@@ -327,8 +327,8 @@ public class MessageFormatInputStreamTest {
     long ttlUpdateRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.TTL_UPDATE);
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     Assert.assertEquals(headerSize + ttlUpdateRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
-    checkTtlUpdateMessage(messageFormatStream, ttlUpdateRecordSize, key, accountId, containerId, ttlUpdateTimeMs,
-        updatedExpiryMs);
+    checkTtlUpdateMessage(messageFormatStream, ttlUpdateRecordSize, key, accountId, containerId, updatedExpiryMs,
+        ttlUpdateTimeMs);
   }
 
   /**
@@ -339,15 +339,15 @@ public class MessageFormatInputStreamTest {
    * @param key the expected {@link StoreKey}
    * @param accountId the account id expected
    * @param containerId the container id expected
-   * @param updateTimeMs the expected time of update
    * @param updatedExpiresAtMs the expected updated expiry time
+   * @param updateTimeMs the expected time of update
    * @throws IOException
    * @throws MessageFormatException
    */
   public static void checkTtlUpdateMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
-      short containerId, long updateTimeMs, long updatedExpiresAtMs) throws IOException, MessageFormatException {
+      short containerId, long updatedExpiresAtMs, long updateTimeMs) throws IOException, MessageFormatException {
     checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key);
-    checkTtlUpdateSubRecord(stream, accountId, containerId, updateTimeMs, updatedExpiresAtMs);
+    checkTtlUpdateSubRecord(stream, accountId, containerId, updatedExpiresAtMs, updateTimeMs);
   }
 
   /**
@@ -372,7 +372,7 @@ public class MessageFormatInputStreamTest {
     if (expectedRecordSize != null) {
       Assert.assertEquals("Size of record not as expected", expectedRecordSize.longValue(), header.getMessageSize());
     }
-    Assert.assertEquals("Encryption key relative should be invalid",
+    Assert.assertEquals("Encryption key relative offset should be invalid",
         MessageFormatRecord.Message_Header_Invalid_Relative_Offset, header.getBlobEncryptionKeyRecordRelativeOffset());
     Assert.assertEquals("Blob props relative offset should be invalid",
         MessageFormatRecord.Message_Header_Invalid_Relative_Offset, header.getBlobPropertiesRecordRelativeOffset());
@@ -391,20 +391,20 @@ public class MessageFormatInputStreamTest {
    * @param stream the {@link InputStream} to obtain the records from
    * @param accountId the account id expected
    * @param containerId the container id expected
-   * @param updateTimeMs the expected time of update
    * @param updatedExpiresAtMs the expected updated expiry time
+   * @param updateTimeMs the expected time of update
    * @throws IOException
    * @throws MessageFormatException
    */
-  private static void checkTtlUpdateSubRecord(InputStream stream, short accountId, short containerId, long updateTimeMs,
-      long updatedExpiresAtMs) throws IOException, MessageFormatException {
+  private static void checkTtlUpdateSubRecord(InputStream stream, short accountId, short containerId,
+      long updatedExpiresAtMs, long updateTimeMs) throws IOException, MessageFormatException {
     UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(stream);
     Assert.assertEquals("Type of update record not TTL_UPDATE", UpdateRecord.Type.TTL_UPDATE, updateRecord.getType());
     Assert.assertNotNull("TtlUpdateSubRecord should not be null", updateRecord.getTtlUpdateSubRecord());
     Assert.assertEquals("AccountId mismatch", accountId, updateRecord.getAccountId());
     Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());
-    Assert.assertEquals("UpdateTime mismatch", updateTimeMs, updateRecord.getUpdateTimeInMs());
     Assert.assertEquals("Updated expiry time mismatch", updatedExpiresAtMs,
         updateRecord.getTtlUpdateSubRecord().getUpdatedExpiryTimeMs());
+    Assert.assertEquals("UpdateTime mismatch", updateTimeMs, updateRecord.getUpdateTimeInMs());
   }
 }

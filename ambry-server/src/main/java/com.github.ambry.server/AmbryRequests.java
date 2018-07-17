@@ -138,13 +138,11 @@ public class AmbryRequests implements RequestAPI {
     this.enableDataPrefetch = enableDataPrefetch;
     this.storeKeyConverterFactory = storeKeyConverterFactory;
 
-    requestsDisableInfo.put(RequestOrResponseType.PutRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
-    requestsDisableInfo.put(RequestOrResponseType.GetRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
-    requestsDisableInfo.put(RequestOrResponseType.DeleteRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
-    requestsDisableInfo.put(RequestOrResponseType.ReplicaMetadataRequest,
-        Collections.newSetFromMap(new ConcurrentHashMap<>()));
-    requestsDisableInfo.put(RequestOrResponseType.TtlUpdateRequest,
-        Collections.newSetFromMap(new ConcurrentHashMap<>()));
+    for (RequestOrResponseType requestType : EnumSet.of(RequestOrResponseType.PutRequest,
+        RequestOrResponseType.GetRequest, RequestOrResponseType.DeleteRequest,
+        RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest)) {
+      requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
+    }
 
     Set<PartitionId> partitionIds = new HashSet<>();
     for (ReplicaId replicaId : clusterMap.getReplicaIds(currentNode)) {
@@ -490,10 +488,12 @@ public class AmbryRequests implements RequestAPI {
             (BlobId) getConvertedStoreKeys(Collections.singletonList(updateRequest.getBlobId())).get(0);
         MessageFormatInputStream stream =
             new TtlUpdateMessageFormatInputStream(convertedStoreKey, convertedStoreKey.getAccountId(),
-                convertedStoreKey.getContainerId(), updateRequest.getExpiresAtMs(), updateRequest.getOperationTimeInMs());
+                convertedStoreKey.getContainerId(), updateRequest.getExpiresAtMs(),
+                updateRequest.getOperationTimeInMs());
         MessageInfo info =
             new MessageInfo(convertedStoreKey, stream.getSize(), false, true, updateRequest.getExpiresAtMs(),
-                convertedStoreKey.getAccountId(), convertedStoreKey.getContainerId(), updateRequest.getOperationTimeInMs());
+                convertedStoreKey.getAccountId(), convertedStoreKey.getContainerId(),
+                updateRequest.getOperationTimeInMs());
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, Collections.singletonList(info), false);
         Store store = storageManager.getStore(updateRequest.getBlobId().getPartition());
         store.updateTtl(writeset);

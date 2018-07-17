@@ -722,23 +722,26 @@ public class BlobStoreTest {
   @Test
   public void ttlUpdateErrorCasesTest() throws Exception {
     // ID that does not exist
-    verifyTtlUpdateFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
+    verifyTtlUpdateFailure(getUniqueId(), Utils.Infinite_Time, StoreErrorCodes.ID_Not_Found);
     // ID that has expired
     for (MockId expired : expiredKeys) {
-      verifyTtlUpdateFailure(expired, StoreErrorCodes.Update_Not_Allowed);
+      verifyTtlUpdateFailure(expired, Utils.Infinite_Time, StoreErrorCodes.Update_Not_Allowed);
     }
     // ID that has not expired but is within the "no updates" period
     inNoTtlUpdatePeriodTest();
     // ID that is already updated
     for (MockId ttlUpdated : ttlUpdatedKeys) {
       if (!deletedKeys.contains(ttlUpdated)) {
-        verifyTtlUpdateFailure(ttlUpdated, StoreErrorCodes.Already_Updated);
+        verifyTtlUpdateFailure(ttlUpdated, Utils.Infinite_Time, StoreErrorCodes.Already_Updated);
       }
     }
     // ID that is already deleted
     for (MockId deleted : deletedKeys) {
-      verifyTtlUpdateFailure(deleted, StoreErrorCodes.ID_Deleted);
+      verifyTtlUpdateFailure(deleted, Utils.Infinite_Time, StoreErrorCodes.ID_Deleted);
     }
+    // Attempt to set expiry time to anything other than infinity
+    MockId id = getIdToTtlUpdate(liveKeys);
+    verifyTtlUpdateFailure(id, time.milliseconds() + 5, StoreErrorCodes.Update_Not_Allowed);
     // authorization failure
     ttlUpdateAuthorizationFailureTest();
   }
@@ -1629,11 +1632,12 @@ public class BlobStoreTest {
   /**
    * Verifies that TTL update fails.
    * @param idToUpdate the {@link MockId} to update the TTL for.
+   * @param newExpiryTimeMs the new expiry time (in ms) of the blob.
    * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
    */
-  private void verifyTtlUpdateFailure(MockId idToUpdate, StoreErrorCodes expectedErrorCode) {
+  private void verifyTtlUpdateFailure(MockId idToUpdate, long newExpiryTimeMs, StoreErrorCodes expectedErrorCode) {
     MessageInfo info =
-        new MessageInfo(idToUpdate, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, idToUpdate.getAccountId(),
+        new MessageInfo(idToUpdate, TTL_UPDATE_RECORD_SIZE, false, true, newExpiryTimeMs, idToUpdate.getAccountId(),
             idToUpdate.getContainerId(), time.milliseconds());
     MessageWriteSet writeSet = new MockMessageWriteSet(Collections.singletonList(info),
         Collections.singletonList(ByteBuffer.wrap(TTL_UPDATE_BUF)));
@@ -1790,7 +1794,7 @@ public class BlobStoreTest {
     long bufferTimeSecs = new StoreConfig(new VerifiableProperties(properties)).storeTtlUpdateBufferTimeSeconds;
     long cutOffTimeMs = time.milliseconds() + TimeUnit.SECONDS.toMillis(bufferTimeSecs);
     MockId id = put(1, PUT_RECORD_SIZE, cutOffTimeMs - 1).get(0);
-    verifyTtlUpdateFailure(id, StoreErrorCodes.Update_Not_Allowed);
+    verifyTtlUpdateFailure(id, Utils.Infinite_Time, StoreErrorCodes.Update_Not_Allowed);
     // something that is AT cutoff time succeeds
     id = put(1, PUT_RECORD_SIZE, cutOffTimeMs).get(0);
     updateTtl(id);
@@ -1807,7 +1811,7 @@ public class BlobStoreTest {
     short[] containerIds =
         {-1, -1, (short) (id.getContainerId() - 1), (short) (id.getContainerId() + 1), id.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
-      verifyTtlUpdateFailure(new MockId(id.getID(), accountIds[i], containerIds[i]),
+      verifyTtlUpdateFailure(new MockId(id.getID(), accountIds[i], containerIds[i]), Utils.Infinite_Time,
           StoreErrorCodes.Authorization_Failure);
     }
   }

@@ -679,7 +679,7 @@ public class AmbryRequestsTest {
     storageManager.resetStore();
     RequestOrResponseType requestType = request.getRequestType();
     Response response = sendRequestGetResponse(request,
-        requestType == RequestOrResponseType.GetRequest || requestType == RequestOrResponseType.ReplicaMetadataRequest
+        EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest).contains(requestType)
             ? ServerErrorCode.No_Error : expectedErrorCode);
     if (expectedErrorCode.equals(ServerErrorCode.No_Error) || forceCheckOpReceived) {
       assertEquals("Operation received at the store not as expected", requestType,
@@ -714,15 +714,15 @@ public class AmbryRequestsTest {
   }
 
   /**
-   * Changes the state of the partition
+   * Changes the write state of the partition
    * @param id the {@link MockPartitionId} whose status needs to change
-   * @param replicaDown if {@code true}, partition will become
+   * @param seal if {@code true}, partition will become
    * {@link com.github.ambry.clustermap.PartitionState#READ_ONLY}. Otherwise
    * {@link com.github.ambry.clustermap.PartitionState#READ_WRITE}
    */
-  private void changePartitionState(PartitionId id, boolean replicaDown) {
+  private void changePartitionState(PartitionId id, boolean seal) {
     MockReplicaId replicaId = (MockReplicaId) findReplica(id);
-    replicaId.markReplicaDownStatus(replicaDown);
+    replicaId.setSealedState(seal);
     ((MockPartitionId) id).resolvePartitionStatus();
   }
 
@@ -1046,22 +1046,23 @@ public class AmbryRequestsTest {
   // ttlUpdateTest() helpers
 
   /**
-   * Does a TTL update and checks for success if {@code expected} is {@link ServerErrorCode#No_Error}. Else, checks for
-   * failure with the code {@code expected}.
+   * Does a TTL update and checks for success if {@code expectedErrorCode} is {@link ServerErrorCode#No_Error}. Else,
+   * checks for failure with the code {@code expectedErrorCode}.
    * @param correlationId the correlation ID to use in the request
    * @param clientId the client ID to use in the request
    * @param blobId the blob ID to use in the request
    * @param expiresAtMs the expiry time (ms) to use in the request
    * @param opTimeMs the operation time (ms) to use in the request
+   * @param expectedErrorCode the expected {@link ServerErrorCode}
    * @throws InterruptedException
    * @throws IOException
    * @throws MessageFormatException
    */
   private void doTtlUpdate(int correlationId, String clientId, BlobId blobId, long expiresAtMs, long opTimeMs,
-      ServerErrorCode expected) throws InterruptedException, IOException, MessageFormatException {
+      ServerErrorCode expectedErrorCode) throws InterruptedException, IOException, MessageFormatException {
     TtlUpdateRequest request = new TtlUpdateRequest(correlationId, clientId, blobId, expiresAtMs, opTimeMs);
-    sendAndVerifyOperationRequest(request, expected, true);
-    if (expected == ServerErrorCode.No_Error) {
+    sendAndVerifyOperationRequest(request, expectedErrorCode, true);
+    if (expectedErrorCode == ServerErrorCode.No_Error) {
       verifyTtlUpdate(request.getBlobId(), expiresAtMs, opTimeMs, MockStorageManager.messageWriteSetReceived);
     }
   }
@@ -1126,7 +1127,7 @@ public class AmbryRequestsTest {
 
     // verify stream
     MessageFormatInputStreamTest.checkTtlUpdateMessage(stream, null, key, key.getAccountId(), key.getContainerId(),
-        opTimeMs, expiresAtMs);
+        expiresAtMs, opTimeMs);
 
     // verify MessageInfo
     // since the record has been verified, the buffer size before verification is a good indicator of size

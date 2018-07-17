@@ -500,6 +500,10 @@ class BlobStore implements Store {
       List<MessageInfo> infoList = messageSetToUpdate.getMessageSetInfo();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       for (MessageInfo info : infoList) {
+        if (info.getExpirationTimeInMs() != Utils.Infinite_Time) {
+          throw new StoreException("BlobStore only supports removing the expiration time",
+              StoreErrorCodes.Update_Not_Allowed);
+        }
         IndexValue value = index.findKey(info.getStoreKey());
         if (value == null) {
           throw new StoreException("Cannot update TTL of " + info.getStoreKey() + " since it's not in the index",
