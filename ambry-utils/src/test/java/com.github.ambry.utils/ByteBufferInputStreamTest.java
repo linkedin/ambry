@@ -58,7 +58,8 @@ public class ByteBufferInputStreamTest {
     for (int i = 0; i < 23; i++) {
       Assert.assertEquals(output[i], buf[i + 1001]);
     }
-    Assert.assertEquals(stream3.read(), -1);
+    Assert.assertEquals(-1, stream3.read());
+    Assert.assertEquals(0, stream3.read(output, 0, 0));
 
     ByteBuffer byteBuf = ByteBuffer.wrap(buf);
     ByteBufferInputStream stream4 = new ByteBufferInputStream(byteBuf.duplicate());

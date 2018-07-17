@@ -48,6 +48,12 @@ public class ZeroBytesInputStream extends InputStream {
 
   @Override
   public int read(byte[] bytes, int offset, int length) throws IOException {
+    if (length == 0) {
+      return 0;
+    }
+    if (position >= streamSize) {
+      return -1;
+    }
     int count = (int) Math.min(length, streamSize - position);
     Arrays.fill(bytes, offset, offset + count, (byte) 0);
     position += count;

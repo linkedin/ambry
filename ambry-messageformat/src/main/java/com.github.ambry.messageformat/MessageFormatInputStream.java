@@ -95,7 +95,7 @@ public abstract class MessageFormatInputStream extends InputStream {
         totalRead += bytesToRead;
       }
     }
-    return totalRead;
+    return totalRead > 0 ? totalRead : -1;
   }
 
   public long getSize() {
