@@ -89,7 +89,7 @@ public class AccountContainerTest {
     refAccountJson.put(Account.JSON_VERSION_KEY, Account.JSON_VERSION_1);
     refAccountJson.put(ACCOUNT_ID_KEY, refAccountId);
     refAccountJson.put(ACCOUNT_NAME_KEY, refAccountName);
-    refAccountJson.put(Account.STATUS_KEY, refAccountStatus);
+    refAccountJson.put(Account.STATUS_KEY, refAccountStatus.name());
     refAccountJson.put(SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion);
     refAccountJson.put(CONTAINERS_KEY, containerJsonList);
   }
@@ -908,7 +908,7 @@ public class AccountContainerTest {
         containerJson.put(Container.JSON_VERSION_KEY, Container.JSON_VERSION_1);
         containerJson.put(CONTAINER_ID_KEY, container.getId());
         containerJson.put(CONTAINER_NAME_KEY, container.getName());
-        containerJson.put(Container.STATUS_KEY, container.getStatus());
+        containerJson.put(Container.STATUS_KEY, container.getStatus().name());
         containerJson.put(DESCRIPTION_KEY, container.getDescription());
         containerJson.put(IS_PRIVATE_KEY, !container.isCacheable());
         containerJson.put(PARENT_ACCOUNT_ID_KEY, container.getParentAccountId());
@@ -917,7 +917,7 @@ public class AccountContainerTest {
         containerJson.put(Container.JSON_VERSION_KEY, Container.JSON_VERSION_2);
         containerJson.put(CONTAINER_ID_KEY, container.getId());
         containerJson.put(CONTAINER_NAME_KEY, container.getName());
-        containerJson.put(Container.STATUS_KEY, container.getStatus());
+        containerJson.put(Container.STATUS_KEY, container.getStatus().name());
         containerJson.put(DESCRIPTION_KEY, container.getDescription());
         containerJson.put(ENCRYPTED_KEY, container.isEncrypted());
         containerJson.put(PREVIOUSLY_ENCRYPTED_KEY, container.wasPreviouslyEncrypted());

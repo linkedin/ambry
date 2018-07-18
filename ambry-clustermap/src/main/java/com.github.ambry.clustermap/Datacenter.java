@@ -48,7 +48,7 @@ class Datacenter {
     }
     this.hardwareLayout = hardwareLayout;
     this.name = jsonObject.getString("name");
-    id = Byte.parseByte(jsonObject.getString("id"));
+    id = (byte) jsonObject.getInt("id");
 
     this.dataNodes = new ArrayList<DataNode>(jsonObject.getJSONArray("dataNodes").length());
     for (int i = 0; i < jsonObject.getJSONArray("dataNodes").length(); ++i) {

@@ -402,7 +402,7 @@ public class Container {
         metadata.put(JSON_VERSION_KEY, JSON_VERSION_1);
         metadata.put(CONTAINER_ID_KEY, id);
         metadata.put(CONTAINER_NAME_KEY, name);
-        metadata.put(STATUS_KEY, status);
+        metadata.put(STATUS_KEY, status.name());
         metadata.put(DESCRIPTION_KEY, description);
         metadata.put(IS_PRIVATE_KEY, !cacheable);
         metadata.put(PARENT_ACCOUNT_ID_KEY, parentAccountId);
@@ -411,7 +411,7 @@ public class Container {
         metadata.put(Container.JSON_VERSION_KEY, JSON_VERSION_2);
         metadata.put(CONTAINER_ID_KEY, id);
         metadata.put(CONTAINER_NAME_KEY, name);
-        metadata.put(Container.STATUS_KEY, status);
+        metadata.put(Container.STATUS_KEY, status.name());
         metadata.put(DESCRIPTION_KEY, description);
         metadata.put(ENCRYPTED_KEY, encrypted);
         metadata.put(PREVIOUSLY_ENCRYPTED_KEY, previouslyEncrypted);

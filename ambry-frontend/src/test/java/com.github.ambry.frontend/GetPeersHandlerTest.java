@@ -169,7 +169,7 @@ public class GetPeersHandlerTest {
   private RestRequest getRestRequest(String datanode) throws Exception {
     String[] parts = datanode.split(":");
     JSONObject data = new JSONObject();
-    data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET);
+    data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET.name());
     data.put(MockRestRequest.URI_KEY,
         Operations.GET_PEERS + "?" + GetPeersHandler.NAME_QUERY_PARAM + "=" + parts[0] + "&"
             + GetPeersHandler.PORT_QUERY_PARAM + "=" + parts[1]);
@@ -239,8 +239,8 @@ public class GetPeersHandlerTest {
       uri.append(GetPeersHandler.PORT_QUERY_PARAM).append("=").append(port);
     }
     JSONObject data = new JSONObject();
-    data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET);
-    data.put(MockRestRequest.URI_KEY, uri);
+    data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET.name());
+    data.put(MockRestRequest.URI_KEY, uri.toString());
     RestRequest restRequest = new MockRestRequest(data, null);
     try {
       sendRequestGetResponse(restRequest, new MockRestResponseChannel());

@@ -115,7 +115,7 @@ public class ClusterMapUtils {
     JSONArray all = root.getJSONArray(ZKINFO_STR);
     for (int i = 0; i < all.length(); i++) {
       JSONObject entry = all.getJSONObject(i);
-      byte id = Byte.parseByte(entry.getString(DATACENTER_ID_STR));
+      byte id = (byte) entry.getInt(DATACENTER_ID_STR);
       DcZkInfo dcZkInfo = new DcZkInfo(entry.getString(DATACENTER_STR), id, entry.getString(ZKCONNECTSTR_STR));
       dataCenterToZkAddress.put(dcZkInfo.dcName, dcZkInfo);
     }

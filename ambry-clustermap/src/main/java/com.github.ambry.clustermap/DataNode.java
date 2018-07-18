@@ -239,7 +239,7 @@ class DataNode implements DataNodeId {
     addSSLPortToJson(jsonObject);
     jsonObject.putOpt("rackId", rackId);
     jsonObject.put("hardwareState",
-        dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
+        dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE.name() : HardwareState.AVAILABLE.name())
         .put("disks", new JSONArray());
     for (Disk disk : disks) {
       jsonObject.accumulate("disks", disk.toJSONObject());

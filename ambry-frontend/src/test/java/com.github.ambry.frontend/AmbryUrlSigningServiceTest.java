@@ -142,7 +142,7 @@ public class AmbryUrlSigningServiceTest {
    */
   private RestRequest getRequestFromUrl(RestMethod restMethod, String url) throws Exception {
     JSONObject request = new JSONObject();
-    request.put(MockRestRequest.REST_METHOD_KEY, restMethod);
+    request.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
     request.put(MockRestRequest.URI_KEY, url);
     return new MockRestRequest(request, null);
   }

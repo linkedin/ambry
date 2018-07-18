@@ -74,8 +74,10 @@ public class GetReplicasHandlerTest {
       assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
       assertEquals("Unexpected Content-Type", "application/json",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-      String returnedReplicasStr =
-          RestTestUtils.getJsonizedResponseBody(channel).getString(GetReplicasHandler.REPLICAS_KEY).replace("\"", "");
+      String returnedReplicasStr = RestTestUtils.getJsonizedResponseBody(channel)
+          .get(GetReplicasHandler.REPLICAS_KEY)
+          .toString()
+          .replace("\"", "");
       assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
           originalReplicaStr, returnedReplicasStr);
     }
