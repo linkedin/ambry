@@ -774,7 +774,7 @@ public class RestUtilsTest {
   private RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers)
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
     JSONObject request = new JSONObject();
-    request.put(MockRestRequest.REST_METHOD_KEY, restMethod);
+    request.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
     request.put(MockRestRequest.URI_KEY, uri);
     if (headers != null) {
       request.put(MockRestRequest.HEADERS_KEY, headers);

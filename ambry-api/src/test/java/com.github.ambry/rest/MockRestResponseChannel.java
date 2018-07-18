@@ -98,7 +98,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   public MockRestResponseChannel(RestRequest restRequest) throws JSONException {
-    responseMetadata.put(RESPONSE_STATUS_KEY, ResponseStatus.Ok);
+    responseMetadata.put(RESPONSE_STATUS_KEY, ResponseStatus.Ok.name());
     this.restRequest = restRequest;
   }
 
@@ -144,7 +144,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
           if (exception instanceof RestServiceException) {
             status = ResponseStatus.getResponseStatus(((RestServiceException) exception).getErrorCode());
           }
-          responseMetadata.put(RESPONSE_STATUS_KEY, status);
+          responseMetadata.put(RESPONSE_STATUS_KEY, status.name());
           bodyBytes.write(exception.toString().getBytes());
           responseMetadataFinalized.set(true);
         }
@@ -164,7 +164,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
   public synchronized void setStatus(ResponseStatus status) throws RestServiceException {
     if (isOpen() && !responseMetadataFinalized.get()) {
       try {
-        responseMetadata.put(RESPONSE_STATUS_KEY, status);
+        responseMetadata.put(RESPONSE_STATUS_KEY, status.name());
         onEventComplete(Event.SetStatus);
       } catch (JSONException e) {
         throw new RestServiceException("Unable to set Status", RestServiceErrorCode.InternalServerError);
@@ -198,7 +198,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
     try {
       if (responseMetadata.has(RESPONSE_HEADERS_KEY) && responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY)
           .has(headerName)) {
-        headerValue = responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).getString(headerName);
+        headerValue = responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).get(headerName).toString();
       }
     } catch (JSONException e) {
       throw new IllegalStateException(e);

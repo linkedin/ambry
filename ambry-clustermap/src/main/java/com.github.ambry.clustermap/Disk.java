@@ -114,7 +114,7 @@ class Disk implements DiskId {
 
   JSONObject toJSONObject() throws JSONException {
     return new JSONObject().put("mountPath", mountPath)
-        .put("hardwareState", getHardState())
+        .put("hardwareState", getHardState().name())
         .put("capacityInBytes", capacityInBytes);
   }
 

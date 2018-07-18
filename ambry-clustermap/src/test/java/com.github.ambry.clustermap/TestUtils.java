@@ -48,7 +48,7 @@ public class TestUtils {
       throws JSONException {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("mountPath", mountPath);
-    jsonObject.put("hardwareState", hardwareState);
+    jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("capacityInBytes", capacityInBytes);
     return jsonObject;
   }
@@ -78,7 +78,7 @@ public class TestUtils {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
-    jsonObject.put("hardwareState", hardwareState);
+    jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("disks", disks);
     return jsonObject;
   }
@@ -89,7 +89,7 @@ public class TestUtils {
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
     jsonObject.put("sslport", sslPort);
-    jsonObject.put("hardwareState", hardwareState);
+    jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("disks", disks);
     return jsonObject;
   }
@@ -113,7 +113,7 @@ public class TestUtils {
     jsonObject.put("port", port);
     jsonObject.put("sslport", sslPort);
     jsonObject.put("rackId", Long.toString(rackId));
-    jsonObject.put("hardwareState", hardwareState);
+    jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("disks", disks);
     return jsonObject;
   }
@@ -307,7 +307,7 @@ public class TestUtils {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("id", id);
     jsonObject.put("partitionClass", partitionClass);
-    jsonObject.put("partitionState", partitionState);
+    jsonObject.put("partitionState", partitionState.name());
     jsonObject.put("replicaCapacityInBytes", replicaCapacityInBytes);
     jsonObject.put("replicas", replicas);
     return jsonObject;

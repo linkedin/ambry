@@ -108,7 +108,7 @@ public class MockRestRequest implements RestRequest {
 
   static {
     try {
-      DUMMY_DATA.put(REST_METHOD_KEY, RestMethod.GET);
+      DUMMY_DATA.put(REST_METHOD_KEY, RestMethod.GET.name());
       DUMMY_DATA.put(URI_KEY, "/");
     } catch (JSONException e) {
       throw new IllegalStateException(e);

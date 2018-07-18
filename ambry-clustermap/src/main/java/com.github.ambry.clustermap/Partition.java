@@ -172,7 +172,7 @@ class Partition implements PartitionId {
   JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject().put("id", id)
         .put("partitionClass", partitionClass)
-        .put("partitionState", partitionState)
+        .put("partitionState", partitionState.name())
         .put("replicaCapacityInBytes", replicaCapacityInBytes)
         .put("replicas", new JSONArray());
     for (Replica replica : replicas) {

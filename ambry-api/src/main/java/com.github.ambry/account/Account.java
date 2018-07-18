@@ -170,7 +170,7 @@ public class Account {
     metadata.put(JSON_VERSION_KEY, CURRENT_JSON_VERSION);
     metadata.put(ACCOUNT_ID_KEY, id);
     metadata.put(ACCOUNT_NAME_KEY, name);
-    metadata.put(STATUS_KEY, status);
+    metadata.put(STATUS_KEY, status.name());
     metadata.put(SNAPSHOT_VERSION_KEY, incrementSnapshotVersion ? snapshotVersion + 1 : snapshotVersion);
     JSONArray containerArray = new JSONArray();
     for (Container container : containerIdToContainerMap.values()) {

@@ -115,7 +115,7 @@ class GetReplicasHandler {
     JSONObject result = new JSONObject();
     if (replicaIds != null) {
       for (ReplicaId replicaId : replicaIds) {
-        result.append(REPLICAS_KEY, replicaId);
+        result.append(REPLICAS_KEY, replicaId.toString());
       }
     }
     return result;

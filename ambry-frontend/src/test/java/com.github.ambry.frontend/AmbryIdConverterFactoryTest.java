@@ -88,7 +88,7 @@ public class AmbryIdConverterFactoryTest {
   private void testConversion(IdConverter idConverter, RestMethod restMethod, String input, String expectedOutput)
       throws Exception {
     JSONObject requestData = new JSONObject();
-    requestData.put(MockRestRequest.REST_METHOD_KEY, restMethod);
+    requestData.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
     requestData.put(MockRestRequest.URI_KEY, "/");
     RestRequest restRequest = new MockRestRequest(requestData, null);
     IdConversionCallback callback = new IdConversionCallback();
