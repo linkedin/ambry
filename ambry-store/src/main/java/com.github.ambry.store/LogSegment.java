@@ -24,6 +24,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,6 +54,9 @@ class LogSegment implements Read, Write {
   private final AtomicLong endOffset;
   private final AtomicLong refCount = new AtomicLong(0);
   private final AtomicBoolean open = new AtomicBoolean(true);
+  static final int THREAD_LOCAL_BYTE_BUFFER_SIZE = 1024 * 1024;
+  private static ThreadLocal<ByteBuffer> threadLocalByteBuffer =
+      ThreadLocal.withInitial(() -> ByteBuffer.allocateDirect(THREAD_LOCAL_BYTE_BUFFER_SIZE));
 
   /**
    * Creates a LogSegment abstraction with the given capacity.
@@ -172,9 +176,25 @@ class LogSegment implements Read, Write {
           "Channel cannot be written to segment [" + file.getAbsolutePath() + "] because" + " it exceeds the capacity ["
               + capacityInBytes + "]");
     } else {
-      long bytesWritten = 0;
+      if (!fileChannel.isOpen()) {
+        throw new ClosedChannelException();
+      }
+      int bytesWritten = 0;
+      ByteBuffer byteBuffer = threadLocalByteBuffer.get();
       while (bytesWritten < size) {
-        bytesWritten += fileChannel.transferFrom(channel, endOffset.get() + bytesWritten, size - bytesWritten);
+        byteBuffer.position(0);
+        if (byteBuffer.capacity() > size - bytesWritten) {
+          byteBuffer.limit((int) size - bytesWritten);
+        } else {
+          byteBuffer.limit(byteBuffer.capacity());
+        }
+        if (channel.read(byteBuffer) < 0) {
+          throw new IOException("ReadableByteChannel length less than requested size!");
+        }
+        byteBuffer.flip();
+        while (byteBuffer.hasRemaining()) {
+          bytesWritten += fileChannel.write(byteBuffer, endOffset.get() + bytesWritten);
+        }
       }
       endOffset.addAndGet(bytesWritten);
     }
