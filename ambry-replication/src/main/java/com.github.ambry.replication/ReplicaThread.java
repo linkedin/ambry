@@ -782,7 +782,7 @@ class ReplicaThread implements Runnable {
                 remoteNode, threadName, remoteReplicaInfo.getReplicaId());
           } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Authorization_Failure) {
             replicationMetrics.blobAuthorizationFailureCount.inc();
-            logger.trace("One of the blobs authorization failed: Remote node: {} Thread name: {} Remote replica: {}",
+            logger.error("One of the blobs authorization failed: Remote node: {} Thread name: {} Remote replica: {}",
                 remoteNode, threadName, remoteReplicaInfo.getReplicaId());
           } else {
             replicationMetrics.updateGetRequestError(remoteReplicaInfo.getReplicaId());

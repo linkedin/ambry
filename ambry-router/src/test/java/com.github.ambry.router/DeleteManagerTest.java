@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -231,6 +232,28 @@ public class DeleteManagerTest {
     serverErrorCodes[5] = ServerErrorCode.Blob_Authorization_Failure;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobAuthorizationFailure,
         deleteErrorCodeChecker);
+  }
+
+  /**
+   * Tests to ensure that {@link RouterErrorCode}s are properly resolved based on precedence
+   * @throws Exception
+   */
+  @Test
+  public void routerErrorCodeResolutionTest() throws Exception {
+    LinkedHashMap<ServerErrorCode, RouterErrorCode> codesToSetAndTest = new LinkedHashMap<>();
+    // test 4 codes
+    codesToSetAndTest.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
+    codesToSetAndTest.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
+    codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    codesToSetAndTest.put(ServerErrorCode.IO_Error, RouterErrorCode.UnexpectedInternalError);
+    doRouterErrorCodeResolutionTest(codesToSetAndTest);
+
+    // test another 4 codes
+    codesToSetAndTest.clear();
+    codesToSetAndTest.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
+    codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    codesToSetAndTest.put(ServerErrorCode.Partition_Unknown, RouterErrorCode.UnexpectedInternalError);
+    doRouterErrorCodeResolutionTest(codesToSetAndTest);
   }
 
   /**
@@ -479,5 +502,42 @@ public class DeleteManagerTest {
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.delete.request.parallelism", DELETE_PARALLELISM);
     return properties;
+  }
+
+  /**
+   * Runs the router code resolution test based on the input
+   * @param codesToSetAndTest a {@link LinkedHashMap} that defines the ordering of the router error codes and also
+   *                          provides the server error codes that must be set and their equivalent router error codes.
+   * @throws Exception
+   */
+  private void doRouterErrorCodeResolutionTest(LinkedHashMap<ServerErrorCode, RouterErrorCode> codesToSetAndTest)
+      throws Exception {
+    if (codesToSetAndTest.size() * 2 > serverLayout.getMockServers().size()) {
+      throw new IllegalStateException("Cannot run test because there aren't enough servers for the given codes");
+    }
+    List<ServerErrorCode> serverErrorCodes =
+        new ArrayList<>(Collections.nCopies(serverLayout.getMockServers().size(), ServerErrorCode.Blob_Not_Found));
+    List<RouterErrorCode> expected = new ArrayList<>(codesToSetAndTest.size());
+    // fill in the array with all the error codes that need resolution and knock them off one by one
+    // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
+    int serverIdx = 0;
+    for (Map.Entry<ServerErrorCode, RouterErrorCode> entry : codesToSetAndTest.entrySet()) {
+      serverErrorCodes.set(serverIdx, entry.getKey());
+      serverErrorCodes.set(serverIdx + 1, entry.getKey());
+      expected.add(entry.getValue());
+      serverIdx += 2;
+    }
+    expected.add(RouterErrorCode.BlobDoesNotExist);
+    for (int i = 0; i < expected.size(); i++) {
+      List<ServerErrorCode> shuffled = new ArrayList<>(serverErrorCodes);
+      Collections.shuffle(shuffled);
+      setServerErrorCodes(shuffled, serverLayout);
+      deleteErrorCodeChecker.testAndAssert(expected.get(i));
+      if (i * 2 + 1 < serverErrorCodes.size()) {
+        serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
+        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
+      }
+    }
+    serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
 }
