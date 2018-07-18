@@ -145,7 +145,7 @@ class LogSegment implements Read, Write {
               + capacityInBytes + "]");
     } else {
       while (buffer.hasRemaining()) {
-        bytesWritten += fileChannel.write(buffer, endOffset.get());
+        bytesWritten += fileChannel.write(buffer, endOffset.get() + bytesWritten);
       }
       endOffset.addAndGet(bytesWritten);
     }
