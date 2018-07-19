@@ -313,7 +313,7 @@ public class HelixClusterManagerTest {
    * {@link org.apache.helix.NotificationContext.Type#INIT} and that they are dealt with correctly.
    */
   @Test
-  public void sealedReplicaChangeTest() throws Exception {
+  public void sealedReplicaChangeTest() {
     if (useComposite) {
       return;
     }
@@ -323,28 +323,65 @@ public class HelixClusterManagerTest {
 
     AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds(null).get(0);
     List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
-    helixCluster.setReplicaSealedState(partition, instances.get(0), true, false);
+    helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.SealedState, true, false);
     assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
         clusterManager.getWritablePartitionIds(null).contains(partition));
     assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
         partition.getPartitionState());
-    helixCluster.setReplicaSealedState(partition, instances.get(1), true, true);
+    helixCluster.setReplicaState(partition, instances.get(1), ReplicaStateType.SealedState, true, false);
     assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
         clusterManager.getWritablePartitionIds(null).contains(partition));
     assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
         partition.getPartitionState());
-    helixCluster.setReplicaSealedState(partition, instances.get(1), false, true);
+    helixCluster.setReplicaState(partition, instances.get(1), ReplicaStateType.SealedState, false, false);
     assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
         clusterManager.getWritablePartitionIds(null).contains(partition));
     assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
         partition.getPartitionState());
-    helixCluster.setReplicaSealedState(partition, instances.get(0), false, false);
+    helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.SealedState, false, false);
     // At this point all replicas have been marked READ_WRITE. Now, the entire partition should be READ_WRITE.
     assertTrue("If no replica is SEALED, the whole partition should be Writable",
         clusterManager.getWritablePartitionIds(null).contains(partition));
     assertEquals("If no replica is SEALED, the whole partition should be Writable", PartitionState.READ_WRITE,
         partition.getPartitionState());
     assertStateEquivalency();
+  }
+
+  /**
+   * Test that the changes to the stopped states of replicas get reflected correctly in the cluster manager.
+   */
+  @Test
+  public void stoppedReplicaChangeTest() {
+    if (useComposite) {
+      return;
+    }
+
+    // all instances are up initially.
+    assertStateEquivalency();
+
+    AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds(null).get(0);
+    List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
+    // mark the replica on first instance as stopped
+    helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.StoppedState, true, false);
+    int aliveCount = 0;
+    for (AmbryReplica replica : partition.getReplicaIds()) {
+      if (replica.isDown()) {
+        assertEquals("Mismatch in hostname of instance where stopped replica resides", instances.get(0),
+            replica.getDataNodeId().getHostname() + "_" + replica.getDataNodeId().getPort());
+      } else {
+        aliveCount++;
+      }
+    }
+    assertEquals("Mismatch in number of alive replicas", instances.size() - 1, aliveCount);
+    // unmark the stopped replica and no replica is in stopped state
+    helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.StoppedState, false, false);
+    aliveCount = 0;
+    for (AmbryReplica replica : partition.getReplicaIds()) {
+      if (!replica.isDown()) {
+        aliveCount++;
+      }
+    }
+    assertEquals("Mismatch in number of alive replicas, all replicas should be up", instances.size(), aliveCount);
   }
 
   /**

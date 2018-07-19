@@ -143,15 +143,15 @@ public class ResponseHandlerTest {
     expectedEventTypes.put(ServerErrorCode.Disk_Unavailable,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Error});
     expectedEventTypes.put(ServerErrorCode.Partition_ReadOnly,
-        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok, ReplicaEventType.Partition_ReadOnly, ReplicaEventType.Replica_Response});
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok, ReplicaEventType.Partition_ReadOnly, ReplicaEventType.Replica_Available});
     expectedEventTypes.put(ServerErrorCode.Replica_Unavailable,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok, ReplicaEventType.Replica_Unavailable});
     expectedEventTypes.put(ServerErrorCode.Temporarily_Disabled,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok, ReplicaEventType.Replica_Unavailable});
     expectedEventTypes.put(ServerErrorCode.Unknown_Error,
-        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok, ReplicaEventType.Replica_Response});
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok, ReplicaEventType.Replica_Available});
     expectedEventTypes.put(ServerErrorCode.No_Error,
-        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok, ReplicaEventType.Replica_Response});
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok, ReplicaEventType.Replica_Available});
     expectedEventTypes.put(NetworkClientErrorCode.NetworkError, new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
     expectedEventTypes.put(NetworkClientErrorCode.ConnectionUnavailable, new ReplicaEventType[]{});
     expectedEventTypes.put(new RouterException("", RouterErrorCode.UnexpectedInternalError), new ReplicaEventType[]{});

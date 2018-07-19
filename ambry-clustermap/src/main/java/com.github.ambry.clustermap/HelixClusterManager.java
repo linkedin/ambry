@@ -234,7 +234,7 @@ class HelixClusterManager implements ClusterMap {
       case Replica_Unavailable:
         replica.onReplicaUnavailable();
         break;
-      case Replica_Response:
+      case Replica_Available:
         replica.onReplicaResponse();
         break;
     }
@@ -319,7 +319,7 @@ class HelixClusterManager implements ClusterMap {
           }
           instanceConfigInitialized.set(true);
         } else {
-          updateSealedStateOfReplicas(configs);
+          updateStateOfReplicas(configs);
         }
         sealedStateChangeCounter.incrementAndGet();
         helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
@@ -352,11 +352,11 @@ class HelixClusterManager implements ClusterMap {
     }
 
     /**
-     * Go over the given list of {@link InstanceConfig}s and update the sealed states of replicas.
+     * Go over the given list of {@link InstanceConfig}s and update the both sealed and stopped states of replicas.
      * @param instanceConfigs the list of {@link InstanceConfig}s containing the up-to-date information about the
      *                        sealed states of replicas.
      */
-    private void updateSealedStateOfReplicas(List<InstanceConfig> instanceConfigs) {
+    private void updateStateOfReplicas(List<InstanceConfig> instanceConfigs) {
       for (InstanceConfig instanceConfig : instanceConfigs) {
         int schemaVersion = getSchemaVersion(instanceConfig);
         if (schemaVersion == 0) {
@@ -366,8 +366,10 @@ class HelixClusterManager implements ClusterMap {
                 instanceConfig);
           } else {
             HashSet<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
+            HashSet<String> stoppedReplicas = new HashSet<>(getStoppedReplicas(instanceConfig));
             for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node)) {
               replica.setSealedState(sealedReplicas.contains(replica.getPartitionId().toPathString()));
+              replica.setStoppedState(stoppedReplicas.contains(replica.getPartitionId().toPathString()));
             }
           }
         } else {
@@ -424,17 +426,18 @@ class HelixClusterManager implements ClusterMap {
       ambryDataNodeToAmbryReplicas.put(datanode, new HashSet<AmbryReplica>());
       ambryDataNodeToAmbryDisks.put(datanode, new HashSet<AmbryDisk>());
       List<String> sealedReplicas = getSealedReplicas(instanceConfig);
+      List<String> stoppedReplicas = getStoppedReplicas(instanceConfig);
       Map<String, Map<String, String>> diskInfos = instanceConfig.getRecord().getMapFields();
       for (Map.Entry<String, Map<String, String>> entry : diskInfos.entrySet()) {
         String mountPath = entry.getKey();
         Map<String, String> diskInfo = entry.getValue();
         long capacityBytes = Long.valueOf(diskInfo.get(DISK_CAPACITY_STR));
-        HardwareState state =
+        HardwareState diskState =
             diskInfo.get(DISK_STATE).equals(AVAILABLE_STR) ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
         String replicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
 
         // Create disk
-        AmbryDisk disk = new AmbryDisk(clusterMapConfig, datanode, mountPath, state, capacityBytes);
+        AmbryDisk disk = new AmbryDisk(clusterMapConfig, datanode, mountPath, diskState, capacityBytes);
         ambryDataNodeToAmbryDisks.get(datanode).add(disk);
 
         if (!replicasStr.isEmpty()) {
@@ -465,8 +468,11 @@ class HelixClusterManager implements ClusterMap {
             }
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
             // Create replica associated with this node.
+            HardwareState replicaState = diskState == HardwareState.UNAVAILABLE ? diskState
+                : (stoppedReplicas.contains(partitionName) ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE);
             AmbryReplica replica =
-                new AmbryReplica(clusterMapConfig, mappedPartition, disk, replicaCapacity, sealedReplicas.contains(partitionName));
+                new AmbryReplica(clusterMapConfig, mappedPartition, disk, replicaState, replicaCapacity,
+                    sealedReplicas.contains(partitionName));
             ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
             ambryDataNodeToAmbryReplicas.get(datanode).add(replica);
           }

@@ -162,21 +162,23 @@ public class DynamicClusterManagerComponentsTest {
 
     // AmbryReplica tests
     try {
-      new AmbryReplica(clusterMapConfig1, null, disk1, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+      new AmbryReplica(clusterMapConfig1, null, disk1, HardwareState.AVAILABLE, MAX_REPLICA_CAPACITY_IN_BYTES, false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
 
     try {
-      new AmbryReplica(clusterMapConfig1, partition1, null, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+      new AmbryReplica(clusterMapConfig1, partition1, null, HardwareState.AVAILABLE, MAX_REPLICA_CAPACITY_IN_BYTES,
+          false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
 
     try {
-      new AmbryReplica(clusterMapConfig1, partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES + 1, false);
+      new AmbryReplica(clusterMapConfig1, partition1, disk1, HardwareState.AVAILABLE, MAX_REPLICA_CAPACITY_IN_BYTES + 1,
+          false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
@@ -184,29 +186,35 @@ public class DynamicClusterManagerComponentsTest {
 
     // Create a few replicas and make the mockClusterManagerCallback aware of the association.
     AmbryReplica replica1 =
-        new AmbryReplica(clusterMapConfig1, partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryReplica(clusterMapConfig1, partition1, disk1, HardwareState.AVAILABLE, MAX_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica1);
     AmbryReplica replica2 =
-        new AmbryReplica(clusterMapConfig1, partition2, disk1, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryReplica(clusterMapConfig1, partition2, disk1, HardwareState.AVAILABLE, MIN_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition2, replica2);
     AmbryReplica replica3 =
-        new AmbryReplica(clusterMapConfig2, partition1, disk2, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryReplica(clusterMapConfig2, partition1, disk2, HardwareState.AVAILABLE, MIN_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica3);
-    AmbryReplica replica4 = new AmbryReplica(clusterMapConfig2, partition2, disk2, MIN_REPLICA_CAPACITY_IN_BYTES, true);
+    AmbryReplica replica4 = new AmbryReplica(clusterMapConfig2, partition2, disk2, HardwareState.AVAILABLE, MIN_REPLICA_CAPACITY_IN_BYTES, true);
     mockClusterManagerCallback.addReplicaToPartition(partition2, replica4);
+    AmbryReplica replica5 = new AmbryReplica(clusterMapConfig1, partition1, disk1, HardwareState.UNAVAILABLE, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+    mockClusterManagerCallback.addReplicaToPartition(partition1, replica5);
+
     sealedStateChangeCounter.incrementAndGet();
 
     assertEquals(replica1.getDiskId().getMountPath(), replica1.getMountPath());
     List<AmbryReplica> peerReplicas = replica1.getPeerReplicaIds();
-    assertEquals(1, peerReplicas.size());
+    assertEquals(2, peerReplicas.size());
     assertEquals(replica1.getPartitionId(), peerReplicas.get(0).getPartitionId());
     assertEquals(replica3, peerReplicas.get(0));
+    assertEquals(replica5, peerReplicas.get(1));
+    assertEquals("Replica should be in stopped state", true, peerReplicas.get(1).isDown());
 
     List<AmbryReplica> replicaList1 = partition1.getReplicaIds();
     List<AmbryReplica> replicaList2 = partition2.getReplicaIds();
-    assertEquals("Found: " + replicaList1.toString(), 2, replicaList1.size());
+    assertEquals("Mismatch in number of replicas. Found: " + replicaList1.toString(), 3, replicaList1.size());
     assertTrue(replicaList1.contains(replica1));
     assertTrue(replicaList1.contains(replica3));
+    assertTrue(replicaList1.contains(replica5));
     assertEquals(2, replicaList2.size());
     assertTrue(replicaList2.contains(replica2));
     assertTrue(replicaList2.contains(replica4));

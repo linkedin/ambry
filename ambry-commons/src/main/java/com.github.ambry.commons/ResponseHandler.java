@@ -54,7 +54,7 @@ public class ResponseHandler {
       case Partition_ReadOnly:
         clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Partition_ReadOnly);
         clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Ok);
-        clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Replica_Response);
+        clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Replica_Available);
         break;
       case Temporarily_Disabled:
       case Replica_Unavailable:
@@ -64,7 +64,7 @@ public class ResponseHandler {
       default:
         // other server error codes
         clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Ok);
-        clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Replica_Response);
+        clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Replica_Available);
         break;
     }
     // Regardless of what the error code is (or there is no error), it is a node response event.

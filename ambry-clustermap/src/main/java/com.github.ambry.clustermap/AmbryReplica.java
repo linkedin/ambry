@@ -30,7 +30,7 @@ class AmbryReplica implements ReplicaId, Resource {
   private final AmbryDisk disk;
   private final long capacityBytes;
   private volatile boolean isSealed;
-  private volatile boolean isStopped = false;
+  private volatile boolean isStopped;
   private final ResourceStatePolicy resourceStatePolicy;
 
   /**
@@ -41,15 +41,16 @@ class AmbryReplica implements ReplicaId, Resource {
    * @param capacityBytes the capacity in bytes for this replica.
    * @param isSealed whether this replica is in sealed state.
    */
-  AmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, AmbryDisk disk, long capacityBytes,
-      boolean isSealed) throws Exception {
+  AmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, AmbryDisk disk, HardwareState state,
+      long capacityBytes, boolean isSealed) throws Exception {
     this.partition = partition;
     this.disk = disk;
     this.capacityBytes = capacityBytes;
     this.isSealed = isSealed;
+    this.isStopped = state == HardwareState.UNAVAILABLE;
     validate();
     ResourceStatePolicyFactory resourceStatePolicyFactory =
-        Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, disk.getState(), clusterMapConfig);
+        Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, state, clusterMapConfig);
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
   }
 

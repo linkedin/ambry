@@ -17,5 +17,38 @@ package com.github.ambry.clustermap;
  * The response codes conveyed to the cluster map when there is a replica related event.
  */
 public enum ReplicaEventType {
-  Node_Response, Node_Timeout, Disk_Error, Disk_Ok, Partition_ReadOnly, Replica_Unavailable, Replica_Response
+  /**
+   * Node is up and responds in time.
+   */
+  Node_Response,
+
+  /**
+   * Node fails to respond before timeout and connection is lost.
+   */
+  Node_Timeout,
+
+  /**
+   * Disk is in bad state due to failures/errors.
+   */
+  Disk_Error,
+
+  /**
+   * Disk responds in time and is proper functioning.
+   */
+  Disk_Ok,
+
+  /**
+   * The partition which replica belongs to is in ReadOnly state.
+   */
+  Partition_ReadOnly,
+
+  /**
+   * The replica is unavailable because it is either stopped or unreachable.
+   */
+  Replica_Unavailable,
+
+  /**
+   * The replica responds in time and is available for requests.
+   */
+  Replica_Available
 }
