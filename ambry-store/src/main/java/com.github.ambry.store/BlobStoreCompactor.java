@@ -627,6 +627,16 @@ class BlobStoreCompactor {
    */
   private boolean isDuplicate(IndexEntry copyCandidate, FileSpan duplicateSearchSpan, Offset indexSegmentStartOffset,
       boolean checkAlreadyCopied) {
+    // Duplicates can exist because of two reasons
+    // 1. Duplicates in src: These can occur because compaction creates temporary duplicates
+    // Consider the following situation
+    // Segments 0_0, 1_0 and 2_0 are being compacted. All the data in 0_0 and half the data in 1_0 fit in 0_1 and the
+    // rest in 1_1. When 0_1 is full and is put into the "main" log, there will be some duplicated data in 0_1 and 1_0.
+    // If a shutdown occurs after this point, then the code has to make sure not to copy any of the data already copied
+    // 2. Duplicates in tgt: the checkpointing logic during copying works at the IndexSegment level
+    // This means that a crash/shutdown could occur in the middle of copying the data represented by an IndexSegment and
+    // the incremental progress inside an IndexSegment is not logged. After restart, compaction is resumed from the
+    // checkpoint and will have to detect data that it has already copied
     try {
       boolean isDuplicate = false;
       IndexValue copyCandidateValue = copyCandidate.getValue();
@@ -663,6 +673,9 @@ class BlobStoreCompactor {
       throws StoreException {
     // TODO: move this blob store stats
     Offset startOffsetOfLastIndexSegmentForDeleteCheck = getStartOffsetOfLastIndexSegmentForDeleteCheck();
+    // deletes are in effect if this index segment does not have any deletes that are less than
+    // StoreConfig#storeDeletedMessageRetentionDays days old. If there are such deletes, then they are not counted as
+    // deletes and the PUT records are still valid as far as compaction is concerned
     boolean deletesInEffect = startOffsetOfLastIndexSegmentForDeleteCheck != null
         && indexSegment.getStartOffset().compareTo(startOffsetOfLastIndexSegmentForDeleteCheck) <= 0;
     logger.trace("Deletes in effect is {} for index segment with start offset {} in {}", deletesInEffect,
@@ -700,7 +713,7 @@ class BlobStoreCompactor {
         if (!srcIndex.isExpired(valueFromIdx)) {
           // unexpired PUT entry.
           if (deletesInEffect) {
-            if (!isDeleted(indexEntry.getKey(), indexSegment.getStartOffset(),
+            if (!hasDeleteEntryInSpan(indexEntry.getKey(), indexSegment.getStartOffset(),
                 startOffsetOfLastIndexSegmentForDeleteCheck)) {
               // PUT entry that has not expired and is not considered deleted.
               // Add all values in this index segment (to account for the presence of TTL updates)
@@ -724,7 +737,8 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Determines whether a TTL update entry is valid
+   * Determines whether a TTL update entry is valid. A TTL update entry is valid as long as the associated PUT record
+   * is still present in the store (the validity of the PUT record does not matter - only its presence/absence does).
    * @param key the {@link StoreKey} being examined
    * @param indexSegmentStartOffset the start offset of the {@link IndexSegment} that the TTL update record is in
    * @return {@code true} if the TTL update entry is valid
@@ -741,12 +755,13 @@ class BlobStoreCompactor {
       logger.trace("TTL update of {} in segment with start offset {} in {} is not valid the corresponding PUT entry "
           + "does not exist anymore", key, indexSegmentStartOffset, storeId);
     } else {
+      // exists in source - now we need to check if it exists in the target
       IndexValue tgtValue = tgtIndex.findKey(key, null, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
-      if (tgtValue == null && isOffsetInCurrentCycle(srcValue.getOffset())) {
+      if (tgtValue == null && isOffsetUnderCompaction(srcValue.getOffset())) {
         // exists in src but not in tgt. This can happen either because
-        // 1. The FileSpan to which srcValue belongs is not under compaction
-        // 2. srcValue will be compacted in this cycle
-        // However, the second check ensures that this piece of code is reached only if #2 is true
+        // 1. The FileSpan to which srcValue belongs is not under compaction (so there is no reason for tgt to have it)
+        // 2. srcValue will be compacted in this cycle (because it has been determined that the PUT is not valid. Since
+        // the PUT is going away in this cycle, it is safe to remove the TTL update also)
         logger.trace(
             "TTL update of {} in segment with start offset {} in {} is not valid because the corresponding PUT entry"
                 + " {} will be compacted in this cycle ({} are being compacted in this cycle)", key,
@@ -766,7 +781,7 @@ class BlobStoreCompactor {
    * @param offset the {@link Offset} to check
    * @return {@code true} if the offset is being compacted in the current cycle.
    */
-  private boolean isOffsetInCurrentCycle(Offset offset) {
+  private boolean isOffsetUnderCompaction(Offset offset) {
     List<String> segmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
     LogSegment first = srcLog.getSegment(segmentsUnderCompaction.get(0));
     LogSegment last = srcLog.getSegment(segmentsUnderCompaction.get(segmentsUnderCompaction.size() - 1));
@@ -820,10 +835,11 @@ class BlobStoreCompactor {
    * @param key the {@link StoreKey} to check
    * @param searchStartOffset the start offset of the search for delete entry
    * @param searchEndOffset the end offset of the search for delete entry
-   * @return {@code true} if the key has been deleted
+   * @return {@code true} if the key has a delete entry in the given search span.
    * @throws StoreException if there are any problems using the index
    */
-  private boolean isDeleted(StoreKey key, Offset searchStartOffset, Offset searchEndOffset) throws StoreException {
+  private boolean hasDeleteEntryInSpan(StoreKey key, Offset searchStartOffset, Offset searchEndOffset)
+      throws StoreException {
     FileSpan deleteSearchSpan = new FileSpan(searchStartOffset, searchEndOffset);
     return srcIndex.findKey(key, deleteSearchSpan, EnumSet.of(PersistentIndex.IndexEntryType.DELETE)) != null;
   }
