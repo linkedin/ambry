@@ -353,6 +353,55 @@ class RouterServerTestFramework {
   }
 
   /**
+   * Submit a getBlob operation with incorrect accountId/ContainerId in blobId..
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startGetBlobAuthorizationFailTest(final OperationChain opChain) {
+    Callback<GetBlobResult> callback = new TestCallback<>(opChain, false);
+    BlobId originalId, fraudId = null;
+    try {
+      originalId = new BlobId(opChain.blobId, clusterMap);
+      fraudId = BlobId.craft(originalId, originalId.getVersion(), (short) (1), (short) 1);
+    } catch (IOException e) {
+      Assert.fail("BlobId creation failed.");
+    }
+    Future<GetBlobResult> future = router.getBlob(fraudId.getID(),
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+            .getOption(GetOption.Include_All)
+            .build(), callback);
+    TestFuture<GetBlobResult> testFuture = new TestFuture<GetBlobResult>(future, genLabel("getBlob", true), opChain) {
+      @Override
+      void check() throws Exception {
+        checkExpectedRouterErrorCode(RouterErrorCode.BlobAuthorizationFailure);
+      }
+    };
+    opChain.testFutures.add(testFuture);
+  }
+
+  /**
+   * Submit a deleteBlob operation with incorrect accountId/ContainerId in blobId.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startDeleteBlobAuthorizationFailTest(final OperationChain opChain) {
+    Callback<Void> callback = new TestCallback<>(opChain, false);
+    BlobId originalId, fraudId = null;
+    try {
+      originalId = new BlobId(opChain.blobId, clusterMap);
+      fraudId = BlobId.craft(originalId, originalId.getVersion(), (short) (1), (short) 1);
+    } catch (IOException e) {
+      Assert.fail("BlobId creation failed.");
+    }
+    Future<Void> future = router.deleteBlob(fraudId.getID(), null, callback);
+    TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", true), opChain) {
+      @Override
+      void check() throws Exception {
+        checkExpectedRouterErrorCode(RouterErrorCode.BlobAuthorizationFailure);
+      }
+    };
+    opChain.testFutures.add(testFuture);
+  }
+
+  /**
    * Submit a deleteBlob operation.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
@@ -426,6 +475,12 @@ class RouterServerTestFramework {
         case AWAIT_DELETION:
           startAwaitDeletion(opChain);
           break;
+        case GET_AUTHORIZATION_FAILURE:
+          startGetBlobAuthorizationFailTest(opChain);
+          break;
+        case DELETE_AUTHORIZATION_FAILURE:
+          startDeleteBlobAuthorizationFailTest(opChain);
+          break;
         default:
           throw new IllegalArgumentException("Unknown op: " + nextOp);
       }
@@ -446,9 +501,15 @@ class RouterServerTestFramework {
      * GetBlob with the nonblocking router and check the blob contents against what was put in.
      */
     GET(false), /**
+     * GetBlob with incorrect accountId and containerId in blobId
+     */
+    GET_AUTHORIZATION_FAILURE(false), /**
      * DeleteBlob with the nonblocking router
      */
     DELETE(false), /**
+     * DeleteBlob with incorrect accountId and containerId in blobId
+     */
+    DELETE_AUTHORIZATION_FAILURE(false), /**
      * GetBlobInfo with the nonblocking router. Expect an exception to occur because the blob should have already been
      * deleted
      */
@@ -561,6 +622,21 @@ class RouterServerTestFramework {
             RouterErrorCode.BlobDeleted, ((RouterException) rootCause).getErrorCode());
       } catch (Exception e) {
         throw new Exception("Unexpected exception occured in operation: " + getOperationName(), e);
+      }
+    }
+
+    /**
+     * Check if router got expected RouterErrorCode.
+     * @throws Exception
+     */
+    void checkExpectedRouterErrorCode(RouterErrorCode routerErrorCode) throws Exception {
+      try {
+        future.get(AWAIT_TIMEOUT, TimeUnit.SECONDS);
+        Assert.fail("Blob should have failed in operation: " + getOperationName());
+      } catch (Exception e) {
+        Assert.assertTrue("Expect RouterException", e.getCause() instanceof RouterException);
+        Assert.assertEquals("RouterErrorCode doesn't match.", routerErrorCode,
+            ((RouterException) e.getCause()).getErrorCode());
       }
     }
 
