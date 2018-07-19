@@ -54,7 +54,7 @@ public abstract class MessageFormatInputStream extends InputStream {
         crc.flip();
       }
       if (crc.remaining() > 0) {
-        return crc.get();
+        return crc.get() & 0xFF;
       }
     }
     return -1;
@@ -95,7 +95,7 @@ public abstract class MessageFormatInputStream extends InputStream {
         totalRead += bytesToRead;
       }
     }
-    return totalRead;
+    return totalRead > 0 ? totalRead : -1;
   }
 
   public long getSize() {

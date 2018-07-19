@@ -26,7 +26,7 @@ import static org.junit.Assert.*;
 public class ByteBufferInputStreamTest {
 
   @Test
-  public void byteBufferStreamTest() throws IOException {
+  public void byteBufferStreamTest() throws Exception {
     byte[] buf = new byte[1024];
     new Random().nextBytes(buf);
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(buf));
@@ -58,7 +58,8 @@ public class ByteBufferInputStreamTest {
     for (int i = 0; i < 23; i++) {
       Assert.assertEquals(output[i], buf[i + 1001]);
     }
-    Assert.assertEquals(stream3.read(), -1);
+    Assert.assertEquals(-1, stream3.read());
+    TestUtils.validateInputStreamContract(stream3);
 
     ByteBuffer byteBuf = ByteBuffer.wrap(buf);
     ByteBufferInputStream stream4 = new ByteBufferInputStream(byteBuf.duplicate());

@@ -160,6 +160,40 @@ public class TestUtils {
   }
 
   /**
+   * Verify that the {@code inputStream} satisfies basic properties of the contract.
+   * @param inputStream
+   * @throws Exception
+   */
+  public static void validateInputStreamContract(InputStream inputStream) throws Exception {
+    int numBytes = 8;
+    byte[] bytes = new byte[numBytes];
+    assertException(NullPointerException.class, () -> inputStream.read(null, 0, 5), null);
+    assertException(IndexOutOfBoundsException.class, () -> inputStream.read(bytes, -1, 5), null);
+    assertException(IndexOutOfBoundsException.class, () -> inputStream.read(bytes, 0, -1), null);
+    assertException(IndexOutOfBoundsException.class, () -> inputStream.read(bytes, numBytes, 1), null);
+    assertException(IndexOutOfBoundsException.class, () -> inputStream.read(bytes, 1, numBytes), null);
+    Assert.assertEquals(0, inputStream.read(bytes, 0, 0));
+  }
+
+  /**
+   * Read through the {@code inputStream} using the no-arg read method until {@code -1} is returned,
+   * and verify that the expected number of bytes {@code expectedLength} is read.
+   * @param inputStream
+   * @param expectedLength
+   * @throws IOException
+   */
+  public static void readInputStreamAndValidateSize(InputStream inputStream, long expectedLength) throws IOException {
+    int readVal = 0;
+    long numRead = 0;
+    do {
+      readVal = inputStream.read();
+      numRead++;
+    } while (readVal != -1);
+    numRead--;
+    Assert.assertEquals("Unexpected inputstream read length", expectedLength, numRead);
+  }
+
+  /**
    * Gets a temporary directory with the given prefix. The directory will be deleted when the virtual machine terminates.
    * @param prefix The prefix for the name of the temporary directory.
    * @return The absolute path of the generated temporary directory.

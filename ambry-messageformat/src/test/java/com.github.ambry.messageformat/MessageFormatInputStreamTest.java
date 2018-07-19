@@ -313,6 +313,35 @@ public class MessageFormatInputStreamTest {
   }
 
   /**
+   * Test calling the no-arg read method
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  @Test
+  public void messageFormatNoArgReadTest() throws Exception, MessageFormatException {
+    StoreKey key = new MockId("id1");
+    StoreKeyFactory keyFactory = new MockIdFactory();
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    BlobProperties prop = new BlobProperties(10, "servid", accountId, containerId, false);
+    byte[] encryptionKey = new byte[100];
+    new Random().nextBytes(encryptionKey);
+    byte[] usermetadata = new byte[1000];
+    new Random().nextBytes(usermetadata);
+    int blobContentSize = 2000;
+    byte[] data = new byte[blobContentSize];
+    new Random().nextBytes(data);
+    ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(data));
+
+    MessageFormatInputStream messageFormatStream =
+        new PutMessageFormatInputStream(key, ByteBuffer.wrap(encryptionKey), prop, ByteBuffer.wrap(usermetadata),
+            stream, blobContentSize, BlobType.DataBlob);
+
+    TestUtils.validateInputStreamContract(messageFormatStream);
+    TestUtils.readInputStreamAndValidateSize(messageFormatStream, messageFormatStream.getSize());
+  }
+
+  /**
    * Tests for {@link TtlUpdateMessageFormatInputStream} in different versions.
    */
   @Test
