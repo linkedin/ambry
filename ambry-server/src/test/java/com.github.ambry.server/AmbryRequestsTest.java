@@ -1088,10 +1088,10 @@ public class AmbryRequestsTest {
         ServerErrorCode.Unknown_Error, true);
     MockStorageManager.runtimeException = null;
 
-    // store is not started/is stopped/otherwise unavailable - Disk_Unavailable
+    // store is not started/is stopped/otherwise unavailable - Replica_Unavailable
     storageManager.returnNullStore = true;
     sendAndVerifyOperationRequest(RequestOrResponseType.TtlUpdateRequest, Collections.singletonList(id),
-        ServerErrorCode.Disk_Unavailable, false);
+        ServerErrorCode.Replica_Unavailable, false);
     storageManager.returnNullStore = false;
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
 
