@@ -151,8 +151,8 @@ class RouterTestHelpers {
     if (serverErrorCodesInOrder.length > replicas.size()) {
       throw new IllegalArgumentException("More server error codes provided than replicas in partition");
     }
-    // Do serverErrorCodes assignment based on Operation Tracker logic so that server error can return in the order of
-    // serverErrorCodesInOrder.
+    // Assume number of nodes in each dc is 3 and do serverErrorCodes assignment based on Operation Tracker logic.
+    // TODO: Use a shared queue among all mock servers to avoid assumption above.
     int numOfNodesEachDatacenter = 3;
     List<ServerErrorCode> serverErrorInLocalDC =
         Arrays.asList(serverErrorCodesInOrder).subList(0, numOfNodesEachDatacenter);
