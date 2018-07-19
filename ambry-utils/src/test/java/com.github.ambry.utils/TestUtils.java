@@ -189,7 +189,7 @@ public class TestUtils {
       numRead++;
     } while (readVal != -1);
     numRead--;
-    Assert.assertEquals(expectedLength, numRead);
+    Assert.assertEquals("Unexpected inputstream read length", expectedLength, numRead);
   }
 
   /**
