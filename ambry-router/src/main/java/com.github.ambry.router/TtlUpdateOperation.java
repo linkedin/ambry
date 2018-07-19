@@ -190,6 +190,9 @@ class TtlUpdateOperation {
         } else {
           // The status of operation tracker will be updated within the processServerError method.
           processServerError(replica, ttlUpdateResponse.getError(), ttlUpdateResponse.getCorrelationId());
+          if (ttlUpdateResponse.getError() == ServerErrorCode.Blob_Authorization_Failure) {
+            operationCompleted = true;
+          }
         }
       }
     }
@@ -248,6 +251,9 @@ class TtlUpdateOperation {
           routerMetrics.crossColoSuccessCount.inc();
         }
         break;
+      case Blob_Authorization_Failure:
+        updateOperationState(replica, RouterErrorCode.BlobAuthorizationFailure);
+        break;
       case Blob_Deleted:
         updateOperationState(replica, RouterErrorCode.BlobDeleted);
         break;
@@ -302,8 +308,9 @@ class TtlUpdateOperation {
    * Completes the {@link TtlUpdateOperation} if it is done.
    */
   private void checkAndMaybeComplete() {
-    if (operationTracker.isDone()) {
-      if (!operationTracker.hasSucceeded()) {
+    // operationCompleted is true if Blob_Authorization_Failure was received.
+    if (operationTracker.isDone() || operationCompleted == true) {
+      if (!operationTracker.hasSucceeded() ) {
         setOperationException(
             new RouterException("The TtlUpdateOperation could not be completed.", resolvedRouterErrorCode));
       }
@@ -320,20 +327,22 @@ class TtlUpdateOperation {
    */
   private int getPrecedenceLevel(RouterErrorCode routerErrorCode) {
     switch (routerErrorCode) {
-      case BlobDeleted:
+      case BlobAuthorizationFailure:
         return 0;
-      case BlobExpired:
+      case BlobDeleted:
         return 1;
-      case BlobUpdateNotAllowed:
+      case BlobExpired:
         return 2;
-      case AmbryUnavailable:
+      case BlobUpdateNotAllowed:
         return 3;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 4;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 5;
-      case BlobDoesNotExist:
+      case OperationTimedOut:
         return 6;
+      case BlobDoesNotExist:
+        return 7;
       default:
         return Integer.MIN_VALUE;
     }

@@ -112,6 +112,7 @@ public class ReplicationMetrics {
   public final Map<String, Histogram> sslInterColoTotalReplicationTime = new HashMap<String, Histogram>();
   public final Histogram sslIntraColoTotalReplicationTime;
   public final Counter blobDeletedOnGetCount;
+  public final Counter blobAuthorizationFailureCount;
 
   public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
@@ -207,6 +208,8 @@ public class ReplicationMetrics {
     sslIntraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoTotalReplicationTime"));
     blobDeletedOnGetCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "BlobDeletedOnGetCount"));
+    blobAuthorizationFailureCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "BlobAuthorizationFailureCount"));
     this.registry = registry;
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
     populateInvalidMessageMetricForReplicas(replicaIds);

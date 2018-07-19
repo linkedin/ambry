@@ -75,10 +75,11 @@ public enum RouterErrorCode {
   RangeNotSatisfiable, /**
    * The channel returned to the user in a getBlob operation has been closed before operation completion.
    */
-  ChannelClosed,
-
-  /**
+  ChannelClosed, /**
    * The update has been rejected
    */
-  BlobUpdateNotAllowed
+  BlobUpdateNotAllowed, /**
+   * ContainerId or AccountId from blobId doesn't match these in store server.
+   */
+  BlobAuthorizationFailure
 }

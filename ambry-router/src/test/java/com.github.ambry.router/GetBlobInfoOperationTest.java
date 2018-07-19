@@ -365,14 +365,16 @@ public class GetBlobInfoOperationTest {
   }
 
   /**
-   * Test the case with Blob_Not_Found errors from most servers, and Blob_Deleted at just one server. The latter
-   * should be the exception received for the operation.
+   * Test the case with Blob_Not_Found errors from most servers, and Blob_Deleted, Blob_Expired or
+   * Blob_Authorization_Failure at just one server. The latter should be the exception received for the operation.
    * @throws Exception
    */
   @Test
-  public void testErrorPrecedenceWithBlobDeletedAndExpiredCase() throws Exception {
-    ServerErrorCode[] serverErrorCodesToTest = {ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Expired};
-    RouterErrorCode[] routerErrorCodesToExpect = {RouterErrorCode.BlobDeleted, RouterErrorCode.BlobExpired};
+  public void testErrorPrecedenceWithSpecialCase() throws Exception {
+    ServerErrorCode[] serverErrorCodesToTest =
+        {ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Expired, ServerErrorCode.Blob_Authorization_Failure};
+    RouterErrorCode[] routerErrorCodesToExpect =
+        {RouterErrorCode.BlobDeleted, RouterErrorCode.BlobExpired, RouterErrorCode.BlobAuthorizationFailure};
     for (int i = 0; i < serverErrorCodesToTest.length; i++) {
       int indexToSetCustomError = random.nextInt(replicasCount);
       ServerErrorCode[] serverErrorCodesInOrder = new ServerErrorCode[9];
@@ -385,6 +387,31 @@ public class GetBlobInfoOperationTest {
       }
       testErrorPrecedence(serverErrorCodesInOrder, routerErrorCodesToExpect[i]);
     }
+  }
+
+  /**
+   * Test the case where servers return different {@link ServerErrorCode} or success, and the {@link GetBlobInfoOperation}
+   * is able to resolve and conclude the correct {@link RouterErrorCode}. The get blob operation should be able
+   * to resolve the router error code as {@code Blob_Authorization_Failure}.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobAuthorizationFailureOverrideAll() throws Exception {
+    successTarget = 2; // set it to 2 for more coverage
+    Properties props = getNonBlockingRouterProperties();
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
+    serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
+    serverErrorCodes[2] = ServerErrorCode.IO_Error;
+    serverErrorCodes[3] = ServerErrorCode.Partition_Unknown;
+    serverErrorCodes[4] = ServerErrorCode.Disk_Unavailable;
+    serverErrorCodes[5] = ServerErrorCode.Blob_Authorization_Failure;
+    serverErrorCodes[6] = ServerErrorCode.Unknown_Error;
+    serverErrorCodes[7] = ServerErrorCode.Unknown_Error;
+    serverErrorCodes[8] = ServerErrorCode.No_Error;
+    testErrorPrecedence(serverErrorCodes, RouterErrorCode.BlobAuthorizationFailure);
   }
 
   /**

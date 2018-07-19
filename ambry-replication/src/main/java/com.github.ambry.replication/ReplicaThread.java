@@ -780,6 +780,11 @@ class ReplicaThread implements Runnable {
             replicationMetrics.blobDeletedOnGetCount.inc();
             logger.trace("One of the blobs to GET is deleted: Remote node: {} Thread name: {} Remote replica: {}",
                 remoteNode, threadName, remoteReplicaInfo.getReplicaId());
+          } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Authorization_Failure) {
+            replicationMetrics.blobAuthorizationFailureCount.inc();
+            logger.error(
+                "One of the blobs authorization failed: Remote node: {} Thread name: {} Remote replica: {} Keys are: {}",
+                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.missingStoreKeys);
           } else {
             replicationMetrics.updateGetRequestError(remoteReplicaInfo.getReplicaId());
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,

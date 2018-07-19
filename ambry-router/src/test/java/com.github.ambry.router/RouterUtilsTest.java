@@ -89,6 +89,7 @@ public class RouterUtilsTest {
         case BadInputChannel:
         case BlobDeleted:
         case BlobDoesNotExist:
+        case BlobAuthorizationFailure:
         case BlobExpired:
         case RangeNotSatisfiable:
         case ChannelClosed:

@@ -809,7 +809,8 @@ class GetBlobOperation extends GetOperation {
           } else {
             // process and set the most relevant exception.
             processServerError(getError);
-            if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired) {
+            if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
+                || getError == ServerErrorCode.Blob_Authorization_Failure) {
               // this is a successful response and one that completes the operation regardless of whether the
               // success target has been reached or not.
               chunkCompleted = true;
@@ -854,6 +855,7 @@ class GetBlobOperation extends GetOperation {
     void setChunkException(RouterException exception) {
       if (chunkException == null || exception.getErrorCode() == RouterErrorCode.BlobDeleted
           || exception.getErrorCode() == RouterErrorCode.BlobExpired
+          || exception.getErrorCode() == RouterErrorCode.BlobAuthorizationFailure
           || exception.getErrorCode() == RouterErrorCode.RangeNotSatisfiable) {
         chunkException = exception;
       }
@@ -1057,6 +1059,10 @@ class GetBlobOperation extends GetOperation {
     void processServerError(ServerErrorCode errorCode) {
       logger.trace("Server returned an error: {} ", errorCode);
       switch (errorCode) {
+        case Blob_Authorization_Failure:
+          setChunkException(
+              new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobAuthorizationFailure));
+          break;
         case Blob_Deleted:
           setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDeleted));
           break;

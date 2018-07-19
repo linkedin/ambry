@@ -167,7 +167,8 @@ class MockServer {
       // getError could be at the server level or the partition level. For partition level errors,
       // set it in the partitionResponseInfo
       if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Expired
-          || getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Not_Found) {
+          || getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Not_Found
+          || getError == ServerErrorCode.Blob_Authorization_Failure) {
         partitionError = getError;
         serverError = ServerErrorCode.No_Error;
       } else {
@@ -322,6 +323,12 @@ class MockServer {
       } else if (processedError == ServerErrorCode.Blob_Expired) {
         if (partitionError == ServerErrorCode.No_Error) {
           partitionError = ServerErrorCode.Blob_Expired;
+        }
+        byteBuffer = ByteBuffer.allocate(0);
+        byteBufferSize = 0;
+      } else if (processedError == ServerErrorCode.Blob_Authorization_Failure) {
+        if (partitionError == ServerErrorCode.No_Error) {
+          partitionError = ServerErrorCode.Blob_Authorization_Failure;
         }
         byteBuffer = ByteBuffer.allocate(0);
         byteBufferSize = 0;
