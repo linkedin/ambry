@@ -116,7 +116,7 @@ class AmbryReplica implements ReplicaId, Resource {
 
   @Override
   public boolean isDown() {
-    return disk.getState() == HardwareState.UNAVAILABLE || isStopped;
+    return disk.getState() == HardwareState.UNAVAILABLE || resourceStatePolicy.isDown() || isStopped;
   }
 
   @Override
