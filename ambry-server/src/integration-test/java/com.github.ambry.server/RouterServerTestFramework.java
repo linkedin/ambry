@@ -368,8 +368,8 @@ class RouterServerTestFramework {
       // If there is a blobId creation failure, throw the exception and don't need to do actual action.
       FutureResult<Void> future = new FutureResult<>();
       // continue the chain
-      future.done(null, null);
-      callback.onCompletion(null, null);
+      future.done(null, e);
+      callback.onCompletion(null, e);
       TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("getBlob", true), opChain) {
         @Override
         void check() throws Exception {
@@ -408,8 +408,8 @@ class RouterServerTestFramework {
       // If there is a blobId creation failure, throw the exception and don't need to do actual action.
       FutureResult<Void> future = new FutureResult<>();
       // continue the chain
-      future.done(null, null);
-      callback.onCompletion(null, null);
+      future.done(null, e);
+      callback.onCompletion(null, e);
       TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", true), opChain) {
         @Override
         void check() throws Exception {
