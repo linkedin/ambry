@@ -27,6 +27,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.Selector;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
@@ -158,8 +159,7 @@ class RouterServerTestFramework {
    * @param operations the queue of operations to perform in the chain
    * @return an {@link OperationChain} object describing the started chain.
    */
-  OperationChain startOperationChain(int blobSize, Container container, int chainId, Queue<OperationType> operations)
-      throws IOException {
+  OperationChain startOperationChain(int blobSize, Container container, int chainId, Queue<OperationType> operations) {
     byte[] userMetadata = new byte[1000];
     byte[] data = new byte[blobSize];
     TestUtils.RANDOM.nextBytes(userMetadata);
@@ -356,13 +356,30 @@ class RouterServerTestFramework {
   /**
    * Submit a getBlob operation with incorrect accountId/ContainerId in blobId..
    * @param opChain the {@link OperationChain} object that this operation is a part of.
-   * @throws IOException if blobId creation failed.
    */
-  private void startGetBlobAuthorizationFailTest(final OperationChain opChain) throws IOException {
+  private void startGetBlobAuthorizationFailTest(final OperationChain opChain) {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, false);
-    BlobId originalId = new BlobId(opChain.blobId, clusterMap);
-    BlobId fraudId = BlobId.craft(originalId, originalId.getVersion(), (short) (originalId.getAccountId() + 1),
-        (short) (originalId.getContainerId() + 1));
+    BlobId originalId, fraudId;
+    try {
+      originalId = new BlobId(opChain.blobId, clusterMap);
+      fraudId = BlobId.craft(originalId, originalId.getVersion(), (short) (originalId.getAccountId() + 1),
+          (short) (originalId.getContainerId() + 1));
+    } catch (IOException e) {
+      // If there is a blobId creation failure, throw the exception and don't need to do actual action.
+      FutureResult<Void> future = new FutureResult<>();
+      // continue the chain
+      future.done(null, null);
+      callback.onCompletion(null, null);
+      TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("getBlob", true), opChain) {
+        @Override
+        void check() throws Exception {
+          throw e;
+        }
+      };
+      opChain.testFutures.add(testFuture);
+      return;
+    }
+    // If everything good:
     Future<GetBlobResult> future = router.getBlob(fraudId.getID(),
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
             .getOption(GetOption.Include_All)
@@ -379,13 +396,29 @@ class RouterServerTestFramework {
   /**
    * Submit a deleteBlob operation with incorrect accountId/ContainerId in blobId.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
-   * @throws IOException if blobId creation failed.
    */
-  private void startDeleteBlobAuthorizationFailTest(final OperationChain opChain) throws IOException {
+  private void startDeleteBlobAuthorizationFailTest(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
-    BlobId originalId = new BlobId(opChain.blobId, clusterMap);
-    BlobId fraudId = BlobId.craft(originalId, originalId.getVersion(), (short) (originalId.getAccountId() + 1),
-        (short) (originalId.getContainerId() + 1));
+    BlobId originalId, fraudId;
+    try {
+      originalId = new BlobId(opChain.blobId, clusterMap);
+      fraudId = BlobId.craft(originalId, originalId.getVersion(), (short) (originalId.getAccountId() + 1),
+          (short) (originalId.getContainerId() + 1));
+    } catch (IOException e) {
+      // If there is a blobId creation failure, throw the exception and don't need to do actual action.
+      FutureResult<Void> future = new FutureResult<>();
+      // continue the chain
+      future.done(null, null);
+      callback.onCompletion(null, null);
+      TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", true), opChain) {
+        @Override
+        void check() throws Exception {
+          throw e;
+        }
+      };
+      opChain.testFutures.add(testFuture);
+      return;
+    }
     Future<Void> future = router.deleteBlob(fraudId.getID(), null, callback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", true), opChain) {
       @Override
@@ -417,7 +450,7 @@ class RouterServerTestFramework {
    * nodes before continuing the chain.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
-  private void startAwaitCreation(final OperationChain opChain) throws IOException {
+  private void startAwaitCreation(final OperationChain opChain) {
     notificationSystem.awaitBlobCreations(opChain.blobId);
     continueChain(opChain);
   }
@@ -427,7 +460,7 @@ class RouterServerTestFramework {
    * nodes before continuing the chain.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
-  private void startAwaitDeletion(final OperationChain opChain) throws IOException {
+  private void startAwaitDeletion(final OperationChain opChain) {
     notificationSystem.awaitBlobDeletions(opChain.blobId);
     continueChain(opChain);
   }
@@ -437,7 +470,7 @@ class RouterServerTestFramework {
    * mark the chain as completed.
    * @param opChain the {@link OperationChain} to get the next operation from.
    */
-  private void continueChain(final OperationChain opChain) throws IOException {
+  private void continueChain(final OperationChain opChain) {
     synchronized (opChain.testFutures) {
       OperationType nextOp = opChain.operations.poll();
       if (nextOp == null) {
@@ -662,14 +695,7 @@ class RouterServerTestFramework {
         return;
       }
       action(result);
-      try {
-        continueChain(opChain);
-      } catch (IOException e) {
-        if (expectError) {
-          opChain.latch.countDown();
-          return;
-        }
-      }
+      continueChain(opChain);
     }
 
     /**
