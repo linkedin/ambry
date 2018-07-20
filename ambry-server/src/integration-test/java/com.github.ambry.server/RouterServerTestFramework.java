@@ -354,7 +354,7 @@ class RouterServerTestFramework {
   }
 
   /**
-   * Submit a getBlob operation with incorrect accountId/ContainerId in blobId..
+   * Submit a getBlob operation with incorrect accountId/ContainerId in blobId.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
   private void startGetBlobAuthorizationFailTest(final OperationChain opChain) {
@@ -654,10 +654,10 @@ class RouterServerTestFramework {
     }
 
     /**
-     * Check if router got expected RouterErrorCode.
-     * @throws Exception
+     * Check if router get expected RouterErrorCode.
+     * @param routerErrorCode is the expected error code.
      */
-    void checkExpectedRouterErrorCode(RouterErrorCode routerErrorCode) throws Exception {
+    void checkExpectedRouterErrorCode(RouterErrorCode routerErrorCode) {
       try {
         future.get(AWAIT_TIMEOUT, TimeUnit.SECONDS);
         Assert.fail("Blob should have failed in operation: " + getOperationName());
