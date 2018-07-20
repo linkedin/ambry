@@ -70,7 +70,7 @@ import static org.junit.Assert.fail;
 public class HelixAccountServiceTest {
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 20000;
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
-  private static final String ZK_CONNECT_STRING = "dummyHost:dummyPort";
+  private static final String ZK_CONNECT_STRING = "";
   private static final String STORE_ROOT_PATH = "/ambry_test/helix_account_service";
   private static final Random random = new Random();
   private static final String BAD_ACCOUNT_METADATA_STRING = "badAccountMetadataString";
@@ -111,7 +111,7 @@ public class HelixAccountServiceTest {
         String.valueOf(ZK_CLIENT_CONNECTION_TIMEOUT_MS));
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
         String.valueOf(ZK_CLIENT_SESSION_TIMEOUT_MS));
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
+    helixConfigProps.setProperty(HelixAccountServiceConfig.HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string",
         ZK_CONNECT_STRING);
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", STORE_ROOT_PATH);
     accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
@@ -143,7 +143,7 @@ public class HelixAccountServiceTest {
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testStartUpWithoutMetadataExists() throws Exception {
+  public void testStartUpWithoutMetadataExists() {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // At time zero, no account metadata exists.
     assertEquals("The number of account in HelixAccountService is incorrect after clean startup", 0,
@@ -169,7 +169,7 @@ public class HelixAccountServiceTest {
    * exists on the {@code ZooKeeper}.
    */
   @Test
-  public void testCreateAccount() throws Exception {
+  public void testCreateAccount() {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
         accountService.getAllAccounts().size());
@@ -660,7 +660,7 @@ public class HelixAccountServiceTest {
         new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
     accountService = mockHelixAccountServiceFactory.getAccountService();
     CountDownLatch latch = new CountDownLatch(1);
-    mockHelixAccountServiceFactory.getHelixStore(storeConfig).setReadLatch(latch);
+    mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig).setReadLatch(latch);
     assertEquals("Wrong number of thread for account updater.", 1, numThreadsByThisName(updaterThreadPrefix));
     awaitLatchOrTimeout(latch, 100);
   }
@@ -669,10 +669,9 @@ public class HelixAccountServiceTest {
    * Tests disabling the background thread. By setting the polling interval to 0ms, the accounts should not be fetched.
    * Therefore, after the {@link HelixAccountService} starts, there should be a single get call to the
    * {@link HelixPropertyStore}.
-   * @throws Exception
    */
   @Test
-  public void testDisableBackgroundUpdater() throws Exception {
+  public void testDisableBackgroundUpdater() {
     helixConfigProps.setProperty(HelixAccountServiceConfig.UPDATER_POLLING_INTERVAL_MS_KEY, "0");
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
@@ -806,7 +805,7 @@ public class HelixAccountServiceTest {
    */
   private void writeAccountsToHelixPropertyStore(Collection<Account> accounts, boolean shouldNotify) throws Exception {
     HelixStoreOperator storeOperator =
-        new HelixStoreOperator(mockHelixAccountServiceFactory.getHelixStore(storeConfig));
+        new HelixStoreOperator(mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig));
     ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
     Map<String, String> accountMap = new HashMap<>();
     for (Account account : accounts) {
@@ -827,7 +826,7 @@ public class HelixAccountServiceTest {
    */
   private void writeZNRecordToHelixPropertyStore(ZNRecord zNRecord, boolean shouldNotify) throws Exception {
     HelixStoreOperator storeOperator =
-        new HelixStoreOperator(mockHelixAccountServiceFactory.getHelixStore(storeConfig));
+        new HelixStoreOperator(mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig));
     storeOperator.write(HelixAccountService.FULL_ACCOUNT_METADATA_PATH, zNRecord);
     if (shouldNotify) {
       notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
@@ -874,7 +873,7 @@ public class HelixAccountServiceTest {
    */
   private void deleteStoreIfExists() throws Exception {
     HelixStoreOperator storeOperator =
-        new HelixStoreOperator(mockHelixAccountServiceFactory.getHelixStore(storeConfig));
+        new HelixStoreOperator(mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig));
     // check if the store exists by checking if root path (e.g., "/") exists in the store.
     if (storeOperator.exist("/")) {
       storeOperator.delete("/");

@@ -18,7 +18,6 @@ package com.github.ambry.config;
  */
 public class HelixPropertyStoreConfig {
   public static final String HELIX_PROPERTY_STORE_PREFIX = "helix.property.store.";
-  public static final String INVALID_ZK_CLIENT_CONNECT_STRING = "";
 
   /**
    * Time in ms to time out a connection to a ZooKeeper server.
@@ -36,14 +35,6 @@ public class HelixPropertyStoreConfig {
   public final int zkClientSessionTimeoutMs;
 
   /**
-   * The ZooKeeper server address. This config is required when using {@code HelixAccountService}, but not for
-   * {@code InMemoryUnknownAccountService}.
-   */
-  @Config(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string")
-  @Default(INVALID_ZK_CLIENT_CONNECT_STRING)
-  public final String zkClientConnectString;
-
-  /**
    * The root path of helix property store in the ZooKeeper. Must start with {@code /}, and must not end with {@code /}.
    * It is recommended to make root path in the form of {@code /ambry/<clustername>/helixPropertyStore}
    */
@@ -58,8 +49,6 @@ public class HelixPropertyStoreConfig {
     zkClientSessionTimeoutMs =
         verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms", 20 * 1000, 1,
             Integer.MAX_VALUE);
-    zkClientConnectString = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
-        INVALID_ZK_CLIENT_CONNECT_STRING);
     rootPath = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "root.path",
         "/ambry/defaultCluster/helixPropertyStore");
   }

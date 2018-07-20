@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
@@ -47,14 +48,14 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
    * Constructor.
    * @param verifiableProperties The properties to get a {@link HelixAccountService} instance. Cannot be {@code null}.
    * @param metricRegistry The {@link MetricRegistry} for metrics tracking. Cannot be {@code null}.
-   * @param notifier The {@link Notifier} used to get a {@link HelixAccountService}. Can be {@code null}.
    */
-  public HelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      Notifier<String> notifier) {
+  public HelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
     accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
     accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
-    this.notifier = notifier;
+    this.notifier =
+        accountServiceConfig.zkClientConnectString.equals(HelixAccountServiceConfig.INVALID_ZK_CLIENT_CONNECT_STRING)
+            ? null : new HelixNotifier(accountServiceConfig.zkClientConnectString, storeConfig);
   }
 
   @Override
@@ -62,12 +63,12 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
     try {
       long startTimeMs = System.currentTimeMillis();
       logger.info("Starting a HelixAccountService");
-      ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
+      ZkClient zkClient = new ZkClient(accountServiceConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
           storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
       HelixPropertyStore<ZNRecord> helixStore =
           new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, null);
       logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
-              + "zkClientConnectionTimeoutMs={}, rootPath={}", storeConfig.zkClientConnectString,
+              + "zkClientConnectionTimeoutMs={}, rootPath={}", accountServiceConfig.zkClientConnectString,
           storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath);
       ScheduledExecutorService scheduler =
           accountServiceConfig.updaterPollingIntervalMs > 0 ? Utils.newScheduler(1, HELIX_ACCOUNT_UPDATER_PREFIX, false)

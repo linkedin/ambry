@@ -50,21 +50,23 @@ public class HelixStoreOperator {
 
   /**
    * A constructor that gets a {@link HelixStoreOperator} based on the {@link HelixPropertyStoreConfig}.
+   * @param zkServers the ZooKeeper server address.
    * @param storeConfig A {@link HelixPropertyStore} used to instantiate a {@link HelixStoreOperator}.
    */
-  public HelixStoreOperator(HelixPropertyStoreConfig storeConfig) {
+  public HelixStoreOperator(String zkServers, HelixPropertyStoreConfig storeConfig) {
     if (storeConfig == null) {
       throw new IllegalArgumentException("storeConfig cannot be null");
     }
     long startTimeMs = System.currentTimeMillis();
     logger.info("Starting a HelixStoreOperator");
-    ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
-        storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
+    ZkClient zkClient =
+        new ZkClient(zkServers, storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs,
+            new ZNRecordSerializer());
     List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath);
     HelixPropertyStore<ZNRecord> helixStore =
         new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
     logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
-            + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", storeConfig.zkClientConnectString,
+            + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", zkServers,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
         subscribedPaths);
     this.helixStore = helixStore;

@@ -40,12 +40,12 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
   /**
    * Constructor.
    * @param verifiableProperties The properties to start a {@link HelixAccountService}.
-   * @param metricRegistry The {@link MetricRegistry} to start a {@link HelixAccountService}.
    * @param notifier The {@link Notifier} to start a {@link HelixAccountService}.
+   * @param metricRegistry The {@link MetricRegistry} to start a {@link HelixAccountService}.
    */
   public MockHelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       Notifier<String> notifier, String updaterThreadPrefix) {
-    super(verifiableProperties, metricRegistry, notifier);
+    super(verifiableProperties, metricRegistry);
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
     accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
     accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
@@ -58,8 +58,8 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
     try {
       ScheduledExecutorService scheduler =
           accountServiceConfig.updaterPollingIntervalMs > 0 ? Utils.newScheduler(1, updaterThreadPrefix, false) : null;
-      return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier, scheduler,
-          accountServiceConfig);
+      return new HelixAccountService(getHelixStore(accountServiceConfig.zkClientConnectString, storeConfig),
+          accountServiceMetrics, notifier, scheduler, accountServiceConfig);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate HelixAccountService", e);
     }
@@ -67,11 +67,12 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
 
   /**
    * Gets a {@link MockHelixPropertyStore} for the given {@link HelixPropertyStoreConfig}.
+   * @param zkServers the ZooKeeper server address.
    * @param storeConfig A {@link HelixPropertyStoreConfig}.
    * @return A {@link MockHelixPropertyStore} defined by the {@link HelixPropertyStoreConfig}.
    */
-  MockHelixPropertyStore<ZNRecord> getHelixStore(HelixPropertyStoreConfig storeConfig) {
-    return storeKeyToMockStoreMap.computeIfAbsent(storeConfig.zkClientConnectString + storeConfig.rootPath,
+  MockHelixPropertyStore<ZNRecord> getHelixStore(String zkServers, HelixPropertyStoreConfig storeConfig) {
+    return storeKeyToMockStoreMap.computeIfAbsent(zkServers + storeConfig.rootPath,
         path -> new MockHelixPropertyStore<>());
   }
 }

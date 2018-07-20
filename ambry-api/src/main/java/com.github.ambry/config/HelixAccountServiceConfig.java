@@ -23,6 +23,15 @@ public class HelixAccountServiceConfig {
   public static final String UPDATER_SHUT_DOWN_TIMEOUT_MS_KEY =
       HELIX_ACCOUNT_SERVICE_PREFIX + "updater.shut.down.timeout.ms";
   public static final String BACKUP_DIRECTORY_KEY = HELIX_ACCOUNT_SERVICE_PREFIX + "backup.dir";
+  public static final String INVALID_ZK_CLIENT_CONNECT_STRING = "";
+
+  /**
+   * The ZooKeeper server address. This config is required when using {@code HelixAccountService}, but not for
+   * {@code InMemoryUnknownAccountService}.
+   */
+  @Config(HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string")
+  @Default(INVALID_ZK_CLIENT_CONNECT_STRING)
+  public final String zkClientConnectString;
 
   /**
    * The time interval in second between two consecutive account pulling for the background account updater of
@@ -48,6 +57,8 @@ public class HelixAccountServiceConfig {
   public final String backupDir;
 
   public HelixAccountServiceConfig(VerifiableProperties verifiableProperties) {
+    zkClientConnectString = verifiableProperties.getString(HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string",
+        INVALID_ZK_CLIENT_CONNECT_STRING);
     updaterPollingIntervalMs =
         verifiableProperties.getIntInRange(UPDATER_POLLING_INTERVAL_MS_KEY, 60 * 60 * 1000, 0, Integer.MAX_VALUE);
     updaterShutDownTimeoutMs =
