@@ -42,7 +42,7 @@ import static org.junit.Assert.*;
 public class HelixNotifierTest {
   private static final int ZK_CLIENT_CONNECT_TIMEOUT_MS = 20 * 1000;
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20 * 1000;
-  public static final String ZK_CLIENT_CONNECT_STRING = "";
+  private static final String ZK_CLIENT_CONNECT_STRING = "";
   private static final String STORAGE_ROOT_PATH = "/ambry/testCluster/helixPropertyStore";
   private static final long LATCH_TIMEOUT_MS = 1000;
   private static final List<String> receivedTopicsByListener0 = new ArrayList<>();

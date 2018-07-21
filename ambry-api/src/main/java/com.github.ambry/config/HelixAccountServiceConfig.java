@@ -26,8 +26,7 @@ public class HelixAccountServiceConfig {
   public static final String INVALID_ZK_CLIENT_CONNECT_STRING = "";
 
   /**
-   * The ZooKeeper server address. This config is required when using {@code HelixAccountService}, but not for
-   * {@code InMemoryUnknownAccountService}.
+   * The ZooKeeper server address. This config is required when using {@code HelixAccountService}.
    */
   @Config(HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string")
   @Default(INVALID_ZK_CLIENT_CONNECT_STRING)

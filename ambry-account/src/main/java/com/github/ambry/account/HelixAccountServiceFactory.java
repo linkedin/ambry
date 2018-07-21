@@ -53,7 +53,7 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
     accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
     accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
-    this.notifier =
+    notifier =
         accountServiceConfig.zkClientConnectString.equals(HelixAccountServiceConfig.INVALID_ZK_CLIENT_CONNECT_STRING)
             ? null : new HelixNotifier(accountServiceConfig.zkClientConnectString, storeConfig);
   }
