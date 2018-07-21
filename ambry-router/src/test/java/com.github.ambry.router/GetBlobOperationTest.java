@@ -467,17 +467,40 @@ public class GetBlobOperationTest {
     Properties props = getDefaultNonBlockingRouterProperties();
     props.setProperty("router.datacenter.name", "DC1");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
-    testVariousErrors(dcWherePutHappened);
+    doTestSuccessInThePresenceOfVariousErrors(dcWherePutHappened);
 
     props = getDefaultNonBlockingRouterProperties();
     props.setProperty("router.datacenter.name", "DC2");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
-    testVariousErrors(dcWherePutHappened);
+    doTestSuccessInThePresenceOfVariousErrors(dcWherePutHappened);
 
     props = getDefaultNonBlockingRouterProperties();
     props.setProperty("router.datacenter.name", "DC3");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
-    testVariousErrors(dcWherePutHappened);
+    doTestSuccessInThePresenceOfVariousErrors(dcWherePutHappened);
+  }
+
+  /**
+   * Tests the case where all servers return the same server level error code
+   * @throws Exception
+   */
+  @Test
+  public void testFailureOnServerErrors() throws Exception {
+    doPut();
+    List<ServerErrorCode> serverErrors = new ArrayList<>(Arrays.asList(ServerErrorCode.values()));
+    // set the status to various server level level errors (remove all partition level errors or non errors)
+    serverErrors.remove(ServerErrorCode.Blob_Deleted);
+    serverErrors.remove(ServerErrorCode.Blob_Expired);
+    serverErrors.remove(ServerErrorCode.No_Error);
+    serverErrors.remove(ServerErrorCode.Blob_Authorization_Failure);
+    serverErrors.remove(ServerErrorCode.Blob_Not_Found);
+    for (ServerErrorCode serverErrorCode : serverErrors) {
+      mockServerLayout.getMockServers().forEach(server -> server.setServerErrorForAllRequests(serverErrorCode));
+      GetBlobOperation op = createOperationAndComplete(null);
+      assertFailureAndCheckErrorCode(op,
+          serverErrorCode == ServerErrorCode.Disk_Unavailable ? RouterErrorCode.AmbryUnavailable
+              : RouterErrorCode.UnexpectedInternalError);
+    }
   }
 
   /**
@@ -534,7 +557,7 @@ public class GetBlobOperationTest {
    * operation should succeed.
    * @param dcWherePutHappened the datacenter where the put happened.
    */
-  private void testVariousErrors(String dcWherePutHappened) throws Exception {
+  private void doTestSuccessInThePresenceOfVariousErrors(String dcWherePutHappened) throws Exception {
     ArrayList<MockServer> mockServers = new ArrayList<>(mockServerLayout.getMockServers());
     ArrayList<ServerErrorCode> serverErrors = new ArrayList<>(Arrays.asList(ServerErrorCode.values()));
     // set the status to various server level or partition level errors (not Blob_Deleted or Blob_Expired - as they

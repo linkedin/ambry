@@ -601,8 +601,6 @@ class NonBlockingRouter implements Router {
     protected void updateBlobTtl(final String blobIdStr, final String serviceId, long expiresAtMs,
         FutureResult<Void> futureResult, Callback<Void> callback) {
       Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
-        List<String> blobIdStrs = new ArrayList<>();
-        blobIdStrs.add(blobIdStr);
         if (exception != null) {
           completeOperation(futureResult, callback, null, exception, false);
         } else if (result.getBlobResult != null) {
@@ -610,16 +608,20 @@ class NonBlockingRouter implements Router {
               new RouterException("GET blob call returned the blob instead of just the store keys (before TTL update)",
                   RouterErrorCode.UnexpectedInternalError);
           completeOperation(futureResult, callback, null, exception, false);
-        } else if (result.storeKeys != null) {
-          result.storeKeys.forEach(key -> blobIdStrs.add(key.getID()));
-        }
-        try {
+        } else {
+          List<String> blobIdStrs = new ArrayList<>();
+          blobIdStrs.add(blobIdStr);
+          if (result.storeKeys != null) {
+            result.storeKeys.forEach(key -> blobIdStrs.add(key.getID()));
+          }
           currentOperationsCount.addAndGet(blobIdStrs.size());
-          ttlUpdateManager.submitTtlUpdateOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback);
-          routerCallback.onPollReady();
-        } catch (RouterException e) {
-          currentOperationsCount.addAndGet(1 - blobIdStrs.size());
-          completeUpdateBlobTtlOperation(e, futureResult, callback);
+          try {
+            ttlUpdateManager.submitTtlUpdateOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback);
+            routerCallback.onPollReady();
+          } catch (RouterException e) {
+            currentOperationsCount.addAndGet(1 - blobIdStrs.size());
+            completeUpdateBlobTtlOperation(e, futureResult, callback);
+          }
         }
       };
       GetBlobOptionsInternal options =

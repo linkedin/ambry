@@ -822,6 +822,8 @@ class GetBlobOperation extends GetOperation {
       } else {
         logger.trace("Replica {} returned an error {} for a GetBlobRequest with response correlationId : {} ",
             getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
+        // process and set the most relevant exception.
+        processServerError(getError);
         onErrorResponse(getRequestInfo.replicaId);
       }
     }
@@ -1072,6 +1074,8 @@ class GetBlobOperation extends GetOperation {
         case Blob_Not_Found:
           setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDoesNotExist));
           break;
+        case Disk_Unavailable:
+          setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.AmbryUnavailable));
         default:
           setChunkException(
               new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
