@@ -56,6 +56,13 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
             new HelixPropertyStoreConfig(verifiableProperties)));
   }
 
+  /**
+   * Constructor.
+   * @param storeConfig The {@link HelixPropertyStoreConfig} to use.
+   * @param accountServiceConfig The {@link HelixAccountServiceConfig} to use.
+   * @param accountServiceMetrics The {@link AccountServiceMetrics} to report metrics.
+   * @param notifier The {@link Notifier} to start a {@link HelixAccountService}.
+   */
   protected HelixAccountServiceFactory(HelixPropertyStoreConfig storeConfig,
       HelixAccountServiceConfig accountServiceConfig, AccountServiceMetrics accountServiceMetrics,
       Notifier<String> notifier) {
