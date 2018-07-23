@@ -311,6 +311,7 @@ class GetBlobInfoOperation extends GetOperation {
     } else {
       logger.trace("Replica {} returned an error {} for a GetBlobInfoRequest with response correlationId : {} ",
           getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
+      processServerError(getError);
       onErrorResponse(getRequestInfo.replicaId);
     }
   }
@@ -400,6 +401,9 @@ class GetBlobInfoOperation extends GetOperation {
         logger.trace("Requested blob was not found on this server");
         setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDoesNotExist));
         break;
+      case Disk_Unavailable:
+        logger.trace("Disk on which the requested blob resides is not accessible");
+        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.AmbryUnavailable));
       default:
         setOperationException(
             new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
