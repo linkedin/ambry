@@ -558,7 +558,7 @@ class BlobStoreCompactor {
     List<IndexEntry> allIndexEntries = new ArrayList<>();
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
-    // get all entries
+    // get all entries. We get one entry per key
     indexSegmentToCopy.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), allIndexEntries,
         new AtomicLong(0), true);
 
@@ -592,7 +592,9 @@ class BlobStoreCompactor {
    * 3. Delete records.
    * 4. TTL update records that cannot be cleaned yet (because their PUT records are not cleaned up).
    * Records will be excluded because they are expired/deleted or because they are duplicates.
-   * @param allIndexEntries the {@link MessageInfo} of all the entries in the index segment.
+   * @param allIndexEntries the {@link IndexEntry} of all the entries in the index segment. There should be only one
+   *                        entry per key where a DELETE is preferred over all other entries and PUT is preferred over
+   *                        a TTL update entry
    * @param duplicateSearchSpan the {@link FileSpan} in which to search for duplicates
    * @param indexSegment the {@link IndexSegment} that {@code allIndexEntries} are from.
    * @param checkAlreadyCopied {@code true} if a check for existence in the swap spaces has to be executed (due to
@@ -666,11 +668,23 @@ class BlobStoreCompactor {
    * Gets all the valid index entries in the given list of index entries.
    * @param indexSegment the {@link IndexSegment} that {@code allIndexEntries} are from.
    * @param allIndexEntries the list of {@link IndexEntry} instances from which the valid entries have to be chosen.
-   * @return the list of valid entries picked from {@code allIndexEntries}.
+   *                        There should be only one entry per key where a DELETE is preferred over all other entries
+   *                        and PUT is preferred over a TTL update entry
+   * @return the list of valid entries generated from {@code allIndexEntries}. May contain entries not in
+   * {@code allIndexEntries}.
    * @throws StoreException if {@link BlobReadOptions} could not be obtained from the store for deleted blobs.
    */
   private List<IndexEntry> getValidIndexEntries(IndexSegment indexSegment, List<IndexEntry> allIndexEntries)
       throws StoreException {
+    // Assumed preference order from IndexSegment (current impl)
+    // (Legend: entry/entries in segment -> output from IndexSegment#getIndexEntriesSince())
+    // PUT entry only -> PUT entry
+    // TTL update entry only -> TTL update entry
+    // DELETE entry only -> DELETE entry
+    // PUT + DELETE -> DELETE
+    // TTL update + DELETE -> DELETE
+    // PUT + TTL update -> PUT (the one relevant to this comment)
+    // PUT + TTL update + DELETE -> DELETE
     // TODO: move this blob store stats
     Offset startOffsetOfLastIndexSegmentForDeleteCheck = getStartOffsetOfLastIndexSegmentForDeleteCheck();
     // deletes are in effect if this index segment does not have any deletes that are less than
