@@ -150,6 +150,7 @@ public class RouterServerPlaintextTest {
         case 0:
           operations.add(OperationType.PUT);
           operations.add(OperationType.AWAIT_CREATION);
+          operations.add(OperationType.GET_AUTHORIZATION_FAILURE);
           operations.add(OperationType.GET);
           operations.add(OperationType.GET_INFO);
           operations.add(OperationType.DELETE);
@@ -162,6 +163,7 @@ public class RouterServerPlaintextTest {
         case 1:
           operations.add(OperationType.PUT);
           operations.add(OperationType.AWAIT_CREATION);
+          operations.add(OperationType.DELETE_AUTHORIZATION_FAILURE);
           operations.add(OperationType.DELETE);
           operations.add(OperationType.AWAIT_DELETION);
           operations.add(OperationType.GET_DELETED);
@@ -176,6 +178,7 @@ public class RouterServerPlaintextTest {
           operations.add(OperationType.AWAIT_CREATION);
           operations.add(OperationType.GET);
           operations.add(OperationType.GET);
+          operations.add(OperationType.GET_AUTHORIZATION_FAILURE);
           operations.add(OperationType.GET);
           operations.add(OperationType.GET_INFO);
           break;
@@ -200,7 +203,9 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.PUT);
       operations.add(OperationType.AWAIT_CREATION);
       operations.add(OperationType.GET_INFO);
+      operations.add(OperationType.GET_AUTHORIZATION_FAILURE);
       operations.add(OperationType.GET);
+      operations.add(OperationType.DELETE_AUTHORIZATION_FAILURE);
       operations.add(OperationType.DELETE);
       operations.add(OperationType.AWAIT_DELETION);
       operations.add(OperationType.GET_INFO_DELETED);
@@ -227,7 +232,9 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.PUT);
       operations.add(OperationType.AWAIT_CREATION);
       operations.add(OperationType.GET_INFO);
+      operations.add(OperationType.GET_AUTHORIZATION_FAILURE);
       operations.add(OperationType.GET);
+      operations.add(OperationType.DELETE_AUTHORIZATION_FAILURE);
       operations.add(OperationType.DELETE);
       operations.add(OperationType.AWAIT_DELETION);
       operations.add(OperationType.GET_INFO_DELETED);

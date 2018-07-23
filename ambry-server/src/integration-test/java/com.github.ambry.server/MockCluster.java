@@ -130,6 +130,7 @@ public class MockCluster {
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("store.validate.authorization", "true");
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     props.setProperty("server.enable.store.data.prefetch", Boolean.toString(enableDataPrefetch));
     props.putAll(sslProperties);

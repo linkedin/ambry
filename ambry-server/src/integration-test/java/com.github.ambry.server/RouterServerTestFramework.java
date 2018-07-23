@@ -27,6 +27,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.Selector;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
@@ -353,6 +354,82 @@ class RouterServerTestFramework {
   }
 
   /**
+   * Submit a getBlob operation with incorrect accountId/ContainerId in blobId.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startGetBlobAuthorizationFailTest(final OperationChain opChain) {
+    Callback<GetBlobResult> callback = new TestCallback<>(opChain, false);
+    BlobId originalId, fraudId;
+    try {
+      originalId = new BlobId(opChain.blobId, clusterMap);
+      fraudId = BlobId.craft(originalId, originalId.getVersion(), (short) (originalId.getAccountId() + 1),
+          (short) (originalId.getContainerId() + 1));
+    } catch (IOException e) {
+      // If there is a blobId creation failure, throw the exception and don't need to do actual action.
+      FutureResult<Void> future = new FutureResult<>();
+      // continue the chain
+      future.done(null, e);
+      callback.onCompletion(null, e);
+      TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("getBlob", true), opChain) {
+        @Override
+        void check() throws Exception {
+          throw e;
+        }
+      };
+      opChain.testFutures.add(testFuture);
+      return;
+    }
+    // If everything good:
+    Future<GetBlobResult> future = router.getBlob(fraudId.getID(),
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+            .getOption(GetOption.Include_All)
+            .build(), callback);
+    TestFuture<GetBlobResult> testFuture = new TestFuture<GetBlobResult>(future, genLabel("getBlob", true), opChain) {
+      @Override
+      void check() throws Exception {
+        checkExpectedRouterErrorCode(RouterErrorCode.BlobAuthorizationFailure);
+      }
+    };
+    opChain.testFutures.add(testFuture);
+  }
+
+  /**
+   * Submit a deleteBlob operation with incorrect accountId/ContainerId in blobId.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startDeleteBlobAuthorizationFailTest(final OperationChain opChain) {
+    Callback<Void> callback = new TestCallback<>(opChain, false);
+    BlobId originalId, fraudId;
+    try {
+      originalId = new BlobId(opChain.blobId, clusterMap);
+      fraudId = BlobId.craft(originalId, originalId.getVersion(), (short) (originalId.getAccountId() + 1),
+          (short) (originalId.getContainerId() + 1));
+    } catch (IOException e) {
+      // If there is a blobId creation failure, throw the exception and don't need to do actual action.
+      FutureResult<Void> future = new FutureResult<>();
+      // continue the chain
+      future.done(null, e);
+      callback.onCompletion(null, e);
+      TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", true), opChain) {
+        @Override
+        void check() throws Exception {
+          throw e;
+        }
+      };
+      opChain.testFutures.add(testFuture);
+      return;
+    }
+    Future<Void> future = router.deleteBlob(fraudId.getID(), null, callback);
+    TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", true), opChain) {
+      @Override
+      void check() throws Exception {
+        checkExpectedRouterErrorCode(RouterErrorCode.BlobAuthorizationFailure);
+      }
+    };
+    opChain.testFutures.add(testFuture);
+  }
+
+  /**
    * Submit a deleteBlob operation.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
@@ -426,6 +503,12 @@ class RouterServerTestFramework {
         case AWAIT_DELETION:
           startAwaitDeletion(opChain);
           break;
+        case GET_AUTHORIZATION_FAILURE:
+          startGetBlobAuthorizationFailTest(opChain);
+          break;
+        case DELETE_AUTHORIZATION_FAILURE:
+          startDeleteBlobAuthorizationFailTest(opChain);
+          break;
         default:
           throw new IllegalArgumentException("Unknown op: " + nextOp);
       }
@@ -446,9 +529,15 @@ class RouterServerTestFramework {
      * GetBlob with the nonblocking router and check the blob contents against what was put in.
      */
     GET(false), /**
+     * GetBlob with incorrect accountId and containerId in blobId
+     */
+    GET_AUTHORIZATION_FAILURE(false), /**
      * DeleteBlob with the nonblocking router
      */
     DELETE(false), /**
+     * DeleteBlob with incorrect accountId and containerId in blobId
+     */
+    DELETE_AUTHORIZATION_FAILURE(false), /**
      * GetBlobInfo with the nonblocking router. Expect an exception to occur because the blob should have already been
      * deleted
      */
@@ -561,6 +650,21 @@ class RouterServerTestFramework {
             RouterErrorCode.BlobDeleted, ((RouterException) rootCause).getErrorCode());
       } catch (Exception e) {
         throw new Exception("Unexpected exception occured in operation: " + getOperationName(), e);
+      }
+    }
+
+    /**
+     * Check if router get expected RouterErrorCode.
+     * @param routerErrorCode is the expected error code.
+     */
+    void checkExpectedRouterErrorCode(RouterErrorCode routerErrorCode) {
+      try {
+        future.get(AWAIT_TIMEOUT, TimeUnit.SECONDS);
+        Assert.fail("Blob should have failed in operation: " + getOperationName());
+      } catch (Exception e) {
+        Assert.assertTrue("Expect RouterException", e.getCause() instanceof RouterException);
+        Assert.assertEquals("RouterErrorCode doesn't match.", routerErrorCode,
+            ((RouterException) e.getCause()).getErrorCode());
       }
     }
 
