@@ -80,8 +80,7 @@ public class AccountUpdateToolTest {
   static {
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path",
         HELIX_STORE_ROOT_PATH);
-    helixConfigProps.setProperty(HelixAccountServiceConfig.HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string",
-        ZK_SERVER_ADDRESS);
+    helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, ZK_SERVER_ADDRESS);
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     try {

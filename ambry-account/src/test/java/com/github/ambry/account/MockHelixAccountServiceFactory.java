@@ -30,10 +30,6 @@ import org.apache.helix.ZNRecord;
  * A mock implementation of {@link AccountServiceFactory}. This is only for testing purpose and is not thread safe.
  */
 public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
-  private final HelixPropertyStoreConfig storeConfig;
-  private final HelixAccountServiceConfig accountServiceConfig;
-  private final AccountServiceMetrics accountServiceMetrics;
-  private final Notifier<String> notifier;
   private final String updaterThreadPrefix;
   private final Map<String, MockHelixPropertyStore<ZNRecord>> storeKeyToMockStoreMap = new HashMap<>();
 
@@ -45,11 +41,8 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
    */
   public MockHelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       Notifier<String> notifier, String updaterThreadPrefix) {
-    super(verifiableProperties, metricRegistry);
-    storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
-    accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
-    accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
-    this.notifier = notifier;
+    super(new HelixPropertyStoreConfig(verifiableProperties), new HelixAccountServiceConfig(verifiableProperties),
+        new AccountServiceMetrics(metricRegistry), notifier);
     this.updaterThreadPrefix = updaterThreadPrefix;
   }
 

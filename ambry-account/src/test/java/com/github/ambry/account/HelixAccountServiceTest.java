@@ -70,7 +70,7 @@ import static org.junit.Assert.fail;
 public class HelixAccountServiceTest {
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 20000;
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
-  private static final String ZK_CONNECT_STRING = "";
+  private static final String ZK_CONNECT_STRING = "dummyHost:dummyPort";
   private static final String STORE_ROOT_PATH = "/ambry_test/helix_account_service";
   private static final Random random = new Random();
   private static final String BAD_ACCOUNT_METADATA_STRING = "badAccountMetadataString";
@@ -111,8 +111,7 @@ public class HelixAccountServiceTest {
         String.valueOf(ZK_CLIENT_CONNECTION_TIMEOUT_MS));
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
         String.valueOf(ZK_CLIENT_SESSION_TIMEOUT_MS));
-    helixConfigProps.setProperty(HelixAccountServiceConfig.HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string",
-        ZK_CONNECT_STRING);
+    helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, ZK_CONNECT_STRING);
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", STORE_ROOT_PATH);
     accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
     helixConfigProps.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, accountBackupDir.toString());

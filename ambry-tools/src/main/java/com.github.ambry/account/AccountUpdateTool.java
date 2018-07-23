@@ -15,7 +15,6 @@ package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.HelixNotifier;
-import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -233,8 +232,7 @@ public class AccountUpdateTool {
         String.valueOf(zkConnectionTimeoutMs));
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
         String.valueOf(zkSessionTimeoutMs));
-    helixConfigProps.setProperty(HelixAccountServiceConfig.HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string",
-        zkServer);
+    helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, zkServer);
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", storePath);
     VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     return new HelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry()).getAccountService();

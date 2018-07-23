@@ -42,7 +42,7 @@ import static org.junit.Assert.*;
 public class HelixNotifierTest {
   private static final int ZK_CLIENT_CONNECT_TIMEOUT_MS = 20 * 1000;
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20 * 1000;
-  private static final String ZK_CLIENT_CONNECT_STRING = "";
+  private static final String ZK_CLIENT_CONNECT_STRING = "dummyHost:dummyPort";
   private static final String STORAGE_ROOT_PATH = "/ambry/testCluster/helixPropertyStore";
   private static final long LATCH_TIMEOUT_MS = 1000;
   private static final List<String> receivedTopicsByListener0 = new ArrayList<>();
@@ -455,8 +455,7 @@ public class HelixNotifierTest {
         String.valueOf(zkClientConnectionTimeoutMs));
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
         String.valueOf(zkClientSessionTimeoutMs));
-    helixConfigProps.setProperty(HelixAccountServiceConfig.HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string",
-        zkClientConnectString);
+    helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, zkClientConnectString);
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", storeRootPath);
     VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     return new HelixPropertyStoreConfig(vHelixConfigProps);

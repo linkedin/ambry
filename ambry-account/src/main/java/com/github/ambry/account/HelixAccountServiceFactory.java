@@ -39,10 +39,10 @@ import org.slf4j.LoggerFactory;
 public class HelixAccountServiceFactory implements AccountServiceFactory {
   private static final String HELIX_ACCOUNT_UPDATER_PREFIX = "helix-account-updater";
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final HelixPropertyStoreConfig storeConfig;
-  private final HelixAccountServiceConfig accountServiceConfig;
-  private final AccountServiceMetrics accountServiceMetrics;
-  private final Notifier<String> notifier;
+  protected final HelixPropertyStoreConfig storeConfig;
+  protected final HelixAccountServiceConfig accountServiceConfig;
+  protected final AccountServiceMetrics accountServiceMetrics;
+  protected final Notifier<String> notifier;
 
   /**
    * Constructor.
@@ -50,12 +50,19 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
    * @param metricRegistry The {@link MetricRegistry} for metrics tracking. Cannot be {@code null}.
    */
   public HelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
-    storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
-    accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
-    accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
-    notifier =
-        accountServiceConfig.zkClientConnectString.equals(HelixAccountServiceConfig.INVALID_ZK_CLIENT_CONNECT_STRING)
-            ? null : new HelixNotifier(accountServiceConfig.zkClientConnectString, storeConfig);
+    this(new HelixPropertyStoreConfig(verifiableProperties), new HelixAccountServiceConfig(verifiableProperties),
+        new AccountServiceMetrics(metricRegistry),
+        new HelixNotifier(new HelixAccountServiceConfig(verifiableProperties).zkClientConnectString,
+            new HelixPropertyStoreConfig(verifiableProperties)));
+  }
+
+  protected HelixAccountServiceFactory(HelixPropertyStoreConfig storeConfig,
+      HelixAccountServiceConfig accountServiceConfig, AccountServiceMetrics accountServiceMetrics,
+      Notifier<String> notifier) {
+    this.storeConfig = storeConfig;
+    this.accountServiceConfig = accountServiceConfig;
+    this.accountServiceMetrics = accountServiceMetrics;
+    this.notifier = notifier;
   }
 
   @Override
