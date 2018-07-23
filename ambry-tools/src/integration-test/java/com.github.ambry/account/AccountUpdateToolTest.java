@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.commons.HelixStoreOperator;
+import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
@@ -77,10 +78,9 @@ public class AccountUpdateToolTest {
    * Initialization for all the tests.
    */
   static {
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
-        ZK_SERVER_ADDRESS);
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path",
         HELIX_STORE_ROOT_PATH);
+    helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, ZK_SERVER_ADDRESS);
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     try {
@@ -113,15 +113,14 @@ public class AccountUpdateToolTest {
     tempDirPath = getTempDir("accountUpdateTool-");
 
     // clean up data on ZooKeeper
-    storeOperator = new HelixStoreOperator(storeConfig);
+    storeOperator = new HelixStoreOperator(ZK_SERVER_ADDRESS, storeConfig);
     if (storeOperator.exist("/")) {
       storeOperator.delete("/");
     }
 
     // instantiate a HelixAccountService and listen to the change for account metadata
-    notifier = new HelixNotifier(storeConfig);
-    accountService =
-        new HelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+    notifier = new HelixNotifier(ZK_SERVER_ADDRESS, storeConfig);
+    accountService = new HelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry()).getAccountService();
     accountUpdateConsumer = new TestAccountUpdateConsumer();
     accountService.addAccountUpdateConsumer(accountUpdateConsumer);
   }

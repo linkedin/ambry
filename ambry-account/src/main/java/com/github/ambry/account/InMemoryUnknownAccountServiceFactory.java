@@ -14,7 +14,6 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.VerifiableProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,10 +29,9 @@ public class InMemoryUnknownAccountServiceFactory implements AccountServiceFacto
    * Constructor.
    * @param verifiableProperties The properties to get a {@link HelixAccountService} instance. Cannot be {@code null}.
    * @param metricRegistry The {@link MetricRegistry} for metrics tracking. Cannot be {@code null}.
-   * @param notifier The {@link Notifier} used to get a {@link HelixAccountService}.
    */
-  public InMemoryUnknownAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      Notifier<String> notifier) {
+  public InMemoryUnknownAccountServiceFactory(VerifiableProperties verifiableProperties,
+      MetricRegistry metricRegistry) {
   }
 
   @Override

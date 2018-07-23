@@ -13,6 +13,7 @@
  */
 package com.github.ambry.commons;
 
+import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
@@ -311,7 +312,7 @@ public class HelixNotifierTest {
 
     // pass null storeConfig to construct a HelixNotifier
     try {
-      new HelixNotifier((HelixPropertyStoreConfig) null);
+      new HelixNotifier(ZK_CLIENT_CONNECT_STRING, (HelixPropertyStoreConfig) null);
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
@@ -429,7 +430,7 @@ public class HelixNotifierTest {
    * @return A {@link MockHelixPropertyStore} defined by the {@link HelixPropertyStoreConfig}.
    */
   private MockHelixPropertyStore<ZNRecord> getMockHelixStore(HelixPropertyStoreConfig storeConfig) {
-    String storeRootPath = storeConfig.zkClientConnectString + storeConfig.rootPath;
+    String storeRootPath = ZK_CLIENT_CONNECT_STRING + storeConfig.rootPath;
     MockHelixPropertyStore<ZNRecord> helixStore = storeKeyToMockStoreMap.get(storeRootPath);
     if (helixStore == null) {
       helixStore = new MockHelixPropertyStore<>();
@@ -454,8 +455,7 @@ public class HelixNotifierTest {
         String.valueOf(zkClientConnectionTimeoutMs));
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
         String.valueOf(zkClientSessionTimeoutMs));
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
-        zkClientConnectString);
+    helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, zkClientConnectString);
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", storeRootPath);
     VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     return new HelixPropertyStoreConfig(vHelixConfigProps);

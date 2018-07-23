@@ -21,10 +21,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.commons.HelixNotifier;
-import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.SSLFactory;
-import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
@@ -169,14 +166,9 @@ public class RestServer {
     restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
     restServerMetrics = new RestServerMetrics(metricRegistry, restServerState);
 
-    HelixPropertyStoreConfig helixStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
-    Notifier notifier = null;
-    if (!helixStoreConfig.zkClientConnectString.equals(HelixPropertyStoreConfig.INVALID_ZK_CLIENT_CONNECT_STRING)) {
-      notifier = new HelixNotifier(helixStoreConfig);
-    }
     AccountServiceFactory accountServiceFactory =
         Utils.getObj(restServerConfig.restServerAccountServiceFactory, verifiableProperties,
-            clusterMap.getMetricRegistry(), notifier);
+            clusterMap.getMetricRegistry());
     accountService = accountServiceFactory.getAccountService();
 
     RouterFactory routerFactory =

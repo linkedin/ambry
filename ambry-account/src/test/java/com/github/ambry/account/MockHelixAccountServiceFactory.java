@@ -30,26 +30,19 @@ import org.apache.helix.ZNRecord;
  * A mock implementation of {@link AccountServiceFactory}. This is only for testing purpose and is not thread safe.
  */
 public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
-  private final HelixPropertyStoreConfig storeConfig;
-  private final HelixAccountServiceConfig accountServiceConfig;
-  private final AccountServiceMetrics accountServiceMetrics;
-  private final Notifier<String> notifier;
   private final String updaterThreadPrefix;
   private final Map<String, MockHelixPropertyStore<ZNRecord>> storeKeyToMockStoreMap = new HashMap<>();
 
   /**
    * Constructor.
    * @param verifiableProperties The properties to start a {@link HelixAccountService}.
-   * @param metricRegistry The {@link MetricRegistry} to start a {@link HelixAccountService}.
    * @param notifier The {@link Notifier} to start a {@link HelixAccountService}.
+   * @param metricRegistry The {@link MetricRegistry} to start a {@link HelixAccountService}.
    */
   public MockHelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       Notifier<String> notifier, String updaterThreadPrefix) {
-    super(verifiableProperties, metricRegistry, notifier);
-    storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
-    accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
-    accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
-    this.notifier = notifier;
+    super(new HelixPropertyStoreConfig(verifiableProperties), new HelixAccountServiceConfig(verifiableProperties),
+        new AccountServiceMetrics(metricRegistry), notifier);
     this.updaterThreadPrefix = updaterThreadPrefix;
   }
 
@@ -58,8 +51,8 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
     try {
       ScheduledExecutorService scheduler =
           accountServiceConfig.updaterPollingIntervalMs > 0 ? Utils.newScheduler(1, updaterThreadPrefix, false) : null;
-      return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier, scheduler,
-          accountServiceConfig);
+      return new HelixAccountService(getHelixStore(accountServiceConfig.zkClientConnectString, storeConfig),
+          accountServiceMetrics, notifier, scheduler, accountServiceConfig);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate HelixAccountService", e);
     }
@@ -67,11 +60,12 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
 
   /**
    * Gets a {@link MockHelixPropertyStore} for the given {@link HelixPropertyStoreConfig}.
+   * @param zkServers the ZooKeeper server address.
    * @param storeConfig A {@link HelixPropertyStoreConfig}.
    * @return A {@link MockHelixPropertyStore} defined by the {@link HelixPropertyStoreConfig}.
    */
-  MockHelixPropertyStore<ZNRecord> getHelixStore(HelixPropertyStoreConfig storeConfig) {
-    return storeKeyToMockStoreMap.computeIfAbsent(storeConfig.zkClientConnectString + storeConfig.rootPath,
+  MockHelixPropertyStore<ZNRecord> getHelixStore(String zkServers, HelixPropertyStoreConfig storeConfig) {
+    return storeKeyToMockStoreMap.computeIfAbsent(zkServers + storeConfig.rootPath,
         path -> new MockHelixPropertyStore<>());
   }
 }

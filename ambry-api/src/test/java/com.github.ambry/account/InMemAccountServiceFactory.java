@@ -41,7 +41,7 @@ public class InMemAccountServiceFactory implements AccountServiceFactory {
    * @param metricRegistry will be discarded
    * @param notifier will be discarded
    */
-  public InMemAccountServiceFactory(VerifiableProperties verifiableProperties, Object metricRegistry, Object notifier) {
+  public InMemAccountServiceFactory(VerifiableProperties verifiableProperties, Object metricRegistry) {
     returnOnlyUnknown = verifiableProperties.getBoolean("in.mem.account.service.only.unknown", false);
     notifyConsumers =
         !returnOnlyUnknown && verifiableProperties.getBoolean("in.mem.account.service.notify.consumers", true);
