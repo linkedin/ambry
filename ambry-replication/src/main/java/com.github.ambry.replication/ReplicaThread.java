@@ -824,10 +824,10 @@ class ReplicaThread implements Runnable {
       throws IOException, MessageFormatException, StoreException {
     MessageFormatInputStream ttlUpdateStream =
         new TtlUpdateMessageFormatInputStream(messageInfo.getStoreKey(), messageInfo.getAccountId(),
-            messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
-    MessageInfo info =
-        new MessageInfo(messageInfo.getStoreKey(), ttlUpdateStream.getSize(), false, true, messageInfo.getAccountId(),
-            messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
+            messageInfo.getContainerId(), messageInfo.getExpirationTimeInMs(), messageInfo.getOperationTimeMs());
+    MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), ttlUpdateStream.getSize(), false, true,
+        messageInfo.getExpirationTimeInMs(), messageInfo.getAccountId(), messageInfo.getContainerId(),
+        messageInfo.getOperationTimeMs());
     MessageFormatWriteSet writeSet = new MessageFormatWriteSet(ttlUpdateStream, Collections.singletonList(info), false);
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {

@@ -113,7 +113,8 @@ import static org.junit.Assert.*;
 public class ReplicationTest {
 
   private static int CONSTANT_TIME_MS = 100000;
-  private final MockTime time = new MockTime();
+  private static long EXPIRY_TIME_MS = SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(7);
+  private static long UPDATED_EXPIRY_TIME_MS = SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(14);
 
   /**
    * Tests pausing all partitions and makes sure that the replica thread pauses. Also tests that it resumes when one
@@ -1179,10 +1180,10 @@ public class ReplicationTest {
       aid = putMsg.getAccountId();
       cid = putMsg.getContainerId();
     }
-    long updateTimeMs = time.milliseconds();
-    ByteBuffer buffer = getTtlUpdateMessage(id, aid, cid, updateTimeMs);
+    ByteBuffer buffer = getTtlUpdateMessage(id, aid, cid, UPDATED_EXPIRY_TIME_MS, CONSTANT_TIME_MS);
     for (Host host : hosts) {
-      host.addMessage(partitionId, new MessageInfo(id, buffer.remaining(), false, true, aid, cid, updateTimeMs),
+      host.addMessage(partitionId,
+          new MessageInfo(id, buffer.remaining(), false, true, UPDATED_EXPIRY_TIME_MS, aid, cid, CONSTANT_TIME_MS),
           buffer.duplicate());
     }
   }
@@ -1210,14 +1211,14 @@ public class ReplicationTest {
     blobIdRandom.nextBytes(blob);
     blobIdRandom.nextBytes(usermetadata);
     BlobProperties blobProperties =
-        new BlobProperties(blobSize, "test", null, null, false, Utils.Infinite_Time, CONSTANT_TIME_MS, accountId,
-            containerId, encryptionKey != null);
+        new BlobProperties(blobSize, "test", null, null, false, EXPIRY_TIME_MS - CONSTANT_TIME_MS, CONSTANT_TIME_MS,
+            accountId, containerId, encryptionKey != null);
     MessageFormatInputStream stream =
         new PutMessageFormatInputStream(id, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey),
             blobProperties, ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
     return new Pair<>(ByteBuffer.wrap(message),
-        new MessageInfo(id, message.length, Utils.Infinite_Time, accountId, containerId, time.milliseconds()));
+        new MessageInfo(id, message.length, EXPIRY_TIME_MS, accountId, containerId, CONSTANT_TIME_MS));
   }
 
   /**
@@ -1237,13 +1238,18 @@ public class ReplicationTest {
   /**
    * Returns a TTL update message for the given {@code id}
    * @param id the id for which a ttl update message must be constructed.
+   * @param accountId the account that the blob is associated with
+   * @param containerId the container that the blob is associated with
+   * @param expiresAtMs the new expiry time (ms)
+   * @param updateTimeMs the time of the update (in ms)
    * @return {@link ByteBuffer} representing the entire message.
    * @throws MessageFormatException
    * @throws IOException
    */
-  private ByteBuffer getTtlUpdateMessage(StoreKey id, short accountId, short containerId, long updateTimeMs)
-      throws MessageFormatException, IOException {
-    MessageFormatInputStream stream = new TtlUpdateMessageFormatInputStream(id, accountId, containerId, updateTimeMs);
+  private ByteBuffer getTtlUpdateMessage(StoreKey id, short accountId, short containerId, long expiresAtMs,
+      long updateTimeMs) throws MessageFormatException, IOException {
+    MessageFormatInputStream stream =
+        new TtlUpdateMessageFormatInputStream(id, accountId, containerId, expiresAtMs, updateTimeMs);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
     return ByteBuffer.wrap(message);
   }
@@ -1425,8 +1431,9 @@ public class ReplicationTest {
     }
     MessageInfo ttlUpdateInfo = getMessageInfo(key, partitionInfos, false, true);
     if (ttlUpdateInfo != null) {
-      info = new MessageInfo(info.getStoreKey(), info.getSize(), info.isDeleted(), true, info.getExpirationTimeInMs(),
-          info.getCrc(), info.getAccountId(), info.getContainerId(), info.getOperationTimeMs());
+      info = new MessageInfo(info.getStoreKey(), info.getSize(), info.isDeleted(), true,
+          ttlUpdateInfo.getExpirationTimeInMs(), info.getCrc(), info.getAccountId(), info.getContainerId(),
+          info.getOperationTimeMs());
     }
     return info;
   }
