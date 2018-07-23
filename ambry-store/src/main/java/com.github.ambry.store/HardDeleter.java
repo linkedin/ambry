@@ -739,4 +739,12 @@ public class HardDeleter implements Runnable {
       return messageStoreRecoveryInfoList;
     }
   }
+
+  /**
+   * @param dataDir the directory of the store for which the hard delete thread will be created
+   * @return the name of the hard delete thread
+   */
+  static String getThreadName(String dataDir) {
+    return "hard delete thread " + dataDir;
+  }
 }

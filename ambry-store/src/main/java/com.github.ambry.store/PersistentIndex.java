@@ -231,7 +231,7 @@ class PersistentIndex {
       }
       if (hardDelete != null && config.storeEnableHardDelete) {
         logger.info("Index : " + datadir + " Starting hard delete thread ");
-        hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
+        hardDeleteThread = Utils.newThread(HardDeleter.getThreadName(datadir), hardDeleter, true);
         hardDeleteThread.start();
       } else if (hardDelete != null) {
         hardDeleter.close();
