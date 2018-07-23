@@ -46,6 +46,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -487,13 +488,10 @@ public class GetBlobOperationTest {
   @Test
   public void testFailureOnServerErrors() throws Exception {
     doPut();
-    List<ServerErrorCode> serverErrors = new ArrayList<>(Arrays.asList(ServerErrorCode.values()));
-    // set the status to various server level level errors (remove all partition level errors or non errors)
-    serverErrors.remove(ServerErrorCode.Blob_Deleted);
-    serverErrors.remove(ServerErrorCode.Blob_Expired);
-    serverErrors.remove(ServerErrorCode.No_Error);
-    serverErrors.remove(ServerErrorCode.Blob_Authorization_Failure);
-    serverErrors.remove(ServerErrorCode.Blob_Not_Found);
+    // set the status to various server level errors (remove all partition level errors or non errors)
+    EnumSet<ServerErrorCode> serverErrors = EnumSet.complementOf(
+        EnumSet.of(ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Expired, ServerErrorCode.No_Error,
+            ServerErrorCode.Blob_Authorization_Failure, ServerErrorCode.Blob_Not_Found));
     for (ServerErrorCode serverErrorCode : serverErrors) {
       mockServerLayout.getMockServers().forEach(server -> server.setServerErrorForAllRequests(serverErrorCode));
       GetBlobOperation op = createOperationAndComplete(null);

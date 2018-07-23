@@ -402,7 +402,7 @@ class GetBlobInfoOperation extends GetOperation {
         setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDoesNotExist));
         break;
       case Disk_Unavailable:
-        logger.trace("Requested blob is not accessible");
+        logger.trace("Disk on which the requested blob resides is not accessible");
         setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.AmbryUnavailable));
       default:
         setOperationException(
