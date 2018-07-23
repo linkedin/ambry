@@ -14,9 +14,9 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.commons.Notifier;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
