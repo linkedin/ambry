@@ -56,8 +56,6 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * @see <a href="http://helix.apache.org">http://helix.apache.org</a>
  */
 class HelixClusterManager implements ClusterMap {
-  private final String ZNODE_PATH = "/ClusterConfigs/PartitionOverride";
-  private final String TOPIC = "PartitionOverride";
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final String clusterName;
   private final MetricRegistry metricRegistry;
@@ -82,8 +80,7 @@ class HelixClusterManager implements ClusterMap {
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final PartitionSelectionHelper partitionSelectionHelper;
   private long currentXid;
-  private ZkHelixPropertyStore<ZNRecord> helixPropertyStore;
-  private Map<String, Map<String, String>> partitionOverrideInfoMap = new HashMap<>();
+  private final Map<String, Map<String, String>> partitionOverrideInfoMap = new HashMap<>();
 
   /**
    * Instantiate a HelixClusterManager.
@@ -186,47 +183,50 @@ class HelixClusterManager implements ClusterMap {
    * @param instanceName the String representation of the instance associated with this manager.
    * @param helixFactory the factory class to construct and get a reference to a {@link HelixManager}.
    * @return the HelixManager of local datacenter
+   * @throws IllegalStateException
    */
   private HelixManager initializeHelixManagerAndPropertyStoreInLocalDC(Map<String, DcZkInfo> dataCenterToZkAddress,
-      String instanceName, HelixFactory helixFactory) {
+      String instanceName, HelixFactory helixFactory) throws IllegalStateException {
     DcZkInfo dcZkInfo = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName);
     String zkConnectStr = dcZkInfo.getZkConnectStr();
     HelixManager manager = null;
+    ZkHelixPropertyStore<ZNRecord> helixPropertyStore = null;
     try {
       manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
       helixPropertyStore = manager.getHelixPropertyStore();
       logger.info("Connecting to Helix manager in local datacenter at {}", zkConnectStr);
       manager.connect();
       logger.info("Established connection to Helix manager in local datacenter at {}", zkConnectStr);
+
+      HelixPropertyListener helixListener = new HelixPropertyListener() {
+        @Override
+        public void onDataChange(String path) {
+          logger.info("Message is changed for topic {} at path {}", ClusterMapUtils.ZNODE_NAME, path);
+        }
+
+        @Override
+        public void onDataCreate(String path) {
+          logger.info("Message is created for topic {} at path {}", ClusterMapUtils.ZNODE_NAME, path);
+        }
+
+        @Override
+        public void onDataDelete(String path) {
+          logger.info("Message is deleted for topic {} at path {}", ClusterMapUtils.ZNODE_NAME, path);
+        }
+      };
+      logger.info("Getting ZNRecord from HelixPropertyStore");
+      helixPropertyStore.subscribe(ClusterMapUtils.ZNODE_PATH, helixListener);
+      ZNRecord zNRecord = helixPropertyStore.get(ClusterMapUtils.ZNODE_PATH, null, AccessOption.PERSISTENT);
+      if (clusterMapConfig.clusterMapEnablePartitionOverride) {
+        if (zNRecord != null) {
+          partitionOverrideInfoMap.putAll(zNRecord.getMapFields());
+          logger.info("partitionOverrideInfoMap is initialized!");
+        } else {
+          logger.warn("ZNRecord from HelixPropertyStore is NULL, the partitionOverrideInfoMap is empty.");
+        }
+      }
     } catch (Exception e) {
-      initializationException.compareAndSet(null, e);
-    }
-    HelixPropertyListener helixListener = new HelixPropertyListener() {
-      @Override
-      public void onDataChange(String path) {
-        logger.info("Message is changed for topic {} at path {}", TOPIC, path);
-      }
-
-      @Override
-      public void onDataCreate(String path) {
-        logger.info("Message is created for topic {} at path {}", TOPIC, path);
-      }
-
-      @Override
-      public void onDataDelete(String path) {
-        logger.info("Message is deleted for topic {} at path {}", TOPIC, path);
-      }
-    };
-    logger.info("Getting ZNRecord from HelixPropertyStore");
-    helixPropertyStore.subscribe(ZNODE_PATH, helixListener);
-    ZNRecord zNRecord = helixPropertyStore.get(ZNODE_PATH, null, AccessOption.PERSISTENT);
-    if (clusterMapConfig.clusterMapEnableOverride) {
-      if (zNRecord != null) {
-        partitionOverrideInfoMap = zNRecord.getMapFields();
-        logger.info("partitionOverrideInfoMap is initialized!");
-      } else {
-        logger.warn("ZNRecord from HelixPropertyStore is NULL, the partitionOverrideInfoMap is empty.");
-      }
+      throw new IllegalStateException(e);
     }
     return manager;
   }
@@ -392,7 +392,7 @@ class HelixClusterManager implements ClusterMap {
             initializationException.compareAndSet(null, e);
           }
           instanceConfigInitialized.set(true);
-        } else if (!clusterMapConfig.clusterMapEnableOverride) {
+        } else if (!clusterMapConfig.clusterMapEnablePartitionOverride) {
           updateStateOfReplicas(configs);
         }
         sealedStateChangeCounter.incrementAndGet();
@@ -569,7 +569,8 @@ class HelixClusterManager implements ClusterMap {
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
             // Create replica associated with this node.
             boolean isSealed;
-            if (clusterMapConfig.clusterMapEnableOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
+            if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(
+                partitionName)) {
               isSealed = partitionOverrideInfoMap.get(partitionName)
                   .get(ClusterMapUtils.PARTITION_STATE)
                   .equals(ClusterMapUtils.READ_ONLY_STR);

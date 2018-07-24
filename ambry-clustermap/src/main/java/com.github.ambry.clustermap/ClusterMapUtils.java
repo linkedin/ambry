@@ -63,6 +63,9 @@ public class ClusterMapUtils {
   static final String DATACENTER_ID_STR = "id";
   static final String SCHEMA_VERSION_STR = "schemaVersion";
   static final String XID_STR = "xid";
+  static final String ZNODE_NAME = "PartitionOverride";
+  static final String ZNODE_PATH = "/ClusterConfigs/" + ZNODE_NAME;
+  static final String PROPERTYSTORE_ZNODE_PATH = "/PROPERTYSTORE/ClusterConfigs/" + ZNODE_NAME;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
   static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
@@ -139,9 +142,13 @@ public class ClusterMapUtils {
    * @param propertyStoreConfig the config for {@link HelixPropertyStore}.
    * @param subscribedPaths a list of paths to which the PropertyStore subscribes.
    * @return the instance of {@link HelixPropertyStore}.
+   * @throws IllegalArgumentException
    */
   public static HelixPropertyStore<ZNRecord> createHelixPropertyStore(String zkServers,
-      HelixPropertyStoreConfig propertyStoreConfig, List<String> subscribedPaths) {
+      HelixPropertyStoreConfig propertyStoreConfig, List<String> subscribedPaths) throws IllegalArgumentException {
+    if (zkServers == null || zkServers.isEmpty() || propertyStoreConfig == null) {
+      throw new IllegalArgumentException("Invalid arguments, cannot create HelixPropertyStore");
+    }
     ZkClient zkClient = new ZkClient(zkServers, propertyStoreConfig.zkClientSessionTimeoutMs,
         propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
     return new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath,

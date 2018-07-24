@@ -37,7 +37,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static com.github.ambry.clustermap.HelixBootstrapUpgradeTool.*;
-import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
@@ -126,7 +125,7 @@ public class HelixBootstrapUpgradeToolTest {
     long expectedResourceCount =
         (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
     writeBootstrapOrUpgrade(expectedResourceCount, false);
-    uploadClusterConfigs();
+    uploadClusterConfigsAndVerify();
 
     /* Test Simple Upgrade */
     int numNewNodes = 4;
@@ -160,7 +159,7 @@ public class HelixBootstrapUpgradeToolTest {
 
     expectedResourceCount += (numNewPartitions - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
     writeBootstrapOrUpgrade(expectedResourceCount, false);
-    uploadClusterConfigs();
+    uploadClusterConfigsAndVerify();
 
     // Now, mark the ones that were READ_ONLY as READ_WRITE and vice versa
     for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
@@ -172,7 +171,7 @@ public class HelixBootstrapUpgradeToolTest {
       }
     }
     writeBootstrapOrUpgrade(expectedResourceCount, false);
-    uploadClusterConfigs();
+    uploadClusterConfigsAndVerify();
 
     // Now, change the replica count for a partition.
     Partition partition1 = (Partition) testPartitionLayout.getPartitionLayout()
@@ -233,7 +232,7 @@ public class HelixBootstrapUpgradeToolTest {
    * @throws IOException if a file read error is encountered.
    * @throws JSONException if a JSON parse error is encountered.
    */
-  private void uploadClusterConfigs() throws Exception {
+  private void uploadClusterConfigsAndVerify() throws Exception {
     List<PartitionId> writablePartitions = testPartitionLayout.getPartitionLayout().getWritablePartitions(null);
     Set<String> writableInPartitionLayout = new HashSet<>();
     writablePartitions.forEach(k -> writableInPartitionLayout.add(k.toPathString()));
@@ -247,7 +246,7 @@ public class HelixBootstrapUpgradeToolTest {
       HelixPropertyStore<ZNRecord> propertyStore =
           ClusterMapUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      String getPath = ROOT_PATH + PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME;
+      String getPath = ROOT_PATH + ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;
       ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
       assertNotNull(zNRecord);
       Map<String, Map<String, String>> overridePartition = zNRecord.getMapFields();

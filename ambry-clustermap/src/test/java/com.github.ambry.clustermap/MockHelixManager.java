@@ -54,7 +54,6 @@ import static org.mockito.Mockito.*;
  * A mock implementation of the {@link HelixManager} to use in tests.
  */
 class MockHelixManager implements HelixManager {
-  private final String ZNODE_PATH = "/ClusterConfigs/PartitionOverride";
   private final String clusterName;
   private final String instanceName;
   private final InstanceType instanceType;
@@ -88,7 +87,8 @@ class MockHelixManager implements HelixManager {
     this.beBadException = beBadException;
 
     MockitoAnnotations.initMocks(this);
-    Mockito.when(helixPropertyStore.get(eq(ZNODE_PATH), eq(null), eq(AccessOption.PERSISTENT))).thenReturn(record);
+    Mockito.when(helixPropertyStore.get(eq(ClusterMapUtils.ZNODE_PATH), eq(null), eq(AccessOption.PERSISTENT)))
+        .thenReturn(record);
   }
 
   @Override

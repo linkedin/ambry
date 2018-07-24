@@ -66,7 +66,6 @@ public class HelixClusterManagerTest {
   private final TestPartitionLayout testPartitionLayout;
   private final String clusterNameStatic = "HelixClusterManagerTestCluster";
   private final String clusterNamePrefixInHelix = "Ambry-";
-  private final String ZNODE_NAME = "PartitionOverride";
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
   private final String hostname;
@@ -104,7 +103,7 @@ public class HelixClusterManagerTest {
    * Construct the static layout files and use that to instantiate a {@link MockHelixCluster}.
    * Instantiate a {@link MockHelixManagerFactory} for use by the cluster manager.
    * @param useComposite whether or not the test are to be done for the {@link CompositeClusterManager}
-   * @param overrideEnabled whether or not the {@link ClusterMapConfig#clusterMapEnableOverride} is enabled. This config
+   * @param overrideEnabled whether or not the {@link ClusterMapConfig#clusterMapEnablePartitionOverride} is enabled. This config
    *                        is only applicable for {@link HelixClusterManager}
    * @throws Exception
    */
@@ -165,7 +164,7 @@ public class HelixClusterManagerTest {
       partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>())
           .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_ONLY_STR);
     }
-    ZNRecord znRecord = new ZNRecord(ZNODE_NAME);
+    ZNRecord znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);
     znRecord.setMapFields(partitionOverrideMap);
 
     helixCluster =
@@ -184,7 +183,7 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.datacenter.name", localDc);
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
-    props.setProperty("clustermap.enable.override", this.overrideEnabled ? "true" : "false");
+    props.setProperty("clustermap.enable.partition.override", this.overrideEnabled ? "true" : "false");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
     if (useComposite) {
@@ -500,8 +499,8 @@ public class HelixClusterManagerTest {
   }
 
   /**
-   * Test that ClusterManger will use seal state in PartitionOverride when {@link ClusterMapConfig#clusterMapEnableOverride}
-   * is enabled. This also tests that InstanceConfig changes won't affect any seal state of partition if clusterMapEnableOverride
+   * Test that ClusterManger will use seal state in PartitionOverride when {@link ClusterMapConfig#clusterMapEnablePartitionOverride}
+   * is enabled. This also tests that InstanceConfig changes won't affect any seal state of partition if clusterMapEnablePartitionOverride
    * is enabled.
    */
   @Test

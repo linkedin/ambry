@@ -160,11 +160,15 @@ public class ClusterMapConfig {
   public final Long clustermapCurrentXid;
 
   /**
-   * Indicate if cluster manager enables override on dynamic sealed list.
+   * Indicate if cluster manager enables override on properties of partition. These properties include partition state
+   * and partition class etc.
+   * By default this config is disabled, the state of partition is dynamically updated based on SEALED list from Helix.
+   * When something goes bad and partition override is enabled, cluster manager uses partition properties in Helix PropertyStore
+   * as source of truth to resolve partition state and ignores any changes from SEALED list in InstanceConfig.
    */
-  @Config("clustermap.enable.override")
+  @Config("clustermap.enable.partition.override")
   @Default("false")
-  public final boolean clusterMapEnableOverride;
+  public final boolean clusterMapEnablePartitionOverride;
 
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
@@ -196,6 +200,6 @@ public class ClusterMapConfig {
     clusterMapDefaultPartitionClass =
         verifiableProperties.getString("clustermap.default.partition.class", MAX_REPLICAS_ALL_DATACENTERS);
     clustermapCurrentXid = verifiableProperties.getLong("clustermap.current.xid", Long.MAX_VALUE);
-    clusterMapEnableOverride = verifiableProperties.getBoolean("clustermap.enable.override", false);
+    clusterMapEnablePartitionOverride = verifiableProperties.getBoolean("clustermap.enable.partition.override", false);
   }
 }
