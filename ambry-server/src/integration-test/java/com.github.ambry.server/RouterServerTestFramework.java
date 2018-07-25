@@ -133,6 +133,7 @@ class RouterServerTestFramework {
           testFuture.check();
         }
       }
+      Assert.assertEquals("opChain stops in the middle.", 0, opChain.operations.size());
       if (opChain.blobId != null) {
         blobsPut++;
         PartitionId partitionId = new BlobId(opChain.blobId, clusterMap).getPartition();
@@ -358,7 +359,7 @@ class RouterServerTestFramework {
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
   private void startGetBlobAuthorizationFailTest(final OperationChain opChain) {
-    Callback<GetBlobResult> callback = new TestCallback<>(opChain, false);
+    Callback<GetBlobResult> callback = new TestCallback<>(opChain, true);
     BlobId originalId, fraudId;
     try {
       originalId = new BlobId(opChain.blobId, clusterMap);
@@ -370,7 +371,7 @@ class RouterServerTestFramework {
       // continue the chain
       future.done(null, e);
       callback.onCompletion(null, e);
-      TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("getBlob", true), opChain) {
+      TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("getBlobAuthorizationFail", true), opChain) {
         @Override
         void check() throws Exception {
           throw e;
@@ -384,12 +385,13 @@ class RouterServerTestFramework {
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
             .getOption(GetOption.Include_All)
             .build(), callback);
-    TestFuture<GetBlobResult> testFuture = new TestFuture<GetBlobResult>(future, genLabel("getBlob", true), opChain) {
-      @Override
-      void check() throws Exception {
-        checkExpectedRouterErrorCode(RouterErrorCode.BlobAuthorizationFailure);
-      }
-    };
+    TestFuture<GetBlobResult> testFuture =
+        new TestFuture<GetBlobResult>(future, genLabel("getBlobAuthorizationFail", true), opChain) {
+          @Override
+          void check() throws Exception {
+            checkExpectedRouterErrorCode(RouterErrorCode.BlobAuthorizationFailure);
+          }
+        };
     opChain.testFutures.add(testFuture);
   }
 
@@ -398,7 +400,7 @@ class RouterServerTestFramework {
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
   private void startDeleteBlobAuthorizationFailTest(final OperationChain opChain) {
-    Callback<Void> callback = new TestCallback<>(opChain, false);
+    Callback<Void> callback = new TestCallback<>(opChain, true);
     BlobId originalId, fraudId;
     try {
       originalId = new BlobId(opChain.blobId, clusterMap);
@@ -410,17 +412,18 @@ class RouterServerTestFramework {
       // continue the chain
       future.done(null, e);
       callback.onCompletion(null, e);
-      TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", true), opChain) {
-        @Override
-        void check() throws Exception {
-          throw e;
-        }
-      };
+      TestFuture<Void> testFuture =
+          new TestFuture<Void>(future, genLabel("deleteBlobAuthorizationFail", true), opChain) {
+            @Override
+            void check() throws Exception {
+              throw e;
+            }
+          };
       opChain.testFutures.add(testFuture);
       return;
     }
     Future<Void> future = router.deleteBlob(fraudId.getID(), null, callback);
-    TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", true), opChain) {
+    TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlobAuthorizationFail", true), opChain) {
       @Override
       void check() throws Exception {
         checkExpectedRouterErrorCode(RouterErrorCode.BlobAuthorizationFailure);
