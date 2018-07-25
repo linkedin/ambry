@@ -516,7 +516,7 @@ public class ReplicationTest {
     List<Host> remoteHostOnly = Collections.singletonList(remoteHost);
     List<Host> expectedLocalHostOnly = Collections.singletonList(expectedLocalHost);
     List<Host> localHostAndExpectedLocalHost = Arrays.asList(localHost, expectedLocalHost);
-    List<Host> remoteHostAndExpectedLocalHost = Arrays.asList(expectedLocalHost, remoteHost);
+    List<Host> remoteHostAndExpectedLocalHost = Arrays.asList(remoteHost, expectedLocalHost);
     List<Host> allHosts = Arrays.asList(localHost, expectedLocalHost, remoteHost);
     for (PartitionId pid : partitionIds) {
       // add 3 put messages to both hosts (also add to expectedLocal)
