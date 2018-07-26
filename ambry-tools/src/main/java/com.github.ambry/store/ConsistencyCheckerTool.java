@@ -228,7 +228,8 @@ public class ConsistencyCheckerTool {
         if (!isDeprecated && info.getStates().contains(DumpIndexTool.BlobState.Valid)) {
           status.addAvailable(replica);
         } else {
-          status.addDeletedOrExpired(replica);
+          status.setIsDeprecated(isDeprecated);
+          status.addDeletedOrExpiredOrDeprecated(replica);
         }
       }
     }
@@ -246,16 +247,20 @@ public class ConsistencyCheckerTool {
     List<StoreKey> realInconsistentBlobs = new ArrayList<>();
     logger.info("Total Blobs Found {}", blobIdToStatusMap.size());
     long totalInconsistentBlobs = 0;
+    long totalDeprecatedBlobs = 0;
     long inconsistentDueToReplicationCount = 0;
     long acceptableInconsistentBlobs = 0;
     for (StoreKey blobId : blobIdToStatusMap.keySet()) {
       ReplicationStatus consistencyBlobResult = blobIdToStatusMap.get(blobId);
       // valid blobs : count of available replicas = total replica count or count of deleted replicas = total replica count
       boolean isValid = consistencyBlobResult.available.size() == replicaCount
-          || consistencyBlobResult.deletedOrExpired.size() == replicaCount;
+          || consistencyBlobResult.deletedOrExpiredOrDeprecated.size() == replicaCount;
       if (!isValid) {
         totalInconsistentBlobs++;
-        if ((consistencyBlobResult.deletedOrExpired.size() + consistencyBlobResult.unavailable.size()
+        if (consistencyBlobResult.isDeprecated) {
+          totalDeprecatedBlobs++;
+        }
+        if ((consistencyBlobResult.deletedOrExpiredOrDeprecated.size() + consistencyBlobResult.unavailable.size()
             == replicaCount)) {
           // acceptable inconsistent blobs : count of deleted + count of unavailable = total replica count
           logger.debug("Partially deleted (acceptable inconsistency) blob {} isDeletedOrExpired {}. Blob status - {}",
@@ -274,10 +279,12 @@ public class ConsistencyCheckerTool {
       }
     }
     // Inconsistent blobs = real inconsistent + acceptable inconsistent + inconsistent due to replication Lag
+    // Deprecated blobs = blobs determined to be deprecated
     // Acceptable inconsistent = due to deletion, some replicas reports as deleted, whereas some reports as unavailable
     // Inconsistent due to replication lag = Inconsistency due to replication lag.
     // Anything else is considered to be real inconsistent blobs
     logger.info("Total Inconsistent blobs count : {}", totalInconsistentBlobs);
+    logger.info("Total Deprecated blobs count : {}", totalDeprecatedBlobs);
     logger.info("Acceptable Inconsistent blobs count : {}", acceptableInconsistentBlobs);
     logger.info("Inconsistent blobs count due to replication lag : {}", inconsistentDueToReplicationCount);
     logger.info("Real Inconsistent blobs count : {} ", realInconsistentBlobs.size());
@@ -290,9 +297,10 @@ public class ConsistencyCheckerTool {
    */
   private static class ReplicationStatus {
     final Set<File> available = new HashSet<>();
-    final Set<File> deletedOrExpired = new HashSet<>();
+    final Set<File> deletedOrExpiredOrDeprecated = new HashSet<>();
     final Set<File> unavailable = new HashSet<>();
     boolean isDeletedOrExpired;
+    boolean isDeprecated = false;
     boolean belongsToRecentIndexSegment = false;
 
     /**
@@ -313,8 +321,12 @@ public class ConsistencyCheckerTool {
       this.belongsToRecentIndexSegment = this.belongsToRecentIndexSegment || belongsToRecentIndexSegment;
     }
 
-    void addDeletedOrExpired(File replica) {
-      deletedOrExpired.add(replica);
+    void setIsDeprecated(boolean isDeprecated) {
+      this.isDeprecated = isDeprecated;
+    }
+
+    void addDeletedOrExpiredOrDeprecated(File replica) {
+      deletedOrExpiredOrDeprecated.add(replica);
       isDeletedOrExpired = true;
       unavailable.remove(replica);
       available.remove(replica);
@@ -322,10 +334,11 @@ public class ConsistencyCheckerTool {
 
     @Override
     public String toString() {
-      int totalReplicas = available.size() + deletedOrExpired.size() + unavailable.size();
+      int totalReplicas = available.size() + deletedOrExpiredOrDeprecated.size() + unavailable.size();
       return "Available size: " + available.size() + ", Available :: " + available + "\nDeleted/Expired size: "
-          + deletedOrExpired.size() + " Deleted/Expired :: " + deletedOrExpired + "\nUnavailable size: "
-          + unavailable.size() + " Unavailable :: " + unavailable + "\nTotal Replica count: " + totalReplicas;
+          + deletedOrExpiredOrDeprecated.size() + " Deleted/Expired/Deprecated :: " + deletedOrExpiredOrDeprecated
+          + "\nUnavailable size: " + unavailable.size() + " Unavailable :: " + unavailable + "\nTotal Replica count: "
+          + totalReplicas;
     }
   }
 }
