@@ -111,8 +111,10 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
 
     @Override
     public StoreKey getConverted(StoreKey storeKey) {
-      if (exception != null || !lastConverted.containsKey(storeKey)) {
+      if (exception != null) {
         throw new IllegalStateException(exception);
+      } else if (!lastConverted.containsKey(storeKey)) {
+        throw new IllegalStateException(storeKey + " has not been converted");
       }
       return lastConverted.get(storeKey);
     }

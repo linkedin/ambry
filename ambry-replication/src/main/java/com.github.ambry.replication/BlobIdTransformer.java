@@ -27,7 +27,6 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
-import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -66,7 +65,7 @@ public class BlobIdTransformer implements Transformer {
       StoreKey oldStoreKey = message.getMessageInfo().getStoreKey();
       StoreKey newStoreKey = storeKeyConverter.getConverted(oldStoreKey);
       if (newStoreKey != null) {
-        transformedMsg = newMessage(message.getStream(), newStoreKey);
+        transformedMsg = newMessage(message.getStream(), newStoreKey, message.getMessageInfo());
       }
     } catch (Exception e) {
       return new TransformationOutput(e);
@@ -118,11 +117,13 @@ public class BlobIdTransformer implements Transformer {
    * with a new store key and account/container IDs
    * @param inputStream the input stream of the Message
    * @param newKey the new StoreKey
+   * @param oldMessageInfo the {@link MessageInfo} of the message being transformed
    * @return new Message message
    * @throws IOException
    * @throws MessageFormatException
    */
-  private Message newMessage(InputStream inputStream, StoreKey newKey) throws IOException, MessageFormatException {
+  private Message newMessage(InputStream inputStream, StoreKey newKey, MessageInfo oldMessageInfo)
+      throws IOException, MessageFormatException {
     MessageHeader_Format headerFormat = getMessageHeader(inputStream);
     storeKeyFactory.getStoreKey(new DataInputStream(inputStream));
     BlobId newBlobId = (BlobId) newKey;
@@ -144,9 +145,10 @@ public class BlobIdTransformer implements Transformer {
       PutMessageFormatInputStream putMessageFormatInputStream =
           new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData, blobData.getStream(),
               blobData.getSize(), blobData.getBlobType());
-      MessageInfo info = new MessageInfo(newKey, putMessageFormatInputStream.getSize(),
-          Utils.addSecondsToEpochTime(newProperties.getCreationTimeInMs(), newProperties.getTimeToLiveInSeconds()),
-          newProperties.getAccountId(), newProperties.getContainerId(), newProperties.getCreationTimeInMs());
+      MessageInfo info =
+          new MessageInfo(newKey, putMessageFormatInputStream.getSize(), false, oldMessageInfo.isTtlUpdated(),
+              oldMessageInfo.getExpirationTimeInMs(), newProperties.getAccountId(), newProperties.getContainerId(),
+              oldMessageInfo.getOperationTimeMs());
       return new Message(info, putMessageFormatInputStream);
     } else {
       throw new IllegalArgumentException("Only 'put' records are valid");
