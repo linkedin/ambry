@@ -133,7 +133,7 @@ class RouterServerTestFramework {
           testFuture.check();
         }
       }
-      Assert.assertEquals("opChain stops in the middle.", 0, opChain.operations.size());
+      Assert.assertEquals("opChain stopped in the middle.", 0, opChain.operations.size());
       if (opChain.blobId != null) {
         blobsPut++;
         PartitionId partitionId = new BlobId(opChain.blobId, clusterMap).getPartition();
