@@ -158,6 +158,7 @@ project(':ambry-account') {
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
+        testCompile "com.google.jimfs:jimfs:$jimFsVersion"
     }
 }
 
