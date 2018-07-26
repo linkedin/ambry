@@ -18,6 +18,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -291,10 +292,7 @@ class DataNode implements DataNodeId {
     }
 
     DataNode other = (DataNode) o;
-    int compare = (portNum < other.portNum) ? -1 : ((portNum == other.portNum) ? 0 : 1);
-    if (compare == 0) {
-      compare = hostname.compareTo(other.hostname);
-    }
-    return compare;
+    return Comparator.comparingInt((DataNode k) -> k.portNum).
+        thenComparing(k -> k.hostname).compare(this, other);
   }
 }

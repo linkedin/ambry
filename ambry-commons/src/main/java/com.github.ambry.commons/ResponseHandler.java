@@ -59,7 +59,6 @@ public class ResponseHandler {
       case Temporarily_Disabled:
       case Replica_Unavailable:
         clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Replica_Unavailable);
-        clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Ok);
         break;
       default:
         // other server error codes
