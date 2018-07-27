@@ -21,7 +21,6 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Consumer;
 import org.I0Itec.zkclient.IDefaultNameSpace;
 import org.I0Itec.zkclient.ZkServer;
 import org.junit.Assert;
@@ -33,7 +32,7 @@ import static org.junit.Assert.*;
  * A class consisting of common util methods useful for tests.
  */
 public class TestUtils {
-  public static final int TTL_SECS = 7200;
+  public static final long TTL_SECS = TimeUnit.DAYS.toSeconds(7);
   public static final Random RANDOM = new Random();
 
   /**
@@ -148,7 +147,8 @@ public class TestUtils {
    * Asserts that {@code actual} and {@code expect} are equal. Checks that {@code actual}
    * contains no extra data if {@code checkActualComplete} is {@code true}.
    */
-  public static void assertInputStreamEqual(InputStream expect, InputStream actual, int size, boolean checkActualComplete) throws IOException {
+  public static void assertInputStreamEqual(InputStream expect, InputStream actual, int size,
+      boolean checkActualComplete) throws IOException {
     byte[] actualBuf = Utils.readBytesFromStream(actual, size);
     if (checkActualComplete) {
       int finalRead = actual.read();
