@@ -232,6 +232,8 @@ class RouterServerTestFramework {
         opChain.properties.getBlobSize(), blobInfo.getBlobProperties().getBlobSize());
     Assert.assertEquals("Service ID in info does not match expected for operation: " + operationName,
         opChain.properties.getServiceId(), blobInfo.getBlobProperties().getServiceId());
+    Assert.assertEquals("TTL is incorrect for operation: " + operationName, opChain.properties.getTimeToLiveInSeconds(),
+        blobInfo.getBlobProperties().getTimeToLiveInSeconds());
     Assert.assertArrayEquals("Unexpected user metadata for operation: " + operationName, opChain.userMetadata,
         blobInfo.getUserMetadata());
   }
