@@ -66,6 +66,8 @@ public class Container {
   static final String REPLICATION_POLICY_KEY = "replicationPolicy";
   static final String TTL_REQUIRED_KEY = "ttlRequired";
   static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
+  static final String CLOUD_CONFIG_KEY = "cloudConfig";
+
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
   static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
@@ -257,7 +259,7 @@ public class Container {
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
           UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, UNKNOWN_CONTAINER_CACHEABLE_SETTING,
           UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING,
-          UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
+          UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID, null);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -271,7 +273,7 @@ public class Container {
           DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING,
-          DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
+          DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID, null);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -285,7 +287,7 @@ public class Container {
           DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING,
-          DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
+          DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID, null);
 
   // container field variables
   private final short id;
@@ -299,6 +301,8 @@ public class Container {
   private final String replicationPolicy;
   private final boolean ttlRequired;
   private final short parentAccountId;
+  // TODO: should this be a collection of cloud configs to support multi-replication?
+  private final CloudReplicationConfig cloudConfig;
 
   /**
    * Constructing an {@link Container} object from container metadata.
@@ -323,6 +327,7 @@ public class Container {
         mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         replicationPolicy = null;
         ttlRequired = false;
+        cloudConfig = null;
         break;
       case JSON_VERSION_2:
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
@@ -335,6 +340,8 @@ public class Container {
         mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED_KEY, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
         replicationPolicy = metadata.optString(REPLICATION_POLICY_KEY, null);
         ttlRequired = metadata.optBoolean(TTL_REQUIRED_KEY, false);
+        JSONObject cloudJson = metadata.optJSONObject(CLOUD_CONFIG_KEY);
+        cloudConfig = (cloudJson == null) ? null : new CloudReplicationConfig(cloudJson);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
@@ -350,17 +357,18 @@ public class Container {
    * @param description The description of the container. Can be null.
    * @param encrypted {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
    * @param previouslyEncrypted {@code true} if this {@link Container} was encrypted in the past, or currently, and a
-   *                            subset of blobs in it could still be encrypted.
+*                            subset of blobs in it could still be encrypted.
    * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
-   *                  this container.
+*                  this container.
    * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
    * @param replicationPolicy the replication policy to use. If {@code null}, the cluster's default will be used.
    * @param ttlRequired {@code true} if ttl is required on content created in this container.
    * @param parentAccountId The id of the parent {@link Account} of this container.
+   * @param cloudConfig The cloud config for the container.
    */
   Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
-      boolean ttlRequired, short parentAccountId) {
+      boolean ttlRequired, short parentAccountId, CloudReplicationConfig cloudConfig) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -375,6 +383,7 @@ public class Container {
         this.mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         this.replicationPolicy = null;
         this.ttlRequired = false;
+        this.cloudConfig = null;
         break;
       case JSON_VERSION_2:
         this.encrypted = encrypted;
@@ -382,6 +391,7 @@ public class Container {
         this.mediaScanDisabled = mediaScanDisabled;
         this.replicationPolicy = replicationPolicy;
         this.ttlRequired = ttlRequired;
+        this.cloudConfig = cloudConfig;
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -445,6 +455,9 @@ public class Container {
         metadata.put(MEDIA_SCAN_DISABLED_KEY, mediaScanDisabled);
         metadata.putOpt(REPLICATION_POLICY_KEY, replicationPolicy);
         metadata.put(TTL_REQUIRED_KEY, ttlRequired);
+        if (cloudConfig != null) {
+          metadata.put(CLOUD_CONFIG_KEY, cloudConfig.toJson());
+        }
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -534,6 +547,10 @@ public class Container {
    */
   public short getParentAccountId() {
     return parentAccountId;
+  }
+
+  public CloudReplicationConfig getCloudReplicationConfig() {
+    return cloudConfig;
   }
 
   /**

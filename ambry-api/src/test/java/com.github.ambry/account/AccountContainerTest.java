@@ -863,7 +863,7 @@ public class AccountContainerTest {
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
-          (short) 0);
+          (short) 0, null);
     }, null);
   }
 
@@ -913,7 +913,7 @@ public class AccountContainerTest {
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
           refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
-          refContainerTtlRequiredValues.get(i), refAccountId));
+          refContainerTtlRequiredValues.get(i), refAccountId, null));
       containerJsonList.add(buildContainerJson(refContainers.get(i)));
     }
   }

@@ -22,4 +22,5 @@ include 'ambry-api',
         'ambry-rest',
         'ambry-router',
         'ambry-frontend',
+        'ambry-cloud',
         'log4j-test-config'

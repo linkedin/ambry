@@ -37,6 +37,7 @@ public class ContainerBuilder {
   private boolean mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
   private String replicationPolicy = null;
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
+  private CloudReplicationConfig cloudConfig = null;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -59,6 +60,7 @@ public class ContainerBuilder {
     replicationPolicy = origin.getReplicationPolicy();
     ttlRequired = origin.isTtlRequired();
     parentAccountId = origin.getParentAccountId();
+    cloudConfig = origin.getCloudReplicationConfig();
   }
 
   /**
@@ -187,6 +189,11 @@ public class ContainerBuilder {
     return this;
   }
 
+  public ContainerBuilder setCloudConfig(CloudReplicationConfig cloudConfig) {
+    this.cloudConfig = cloudConfig;
+    return this;
+  }
+
   /**
    * Builds a {@link Container} object. {@code id}, {@code name}, {@code status}, {@code isPrivate}, and
    * {@code parentAccountId} are required before build.
@@ -195,6 +202,6 @@ public class ContainerBuilder {
    */
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, replicationPolicy, ttlRequired, parentAccountId);
+        mediaScanDisabled, replicationPolicy, ttlRequired, parentAccountId, cloudConfig);
   }
 }
