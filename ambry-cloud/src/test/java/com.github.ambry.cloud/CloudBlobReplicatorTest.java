@@ -1,5 +1,6 @@
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountService;
@@ -18,10 +19,14 @@ import com.github.ambry.router.KeyManagementService;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.SingleKeyManagementServiceFactory;
+import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import com.google.common.collect.ImmutableList;
-import com.google.common.io.Resources;
+import com.microsoft.azure.storage.StorageException;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.InputStream;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -46,17 +51,19 @@ public class CloudBlobReplicatorTest {
   private InMemoryBlobEventSource eventSource;
   private CloudDestinationFactory destinationFactory;
   private CloudDestination destination;
+  private CloudReplicationMetrics metrics;
   private CloudBlobReplicator replicator;
-  private short accountId = 101, containerId = 102;
+  private short accountId = 101;
+  private short containerId = 201;
+  private short containerIdNoRepl = 202;
   private String accountName = "ambryTeam";
   private String containerName = "ambrytest";
   private String serviceId = "TestService";
+  private long defaultBlobSize = 1024l;
 
   // Only need these for intg test
   private boolean useRealCloudService = false;
   private String configSpec;
-  //String blobFilePath = System.getProperty("blob.file.path");
-  //String containerName = System.getProperty("azure.container.name");
 
   @Before
   public void setup() throws Exception {
@@ -64,14 +71,16 @@ public class CloudBlobReplicatorTest {
     useRealCloudService = Boolean.parseBoolean(System.getProperty("use.real.cloud.service"));
     if (useRealCloudService) {
       configSpec = System.getProperty("cloud.config.spec");
-      destinationFactory = CloudDestinationFactory.getInstance();
+      destinationFactory = new AmbryCloudDestinationFactory(null);
     } else {
       configSpec = "AccountName=ambry;AccountKey=ambry-kay";
       destinationFactory = mock(CloudDestinationFactory.class);
       CloudDestination mockDestination = mock(CloudDestination.class);
-      when(mockDestination.uploadBlob(anyString(), anyString(), anyLong(), any())).thenReturn(true);
-      when(mockDestination.deleteBlob(anyString(), anyString())).thenReturn(true);
-      when(destinationFactory.getCloudDestination(any(), eq(configSpec))).thenReturn(mockDestination);
+      when(mockDestination.uploadBlob(anyString(), anyLong(), any())).thenReturn(true);
+      when(mockDestination.deleteBlob(anyString())).thenReturn(true);
+      CloudReplicationConfig config =
+          new CloudReplicationConfig(CloudDestinationType.AZURE.name(), configSpec, containerName);
+      when(destinationFactory.getCloudDestination(eq(config))).thenReturn(mockDestination);
       destination = mockDestination;
     }
 
@@ -85,7 +94,7 @@ public class CloudBlobReplicatorTest {
     accountService = new InMemAccountService(false, true);
 
     //
-    // Build an account owning a container configured to publish to the cloud
+    // Build an account with two containers, one configured to publish to the cloud and the other not.
     //
 
     //CryptoService cryptoService = new GCMCryptoServiceFactory(props, null).getCryptoService();
@@ -99,19 +108,23 @@ public class CloudBlobReplicatorTest {
 
     CloudReplicationConfig containerCloudConfig =
         new CloudReplicationConfig(CloudDestinationType.AZURE.name(), configSpec, containerName);
-    Container container = new ContainerBuilder(containerId, containerName, Container.ContainerStatus.ACTIVE, null,
-        accountId).setCloudConfig(containerCloudConfig).build();
-    Account account =
-        new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).containers(ImmutableList.of(container))
-            .build();
+    Container containerWithReplication =
+        new ContainerBuilder(containerId, containerName, Container.ContainerStatus.ACTIVE, null,
+            accountId).setCloudConfig(containerCloudConfig).build();
+    Container containerWithoutReplication =
+        new ContainerBuilder(containerIdNoRepl, "dontreplicateme", Container.ContainerStatus.ACTIVE, null,
+            accountId).build();
+
+    Account account = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).containers(
+        ImmutableList.of(containerWithReplication, containerWithoutReplication)).build();
     accountService.updateAccounts(ImmutableList.of(account));
-
     eventSource = new InMemoryBlobEventSource();
-
+    metrics = new CloudReplicationMetrics(new MetricRegistry());
     replicator = new CloudBlobReplicator().router(router)
         .accountService(accountService)
         .eventSource(eventSource)
         .destinationFactory(destinationFactory)
+        .metrics(metrics)
         .cryptoService(cryptoService)
         .keyService(kms);
     replicator.startup();
@@ -137,33 +150,128 @@ public class CloudBlobReplicatorTest {
     long blobSize = inputFile.length();
     FileInputStream inputStream = new FileInputStream(blobFilePath);
 
-    ReadableStreamChannel channel =
-        new InputStreamReadableStreamChannel(inputStream, blobSize, Executors.newSingleThreadExecutor());
-
     BlobProperties blobProps = new BlobProperties(blobSize, serviceId, accountId, containerId, false);
-    Future<String> fut = router.putBlob(blobProps, null, channel, null);
-    String blobId = fut.get();
+    String blobId = putBlob(blobProps, inputStream);
     assertNotNull(blobId);
 
     eventSource.pumpEvent(new BlobEvent(blobId, BlobOperation.PUT));
     if (!useRealCloudService) {
-      verify(destination).uploadBlob(eq(blobId), eq(containerName), anyLong(), any());
+      verify(destination).uploadBlob(eq(blobId), anyLong(), any());
     }
     assertTrue(eventSource.q.isEmpty());
+    checkUploadMetrics(1, 1, 0);
 
     eventSource.pumpEvent(new BlobEvent(blobId, BlobOperation.DELETE));
     if (!useRealCloudService) {
-      verify(destination).deleteBlob(eq(blobId), eq(containerName));
+      verify(destination).deleteBlob(eq(blobId));
     }
     assertTrue(eventSource.q.isEmpty());
+    checkDeleteMetrics(1, 1, 0);
   }
 
-  // TODO:
-  // PUT blob with TTL should not be uploaded
-  // UPDATE blob with no TTL should be uploaded
-  // PUT of blob second time should not be uploaded
-  // DELETE of non-existing blob should fail
+  @Test
+  public void testBlobWithTTL() throws Exception {
+    // Blob with TTL should not be uploaded
+    BlobProperties blobProps = new BlobProperties(defaultBlobSize, serviceId, accountId, containerId, false);
+    blobProps.setTimeToLiveInSeconds(3600l);
+    String blobId = putRandomBlob(blobProps);
+    eventSource.pumpEvent(new BlobEvent(blobId, BlobOperation.PUT));
+    assertTrue(eventSource.q.isEmpty());
+    checkUploadMetrics(1, 0, 0);
+
+    // UPDATE blob with no TTL should be uploaded
+    router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time);
+    eventSource.pumpEvent(new BlobEvent(blobId, BlobOperation.UPDATE));
+    checkUploadMetrics(2, 1, 0);
+  }
+
+  @Test
+  public void testBlobWithNoReplication() throws Exception {
+    // put a blob generated from random bytes
+    BlobProperties blobProps = new BlobProperties(defaultBlobSize, serviceId, accountId, containerIdNoRepl, false);
+    String blobId = putRandomBlob(blobProps);
+    eventSource.pumpEvent(new BlobEvent(blobId, BlobOperation.PUT));
+    // There should be no request recorded
+    checkUploadMetrics(0, 0, 0);
+
+    eventSource.pumpEvent(new BlobEvent(blobId, BlobOperation.DELETE));
+    checkDeleteMetrics(0, 0, 0);
+  }
+
+  @Test
+  public void testUploadExistingBlob() throws Exception {
+    if (useRealCloudService) {
+      return;
+    }
+    when(destination.uploadBlob(anyString(), anyLong(), any())).thenReturn(false);
+
+    BlobProperties blobProps = new BlobProperties(defaultBlobSize, serviceId, accountId, containerId, false);
+    String blobId = putRandomBlob(blobProps);
+    eventSource.pumpEvent(new BlobEvent(blobId, BlobOperation.PUT));
+    checkUploadMetrics(1, 0, 0);
+  }
+
+  @Test
+  public void testDeleteNonexistantBlob() throws Exception {
+    if (useRealCloudService) {
+      return;
+    }
+    when(destination.deleteBlob(anyString())).thenReturn(false);
+
+    BlobProperties blobProps = new BlobProperties(defaultBlobSize, serviceId, accountId, containerId, false);
+    String blobId = putRandomBlob(blobProps);
+    eventSource.pumpEvent(new BlobEvent(blobId, BlobOperation.DELETE));
+    checkDeleteMetrics(1, 0, 0);
+  }
+
   // Simulate exceptions, use bad account, container, blobId, configSpec
+  @Test
+  public void testReplicationWithExceptions() throws Exception {
+    if (useRealCloudService) {
+      return;
+    }
+    StorageException sex = new StorageException("INVALID_KEY", "Invalid storage key", null);
+    when(destinationFactory.getCloudDestination(any(CloudReplicationConfig.class))).thenThrow(InstantiationException.class);
+
+    BlobProperties blobProps = new BlobProperties(defaultBlobSize, serviceId, accountId, containerId, false);
+    String blobId = putRandomBlob(blobProps);
+    eventSource.pumpEvent(new BlobEvent(blobId, BlobOperation.PUT));
+    assertFalse(eventSource.q.isEmpty());
+    checkUploadMetrics(1, 0, 1);
+
+    when(destinationFactory.getCloudDestination(any(CloudReplicationConfig.class))).thenReturn(destination);
+    when(destination.uploadBlob(anyString(), anyLong(), any())).thenThrow(sex);
+
+    eventSource.pumpEvent(new BlobEvent(blobId, BlobOperation.PUT));
+    assertFalse(eventSource.q.isEmpty());
+    checkUploadMetrics(2, 0, 2);
+  }
+
+  private String putBlob(BlobProperties blobProperties, InputStream inputStream) throws Exception {
+    ReadableStreamChannel channel = new InputStreamReadableStreamChannel(inputStream, blobProperties.getBlobSize(),
+        Executors.newSingleThreadExecutor());
+    Future<String> fut = router.putBlob(blobProperties, null, channel, null);
+    return fut.get();
+  }
+
+  // put a blob generated from random bytes
+  private String putRandomBlob(BlobProperties blobProperties) throws Exception {
+    byte[] randomBytes = TestUtils.getRandomBytes((int) blobProperties.getBlobSize());
+    InputStream inputStream = new ByteArrayInputStream(randomBytes);
+    return putBlob(blobProperties, inputStream);
+  }
+
+  private void checkUploadMetrics(long expectedRequestCount, long expectedUploadedCount, long expectedErrorCount) {
+    assertEquals("Unexpected blobUploadRequestCount", expectedRequestCount, metrics.blobUploadRequestCount.getCount());
+    assertEquals("Unexpected blobUploadedCount", expectedUploadedCount, metrics.blobUploadedCount.getCount());
+    assertEquals("Unexpected blobUploadErrorCount", expectedErrorCount, metrics.blobUploadErrorCount.getCount());
+  }
+
+  private void checkDeleteMetrics(long expectedRequestCount, long expectedDeletedCount, long expectedErrorCount) {
+    assertEquals("Unexpected blobDeleteRequestCount", expectedRequestCount, metrics.blobDeleteRequestCount.getCount());
+    assertEquals("Unexpected blobDeletedCount", expectedDeletedCount, metrics.blobDeletedCount.getCount());
+    assertEquals("Unexpected blobDeleteErrorCount", expectedErrorCount, metrics.blobDeleteErrorCount.getCount());
+  }
 
   private static class DummyCryptoService implements CryptoService<SecretKeySpec> {
 

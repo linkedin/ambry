@@ -1,5 +1,6 @@
 package com.github.ambry.account;
 
+import java.util.Objects;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -48,5 +49,21 @@ public class CloudReplicationConfig {
     metadata.putOpt(CLOUD_CONFIG_SPEC_KEY, configSpec);
     metadata.putOpt(CLOUD_CONTAINER_NAME_KEY, cloudContainerName);
     return metadata;
+  }
+
+  @Override
+  public int hashCode() {
+    return (destinationType + configSpec + cloudContainerName).hashCode();
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (!(o instanceof CloudReplicationConfig)) {
+      return false;
+    }
+    CloudReplicationConfig oconfig = (CloudReplicationConfig) o;
+    return (Objects.equals(destinationType, oconfig.destinationType)
+        && Objects.equals(configSpec, oconfig.configSpec)
+        && Objects.equals(cloudContainerName, oconfig.cloudContainerName));
   }
 }

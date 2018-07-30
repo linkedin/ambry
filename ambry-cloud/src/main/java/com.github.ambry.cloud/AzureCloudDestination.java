@@ -1,6 +1,7 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.account.Account;
+import com.github.ambry.account.CloudReplicationConfig;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.OperationContext;
 import com.microsoft.azure.storage.StorageException;
@@ -17,32 +18,39 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 public class AzureCloudDestination implements CloudDestination {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
 
   private String connectionString;
+  private String containerName;
   private CloudStorageAccount azureAccount;
   private CloudBlobClient azureBlobClient;
+  private CloudBlobContainer azureContainer;
 
   // For test mocking
   public void setAzureAccount(CloudStorageAccount azureAccount) {
     this.azureAccount = azureAccount;
   }
 
-  public void initialize(String configSpec) throws Exception {
+  public void initialize(CloudReplicationConfig config) throws Exception {
     // Parse the connection string and create a blob client to interact with Blob storage
     // Note: the account and blobClient will be different for every distinct Azure account.
     // Likely need thread pool to manage all the connections and reuse/garbage-collect them
-    this.connectionString = configSpec;
+    this.connectionString = config.getConfigSpec();
+    this.containerName = config.getCloudContainerName();
     CloudStorageAccount azureStorageAccount =
         azureAccount != null ? azureAccount : CloudStorageAccount.parse(connectionString);
     azureBlobClient = azureStorageAccount.createCloudBlobClient();
+    azureContainer = azureBlobClient.getContainerReference(containerName);
+    azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
+        new OperationContext());
   }
 
+  // TODO: track metrics on success/failure and upload time/throughput
+
   @Override
-  public boolean uploadBlob(String blobId, String containerName, long blobSize, InputStream blobInputStream) throws Exception {
+  public boolean uploadBlob(String blobId, long blobSize, InputStream blobInputStream) throws Exception {
 
     Objects.requireNonNull(blobId);
     Objects.requireNonNull(containerName);
@@ -51,7 +59,7 @@ public class AzureCloudDestination implements CloudDestination {
     BlobRequestOptions options = null; // may want to set BlobEncryptionPolicy here
     OperationContext opContext = null;
     try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId, containerName);
+      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobId);
 
       if (azureBlob.exists()) {
         logger.info("Skipping upload of blob {} as it already exists in Azure container {}.", blobId, containerName);
@@ -63,20 +71,18 @@ public class AzureCloudDestination implements CloudDestination {
       return true;
 
     } catch (Exception e) {
-      // TODO: possibly transient error connecting to Azure, want to retry
+      logger.error("Failed to upload blob: " + blobId, e);
       throw e;
-    } finally {
-      // TODO: send notification of success/fail and update metrics including upload time
     }
   }
 
   @Override
-  public boolean deleteBlob(String blobId, String containerName) throws Exception {
+  public boolean deleteBlob(String blobId) throws Exception {
     Objects.requireNonNull(blobId);
     Objects.requireNonNull(containerName);
 
     try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId, containerName);
+      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobId);
 
       if (!azureBlob.exists()) {
         logger.info("Skipping deletion of blob {} as it does not exist in Azure container {}.", blobId, containerName);
@@ -88,29 +94,9 @@ public class AzureCloudDestination implements CloudDestination {
       return true;
 
     } catch (Exception e) {
-      // TODO: possibly fatal error with request
+      logger.error("Failed to delete blob: " + blobId, e);
       throw e;
-    } finally {
-      // TODO: send notification of success/fail and update metrics including upload time
     }
   }
 
-  private CloudBlockBlob getAzureBlobReference(String blobId, String containerName)
-      throws URISyntaxException, InvalidKeyException, StorageException {
-
-    if (azureBlobClient == null) {
-      throw new IllegalStateException("Azure client cannot be null");
-    }
-    CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
-
-    // Create the container if it does not exist with public access.
-    //System.out.println("Creating container: " + ambryContainer.getName());
-    // Note: this is expensive!
-    azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
-        new OperationContext());
-
-    //Getting a blob reference
-    CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobId);
-    return azureBlob;
-  }
 }

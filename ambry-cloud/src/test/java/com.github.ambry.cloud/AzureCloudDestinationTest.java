@@ -1,5 +1,6 @@
 package com.github.ambry.cloud;
 
+import com.github.ambry.account.CloudReplicationConfig;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
@@ -38,8 +39,10 @@ public class AzureCloudDestinationTest {
   @Ignore
   // Integration test, needs live Azure account
   public void testPublishDataToAzure() throws Exception {
-    CloudDestination dest =
-        CloudDestinationFactory.getInstance().getCloudDestination(CloudDestinationType.AZURE, connectionString);
+    CloudDestinationFactory factory = new AmbryCloudDestinationFactory(null);
+    CloudReplicationConfig config =
+        new CloudReplicationConfig(CloudDestinationType.AZURE.name(), connectionString, containerName);
+    CloudDestination dest = factory.getCloudDestination(config);
 
     // (AzureCloudDestination)dest).setAzureAccount(mockAzureAccount);
 
@@ -58,7 +61,7 @@ public class AzureCloudDestinationTest {
     long blobSize = inputFile.length();
     String blobId = inputFile.getName();
     FileInputStream inputStream = new FileInputStream(blobFilePath);
-    boolean success = dest.uploadBlob(blobId, containerName, blobSize, inputStream);
+    boolean success = dest.uploadBlob(blobId, blobSize, inputStream);
     System.out.println("Result of uploadBlob is " + success);
   }
 }

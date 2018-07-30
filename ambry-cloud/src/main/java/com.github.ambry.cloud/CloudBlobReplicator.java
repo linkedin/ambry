@@ -16,6 +16,7 @@ import com.github.ambry.router.KeyManagementService;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -33,6 +34,7 @@ public class CloudBlobReplicator implements BlobEventConsumer {
   private CloudDestinationFactory destinationFactory;
   private CryptoService cryptoService;
   private KeyManagementService kms;
+  private CloudReplicationMetrics metrics;
 
   private static final Logger logger = LoggerFactory.getLogger(CloudBlobReplicator.class);
 
@@ -59,6 +61,11 @@ public class CloudBlobReplicator implements BlobEventConsumer {
     return this;
   }
 
+  public CloudBlobReplicator metrics(CloudReplicationMetrics metrics) {
+    this.metrics = metrics;
+    return this;
+  }
+
   public CloudBlobReplicator cryptoService(CryptoService cryptoService) {
     this.cryptoService = cryptoService;
     return this;
@@ -72,7 +79,7 @@ public class CloudBlobReplicator implements BlobEventConsumer {
   public void startup() {
     Objects.requireNonNull(eventSource);
     if (destinationFactory == null) {
-      destinationFactory = CloudDestinationFactory.getInstance();
+      destinationFactory = new AmbryCloudDestinationFactory(null);
     }
     eventSource.subscribe(this);
   }
@@ -87,90 +94,106 @@ public class CloudBlobReplicator implements BlobEventConsumer {
   public boolean onBlobEvent(BlobEvent blobEvent) {
     String blobId = blobEvent.getBlobId();
     BlobOperation op = blobEvent.getBlobOperation();
+
+    CloudReplicationConfig config = getCloudReplicationConfig(blobId);
+    if (config == null) {
+      // Container not configured for replication
+      return true;
+    }
+
     try {
       switch (op) {
         case PUT:
         case UPDATE:
-          handleBlobReplication(blobId);
+          handleBlobReplication(blobId, config);
           break;
         case DELETE:
-          handleBlobDeletion(blobId);
+          handleBlobDeletion(blobId, config);
           break;
       }
-      // TODO: track metrics, maybe issue notifications?
     } catch (Exception ex) {
       return false;
     }
     return true;
   }
 
-  private void handleBlobReplication(String blobId) throws Exception {
+  private void handleBlobReplication(String blobId, CloudReplicationConfig config) throws Exception {
 
-    CloudReplicationMetadata metadata = getCloudReplicationMetadata(blobId);
-    if (metadata == null) {
-      return;
+    metrics.blobUploadRequestCount.inc();
+
+    try {
+      GetBlobOptions getOptions = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+          .getOption(GetOption.Include_All)
+          .build();
+
+      // Callback: (result, exception) -> { }
+      // Perform the Get synchronously for now
+      Future<GetBlobResult> resultFuture = router.getBlob(blobId, getOptions, null);
+      GetBlobResult result = resultFuture.get();
+
+      CloudDestination destination = destinationFactory.getCloudDestination(config);
+
+      BlobInfo blobInfo = result.getBlobInfo();
+      // Only replicate blobs with infinite TTL
+      long ttlSec = blobInfo.getBlobProperties().getTimeToLiveInSeconds();
+      if (ttlSec != Utils.Infinite_Time) {
+        logger.info("Skipping replication of blob {} due to TTL of {}.", blobId, ttlSec);
+        return;
+      }
+      long blobSize = blobInfo.getBlobProperties().getBlobSize();
+      ReadableStreamChannel blobStreamChannel = result.getBlobDataChannel();
+      InputStream blobInputStream = new ReadableStreamChannelInputStream(blobStreamChannel);
+
+      long startTimeMs = SystemTime.getInstance().milliseconds();
+      if (destination.uploadBlob(blobId, blobSize, blobInputStream)) {
+        metrics.blobUploadedCount.inc();
+        long sendTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+        double sendBytesRate = blobSize / ((double) sendTimeMs / SystemTime.MsPerSec);
+        metrics.blobUploadRate.mark((long) sendBytesRate);
+      }
+    } catch (Throwable ex) {
+      metrics.blobUploadErrorCount.inc();
+      throw ex;
     }
-
-    GetBlobOptions getOptions = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .getOption(GetOption.Include_All)
-        .build();
-
-    // Callback: (result, exception) -> { }
-    // Perform the Get synchronously for now
-    Future<GetBlobResult> resultFuture = router.getBlob(blobId, getOptions, null);
-    GetBlobResult result = resultFuture.get();
-
-    CloudDestination destination =
-        destinationFactory.getCloudDestination(metadata.destinationType, metadata.configSpec);
-
-    BlobInfo blobInfo = result.getBlobInfo();
-    // Only replicate blobs with infinite TTL
-    long ttlSec = blobInfo.getBlobProperties().getTimeToLiveInSeconds();
-    if (ttlSec != Utils.Infinite_Time) {
-      logger.info("Skipping replication of blob {} due to TTL of {}.", blobId, ttlSec);
-      return;
-    }
-    long blobSize = blobInfo.getBlobProperties().getBlobSize();
-    ReadableStreamChannel blobStreamChannel = result.getBlobDataChannel();
-    InputStream blobInputStream = new ReadableStreamChannelInputStream(blobStreamChannel);
-
-    destination.uploadBlob(blobId, metadata.cloudContainerName, blobSize, blobInputStream);
   }
 
-  private void handleBlobDeletion(String blobId) throws Exception {
+  private void handleBlobDeletion(String blobId, CloudReplicationConfig config) throws Exception {
 
-    CloudReplicationMetadata metadata = getCloudReplicationMetadata(blobId);
-    if (metadata == null) {
-      return;
+    metrics.blobDeleteRequestCount.inc();
+
+    try {
+      CloudDestination destination = destinationFactory.getCloudDestination(config);
+
+      if (destination.deleteBlob(blobId)) {
+        metrics.blobDeletedCount.inc();
+      }
+    } catch (Throwable ex) {
+      metrics.blobDeleteErrorCount.inc();
+      throw ex;
     }
-
-    CloudDestination destination =
-        destinationFactory.getCloudDestination(metadata.destinationType, metadata.configSpec);
-
-    destination.deleteBlob(blobId, metadata.cloudContainerName);
   }
 
-  private CloudReplicationMetadata getCloudReplicationMetadata(String blobId) {
+  // Returns a sanitized copy of container's replication config
+  private CloudReplicationConfig getCloudReplicationConfig(String blobId) {
     try {
       Pair<Short, Short> pair = BlobId.getAccountAndContainerIds(blobId);
       short accountId = pair.getFirst(), containerId = pair.getSecond();
       Account ambryAccount = accountService.getAccountById(accountId);
+      Objects.requireNonNull(ambryAccount, "No Ambry account found for accountId " + accountId);
       Container ambryContainer = ambryAccount.getContainerById(containerId);
+      Objects.requireNonNull(ambryContainer, "No Ambry container found for containerId " + containerId);
       // Check for valid cloud destination
-      CloudReplicationConfig cloudConfig = ambryContainer.getCloudReplicationConfig();
-      if (cloudConfig == null) {
+      CloudReplicationConfig containerConfig = ambryContainer.getCloudReplicationConfig();
+      if (containerConfig == null) {
         return null;
       }
-      CloudReplicationMetadata metadata = new CloudReplicationMetadata();
-      metadata.configSpec = decryptString(cloudConfig.getConfigSpec(), accountId, containerId);
-      metadata.destinationType = CloudDestinationType.valueOf(cloudConfig.getDestinationType());
+      String clearConfigSpec = decryptString(containerConfig.getConfigSpec(), accountId, containerId);
       // Note: if cloud container name not supplied, use ambry container name instead
-      metadata.cloudContainerName =
-          (cloudConfig.getCloudContainerName() != null) ? cloudConfig.getCloudContainerName()
-              : ambryContainer.getName();
-      return metadata;
+      String cloudContainerName = (containerConfig.getCloudContainerName() != null) ? containerConfig.getCloudContainerName()
+          : ambryContainer.getName();
+      return new CloudReplicationConfig(containerConfig.getDestinationType(), clearConfigSpec, cloudContainerName);
     } catch (Exception ex) {
-      logger.error("Getting cloud replication config", ex);
+      logger.error("Getting cloud replication config for blob " + blobId, ex);
       return null;
     }
   }
@@ -184,10 +207,4 @@ public class CloudBlobReplicator implements BlobEventConsumer {
     return new String(clearBuf.array());
   }
 
-  // metadata container for replicating ambry container to cloud
-  static class CloudReplicationMetadata {
-    CloudDestinationType destinationType;
-    String configSpec;
-    String cloudContainerName;
-  }
 }
