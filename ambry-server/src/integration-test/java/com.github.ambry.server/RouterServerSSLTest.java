@@ -139,6 +139,10 @@ public class RouterServerSSLTest {
           operations.add(OperationType.GET_AUTHORIZATION_FAILURE);
           operations.add(OperationType.GET);
           operations.add(OperationType.GET_INFO);
+          operations.add(OperationType.TTL_UPDATE);
+          operations.add(OperationType.AWAIT_TTL_UPDATE);
+          operations.add(OperationType.GET);
+          operations.add(OperationType.GET_INFO);
           operations.add(OperationType.DELETE);
           operations.add(OperationType.AWAIT_DELETION);
           operations.add(OperationType.GET_DELETED);
@@ -165,6 +169,10 @@ public class RouterServerSSLTest {
           operations.add(OperationType.GET);
           operations.add(OperationType.GET);
           operations.add(OperationType.GET_AUTHORIZATION_FAILURE);
+          operations.add(OperationType.GET);
+          operations.add(OperationType.GET_INFO);
+          operations.add(OperationType.TTL_UPDATE);
+          operations.add(OperationType.AWAIT_TTL_UPDATE);
           operations.add(OperationType.GET);
           operations.add(OperationType.GET_INFO);
           break;

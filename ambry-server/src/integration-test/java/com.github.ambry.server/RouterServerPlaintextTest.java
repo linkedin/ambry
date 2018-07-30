@@ -153,6 +153,10 @@ public class RouterServerPlaintextTest {
           operations.add(OperationType.GET_AUTHORIZATION_FAILURE);
           operations.add(OperationType.GET);
           operations.add(OperationType.GET_INFO);
+          operations.add(OperationType.TTL_UPDATE);
+          operations.add(OperationType.AWAIT_TTL_UPDATE);
+          operations.add(OperationType.GET);
+          operations.add(OperationType.GET_INFO);
           operations.add(OperationType.DELETE);
           operations.add(OperationType.AWAIT_DELETION);
           operations.add(OperationType.GET_DELETED);
@@ -181,6 +185,10 @@ public class RouterServerPlaintextTest {
           operations.add(OperationType.GET_AUTHORIZATION_FAILURE);
           operations.add(OperationType.GET);
           operations.add(OperationType.GET_INFO);
+          operations.add(OperationType.TTL_UPDATE);
+          operations.add(OperationType.AWAIT_TTL_UPDATE);
+          operations.add(OperationType.GET);
+          operations.add(OperationType.GET_INFO);
           break;
       }
       int blobSize = random.nextInt(100 * 1024);
@@ -205,6 +213,10 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.GET_INFO);
       operations.add(OperationType.GET_AUTHORIZATION_FAILURE);
       operations.add(OperationType.GET);
+      operations.add(OperationType.TTL_UPDATE);
+      operations.add(OperationType.AWAIT_TTL_UPDATE);
+      operations.add(OperationType.GET);
+      operations.add(OperationType.GET_INFO);
       operations.add(OperationType.DELETE_AUTHORIZATION_FAILURE);
       operations.add(OperationType.DELETE);
       operations.add(OperationType.AWAIT_DELETION);
@@ -234,6 +246,10 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.GET_INFO);
       operations.add(OperationType.GET_AUTHORIZATION_FAILURE);
       operations.add(OperationType.GET);
+      operations.add(OperationType.TTL_UPDATE);
+      operations.add(OperationType.AWAIT_TTL_UPDATE);
+      operations.add(OperationType.GET);
+      operations.add(OperationType.GET_INFO);
       operations.add(OperationType.DELETE_AUTHORIZATION_FAILURE);
       operations.add(OperationType.DELETE);
       operations.add(OperationType.AWAIT_DELETION);

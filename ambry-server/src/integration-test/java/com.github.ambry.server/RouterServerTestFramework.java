@@ -25,6 +25,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.Selector;
+import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
@@ -167,7 +168,9 @@ class RouterServerTestFramework {
     TestUtils.RANDOM.nextBytes(data);
     short accountId = container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getParentAccountId();
     short containerId = container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getId();
-    BlobProperties properties = new BlobProperties(blobSize, "serviceid1", accountId, containerId, testEncryption);
+    BlobProperties properties =
+        new BlobProperties(blobSize, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId,
+            testEncryption);
     OperationChain opChain = new OperationChain(chainId, properties, userMetadata, data, operations);
     continueChain(opChain);
     return opChain;
@@ -229,6 +232,8 @@ class RouterServerTestFramework {
         opChain.properties.getBlobSize(), blobInfo.getBlobProperties().getBlobSize());
     Assert.assertEquals("Service ID in info does not match expected for operation: " + operationName,
         opChain.properties.getServiceId(), blobInfo.getBlobProperties().getServiceId());
+    Assert.assertEquals("TTL is incorrect for operation: " + operationName, opChain.properties.getTimeToLiveInSeconds(),
+        blobInfo.getBlobProperties().getTimeToLiveInSeconds());
     Assert.assertArrayEquals("Unexpected user metadata for operation: " + operationName, opChain.userMetadata,
         blobInfo.getUserMetadata());
   }
@@ -433,6 +438,23 @@ class RouterServerTestFramework {
   }
 
   /**
+   * Submit a ttl update operation.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startTtlUpdate(final OperationChain opChain) {
+    Callback<Void> callback = new TestCallback<>(opChain, false);
+    Future<Void> future = router.updateBlobTtl(opChain.blobId, null, Utils.Infinite_Time, callback);
+    TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("updateBlobTtl", false), opChain) {
+      @Override
+      void check() throws Exception {
+        get();
+        opChain.properties.setTimeToLiveInSeconds(Utils.Infinite_Time);
+      }
+    };
+    opChain.testFutures.add(testFuture);
+  }
+
+  /**
    * Submit a deleteBlob operation.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
@@ -469,6 +491,16 @@ class RouterServerTestFramework {
   }
 
   /**
+   * Using the mock notification system, wait for the updated blob in this operation chain to be updated on all server
+   * nodes before continuing the chain.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startAwaitTtlUpdate(final OperationChain opChain) {
+    notificationSystem.awaitBlobUpdates(opChain.blobId, UpdateType.TTL_UPDATE);
+    continueChain(opChain);
+  }
+
+  /**
    * Submit the next operation in the chain to the router. If there are no more operations in the queue,
    * mark the chain as completed.
    * @param opChain the {@link OperationChain} to get the next operation from.
@@ -484,6 +516,9 @@ class RouterServerTestFramework {
       switch (nextOp) {
         case PUT:
           startPutBlob(opChain);
+          break;
+        case TTL_UPDATE:
+          startTtlUpdate(opChain);
           break;
         case GET_INFO_DELETED_SUCCESS:
           options = GetOption.Include_Deleted_Blobs;
@@ -506,6 +541,9 @@ class RouterServerTestFramework {
         case AWAIT_DELETION:
           startAwaitDeletion(opChain);
           break;
+        case AWAIT_TTL_UPDATE:
+          startAwaitTtlUpdate(opChain);
+          break;
         case GET_AUTHORIZATION_FAILURE:
           startGetBlobAuthorizationFailTest(opChain);
           break;
@@ -525,46 +563,79 @@ class RouterServerTestFramework {
     /**
      * PutBlob with the nonblocking router
      */
-    PUT(false), /**
+    PUT(false),
+
+    /**
      * GetBlobInfo with the nonblocking router and check the blob info against what was put in.
      */
-    GET_INFO(false), /**
+    GET_INFO(false),
+
+    /**
      * GetBlob with the nonblocking router and check the blob contents against what was put in.
      */
-    GET(false), /**
+    GET(false),
+
+    /**
      * GetBlob with incorrect accountId and containerId in blobId
      */
-    GET_AUTHORIZATION_FAILURE(false), /**
+    GET_AUTHORIZATION_FAILURE(false),
+
+    /**
+     * Update the TTL of a blob
+     */
+    TTL_UPDATE(false),
+
+    /**
      * DeleteBlob with the nonblocking router
      */
-    DELETE(false), /**
+    DELETE(false),
+
+    /**
      * DeleteBlob with incorrect accountId and containerId in blobId
      */
-    DELETE_AUTHORIZATION_FAILURE(false), /**
+    DELETE_AUTHORIZATION_FAILURE(false),
+
+    /**
      * GetBlobInfo with the nonblocking router. Expect an exception to occur because the blob should have already been
      * deleted
      */
-    GET_INFO_DELETED(true), /**
+    GET_INFO_DELETED(true),
+
+    /**
      * GetBlob with the nonblocking router. Expect an exception to occur because the blob should have already been
      * deleted
      */
-    GET_DELETED(true), /**
+    GET_DELETED(true),
+
+    /**
      * GetBlobInfo with the nonblocking router. Will use {@link GetOption#Include_Deleted_Blobs} and is expected to
      * succeed even though the blob is deleted.
      */
-    GET_INFO_DELETED_SUCCESS(false), /**
+    GET_INFO_DELETED_SUCCESS(false),
+
+    /**
      * GetBlob with the nonblocking router. Will use {@link GetOption#Include_Deleted_Blobs} and is expected to
      * succeed even though the blob is deleted.
      */
-    GET_DELETED_SUCCESS(false), /**
+    GET_DELETED_SUCCESS(false),
+
+    /**
      * Wait for the operation chain's blob ID to be reported as created on all replicas. Continue with the remaining
      * actions in the operation chain afterwards.
      */
-    AWAIT_CREATION(false), /**
+    AWAIT_CREATION(false),
+
+    /**
      * Wait for the operation chain's blob ID to be reported as deleted on all replicas. Continue with the remaining
      * actions in the operation chain afterwards.
      */
-    AWAIT_DELETION(false);
+    AWAIT_DELETION(false),
+
+    /**
+     * Wait for the operation chain's blob ID to be reported as updated on all replicas. Continue with the remaining
+     * actions in the operation chain afterwards.
+     */
+    AWAIT_TTL_UPDATE(false);
 
     /**
      * {@code true} if this operation needs to check that the response returned indicates that the blob is deleted.
