@@ -14,67 +14,120 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.account.CloudReplicationConfig;
+import com.github.ambry.utils.TestUtils;
 import com.microsoft.azure.storage.CloudStorageAccount;
+import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
-import java.io.File;
-import java.io.FileInputStream;
-import org.junit.Ignore;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
 public class AzureCloudDestinationTest {
 
-  String connectionString = System.getProperty("azure.connection.string");
-  String blobFilePath = System.getProperty("blob.file.path");
-  String containerName = System.getProperty("azure.container.name");
+  private String configSpec = "AccountName=ambry;AccountKey=ambry-kay";
+  private String containerName = "ambrytest";
+  private AzureCloudDestination azureDest;
+  private CloudReplicationConfig azureConfig;
+  private CloudStorageAccount mockAzureAccount;
+  private CloudBlobClient mockAzureClient;
+  private CloudBlobContainer mockAzureContainer;
+  private CloudBlockBlob mockBlob;
+  private int blobSize = 1024;
+  private String blobId = "A123G789cafebabe";
 
-  public void initMocks() throws Exception {
-    // TODO: stupid account class is final and can't be mocked
-    CloudStorageAccount mockAzureAccount = mock(CloudStorageAccount.class);
-    CloudBlobClient mockAzureClient = mock(CloudBlobClient.class);
-    CloudBlobContainer mockAzureContainer = mock(CloudBlobContainer.class);
-    CloudBlockBlob mockBlob = mock(CloudBlockBlob.class);
+  @Before
+  public void setup() throws Exception {
+    mockAzureAccount = mock(CloudStorageAccount.class);
+    mockAzureClient = mock(CloudBlobClient.class);
+    mockAzureContainer = mock(CloudBlobContainer.class);
+    mockBlob = mock(CloudBlockBlob.class);
     when(mockAzureAccount.createCloudBlobClient()).thenReturn(mockAzureClient);
     when(mockAzureClient.getContainerReference(anyString())).thenReturn(mockAzureContainer);
     when(mockAzureContainer.createIfNotExists()).thenReturn(true);
     when(mockAzureContainer.createIfNotExists(any(), any(), any())).thenReturn(true);
     when(mockAzureContainer.getBlockBlobReference(anyString())).thenReturn(mockBlob);
+    when(mockBlob.exists()).thenReturn(false);
     Mockito.doNothing().when(mockBlob).upload(any(), anyLong(), any(), any(), any());
-    when(mockBlob.deleteIfExists()).thenReturn(true);
+    Mockito.doNothing().when(mockBlob).delete();
+
+    azureConfig = new CloudReplicationConfig(CloudDestinationType.AZURE.name(), configSpec, containerName);
+    azureDest = new AzureCloudDestination();
+    azureDest.setAzureAccount(mockAzureAccount);
+    azureDest.initialize(azureConfig);
   }
 
   @Test
-  @Ignore
-  // Integration test, needs live Azure account
-  public void testPublishDataToAzure() throws Exception {
+  public void testNormal() throws Exception {
+    InputStream inputStream = getBlobInputStream(blobSize);
+    boolean success = azureDest.uploadBlob(blobId, blobSize, inputStream);
+    assertTrue(success);
+
+    when(mockBlob.exists()).thenReturn(true);
+    success = azureDest.deleteBlob(blobId);
+    assertTrue(success);
+  }
+
+  @Test
+  public void testUploadExists() throws Exception {
+    when(mockBlob.exists()).thenReturn(true);
+    InputStream inputStream = getBlobInputStream(blobSize);
+    boolean success = azureDest.uploadBlob(blobId, blobSize, inputStream);
+    assertFalse(success);
+  }
+
+  @Test
+  public void testDeleteNotExists() throws Exception {
+    when(mockBlob.exists()).thenReturn(false);
+    InputStream inputStream = getBlobInputStream(blobSize);
+    boolean success = azureDest.deleteBlob(blobId);
+    assertFalse(success);
+  }
+
+  @Test(expected = StorageException.class)
+  public void testInitClientException() throws Exception {
+    when(mockAzureClient.getContainerReference(anyString())).thenThrow(StorageException.class);
+    azureDest = new AzureCloudDestination();
+    azureDest.setAzureAccount(mockAzureAccount);
+    azureDest.initialize(azureConfig);
+  }
+
+  @Test(expected = InstantiationException.class)
+  public void testInitBadConnection() throws Exception {
     CloudDestinationFactory factory = new AmbryCloudDestinationFactory(null);
-    CloudReplicationConfig config =
-        new CloudReplicationConfig(CloudDestinationType.AZURE.name(), connectionString, containerName);
-    CloudDestination dest = factory.getCloudDestination(config);
+    azureDest = (AzureCloudDestination) factory.getCloudDestination(azureConfig);
+  }
 
-    // (AzureCloudDestination)dest).setAzureAccount(mockAzureAccount);
+  @Test(expected = StorageException.class)
+  public void testUploadContainerException() throws Exception {
+    when(mockAzureContainer.getBlockBlobReference(anyString())).thenThrow(StorageException.class);
+    InputStream inputStream = getBlobInputStream(blobSize);
+    azureDest.uploadBlob(blobId, blobSize, inputStream);
+  }
 
-    // TODO: test cases
-    // Successful upload
-    // Successful delete
-    // getContainerReference throws exceptions, upload fails
-    // getBlockBlobReference throws exceptions, upload fails
-    // upload throws exceptions, upload fails
-    // blob exists returns true, upload returns false
+  @Test(expected = StorageException.class)
+  public void testUploadBlobException() throws Exception {
+    Mockito.doThrow(StorageException.class).when(mockBlob).upload(any(), anyLong(), any(), any(), any());
+    InputStream inputStream = getBlobInputStream(blobSize);
+    azureDest.uploadBlob(blobId, blobSize, inputStream);
+  }
 
-    File inputFile = new File(blobFilePath);
-    if (!inputFile.canRead()) {
-      throw new RuntimeException("Can't read input file: " + blobFilePath);
-    }
-    long blobSize = inputFile.length();
-    String blobId = inputFile.getName();
-    FileInputStream inputStream = new FileInputStream(blobFilePath);
-    boolean success = dest.uploadBlob(blobId, blobSize, inputStream);
-    System.out.println("Result of uploadBlob is " + success);
+  @Test(expected = StorageException.class)
+  public void testDeleteBlobException() throws Exception {
+    when(mockBlob.exists()).thenReturn(true);
+    Mockito.doThrow(StorageException.class).when(mockBlob).delete();
+    azureDest.deleteBlob(blobId);
+  }
+
+  private static InputStream getBlobInputStream(int blobSize) {
+    byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
+    return new ByteArrayInputStream(randomBytes);
   }
 }
