@@ -38,20 +38,22 @@ class AmbryReplica implements ReplicaId, Resource {
    * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    * @param partition the {@link AmbryPartition} of which this is a replica.
    * @param disk the {@link AmbryDisk} on which this replica resides.
+   * @param isReplicaStopped whether this replica is stopped or not.
    * @param capacityBytes the capacity in bytes for this replica.
    * @param isSealed whether this replica is in sealed state.
    */
-  AmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, AmbryDisk disk, HardwareState state,
+  AmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, AmbryDisk disk, boolean isReplicaStopped,
       long capacityBytes, boolean isSealed) throws Exception {
     this.partition = partition;
     this.disk = disk;
     this.capacityBytes = capacityBytes;
     this.isSealed = isSealed;
-    this.isStopped = state == HardwareState.UNAVAILABLE;
+    isStopped = isReplicaStopped;
     validate();
     ResourceStatePolicyFactory resourceStatePolicyFactory =
-        Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, state, clusterMapConfig);
-    this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
+        Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
+            clusterMapConfig);
+    resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
   }
 
   /**

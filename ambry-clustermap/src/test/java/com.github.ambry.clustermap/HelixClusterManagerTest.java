@@ -282,7 +282,7 @@ public class HelixClusterManagerTest {
     assertEquals(HardwareState.UNAVAILABLE, dataNode.getState());
     assertEquals(HardwareState.UNAVAILABLE, disk.getState());
 
-    // Trigger a successful event to bring the resources up.
+    // Trigger a successful node event to bring the resources up.
     clusterManager.onReplicaEvent(replica, ReplicaEventType.Node_Response);
     assertFalse(replica.isDown());
     assertEquals(HardwareState.AVAILABLE, dataNode.getState());
@@ -297,10 +297,28 @@ public class HelixClusterManagerTest {
     // node should still be available even on disk error.
     assertEquals(HardwareState.AVAILABLE, dataNode.getState());
 
+    // Trigger a successful disk event to bring the resources up.
     clusterManager.onReplicaEvent(replica, ReplicaEventType.Disk_Ok);
     assertFalse(replica.isDown());
     assertEquals(HardwareState.AVAILABLE, dataNode.getState());
     assertEquals(HardwareState.AVAILABLE, disk.getState());
+
+    if (!useComposite) {
+      // Similar tests for replica.
+      for (int i = 0; i < clusterMapConfig.clusterMapFixedTimeoutReplicaErrorThreshold; i++) {
+        clusterManager.onReplicaEvent(replica, ReplicaEventType.Replica_Unavailable);
+      }
+      assertTrue(replica.isDown());
+      assertEquals(HardwareState.AVAILABLE, disk.getState());
+      // node should still be available even on disk error.
+      assertEquals(HardwareState.AVAILABLE, dataNode.getState());
+
+      // Trigger a successful replica event to bring the resources up.
+      clusterManager.onReplicaEvent(replica, ReplicaEventType.Replica_Available);
+      assertFalse(replica.isDown());
+      assertEquals(HardwareState.AVAILABLE, dataNode.getState());
+      assertEquals(HardwareState.AVAILABLE, disk.getState());
+    }
 
     // The following does not do anything currently.
     clusterManager.onReplicaEvent(replica, ReplicaEventType.Partition_ReadOnly);

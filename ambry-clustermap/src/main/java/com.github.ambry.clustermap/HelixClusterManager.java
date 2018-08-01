@@ -468,11 +468,9 @@ class HelixClusterManager implements ClusterMap {
             }
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
             // Create replica associated with this node.
-            HardwareState replicaState = diskState == HardwareState.UNAVAILABLE ? diskState
-                : (stoppedReplicas.contains(partitionName) ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE);
             AmbryReplica replica =
-                new AmbryReplica(clusterMapConfig, mappedPartition, disk, replicaState, replicaCapacity,
-                    sealedReplicas.contains(partitionName));
+                new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
+                    replicaCapacity, sealedReplicas.contains(partitionName));
             ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
             ambryDataNodeToAmbryReplicas.get(datanode).add(replica);
           }
