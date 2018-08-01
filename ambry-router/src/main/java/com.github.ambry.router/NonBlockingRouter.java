@@ -231,6 +231,9 @@ class NonBlockingRouter implements Router {
       // Can skip attemptChunkDeletes if we can determine this is not a metadata blob
       boolean attemptChunkDeletes = isMaybeMetadataBlob(blobId);
       getOperationController().deleteBlob(blobId, serviceId, futureResult, callback, attemptChunkDeletes);
+      if (!attemptChunkDeletes) {
+        routerMetrics.skippedGetBlobCount.inc();
+      }
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -256,7 +259,6 @@ class NonBlockingRouter implements Router {
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }
-    // Note: for GET operation
     currentOperationsCount.incrementAndGet();
     routerMetrics.updateBlobTtlOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
@@ -473,6 +475,12 @@ class NonBlockingRouter implements Router {
     }
   }
 
+  /**
+   * Returns true is the input blobId may refer to a metadata blob, otherwise false.
+   * The method will return false only for V5 and later blobs where the BlobDataType is available.
+   * @param blobId the blobId to check.
+   * @return boolean indicating whether the blob may be metadata.
+   */
   private static final boolean isMaybeMetadataBlob(String blobId) {
     try {
       BlobId.BlobDataType dataType = BlobId.getBlobDataType(blobId);
@@ -589,9 +597,6 @@ class NonBlockingRouter implements Router {
                       "RouterException for same reason should have been thrown by submitDeleteBlobOperation() and no callback should be triggered.",
                       e);
                 }
-              }
-              if (exception == null && !attemptChunkDeletes) {
-                routerMetrics.skippedGetBlobCount.inc();
               }
               if (callback != null) {
                 callback.onCompletion(result, exception);
