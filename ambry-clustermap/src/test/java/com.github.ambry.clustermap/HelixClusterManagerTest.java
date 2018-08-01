@@ -78,6 +78,9 @@ public class HelixClusterManagerTest {
   private final PartitionRangeCheckParams defaultRo;
   private final PartitionRangeCheckParams specialRo;
 
+  /**
+   * Resource state associated with datanode, disk and replica.
+   */
   enum ResourceState {
     Node_Up, Node_Down, Disk_Up, Disk_Down, Replica_Up, Replica_Down
   }
