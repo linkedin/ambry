@@ -131,6 +131,7 @@ project(':ambry-clustermap') {
         compile "org.apache.helix:helix-core:$helixVersion"
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
+        testCompile project(':ambry-commons')
         testCompile project(':ambry-utils').sourceSets.test.output
     }
 }

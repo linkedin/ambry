@@ -146,9 +146,11 @@ public class ResponseHandlerTest {
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
             ReplicaEventType.Partition_ReadOnly, ReplicaEventType.Replica_Available});
     expectedEventTypes.put(ServerErrorCode.Replica_Unavailable,
-        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Replica_Unavailable});
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
+            ReplicaEventType.Replica_Unavailable});
     expectedEventTypes.put(ServerErrorCode.Temporarily_Disabled,
-        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Replica_Unavailable});
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
+            ReplicaEventType.Replica_Unavailable});
     expectedEventTypes.put(ServerErrorCode.Unknown_Error,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
             ReplicaEventType.Replica_Available});

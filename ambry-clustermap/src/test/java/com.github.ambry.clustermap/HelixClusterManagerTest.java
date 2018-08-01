@@ -17,6 +17,8 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.TestUtils.*;
+import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -75,6 +77,10 @@ public class HelixClusterManagerTest {
   private final PartitionRangeCheckParams specialRw;
   private final PartitionRangeCheckParams defaultRo;
   private final PartitionRangeCheckParams specialRo;
+
+  enum ResourceState {
+    Node_Up, Node_Down, Disk_Up, Disk_Down, Replica_Up, Replica_Down
+  }
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -326,6 +332,48 @@ public class HelixClusterManagerTest {
   }
 
   /**
+   * Test that {@link ResponseHandler} works as expected in the presence of various types of server events. The test also
+   * verifies the states of datanode, disk and replica are changed correctly based on server event.
+   */
+  @Test
+  public void onServerEventTest() {
+    if (useComposite) {
+      return;
+    }
+    // Test configuration: we select the disk from one datanode and select the replica on that disk
+
+    // Initial state: disk is down; Server event: Replica_Unavailable; Expected result: disk becomes available again
+    mockServerEventsAndVerify(
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down},
+        ServerErrorCode.Replica_Unavailable,
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Down});
+
+    // Initial state: disk is down; Server event: Temporarily_Disabled; Expected result: disk becomes available again
+    mockServerEventsAndVerify(
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down},
+        ServerErrorCode.Temporarily_Disabled,
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Down});
+
+    // Initial state: disk and replica are down; Server event: Partition_ReadOnly; Expected result: disk and replica become available again
+    mockServerEventsAndVerify(
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down},
+        ServerErrorCode.Partition_ReadOnly,
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Up});
+
+    // Initial state: everything is up; Server event: IO_Error; Expected result: disk and replica become unavailable
+    mockServerEventsAndVerify(
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Up},
+        ServerErrorCode.IO_Error,
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down});
+
+    // Initial state: everything is up; Server event: Disk_Unavailable; Expected result: disk and replica become unavailable
+    mockServerEventsAndVerify(
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Up},
+        ServerErrorCode.Disk_Unavailable,
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down});
+  }
+
+  /**
    * Test that the changes to the sealed states of replicas get reflected correctly in the cluster manager.
    * This also tests multiple InstanceConfig change callbacks (including multiple such callbacks tagged as
    * {@link org.apache.helix.NotificationContext.Type#INIT} and that they are dealt with correctly.
@@ -513,6 +561,59 @@ public class HelixClusterManagerTest {
   }
 
   // Helpers
+
+  /**
+   * The helper method sets up initial states for datanode, disk and replica. Then it triggers specified server event and
+   * verifies the states of datanode, disk and replica are expected after event.
+   * @param initialStates the initial states for datanode, disk and replica (default order).
+   * @param serverErrorCode the {@link ServerErrorCode} received for mocking event.
+   * @param expectedStates the expected states for datanode, disk and replica (default order).
+   */
+  private void mockServerEventsAndVerify(ResourceState[] initialStates, ServerErrorCode serverErrorCode,
+      ResourceState[] expectedStates) {
+    ResponseHandler handler = new ResponseHandler(clusterManager);
+    ReplicaId replica = clusterManager.getWritablePartitionIds(null).get(0).getReplicaIds().get(0);
+    DataNodeId dataNode = replica.getDataNodeId();
+    assertTrue(clusterManager.getReplicaIds(dataNode).contains(replica));
+    DiskId disk = replica.getDiskId();
+
+    // Verify that everything is up in the beginning.
+    assertFalse(replica.isDown());
+    assertEquals(HardwareState.AVAILABLE, dataNode.getState());
+    assertEquals(HardwareState.AVAILABLE, disk.getState());
+
+    // Mock initial states for node, disk and replica
+    if (initialStates[0] == ResourceState.Node_Down) {
+      for (int i = 0; i < clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold; i++) {
+        clusterManager.onReplicaEvent(replica, ReplicaEventType.Node_Timeout);
+      }
+    } else if (initialStates[1] == ResourceState.Disk_Down) {
+      for (int i = 0; i < clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold; i++) {
+        clusterManager.onReplicaEvent(replica, ReplicaEventType.Disk_Error);
+      }
+    } else if (initialStates[2] == ResourceState.Replica_Down) {
+      for (int i = 0; i < clusterMapConfig.clusterMapFixedTimeoutReplicaErrorThreshold; i++) {
+        clusterManager.onReplicaEvent(replica, ReplicaEventType.Replica_Unavailable);
+      }
+    }
+
+    // Make sure node, disk and replica match specified initial states
+    assertEquals(initialStates[2], replica.isDown() ? ResourceState.Replica_Down : ResourceState.Replica_Up);
+    assertEquals(initialStates[1],
+        disk.getState() == HardwareState.UNAVAILABLE ? ResourceState.Disk_Down : ResourceState.Disk_Up);
+    assertEquals(initialStates[0],
+        dataNode.getState() == HardwareState.UNAVAILABLE ? ResourceState.Node_Down : ResourceState.Node_Up);
+
+    // Trigger server event
+    handler.onEvent(replica, serverErrorCode);
+
+    // Verify node, disk and replica match expected states after server event
+    assertEquals(expectedStates[2], replica.isDown() ? ResourceState.Replica_Down : ResourceState.Replica_Up);
+    assertEquals(expectedStates[1],
+        disk.getState() == HardwareState.UNAVAILABLE ? ResourceState.Disk_Down : ResourceState.Disk_Up);
+    assertEquals(expectedStates[0],
+        dataNode.getState() == HardwareState.UNAVAILABLE ? ResourceState.Node_Down : ResourceState.Node_Up);
+  }
 
   /**
    * Get the counter value for the metric in {@link HelixClusterManagerMetrics} with the given suffix.
