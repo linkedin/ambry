@@ -476,8 +476,8 @@ class NonBlockingRouter implements Router {
   }
 
   /**
-   * Returns true is the input blobId may refer to a metadata blob, otherwise false.
-   * The method will return false only for V5 and later blobs where the BlobDataType is available.
+   * Returns {@code true} if the input blobId may refer to a metadata blob, otherwise {@code false}.
+   * The method will return {@code false} only for V5 and later blobs where the BlobDataType is available.
    * @param blobId the blobId to check.
    * @return boolean indicating whether the blob may be metadata.
    */
