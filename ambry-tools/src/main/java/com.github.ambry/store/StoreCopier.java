@@ -247,8 +247,8 @@ public class StoreCopier implements Closeable {
         }
       }
       token = findInfo.getFindToken();
-      logger.info("[{}] [{}] {}% copied", Thread.currentThread().getName(), storeId,
-          df.format(token.getBytesRead() * 100.0 / src.getSizeInBytes()));
+      double percentBytesRead = src.getSizeInBytes() > 0L ? token.getBytesRead() * 100.0 / src.getSizeInBytes() : 100.0;
+      logger.info("[{}] [{}] {}% copied", Thread.currentThread().getName(), storeId, df.format(percentBytesRead));
     } while (!token.equals(lastToken));
     return new Pair<>(token, sourceHasProblems);
   }

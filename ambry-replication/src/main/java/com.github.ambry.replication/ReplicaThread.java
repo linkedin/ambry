@@ -455,9 +455,11 @@ class ReplicaThread implements Runnable {
 
       if (response.getError() != ServerErrorCode.No_Error
           || response.getReplicaMetadataResponseInfoList().size() != replicasToReplicatePerNode.size()) {
+        int replicaMetadataResponseInfoListSize = response.getReplicaMetadataResponseInfoList() == null ? 0
+            : response.getReplicaMetadataResponseInfoList().size();
         logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
             + replicasToReplicatePerNode + " Replica metadata response error: " + response.getError()
-            + " ReplicaMetadataResponseInfoListSize: " + response.getReplicaMetadataResponseInfoList().size()
+            + " ReplicaMetadataResponseInfoListSize: " + replicaMetadataResponseInfoListSize
             + " ReplicasToReplicatePerNodeSize: " + replicasToReplicatePerNode.size());
         throw new ReplicationException("Replica Metadata Response Error " + response.getError());
       }
@@ -629,8 +631,10 @@ class ReplicaThread implements Runnable {
     try {
       List<StoreKey> storeKeysToConvert = new ArrayList<>();
       for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
-        for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
-          storeKeysToConvert.add(messageInfo.getStoreKey());
+        if (replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) {
+          for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
+            storeKeysToConvert.add(messageInfo.getStoreKey());
+          }
         }
       }
       return storeKeyConverter.convert(storeKeysToConvert);
