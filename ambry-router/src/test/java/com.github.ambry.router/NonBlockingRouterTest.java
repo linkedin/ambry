@@ -505,7 +505,8 @@ public class NonBlockingRouterTest {
         deletesDoneLatch.get().countDown();
       }
     };
-    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap),
+    NonBlockingRouterMetrics localMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    router = new NonBlockingRouter(routerConfig, localMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
         cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -536,6 +537,7 @@ public class NonBlockingRouterTest {
           deletesDoneLatch.get().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       Assert.assertTrue("All blobs in server are deleted", blobsThatAreDeleted.keySet().containsAll(blobsToBeDeleted));
       Assert.assertTrue("Only blobs in server are deleted", blobsToBeDeleted.containsAll(blobsThatAreDeleted.keySet()));
+
       for (Map.Entry<String, String> blobIdAndServiceId : blobsThatAreDeleted.entrySet()) {
         String expectedServiceId = blobIdAndServiceId.getKey().equals(blobId) ? deleteServiceId
             : BackgroundDeleteRequest.SERVICE_ID_PREFIX + deleteServiceId;
@@ -595,7 +597,8 @@ public class NonBlockingRouterTest {
         receivedDeleteServiceId.set(serviceId);
       }
     };
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+    NonBlockingRouterMetrics localMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), localMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
         cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -612,6 +615,7 @@ public class NonBlockingRouterTest {
     Assert.assertEquals("Only the original blob deletion should have been initiated", 1, deletesInitiated.get());
     Assert.assertEquals("The delete service ID should match the expected value", deleteServiceId,
         receivedDeleteServiceId.get());
+    Assert.assertEquals("Get should have been skipped", 1, localMetrics.skippedGetBlobCount.getCount());
     router.close();
     assertClosed();
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
@@ -1030,6 +1034,9 @@ public class NonBlockingRouterTest {
     notificationSystem.checkNotifications(numChunks == 1 ? 1 : numChunks + 1, updateServiceId, Utils.Infinite_Time);
     assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    if (numChunks == 1) {
+      Assert.assertEquals("Get should have been skipped", 1, routerMetrics.skippedGetBlobCount.getCount());
+    }
     router.close();
     // check that ttl update won't work after router close
     Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time);

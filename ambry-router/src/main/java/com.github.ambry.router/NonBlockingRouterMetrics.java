@@ -133,6 +133,8 @@ public class NonBlockingRouterMetrics {
   public final Counter ignoredResponseCount;
   public final Counter crossColoRequestCount;
   public final Counter crossColoSuccessCount;
+  // Number of unnecessary blob gets avoided via use of BlobDataType
+  public final Counter skippedGetBlobCount;
   public Gauge<Long> chunkFillerThreadRunning;
   public Gauge<Long> requestResponseHandlerThreadRunning;
 
@@ -345,6 +347,7 @@ public class NonBlockingRouterMetrics {
     simpleBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "SimpleBlobGetCount"));
     compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));
     compositeBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "CompositeBlobGetCount"));
+    skippedGetBlobCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "SkippedGetBlobCount"));
 
     // Track metrics at the DataNode level.
     dataNodeToMetrics = new HashMap<>();

@@ -31,6 +31,7 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import com.google.common.collect.ImmutableList;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -227,7 +228,9 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<Void> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().deleteBlob(blobId, serviceId, futureResult, callback, true);
+      // Can skip attemptChunkDeletes if we can determine this is not a metadata blob
+      boolean attemptChunkDeletes = isMaybeMetadataBlob(blobId);
+      getOperationController().deleteBlob(blobId, serviceId, futureResult, callback, attemptChunkDeletes);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -253,6 +256,7 @@ class NonBlockingRouter implements Router {
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }
+    // Note: for GET operation
     currentOperationsCount.incrementAndGet();
     routerMetrics.updateBlobTtlOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
@@ -469,6 +473,16 @@ class NonBlockingRouter implements Router {
     }
   }
 
+  private static final boolean isMaybeMetadataBlob(String blobId) {
+    try {
+      BlobId.BlobDataType dataType = BlobId.getBlobDataType(blobId);
+      return (dataType == null || dataType == BlobId.BlobDataType.METADATA);
+    } catch (Exception ex) {
+      logger.error("Unexpected error getting blob data type for blobId " + blobId, ex);
+      return true;
+    }
+  }
+
   /**
    * OperationController is the scaling unit for the NonBlockingRouter. The NonBlockingRouter can have multiple
    * OperationControllers. Any operation submitted to the NonBlockingRouter will be submitted to one of the
@@ -576,6 +590,9 @@ class NonBlockingRouter implements Router {
                       e);
                 }
               }
+              if (exception == null && !attemptChunkDeletes) {
+                routerMetrics.skippedGetBlobCount.inc();
+              }
               if (callback != null) {
                 callback.onCompletion(result, exception);
               }
@@ -600,36 +617,53 @@ class NonBlockingRouter implements Router {
      */
     protected void updateBlobTtl(final String blobIdStr, final String serviceId, long expiresAtMs,
         FutureResult<Void> futureResult, Callback<Void> callback) {
-      Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
-        if (exception != null) {
-          completeOperation(futureResult, callback, null, exception, false);
-        } else if (result.getBlobResult != null) {
-          exception =
-              new RouterException("GET blob call returned the blob instead of just the store keys (before TTL update)",
-                  RouterErrorCode.UnexpectedInternalError);
-          completeOperation(futureResult, callback, null, exception, false);
-        } else {
-          List<String> blobIdStrs = new ArrayList<>();
-          blobIdStrs.add(blobIdStr);
-          if (result.storeKeys != null) {
-            result.storeKeys.forEach(key -> blobIdStrs.add(key.getID()));
+
+      // Can skip GET if we can determine this is not a metadata blob
+      boolean needGet = isMaybeMetadataBlob(blobIdStr);
+
+      if (needGet) {
+        Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
+          if (exception != null) {
+            completeOperation(futureResult, callback, null, exception, false);
+          } else if (result.getBlobResult != null) {
+            exception = new RouterException(
+                "GET blob call returned the blob instead of just the store keys (before TTL update)",
+                RouterErrorCode.UnexpectedInternalError);
+            completeOperation(futureResult, callback, null, exception, false);
+          } else {
+            List<String> blobIdStrs = new ArrayList<>();
+            blobIdStrs.add(blobIdStr);
+            if (result.storeKeys != null) {
+              result.storeKeys.forEach(key -> blobIdStrs.add(key.getID()));
+            }
+            // TTLUpdateManager updates all chunks in parallel
+            currentOperationsCount.addAndGet(blobIdStrs.size());
+            doUpdateTtlOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback);
           }
-          currentOperationsCount.addAndGet(blobIdStrs.size());
-          try {
-            ttlUpdateManager.submitTtlUpdateOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback);
-            routerCallback.onPollReady();
-          } catch (RouterException e) {
-            currentOperationsCount.addAndGet(1 - blobIdStrs.size());
-            completeUpdateBlobTtlOperation(e, futureResult, callback);
-          }
+        };
+
+        GetBlobOptionsInternal options =
+            new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None, null), true,
+                routerMetrics.ageAtTtlUpdate);
+        try {
+          getBlob(blobIdStr, options, internalCallback);
+        } catch (RouterException e) {
+          completeUpdateBlobTtlOperation(e, futureResult, callback);
         }
-      };
-      GetBlobOptionsInternal options =
-          new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None, null), true,
-              routerMetrics.ageAtTtlUpdate);
+      } else {
+        // needGet is false => do update directly on single blobId
+        routerMetrics.skippedGetBlobCount.inc();
+        doUpdateTtlOperation(ImmutableList.of(blobIdStr), serviceId, expiresAtMs, futureResult, callback);
+      }
+    }
+
+    private void doUpdateTtlOperation(List<String> blobIdStrs, final String serviceId, long expiresAtMs,
+        FutureResult<Void> futureResult, Callback<Void> callback) {
       try {
-        getBlob(blobIdStr, options, internalCallback);
+        ttlUpdateManager.submitTtlUpdateOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback);
+        routerCallback.onPollReady();
       } catch (RouterException e) {
+        currentOperationsCount.addAndGet(1 - blobIdStrs.size());
         completeUpdateBlobTtlOperation(e, futureResult, callback);
       }
     }
