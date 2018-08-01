@@ -81,7 +81,7 @@ public class NetworkClientTest {
    * Test {@link NetworkClient#warmUpConnections(List, int, long)}
    */
   @Test
-  public void testWarmUpConnection() throws IOException {
+  public void testWarmUpConnections() throws IOException {
     MockClusterMap mockClusterMap = new MockClusterMap();
     List<DataNodeId> localDataNodeIds = mockClusterMap.getDataNodeIds()
         .stream()
@@ -89,6 +89,23 @@ public class NetworkClientTest {
             .equals(dataNodeId.getDatacenterName()))
         .collect(Collectors.toList());
     Assert.assertEquals("Connection count is not expected", 2 * localDataNodeIds.size(),
+        networkClient.warmUpConnections(localDataNodeIds, 2, 2000));
+    selector.setState(MockSelectorState.Good);
+  }
+
+  /**
+   * Test connection warm up failed case.
+   */
+  @Test
+  public void testWarmUpConnectionsFailedAll() throws IOException {
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    List<DataNodeId> localDataNodeIds = mockClusterMap.getDataNodeIds()
+        .stream()
+        .filter(dataNodeId -> mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())
+            .equals(dataNodeId.getDatacenterName()))
+        .collect(Collectors.toList());
+    selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
+    Assert.assertEquals("Connection count is not expected", 0,
         networkClient.warmUpConnections(localDataNodeIds, 2, 2000));
     selector.setState(MockSelectorState.Good);
   }
