@@ -14,6 +14,8 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
@@ -27,6 +29,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -72,6 +75,22 @@ public class NetworkClientTest {
     networkClient =
         new NetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), MAX_PORTS_PLAIN_TEXT,
             MAX_PORTS_SSL, CHECKOUT_TIMEOUT_MS, time);
+  }
+
+  /**
+   * Test {@link NetworkClient#warmUpConnections(List, int, long)}
+   */
+  @Test
+  public void testWarmUpConnection() throws IOException {
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    List<DataNodeId> localDataNodeIds = mockClusterMap.getDataNodeIds()
+        .stream()
+        .filter(dataNodeId -> mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())
+            .equals(dataNodeId.getDatacenterName()))
+        .collect(Collectors.toList());
+    Assert.assertEquals("Connection count is not expected", 2 * localDataNodeIds.size(),
+        networkClient.warmUpConnections(localDataNodeIds, 2, 2000));
+    selector.setState(MockSelectorState.Good);
   }
 
   /**
