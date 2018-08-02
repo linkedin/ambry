@@ -31,9 +31,9 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.google.common.collect.ImmutableList;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
@@ -658,7 +658,7 @@ class NonBlockingRouter implements Router {
       } else {
         // needGet is false => do update directly on single blobId
         routerMetrics.skippedGetBlobCount.inc();
-        doUpdateTtlOperation(ImmutableList.of(blobIdStr), serviceId, expiresAtMs, futureResult, callback);
+        doUpdateTtlOperation(Collections.singletonList(blobIdStr), serviceId, expiresAtMs, futureResult, callback);
       }
     }
 
