@@ -142,10 +142,9 @@ public class ClusterMapUtils {
    * @param propertyStoreConfig the config for {@link HelixPropertyStore}.
    * @param subscribedPaths a list of paths to which the PropertyStore subscribes.
    * @return the instance of {@link HelixPropertyStore}.
-   * @throws IllegalArgumentException
    */
   public static HelixPropertyStore<ZNRecord> createHelixPropertyStore(String zkServers,
-      HelixPropertyStoreConfig propertyStoreConfig, List<String> subscribedPaths) throws IllegalArgumentException {
+      HelixPropertyStoreConfig propertyStoreConfig, List<String> subscribedPaths) {
     if (zkServers == null || zkServers.isEmpty() || propertyStoreConfig == null) {
       throw new IllegalArgumentException("Invalid arguments, cannot create HelixPropertyStore");
     }
