@@ -326,9 +326,6 @@ class ReplicaThread implements Runnable {
         DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
         ReplicaMetadataResponse response =
             getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode);
-        if (response.getError() != ServerErrorCode.No_Error) {
-          throw new IOException("ReplicaMetadataResponse had an error: " + response.getError());
-        }
         long startTimeInMs = SystemTime.getInstance().milliseconds();
 
         Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = batchConvertReplicaMetadataResponseKeys(response);
