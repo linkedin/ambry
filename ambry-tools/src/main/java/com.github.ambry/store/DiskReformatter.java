@@ -296,6 +296,7 @@ public class DiskReformatter {
     logger.info("Deleting {}", scratchTgt);
     Utils.deleteFileOrDirectory(scratchTgt);
     logger.info("Done reformatting {}", toMove);
+    logger.info("Done reformatting disk {}", diskMountPath);
   }
 
   /**
