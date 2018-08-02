@@ -345,13 +345,25 @@ public class HelixClusterManagerTest {
     }
     // Test configuration: we select the disk from one datanode and select the replica on that disk
 
-    // Initial state: disk is down; Server event: Replica_Unavailable; Expected result: disk becomes available again
+    // Initial state: only disk is down; Server event: Replica_Unavailable; Expected result: disk becomes available again and replica becomes down
+    mockServerEventsAndVerify(
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Up},
+        ServerErrorCode.Replica_Unavailable,
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Down});
+
+    // Initial state: only disk is down; Server event: Temporarily_Disabled; Expected result: disk becomes available again and replica becomes down
+    mockServerEventsAndVerify(
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Up},
+        ServerErrorCode.Temporarily_Disabled,
+        new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Down});
+
+    // Initial state: disk and replica are down; Server event: Replica_Unavailable; Expected result: disk becomes available again
     mockServerEventsAndVerify(
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down},
         ServerErrorCode.Replica_Unavailable,
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Up, ResourceState.Replica_Down});
 
-    // Initial state: disk is down; Server event: Temporarily_Disabled; Expected result: disk becomes available again
+    // Initial state: disk and replica are down; Server event: Temporarily_Disabled; Expected result: disk becomes available again
     mockServerEventsAndVerify(
         new ResourceState[]{ResourceState.Node_Up, ResourceState.Disk_Down, ResourceState.Replica_Down},
         ServerErrorCode.Temporarily_Disabled,
@@ -590,20 +602,28 @@ public class HelixClusterManagerTest {
       for (int i = 0; i < clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold; i++) {
         clusterManager.onReplicaEvent(replica, ReplicaEventType.Node_Timeout);
       }
-    } else if (initialStates[1] == ResourceState.Disk_Down) {
+    }
+    if (initialStates[1] == ResourceState.Disk_Down) {
       for (int i = 0; i < clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold; i++) {
         clusterManager.onReplicaEvent(replica, ReplicaEventType.Disk_Error);
       }
-    } else if (initialStates[2] == ResourceState.Replica_Down) {
+    }
+    if (initialStates[2] == ResourceState.Replica_Down) {
       for (int i = 0; i < clusterMapConfig.clusterMapFixedTimeoutReplicaErrorThreshold; i++) {
         clusterManager.onReplicaEvent(replica, ReplicaEventType.Replica_Unavailable);
       }
     }
 
     // Make sure node, disk and replica match specified initial states
-    assertEquals(initialStates[2], replica.isDown() ? ResourceState.Replica_Down : ResourceState.Replica_Up);
-    assertEquals(initialStates[1],
-        disk.getState() == HardwareState.UNAVAILABLE ? ResourceState.Disk_Down : ResourceState.Disk_Up);
+    if (dataNode.getState() == HardwareState.AVAILABLE && disk.getState() == HardwareState.AVAILABLE) {
+      // Since replica.isDown() will check the state of disk, if we try to mock disk is down and replica is up, we should
+      // skip this check for initial state. Only when node and disk are up, we check the initial state of replica.
+      assertEquals(initialStates[2], replica.isDown() ? ResourceState.Replica_Down : ResourceState.Replica_Up);
+    }
+    if (dataNode.getState() == HardwareState.AVAILABLE) {
+      assertEquals(initialStates[1],
+          disk.getState() == HardwareState.UNAVAILABLE ? ResourceState.Disk_Down : ResourceState.Disk_Up);
+    }
     assertEquals(initialStates[0],
         dataNode.getState() == HardwareState.UNAVAILABLE ? ResourceState.Node_Down : ResourceState.Node_Up);
 
