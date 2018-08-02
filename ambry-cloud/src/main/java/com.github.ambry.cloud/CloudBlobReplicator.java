@@ -54,37 +54,37 @@ public class CloudBlobReplicator implements BlobEventConsumer {
   public CloudBlobReplicator() {
   }
 
-  public CloudBlobReplicator accountService(AccountService accountService) {
+  CloudBlobReplicator accountService(AccountService accountService) {
     this.accountService = accountService;
     return this;
   }
 
-  public CloudBlobReplicator router(Router router) {
+  CloudBlobReplicator router(Router router) {
     this.router = router;
     return this;
   }
 
-  public CloudBlobReplicator eventSource(BlobEventSource eventSource) {
+  CloudBlobReplicator eventSource(BlobEventSource eventSource) {
     this.eventSource = eventSource;
     return this;
   }
 
-  public CloudBlobReplicator destinationFactory(CloudDestinationFactory destinationFactory) {
+  CloudBlobReplicator destinationFactory(CloudDestinationFactory destinationFactory) {
     this.destinationFactory = destinationFactory;
     return this;
   }
 
-  public CloudBlobReplicator metrics(CloudReplicationMetrics metrics) {
+  CloudBlobReplicator metrics(CloudReplicationMetrics metrics) {
     this.metrics = metrics;
     return this;
   }
 
-  public CloudBlobReplicator cryptoService(CryptoService cryptoService) {
+  CloudBlobReplicator cryptoService(CryptoService cryptoService) {
     this.cryptoService = cryptoService;
     return this;
   }
 
-  public CloudBlobReplicator keyService(KeyManagementService kms) {
+  CloudBlobReplicator keyService(KeyManagementService kms) {
     this.kms = kms;
     return this;
   }
