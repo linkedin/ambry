@@ -17,6 +17,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
+import java.util.Comparator;
 import java.util.List;
 import java.util.TreeSet;
 import org.slf4j.Logger;
@@ -140,12 +141,8 @@ class AmbryDataNode implements DataNodeId {
       throw new IllegalStateException("Incompatible objects to compare");
     }
     AmbryDataNode other = (AmbryDataNode) o;
-    int compare = (plainTextPort.getPort() < other.plainTextPort.getPort()) ? -1
-        : ((plainTextPort.getPort() == other.plainTextPort.getPort()) ? 0 : 1);
-    if (compare == 0) {
-      compare = hostName.compareTo(other.hostName);
-    }
-    return compare;
+    return Comparator.comparingInt((AmbryDataNode k) -> k.plainTextPort.getPort()).
+        thenComparing(k -> k.hostName).compare(this, other);
   }
 
   @Override

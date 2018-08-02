@@ -31,6 +31,10 @@ public class FixedBackoffResourceStatePolicyFactory implements ResourceStatePoli
       resourceStatePolicy = new FixedBackoffResourceStatePolicy(resource, initialState == HardwareState.UNAVAILABLE,
           clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold,
           clusterMapConfig.clusterMapFixedTimeoutDiskRetryBackoffMs, SystemTime.getInstance());
+    } else if (resource instanceof ReplicaId) {
+      resourceStatePolicy = new FixedBackoffResourceStatePolicy(resource, initialState == HardwareState.UNAVAILABLE,
+          clusterMapConfig.clusterMapFixedTimeoutReplicaErrorThreshold,
+          clusterMapConfig.clusterMapFixedTimeoutReplicaRetryBackoffMs, SystemTime.getInstance());
     }
 
     if (resourceStatePolicy == null) {

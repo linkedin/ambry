@@ -35,6 +35,10 @@ public class TestUtils {
 
   static final String DEFAULT_PARTITION_CLASS = "defaultPartitionClass";
 
+  enum ReplicaStateType {
+    SealedState, StoppedState
+  }
+
   public static String getLocalHost() {
     try {
       return InetAddress.getByName("localhost").getCanonicalHostName().toLowerCase();

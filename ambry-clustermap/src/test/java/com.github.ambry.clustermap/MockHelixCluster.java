@@ -88,14 +88,25 @@ public class MockHelixCluster {
    * Set or reset the replica state for the given partition on the given instance.
    * @param partition the partition whose replica needs the state change.
    * @param instance the instance hosting the replica.
-   * @param isSealed whether to set or reset the state.
+   * @param stateType the type of state to be set or reset.
+   * @param setState whether to set or reset the state.
    * @param tagAsInit whether the InstanceConfig notification should be tagged with
    *                  {@link org.apache.helix.NotificationContext.Type#INIT}
    */
-  void setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed, boolean tagAsInit) {
+  void setReplicaState(AmbryPartition partition, String instance, TestUtils.ReplicaStateType stateType,
+      boolean setState, boolean tagAsInit) {
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       if (helixAdmin.getInstancesInCluster(clusterName).contains(instance)) {
-        helixAdmin.setReplicaSealedState(partition, instance, isSealed, tagAsInit);
+        switch (stateType) {
+          case SealedState:
+            helixAdmin.setReplicaSealedState(partition, instance, setState, tagAsInit);
+            break;
+          case StoppedState:
+            helixAdmin.setReplicaStoppedState(partition, instance, setState, tagAsInit);
+            break;
+          default:
+            throw new IllegalStateException("Unrecognized state type");
+        }
       }
     }
   }

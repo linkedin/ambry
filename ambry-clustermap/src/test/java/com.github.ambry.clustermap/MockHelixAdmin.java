@@ -153,6 +153,26 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   /**
+   * Set or reset the stopped state of the replica for the given partition on the given instance.
+   * @param partition the {@link AmbryPartition}
+   * @param instance the instance name.
+   * @param isStopped if true, the replica will be marked as stopped; otherwise it is proper functioning.
+   * @param tagAsInit whether the InstanceConfig notification should be tagged with
+   *                  {@link org.apache.helix.NotificationContext.Type#INIT}
+   */
+  void setReplicaStoppedState(AmbryPartition partition, String instance, boolean isStopped, boolean tagAsInit) {
+    InstanceConfig instanceConfig = getInstanceConfig(clusterName, instance);
+    List<String> stoppedReplicas = ClusterMapUtils.getStoppedReplicas(instanceConfig);
+    if (isStopped) {
+      stoppedReplicas.add(partition.toPathString());
+    } else {
+      stoppedReplicas.remove(partition.toPathString());
+    }
+    instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);
+    triggerInstanceConfigChangeNotification(tagAsInit);
+  }
+
+  /**
    * Associate the given Helix manager with this admin.
    * @param helixManager the {@link MockHelixManager} to associate this admin with.
    */

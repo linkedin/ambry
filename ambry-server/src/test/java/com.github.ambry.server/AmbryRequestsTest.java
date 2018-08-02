@@ -179,9 +179,9 @@ public class AmbryRequestsTest {
 
     PartitionId id = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
 
-    // store is not started - Disk_Unavailable
+    // store is not started - Replica_Unavailable
     storageManager.returnNullStore = true;
-    doScheduleCompactionTest(id, ServerErrorCode.Disk_Unavailable);
+    doScheduleCompactionTest(id, ServerErrorCode.Replica_Unavailable);
     storageManager.returnNullStore = false;
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
 
@@ -477,7 +477,7 @@ public class AmbryRequestsTest {
     adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
     blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Disk_Unavailable);
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Replica_Unavailable);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     storageManager.returnNullStore = false;
     // test invalid numReplicasCaughtUpPerPartition
@@ -1088,10 +1088,10 @@ public class AmbryRequestsTest {
         ServerErrorCode.Unknown_Error, true);
     MockStorageManager.runtimeException = null;
 
-    // store is not started/is stopped/otherwise unavailable - Disk_Unavailable
+    // store is not started/is stopped/otherwise unavailable - Replica_Unavailable
     storageManager.returnNullStore = true;
     sendAndVerifyOperationRequest(RequestOrResponseType.TtlUpdateRequest, Collections.singletonList(id),
-        ServerErrorCode.Disk_Unavailable, false);
+        ServerErrorCode.Replica_Unavailable, false);
     storageManager.returnNullStore = false;
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
 

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,26 +25,35 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 /**
  * {@link ReplicaId} implementation to use within dynamic cluster managers.
  */
-class AmbryReplica implements ReplicaId {
+class AmbryReplica implements ReplicaId, Resource {
   private final AmbryPartition partition;
   private final AmbryDisk disk;
   private final long capacityBytes;
   private volatile boolean isSealed;
-  private volatile boolean isStopped = false;
+  private volatile boolean isStopped;
+  private final ResourceStatePolicy resourceStatePolicy;
 
   /**
    * Instantiate an AmbryReplica instance.
+   * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    * @param partition the {@link AmbryPartition} of which this is a replica.
    * @param disk the {@link AmbryDisk} on which this replica resides.
+   * @param isReplicaStopped whether this replica is stopped or not.
    * @param capacityBytes the capacity in bytes for this replica.
    * @param isSealed whether this replica is in sealed state.
    */
-  AmbryReplica(AmbryPartition partition, AmbryDisk disk, long capacityBytes, boolean isSealed) {
+  AmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, AmbryDisk disk, boolean isReplicaStopped,
+      long capacityBytes, boolean isSealed) throws Exception {
     this.partition = partition;
     this.disk = disk;
     this.capacityBytes = capacityBytes;
     this.isSealed = isSealed;
+    isStopped = isReplicaStopped;
     validate();
+    ResourceStatePolicyFactory resourceStatePolicyFactory =
+        Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
+            clusterMapConfig);
+    resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
   }
 
   /**
@@ -107,12 +118,26 @@ class AmbryReplica implements ReplicaId {
 
   @Override
   public boolean isDown() {
-    return disk.getState() == HardwareState.UNAVAILABLE || isStopped;
+    return disk.getState() == HardwareState.UNAVAILABLE || resourceStatePolicy.isDown() || isStopped;
   }
 
   @Override
   public String toString() {
     return "Replica[" + getDataNodeId().getHostname() + ":" + getDataNodeId().getPort() + ":" + getReplicaPath() + "]";
+  }
+
+  /**
+   * Take actions, if any, when this replica is unavailable.
+   */
+  void onReplicaUnavailable() {
+    resourceStatePolicy.onError();
+  }
+
+  /**
+   * Take actions, if any, when this replica is back in a good state.
+   */
+  void onReplicaResponse() {
+    resourceStatePolicy.onSuccess();
   }
 }
 
