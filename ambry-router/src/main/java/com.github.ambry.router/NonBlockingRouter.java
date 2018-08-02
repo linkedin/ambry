@@ -662,6 +662,14 @@ class NonBlockingRouter implements Router {
       }
     }
 
+    /**
+     * Helper method that submits the TTL update operation and handles exceptions.
+     * @param blobIdStrs The original blobId strings
+     * @param serviceId The service ID of the service updating the ttl of the blob(s). This can be null if unknown.
+     * @param expiresAtMs The new expiry time (in ms) of the blob.
+     * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
+     * @param callback The {@link Callback} that will be called on completion of the request.
+     */
     private void doUpdateTtlOperation(List<String> blobIdStrs, final String serviceId, long expiresAtMs,
         FutureResult<Void> futureResult, Callback<Void> callback) {
       try {

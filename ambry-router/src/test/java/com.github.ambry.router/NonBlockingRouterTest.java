@@ -554,6 +554,7 @@ public class NonBlockingRouterTest {
     router.deleteBlob(blobId, null, null).get();
     Assert.assertTrue("Deletes should not take longer than " + AWAIT_TIMEOUT_MS,
         deletesDoneLatch.get().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    Assert.assertEquals("Get should NOT have been skipped", 0, localMetrics.skippedGetBlobCount.getCount());
 
     router.close();
     assertClosed();
@@ -1036,6 +1037,8 @@ public class NonBlockingRouterTest {
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
     if (numChunks == 1) {
       Assert.assertEquals("Get should have been skipped", 1, routerMetrics.skippedGetBlobCount.getCount());
+    } else {
+      Assert.assertEquals("Get should NOT have been skipped", 0, routerMetrics.skippedGetBlobCount.getCount());
     }
     router.close();
     // check that ttl update won't work after router close
