@@ -631,7 +631,8 @@ class ReplicaThread implements Runnable {
     try {
       List<StoreKey> storeKeysToConvert = new ArrayList<>();
       for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
-        if (replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) {
+        if ((replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) && (
+            replicaMetadataResponseInfo.getMessageInfoList() != null)) {
           for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
             storeKeysToConvert.add(messageInfo.getStoreKey());
           }
