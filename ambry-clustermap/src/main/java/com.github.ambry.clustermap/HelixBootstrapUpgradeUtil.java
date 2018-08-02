@@ -247,9 +247,8 @@ class HelixBootstrapUpgradeUtil {
     }
     String clusterNameInStaticClusterMap = staticClusterMap.partitionLayout.getClusterName();
     clusterName = clusterNamePrefix + clusterNameInStaticClusterMap;
-    System.out.println(
-        "Associating static Ambry cluster \"" + clusterNameInStaticClusterMap + "\" with cluster\"" + clusterName
-            + "\" in Helix");
+    info("Associating static Ambry cluster \"" + clusterNameInStaticClusterMap + "\" with cluster\"" + clusterName
+        + "\" in Helix");
     for (Datacenter datacenter : staticClusterMap.hardwareLayout.getDatacenters()) {
       if (!dataCenterToZkAddress.keySet().contains(datacenter.getName())) {
         throw new IllegalArgumentException(
