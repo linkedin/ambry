@@ -537,7 +537,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void stoppedReplicaChangeTest() {
-    if (useComposite) {
+    if (useComposite || overrideEnabled) {
       return;
     }
 
