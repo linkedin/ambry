@@ -15,7 +15,6 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
@@ -508,7 +507,7 @@ class NonBlockingRouter implements Router {
                   .equals(dataNodeId.getDatacenterName()))
               .collect(Collectors.toList()), routerConfig.routerConnectionsWarmUpCountPerPortToLocalDc,
 
-          routerConfig.routerConnectionsWarmUpMaxWatingTime);
+          routerConfig.routerConnectionsWarmUpMaxWaitingTime);
       routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
       putManager =
           new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,

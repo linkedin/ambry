@@ -64,9 +64,9 @@ public class RouterConfig {
   /**
    * The max time allowed to establish connections to local DC in the startup
    */
-  @Config("router.connections.warm.up.max.wating.time")
+  @Config("router.connections.warm.up.max.waiting.time")
   @Default("5000")
-  public final int routerConnectionsWarmUpMaxWatingTime;
+  public final int routerConnectionsWarmUpMaxWaitingTime;
 
   /**
    * Timeout for checking out an available connection to a (datanode, port).
@@ -231,8 +231,8 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.ssl", 2, 1, 20);
     routerConnectionsWarmUpCountPerPortToLocalDc =
         verifiableProperties.getIntInRange("router.connections.warm.up.count.per.port.to.local.dc", 1, 0, 20);
-    routerConnectionsWarmUpMaxWatingTime =
-        verifiableProperties.getIntInRange("router.connections.warm.up.max.wating.time", 5000, 0, Integer.MAX_VALUE);
+    routerConnectionsWarmUpMaxWaitingTime =
+        verifiableProperties.getIntInRange("router.connections.warm.up.max.waiting.time", 5000, 0, Integer.MAX_VALUE);
     routerConnectionCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("router.connection.checkout.timeout.ms", 1000, 1, 5000);
     routerRequestTimeoutMs = verifiableProperties.getIntInRange("router.request.timeout.ms", 2000, 1, 10000);

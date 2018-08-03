@@ -188,7 +188,7 @@ public class NetworkClient implements Closeable {
   }
 
   /**
-   * Warm up connections to dataNodes in a specify time window.
+   * Warm up connections to dataNodes in a specified time window.
    * If a connection established successfully, it's a successConnection.
    * If a connection failed(for example, target dataNode offline), it's a failedConnection.
    * If a connection breaks after successfully established, it's counted as a failedConnection. This impact the
@@ -199,12 +199,10 @@ public class NetworkClient implements Closeable {
    * @param timeForWarmUp max time to wait for connections' establish.
    * @return number of connections established successfully.
    */
-
   public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionCountPerDataNode, long timeForWarmUp) {
     int expectedConnections = 0;
     logger.info("Connections warm up start.");
     for (DataNodeId dataNodeId : dataNodeIds) {
-      // only warm up connections to dataNodes in local DC.
       for (int i = 0; i < connectionCountPerDataNode; i++) {
         try {
           String connId = selector.connect(
