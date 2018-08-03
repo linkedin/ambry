@@ -36,6 +36,7 @@ public class ContainerBuilder {
   private boolean cacheable = CACHEABLE_DEFAULT_VALUE;
   private boolean mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
   private String replicationPolicy = null;
+  private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -56,6 +57,7 @@ public class ContainerBuilder {
     cacheable = origin.isCacheable();
     mediaScanDisabled = origin.isMediaScanDisabled();
     replicationPolicy = origin.getReplicationPolicy();
+    ttlRequired = origin.isTtlRequired();
     parentAccountId = origin.getParentAccountId();
   }
 
@@ -166,6 +168,16 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the ttl required setting of the {@link Container}.
+   * @param ttlRequired The ttlRequired setting to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setTtlRequired(boolean ttlRequired) {
+    this.ttlRequired = ttlRequired;
+    return this;
+  }
+
+  /**
    * Sets the replication policy desired by the {@link Container}.
    * @param replicationPolicy the replication policy desired by the container
    * @return
@@ -183,6 +195,6 @@ public class ContainerBuilder {
    */
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, replicationPolicy, parentAccountId);
+        mediaScanDisabled, replicationPolicy, ttlRequired, parentAccountId);
   }
 }

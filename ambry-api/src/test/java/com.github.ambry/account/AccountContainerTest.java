@@ -61,6 +61,7 @@ public class AccountContainerTest {
   private List<Boolean> refContainerCachingValues;
   private List<Boolean> refContainerMediaScanDisabledValues;
   private List<String> refContainerReplicationPolicyValues;
+  private List<Boolean> refContainerTtlRequiredValues;
   private List<JSONObject> containerJsonList;
   private List<Container> refContainers;
 
@@ -127,6 +128,7 @@ public class AccountContainerTest {
             .setCacheable(refContainerCachingValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+            .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .build());
     // second container with (id=1, name="0")
     containers.add(
@@ -136,6 +138,7 @@ public class AccountContainerTest {
             .setCacheable(refContainerCachingValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+            .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -154,6 +157,7 @@ public class AccountContainerTest {
             .setCacheable(refContainerCachingValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+            .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .build());
     // second container with (id=0, name="1")
     containers.add(
@@ -163,6 +167,7 @@ public class AccountContainerTest {
             .setCacheable(refContainerCachingValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+            .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -181,6 +186,7 @@ public class AccountContainerTest {
             .setCacheable(refContainerCachingValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+            .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .build());
     // second container with (id=1, name="0")
     containers.add(
@@ -190,6 +196,7 @@ public class AccountContainerTest {
             .setCacheable(refContainerCachingValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+            .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .build());
     // third container with (id=10, name="10")
     containers.add(new ContainerBuilder((short) 10, "10", refContainerStatuses.get(0), refContainerDescriptions.get(0),
@@ -198,6 +205,7 @@ public class AccountContainerTest {
         .setCacheable(refContainerCachingValues.get(0))
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+        .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .build());
     // second container with (id=10, name="11")
     containers.add(new ContainerBuilder((short) 10, "11", refContainerStatuses.get(0), refContainerDescriptions.get(0),
@@ -206,6 +214,7 @@ public class AccountContainerTest {
         .setCacheable(refContainerCachingValues.get(0))
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+        .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -234,6 +243,7 @@ public class AccountContainerTest {
         .setCacheable(refContainerCachingValues.get(0))
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+        .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -346,7 +356,8 @@ public class AccountContainerTest {
               .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(i))
               .setCacheable(refContainerCachingValues.get(i))
               .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(i))
-              .setReplicationPolicy(refContainerReplicationPolicyValues.get(i));
+              .setReplicationPolicy(refContainerReplicationPolicyValues.get(i))
+              .setTtlRequired(refContainerTtlRequiredValues.get(i));
       Container containerFromBuilder = containerBuilder.build();
       assertContainer(containerFromBuilder, i);
 
@@ -493,6 +504,7 @@ public class AccountContainerTest {
       boolean updatedCacheable = !container.isCacheable();
       boolean updatedMediaScanDisabled = !container.isMediaScanDisabled();
       String updatedReplicationPolicy = container.getReplicationPolicy() + "---updated";
+      boolean updatedTtlRequired = !container.isTtlRequired();
 
       containerBuilder.setId(updatedContainerId)
           .setName(updatedContainerName)
@@ -501,7 +513,8 @@ public class AccountContainerTest {
           .setEncrypted(updatedEncrypted)
           .setCacheable(updatedCacheable)
           .setMediaScanDisabled(updatedMediaScanDisabled)
-          .setReplicationPolicy(updatedReplicationPolicy);
+          .setReplicationPolicy(updatedReplicationPolicy)
+          .setTtlRequired(updatedTtlRequired);
       accountBuilder.addOrUpdateContainer(containerBuilder.build());
 
       // build account and assert
@@ -521,6 +534,7 @@ public class AccountContainerTest {
           assertEquals("Wrong media scan disabled setting", MEDIA_SCAN_DISABLED_DEFAULT_VALUE,
               updatedContainer.isMediaScanDisabled());
           assertNull("Wrong replication policy", updatedContainer.getReplicationPolicy());
+          assertFalse("Wrong ttl required setting", updatedContainer.isTtlRequired());
           break;
         case Container.JSON_VERSION_2:
           assertEquals("Wrong encryption setting", updatedEncrypted, updatedContainer.isEncrypted());
@@ -529,6 +543,7 @@ public class AccountContainerTest {
           assertEquals("Wrong media scan disabled setting", updatedMediaScanDisabled,
               updatedContainer.isMediaScanDisabled());
           assertEquals("Wrong replication policy", updatedReplicationPolicy, updatedContainer.getReplicationPolicy());
+          assertEquals("Wrong ttl required setting", updatedTtlRequired, updatedContainer.isTtlRequired());
           break;
         default:
           throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
@@ -564,7 +579,8 @@ public class AccountContainerTest {
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
-            .setReplicationPolicy(refContainerReplicationPolicyValues.get(0));
+            .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+            .setTtlRequired(refContainerTtlRequiredValues.get(0));
     Container container = containerBuilder.build();
     accountBuilder.removeContainer(container);
     accountBuilder.removeContainer(null);
@@ -680,6 +696,7 @@ public class AccountContainerTest {
             .setCacheable(refContainerCachingValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
+            .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .build();
     refContainers.remove(0);
     refContainers.add(updatedContainer);
@@ -768,6 +785,7 @@ public class AccountContainerTest {
         assertEquals("Wrong media scan disabled setting", MEDIA_SCAN_DISABLED_DEFAULT_VALUE,
             container.isMediaScanDisabled());
         assertNull("Wrong replication policy", container.getReplicationPolicy());
+        assertFalse("Wrong ttl required setting", container.isTtlRequired());
         break;
       case Container.JSON_VERSION_2:
         assertEquals("Wrong encryption setting", refContainerEncryptionValues.get(index), container.isEncrypted());
@@ -777,6 +795,7 @@ public class AccountContainerTest {
             container.isMediaScanDisabled());
         assertEquals("Wrong replication policy", refContainerReplicationPolicyValues.get(index),
             container.getReplicationPolicy());
+        assertEquals("Wrong ttl required setting", refContainerTtlRequiredValues.get(index), container.isTtlRequired());
         break;
       default:
         throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
@@ -843,7 +862,7 @@ public class AccountContainerTest {
   private void buildContainerWithBadFieldsAndFail(String name, ContainerStatus status, boolean encrypted,
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
-      new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null,
+      new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
           (short) 0);
     }, null);
   }
@@ -862,6 +881,7 @@ public class AccountContainerTest {
     refContainerCachingValues = new ArrayList<>();
     refContainerMediaScanDisabledValues = new ArrayList<>();
     refContainerReplicationPolicyValues = new ArrayList<>();
+    refContainerTtlRequiredValues = new ArrayList<>();
     containerJsonList = new ArrayList<>();
     refContainers = new ArrayList<>();
     Set<Short> containerIdSet = new HashSet<>();
@@ -888,10 +908,12 @@ public class AccountContainerTest {
       } else {
         refContainerReplicationPolicyValues.add(null);
       }
+      refContainerTtlRequiredValues.add(random.nextBoolean());
       refContainers.add(new Container(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
-          refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i), refAccountId));
+          refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
+          refContainerTtlRequiredValues.get(i), refAccountId));
       containerJsonList.add(buildContainerJson(refContainers.get(i)));
     }
   }
@@ -924,6 +946,7 @@ public class AccountContainerTest {
         containerJson.put(CACHEABLE_KEY, container.isCacheable());
         containerJson.put(MEDIA_SCAN_DISABLED_KEY, container.isMediaScanDisabled());
         containerJson.putOpt(REPLICATION_POLICY_KEY, container.getReplicationPolicy());
+        containerJson.put(TTL_REQUIRED_KEY, container.isTtlRequired());
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + Container.getCurrentJsonVersion());

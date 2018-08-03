@@ -127,12 +127,14 @@ class AccountTestUtils {
         boolean containerPreviousEncryption = containerEncryption || random.nextBoolean();
         boolean mediaScanDisabled = random.nextBoolean();
         String replicationPolicy = UtilsTest.getRandomString(10);
+        boolean ttlRequired = random.nextBoolean();
         Container container = new ContainerBuilder(containerId, containerName, containerStatus, containerDescription,
             accountId).setEncrypted(containerEncryption)
             .setPreviouslyEncrypted(containerPreviousEncryption)
             .setCacheable(containerCaching)
             .setMediaScanDisabled(mediaScanDisabled)
             .setReplicationPolicy(replicationPolicy)
+            .setTtlRequired(ttlRequired)
             .build();
         containers.add(container);
         idToContainers.put(containerId, container);
