@@ -505,9 +505,8 @@ class NonBlockingRouter implements Router {
               .stream()
               .filter(dataNodeId -> clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId())
                   .equals(dataNodeId.getDatacenterName()))
-              .collect(Collectors.toList()), routerConfig.routerConnectionsWarmUpCountPerPortToLocalDc,
-
-          routerConfig.routerConnectionsWarmUpMaxWaitingTime);
+              .collect(Collectors.toList()), routerConfig.routerConnectionsWarmUpPercentagePerPort,
+          routerConfig.routerConnectionsWarmUpTimeoutMs);
       routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
       putManager =
           new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,

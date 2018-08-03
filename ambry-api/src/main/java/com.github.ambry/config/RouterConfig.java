@@ -55,18 +55,20 @@ public class RouterConfig {
   public final int routerScalingUnitMaxConnectionsPerPortSsl;
 
   /**
-   * The number of connections to local DC created in the startup.
+   * The percentage of {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortSsl} or
+   * {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortPlainText} to warm up in the startup.
+   * {@link RouterConfig#routerConnectionsWarmUpTimeoutMs} may need to be adjusted.
    */
-  @Config("router.connections.warm.up.count.per.port.to.local.dc")
-  @Default("1")
-  public final int routerConnectionsWarmUpCountPerPortToLocalDc;
+  @Config("router.connections.warm.up.percentage.per.port")
+  @Default("0.25")
+  public final double routerConnectionsWarmUpPercentagePerPort;
 
   /**
    * The max time allowed to establish connections to local DC in the startup
    */
-  @Config("router.connections.warm.up.max.waiting.time")
+  @Config("router.connections.warm.up.timeout.ms")
   @Default("5000")
-  public final int routerConnectionsWarmUpMaxWaitingTime;
+  public final int routerConnectionsWarmUpTimeoutMs;
 
   /**
    * Timeout for checking out an available connection to a (datanode, port).
@@ -229,10 +231,10 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.plain.text", 5, 1, 20);
     routerScalingUnitMaxConnectionsPerPortSsl =
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.ssl", 2, 1, 20);
-    routerConnectionsWarmUpCountPerPortToLocalDc =
-        verifiableProperties.getIntInRange("router.connections.warm.up.count.per.port.to.local.dc", 1, 0, 20);
-    routerConnectionsWarmUpMaxWaitingTime =
-        verifiableProperties.getIntInRange("router.connections.warm.up.max.waiting.time", 5000, 0, Integer.MAX_VALUE);
+    routerConnectionsWarmUpPercentagePerPort =
+        verifiableProperties.getDoubleInRange("router.connections.warm.up.percentage.per.port", 0.25, 0.0, 1.0);
+    routerConnectionsWarmUpTimeoutMs =
+        verifiableProperties.getIntInRange("router.connections.warm.up.timeout.ms", 5000, 0, Integer.MAX_VALUE);
     routerConnectionCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("router.connection.checkout.timeout.ms", 1000, 1, 5000);
     routerRequestTimeoutMs = verifiableProperties.getIntInRange("router.request.timeout.ms", 2000, 1, 10000);
