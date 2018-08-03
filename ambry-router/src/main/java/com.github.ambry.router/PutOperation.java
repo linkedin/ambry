@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -81,6 +82,7 @@ class PutOperation {
   private final ClusterMap clusterMap;
   private final ResponseHandler responseHandler;
   private final NotificationSystem notificationSystem;
+  private final AccountService accountService;
   private final BlobProperties passedInBlobProperties;
   private final byte[] userMetadata;
   private final String partitionClass;
@@ -152,6 +154,7 @@ class PutOperation {
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param notificationSystem the {@link NotificationSystem} to use for blob creation notifications.
+   * @param accountService the {@link AccountService} used for account/container id and name mapping.
    * @param userMetadata the userMetadata associated with the put operation.
    * @param channel the {@link ReadableStreamChannel} containing the blob data.
    * @param futureResult the future that will contain the result of the operation.
@@ -166,8 +169,8 @@ class PutOperation {
    * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, NotificationSystem notificationSystem, byte[] userMetadata,
-      ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
+      ResponseHandler responseHandler, NotificationSystem notificationSystem, AccountService accountService,
+      byte[] userMetadata, ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
       RouterCallback routerCallback, ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
       BlobProperties blobProperties, String partitionClass) {
@@ -177,6 +180,7 @@ class PutOperation {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
+    this.accountService = accountService;
     this.passedInBlobProperties = blobProperties;
     this.userMetadata = userMetadata;
     this.partitionClass = Objects.requireNonNull(partitionClass, "The provided partitionClass is null");
@@ -241,8 +245,11 @@ class PutOperation {
         metadataPutChunk.maybeNotifyForFirstChunkCreation();
       }
       if (blobId != null) {
-        notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(),
-            composite ? NotificationBlobType.Composite : NotificationBlobType.Simple);
+        Pair<String, String> accountContainerName =
+            RouterUtils.getAccountContainerName(accountService, getBlobProperties().getAccountId(),
+                getBlobProperties().getContainerId());
+        notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), accountContainerName.getFirst(),
+            accountContainerName.getSecond(), composite ? NotificationBlobType.Composite : NotificationBlobType.Simple);
       }
     }
   }
@@ -1340,7 +1347,7 @@ class PutOperation {
     }
 
     /**
-     * Call {@link NotificationSystem#onBlobCreated(String, BlobProperties, NotificationBlobType)} for this
+     * Call {@link NotificationSystem#onBlobCreated(String, BlobProperties, String, String, NotificationBlobType)} for this
      * chunk, unless it is the first chunk, in which case it might be an entire simple blob. In that case, save
      * the {@link BlobProperties} from the first chunk.
      * @param chunk the {@link PutChunk} created.
@@ -1349,8 +1356,11 @@ class PutOperation {
       if (chunk.chunkIndex == 0) {
         firstChunkIdAndProperties = new Pair<>(chunk.chunkBlobId, chunk.chunkBlobProperties);
       } else {
+        Pair<String, String> accountContainerName =
+            RouterUtils.getAccountContainerName(accountService, chunk.chunkBlobProperties.getAccountId(),
+                chunk.chunkBlobProperties.getContainerId());
         notificationSystem.onBlobCreated(chunk.chunkBlobId.getID(), chunk.chunkBlobProperties,
-            NotificationBlobType.DataChunk);
+            accountContainerName.getFirst(), accountContainerName.getSecond(), NotificationBlobType.DataChunk);
       }
     }
 
@@ -1365,7 +1375,11 @@ class PutOperation {
         // completed chunkIds, the first chunk may be null
         String chunkId = firstChunkIdAndProperties.getFirst().getID();
         BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
-        notificationSystem.onBlobCreated(chunkId, chunkProperties, NotificationBlobType.DataChunk);
+        Pair<String, String> accountContainerName =
+            RouterUtils.getAccountContainerName(accountService, chunkProperties.getAccountId(),
+                chunkProperties.getContainerId());
+        notificationSystem.onBlobCreated(chunkId, chunkProperties, accountContainerName.getFirst(),
+            accountContainerName.getSecond(), NotificationBlobType.DataChunk);
       }
     }
 

@@ -13,10 +13,14 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,5 +105,21 @@ class RouterUtils {
    */
   static int getNumChunksForBlobAndChunkSize(long blobSize, int chunkSize) {
     return (int) (blobSize == 0 ? 1 : (blobSize - 1) / chunkSize + 1);
+  }
+
+  /**
+   * Return accountName and containerName in a {@link Pair}.
+   * @param accountService the accountService to translate accountId to name.
+   * @param accountId the accountId to translate.
+   * @param accountId the containerId to translate.
+   * @return accountName and containerName in a {@link Pair}.
+   */
+  static Pair<String, String> getAccountContainerName(AccountService accountService, short accountId,
+      short containerId) {
+    Account account = accountService.getAccountById(accountId);
+    String accountName = account == null ? null : account.getName();
+    Container container = account == null ? null : account.getContainerById(containerId);
+    String containerName = container == null ? null : container.getName();
+    return new Pair<>(accountName, containerName);
   }
 }

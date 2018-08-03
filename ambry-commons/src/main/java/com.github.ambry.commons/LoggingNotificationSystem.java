@@ -36,18 +36,24 @@ public class LoggingNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobCreated(String blobId, BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
-    logger.debug("onBlobCreated " + blobId + ", " + blobProperties + ", " + notificationBlobType);
+  public void onBlobCreated(String blobId, BlobProperties blobProperties, String accountName, String containerName,
+      NotificationBlobType notificationBlobType) {
+    logger.debug("onBlobCreated " + blobId + ", blobProperties " + blobProperties + ", accountName " + accountName
+        + ", containerName " + containerName + ", blobType " + notificationBlobType);
   }
 
   @Override
-  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs) {
-    logger.debug("onBlobTtlUpdated " + blobId + ", " + serviceId + ", " + expiresAtMs);
+  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, String accountName,
+      String containerName) {
+    logger.debug(
+        "onBlobTtlUpdated " + blobId + ", serviceId " + serviceId + ", accountName " + accountName + ", containerName "
+            + containerName + ", " + expiresAtMs);
   }
 
   @Override
-  public void onBlobDeleted(String blobId, String serviceId) {
-    logger.debug("onBlobDeleted " + blobId, ", " + serviceId);
+  public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
+    logger.debug("onBlobDeleted " + blobId,
+        ", " + serviceId + ", accountName " + accountName + ", containerName " + containerName);
   }
 
   @Override

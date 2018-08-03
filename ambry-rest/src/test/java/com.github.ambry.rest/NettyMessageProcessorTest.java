@@ -437,18 +437,20 @@ public class NettyMessageProcessorTest {
     protected volatile CountDownLatch operationCompleted = new CountDownLatch(1);
 
     @Override
-    public void onBlobCreated(String blobId, BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
+    public void onBlobCreated(String blobId, BlobProperties blobProperties, String accountName, String containerName,
+        NotificationBlobType notificationBlobType) {
       blobIdOperatedOn = blobId;
       operationCompleted.countDown();
     }
 
     @Override
-    public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs) {
+    public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, String accountName,
+        String containerName) {
       throw new IllegalStateException("Not implemented");
     }
 
     @Override
-    public void onBlobDeleted(String blobId, String serviceId) {
+    public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
       throw new IllegalStateException("Not implemented");
     }
 

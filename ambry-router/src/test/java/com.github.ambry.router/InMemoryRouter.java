@@ -214,7 +214,7 @@ public class InMemoryRouter implements Router {
       if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
         deletedBlobs.add(blobId);
         if (notificationSystem != null) {
-          notificationSystem.onBlobDeleted(blobId, serviceId);
+          notificationSystem.onBlobDeleted(blobId, serviceId, null, null);
         }
       } else if (!deletedBlobs.contains(blobId)) {
         exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
@@ -245,7 +245,7 @@ public class InMemoryRouter implements Router {
         long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(expiresAtMs, currentProps.getCreationTimeInMs());
         blob.blobProperties.setTimeToLiveInSeconds(newTtlSecs);
         if (notificationSystem != null) {
-          notificationSystem.onBlobTtlUpdated(blobId, serviceId, expiresAtMs);
+          notificationSystem.onBlobTtlUpdated(blobId, serviceId, expiresAtMs, null, null);
         }
       } else if (deletedBlobs.contains(blobId)) {
         exception = new RouterException("Blob has been deleted", RouterErrorCode.BlobDeleted);
@@ -394,7 +394,7 @@ class InMemoryBlobPoster implements Runnable {
           new InMemoryRouter.InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData);
       blobs.put(blobId, blob);
       if (notificationSystem != null) {
-        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), NotificationBlobType.Simple);
+        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), null, null, NotificationBlobType.Simple);
       }
       operationResult = blobId;
     } catch (RouterException e) {

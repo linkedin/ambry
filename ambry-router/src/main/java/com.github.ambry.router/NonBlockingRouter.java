@@ -506,10 +506,11 @@ class NonBlockingRouter implements Router {
       getManager =
           new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, kms, cryptoService,
               cryptoJobHandler, time);
-      deleteManager = new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
-          routerCallback, time);
+      deleteManager = new DeleteManager(clusterMap, responseHandler, accountService, notificationSystem, routerConfig,
+          routerMetrics, routerCallback, time);
       ttlUpdateManager =
-          new TtlUpdateManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, time);
+          new TtlUpdateManager(clusterMap, responseHandler, notificationSystem, accountService, routerConfig,
+              routerMetrics, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + suffix, this, true);
       requestResponseHandlerThread.start();
       routerMetrics.initializeOperationControllerMetrics(requestResponseHandlerThread);

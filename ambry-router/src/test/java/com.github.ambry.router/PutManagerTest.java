@@ -1128,7 +1128,8 @@ public class PutManagerTest {
     Map<String, List<BlobCreatedEvent>> blobCreatedEvents = new HashMap<>();
 
     @Override
-    public void onBlobCreated(String blobId, BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
+    public void onBlobCreated(String blobId, BlobProperties blobProperties, String accountName, String containerName,
+        NotificationBlobType notificationBlobType) {
       List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
       if (events == null) {
         events = new ArrayList<>();
