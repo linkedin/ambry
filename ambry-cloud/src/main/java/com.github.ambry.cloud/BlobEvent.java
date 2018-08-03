@@ -16,6 +16,7 @@ package com.github.ambry.cloud;
 public class BlobEvent {
   private String blobId;
   private BlobOperation blobOperation;
+  private int retryCount;
 
   public BlobEvent(String blobId, BlobOperation blobOperation) {
     this.blobId = blobId;
@@ -26,16 +27,12 @@ public class BlobEvent {
     return blobId;
   }
 
-  public void setBlobId(String blobId) {
-    this.blobId = blobId;
-  }
-
   public BlobOperation getBlobOperation() {
     return blobOperation;
   }
 
-  public void setBlobOperation(BlobOperation blobOperation) {
-    this.blobOperation = blobOperation;
+  public int getRetryCount() {
+    return retryCount;
   }
 
 }
