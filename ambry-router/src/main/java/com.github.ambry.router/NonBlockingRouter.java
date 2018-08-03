@@ -485,7 +485,7 @@ class NonBlockingRouter implements Router {
     try {
       BlobId.BlobDataType dataType = BlobId.getBlobDataType(blobId);
       return (dataType == null || dataType == BlobId.BlobDataType.METADATA);
-    } catch (Exception ex) {
+    } catch (IOException ex) {
       logger.error("Unexpected error getting blob data type for blobId " + blobId, ex);
       return true;
     }
@@ -624,9 +624,7 @@ class NonBlockingRouter implements Router {
         FutureResult<Void> futureResult, Callback<Void> callback) {
 
       // Can skip GET if we can determine this is not a metadata blob
-      boolean needGet = isMaybeMetadataBlob(blobIdStr);
-
-      if (needGet) {
+      if (isMaybeMetadataBlob(blobIdStr)) {
         Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
           if (exception != null) {
             completeOperation(futureResult, callback, null, exception, false);
@@ -656,7 +654,7 @@ class NonBlockingRouter implements Router {
           completeUpdateBlobTtlOperation(e, futureResult, callback);
         }
       } else {
-        // needGet is false => do update directly on single blobId
+        // do update directly on single blobId
         routerMetrics.skippedGetBlobCount.inc();
         doUpdateTtlOperation(Collections.singletonList(blobIdStr), serviceId, expiresAtMs, futureResult, callback);
       }
