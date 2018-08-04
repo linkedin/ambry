@@ -676,7 +676,7 @@ public class RestUtilsTest {
   }
 
   /**
-   * Tests {@link RestUtils#getGetOption(RestRequest)}.
+   * Tests {@link RestUtils#getGetOption(RestRequest, GetOption)}.
    * @throws Exception
    */
   @Test
@@ -685,17 +685,22 @@ public class RestUtilsTest {
       JSONObject headers = new JSONObject();
       headers.put(RestUtils.Headers.GET_OPTION, option.toString().toLowerCase());
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/", headers);
-      assertEquals("Option returned not as expected", option, RestUtils.getGetOption(restRequest));
+      assertEquals("Option returned not as expected", option, RestUtils.getGetOption(restRequest, null));
+      assertEquals("Option returned not as expected", option, RestUtils.getGetOption(restRequest, option));
+      assertEquals("Option returned not as expected", option, RestUtils.getGetOption(restRequest, GetOption.None));
     }
     // no value defined
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null);
-    assertEquals("Option returned not as expected", GetOption.None, RestUtils.getGetOption(restRequest));
+    assertEquals("Option returned not as expected", GetOption.None, RestUtils.getGetOption(restRequest, null));
+    for (GetOption option : GetOption.values()) {
+      assertEquals("Option returned not as expected", option, RestUtils.getGetOption(restRequest, option));
+    }
     // bad value
     JSONObject headers = new JSONObject();
     headers.put(RestUtils.Headers.GET_OPTION, "non_existent_option");
     restRequest = createRestRequest(RestMethod.GET, "/", headers);
     try {
-      RestUtils.getGetOption(restRequest);
+      RestUtils.getGetOption(restRequest, GetOption.None);
       fail("Should have failed to get GetOption because value of header is invalid");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
@@ -1024,8 +1029,10 @@ public class RestUtilsTest {
    * @throws org.json.JSONException
    */
   public static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata) throws JSONException {
-    for (String key : userMetadata.keySet()) {
-      headers.put(key, userMetadata.get(key));
+    if (userMetadata != null) {
+      for (String key : userMetadata.keySet()) {
+        headers.put(key, userMetadata.get(key));
+      }
     }
   }
 }

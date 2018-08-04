@@ -13,6 +13,8 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.router.GetBlobOptions;
 import java.util.Arrays;
 import java.util.List;
 
@@ -123,6 +125,15 @@ public class FrontendConfig {
   @Default("5 * 60")
   public final long frontendUrlSignerDefaultUrlTtlSecs;
 
+  /**
+   * The default {@link GetOption} that the frontend has to use when constructing
+   * {@link GetBlobOptions} for {@link com.github.ambry.router.Router#getBlob(String, GetBlobOptions)}
+   * (or the callback equivalent).
+   */
+  @Config("frontend.default.router.get.option")
+  @Default("GetOption.None")
+  public final GetOption frontendDefaultRouterGetOption;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     frontendOptionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
@@ -152,5 +163,7 @@ public class FrontendConfig {
     frontendUrlSignerDefaultUrlTtlSecs =
         verifiableProperties.getLongInRange("frontend.url.signer.default.url.ttl.secs", 5 * 60, 0,
             frontendUrlSignerMaxUrlTtlSecs);
+    frontendDefaultRouterGetOption =
+        GetOption.valueOf(verifiableProperties.getString("frontend.default.router.get.option", GetOption.None.name()));
   }
 }

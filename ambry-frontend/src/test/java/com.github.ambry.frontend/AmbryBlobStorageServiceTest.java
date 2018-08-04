@@ -76,6 +76,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -389,8 +390,7 @@ public class AmbryBlobStorageServiceTest {
         for (Container container : testAccount.getAllContainers()) {
           doPostGetHeadUpdateDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(),
               testAccount, container);
-          doConditionalUpdateAndDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(),
-              testAccount, container);
+          doConditionalUpdateAndDeleteTest(testAccount, container, testAccount.getName());
         }
       }
     }
@@ -934,6 +934,50 @@ public class AmbryBlobStorageServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.ALLOW));
   }
 
+  /**
+   * Tests the injection of {@link GetOption#Include_All} and {@link GetOption#Include_Deleted_Blobs} as the default
+   * {@link GetOption}
+   * @throws Exception
+   */
+  @Test
+  public void defaultGetDeletedTest() throws Exception {
+    PostResults postResults =
+        prepareAndPostBlob(1024, "defaultGetOptionsTest", TTL_SECS, "application/octet-stream", "defaultGetOptionsTest",
+            refAccount, refContainer, null);
+    // this also verifies that the blob is inaccessible
+    deleteBlobAndVerify(postResults.blobId, postResults.headers, postResults.content, refAccount, refContainer, false);
+    // now reload AmbryBlobStorageService with a new default get option (Include_Deleted and Include_All) and the blob
+    // can be retrieved
+    verifyGetWithDefaultOptions(postResults.blobId, postResults.headers, postResults.content,
+        EnumSet.of(GetOption.Include_Deleted_Blobs, GetOption.Include_All));
+    // won't work with default GetOption.None
+    restartAmbryBlobStorageServiceWithDefaultGetOption(GetOption.None);
+    verifyOperationsAfterDelete(postResults.blobId, postResults.headers, postResults.content, refAccount, refContainer);
+  }
+
+  /**
+   * Tests the injection of {@link GetOption#Include_All} and {@link GetOption#Include_Expired_Blobs} as the default
+   * {@link GetOption}
+   * @throws Exception
+   */
+  @Test
+  public void defaultGetExpiredTest() throws Exception {
+    PostResults postResults =
+        prepareAndPostBlob(1024, "defaultGetOptionsTest", 0, "application/octet-stream", "defaultGetOptionsTest",
+            refAccount, refContainer, null);
+    Thread.sleep(5);
+    RestRequest restRequest = createRestRequest(RestMethod.GET, postResults.blobId, null, null);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
+    // now reload AmbryBlobStorageService with a new default get option (Include_Expired and Include_All) and the blob
+    // can be retrieved
+    verifyGetWithDefaultOptions(postResults.blobId, postResults.headers, postResults.content,
+        EnumSet.of(GetOption.Include_Expired_Blobs, GetOption.Include_All));
+    // won't work with default GetOption.None
+    restartAmbryBlobStorageServiceWithDefaultGetOption(GetOption.None);
+    restRequest = createRestRequest(RestMethod.GET, postResults.blobId, null, null);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
+  }
+
   // helpers
   // general
 
@@ -1082,13 +1126,38 @@ public class AmbryBlobStorageServiceTest {
     return restResponseChannel;
   }
 
+  /**
+   * Prepares random content, sets headers and POSTs a blob with the required parameters
+   * @param contentLength the length of the content to be POSTed.
+   * @param serviceId service ID for the blob
+   * @param ttl TTL for the blob
+   * @param contentType content type for the blob
+   * @param ownerId owner id for the blob
+   * @param account account that the blobs should belong to
+   * @param container container that the blobs should belong to
+   * @param userMetadata user metadata to associate with the blob. Can be {@code null}
+   * @return
+   * @throws Exception
+   */
+  private PostResults prepareAndPostBlob(int contentLength, String serviceId, long ttl, String contentType,
+      String ownerId, Account account, Container container, Map<String, String> userMetadata) throws Exception {
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentLength));
+    JSONObject headers = new JSONObject();
+    setAmbryHeadersForPut(headers, ttl, !container.isCacheable(), serviceId, contentType, ownerId, account.getName(),
+        container.getName());
+    RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
+    String blobId = postBlobAndVerify(headers, content, account, container);
+    headers.put(RestUtils.Headers.BLOB_SIZE, (long) contentLength);
+    return new PostResults(blobId, headers, content);
+  }
+
   // Constructor helpers
 
   /**
    * Sets up and gets an instance of {@link AmbryBlobStorageService}.
    * @return an instance of {@link AmbryBlobStorageService}.
    */
-  private AmbryBlobStorageService getAmbryBlobStorageService() throws Exception {
+  private AmbryBlobStorageService getAmbryBlobStorageService() {
     return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
         idConverterFactory, securityServiceFactory, accountService, urlSigningService, accountAndContainerInjector);
   }
@@ -1216,62 +1285,48 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Tests blob conditional TTL udpate and DELETE operations on the given {@code container}.
-   * @param toPostAccount the {@link Account} to use in post headers. Can be {@code null} if only using service ID.
-   * @param toPostContainer the {@link Container} to use in post headers. Can be {@code null} if only using service ID.
+   * @param expectedAccount the {@link Account} to use in post headers.
+   * @param expectedContainer the {@link Container} to use in post headers.
    * @param serviceId the serviceId to use for the POST
-   * @param isPrivate the isPrivate flag to pass as part of the POST
-   * @param expectedAccount the {@link Account} details that are eventually expected to be populated.
-   * @param expectedContainer the {@link Container} details that are eventually expected to be populated.
    * @throws Exception
    */
-  private void doConditionalUpdateAndDeleteTest(Account toPostAccount, Container toPostContainer, String serviceId,
-      boolean isPrivate, Account expectedAccount, Container expectedContainer) throws Exception {
-    final int CONTENT_LENGTH = 1024;
-    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
-    String contentType = "application/octet-stream";
-    String ownerId = "postGetHeadDeleteOwnerID";
-    JSONObject headers = new JSONObject();
-    String accountNameInPost = toPostAccount != null ? toPostAccount.getName() : null;
-    String containerNameInPost = toPostContainer != null ? toPostContainer.getName() : null;
-    setAmbryHeadersForPut(headers, TTL_SECS, isPrivate, serviceId, contentType, ownerId, accountNameInPost,
-        containerNameInPost);
-    Map<String, String> userMetadata = new HashMap<>();
-    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
-    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
-    RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
-    // perform POST, GET, HEAD successfully
-    String blobId = postBlobAndVerify(headers, content, expectedAccount, expectedContainer);
-    headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
-    getBlobAndVerify(blobId, null, null, headers, content, expectedAccount, expectedContainer);
-    getHeadAndVerify(blobId, null, null, headers, expectedAccount, expectedContainer);
+  private void doConditionalUpdateAndDeleteTest(Account expectedAccount, Container expectedContainer, String serviceId)
+      throws Exception {
+    PostResults postResults =
+        prepareAndPostBlob(1024, serviceId, TTL_SECS, "application/octet-stream", "doConditionalUpdateAndDeleteTest",
+            expectedAccount, expectedContainer, null);
+    getBlobAndVerify(postResults.blobId, null, null, postResults.headers, postResults.content, expectedAccount,
+        expectedContainer);
+    getHeadAndVerify(postResults.blobId, null, null, postResults.headers, expectedAccount, expectedContainer);
     // failures
     Map<RestMethod, String> methodsToUris = new HashMap<>();
     methodsToUris.put(RestMethod.PUT, Operations.UPDATE_TTL);
-    methodsToUris.put(RestMethod.DELETE, blobId);
+    methodsToUris.put(RestMethod.DELETE, postResults.blobId);
     for (Map.Entry<RestMethod, String> methodToUri : methodsToUris.entrySet()) {
       RestMethod method = methodToUri.getKey();
       String uri = methodToUri.getValue();
       JSONObject badHeaders = new JSONObject();
       if (uri.equals(Operations.UPDATE_TTL)) {
-        setUpdateTtlHeaders(badHeaders, blobId, "doConditionalUpdateAndDeleteTest");
+        setUpdateTtlHeaders(badHeaders, postResults.blobId, serviceId);
       }
       // test Conditional op failure because only container name is set
-      setAccountAndContainerHeaders(badHeaders, null, containerNameInPost);
+      setAccountAndContainerHeaders(badHeaders, null, expectedContainer.getName());
       RestRequest restRequest = createRestRequest(method, uri, badHeaders, null);
       verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
       // test Conditional op failure because of incorrect account name
-      setAccountAndContainerHeaders(badHeaders, "INCORRECT_ACCOUNT_NAME", containerNameInPost);
+      setAccountAndContainerHeaders(badHeaders, "INCORRECT_ACCOUNT_NAME", expectedContainer.getName());
       restRequest = createRestRequest(method, uri, badHeaders, null);
       verifyOperationFailure(restRequest, RestServiceErrorCode.PreconditionFailed);
       // test Conditional op failure because of incorrect container name
-      setAccountAndContainerHeaders(badHeaders, accountNameInPost, "INCORRECT_CONTAINER_NAME");
+      setAccountAndContainerHeaders(badHeaders, expectedAccount.getName(), "INCORRECT_CONTAINER_NAME");
       restRequest = createRestRequest(method, uri, badHeaders, null);
       verifyOperationFailure(restRequest, RestServiceErrorCode.PreconditionFailed);
     }
     // test success of conditional update
-    updateBlobTtlAndVerify(blobId, headers, expectedAccount, expectedContainer, true);
+    updateBlobTtlAndVerify(postResults.blobId, postResults.headers, expectedAccount, expectedContainer, true);
     // test Conditional Delete succeeds
-    deleteBlobAndVerify(blobId, headers, content, expectedAccount, expectedContainer, true);
+    deleteBlobAndVerify(postResults.blobId, postResults.headers, postResults.content, expectedAccount,
+        expectedContainer, true);
   }
 
   /**
@@ -2166,6 +2221,56 @@ public class AmbryBlobStorageServiceTest {
       // should fail, because accountName needs to be specified.
       postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", accountWithTwoDefaultContainers.getName(),
           !container.isCacheable(), null, null, RestServiceErrorCode.MissingArgs);
+    }
+  }
+
+  // defaultGetDeletedTest() and defaultGetExpiredTest() helpers
+
+  /**
+   * Restarts {@link #ambryBlobStorageService} with the default {@link GetOption} set to {@code option}
+   * @param option the value to set for "frontend.default.router.get.option"
+   * @throws InstantiationException
+   */
+  private void restartAmbryBlobStorageServiceWithDefaultGetOption(GetOption option) throws InstantiationException {
+    ambryBlobStorageService.shutdown();
+    configProps.setProperty("frontend.default.router.get.option", option.name());
+    verifiableProperties = new VerifiableProperties(configProps);
+    frontendConfig = new FrontendConfig(verifiableProperties);
+    ambryBlobStorageService = getAmbryBlobStorageService();
+    ambryBlobStorageService.start();
+  }
+
+  /**
+   * Verifies GET blob, blobinfo and HEAD with the given {@code defaultOptionsToTest} set as the default {
+   * @link GetOption} (one by one)
+   * @param blobId the id of the blob to fetch
+   * @param expectedHeaders the headers expected in the responses
+   * @param expectedContent the content expected for the blob
+   * @param defaultOptionsToTest the {@link GetOption}s to check as defaults
+   * @throws Exception
+   */
+  private void verifyGetWithDefaultOptions(String blobId, JSONObject expectedHeaders, ByteBuffer expectedContent,
+      EnumSet<GetOption> defaultOptionsToTest) throws Exception {
+    for (GetOption option : defaultOptionsToTest) {
+      restartAmbryBlobStorageServiceWithDefaultGetOption(option);
+      getBlobInfoAndVerify(blobId, null, expectedHeaders, refAccount, refContainer);
+      getHeadAndVerify(blobId, null, null, expectedHeaders, refAccount, refContainer);
+      getBlobAndVerify(blobId, null, null, expectedHeaders, expectedContent, refAccount, refContainer);
+    }
+  }
+
+  /**
+   * Results from a POST performed against {@link AmbryBlobStorageService}
+   */
+  private class PostResults {
+    final String blobId;
+    final JSONObject headers;
+    final ByteBuffer content;
+
+    PostResults(String blobId, JSONObject headers, ByteBuffer content) {
+      this.blobId = blobId;
+      this.headers = headers;
+      this.content = content;
     }
   }
 }

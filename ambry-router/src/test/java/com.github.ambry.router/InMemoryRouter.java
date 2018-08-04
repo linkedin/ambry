@@ -24,10 +24,12 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,6 +54,10 @@ public class InMemoryRouter implements Router {
   public final static String OPERATION_THROW_EARLY_RUNTIME_EXCEPTION = "routerThrowEarlyRuntimeException";
   public final static String OPERATION_THROW_LATE_RUNTIME_EXCEPTION = "routerThrowLateRuntimeException";
   public final static String OPERATION_THROW_ROUTER_EXCEPTION = "routerThrowRouterException";
+  private static final EnumSet<GetOption> ALLOW_EXPIRED_BLOB_GET =
+      EnumSet.of(GetOption.Include_All, GetOption.Include_Expired_Blobs);
+  private static final EnumSet<GetOption> ALLOW_DELETED_BLOB_GET =
+      EnumSet.of(GetOption.Include_All, GetOption.Include_Deleted_Blobs);
   private final ConcurrentHashMap<String, InMemoryBlob> blobs = new ConcurrentHashMap<>();
   private final ConcurrentSkipListSet<String> deletedBlobs = new ConcurrentSkipListSet<>();
   private final AtomicBoolean routerOpen = new AtomicBoolean(true);
@@ -158,24 +164,30 @@ public class InMemoryRouter implements Router {
     Exception exception = null;
     try {
       getBlobIdFromString(blobId, clusterMap);
-      if (deletedBlobs.contains(blobId) && !options.getGetOption().equals(GetOption.Include_All)
-          && !options.getGetOption().equals(GetOption.Include_Deleted_Blobs)) {
+      if (deletedBlobs.contains(blobId) && !ALLOW_DELETED_BLOB_GET.contains(options.getGetOption())) {
         exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
       } else if (!blobs.containsKey(blobId)) {
         exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
       } else {
         InMemoryBlob blob = blobs.get(blobId);
-        switch (options.getOperationType()) {
-          case Data:
-            blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
-            break;
-          case BlobInfo:
-            blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
-            break;
-          case All:
-            blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
-            blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
-            break;
+        long expiresAtMs = Utils.addSecondsToEpochTime(blob.getBlobProperties().getCreationTimeInMs(),
+            blob.getBlobProperties().getTimeToLiveInSeconds());
+        if (expiresAtMs == Utils.Infinite_Time || expiresAtMs > SystemTime.getInstance().milliseconds()
+            || ALLOW_EXPIRED_BLOB_GET.contains(options.getGetOption())) {
+          switch (options.getOperationType()) {
+            case Data:
+              blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
+              break;
+            case BlobInfo:
+              blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
+              break;
+            case All:
+              blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
+              blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
+              break;
+          }
+        } else {
+          exception = new RouterException("Blob expired", RouterErrorCode.BlobExpired);
         }
       }
     } catch (RouterException e) {
