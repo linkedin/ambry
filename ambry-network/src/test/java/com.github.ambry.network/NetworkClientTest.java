@@ -78,7 +78,7 @@ public class NetworkClientTest {
   }
 
   /**
-   * Test {@link NetworkClient#warmUpConnections(List, double, long)}
+   * Test {@link NetworkClient#warmUpConnections(List, int, long)}
    */
   @Test
   public void testWarmUpConnections() throws IOException {
@@ -90,10 +90,10 @@ public class NetworkClientTest {
         .collect(Collectors.toList());
     int maxPort = mockClusterMap.isSslPortsEnabled() ? MAX_PORTS_SSL : MAX_PORTS_PLAIN_TEXT;
     Assert.assertEquals("Connection count is not expected", maxPort * localDataNodeIds.size(),
-        networkClient.warmUpConnections(localDataNodeIds, 1.0, 2000));
-    Assert.assertEquals("Connection count is not expected", (int) (0.5 * maxPort) * localDataNodeIds.size(),
-        networkClient.warmUpConnections(localDataNodeIds, 0.5, 2000));
-    Assert.assertEquals("Connection count is not expected", 0 * maxPort * localDataNodeIds.size(),
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
+    Assert.assertEquals("Connection count is not expected", 50 * maxPort / 100 * localDataNodeIds.size(),
+        networkClient.warmUpConnections(localDataNodeIds, 50, 2000));
+    Assert.assertEquals("Connection count is not expected", 0,
         networkClient.warmUpConnections(localDataNodeIds, 0, 2000));
     selector.setState(MockSelectorState.Good);
   }

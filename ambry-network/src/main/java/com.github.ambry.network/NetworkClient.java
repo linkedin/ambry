@@ -195,19 +195,18 @@ public class NetworkClient implements Closeable {
    * counting in the method, but this is tolerable as other good/bad connections can be handled in next selector.poll().
    * If a connection established after this time window of timeForWarmUp, it can be handled in next selector.poll().
    * @param dataNodeIds warm up target nodes.
-   * @param connectionPercentagePerDataNode percentage of connections would like to establish in the warmup.
+   * @param connectionFractionPerDataNode fraction of connections would like to establish in the warmup.
    * @param timeForWarmUp max time to wait for connections' establish.
    * @return number of connections established successfully.
    */
-  public int warmUpConnections(List<DataNodeId> dataNodeIds, double connectionPercentagePerDataNode,
-      long timeForWarmUp) {
+  public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionFractionPerDataNode, long timeForWarmUp) {
     int expectedConnections = 0;
     logger.info("Connections warm up start.");
     for (DataNodeId dataNodeId : dataNodeIds) {
       int numberOfConnections =
-          (int) (connectionPercentagePerDataNode * (dataNodeId.getPortToConnectTo().getPortType() == PortType.PLAINTEXT
-              ? connectionTracker.getMaxConnectionsPerPortPlainText()
-              : connectionTracker.getMaxConnectionsPerPortSsl()));
+          connectionFractionPerDataNode * (dataNodeId.getPortToConnectTo().getPortType() == PortType.PLAINTEXT
+              ? connectionTracker.getMaxConnectionsPerPortPlainText() : connectionTracker.getMaxConnectionsPerPortSsl())
+              / 100;
       for (int i = 0; i < numberOfConnections; i++) {
         try {
           String connId = selector.connect(
@@ -223,13 +222,13 @@ public class NetworkClient implements Closeable {
       }
     }
     long startTime = System.currentTimeMillis();
-    int actualSuccessConnections = 0;
-    int actualFailedConnections = 0;
-    while (actualSuccessConnections + actualFailedConnections < expectedConnections) {
+    int successfulConnections = 0;
+    int failedConnections = 0;
+    while (successfulConnections + failedConnections < expectedConnections) {
       try {
         selector.poll(1000L);
-        actualSuccessConnections += selector.connected().size();
-        actualFailedConnections += selector.disconnected().size();
+        successfulConnections += selector.connected().size();
+        failedConnections += selector.disconnected().size();
         handleSelectorEvents(null);
       } catch (IOException e) {
         logger.error("Warm up received unexpected error while polling: {}", e);
@@ -239,9 +238,9 @@ public class NetworkClient implements Closeable {
       }
     }
     logger.info("Connections warm up done. Tried: {} Success: {} Failed: {} Time elapsed: {}ms", expectedConnections,
-        actualSuccessConnections, actualFailedConnections, System.currentTimeMillis() - startTime);
+        successfulConnections, failedConnections, System.currentTimeMillis() - startTime);
 
-    return actualSuccessConnections;
+    return successfulConnections;
   }
 
   /**
