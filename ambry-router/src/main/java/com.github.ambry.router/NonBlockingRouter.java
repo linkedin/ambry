@@ -485,7 +485,7 @@ class NonBlockingRouter implements Router {
     try {
       BlobId.BlobDataType dataType = BlobId.getBlobDataType(blobId);
       return (dataType == null || dataType == BlobId.BlobDataType.METADATA);
-    } catch (IOException ex) {
+    } catch (Exception ex) {
       logger.error("Unexpected error getting blob data type for blobId " + blobId, ex);
       return true;
     }
