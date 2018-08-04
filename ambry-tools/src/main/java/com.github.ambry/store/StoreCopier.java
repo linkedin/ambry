@@ -22,6 +22,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.Pair;
@@ -239,7 +240,18 @@ public class StoreCopier implements Closeable {
                 new MessageFormatWriteSet(message.getStream(), Collections.singletonList(message.getMessageInfo()),
                     false);
             tgt.put(writeSet);
-            logger.trace("Copied {} as {}", messageInfo.getStoreKey(), message.getMessageInfo().getStoreKey());
+            MessageInfo tgtMsgInfo = message.getMessageInfo();
+            if (tgtMsgInfo.isTtlUpdated()) {
+              TtlUpdateMessageFormatInputStream stream =
+                  new TtlUpdateMessageFormatInputStream(tgtMsgInfo.getStoreKey(), tgtMsgInfo.getAccountId(),
+                      tgtMsgInfo.getContainerId(), tgtMsgInfo.getExpirationTimeInMs(), tgtMsgInfo.getOperationTimeMs());
+              MessageInfo updateMsgInfo = new MessageInfo(tgtMsgInfo.getStoreKey(), stream.getSize(), false, true,
+                  tgtMsgInfo.getExpirationTimeInMs(), tgtMsgInfo.getAccountId(), tgtMsgInfo.getContainerId(),
+                  tgtMsgInfo.getOperationTimeMs());
+              writeSet = new MessageFormatWriteSet(stream, Collections.singletonList(updateMsgInfo), false);
+              tgt.updateTtl(writeSet);
+            }
+            logger.trace("Copied {} as {}", messageInfo.getStoreKey(), tgtMsgInfo.getStoreKey());
           } else {
             logger.warn("Found a duplicate entry for {} while copying data", messageInfo.getStoreKey());
             sourceHasProblems = true;
