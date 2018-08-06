@@ -195,16 +195,17 @@ public class NetworkClient implements Closeable {
    * counting in the method, but this is tolerable as other good/bad connections can be handled in next selector.poll().
    * If a connection established after this time window of timeForWarmUp, it can be handled in next selector.poll().
    * @param dataNodeIds warm up target nodes.
-   * @param connectionFractionPerDataNode fraction of connections would like to establish in the warmup.
+   * @param connectionWarmUpPercentagePerDataNode percentage of max connections would like to establish in the warmup.
    * @param timeForWarmUp max time to wait for connections' establish.
    * @return number of connections established successfully.
    */
-  public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionFractionPerDataNode, long timeForWarmUp) {
+  public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionWarmUpPercentagePerDataNode,
+      long timeForWarmUp) {
     int expectedConnections = 0;
     logger.info("Connections warm up start.");
     for (DataNodeId dataNodeId : dataNodeIds) {
       int numberOfConnections =
-          connectionFractionPerDataNode * (dataNodeId.getPortToConnectTo().getPortType() == PortType.PLAINTEXT
+          connectionWarmUpPercentagePerDataNode * (dataNodeId.getPortToConnectTo().getPortType() == PortType.PLAINTEXT
               ? connectionTracker.getMaxConnectionsPerPortPlainText() : connectionTracker.getMaxConnectionsPerPortSsl())
               / 100;
       for (int i = 0; i < numberOfConnections; i++) {

@@ -59,9 +59,9 @@ public class RouterConfig {
    * {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortPlainText} to warm up in the startup.
    * {@link RouterConfig#routerConnectionsWarmUpTimeoutMs} may need to be adjusted.
    */
-  @Config("router.connections.warm.up.fraction.per.port")
+  @Config("router.connections.warm.up.percentage.per.port")
   @Default("25")
-  public final int routerConnectionsWarmUpFractionPerPort;
+  public final int routerConnectionsWarmUpPercentagePerPort;
 
   /**
    * The max time allowed to establish connections to local DC in the startup
@@ -231,8 +231,8 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.plain.text", 5, 1, 20);
     routerScalingUnitMaxConnectionsPerPortSsl =
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.ssl", 2, 1, 20);
-    routerConnectionsWarmUpFractionPerPort =
-        verifiableProperties.getIntInRange("router.connections.warm.up.fraction.per.port", 25, 0, 100);
+    routerConnectionsWarmUpPercentagePerPort =
+        verifiableProperties.getIntInRange("router.connections.warm.up.percentage.per.port", 25, 0, 100);
     routerConnectionsWarmUpTimeoutMs =
         verifiableProperties.getIntInRange("router.connections.warm.up.timeout.ms", 5000, 0, Integer.MAX_VALUE);
     routerConnectionCheckoutTimeoutMs =
