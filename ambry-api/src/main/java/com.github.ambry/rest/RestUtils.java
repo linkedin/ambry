@@ -264,6 +264,15 @@ public class RestUtils {
 
     long ttl = Utils.Infinite_Time;
     Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
+    if (container.isTtlRequired()) {
+      if (ttlFromHeader == null) {
+        throw new RestServiceException("TTL(a finite time) is required in container " + container.getName(),
+            RestServiceErrorCode.MissingArgs);
+      } else if (ttlFromHeader == Utils.Infinite_Time) {
+        throw new RestServiceException("TTL(a finite time) is required in container " + container.getName(),
+            RestServiceErrorCode.InvalidArgs);
+      }
+    }
     if (ttlFromHeader != null) {
       if (ttlFromHeader < -1) {
         throw new RestServiceException(Headers.TTL + "[" + ttlFromHeader + "] is not valid (has to be >= -1)",

@@ -115,6 +115,7 @@ public class AmbryBlobStorageServiceTest {
   private final MockClusterMap clusterMap;
   private final BlobId referenceBlobId;
   private final String referenceBlobIdStr;
+  private final int referenceTtl = 1000;
   private final short blobIdVersion;
   private final UrlSigningService urlSigningService;
   private FrontendConfig frontendConfig;
@@ -1144,8 +1145,8 @@ public class AmbryBlobStorageServiceTest {
           break;
         case POST:
           JSONObject headers = new JSONObject();
-          setAmbryHeadersForPut(headers, Utils.Infinite_Time, !refContainer.isCacheable(), "test-serviceID",
-              "text/plain", "test-ownerId", refAccount.getName(), refContainer.getName());
+          setAmbryHeadersForPut(headers, referenceTtl, !refContainer.isCacheable(), "test-serviceID", "text/plain",
+              "test-ownerId", refAccount.getName(), refContainer.getName());
           restRequest = createRestRequest(restMethod, "/", headers, null);
           doOperation(restRequest, restResponseChannel);
           fail("POST should have detected a RestServiceException because of a bad router");

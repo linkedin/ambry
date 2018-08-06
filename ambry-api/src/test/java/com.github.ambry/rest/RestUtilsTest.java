@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
@@ -53,6 +54,9 @@ import static org.junit.Assert.*;
 public class RestUtilsTest {
   private static final Random RANDOM = new Random();
   private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+  private static final Container ttlRequiredContainer =
+      new ContainerBuilder((short) 1, "ttlRequiredContainerName", Container.ContainerStatus.ACTIVE, "description",
+          (short) 1).setTtlRequired(true).build();
 
   /**
    * Tests building of {@link BlobProperties} given good input (all arguments in the number and format expected).
@@ -91,6 +95,18 @@ public class RestUtilsTest {
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, "-2", serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
+    // ttl < -1.
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, "-2", serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
+    verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
+    // ttl required in ttlRequired container.
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, null, serviceId, ttlRequiredContainer, contentType, ownerId);
+    verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.MissingArgs);
+    // ttl(finite time) required in ttlRequired container.
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, "-1", serviceId, ttlRequiredContainer, contentType, ownerId);
+    verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
     // serviceId missing.
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, ttl, null, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
@@ -127,7 +143,7 @@ public class RestUtilsTest {
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InternalServerError);
 
     // no failures.
-    // ttl missing. Should be infinite time by default.
+    // ttl missing. Should be infinite time in non ttlRequired container.
     // ownerId missing.
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, null, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, null);
@@ -137,6 +153,11 @@ public class RestUtilsTest {
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, null, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     headers.put(RestUtils.Headers.TTL, JSONObject.NULL);
+    verifyBlobPropertiesConstructionSuccess(headers);
+
+    // Post with valid ttl to ttlRequired container.
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, "100", serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     verifyBlobPropertiesConstructionSuccess(headers);
 
     // ownerId null.
