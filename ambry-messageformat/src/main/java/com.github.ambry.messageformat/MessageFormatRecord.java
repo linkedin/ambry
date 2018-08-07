@@ -959,7 +959,7 @@ public class MessageFormatRecord {
       DataInputStream dataStream = new DataInputStream(crcStream);
       short accountId = dataStream.readShort();
       short containerId = dataStream.readShort();
-      long udpateTimeInMs = dataStream.readLong();
+      long updateTimeInMs = dataStream.readLong();
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
@@ -967,7 +967,7 @@ public class MessageFormatRecord {
             "update record data is corrupt. Expected CRC: " + expectedCRC + ", Actual CRC: " + actualCRC,
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new UpdateRecord(accountId, containerId, udpateTimeInMs, new DeleteSubRecord());
+      return new UpdateRecord(accountId, containerId, updateTimeInMs, new DeleteSubRecord());
     }
   }
 

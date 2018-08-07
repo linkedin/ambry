@@ -1284,7 +1284,7 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Tests blob conditional TTL udpate and DELETE operations on the given {@code container}.
+   * Tests blob conditional TTL update and DELETE operations on the given {@code container}.
    * @param expectedAccount the {@link Account} to use in post headers.
    * @param expectedContainer the {@link Container} to use in post headers.
    * @param serviceId the serviceId to use for the POST
