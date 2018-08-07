@@ -95,6 +95,7 @@ public class HelixAccountServiceTest {
   private boolean refContainerEncryption;
   private boolean refContainerPreviousEncryption;
   private boolean refContainerMediaScanDisabled;
+  private boolean refContainerTtlRequired;
   private String refReplicationPolicy;
   private short refParentAccountId;
   private AccountService accountService;
@@ -226,6 +227,7 @@ public class HelixAccountServiceTest {
             container.getStatus().equals(ContainerStatus.ACTIVE) ? ContainerStatus.INACTIVE : ContainerStatus.ACTIVE);
         containerBuilder.setDescription(container.getDescription() + "--extra");
         containerBuilder.setReplicationPolicy(container.getReplicationPolicy() + "---extra");
+        containerBuilder.setTtlRequired(!container.isTtlRequired());
         accountBuilder.addOrUpdateContainer(containerBuilder.build());
       }
       accountsToUpdate.add(accountBuilder.build());
@@ -930,12 +932,14 @@ public class HelixAccountServiceTest {
     refContainerPreviousEncryption = refContainerEncryption || random.nextBoolean();
     refContainerMediaScanDisabled = random.nextBoolean();
     refReplicationPolicy = UtilsTest.getRandomString(10);
+    refContainerTtlRequired = random.nextBoolean();
     refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
         refParentAccountId).setEncrypted(refContainerEncryption)
         .setPreviouslyEncrypted(refContainerPreviousEncryption)
         .setCacheable(refContainerCaching)
         .setMediaScanDisabled(refContainerMediaScanDisabled)
         .setReplicationPolicy(refReplicationPolicy)
+        .setTtlRequired(refContainerTtlRequired)
         .build();
     refAccount =
         new AccountBuilder(refAccountId, refAccountName, refAccountStatus).addOrUpdateContainer(refContainer).build();

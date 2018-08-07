@@ -64,10 +64,12 @@ public class Container {
   static final String CACHEABLE_KEY = "cacheable";
   static final String MEDIA_SCAN_DISABLED_KEY = "mediaScanDisabled";
   static final String REPLICATION_POLICY_KEY = "replicationPolicy";
+  static final String TTL_REQUIRED_KEY = "ttlRequired";
   static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
   static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
+  static final boolean TTL_REQUIRED_DEFAULT_VALUE = false;
   static final boolean CACHEABLE_DEFAULT_VALUE = true;
   public static final short JSON_VERSION_1 = 1;
   public static final short JSON_VERSION_2 = 2;
@@ -213,6 +215,21 @@ public class Container {
   public static final boolean DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
 
   /**
+   * The ttl required setting for {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final boolean UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING = TTL_REQUIRED_DEFAULT_VALUE;
+
+  /**
+   * The ttl required setting for {@link #DEFAULT_PUBLIC_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING = TTL_REQUIRED_DEFAULT_VALUE;
+
+  /**
+   * The ttl required setting for {@link #DEFAULT_PRIVATE_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING = TTL_REQUIRED_DEFAULT_VALUE;
+
+  /**
    * The parent account id of {@link #UNKNOWN_CONTAINER}.
    */
   public static final short UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID = Account.UNKNOWN_ACCOUNT_ID;
@@ -239,7 +256,8 @@ public class Container {
       new Container(UNKNOWN_CONTAINER_ID, UNKNOWN_CONTAINER_NAME, UNKNOWN_CONTAINER_STATUS,
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
           UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, UNKNOWN_CONTAINER_CACHEABLE_SETTING,
-          UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
+          UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING,
+          UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -252,7 +270,8 @@ public class Container {
       new Container(DEFAULT_PUBLIC_CONTAINER_ID, DEFAULT_PUBLIC_CONTAINER_NAME, DEFAULT_PUBLIC_CONTAINER_STATUS,
           DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
-          DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
+          DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING,
+          DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -265,7 +284,8 @@ public class Container {
       new Container(DEFAULT_PRIVATE_CONTAINER_ID, DEFAULT_PRIVATE_CONTAINER_NAME, DEFAULT_PRIVATE_CONTAINER_STATUS,
           DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
-          DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
+          DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING,
+          DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
 
   // container field variables
   private final short id;
@@ -277,6 +297,7 @@ public class Container {
   private final boolean cacheable;
   private final boolean mediaScanDisabled;
   private final String replicationPolicy;
+  private final boolean ttlRequired;
   private final short parentAccountId;
 
   /**
@@ -301,6 +322,7 @@ public class Container {
         cacheable = !metadata.getBoolean(IS_PRIVATE_KEY);
         mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         replicationPolicy = null;
+        ttlRequired = false;
         break;
       case JSON_VERSION_2:
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
@@ -312,6 +334,7 @@ public class Container {
         cacheable = metadata.optBoolean(CACHEABLE_KEY, CACHEABLE_DEFAULT_VALUE);
         mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED_KEY, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
         replicationPolicy = metadata.optString(REPLICATION_POLICY_KEY, null);
+        ttlRequired = metadata.optBoolean(TTL_REQUIRED_KEY, false);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
@@ -332,11 +355,12 @@ public class Container {
    *                  this container.
    * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
    * @param replicationPolicy the replication policy to use. If {@code null}, the cluster's default will be used.
+   * @param ttlRequired {@code true} if ttl is required on content created in this container.
    * @param parentAccountId The id of the parent {@link Account} of this container.
    */
   Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
-      short parentAccountId) {
+      boolean ttlRequired, short parentAccountId) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -350,12 +374,14 @@ public class Container {
         this.previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         this.mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         this.replicationPolicy = null;
+        this.ttlRequired = false;
         break;
       case JSON_VERSION_2:
         this.encrypted = encrypted;
         this.previouslyEncrypted = previouslyEncrypted;
         this.mediaScanDisabled = mediaScanDisabled;
         this.replicationPolicy = replicationPolicy;
+        this.ttlRequired = ttlRequired;
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -418,6 +444,7 @@ public class Container {
         metadata.put(CACHEABLE_KEY, cacheable);
         metadata.put(MEDIA_SCAN_DISABLED_KEY, mediaScanDisabled);
         metadata.putOpt(REPLICATION_POLICY_KEY, replicationPolicy);
+        metadata.put(TTL_REQUIRED_KEY, ttlRequired);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -495,6 +522,13 @@ public class Container {
   }
 
   /**
+   * @return {@code true} if ttl is required on content created in this container.
+   */
+  public boolean isTtlRequired() {
+    return ttlRequired;
+  }
+
+  /**
    * Gets the if of the {@link Account} that owns this container.
    * @return The id of the parent {@link Account} of this container.
    */
@@ -525,7 +559,8 @@ public class Container {
         && previouslyEncrypted == container.previouslyEncrypted && cacheable == container.cacheable
         && mediaScanDisabled == container.mediaScanDisabled && parentAccountId == container.parentAccountId
         && Objects.equals(name, container.name) && status == container.status && Objects.equals(description,
-        container.description) && Objects.equals(replicationPolicy, container.replicationPolicy);
+        container.description) && Objects.equals(replicationPolicy, container.replicationPolicy)
+        && ttlRequired == container.ttlRequired;
   }
 
   @Override

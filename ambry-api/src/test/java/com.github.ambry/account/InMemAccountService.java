@@ -181,6 +181,7 @@ public class InMemAccountService implements AccountService {
         .setPreviouslyEncrypted(refContainerPreviousEncryption)
         .setCacheable(refContainerCaching)
         .setMediaScanDisabled(refContainerMediaScanDisabled)
+        .setTtlRequired(false)
         .build();
   }
 }
