@@ -164,7 +164,6 @@ public class InMemAccountService implements AccountService {
 
   /**
    * Creates and returns a random {@link Container} for {@code accountId}.
-   * {@link Container#ttlRequired} is false by default.
    * @param accountId the account id for the container
    * @return returns a random {@link Container} for {@code accountId}
    */
@@ -182,6 +181,7 @@ public class InMemAccountService implements AccountService {
         .setPreviouslyEncrypted(refContainerPreviousEncryption)
         .setCacheable(refContainerCaching)
         .setMediaScanDisabled(refContainerMediaScanDisabled)
+        .setTtlRequired(false)
         .build();
   }
 }
