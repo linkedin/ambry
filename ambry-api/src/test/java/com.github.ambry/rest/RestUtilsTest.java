@@ -139,7 +139,7 @@ public class RestUtilsTest {
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InternalServerError);
 
     // no failures.
-    // ttl missing. Should be infinite time in non ttlRequired container.
+    // ttl missing. Should be infinite time by default in non ttlRequired container.
     // ownerId missing.
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, null, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, null);
@@ -153,7 +153,7 @@ public class RestUtilsTest {
 
     // Post with valid ttl to ttlRequired container.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, "100", serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
+    setAmbryHeadersForPut(headers, "100", serviceId, ttlRequiredContainer, contentType, ownerId);
     verifyBlobPropertiesConstructionSuccess(headers);
 
     // ownerId null.
