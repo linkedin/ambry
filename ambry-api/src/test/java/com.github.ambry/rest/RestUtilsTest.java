@@ -95,10 +95,6 @@ public class RestUtilsTest {
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, "-2", serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
-    // ttl < -1.
-    headers = new JSONObject();
-    setAmbryHeadersForPut(headers, "-2", serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
-    verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
     // ttl required in ttlRequired container.
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, null, serviceId, ttlRequiredContainer, contentType, ownerId);
