@@ -179,8 +179,8 @@ class AmbryBlobStorageService implements BlobStorageService {
         getSignedUrlHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
-        GetBlobOptions options =
-            RestUtils.buildGetBlobOptions(restRequest.getArgs(), subresource, RestUtils.getGetOption(restRequest));
+        GetBlobOptions options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), subresource,
+            RestUtils.getGetOption(restRequest, frontendConfig.frontendDefaultRouterGetOption));
         GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
         SecurityProcessRequestCallback securityCallback =
             new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
@@ -546,7 +546,7 @@ class AmbryBlobStorageService implements BlobStorageService {
               }
               break;
             case HEAD:
-              GetOption getOption = RestUtils.getGetOption(restRequest);
+              GetOption getOption = RestUtils.getGetOption(restRequest, frontendConfig.frontendDefaultRouterGetOption);
               // inject encryption metrics if need be
               if (BlobId.isEncrypted(result)) {
                 RestRequestMetrics requestMetrics =

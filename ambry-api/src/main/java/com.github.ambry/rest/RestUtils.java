@@ -560,19 +560,21 @@ public class RestUtils {
   /**
    * Gets the {@link GetOption} required by the request.
    * @param restRequest the representation of the request.
+   * @param defaultGetOption the {@link GetOption} to use if the {@code restRequest} doesn't have one. Can be
+   * {@code null}.
    * @return the required {@link GetOption}. Defaults to {@link GetOption#None}.
    * @throws RestServiceException if the {@link RestUtils.Headers#GET_OPTION} is present but not recognized.
    */
-  public static GetOption getGetOption(RestRequest restRequest) throws RestServiceException {
-    GetOption options = GetOption.None;
-    Map<String, Object> args = restRequest.getArgs();
-    Object value = args.get(RestUtils.Headers.GET_OPTION);
+  public static GetOption getGetOption(RestRequest restRequest, GetOption defaultGetOption)
+      throws RestServiceException {
+    GetOption option = defaultGetOption == null ? GetOption.None : defaultGetOption;
+    Object value = restRequest.getArgs().get(RestUtils.Headers.GET_OPTION);
     if (value != null) {
       String str = (String) value;
       boolean foundMatch = false;
       for (GetOption getOption : GetOption.values()) {
         if (str.equalsIgnoreCase(getOption.name())) {
-          options = getOption;
+          option = getOption;
           foundMatch = true;
           break;
         }
@@ -582,7 +584,7 @@ public class RestUtils {
             RestServiceErrorCode.InvalidArgs);
       }
     }
-    return options;
+    return option;
   }
 
   /**
