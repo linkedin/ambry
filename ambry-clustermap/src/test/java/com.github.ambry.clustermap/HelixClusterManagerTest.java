@@ -153,7 +153,7 @@ public class HelixClusterManagerTest {
     // Mock the override partition map
     Random rand = new Random();
     int totalPartitionNum = testPartitionLayout.getPartitionCount();
-    int numOfReadOnly = rand.nextInt(totalPartitionNum / 2);
+    int numOfReadOnly = rand.nextInt(totalPartitionNum / 2 - 1);
     int numOfReadWrite = totalPartitionNum - numOfReadOnly;
     partitionOverrideMap = new HashMap<>();
     for (int i = 0; i < numOfReadWrite; ++i) {
@@ -183,7 +183,7 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.datacenter.name", localDc);
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
-    props.setProperty("clustermap.enable.partition.override", this.overrideEnabled ? "true" : "false");
+    props.setProperty("clustermap.enable.partition.override", overrideEnabled ? "true" : "false");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
     if (useComposite) {
@@ -499,24 +499,37 @@ public class HelixClusterManagerTest {
   }
 
   /**
-   * Test that ClusterManger will use seal state in PartitionOverride when {@link ClusterMapConfig#clusterMapEnablePartitionOverride}
-   * is enabled. This also tests that InstanceConfig changes won't affect any seal state of partition if clusterMapEnablePartitionOverride
-   * is enabled.
+   * Test that ClusterManger will use seal state in PartitionOverride/InstanceConfig when {@link ClusterMapConfig#clusterMapEnablePartitionOverride}
+   * is enabled/disabled. This test verifies that InstanceConfig changes won't affect any seal state of partition if clusterMapEnablePartitionOverride
+   * is enabled. It also tests seal state can be dynamically changed by InstanceConfig change when PartitionOverride is
+   * non-empty but disabled.
    */
   @Test
-  public void clusterMapOverrideEnabledTest() throws Exception {
+  public void clusterMapOverrideEnabledAndDisabledTest() throws Exception {
+    if (useComposite) {
+      return;
+    }
+    // Get the writable partitions in OverrideMap
+    Set<String> writableInOverrideMap = new HashSet<>();
+    for (Map.Entry<String, Map<String, String>> entry : partitionOverrideMap.entrySet()) {
+      if (entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(ClusterMapUtils.READ_WRITE_STR)) {
+        writableInOverrideMap.add(entry.getKey());
+      }
+    }
+    // Get the writable partitions in InstanceConfig(PartitionLayout)
+    List<PartitionId> writableInLayout = testPartitionLayout.getPartitionLayout().getWritablePartitions(null);
+    Set<String> writableInInstanceConfig = new HashSet<>();
+    writableInLayout.forEach(k -> writableInInstanceConfig.add(k.toPathString()));
+
     if (overrideEnabled) {
       // Verify clustermap uses partition override for initialization
-      Set<String> writableInOverrideMap = new HashSet<>();
-      for (Map.Entry<String, Map<String, String>> entry : partitionOverrideMap.entrySet()) {
-        if (entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(ClusterMapUtils.READ_WRITE_STR)) {
-          writableInOverrideMap.add(entry.getKey());
-        }
-      }
-      Pair<Set<String>, Set<String>> writablePartitionsInTwoPlaces = getWritablePartitions();
-      Set<String> writableInClusterManager = writablePartitionsInTwoPlaces.getSecond();
+      Set<String> writableInClusterManager = getWritablePartitions().getSecond();
       assertEquals("Mismatch in writable partitions during initialization", writableInOverrideMap,
           writableInClusterManager);
+      // Ensure clustermap ignores the InstanceConfig when override is enabled.
+      assertFalse(
+          "Writable partitions in ClusterManager should not equal to those in InstanceConfigs when override is enabled",
+          writableInClusterManager.equals(writableInInstanceConfig));
 
       // Verify writable partitions in clustermap remain unchanged when instanceConfig changes in Helix cluster
       AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds(null).get(0);
@@ -528,6 +541,30 @@ public class HelixClusterManagerTest {
       assertEquals("Mismatch in instanceTriggerCounter", countVal + 1, instanceTriggerCounter.getCount());
       writableInClusterManager = getWritablePartitions().getSecond();
       assertEquals("Mismatch in writable partitions when instanceConfig changes", writableInOverrideMap,
+          writableInClusterManager);
+    } else {
+      // Verify clustermap uses instanceConfig for initialization when override map is non-empty but disabled.
+      Set<String> writableInClusterManager = getWritablePartitions().getSecond();
+      assertEquals("Mismatch in writable partitions during initialization", writableInInstanceConfig,
+          writableInClusterManager);
+      // Ensure clustermap ignores partition override map when override is disabled.
+      assertFalse(
+          "Writable partitions in ClusterManager should not equal to those in OverrideMap when override is disabled",
+          writableInClusterManager.equals(writableInOverrideMap));
+
+      // Verify partition state in clustermap is changed when instanceConfig changes in Helix cluster.
+      // This is to ensure partition override doesn't take any effect when it is disabled.
+      AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds(null).get(0);
+      List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
+      helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.SealedState, true, false);
+      assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
+          clusterManager.getWritablePartitionIds(null).contains(partition));
+      assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
+          partition.getPartitionState());
+      // Ensure that after instanceConfig changes, the writable partitions in clusterManager match those in InstanceConfig
+      writableInInstanceConfig.remove(partition.toPathString());
+      writableInClusterManager = getWritablePartitions().getSecond();
+      assertEquals("Mismatch in writable partitions during initialization", writableInInstanceConfig,
           writableInClusterManager);
     }
   }
