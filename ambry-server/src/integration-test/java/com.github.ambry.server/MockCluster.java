@@ -13,6 +13,8 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
@@ -382,19 +384,19 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobCreated(String blobId, BlobProperties blobProperties, String accountName, String containerName,
+  public void onBlobCreated(String blobId, BlobProperties blobProperties, Account account, Container container,
       NotificationBlobType notificationBlobType) {
     // ignore
   }
 
   @Override
-  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, String accountName,
-      String containerName) {
+  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, Account account,
+      Container container) {
     // ignore
   }
 
   @Override
-  public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
+  public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
     // ignore
   }
 

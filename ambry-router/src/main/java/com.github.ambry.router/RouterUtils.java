@@ -108,18 +108,15 @@ class RouterUtils {
   }
 
   /**
-   * Return accountName and containerName in a {@link Pair}.
+   * Return {@link Account} and {@link Container} in a {@link Pair}.
    * @param accountService the accountService to translate accountId to name.
    * @param accountId the accountId to translate.
-   * @param accountId the containerId to translate.
-   * @return accountName and containerName in a {@link Pair}.
+   * @return {@link Account} and {@link Container} in a {@link Pair}.
    */
-  static Pair<String, String> getAccountContainerName(AccountService accountService, short accountId,
+  static Pair<Account, Container> getAccountContainer(AccountService accountService, short accountId,
       short containerId) {
     Account account = accountService.getAccountById(accountId);
-    String accountName = account == null ? null : account.getName();
     Container container = account == null ? null : account.getContainerById(containerId);
-    String containerName = container == null ? null : container.getName();
-    return new Pair<>(accountName, containerName);
+    return new Pair<>(account, container);
   }
 }

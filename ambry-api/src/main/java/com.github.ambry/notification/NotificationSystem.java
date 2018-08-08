@@ -13,6 +13,8 @@
  */
 package com.github.ambry.notification;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.store.MessageInfo;
 import java.io.Closeable;
@@ -29,11 +31,11 @@ public interface NotificationSystem extends Closeable {
    * Notifies the underlying system when a new blob is created
    * @param blobId The id of the blob that was created
    * @param blobProperties The blob properties for the blob
-   * @param accountName The account name for the blob
-   * @param containerName The container name for the blob
+   * @param account The {@link Account} for the blob
+   * @param container The {@link Container} for the blob
    * @param notificationBlobType The {@link NotificationBlobType} of this blob.
    */
-  void onBlobCreated(String blobId, BlobProperties blobProperties, String accountName, String containerName,
+  void onBlobCreated(String blobId, BlobProperties blobProperties, Account account, Container container,
       NotificationBlobType notificationBlobType);
 
   /**
@@ -41,19 +43,19 @@ public interface NotificationSystem extends Closeable {
    * @param blobId The id of the blob whose ttl was updated
    * @param serviceId The service ID of the service that updated the tll of the blob. This can be null if unknown
    * @param expiresAtMs The new expiry time (in ms) of the blob
-   * @param accountName The account name for the blob
-   * @param containerName The container name for the blob
+   * @param account The {@link Account} for the blob
+   * @param container The {@link Container} for the blob
    */
-  void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, String accountName, String containerName);
+  void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, Account account, Container container);
 
   /**
    * Notifies the underlying system when an existing blob is deleted
    * @param blobId The id of the blob that was deleted
    * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
-   * @param accountName The account name for the blob
-   * @param containerName The container name for the blob
+   * @param account The {@link Account} for the blob
+   * @param container The {@link Container} for the blob
    */
-  void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName);
+  void onBlobDeleted(String blobId, String serviceId, Account account, Container container);
 
   /**
    * Notifies the underlying system when a blob is replicated to a node
