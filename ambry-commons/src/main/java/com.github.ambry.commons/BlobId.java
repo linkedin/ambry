@@ -463,6 +463,7 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V2:
       case BLOB_ID_V3:
       case BLOB_ID_V4:
+      case BLOB_ID_V5:
         sb.append(":").append(type);
         sb.append(":").append(datacenterId);
         sb.append(":").append(accountId);
