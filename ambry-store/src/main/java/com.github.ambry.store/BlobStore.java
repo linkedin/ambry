@@ -497,6 +497,7 @@ class BlobStore implements Store {
     checkStarted();
     final Timer.Context context = metrics.ttlUpdateResponse.time();
     try {
+      List<IndexValue> indexValuesToUpdate = new ArrayList<>();
       List<MessageInfo> infoList = messageSetToUpdate.getMessageSetInfo();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       for (MessageInfo info : infoList) {
@@ -533,6 +534,7 @@ class BlobStore implements Store {
                   + info.getOperationTimeMs() + ". ExpiresAtMs: " + value.getExpiresAtMs(),
               StoreErrorCodes.Update_Not_Allowed);
         }
+        indexValuesToUpdate.add(value);
       }
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
@@ -556,11 +558,12 @@ class BlobStore implements Store {
         Offset endOffsetOfLastMessage = log.getEndOffset();
         messageSetToUpdate.writeTo(log);
         logger.trace("Store : {} ttl update mark written to log", dataDir);
+        int correspondingPutIndex = 0;
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-          index.markAsPermanent(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
+          IndexValue ttlUpdateValue = index.markAsPermanent(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
-          // TODO: handle this in BlobStoreStats
+          blobStoreStats.handleNewTtlUpdateEntry(ttlUpdateValue, indexValuesToUpdate.get(correspondingPutIndex++));
         }
         logger.trace("Store : {} ttl update has been marked in the index ", dataDir);
       }

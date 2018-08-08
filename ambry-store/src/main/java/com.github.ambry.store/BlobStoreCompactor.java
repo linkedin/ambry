@@ -768,7 +768,8 @@ class BlobStoreCompactor {
       throws StoreException {
     IndexValue putValue = srcIndex.findKey(key, new FileSpan(srcIndex.getStartOffset(), updateValue.getOffset()),
         EnumSet.of(PersistentIndex.IndexEntryType.PUT));
-    // in a non multi valued segment, there can only be PUTs and DELETEs in the same segment
+    // in a non multi valued segment, if putValue is not found directly from the index, check if the PUT and DELETE
+    // are the same segment so that the PUT entry can be constructed from the DELETE entry
     if (putValue == null && updateValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
       putValue = getPutValueFromDeleteEntry(key, updateValue, indexSegmentOfUpdateValue);
     }
@@ -776,7 +777,7 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Gets the {@link IndexValue} for the PUT from the {@link #srcIndex} (if it exists)
+   * Gets the {@link IndexValue} for the PUT using info in the {@code deleteValue)
    * @param key the {@link StoreKey} whose PUT is required
    * @param deleteValue the delete {@link IndexValue} associated with the same {@code key}
    * @param indexSegmentOfUpdateValue the {@link IndexSegment} that {@code deleteValue} belongs to
@@ -859,7 +860,7 @@ class BlobStoreCompactor {
    * Adds entries related to {@code entry} that are in the same {@code indexSegment} including {@code entry}
    * @param entries the list of {@link IndexEntry} to add to.
    * @param indexSegment the {@link IndexSegment} to fetch values from.
-   * @param entry the {@link IndexEntry} for a DELETE that is under processing
+   * @param entry the {@link IndexEntry} that is under processing
    * @throws StoreException if there are problems using the index
    */
   private void addAllEntriesForKeyInSegment(List<IndexEntry> entries, IndexSegment indexSegment, IndexEntry entry)

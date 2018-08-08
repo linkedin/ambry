@@ -446,6 +446,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           StoreErrorCodes.IOError);
     }
     addPutEntriesForDelete(indexSegment.getStartOffset().getOffset(), indexEntries);
+    indexEntries.sort(KEY_OFFSET_COMPARATOR);
     updateExpiryTimeForAllPuts(indexEntries);
     return indexEntries;
   }
@@ -467,7 +468,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       IndexValue value = entry.getValue();
       if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
         if (value.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
-            && value.getOriginalMessageOffset() != value.getOffset().getOffset()
+            && value.getOriginalMessageOffset() < value.getOffset().getOffset()
             && value.getOriginalMessageOffset() >= indexSegmentStartOffset && !seenPuts.contains(entry.getKey())) {
           // We need to find the original put (if it has not already been processed)
           IndexValue originalPutValue = getPutRecordForDeletedKey(entry.getKey(), value);
@@ -478,7 +479,6 @@ class BlobStoreStats implements StoreStats, Closeable {
       }
     }
     indexEntries.addAll(newEntries);
-    indexEntries.sort(KEY_OFFSET_COMPARATOR);
   }
 
   /**
@@ -501,7 +501,8 @@ class BlobStoreStats implements StoreStats, Closeable {
    * same {@link IndexSegment}.
    * @param indexSegment the {@link IndexSegment} where the entries came from
    * @param indexEntries a {@link List} of unfiltered {@link IndexEntry} whose elements could be valid or invalid. This
-   *                     should contain all entries for a particular key in the {@link IndexSegment}.
+   *                     should contain all entries for a particular key in the {@link IndexSegment} and should be in
+   *                     the ascending order of key,offset.
    * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
    * @param deletedKeys a {@link Map} of deleted keys to operation time. Used to determine whether a PUT is deleted
    * @return a {@link List} of valid {@link IndexValue}. The returned list can have multiple entries for the same key
@@ -1014,7 +1015,8 @@ class BlobStoreStats implements StoreStats, Closeable {
      * log segment buckets. The function is called in reverse chronological order. That is, newest {@link IndexSegment}
      * to older ones.
      * @param indexSegment the {@link IndexSegment} where the index entries belong to
-     * @param indexEntries a {@link List} of {@link IndexEntry} to be processed
+     * @param indexEntries a {@link List} of {@link IndexEntry} to be processed. This should contain all entries for a
+     *                    particular key in the {@link IndexSegment} and should be in the ascending order of key,offset.
      * @param deletedKeys a {@link Map} of processed deleted keys to their corresponding deletion time in ms
      * @throws StoreException
      */
