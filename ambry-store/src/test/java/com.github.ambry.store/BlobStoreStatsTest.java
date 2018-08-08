@@ -70,10 +70,9 @@ public class BlobStoreStatsTest {
    * Creates a temporary directory and sets up some test state.
    * @throws IOException
    */
-  public BlobStoreStatsTest(boolean isLogSegmented, boolean isBucketingEnabled)
-      throws InterruptedException, IOException, StoreException {
+  public BlobStoreStatsTest(boolean isLogSegmented, boolean isBucketingEnabled) throws IOException, StoreException {
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + UtilsTest.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir, false);
+    state = new CuratedLogIndexState(isLogSegmented, tempDir, true);
     bucketingEnabled = isBucketingEnabled;
     this.isLogSegmented = isLogSegmented;
   }
@@ -97,6 +96,7 @@ public class BlobStoreStatsTest {
    * Releases all resources and deletes the temporary directory.
    * @throws InterruptedException
    * @throws IOException
+   * @throws StoreException
    */
   @After
   public void cleanup() throws InterruptedException, IOException, StoreException {
@@ -135,12 +135,10 @@ public class BlobStoreStatsTest {
 
   /**
    * Basic test to verify reported valid size information per container by BlobStoreStats.
-   * @throws InterruptedException
    * @throws StoreException
-   * @throws IOException
    */
   @Test
-  public void testContainerValidDataSize() throws InterruptedException, StoreException, IOException {
+  public void testContainerValidDataSize() throws StoreException {
     assumeTrue(!bucketingEnabled);
     BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
@@ -152,12 +150,10 @@ public class BlobStoreStatsTest {
 
   /**
    * Basic test to verify reported valid size information per log segment by BlobStoreStats.
-   * @throws InterruptedException
    * @throws StoreException
-   * @throws IOException
    */
   @Test
-  public void testLogSegmentValidDataSize() throws InterruptedException, StoreException, IOException {
+  public void testLogSegmentValidDataSize() throws StoreException {
     assumeTrue(!bucketingEnabled);
     BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
     long currentTimeInMs = state.time.milliseconds();
@@ -174,12 +170,11 @@ public class BlobStoreStatsTest {
    * 2. Add new puts.
    * 3. Verify reported stats and record the total valid size after new puts are added.
    * 4. Verify the delta of total valid size prior to adding the new puts and after matches with the expected delta.
-   * @throws InterruptedException
    * @throws StoreException
    * @throws IOException
    */
   @Test
-  public void testValidDataSizeAfterPuts() throws InterruptedException, StoreException, IOException {
+  public void testValidDataSizeAfterPuts() throws StoreException, IOException {
     assumeTrue(!bucketingEnabled);
     BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
     // advance time to the next second for deletes/expiration to take effect
@@ -212,12 +207,11 @@ public class BlobStoreStatsTest {
    * 4. Advance time to let the expiration take effect.
    * 5. Verify reported stats and record the total valid size after new puts are expired.
    * 6. Verify the reported total valid size difference before the new puts and after.
-   * @throws InterruptedException
    * @throws StoreException
    * @throws IOException
    */
   @Test
-  public void testValidDataSizeAfterExpiration() throws InterruptedException, StoreException, IOException {
+  public void testValidDataSizeAfterExpiration() throws StoreException, IOException {
     assumeTrue(!bucketingEnabled);
     BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
     // advance time to the next second for previous deletes/expiration to take effect
@@ -270,12 +264,11 @@ public class BlobStoreStatsTest {
    * 4. Verify reported stats after the deletes but at a time point before the deletes are relevant.
    * 5. Verify reported stats and record the total valid size after the deletes.
    * 6. Verify the delta of total valid size prior to the new deletes and after matches with the expected delta.
-   * @throws InterruptedException
    * @throws StoreException
    * @throws IOException
    */
   @Test
-  public void testValidDataSizeAfterDeletes() throws InterruptedException, StoreException, IOException {
+  public void testValidDataSizeAfterDeletes() throws StoreException, IOException {
     assumeTrue(!bucketingEnabled);
     BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
     int numEntries =
@@ -599,7 +592,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + UtilsTest.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir, false, false, false);
+    state = new CuratedLogIndexState(isLogSegmented, tempDir, false, false, true);
     int bucketCount = bucketingEnabled ? 1 : 0;
     BlobStoreStats blobStoreStats = setupBlobStoreStats(bucketCount, 0);
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
@@ -618,7 +611,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + UtilsTest.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir, false, false, false);
+    state = new CuratedLogIndexState(isLogSegmented, tempDir, false, false, true);
     MockThrottler mockThrottler = new MockThrottler(new CountDownLatch(0), new CountDownLatch(0));
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     int bucketCount = 50;
@@ -688,10 +681,9 @@ public class BlobStoreStatsTest {
 
   /**
    * Test to verify that once the {@link BlobStoreStats} is closed (or closing), requests throw {@link StoreException}.
-   * @throws InterruptedException
    */
   @Test(timeout = 1000)
-  public void testRequestOnClosing() throws InterruptedException {
+  public void testRequestOnClosing() {
     int bucketCount = bucketingEnabled ? 1 : 0;
     BlobStoreStats blobStoreStats = setupBlobStoreStats(bucketCount, 0);
     blobStoreStats.close();
@@ -850,7 +842,7 @@ public class BlobStoreStatsTest {
   /**
    * Advance the time to the next nearest second. That is, 1 sec to 2 sec or 1001 ms to 2000ms.
    */
-  private void advanceTimeToNextSecond() throws InterruptedException {
+  private void advanceTimeToNextSecond() {
     long currentTimeInMs = state.time.milliseconds();
     state.advanceTime(Time.MsPerSec - currentTimeInMs % Time.MsPerSec);
   }
@@ -962,7 +954,8 @@ public class BlobStoreStatsTest {
               deleteAndExpirationRefTimeInMs, null);
       for (IndexEntry indexEntry : validEntries) {
         IndexValue indexValue = indexEntry.getValue();
-        if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+        if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index) && !indexValue.isFlagSet(
+            IndexValue.Flags.Ttl_Update_Index)) {
           updateNestedMapHelper(containerValidSizeMap, String.valueOf(indexValue.getAccountId()),
               String.valueOf(indexValue.getContainerId()), indexValue.getSize());
         }

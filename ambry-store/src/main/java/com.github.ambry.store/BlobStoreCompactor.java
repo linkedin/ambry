@@ -698,22 +698,28 @@ class BlobStoreCompactor {
     for (IndexEntry indexEntry : allIndexEntries) {
       IndexValue value = indexEntry.getValue();
       if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-        // DELETE entry. Always valid.
-        // In PersistentIndex.markAsDeleted(), the expiry time of the put/ttl update value is copied into the
-        // delete value. So it is safe to check for isExpired() on the delete value.
-        if (deletesInEffect || srcIndex.isExpired(value)) {
-          validEntries.add(indexEntry);
-          // still have to evaluate whether the TTL update has to be copied
-          NavigableSet<IndexValue> values = indexSegment.find(indexEntry.getKey());
-          IndexValue secondVal = values.lower(values.last());
-          if (secondVal != null && secondVal.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && isTtlUpdateEntryValid(
-              indexEntry.getKey(), indexSegment.getStartOffset())) {
-            validEntries.add(new IndexEntry(indexEntry.getKey(), secondVal));
+        IndexValue putValue = getPutValueFromSrc(indexEntry.getKey(), value, indexSegment);
+        if (putValue != null) {
+          // In PersistentIndex.markAsDeleted(), the expiry time of the put/ttl update value is copied into the
+          // delete value. So it is safe to check for isExpired() on the delete value.
+          if (deletesInEffect || srcIndex.isExpired(value)) {
+            // still have to evaluate whether the TTL update has to be copied
+            NavigableSet<IndexValue> values = indexSegment.find(indexEntry.getKey());
+            IndexValue secondVal = values.lower(values.last());
+            if (secondVal != null && secondVal.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && isTtlUpdateEntryValid(
+                indexEntry.getKey(), indexSegment.getStartOffset())) {
+              validEntries.add(new IndexEntry(indexEntry.getKey(), secondVal));
+            }
+            // DELETE entry. Always valid.
+            validEntries.add(indexEntry);
+          } else {
+            // if this delete cannot be counted and there is a corresponding unexpired PUT/TTL update entry in the same
+            // index segment, we will need to add it.
+            addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
           }
         } else {
-          // if this delete cannot be counted and there is a corresponding unexpired PUT/TTL update entry in the same
-          // index segment, we will need to add it.
-          addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
+          // DELETE entry. Always valid.
+          validEntries.add(indexEntry);
         }
       } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
         // if IndexSegment::getIndexEntriesSince() returns a TTL update entry, it is because it is the ONLY entry i.e.
@@ -748,6 +754,52 @@ class BlobStoreCompactor {
       }
     }
     return validEntries;
+  }
+
+  /**
+   * Gets the {@link IndexValue} for the PUT from the {@link #srcIndex} (if it exists)
+   * @param key the {@link StoreKey} whose PUT is required
+   * @param updateValue the update (TTL update/delete) {@link IndexValue} associated with the same {@code key}
+   * @param indexSegmentOfUpdateValue the {@link IndexSegment} that {@code updateValue} belongs to
+   * @return the {@link IndexValue} for the PUT in the {@link #srcIndex} (if it exists)
+   * @throws StoreException if there are problems with the index
+   */
+  private IndexValue getPutValueFromSrc(StoreKey key, IndexValue updateValue, IndexSegment indexSegmentOfUpdateValue)
+      throws StoreException {
+    IndexValue putValue = srcIndex.findKey(key, new FileSpan(srcIndex.getStartOffset(), updateValue.getOffset()),
+        EnumSet.of(PersistentIndex.IndexEntryType.PUT));
+    // in a non multi valued segment, if putValue is not found directly from the index, check if the PUT and DELETE
+    // are the same segment so that the PUT entry can be constructed from the DELETE entry
+    if (putValue == null && updateValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+      putValue = getPutValueFromDeleteEntry(key, updateValue, indexSegmentOfUpdateValue);
+    }
+    return putValue;
+  }
+
+  /**
+   * Gets the {@link IndexValue} for the PUT using info in the {@code deleteValue)
+   * @param key the {@link StoreKey} whose PUT is required
+   * @param deleteValue the delete {@link IndexValue} associated with the same {@code key}
+   * @param indexSegmentOfUpdateValue the {@link IndexSegment} that {@code deleteValue} belongs to
+   * @return the {@link IndexValue} for the PUT in the {@link #srcIndex} (if it exists)
+   */
+  private IndexValue getPutValueFromDeleteEntry(StoreKey key, IndexValue deleteValue,
+      IndexSegment indexSegmentOfUpdateValue) {
+    // TODO: find a way to test this?
+    IndexValue putValue = null;
+    long putRecordOffset = deleteValue.getOriginalMessageOffset();
+    if (putRecordOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && putRecordOffset != deleteValue.getOffset()
+        .getOffset() && indexSegmentOfUpdateValue.getStartOffset().getOffset() <= putRecordOffset) {
+      try (BlobReadOptions options = srcIndex.getBlobReadInfo(key, EnumSet.allOf(StoreGetOptions.class))) {
+        Offset offset = new Offset(indexSegmentOfUpdateValue.getStartOffset().getName(), options.getOffset());
+        MessageInfo info = options.getMessageInfo();
+        putValue = new IndexValue(info.getSize(), offset, info.getExpirationTimeInMs(), info.getOperationTimeMs(),
+            info.getAccountId(), info.getContainerId());
+      } catch (StoreException e) {
+        logger.error("Fetching PUT index entry of {} in {} failed", key, indexSegmentOfUpdateValue.getStartOffset());
+      }
+    }
+    return putValue;
   }
 
   /**
@@ -808,7 +860,7 @@ class BlobStoreCompactor {
    * Adds entries related to {@code entry} that are in the same {@code indexSegment} including {@code entry}
    * @param entries the list of {@link IndexEntry} to add to.
    * @param indexSegment the {@link IndexSegment} to fetch values from.
-   * @param entry the {@link IndexEntry} for a DELETE that is under processing
+   * @param entry the {@link IndexEntry} that is under processing
    * @throws StoreException if there are problems using the index
    */
   private void addAllEntriesForKeyInSegment(List<IndexEntry> entries, IndexSegment indexSegment, IndexEntry entry)
@@ -820,26 +872,12 @@ class BlobStoreCompactor {
       // we are using a multivalued index segment. Any related values will be in this set
       values.forEach(valueFromSeg -> entries.add(new IndexEntry(entry.getKey(), valueFromSeg)));
     } else {
-      // TODO: find a way to test this?
       // in a non multi valued segment, there can only be PUTs and DELETEs in the same segment
       entries.add(entry);
       if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
-        // this approach will fetch the PUT record.
-        IndexValue value = entry.getValue();
-        long putRecordOffset = value.getOriginalMessageOffset();
-        if (putRecordOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && putRecordOffset != value.getOffset()
-            .getOffset() && indexSegment.getStartOffset().getOffset() <= putRecordOffset) {
-          try (BlobReadOptions options = srcIndex.getBlobReadInfo(entry.getKey(),
-              EnumSet.allOf(StoreGetOptions.class))) {
-            Offset offset = new Offset(indexSegment.getStartOffset().getName(), options.getOffset());
-            MessageInfo info = options.getMessageInfo();
-            IndexValue putValue =
-                new IndexValue(info.getSize(), offset, info.getExpirationTimeInMs(), info.getOperationTimeMs(),
-                    info.getAccountId(), info.getContainerId());
-            entries.add(new IndexEntry(entry.getKey(), putValue));
-          } catch (StoreException e) {
-            logger.error("Fetching PUT index entry of {} in {} failed", entry.getKey(), indexSegment.getStartOffset());
-          }
+        IndexValue putValue = getPutValueFromDeleteEntry(entry.getKey(), entry.getValue(), indexSegment);
+        if (putValue != null) {
+          entries.add(new IndexEntry(entry.getKey(), putValue));
         }
       }
     }

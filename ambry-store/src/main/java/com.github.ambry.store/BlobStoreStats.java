@@ -21,12 +21,16 @@ import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Queue;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -60,6 +64,8 @@ class BlobStoreStats implements StoreStats, Closeable {
   private static final int SUBTRACT = -1;
   private static final long REF_TIME_OUT_OF_BOUNDS = -1;
   private static final Logger logger = LoggerFactory.getLogger(BlobStoreStats.class);
+  private static final Comparator<IndexEntry> KEY_OFFSET_COMPARATOR =
+      Comparator.comparing(IndexEntry::getKey).thenComparing(IndexEntry::getValue);
 
   private final String storeId;
   private final PersistentIndex index;
@@ -166,6 +172,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    * 2. PUT expiring at t_exp but t_ref < t_exp
    * 3. PUT with corresponding DELETE at time t_delete but t_ref < t_delete
    * 4. DELETE record
+   * 5. TTL update record whose PUT record is still valid or is in a different log segment to the TTL update record
    * For this API, t_ref is specified by the given {@link TimeRange}.
    * @param timeRange the reference {@link TimeRange} at which the data is requested. Defines both the reference time
    *                  and the acceptable resolution.
@@ -295,7 +302,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   void handleNewPutEntry(IndexValue putValue) {
     if (recentEntryQueueEnabled) {
-      recentEntryQueue.offer(new Pair<IndexValue, IndexValue>(putValue, null));
+      recentEntryQueue.offer(new Pair<>(putValue, null));
       metrics.statsRecentEntryQueueSize.update(queueEntryCount.incrementAndGet());
     }
   }
@@ -308,6 +315,18 @@ class BlobStoreStats implements StoreStats, Closeable {
   void handleNewDeleteEntry(IndexValue deleteValue, IndexValue originalPutValue) {
     if (recentEntryQueueEnabled) {
       recentEntryQueue.offer(new Pair<>(deleteValue, originalPutValue));
+      metrics.statsRecentEntryQueueSize.update(queueEntryCount.incrementAndGet());
+    }
+  }
+
+  /**
+   * Function that handles new TTL updates after a scan to keep the current {@link ScanResults} relevant.
+   * @param ttlUpdateValue the {@link IndexValue} of the new TTL update
+   * @param originalPutValue the {@link IndexValue} of the original PUT that is getting updated
+   */
+  void handleNewTtlUpdateEntry(IndexValue ttlUpdateValue, IndexValue originalPutValue) {
+    if (recentEntryQueueEnabled) {
+      recentEntryQueue.offer(new Pair<>(ttlUpdateValue, originalPutValue));
       metrics.statsRecentEntryQueueSize.update(queueEntryCount.incrementAndGet());
     }
   }
@@ -350,8 +369,9 @@ class BlobStoreStats implements StoreStats, Closeable {
           getValidIndexEntries(indexSegment, getIndexEntries(indexSegment), referenceTimeInMs, deletedKeys);
       for (IndexEntry indexEntry : validIndexEntries) {
         IndexValue indexValue = indexEntry.getValue();
-        if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-          // delete records does not count towards valid data size for quota (containers)
+        if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !indexValue.isFlagSet(
+            IndexValue.Flags.Delete_Index)) {
+          // delete and TTL update records does not count towards valid data size for quota (containers)
           updateNestedMapHelper(validDataSizePerContainer, String.valueOf(indexValue.getAccountId()),
               String.valueOf(indexValue.getContainerId()), indexValue.getSize());
         }
@@ -407,16 +427,17 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   /**
-   * Get all {@link IndexEntry} in a given {@link IndexSegment}.
+   * Get all {@link IndexEntry} in a given {@link IndexSegment}. There may be multiple entries for the same key
    * @param indexSegment the {@link IndexSegment} to fetch the index entries from
-   * @return a {@link List} of all {@link IndexEntry} in the given {@link IndexSegment}
+   * @return a {@link List} of all {@link IndexEntry} in the given {@link IndexSegment}. The returned list can have
+   * multiple entries for the same key and is sorted in the ascending order of key,offset
    * @throws StoreException
    */
   private List<IndexEntry> getIndexEntries(IndexSegment indexSegment) throws StoreException {
     List<IndexEntry> indexEntries = new ArrayList<>();
     try {
       indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), indexEntries, new AtomicLong(0),
-          true);
+          false);
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID,
           indexEntries.size());
     } catch (IOException e) {
@@ -424,23 +445,76 @@ class BlobStoreStats implements StoreStats, Closeable {
           String.format("I/O exception while getting entries from index segment for store %s", storeId), e,
           StoreErrorCodes.IOError);
     }
+    addPutEntriesForDelete(indexSegment.getStartOffset().getOffset(), indexEntries);
+    indexEntries.sort(KEY_OFFSET_COMPARATOR);
+    updateExpiryTimeForAllPuts(indexEntries);
     return indexEntries;
+  }
+
+  /**
+   * Adds put entries for any delete entries that may have squashed put entries in the same segment. Requires that a
+   * put entry (if it exists) should occur before a delete entry for the same key in {@code indexEntries}
+   * @param indexSegmentStartOffset the start offset of the {@link IndexSegment} from which {@code indexEntries} was
+   *                                obtained
+   * @param indexEntries the list of {@link IndexEntry} from the same {@link IndexSegment}. This list will be sorted
+   *                     in the ascending order of key,offset
+   * @throws StoreException if there are problems accessing the index
+   */
+  private void addPutEntriesForDelete(long indexSegmentStartOffset, List<IndexEntry> indexEntries)
+      throws StoreException {
+    Set<StoreKey> seenPuts = new HashSet<>();
+    List<IndexEntry> newEntries = new ArrayList<>();
+    for (IndexEntry entry : indexEntries) {
+      IndexValue value = entry.getValue();
+      if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+        if (value.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
+            && value.getOriginalMessageOffset() < value.getOffset().getOffset()
+            && value.getOriginalMessageOffset() >= indexSegmentStartOffset && !seenPuts.contains(entry.getKey())) {
+          // We need to find the original put (if it has not already been processed)
+          IndexValue originalPutValue = getPutRecordForDeletedKey(entry.getKey(), value);
+          newEntries.add(new IndexEntry(entry.getKey(), originalPutValue));
+        }
+      } else if (!entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        seenPuts.add(entry.getKey());
+      }
+    }
+    indexEntries.addAll(newEntries);
+  }
+
+  /**
+   * Updates the expiry time (ms) for all PUT index values
+   * @param indexEntries the {@link IndexEntry} list to update the expiry time (ms) for
+   * @throws StoreException if there are problems interacting with the index
+   */
+  private void updateExpiryTimeForAllPuts(List<IndexEntry> indexEntries) throws StoreException {
+    for (IndexEntry entry : indexEntries) {
+      if (!entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !entry.getValue()
+          .isFlagSet(IndexValue.Flags.Delete_Index)) {
+        long expiryTimeMs = index.findKey(entry.getKey()).getExpiresAtMs();
+        entry.getValue().setExpiresAtMs(expiryTimeMs);
+      }
+    }
   }
 
   /**
    * Get a {@link List} of valid {@link IndexValue}s from a given {@link List} of {@link IndexEntry} that belong to the
    * same {@link IndexSegment}.
    * @param indexSegment the {@link IndexSegment} where the entries came from
-   * @param indexEntries a {@link List} of unfiltered {@link IndexEntry} whose elements could be valid or invalid
+   * @param indexEntries a {@link List} of unfiltered {@link IndexEntry} whose elements could be valid or invalid. This
+   *                     should contain all entries for a particular key in the {@link IndexSegment} and should be in
+   *                     the ascending order of key,offset.
    * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
    * @param deletedKeys a {@link Map} of deleted keys to operation time. Used to determine whether a PUT is deleted
-   * @return a {@link List} of valid {@link IndexValue}
+   * @return a {@link List} of valid {@link IndexValue}. The returned list can have multiple entries for the same key
+   * and is sorted in the descending order of key,offset
    * @throws StoreException
    */
   private List<IndexEntry> getValidIndexEntries(IndexSegment indexSegment, List<IndexEntry> indexEntries,
       long referenceTimeInMs, Map<StoreKey, Long> deletedKeys) throws StoreException {
     List<IndexEntry> validIndexEntries = new ArrayList<>();
-    for (IndexEntry indexEntry : indexEntries) {
+    ListIterator<IndexEntry> it = indexEntries.listIterator(indexEntries.size());
+    while (it.hasPrevious()) {
+      IndexEntry indexEntry = it.previous();
       IndexValue indexValue = indexEntry.getValue();
       if (indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
         // delete record is always valid
@@ -450,23 +524,55 @@ class BlobStoreStats implements StoreStats, Closeable {
               indexValue.getOperationTimeInMs() == Utils.Infinite_Time ? indexSegment.getLastModifiedTimeMs()
                   : indexValue.getOperationTimeInMs();
           deletedKeys.put(indexEntry.getKey(), operationTimeInMs);
-          if (indexValue.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
-              && indexValue.getOriginalMessageOffset() != indexValue.getOffset().getOffset()
-              && indexValue.getOriginalMessageOffset() >= indexSegment.getStartOffset().getOffset()
-              && operationTimeInMs >= referenceTimeInMs) {
-            // delete is not relevant yet and it's in the same index segment as the original put. We need to find the
-            // original put since it's still valid
-            IndexValue originalPutValue = getPutRecordForDeletedKey(indexEntry.getKey(), indexValue);
-            validIndexEntries.add(new IndexEntry(indexEntry.getKey(), originalPutValue));
-          }
         }
-      } else if (!isExpired(indexValue.getExpiresAtMs(), referenceTimeInMs) && (
-          !deletedKeys.containsKey(indexEntry.getKey()) || deletedKeys.get(indexEntry.getKey()) >= referenceTimeInMs)) {
+      } else if (indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        if (isTtlUpdateEntryValid(indexEntry.getKey(), indexValue, referenceTimeInMs, deletedKeys)) {
+          validIndexEntries.add(indexEntry);
+        }
+      } else if (isPutEntryValid(indexEntry.getKey(), indexValue, referenceTimeInMs, deletedKeys)) {
         // put record that is not deleted and not expired according to given reference times
         validIndexEntries.add(indexEntry);
       }
     }
     return validIndexEntries;
+  }
+
+  /**
+   * @param key the {@link StoreKey} to check
+   * @param ttlUpdateValue the {@link IndexValue} of the TTL update entry of {@code key}
+   * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
+   * @param deletedKeys a {@link Map} of deleted keys to operation time. Used to determine whether a PUT is deleted
+   * @return {@code true} if the ttl update entry is valid
+   * @throws StoreException if there are problems accessing the index
+   */
+  private boolean isTtlUpdateEntryValid(StoreKey key, IndexValue ttlUpdateValue, long referenceTimeInMs,
+      Map<StoreKey, Long> deletedKeys) throws StoreException {
+    FileSpan searchSpan = new FileSpan(index.getStartOffset(), ttlUpdateValue.getOffset());
+    IndexValue putValue = index.findKey(key, searchSpan, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
+    boolean valid = true;
+    if (putValue == null) {
+      // no put value so not valid
+      valid = false;
+    } else if (putValue.getOffset().getName().equals(ttlUpdateValue.getOffset().getName())) {
+      // can be invalid if it is in the same log segment and the put is invalid
+      valid = isPutEntryValid(key, putValue, referenceTimeInMs, deletedKeys);
+    }
+    // else, valid = true because a ttl update entry with a put in another log segment is considered valid as long as
+    // the put still exists (regardless of its validity)
+    return valid;
+  }
+
+  /**
+   * @param key the {@link StoreKey} to check
+   * @param putValue the {@link IndexValue} of the PUT of {@code key}
+   * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
+   * @param deletedKeys a {@link Map} of deleted keys to operation time. Used to determine whether a PUT is deleted
+   * @return {@code true} if the put entry is valid
+   */
+  private boolean isPutEntryValid(StoreKey key, IndexValue putValue, long referenceTimeInMs,
+      Map<StoreKey, Long> deletedKeys) {
+    return !isExpired(putValue.getExpiresAtMs(), referenceTimeInMs) && (!deletedKeys.containsKey(key)
+        || deletedKeys.get(key) >= referenceTimeInMs);
   }
 
   /**
@@ -498,9 +604,8 @@ class BlobStoreStats implements StoreStats, Closeable {
   private IndexValue getPutRecordForDeletedKey(StoreKey key, IndexValue deleteIndexValue) throws StoreException {
     BlobReadOptions originalPut = index.getBlobReadInfo(key, EnumSet.allOf(StoreGetOptions.class));
     Offset originalPutOffset = new Offset(originalPut.getLogSegmentName(), originalPut.getOffset());
-    return new IndexValue(originalPut.getMessageInfo().getSize(), originalPutOffset,
-        originalPut.getMessageInfo().getExpirationTimeInMs(), deleteIndexValue.getOperationTimeInMs(),
-        deleteIndexValue.getAccountId(), deleteIndexValue.getContainerId());
+    return new IndexValue(originalPut.getMessageInfo().getSize(), originalPutOffset, deleteIndexValue.getExpiresAtMs(),
+        deleteIndexValue.getOperationTimeInMs(), deleteIndexValue.getAccountId(), deleteIndexValue.getContainerId());
   }
 
   /**
@@ -617,6 +722,16 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   /**
+   * Helper function to process new TTL update entries and make appropriate updates to the given {@link ScanResults}.
+   * @param results the {@link ScanResults} to apply the updates to
+   * @param ttlUpdateValue the {@link IndexValue} of the new TTL update
+   * @param originalPutValue the {@link IndexValue} of the original PUT
+   */
+  private void processNewTtlUpdate(ScanResults results, IndexValue ttlUpdateValue, IndexValue originalPutValue) {
+    // TODO: future work to support online updates
+  }
+
+  /**
    * Process a {@link List} of valid {@link IndexEntry} based on forecast boundaries and populate corresponding
    * container buckets in the given {@link ScanResults}.
    * @param results the {@link ScanResults} to be populated
@@ -627,8 +742,9 @@ class BlobStoreStats implements StoreStats, Closeable {
       Map<StoreKey, Long> deletedKeys) {
     for (IndexEntry indexEntry : indexEntries) {
       IndexValue indexValue = indexEntry.getValue();
-      if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-        // delete records does not count towards valid data size for quota (containers)
+      if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !indexValue.isFlagSet(
+          IndexValue.Flags.Delete_Index)) {
+        // delete and TTL update records does not count towards valid data size for quota (containers)
         results.updateContainerBaseBucket(String.valueOf(indexValue.getAccountId()),
             String.valueOf(indexValue.getContainerId()), indexValue.getSize());
         long expOrDelTimeInMs = indexValue.getExpiresAtMs();
@@ -651,14 +767,14 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param results the {@link ScanResults} to be populated
    * @param indexEntries a {@link List} of valid {@link IndexEntry} to be processed
    * @param deletedKeys a {@link Map} of deleted keys to their corresponding deletion time in ms
+   * @throws StoreException if there are problems accessing the index
    */
   private void processEntriesForLogSegmentBucket(ScanResults results, List<IndexEntry> indexEntries,
-      Map<StoreKey, Long> deletedKeys) {
+      Map<StoreKey, Long> deletedKeys) throws StoreException {
     for (IndexEntry indexEntry : indexEntries) {
       IndexValue indexValue = indexEntry.getValue();
       results.updateLogSegmentBaseBucket(indexValue.getOffset().getName(), indexValue.getSize());
       if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-        // put records
         long expOrDelTimeInMs = indexValue.getExpiresAtMs();
         if (deletedKeys.containsKey(indexEntry.getKey())) {
           long deleteTimeInMs = deletedKeys.get(indexEntry.getKey());
@@ -666,7 +782,11 @@ class BlobStoreStats implements StoreStats, Closeable {
               expOrDelTimeInMs != Utils.Infinite_Time && expOrDelTimeInMs < deleteTimeInMs ? expOrDelTimeInMs
                   : deleteTimeInMs;
         }
-        handleLogSegmentBucketUpdate(results, indexValue, expOrDelTimeInMs, SUBTRACT);
+        if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) || !isTtlUpdateEntryValid(indexEntry.getKey(),
+            indexValue, expOrDelTimeInMs == Utils.Infinite_Time ? expOrDelTimeInMs : expOrDelTimeInMs + 1,
+            deletedKeys)) {
+          handleLogSegmentBucketUpdate(results, indexValue, expOrDelTimeInMs, SUBTRACT);
+        }
       }
     }
   }
@@ -721,6 +841,9 @@ class BlobStoreStats implements StoreStats, Closeable {
             if (newValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
               // new delete
               processNewDelete(currentScanResults, newValue, entry.getSecond());
+            } else if (newValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+              // new ttl update
+              processNewTtlUpdate(currentScanResults, newValue, entry.getSecond());
             } else {
               // new put
               processNewPut(currentScanResults, newValue);
@@ -847,41 +970,40 @@ class BlobStoreStats implements StoreStats, Closeable {
         }
         List<IndexEntry> indexEntries = getIndexEntries(indexSegment);
         forwardScanEntryCount += indexEntries.size();
+        Map<StoreKey, IndexValue> seenPuts = new HashMap<>();
         for (IndexEntry entry : indexEntries) {
           IndexValue indexValue = entry.getValue();
           if (indexValue.getOffset().compareTo(startOffset) >= 0 && indexValue.getOffset().compareTo(endOffset) < 0) {
             // index value is not yet processed and should be processed
-            if (indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-              // delete record
+            if (indexValue.isFlagSet(IndexValue.Flags.Delete_Index) || indexValue.isFlagSet(
+                IndexValue.Flags.Ttl_Update_Index)) {
               IndexValue originalPut;
               if (indexValue.getOriginalMessageOffset() == indexValue.getOffset().getOffset()) {
-                // delete record with no put record due to compaction and legacy bugs
+                // update record with no put record due to compaction and legacy bugs
                 originalPut = null;
-              } else if (indexValue.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
-                  && indexValue.getOriginalMessageOffset() >= indexSegment.getStartOffset().getOffset()) {
-                // delete and put are in the same index segment
-                originalPut = getPutRecordForDeletedKey(entry.getKey(), indexValue);
-                if (originalPut.getOffset().compareTo(startOffset) >= 0) {
-                  processNewPut(newScanResults, originalPut);
-                }
               } else {
-                // ordinary delete record
-                Offset previousIndexSegmentOffset = index.getIndexSegments().size() > 1 ? index.getIndexSegments()
-                    .lowerKey(indexSegment.getStartOffset()) : index.getStartOffset();
-                FileSpan searchSpan = new FileSpan(index.getStartOffset(), previousIndexSegmentOffset);
-                originalPut = index.findKey(entry.getKey(), searchSpan,
-                    EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
+                FileSpan searchSpan = new FileSpan(index.getStartOffset(), indexSegment.getStartOffset());
+                originalPut = seenPuts.get(entry.getKey());
+                if (originalPut == null) {
+                  originalPut =
+                      index.findKey(entry.getKey(), searchSpan, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
+                }
               }
               if (originalPut == null) {
                 newScanResults.updateLogSegmentBaseBucket(indexValue.getOffset().getName(), indexValue.getSize());
-              } else if (!originalPut.isFlagSet(IndexValue.Flags.Delete_Index)) {
-                // put exists and there are no multiple deletes
+              } else if (indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
                 processNewDelete(newScanResults, indexValue, originalPut);
+              } else if (indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+                processNewTtlUpdate(newScanResults, indexValue, originalPut);
               }
             } else {
               // put record
               processNewPut(newScanResults, indexValue);
             }
+          }
+          if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index) && !indexValue.isFlagSet(
+              IndexValue.Flags.Ttl_Update_Index)) {
+            seenPuts.put(entry.getKey(), entry.getValue());
           }
         }
       }
@@ -893,7 +1015,8 @@ class BlobStoreStats implements StoreStats, Closeable {
      * log segment buckets. The function is called in reverse chronological order. That is, newest {@link IndexSegment}
      * to older ones.
      * @param indexSegment the {@link IndexSegment} where the index entries belong to
-     * @param indexEntries a {@link List} of {@link IndexEntry} to be processed
+     * @param indexEntries a {@link List} of {@link IndexEntry} to be processed. This should contain all entries for a
+     *                    particular key in the {@link IndexSegment} and should be in the ascending order of key,offset.
      * @param deletedKeys a {@link Map} of processed deleted keys to their corresponding deletion time in ms
      * @throws StoreException
      */
