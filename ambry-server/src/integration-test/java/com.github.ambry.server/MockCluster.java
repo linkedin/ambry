@@ -382,17 +382,19 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobCreated(String blobId, BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
+  public void onBlobCreated(String blobId, BlobProperties blobProperties, String accountName, String containerName,
+      NotificationBlobType notificationBlobType) {
     // ignore
   }
 
   @Override
-  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs) {
+  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, String accountName,
+      String containerName) {
     // ignore
   }
 
   @Override
-  public void onBlobDeleted(String blobId, String serviceId) {
+  public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
     // ignore
   }
 

@@ -430,7 +430,7 @@ public class NonBlockingRouterTest {
     final Map<String, String> blobsThatAreDeleted = new HashMap<>();
     LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
       @Override
-      public void onBlobDeleted(String blobId, String serviceId) {
+      public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
         blobsThatAreDeleted.put(blobId, serviceId);
         deletesDoneLatch.countDown();
       }
@@ -500,7 +500,7 @@ public class NonBlockingRouterTest {
     final Map<String, String> blobsThatAreDeleted = new HashMap<>();
     LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
       @Override
-      public void onBlobDeleted(String blobId, String serviceId) {
+      public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
         blobsThatAreDeleted.put(blobId, serviceId);
         deletesDoneLatch.get().countDown();
       }
@@ -593,7 +593,7 @@ public class NonBlockingRouterTest {
     final AtomicReference<String> receivedDeleteServiceId = new AtomicReference<>();
     LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
       @Override
-      public void onBlobDeleted(String blobId, String serviceId) {
+      public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
         deletesInitiated.incrementAndGet();
         receivedDeleteServiceId.set(serviceId);
       }
@@ -808,9 +808,10 @@ public class NonBlockingRouterTest {
     testResponseDeserializationError(opHelper, networkClient, blobId);
 
     opHelper = new OperationHelper(OperationType.DELETE);
-    deleteManager = new DeleteManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
-        new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new RouterCallback(null, new ArrayList<BackgroundDeleteRequest>()), mockTime);
+    deleteManager =
+        new DeleteManager(mockClusterMap, mockResponseHandler, accountService, new LoggingNotificationSystem(),
+            new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+            new RouterCallback(null, new ArrayList<BackgroundDeleteRequest>()), mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.

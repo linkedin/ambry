@@ -14,6 +14,7 @@
 
 package com.github.ambry.router;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ReplicaId;
@@ -28,6 +29,7 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
 import java.util.ArrayList;
@@ -53,6 +55,7 @@ class TtlUpdateManager {
   private final NotificationSystem notificationSystem;
   private final Time time;
   private final ResponseHandler responseHandler;
+  private final AccountService accountService;
   private final NonBlockingRouterMetrics routerMetrics;
   private final RouterConfig routerConfig;
   private final Set<TtlUpdateOperation> ttlUpdateOperations = ConcurrentHashMap.newKeySet();
@@ -81,14 +84,16 @@ class TtlUpdateManager {
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param notificationSystem The {@link NotificationSystem} used for notifying ttl updates for blobs.
+   * @param accountService The {@link AccountService} used for account/container id and name mapping.
    * @param routerConfig The {@link RouterConfig} containing the configs for the TtlUpdateManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param time The {@link Time} instance to use.
    */
   TtlUpdateManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
-      RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time) {
+      AccountService accountService, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
+    this.accountService = accountService;
     this.notificationSystem = notificationSystem;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -226,7 +231,11 @@ class TtlUpdateManager {
   private void onComplete(TtlUpdateOperation op) {
     Exception e = op.getOperationException();
     if (e == null) {
-      notificationSystem.onBlobTtlUpdated(op.getBlobId().getID(), op.getServiceId(), op.getExpiresAtMs());
+      BlobId blobId = op.getBlobId();
+      Pair<String, String> accountContainerName =
+          RouterUtils.getAccountContainerName(accountService, blobId.getAccountId(), blobId.getContainerId());
+      notificationSystem.onBlobTtlUpdated(op.getBlobId().getID(), op.getServiceId(), op.getExpiresAtMs(),
+          accountContainerName.getFirst(), accountContainerName.getSecond());
     } else {
       routerMetrics.onUpdateBlobTtlError(e);
     }

@@ -159,7 +159,8 @@ class PutManager {
       FutureResult<String> futureResult, Callback<String> callback) {
     String partitionClass = getPartitionClass(blobProperties);
     PutOperation putOperation =
-        new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, notificationSystem, userMetaData,
+        new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, notificationSystem, accountService,
+            userMetaData,
             channel, futureResult, callback, routerCallback, chunkArrivalListener, kms, cryptoService, cryptoJobHandler,
             time, blobProperties, partitionClass);
     putOperations.add(putOperation);

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ReplicaId;
@@ -27,6 +28,7 @@ import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
 import java.util.Collections;
@@ -48,6 +50,7 @@ class DeleteManager {
   private final NotificationSystem notificationSystem;
   private final Time time;
   private final ResponseHandler responseHandler;
+  private final AccountService accountService;
   private final NonBlockingRouterMetrics routerMetrics;
   private final ClusterMap clusterMap;
   private final RouterConfig routerConfig;
@@ -76,16 +79,19 @@ class DeleteManager {
    * Creates a DeleteManager.
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
+   * @param accountService The {@link AccountService} used for account/container id and name mapping.
    * @param notificationSystem The {@link NotificationSystem} used for notifying blob deletions.
    * @param routerConfig The {@link RouterConfig} containing the configs for the DeleteManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param time The {@link Time} instance to use.
    */
-  DeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
-      RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, Time time) {
+  DeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, AccountService accountService,
+      NotificationSystem notificationSystem, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      RouterCallback routerCallback, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
+    this.accountService = accountService;
     this.notificationSystem = notificationSystem;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -209,7 +215,11 @@ class DeleteManager {
   void onComplete(DeleteOperation op) {
     Exception e = op.getOperationException();
     if (e == null) {
-      notificationSystem.onBlobDeleted(op.getBlobId().getID(), op.getServiceId());
+      BlobId blobId = op.getBlobId();
+      Pair<String, String> accountContainerName =
+          RouterUtils.getAccountContainerName(accountService, blobId.getAccountId(), blobId.getContainerId());
+      notificationSystem.onBlobDeleted(blobId.getID(), op.getServiceId(), accountContainerName.getFirst(),
+          accountContainerName.getSecond());
     } else {
       routerMetrics.onDeleteBlobError(e);
     }

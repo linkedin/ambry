@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -83,6 +84,7 @@ public class TtlUpdateManagerTest {
   private final List<String> blobIds = new ArrayList<>(BLOBS_COUNT);
   private final TtlUpdateNotificationSystem notificationSystem = new TtlUpdateNotificationSystem();
   private final int serverCount = serverLayout.getMockServers().size();
+  private final AccountService accountService = new InMemAccountService(true, false);
 
   /**
    * Sets up all required components including a blob.
@@ -109,7 +111,8 @@ public class TtlUpdateManagerTest {
       blobIds.add(blobId);
     }
     ttlUpdateManager =
-        new TtlUpdateManager(clusterMap, new ResponseHandler(clusterMap), notificationSystem, routerConfig, metrics,
+        new TtlUpdateManager(clusterMap, new ResponseHandler(clusterMap), notificationSystem, accountService,
+            routerConfig, metrics,
             time);
     networkClient = networkClientFactory.getNetworkClient();
   }
@@ -486,7 +489,8 @@ class TtlUpdateNotificationSystem extends LoggingNotificationSystem {
   private final AtomicReference<Boolean> mismatchedData = new AtomicReference<>(false);
 
   @Override
-  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs) {
+  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, String accountName,
+      String containerName) {
     updatesInitiated.incrementAndGet();
     if (receivedUpdateServiceId.get() == null) {
       receivedUpdateServiceId.set(serviceId);

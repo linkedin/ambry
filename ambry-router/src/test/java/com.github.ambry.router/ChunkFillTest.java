@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -150,7 +151,7 @@ public class ChunkFillTest {
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
-            putUserMetadata, putChannel, futureResult, null,
+            new InMemAccountService(true, false), putUserMetadata, putChannel, futureResult, null,
             new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
             null, null, null, new MockTime(), putBlobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
     op.startReadingFromChannel();
@@ -260,8 +261,8 @@ public class ChunkFillTest {
         new MockRouterCallback(networkClientFactory.getNetworkClient(), Collections.EMPTY_LIST);
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
-            putUserMetadata, putChannel, futureResult, null, routerCallback, null, kms, cryptoService, cryptoJobHandler,
-            time, putBlobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
+            new InMemAccountService(true, false), putUserMetadata, putChannel, futureResult, null, routerCallback, null,
+            kms, cryptoService, cryptoJobHandler, time, putBlobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
     op.startReadingFromChannel();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     compositeBuffers = new ByteBuffer[numChunks];
