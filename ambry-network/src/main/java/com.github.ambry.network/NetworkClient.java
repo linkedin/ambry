@@ -203,11 +203,15 @@ public class NetworkClient implements Closeable {
       long timeForWarmUp) {
     int expectedConnections = 0;
     logger.info("Connections warm up start.");
+    if (dataNodeIds.size() == 0) {
+      return 0;
+    }
+    int numberOfConnections = connectionWarmUpPercentagePerDataNode == 0 ? 0 : Math.max(1,
+        connectionWarmUpPercentagePerDataNode * (
+            dataNodeIds.get(0).getPortToConnectTo().getPortType() == PortType.PLAINTEXT
+                ? connectionTracker.getMaxConnectionsPerPortPlainText()
+                : connectionTracker.getMaxConnectionsPerPortSsl()) / 100);
     for (DataNodeId dataNodeId : dataNodeIds) {
-      int numberOfConnections =
-          connectionWarmUpPercentagePerDataNode * (dataNodeId.getPortToConnectTo().getPortType() == PortType.PLAINTEXT
-              ? connectionTracker.getMaxConnectionsPerPortPlainText() : connectionTracker.getMaxConnectionsPerPortSsl())
-              / 100;
       for (int i = 0; i < numberOfConnections; i++) {
         try {
           String connId = selector.connect(

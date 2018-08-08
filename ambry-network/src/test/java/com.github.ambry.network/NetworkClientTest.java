@@ -95,6 +95,9 @@ public class NetworkClientTest {
         networkClient.warmUpConnections(localDataNodeIds, 50, 2000));
     Assert.assertEquals("Connection count is not expected", 0,
         networkClient.warmUpConnections(localDataNodeIds, 0, 2000));
+    selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
+    Assert.assertEquals("Connection count is not expected", 0,
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
     selector.setState(MockSelectorState.Good);
   }
 
