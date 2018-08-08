@@ -125,6 +125,7 @@ public class BlobId extends StoreKey {
   public static final short BLOB_ID_V3 = 3;
   public static final short BLOB_ID_V4 = 4;
   public static final short BLOB_ID_V5 = 5;
+  public static final short BLOB_ID_V6 = 6;
   private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
   private static final short FLAG_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
@@ -138,10 +139,15 @@ public class BlobId extends StoreKey {
 
   private final short version;
   private final BlobIdType type;
-  private final Byte datacenterId;
-  private final Short accountId;
-  private final Short containerId;
+  private final byte datacenterId;
+  private final short accountId;
+  private final short containerId;
   private final PartitionId partitionId;
+  /**
+   * Ideally this could be a {@link UUID} object instead of a {@link String} to save some memory, but I am not sure if
+   * previous code versions allowed constructing blob IDs with custom strings in this field, as opposed to always
+   * calling {@link UUID#randomUUID()}.
+   */
   private final String uuid;
   private final boolean isEncrypted;
   private final BlobDataType blobDataType;
@@ -219,13 +225,14 @@ public class BlobId extends StoreKey {
         this.blobDataType = null;
         break;
       case BLOB_ID_V5:
+      case BLOB_ID_V6:
         this.type = type;
         this.datacenterId = datacenterId;
         this.accountId = accountId;
         this.containerId = containerId;
         this.isEncrypted = isEncrypted;
         if (blobDataType == null) {
-          throw new IllegalArgumentException("blobDataType can't be null for id version " + BLOB_ID_V5);
+          throw new IllegalArgumentException("blobDataType can't be null for id version " + version);
         }
         this.blobDataType = blobDataType;
         break;
@@ -260,7 +267,13 @@ public class BlobId extends StoreKey {
     if (partitionId == null) {
       throw new IllegalArgumentException("Partition ID cannot be null");
     }
-    uuid = Utils.readIntString(stream);
+    switch (version) {
+      case BLOB_ID_V6:
+        uuid = UuidSerDe.deserialize(stream).toString();
+        break;
+      default:
+        uuid = Utils.readIntString(stream);
+    }
     if (ensureFullyRead && stream.read() != -1) {
       throw new IllegalArgumentException("Stream should have no more available bytes to read");
     }
@@ -305,6 +318,10 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V5:
         return (short) (FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
             + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + sizeForBlobIdV1);
+      case BLOB_ID_V6:
+        return (short) (VERSION_FIELD_LENGTH_IN_BYTES + FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
+            + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length
+            + 16);
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
@@ -430,6 +447,7 @@ public class BlobId extends StoreKey {
         idBuf.putShort(containerId);
         break;
       case BLOB_ID_V5:
+      case BLOB_ID_V6:
         flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
         flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
         flag |= (blobDataType.ordinal() << BLOB_DATA_TYPE_SHIFT);
@@ -442,8 +460,15 @@ public class BlobId extends StoreKey {
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
     idBuf.put(partitionId.getBytes());
-    idBuf.putInt(uuid.getBytes().length);
-    idBuf.put(uuid.getBytes());
+    switch (version) {
+      case BLOB_ID_V6:
+        UuidSerDe.serialize(UUID.fromString(uuid), idBuf);
+        break;
+      default:
+        idBuf.putInt(uuid.getBytes().length);
+        idBuf.put(uuid.getBytes());
+        break;
+    }
     return idBuf.array();
   }
 
@@ -464,6 +489,7 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V3:
       case BLOB_ID_V4:
       case BLOB_ID_V5:
+      case BLOB_ID_V6:
         sb.append(":").append(type);
         sb.append(":").append(datacenterId);
         sb.append(":").append(accountId);
@@ -515,11 +541,11 @@ public class BlobId extends StoreKey {
         case BLOB_ID_V2:
           result = type.compareTo(other.type);
           if (result == 0) {
-            result = datacenterId.compareTo(other.datacenterId);
+            result = Byte.compare(datacenterId, other.datacenterId);
             if (result == 0) {
-              result = accountId.compareTo(other.accountId);
+              result = Short.compare(accountId, other.accountId);
               if (result == 0) {
-                result = containerId.compareTo(other.containerId);
+                result = Short.compare(containerId, other.containerId);
                 if (result == 0) {
                   result = partitionId.compareTo(other.partitionId);
                   if (result == 0) {
@@ -533,6 +559,7 @@ public class BlobId extends StoreKey {
         case BLOB_ID_V3:
         case BLOB_ID_V4:
         case BLOB_ID_V5:
+        case BLOB_ID_V6:
           result = uuid.compareTo(other.uuid);
           break;
         default:
@@ -563,7 +590,7 @@ public class BlobId extends StoreKey {
    * @return all valid versions of BlobId.
    */
   public static Short[] getAllValidVersions() {
-    return new Short[]{BLOB_ID_V1, BLOB_ID_V2, BLOB_ID_V3, BLOB_ID_V4, BLOB_ID_V5};
+    return new Short[]{BLOB_ID_V1, BLOB_ID_V2, BLOB_ID_V3, BLOB_ID_V4, BLOB_ID_V5, BLOB_ID_V6};
   }
 
   /**
@@ -678,6 +705,32 @@ public class BlobId extends StoreKey {
   }
 
   /**
+   * A serde to store UUIDs in a more compact byte representation than their canonical string representation.
+   */
+  private static class UuidSerDe {
+    /**
+     * Write a compact representation of a {@link UUID} into a {@link ByteBuffer}. This will advance the buffer cursor.
+     * @param uuid the {@link UUID} to serialize.
+     * @param buf the {@link ByteBuffer} to write into.
+     */
+    static void serialize(UUID uuid, ByteBuffer buf) {
+      buf.putLong(uuid.getMostSignificantBits());
+      buf.putLong(uuid.getLeastSignificantBits());
+    }
+
+    /**
+     * Deserialize a compact UUID from a {@link DataInputStream}.
+     * @param stream the {@link DataInputStream}.
+     * @return the {@link UUID}.
+     * @throws IOException if there are errors reading from the stream.
+     */
+    static UUID deserialize(DataInputStream stream) throws IOException {
+      long mostSigBits = stream.readLong();
+      long leastSigBits = stream.readLong();
+      return new UUID(mostSigBits, leastSigBits);
+    }
+  }
+  /**
    * A class that can hold all the information embedded in a BlobId up to and not including the {@link PartitionId}
    * The preamble can be parsed off a blob id string without a {@link ClusterMap}.
    */
@@ -736,6 +789,7 @@ public class BlobId extends StoreKey {
           blobDataType = null;
           break;
         case BLOB_ID_V5:
+        case BLOB_ID_V6:
           blobIdFlag = stream.readByte();
           type = BlobIdType.values()[blobIdFlag & BLOB_ID_TYPE_MASK];
           isEncrypted = (blobIdFlag & IS_ENCRYPTED_MASK) != 0;

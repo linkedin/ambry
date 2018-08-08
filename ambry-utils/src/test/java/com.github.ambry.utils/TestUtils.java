@@ -17,6 +17,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +37,7 @@ import static org.junit.Assert.*;
 public class TestUtils {
   public static final long TTL_SECS = TimeUnit.DAYS.toSeconds(7);
   public static final Random RANDOM = new Random();
+  public static final List<Boolean> BOOLEAN_VALUES = Collections.unmodifiableList(Arrays.asList(true, false));
 
   /**
    * Return the number of threads currently running with a name containing the given pattern.
