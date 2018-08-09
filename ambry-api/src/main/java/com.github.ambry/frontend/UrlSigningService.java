@@ -15,7 +15,6 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceException;
-import java.util.Map;
 
 
 /**

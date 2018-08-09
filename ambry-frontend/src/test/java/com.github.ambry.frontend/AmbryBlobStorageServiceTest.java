@@ -996,8 +996,8 @@ public class AmbryBlobStorageServiceTest {
    * @throws URISyntaxException
    */
 
-  static RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers,
-      List<ByteBuffer> contents) throws JSONException, UnsupportedEncodingException, URISyntaxException {
+  static RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers, List<ByteBuffer> contents)
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
     JSONObject request = new JSONObject();
     request.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
     request.put(MockRestRequest.URI_KEY, uri);

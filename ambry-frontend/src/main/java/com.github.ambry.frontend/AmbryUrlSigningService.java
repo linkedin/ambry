@@ -65,8 +65,8 @@ public class AmbryUrlSigningService implements UrlSigningService {
    * @param time the {@link Time} instance to use.
    */
   AmbryUrlSigningService(String uploadEndpoint, String downloadEndpoint, long defaultUrlTtlSecs,
-      long defaultMaxUploadSize, long maxUrlTtlSecs, long chunkUploadInitialChunkTtlSecs,
-      long chunkUploadMaxChunkSize, Time time) {
+      long defaultMaxUploadSize, long maxUrlTtlSecs, long chunkUploadInitialChunkTtlSecs, long chunkUploadMaxChunkSize,
+      Time time) {
     if (!uploadEndpoint.endsWith(ENDPOINT_SUFFIX)) {
       uploadEndpoint = uploadEndpoint + ENDPOINT_SUFFIX;
     }

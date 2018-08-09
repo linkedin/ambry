@@ -49,7 +49,8 @@ public class AmbryIdSigningServiceTest {
     TestUtils.assertException(RestServiceException.class, () -> idSigningService.getSignedId(null, null),
         errorCodeChecker(RestServiceErrorCode.InternalServerError));
 
-    TestUtils.assertException(RestServiceException.class, () -> idSigningService.parseSignedId(signedId.substring("signedId/".length())),
+    TestUtils.assertException(RestServiceException.class,
+        () -> idSigningService.parseSignedId(signedId.substring("signedId/".length())),
         errorCodeChecker(RestServiceErrorCode.InternalServerError));
 
     TestUtils.assertException(RestServiceException.class, () -> idSigningService.parseSignedId("signedId/abcdefg"),
@@ -61,7 +62,7 @@ public class AmbryIdSigningServiceTest {
    * @return a {@link ThrowingConsumer} to use with {@link com.github.ambry.utils.TestUtils#assertException}.
    */
   ThrowingConsumer<RestServiceException> errorCodeChecker(RestServiceErrorCode restServiceErrorCode) {
-    return restServiceException -> assertEquals("Wrong RestServiceErrorCode in " + restServiceException, restServiceErrorCode,
-        restServiceException.getErrorCode());
+    return restServiceException -> assertEquals("Wrong RestServiceErrorCode in " + restServiceException,
+        restServiceErrorCode, restServiceException.getErrorCode());
   }
 }

@@ -734,7 +734,8 @@ public class AsyncRequestResponseHandlerTest {
  * used with one event only.
  * @param <T> the type of event that this is a monitor for.
  */
-class EventMonitor<T> implements MockRestResponseChannel.EventListener, MockRestRequest.EventListener, ByteBufferRSC.EventListener {
+class EventMonitor<T>
+    implements MockRestResponseChannel.EventListener, MockRestRequest.EventListener, ByteBufferRSC.EventListener {
   private final T eventOfInterest;
   private final CountDownLatch eventFired = new CountDownLatch(1);
   private final AtomicBoolean eventOccurred = new AtomicBoolean(false);

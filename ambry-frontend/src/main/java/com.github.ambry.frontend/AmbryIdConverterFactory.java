@@ -23,7 +23,6 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Pair;
-import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.Future;
 
@@ -120,6 +119,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       }
       return blobId;
     }
+
     /**
      * If {@link RestUtils.InternalKeys#SIGNED_ID_METADATA_KEY} is set in the {@link RestRequest}, return a signed id.
      * Otherwise, return the provided blob ID.

@@ -17,13 +17,8 @@ package com.github.ambry.frontend;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Pair;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 import org.apache.commons.codec.binary.Base64;
 
 
