@@ -13,6 +13,8 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -430,7 +432,7 @@ public class NonBlockingRouterTest {
     final Map<String, String> blobsThatAreDeleted = new HashMap<>();
     LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
       @Override
-      public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
+      public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
         blobsThatAreDeleted.put(blobId, serviceId);
         deletesDoneLatch.countDown();
       }
@@ -500,7 +502,7 @@ public class NonBlockingRouterTest {
     final Map<String, String> blobsThatAreDeleted = new HashMap<>();
     LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
       @Override
-      public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
+      public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
         blobsThatAreDeleted.put(blobId, serviceId);
         deletesDoneLatch.get().countDown();
       }
@@ -593,7 +595,7 @@ public class NonBlockingRouterTest {
     final AtomicReference<String> receivedDeleteServiceId = new AtomicReference<>();
     LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
       @Override
-      public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
+      public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
         deletesInitiated.incrementAndGet();
         receivedDeleteServiceId.set(serviceId);
       }

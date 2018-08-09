@@ -14,7 +14,9 @@
 
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ReplicaId;
@@ -232,10 +234,10 @@ class TtlUpdateManager {
     Exception e = op.getOperationException();
     if (e == null) {
       BlobId blobId = op.getBlobId();
-      Pair<String, String> accountContainerName =
-          RouterUtils.getAccountContainerName(accountService, blobId.getAccountId(), blobId.getContainerId());
+      Pair<Account, Container> accountContainer =
+          RouterUtils.getAccountContainer(accountService, blobId.getAccountId(), blobId.getContainerId());
       notificationSystem.onBlobTtlUpdated(op.getBlobId().getID(), op.getServiceId(), op.getExpiresAtMs(),
-          accountContainerName.getFirst(), accountContainerName.getSecond());
+          accountContainer.getFirst(), accountContainer.getSecond());
     } else {
       routerMetrics.onUpdateBlobTtlError(e);
     }

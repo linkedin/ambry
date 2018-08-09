@@ -13,7 +13,9 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -245,11 +247,11 @@ class PutOperation {
         metadataPutChunk.maybeNotifyForFirstChunkCreation();
       }
       if (blobId != null) {
-        Pair<String, String> accountContainerName =
-            RouterUtils.getAccountContainerName(accountService, getBlobProperties().getAccountId(),
+        Pair<Account, Container> accountContainer =
+            RouterUtils.getAccountContainer(accountService, getBlobProperties().getAccountId(),
                 getBlobProperties().getContainerId());
-        notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), accountContainerName.getFirst(),
-            accountContainerName.getSecond(), composite ? NotificationBlobType.Composite : NotificationBlobType.Simple);
+        notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), accountContainer.getFirst(),
+            accountContainer.getSecond(), composite ? NotificationBlobType.Composite : NotificationBlobType.Simple);
       }
     }
   }
@@ -1347,8 +1349,8 @@ class PutOperation {
     }
 
     /**
-     * Call {@link NotificationSystem#onBlobCreated(String, BlobProperties, String, String, NotificationBlobType)} for this
-     * chunk, unless it is the first chunk, in which case it might be an entire simple blob. In that case, save
+     * Call {@link NotificationSystem#onBlobCreated(String, BlobProperties, Account, Container, NotificationBlobType)}
+     * for this chunk, unless it is the first chunk, in which case it might be an entire simple blob. In that case, save
      * the {@link BlobProperties} from the first chunk.
      * @param chunk the {@link PutChunk} created.
      */
@@ -1356,11 +1358,11 @@ class PutOperation {
       if (chunk.chunkIndex == 0) {
         firstChunkIdAndProperties = new Pair<>(chunk.chunkBlobId, chunk.chunkBlobProperties);
       } else {
-        Pair<String, String> accountContainerName =
-            RouterUtils.getAccountContainerName(accountService, chunk.chunkBlobProperties.getAccountId(),
+        Pair<Account, Container> accountContainer =
+            RouterUtils.getAccountContainer(accountService, chunk.chunkBlobProperties.getAccountId(),
                 chunk.chunkBlobProperties.getContainerId());
         notificationSystem.onBlobCreated(chunk.chunkBlobId.getID(), chunk.chunkBlobProperties,
-            accountContainerName.getFirst(), accountContainerName.getSecond(), NotificationBlobType.DataChunk);
+            accountContainer.getFirst(), accountContainer.getSecond(), NotificationBlobType.DataChunk);
       }
     }
 
@@ -1375,11 +1377,11 @@ class PutOperation {
         // completed chunkIds, the first chunk may be null
         String chunkId = firstChunkIdAndProperties.getFirst().getID();
         BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
-        Pair<String, String> accountContainerName =
-            RouterUtils.getAccountContainerName(accountService, chunkProperties.getAccountId(),
+        Pair<Account, Container> accountContainer =
+            RouterUtils.getAccountContainer(accountService, chunkProperties.getAccountId(),
                 chunkProperties.getContainerId());
-        notificationSystem.onBlobCreated(chunkId, chunkProperties, accountContainerName.getFirst(),
-            accountContainerName.getSecond(), NotificationBlobType.DataChunk);
+        notificationSystem.onBlobCreated(chunkId, chunkProperties, accountContainer.getFirst(),
+            accountContainer.getSecond(), NotificationBlobType.DataChunk);
       }
     }
 

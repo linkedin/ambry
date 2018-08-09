@@ -13,7 +13,9 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -489,8 +491,8 @@ class TtlUpdateNotificationSystem extends LoggingNotificationSystem {
   private final AtomicReference<Boolean> mismatchedData = new AtomicReference<>(false);
 
   @Override
-  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, String accountName,
-      String containerName) {
+  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, Account account,
+      Container container) {
     updatesInitiated.incrementAndGet();
     if (receivedUpdateServiceId.get() == null) {
       receivedUpdateServiceId.set(serviceId);

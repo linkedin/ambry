@@ -13,6 +13,8 @@
  */
 package com.github.ambry.commons;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationBlobType;
@@ -36,24 +38,30 @@ public class LoggingNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobCreated(String blobId, BlobProperties blobProperties, String accountName, String containerName,
+  public void onBlobCreated(String blobId, BlobProperties blobProperties, Account account, Container container,
       NotificationBlobType notificationBlobType) {
-    logger.debug("onBlobCreated " + blobId + ", blobProperties " + blobProperties + ", accountName " + accountName
-        + ", containerName " + containerName + ", blobType " + notificationBlobType);
-  }
-
-  @Override
-  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, String accountName,
-      String containerName) {
     logger.debug(
-        "onBlobTtlUpdated " + blobId + ", serviceId " + serviceId + ", accountName " + accountName + ", containerName "
-            + containerName + ", " + expiresAtMs);
+        "onBlobCreated " + blobId + ", blobProperties " + blobProperties + ", accountName " + (account == null ? null
+            : account.getName()) + ", accountId" + (account == null ? null : account.getId()) + ", containerName " + (
+            container == null ? null : container.getName()) + ", containerId " + (container == null ? null
+            : container.getId()) + ", blobType " + notificationBlobType);
   }
 
   @Override
-  public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
+  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, Account account,
+      Container container) {
+    logger.debug("onBlobTtlUpdated " + blobId + ", serviceId " + serviceId + ", accountName " + (account == null ? null
+        : account.getName()) + ", accountId" + (account == null ? null : account.getId()) + ", containerName " + (
+        container == null ? null : container.getName()) + ", containerId " + (container == null ? null
+        : container.getId()) + ", " + expiresAtMs);
+  }
+
+  @Override
+  public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
     logger.debug("onBlobDeleted " + blobId,
-        ", " + serviceId + ", accountName " + accountName + ", containerName " + containerName);
+        ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
+            account == null ? null : account.getId()) + ", containerName " + (container == null ? null
+            : container.getName()) + ", containerId " + (container == null ? null : container.getId()));
   }
 
   @Override

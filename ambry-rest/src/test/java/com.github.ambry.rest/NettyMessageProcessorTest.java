@@ -14,6 +14,8 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -437,20 +439,20 @@ public class NettyMessageProcessorTest {
     protected volatile CountDownLatch operationCompleted = new CountDownLatch(1);
 
     @Override
-    public void onBlobCreated(String blobId, BlobProperties blobProperties, String accountName, String containerName,
+    public void onBlobCreated(String blobId, BlobProperties blobProperties, Account account, Container container,
         NotificationBlobType notificationBlobType) {
       blobIdOperatedOn = blobId;
       operationCompleted.countDown();
     }
 
     @Override
-    public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, String accountName,
-        String containerName) {
+    public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs, Account account,
+        Container container) {
       throw new IllegalStateException("Not implemented");
     }
 
     @Override
-    public void onBlobDeleted(String blobId, String serviceId, String accountName, String containerName) {
+    public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
       throw new IllegalStateException("Not implemented");
     }
 
