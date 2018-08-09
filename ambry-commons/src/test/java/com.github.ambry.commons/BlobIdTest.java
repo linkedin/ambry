@@ -177,15 +177,16 @@ public class BlobIdTest {
     assertFalse("V3 should return false if blobIdString has no encrypted", BlobId.isEncrypted("AAMA"));
     assertFalse("V3 should return false if blobIdString has no encrypted", BlobId.isEncrypted("AAMB"));
 
-    // V4 should return true or false based on its encrypted bit
-    boolean[] isEncryptedValues = {true, false};
-    for (boolean isEncrypted : isEncryptedValues) {
-      BlobId blobIdV4 =
-          new BlobId(BLOB_ID_V4, random.nextBoolean() ? BlobIdType.NATIVE : BlobIdType.CRAFTED, (byte) 1, (short) 1,
-              (short) 1, referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)
-              .get(random.nextInt(3)), isEncrypted, null);
-      assertEquals("V4 should return true or false based on its encrypted bit", isEncrypted,
-          BlobId.isEncrypted(blobIdV4.getID()));
+    // V4+ should return true or false based on its encrypted bit
+    for (short version : new short[]{BLOB_ID_V4, BLOB_ID_V5}) {
+      for (boolean isEncrypted : new boolean[]{true, false}) {
+        BlobId blobId =
+            new BlobId(version, random.nextBoolean() ? BlobIdType.NATIVE : BlobIdType.CRAFTED, (byte) 1, (short) 1,
+                (short) 1, referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)
+                .get(random.nextInt(3)), isEncrypted, BlobDataType.DATACHUNK);
+        assertEquals("V" + version + " should return true or false based on its encrypted bit", isEncrypted,
+            BlobId.isEncrypted(blobId.getID()));
+      }
     }
   }
 
@@ -213,6 +214,7 @@ public class BlobIdTest {
         BlobId blobIdV2 = getRandomBlobId(BLOB_ID_V2);
         BlobId blobIdV3 = getRandomBlobId(BLOB_ID_V3);
         BlobId blobIdV4 = getRandomBlobId(BLOB_ID_V4);
+        BlobId blobIdV5 = getRandomBlobId(BLOB_ID_V5);
 
         assertTrue("blobIdV1 should be less than blobIdV2", blobIdV1.compareTo(blobIdV2) < 0);
         assertFalse(blobIdV1.equals(blobIdV2));
@@ -236,6 +238,8 @@ public class BlobIdTest {
         assertTrue(blobIdV3.equals(blobIdV3));
         assertTrue("blobIdV4 should be equal to blobIdV4", blobIdV4.compareTo(blobIdV4) == 0);
         assertTrue(blobIdV4.equals(blobIdV4));
+        assertTrue("blobIdV5 should be equal to blobIdV5", blobIdV5.compareTo(blobIdV5) == 0);
+        assertTrue(blobIdV5.equals(blobIdV5));
 
         assertTrue("Comparison for blobIdV3 and above are based on uuid only",
             blobIdV3.compareTo(blobIdV4) == blobIdV3.getUuid().compareTo(blobIdV4.getUuid()));
@@ -256,6 +260,7 @@ public class BlobIdTest {
         BlobId blobIdV2Alt = getRandomBlobId(BLOB_ID_V2);
         BlobId blobIdV3Alt = getRandomBlobId(BLOB_ID_V3);
         BlobId blobIdV4Alt = getRandomBlobId(BLOB_ID_V4);
+        BlobId blobIdV5Alt = getRandomBlobId(BLOB_ID_V5);
 
         assertFalse("Two randomly generated V1 blob ids should be unequal", blobIdV1.compareTo(blobIdV1Alt) == 0);
         assertFalse("Two randomly generated V1 blob ids should be unequal", blobIdV1.equals(blobIdV1Alt));
@@ -268,6 +273,9 @@ public class BlobIdTest {
 
         assertFalse("Two randomly generated V4 blob ids should be unequal", blobIdV4.compareTo(blobIdV4Alt) == 0);
         assertFalse("Two randomly generated V4 blob ids should be unequal", blobIdV4.equals(blobIdV4Alt));
+
+        assertFalse("Two randomly generated V5 blob ids should be unequal", blobIdV5.compareTo(blobIdV5Alt) == 0);
+        assertFalse("Two randomly generated V5 blob ids should be unequal", blobIdV5.equals(blobIdV5Alt));
       }
     }
   }
@@ -283,14 +291,17 @@ public class BlobIdTest {
   public void testCrafting() throws Exception {
     BlobId inputs[];
     if (version >= BLOB_ID_V3) {
-      inputs = new BlobId[]{new BlobId(version, BlobIdType.NATIVE, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId, false, referenceDataType), new BlobId(version, BlobIdType.CRAFTED,
-          referenceDatacenterId, referenceAccountId, referenceContainerId, referencePartitionId, false, referenceDataType)};
+      inputs = new BlobId[]{
+          new BlobId(version, BlobIdType.NATIVE, referenceDatacenterId, referenceAccountId, referenceContainerId,
+              referencePartitionId, false, referenceDataType),
+          new BlobId(version, BlobIdType.CRAFTED, referenceDatacenterId, referenceAccountId, referenceContainerId,
+              referencePartitionId, false, referenceDataType)};
       assertFalse("isCrafted() should be false for native id", BlobId.isCrafted(inputs[0].getID()));
       assertTrue("isCrafted() should be true for crafted id", BlobId.isCrafted(inputs[1].getID()));
     } else {
-      inputs = new BlobId[]{new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId, false, null)};
+      inputs = new BlobId[]{
+          new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
+              referencePartitionId, false, null)};
       assertFalse("isCrafted() should be false for ids below BLOB_ID_V3", BlobId.isCrafted(inputs[0].getID()));
     }
     short newAccountId = (short) (referenceAccountId + 1 + TestUtils.RANDOM.nextInt(100));
@@ -313,8 +324,7 @@ public class BlobIdTest {
       verifyCrafting(id, crafted);
     }
 
-    BlobId craftedAgain = BlobId.craft(crafted, crafted.getVersion(), crafted.getAccountId(),
-        crafted.getContainerId());
+    BlobId craftedAgain = BlobId.craft(crafted, crafted.getVersion(), crafted.getAccountId(), crafted.getContainerId());
     verifyCrafting(crafted, craftedAgain);
     assertEquals("Accounts should match", crafted.getAccountId(), craftedAgain.getAccountId());
     assertEquals("Containers should match", crafted.getContainerId(), craftedAgain.getContainerId());
@@ -346,6 +356,7 @@ public class BlobIdTest {
     BlobId blobIdV2 = getRandomBlobId(BLOB_ID_V2);
     BlobId blobIdV3 = getRandomBlobId(BLOB_ID_V3);
     BlobId blobIdV4 = getRandomBlobId(BLOB_ID_V4);
+    BlobId blobIdV5 = getRandomBlobId(BLOB_ID_V4);
     // test v1
     assertTrue("isAccountContainerMatch() should always return true for  V1 blobID.",
         blobIdV1.isAccountContainerMatch(blobIdV1.getAccountId(), blobIdV1.getContainerId()));
@@ -354,7 +365,7 @@ public class BlobIdTest {
     assertTrue("isAccountContainerMatch() should always return true for  V1 blobID.",
         blobIdV1.isAccountContainerMatch(getRandomShort(random), getRandomShort(random)));
     // test v2, v3 and v4
-    BlobId[] blobIds = {blobIdV2, blobIdV3, blobIdV4};
+    BlobId[] blobIds = {blobIdV2, blobIdV3, blobIdV4, blobIdV5};
     for (BlobId blobId : blobIds) {
       assertTrue("isAccountContainerMatch() should return true because account and container match.",
           blobId.isAccountContainerMatch(blobId.getAccountId(), blobId.getContainerId()));
@@ -619,9 +630,8 @@ public class BlobIdTest {
    * Constructs a {@link BlobId} with random fields and the given version.
    * @param version The version of {@link BlobId} to build
    * @return A {@link BlobId} with random fields and the given version.
-   * @throws Exception
    */
-  private BlobId getRandomBlobId(short version) throws Exception {
+  private BlobId getRandomBlobId(short version) {
     byte[] bytes = new byte[2];
     random.nextBytes(bytes);
     random.nextBytes(bytes);

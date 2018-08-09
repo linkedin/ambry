@@ -54,7 +54,7 @@ public class FrontendUtilsTest {
     PartitionId referencePartitionId =
         referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     boolean referenceIsEncrypted = TestUtils.RANDOM.nextBoolean();
-    short[] versions = {BlobId.BLOB_ID_V3, BlobId.BLOB_ID_V4};
+    short[] versions = {BlobId.BLOB_ID_V3, BlobId.BLOB_ID_V4, BlobId.BLOB_ID_V5};
     for (short version : versions) {
       BlobId blobId =
           new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
