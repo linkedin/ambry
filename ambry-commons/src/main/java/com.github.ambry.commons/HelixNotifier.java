@@ -13,8 +13,6 @@
  */
 package com.github.ambry.commons;
 
-import com.github.ambry.clustermap.ClusterMapUtils;
-import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.Collections;
 import java.util.List;
@@ -73,7 +71,7 @@ public class HelixNotifier implements Notifier<String> {
     logger.info("Starting a HelixNotifier");
     List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath + HelixNotifier.TOPIC_PATH);
     HelixPropertyStore<ZNRecord> helixStore =
-        ClusterMapUtils.createHelixPropertyStore(zkServers, storeConfig, subscribedPaths);
+        CommonUtils.createHelixPropertyStore(zkServers, storeConfig, subscribedPaths);
     logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
             + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", zkServers,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,

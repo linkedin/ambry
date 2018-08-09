@@ -14,7 +14,7 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterMapUtils;
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
@@ -75,7 +75,7 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
       long startTimeMs = System.currentTimeMillis();
       logger.info("Starting a HelixAccountService");
       HelixPropertyStore<ZNRecord> helixStore =
-          ClusterMapUtils.createHelixPropertyStore(accountServiceConfig.zkClientConnectString, storeConfig, null);
+          CommonUtils.createHelixPropertyStore(accountServiceConfig.zkClientConnectString, storeConfig, null);
       logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
               + "zkClientConnectionTimeoutMs={}, rootPath={}", accountServiceConfig.zkClientConnectString,
           storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath);

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -165,7 +166,7 @@ class HelixBootstrapUpgradeUtil {
             maxPartitionsInOneResource, false, false, helixAdminFactory);
     Map<String, Map<String, String>> partitionOverrideInfos =
         clusterMapToHelixMapper.generatePartitionOverrideFromAllDCs();
-    info("Uploading partition override to HelixPropertyStore based on static clustermap.");
+    info("Uploading partition override to HelixPropertyStore based on override json file.");
     clusterMapToHelixMapper.uploadPartitionOverride(partitionOverrideInfos);
     info("Upload cluster configs completed.");
   }
@@ -287,7 +288,7 @@ class HelixBootstrapUpgradeUtil {
     info("Setting partition override for all datacenters.");
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
       HelixPropertyStore<ZNRecord> helixPropertyStore =
-          ClusterMapUtils.createHelixPropertyStore(entry.getValue().getZkConnectStr(), propertyStoreConfig, null);
+          CommonUtils.createHelixPropertyStore(entry.getValue().getZkConnectStr(), propertyStoreConfig, null);
       ZNRecord znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);
       znRecord.setMapFields(partitionOverrideInfos);
       String path = "/" + clusterName + ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;

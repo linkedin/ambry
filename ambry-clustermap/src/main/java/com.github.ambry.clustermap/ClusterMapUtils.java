@@ -137,24 +137,6 @@ public class ClusterMapUtils {
   }
 
   /**
-   * Create a instance of {@link HelixPropertyStore} based on given {@link HelixPropertyStoreConfig}.
-   * @param zkServers the ZooKeeper server address.
-   * @param propertyStoreConfig the config for {@link HelixPropertyStore}.
-   * @param subscribedPaths a list of paths to which the PropertyStore subscribes.
-   * @return the instance of {@link HelixPropertyStore}.
-   */
-  public static HelixPropertyStore<ZNRecord> createHelixPropertyStore(String zkServers,
-      HelixPropertyStoreConfig propertyStoreConfig, List<String> subscribedPaths) {
-    if (zkServers == null || zkServers.isEmpty() || propertyStoreConfig == null) {
-      throw new IllegalArgumentException("Invalid arguments, cannot create HelixPropertyStore");
-    }
-    ZkClient zkClient = new ZkClient(zkServers, propertyStoreConfig.zkClientSessionTimeoutMs,
-        propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
-    return new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath,
-        subscribedPaths);
-  }
-
-  /**
    * Get the schema version associated with the given instance (if any).
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the schema version of the information stored. If the field is absent in the InstanceConfig, the version

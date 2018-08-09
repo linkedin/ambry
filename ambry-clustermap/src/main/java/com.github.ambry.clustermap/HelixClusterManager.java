@@ -117,14 +117,14 @@ class HelixClusterManager implements ClusterMap {
           public void run() {
             try {
               HelixManager manager;
-              if (!dcName.equals(clusterMapConfig.clusterMapDatacenterName)) {
+              if (dcName.equals(clusterMapConfig.clusterMapDatacenterName)) {
+                manager = localManager;
+              } else {
                 manager =
                     helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
                 logger.info("Connecting to Helix manager at {}", zkConnectStr);
                 manager.connect();
                 logger.info("Established connection to Helix manager at {}", zkConnectStr);
-              } else {
-                manager = localManager;
               }
               DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler);
               dcToDcZkInfo.put(dcName, dcInfo);

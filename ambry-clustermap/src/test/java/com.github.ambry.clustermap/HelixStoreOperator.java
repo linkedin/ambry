@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.Collections;
 import java.util.List;
@@ -57,7 +58,7 @@ public class HelixStoreOperator {
     logger.info("Starting a HelixStoreOperator");
     List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath);
     HelixPropertyStore<ZNRecord> helixStore =
-        ClusterMapUtils.createHelixPropertyStore(zkServers, storeConfig, subscribedPaths);
+        CommonUtils.createHelixPropertyStore(zkServers, storeConfig, subscribedPaths);
     logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
             + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", zkServers,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,

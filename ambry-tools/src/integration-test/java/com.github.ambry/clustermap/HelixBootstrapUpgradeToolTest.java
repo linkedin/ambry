@@ -15,6 +15,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.clustermap.TestUtils.*;
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
@@ -244,7 +245,7 @@ public class HelixBootstrapUpgradeToolTest {
     // Check writable partitions in each datacenter
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
       HelixPropertyStore<ZNRecord> propertyStore =
-          ClusterMapUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
+          CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
       String getPath = ROOT_PATH + ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;
       ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);

@@ -104,6 +104,7 @@ project(':ambry-utils') {
 project(':ambry-api') {
     dependencies {
         compile project(':ambry-utils')
+        compile "org.apache.helix:helix-core:$helixVersion"
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "org.codehaus.jackson:jackson-core-asl:$jacksonVersion"
         compile "org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion"
