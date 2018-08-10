@@ -74,6 +74,7 @@ class HelixClusterManager implements ClusterMap {
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final PartitionSelectionHelper partitionSelectionHelper;
+  private final long currentXid;
 
   /**
    * Instantiate a HelixClusterManager.
@@ -85,6 +86,7 @@ class HelixClusterManager implements ClusterMap {
   HelixClusterManager(ClusterMapConfig clusterMapConfig, String instanceName, HelixFactory helixFactory,
       MetricRegistry metricRegistry) throws IOException {
     this.clusterMapConfig = clusterMapConfig;
+    currentXid = clusterMapConfig.clustermapCurrentXid;
     this.metricRegistry = metricRegistry;
     clusterName = clusterMapConfig.clusterMapClusterName;
     helixClusterManagerCallback = new HelixClusterManagerCallback();
@@ -328,24 +330,35 @@ class HelixClusterManager implements ClusterMap {
 
     /**
      * Populate the initial data from the admin connection. Create nodes, disks, partitions and replicas for the entire
-     * cluster.
+     * cluster. An {@link InstanceConfig} will only be looked at if the xid in it is <= currentXid.
      * @throws Exception if creation of {@link AmbryDataNode}s or {@link AmbryDisk}s throw an Exception.
      */
     private void initializeInstances(List<InstanceConfig> instanceConfigs) throws Exception {
       logger.info("Initializing cluster information from {}", dcName);
       for (InstanceConfig instanceConfig : instanceConfigs) {
         int schemaVersion = getSchemaVersion(instanceConfig);
-        if (schemaVersion == 0) {
-          String instanceName = instanceConfig.getInstanceName();
-          logger.info("Adding node {} and its disks and replicas", instanceName);
-          AmbryDataNode datanode =
-              new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
-                  Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig));
-          initializeDisksAndReplicasOnNode(datanode, instanceConfig);
-          instanceNameToAmbryDataNode.put(instanceName, datanode);
-          allInstances.add(instanceName);
-        } else {
-          logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
+        switch (schemaVersion) {
+          case 0:
+            String instanceName = instanceConfig.getInstanceName();
+            long instanceXid = getXid(instanceConfig);
+            if (instanceXid <= currentXid) {
+              logger.info("Adding node {} and its disks and replicas", instanceName);
+              AmbryDataNode datanode =
+                  new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
+                      Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig),
+                      getSslPortStr(instanceConfig));
+              initializeDisksAndReplicasOnNode(datanode, instanceConfig);
+              instanceNameToAmbryDataNode.put(instanceName, datanode);
+              allInstances.add(instanceName);
+            } else {
+              logger.info(
+                  "Ignoring instanceConfig for {} because the xid associated with it ({}) is later than current xid ({})",
+                  instanceName, instanceXid, currentXid);
+            }
+            break;
+          default:
+            logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
+            break;
         }
       }
       logger.info("Initialized cluster information from {}", dcName);
@@ -353,27 +366,38 @@ class HelixClusterManager implements ClusterMap {
 
     /**
      * Go over the given list of {@link InstanceConfig}s and update the both sealed and stopped states of replicas.
+     * An {@link InstanceConfig} will only be looked at if the xid in it is <= currentXid.
      * @param instanceConfigs the list of {@link InstanceConfig}s containing the up-to-date information about the
      *                        sealed states of replicas.
      */
     private void updateStateOfReplicas(List<InstanceConfig> instanceConfigs) {
       for (InstanceConfig instanceConfig : instanceConfigs) {
         int schemaVersion = getSchemaVersion(instanceConfig);
-        if (schemaVersion == 0) {
-          AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName());
-          if (node == null) {
-            logger.info("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
-                instanceConfig);
-          } else {
-            HashSet<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
-            HashSet<String> stoppedReplicas = new HashSet<>(getStoppedReplicas(instanceConfig));
-            for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node)) {
-              replica.setSealedState(sealedReplicas.contains(replica.getPartitionId().toPathString()));
-              replica.setStoppedState(stoppedReplicas.contains(replica.getPartitionId().toPathString()));
+        switch (schemaVersion) {
+          case 0:
+            String instanceName = instanceConfig.getInstanceName();
+            long instanceXid = getXid(instanceConfig);
+            AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceName);
+            if (instanceXid <= currentXid) {
+              if (node == null) {
+                logger.info("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
+                    instanceConfig);
+              } else {
+                Set<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
+                Set<String> stoppedReplicas = new HashSet<>(getStoppedReplicas(instanceConfig));
+                for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node)) {
+                  replica.setSealedState(sealedReplicas.contains(replica.getPartitionId().toPathString()));
+                  replica.setStoppedState(stoppedReplicas.contains(replica.getPartitionId().toPathString()));
+                }
+              }
+            } else {
+              logger.info(
+                  "Ignoring instanceConfig change for {} because the xid associated with it ({}) is later than current xid ({})",
+                  instanceName, instanceXid, currentXid);
             }
-          }
-        } else {
-          logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
+            break;
+          default:
+            logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
         }
       }
     }

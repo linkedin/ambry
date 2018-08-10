@@ -152,6 +152,13 @@ public class ClusterMapConfig {
   @Default(MAX_REPLICAS_ALL_DATACENTERS)
   public final String clusterMapDefaultPartitionClass;
 
+  /**
+   * The current xid for this cluster manager. Any changes beyond this xid will be ignored by the cluster manager.
+   */
+  @Config("clustermap.current.xid")
+  @Default("Long.MAX")
+  public final Long clustermapCurrentXid;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -181,5 +188,6 @@ public class ClusterMapConfig {
     clusterMapResolveHostnames = verifiableProperties.getBoolean("clustermap.resolve.hostnames", true);
     clusterMapDefaultPartitionClass =
         verifiableProperties.getString("clustermap.default.partition.class", MAX_REPLICAS_ALL_DATACENTERS);
+    clustermapCurrentXid = verifiableProperties.getLong("clustermap.current.xid", Long.MAX_VALUE);
   }
 }

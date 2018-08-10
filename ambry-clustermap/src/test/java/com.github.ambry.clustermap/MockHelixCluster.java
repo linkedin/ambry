@@ -206,6 +206,14 @@ public class MockHelixCluster {
     return instanceConfig;
   }
 
+  List<InstanceConfig> getAllInstanceConfigs() {
+    List<InstanceConfig> configs = new ArrayList<>();
+    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
+      configs.addAll(helixAdmin.getInstanceConfigs(clusterName));
+    }
+    return configs;
+  }
+
   /**
    * Get the instances that have replicas for the given partition.
    * @param partition the partition name of the partition.

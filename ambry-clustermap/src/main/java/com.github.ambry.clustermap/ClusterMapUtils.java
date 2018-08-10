@@ -52,6 +52,7 @@ public class ClusterMapUtils {
   static final String DATACENTER_STR = "datacenter";
   static final String DATACENTER_ID_STR = "id";
   static final String SCHEMA_VERSION_STR = "schemaVersion";
+  static final String XID_STR = "xid";
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
   static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
@@ -178,6 +179,17 @@ public class ClusterMapUtils {
   static Integer getSslPortStr(InstanceConfig instanceConfig) {
     String sslPortStr = instanceConfig.getRecord().getSimpleField(SSLPORT_STR);
     return sslPortStr == null ? null : Integer.valueOf(sslPortStr);
+  }
+
+  /**
+   * Get the xid associated with this instance. The xid is like a timestamp or a change number, so if it is absent,
+   * a value representing the earliest point in time is returned.
+   * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
+   * @return the xid associated with the given instance.
+   */
+  static Long getXid(InstanceConfig instanceConfig) {
+    String xid = instanceConfig.getRecord().getSimpleField(XID_STR);
+    return xid == null ? Long.MIN_VALUE : Long.valueOf(xid);
   }
 
   /**
