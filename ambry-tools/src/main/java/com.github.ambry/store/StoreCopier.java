@@ -252,7 +252,7 @@ public class StoreCopier implements Closeable {
               tgt.updateTtl(writeSet);
             }
             logger.trace("Copied {} as {}", messageInfo.getStoreKey(), tgtMsgInfo.getStoreKey());
-          } else {
+          } else if (!messageInfo.isTtlUpdated()) {
             logger.warn("Found a duplicate entry for {} while copying data", messageInfo.getStoreKey());
             sourceHasProblems = true;
           }

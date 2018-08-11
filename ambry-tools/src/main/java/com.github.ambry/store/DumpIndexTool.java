@@ -66,10 +66,12 @@ public class DumpIndexTool {
     private final EnumSet<BlobState> states;
     private final boolean isInRecentIndexSegment;
     private boolean seenTtlUpdate = false;
+    private boolean isPermanent = false;
 
-    public Info(EnumSet<BlobState> states, boolean isInRecentIndexSegment) {
+    public Info(EnumSet<BlobState> states, boolean isInRecentIndexSegment, boolean isPermanent) {
       this.states = states;
       this.isInRecentIndexSegment = isInRecentIndexSegment;
+      this.isPermanent = isPermanent;
     }
 
     /**
@@ -91,6 +93,7 @@ public class DumpIndexTool {
      */
     public void markTtlUpdateSeen() {
       seenTtlUpdate = true;
+      isPermanent = true;
     }
 
     /**
@@ -98,6 +101,13 @@ public class DumpIndexTool {
      */
     public boolean isTtlUpdateSeen() {
       return seenTtlUpdate;
+    }
+
+    /**
+     * @return {@code true} if the blob is permanent
+     */
+    public boolean isPermanent() {
+      return isPermanent;
     }
   }
 
@@ -221,9 +231,9 @@ public class DumpIndexTool {
 
     @Override
     public String toString() {
-      return "Processed: " + processedCount + ", Active: " + activeCount + ", Put: " + putCount + ", Delete: "
-          + deleteCount + ", Duplicate Puts: " + duplicatePuts + ", Put After Update: " + putAfterUpdates
-          + ", Duplicate Delete: " + duplicateDeletes + ", Duplicate Update: " + duplicateUpdates
+      return "Processed: " + processedCount + ", Active: " + activeCount + ", Put: " + putCount + ", TTL update count: "
+          + ttlUpdateCount + ", Delete: " + deleteCount + ", Duplicate Puts: " + duplicatePuts + ", Put After Update: "
+          + putAfterUpdates + ", Duplicate Delete: " + duplicateDeletes + ", Duplicate Update: " + duplicateUpdates
           + ", Update After Delete: " + updateAfterDeletes;
     }
   }
@@ -443,6 +453,7 @@ public class DumpIndexTool {
             boolean isDelete = entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index);
             boolean isTtlUpdate = !isDelete && entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index);
             boolean isExpired = DumpDataHelper.isExpired(entry.getValue().getExpiresAtMs(), currentTimeMs);
+            boolean isPermanent = entry.getValue().getExpiresAtMs() == Utils.Infinite_Time;
             EnumSet<BlobState> states = isExpired ? EnumSet.of(BlobState.Expired) : EnumSet.noneOf(BlobState.class);
             if (isDelete) {
               deleteCount++;
@@ -457,7 +468,7 @@ public class DumpIndexTool {
             }
             Info info = keyToState.get(key);
             if (info == null) {
-              info = new Info(states, isInRecentIndexSegment);
+              info = new Info(states, isInRecentIndexSegment, isPermanent);
               if (isTtlUpdate) {
                 info.markTtlUpdateSeen();
               }
@@ -472,7 +483,7 @@ public class DumpIndexTool {
               }
             } else {
               if (isDelete) {
-                Info newInfo = new Info(states, isInRecentIndexSegment);
+                Info newInfo = new Info(states, isInRecentIndexSegment, isPermanent);
                 if (info.isTtlUpdateSeen()) {
                   newInfo.markTtlUpdateSeen();
                 }
@@ -485,9 +496,9 @@ public class DumpIndexTool {
                 }
               } else if (isTtlUpdate) {
                 states.add(isExpired ? BlobState.Expired : BlobState.Valid);
-                info = new Info(states, isInRecentIndexSegment);
+                info = new Info(states, isInRecentIndexSegment, isPermanent);
                 info.markTtlUpdateSeen();
-                keyToState.put(key, new Info(states, isInRecentIndexSegment));
+                keyToState.put(key, new Info(states, isInRecentIndexSegment, isPermanent));
               } else {
                 duplicatePuts.add(key);
               }
