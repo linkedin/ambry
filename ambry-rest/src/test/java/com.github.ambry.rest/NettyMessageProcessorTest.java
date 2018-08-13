@@ -329,7 +329,7 @@ public class NettyMessageProcessorTest {
       }
       channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
     }
-    if (!notificationSystem.operationCompleted.await(100, TimeUnit.MILLISECONDS)) {
+    if (!notificationSystem.operationCompleted.await(1000, TimeUnit.MILLISECONDS)) {
       fail("Post did not succeed after 100ms. There is an error or timeout needs to increase");
     }
     assertNotNull("Blob id operated on cannot be null", notificationSystem.blobIdOperatedOn);
