@@ -356,7 +356,7 @@ public class BlobIdTest {
     BlobId blobIdV2 = getRandomBlobId(BLOB_ID_V2);
     BlobId blobIdV3 = getRandomBlobId(BLOB_ID_V3);
     BlobId blobIdV4 = getRandomBlobId(BLOB_ID_V4);
-    BlobId blobIdV5 = getRandomBlobId(BLOB_ID_V4);
+    BlobId blobIdV5 = getRandomBlobId(BLOB_ID_V5);
     // test v1
     assertTrue("isAccountContainerMatch() should always return true for  V1 blobID.",
         blobIdV1.isAccountContainerMatch(blobIdV1.getAccountId(), blobIdV1.getContainerId()));
