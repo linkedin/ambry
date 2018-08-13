@@ -1137,9 +1137,10 @@ public final class ServerTestUtil {
     sslProps.setProperty("clustermap.cluster.name", "test");
     sslProps.setProperty("clustermap.datacenter.name", sourceDatacenter);
     sslProps.setProperty("clustermap.host.name", "localhost");
+    sslProps.setProperty("connectionpool.read.timeout.ms", "15000");
     VerifiableProperties vProps = new VerifiableProperties(sslProps);
     ConnectionPool connectionPool =
-        new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(new Properties())),
+        new BlockingChannelConnectionPool(new ConnectionPoolConfig(vProps),
             new SSLConfig(vProps), new ClusterMapConfig(vProps), new MetricRegistry());
     CountDownLatch verifierLatch = new CountDownLatch(numberOfVerifierThreads);
     AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSend);
