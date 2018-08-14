@@ -581,8 +581,7 @@ class HelixBootstrapUpgradeUtil {
    * @param hardwareLayout the {@link HardwareLayout} of the static clustermap.
    * @param partitionLayout the {@link PartitionLayout} of the static clustermap.
    */
-  private void verifyEquivalencyWithStaticClusterMap(HardwareLayout hardwareLayout, PartitionLayout partitionLayout)
-      throws Exception {
+  private void verifyEquivalencyWithStaticClusterMap(HardwareLayout hardwareLayout, PartitionLayout partitionLayout) {
     String clusterNameInStaticClusterMap = hardwareLayout.getClusterName();
     info("Verifying equivalency of static cluster: " + clusterNameInStaticClusterMap + " with the "
         + "corresponding cluster in Helix: " + clusterName);
@@ -605,8 +604,8 @@ class HelixBootstrapUpgradeUtil {
    * @param clusterName the cluster to be verified.
    * @param partitionLayout the {@link PartitionLayout} of the static clustermap.
    */
-  private void verifyDataNodeAndDiskEquivalencyInDc(Datacenter dc, String clusterName, PartitionLayout partitionLayout)
-      throws Exception {
+  private void verifyDataNodeAndDiskEquivalencyInDc(Datacenter dc, String clusterName,
+      PartitionLayout partitionLayout) {
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
