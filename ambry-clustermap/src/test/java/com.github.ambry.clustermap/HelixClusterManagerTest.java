@@ -507,7 +507,6 @@ public class HelixClusterManagerTest {
     aheadInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 1));
     HelixClusterManager clusterManager =
         new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
-    assertEquals(CURRENT_XID, clusterManager.getCurrentXid());
     assertEquals(instanceCount - 1, clusterManager.getDataNodeIds().size());
     for (AmbryDataNode dataNode : clusterManager.getDataNodeIds()) {
       String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
@@ -535,9 +534,8 @@ public class HelixClusterManagerTest {
     // Because the XID was higher, the change reflecting this replica being stopped will not be absorbed.
     assertFalse(ignoreInstanceReplica.isDown());
 
-    // Now advance the current xid of the cluster manager.
-    clusterManager.setCurrentXid(CURRENT_XID + 3);
-    assertEquals(CURRENT_XID + 3, clusterManager.getCurrentXid());
+    // Now advance the current xid of the cluster manager (simulated by moving back the xid in the InstanceConfig).
+    ignoreInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID - 2));
     helixCluster.triggerInstanceConfigChangeNotification();
     // Now the change should get absorbed.
     assertTrue(ignoreInstanceReplica.isDown());

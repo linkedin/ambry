@@ -37,6 +37,7 @@ class HelixClusterManagerMetrics {
   public final Counter getDataNodeIdMismatchCount;
   public final Counter getReplicaIdsMismatchCount;
   public final Counter getDataNodeIdsMismatchCount;
+  public final Counter ignoredUpdatesCount;
 
   public Gauge<Long> helixClusterManagerInstantiationFailed;
 
@@ -72,6 +73,8 @@ class HelixClusterManagerMetrics {
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "getReplicaIdsMismatchCount"));
     getDataNodeIdsMismatchCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "getDataNodeIdsMismatchCount"));
+    ignoredUpdatesCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "ignoredUpdatesCount"));
   }
 
   void initializeInstantiationMetric(final boolean instantiated) {

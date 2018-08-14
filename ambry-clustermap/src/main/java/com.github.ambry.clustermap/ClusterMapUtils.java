@@ -187,7 +187,7 @@ public class ClusterMapUtils {
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the xid associated with the given instance.
    */
-  static Long getXid(InstanceConfig instanceConfig) {
+  static long getXid(InstanceConfig instanceConfig) {
     String xid = instanceConfig.getRecord().getSimpleField(XID_STR);
     return xid == null ? Long.MIN_VALUE : Long.valueOf(xid);
   }

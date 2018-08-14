@@ -354,6 +354,7 @@ class HelixClusterManager implements ClusterMap {
               logger.info(
                   "Ignoring instanceConfig for {} because the xid associated with it ({}) is later than current xid ({})",
                   instanceName, instanceXid, currentXid);
+              helixClusterManagerMetrics.ignoredUpdatesCount.inc();
             }
             break;
           default:
@@ -391,9 +392,10 @@ class HelixClusterManager implements ClusterMap {
                 }
               }
             } else {
-              logger.info(
+              logger.trace(
                   "Ignoring instanceConfig change for {} because the xid associated with it ({}) is later than current xid ({})",
                   instanceName, instanceXid, currentXid);
+              helixClusterManagerMetrics.ignoredUpdatesCount.inc();
             }
             break;
           default:
@@ -700,21 +702,6 @@ class HelixClusterManager implements ClusterMap {
     long getAllocatedUsableCapacity() {
       return clusterWideAllocatedUsableCapacityBytes;
     }
-  }
-
-  /**
-   * @return the current xid;
-   */
-  protected long getCurrentXid() {
-    return currentXid;
-  }
-
-  /**
-   * Set the current xid;
-   * @param newXid the new xid to set.
-   */
-  protected void setCurrentXid(long newXid) {
-    currentXid = newXid;
   }
 }
 
