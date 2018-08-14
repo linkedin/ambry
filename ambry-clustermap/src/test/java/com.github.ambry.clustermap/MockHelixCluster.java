@@ -58,6 +58,13 @@ public class MockHelixCluster {
   void upgradeWithNewHardwareLayout(String hardwareLayoutPath) throws Exception {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName, 3,
         false, false, helixAdminFactory);
+    triggerInstanceConfigChangeNotification();
+  }
+
+  /**
+   * Trigger an InstanceConfig change notification for all datacenters.
+   */
+  void triggerInstanceConfigChangeNotification() {
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       helixAdmin.triggerInstanceConfigChangeNotification(false);
     }
@@ -204,6 +211,14 @@ public class MockHelixCluster {
       }
     }
     return instanceConfig;
+  }
+
+  List<InstanceConfig> getAllInstanceConfigs() {
+    List<InstanceConfig> configs = new ArrayList<>();
+    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
+      configs.addAll(helixAdmin.getInstanceConfigs(clusterName));
+    }
+    return configs;
   }
 
   /**

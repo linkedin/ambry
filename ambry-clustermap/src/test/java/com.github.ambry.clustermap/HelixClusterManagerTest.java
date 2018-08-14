@@ -39,6 +39,7 @@ import java.util.Random;
 import java.util.Set;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
+import org.apache.helix.model.InstanceConfig;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
@@ -46,6 +47,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 
@@ -70,6 +72,7 @@ public class HelixClusterManagerTest {
   private Map<String, Counter> counters;
   private final boolean useComposite;
   private final String hardwareLayoutPath;
+  private static final long CURRENT_XID = 64;
 
   // for verifying getPartitions() and getWritablePartitions()
   private static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
@@ -152,6 +155,7 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
     props.setProperty("clustermap.datacenter.name", localDc);
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null);
     if (useComposite) {
@@ -480,6 +484,61 @@ public class HelixClusterManagerTest {
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     // this triggers a notification.
     helixCluster.upgradeWithNewHardwareLayout(hardwareLayoutPath);
+  }
+
+  /**
+   * Tests that if the xid of an InstanceConfig change is greater than the current xid of the cluster manager, then that
+   * change is ignored - both during initialization as well as with post-initialization InstanceConfig changes.
+   */
+  @Test
+  public void xidTest() throws Exception {
+    if (useComposite) {
+      return;
+    }
+    // Close the one initialized in the constructor, as this test needs to test initialization flow as well.
+    clusterManager.close();
+
+    // Initialization path:
+    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null);
+    List<InstanceConfig> instanceConfigs = helixCluster.getAllInstanceConfigs();
+    int instanceCount = instanceConfigs.size();
+    InstanceConfig aheadInstanceConfig =
+        instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size()));
+    aheadInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 1));
+    HelixClusterManager clusterManager =
+        new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
+    assertEquals(instanceCount - 1, clusterManager.getDataNodeIds().size());
+    for (AmbryDataNode dataNode : clusterManager.getDataNodeIds()) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      assertFalse(instanceName.equals(aheadInstanceConfig.getInstanceName()));
+    }
+
+    // Post-initialization InstanceConfig change:
+    InstanceConfig ignoreInstanceConfig =
+        instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size()));
+    String ignoreInstanceName = ignoreInstanceConfig.getInstanceName();
+    ignoreInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 2));
+
+    AmbryReplica ignoreInstanceReplica = null;
+    for (AmbryDataNode dataNode : clusterManager.getDataNodeIds()) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      if (instanceName.equals(ignoreInstanceName)) {
+        ignoreInstanceReplica = clusterManager.getReplicaIds(dataNode).get(0);
+        ignoreInstanceConfig.getRecord()
+            .setListField(STOPPED_REPLICAS_STR,
+                Collections.singletonList(ignoreInstanceReplica.getPartitionId().toPathString()));
+        break;
+      }
+    }
+    helixCluster.triggerInstanceConfigChangeNotification();
+    // Because the XID was higher, the change reflecting this replica being stopped will not be absorbed.
+    assertFalse(ignoreInstanceReplica.isDown());
+
+    // Now advance the current xid of the cluster manager (simulated by moving back the xid in the InstanceConfig).
+    ignoreInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID - 2));
+    helixCluster.triggerInstanceConfigChangeNotification();
+    // Now the change should get absorbed.
+    assertTrue(ignoreInstanceReplica.isDown());
   }
 
   /**
