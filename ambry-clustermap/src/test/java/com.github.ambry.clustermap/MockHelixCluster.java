@@ -58,6 +58,13 @@ public class MockHelixCluster {
   void upgradeWithNewHardwareLayout(String hardwareLayoutPath) throws Exception {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName, 3,
         false, false, helixAdminFactory);
+    triggerInstanceConfigChangeNotification();
+  }
+
+  /**
+   * Trigger an InstanceConfig change notification for all datacenters.
+   */
+  void triggerInstanceConfigChangeNotification() {
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       helixAdmin.triggerInstanceConfigChangeNotification(false);
     }

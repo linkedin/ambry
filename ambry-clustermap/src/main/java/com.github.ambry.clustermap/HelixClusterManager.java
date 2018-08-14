@@ -74,7 +74,7 @@ class HelixClusterManager implements ClusterMap {
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final PartitionSelectionHelper partitionSelectionHelper;
-  private final long currentXid;
+  private long currentXid;
 
   /**
    * Instantiate a HelixClusterManager.
@@ -700,6 +700,21 @@ class HelixClusterManager implements ClusterMap {
     long getAllocatedUsableCapacity() {
       return clusterWideAllocatedUsableCapacityBytes;
     }
+  }
+
+  /**
+   * @return the current xid;
+   */
+  protected long getCurrentXid() {
+    return currentXid;
+  }
+
+  /**
+   * Set the current xid;
+   * @param newXid the new xid to set.
+   */
+  protected void setCurrentXid(long newXid) {
+    currentXid = newXid;
   }
 }
 
