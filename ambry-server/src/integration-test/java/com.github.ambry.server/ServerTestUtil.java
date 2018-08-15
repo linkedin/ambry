@@ -100,6 +100,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -744,8 +745,6 @@ final class ServerTestUtil {
     }
 
     // ttl update all blobs and wait for replication
-    List<Thread> threads = new ArrayList<>(blobIds.size());
-    AtomicReference<Throwable> exception = new AtomicReference<>(null);
     Map<BlockingChannel, List<BlobId>> channelToBlobIds = new HashMap<>();
     for (int i = 0; i < blobIds.size(); i++) {
       final BlobId blobId = blobIds.get(i);
@@ -757,25 +756,18 @@ final class ServerTestUtil {
         channelToBlobIds.computeIfAbsent(channel3, updateChannel -> new ArrayList<>()).add(blobId);
       }
     }
-    for (Map.Entry<BlockingChannel, List<BlobId>> entry : channelToBlobIds.entrySet()) {
-      Thread threadToRun = new Thread(() -> {
-        try {
-          for (BlobId blobId : entry.getValue()) {
-            updateBlobTtl(entry.getKey(), blobId);
-          }
-        } catch (Throwable e) {
-          exception.set(e);
+
+    channelToBlobIds.entrySet().stream().map(entry -> CompletableFuture.supplyAsync(() -> {
+      try {
+        for (BlobId blobId : entry.getValue()) {
+          updateBlobTtl(entry.getKey(), blobId);
         }
-      });
-      threads.add(threadToRun);
-    }
-    threads.forEach(Thread::start);
-    for (Thread thread : threads) {
-      thread.join();
-    }
-    if (exception.get() != null) {
-      throw new IllegalStateException(exception.get());
-    }
+        return null;
+      } catch (Throwable e) {
+        throw new RuntimeException("Exception updating ttl for: " + entry, e);
+      }
+    })).forEach(CompletableFuture::join);
+
     // check that the TTL update has propagated
     blobIds.forEach(blobId -> notificationSystem.awaitBlobUpdates(blobId.getID(), UpdateType.TTL_UPDATE));
     // check all servers
