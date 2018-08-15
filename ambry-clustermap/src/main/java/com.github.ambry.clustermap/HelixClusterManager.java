@@ -392,7 +392,7 @@ class HelixClusterManager implements ClusterMap {
             initializationException.compareAndSet(null, e);
           }
           instanceConfigInitialized.set(true);
-        } else if (!clusterMapConfig.clusterMapEnablePartitionOverride) {
+        } else {
           updateStateOfReplicas(configs);
         }
         sealedStateChangeCounter.incrementAndGet();
@@ -460,8 +460,15 @@ class HelixClusterManager implements ClusterMap {
                 Set<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
                 Set<String> stoppedReplicas = new HashSet<>(getStoppedReplicas(instanceConfig));
                 for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node)) {
-                  replica.setSealedState(sealedReplicas.contains(replica.getPartitionId().toPathString()));
-                  replica.setStoppedState(stoppedReplicas.contains(replica.getPartitionId().toPathString()));
+                  if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(
+                      replica.getPartitionId().toPathString())) {
+                    logger.trace(
+                        "Ignoring instanceConfig change for partition {} on instance {} because partition override is enabled",
+                        replica.getPartitionId().toPathString(), instanceName);
+                  } else {
+                    replica.setSealedState(sealedReplicas.contains(replica.getPartitionId().toPathString()));
+                    replica.setStoppedState(stoppedReplicas.contains(replica.getPartitionId().toPathString()));
+                  }
                 }
               }
             } else {

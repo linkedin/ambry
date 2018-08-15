@@ -40,8 +40,8 @@ import java.util.Random;
 import java.util.Set;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
-import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.ZNRecord;
+import org.apache.helix.model.InstanceConfig;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
@@ -76,8 +76,8 @@ public class HelixClusterManagerTest {
   private final boolean useComposite;
   private final boolean overrideEnabled;
   private final String hardwareLayoutPath;
+  private final String partitionLayoutPath;
   private static final long CURRENT_XID = 64;
-
 
   // for verifying getPartitions() and getWritablePartitions()
   private static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
@@ -86,6 +86,7 @@ public class HelixClusterManagerTest {
   private final PartitionRangeCheckParams defaultRo;
   private final PartitionRangeCheckParams specialRo;
   private final Map<String, Map<String, String>> partitionOverrideMap;
+  private final ZNRecord znRecord;
 
   /**
    * Resource state associated with datanode, disk and replica.
@@ -121,8 +122,8 @@ public class HelixClusterManagerTest {
     for (String dcName : dcs) {
       dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port++, false));
     }
-    this.hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
-    String partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
+    hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
+    partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
     JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
     testHardwareLayout = constructInitialHardwareLayoutJSON(clusterNameStatic);
@@ -164,7 +165,7 @@ public class HelixClusterManagerTest {
       partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>())
           .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_ONLY_STR);
     }
-    ZNRecord znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);
+    znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);
     znRecord.setMapFields(partitionOverrideMap);
 
     helixCluster =
@@ -183,7 +184,7 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.datacenter.name", localDc);
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
-    props.setProperty("clustermap.enable.partition.override", overrideEnabled ? "true" : "false");
+    props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
     if (useComposite) {
@@ -542,6 +543,33 @@ public class HelixClusterManagerTest {
       writableInClusterManager = getWritablePartitions().getSecond();
       assertEquals("Mismatch in writable partitions when instanceConfig changes", writableInOverrideMap,
           writableInClusterManager);
+
+      // Verify the partition state could be changed if this partition is not in partition override map.
+      // Following test re-initializes clusterManager with new partitionLayout and then triggers instanceConfig change on new added partition
+      testPartitionLayout.addNewPartitions(1, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, dcs[0]);
+      Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+      helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+      clusterManager.close();
+      MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
+      HelixClusterManager clusterManager =
+          new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
+      // Ensure the new RW partition is added
+      assertEquals("Mismatch in writable partitions when instanceConfig changes", writableInOverrideMap.size() + 1,
+          clusterManager.getWritablePartitionIds(null).size());
+      // Find out the new added partition which is not in partition override map
+      for (PartitionId partitionId : clusterManager.getAllPartitionIds(null)) {
+        if (partitionId.toPathString().equals(String.valueOf(testPartitionLayout.getPartitionCount() - 1))) {
+          partition = (AmbryPartition) partitionId;
+        }
+      }
+      instances = helixCluster.getInstancesForPartition((partition.toPathString()));
+      // Change the replica from RW to RO, which triggers instanceConfig change
+      helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.SealedState, true, false);
+      // Ensure the partition state becomes Read_Only
+      assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
+          clusterManager.getWritablePartitionIds(null).contains(partition));
+      assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
+          partition.getPartitionState());
     } else {
       // Verify clustermap uses instanceConfig for initialization when override map is non-empty but disabled.
       Set<String> writableInClusterManager = getWritablePartitions().getSecond();
@@ -639,8 +667,9 @@ public class HelixClusterManagerTest {
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null, null);
     List<InstanceConfig> instanceConfigs = helixCluster.getAllInstanceConfigs();
     int instanceCount = instanceConfigs.size();
-    InstanceConfig aheadInstanceConfig =
-        instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size()));
+    int randomIndex = com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size());
+    InstanceConfig aheadInstanceConfig = instanceConfigs.get(randomIndex);
+    Collections.swap(instanceConfigs, randomIndex, instanceConfigs.size() - 1);
     aheadInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 1));
     HelixClusterManager clusterManager =
         new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
@@ -652,7 +681,7 @@ public class HelixClusterManagerTest {
 
     // Post-initialization InstanceConfig change:
     InstanceConfig ignoreInstanceConfig =
-        instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size()));
+        instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size() - 1));
     String ignoreInstanceName = ignoreInstanceConfig.getInstanceName();
     ignoreInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 2));
 
