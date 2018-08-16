@@ -91,14 +91,14 @@ public class IndexTest {
 
   /**
    * Releases all resources and deletes the temporary directory.
-   * @throws InterruptedException
-   * @throws IOException
-   * @throws StoreException
+   * @throws Exception
    */
   @After
-  public void cleanup() throws InterruptedException, IOException, StoreException {
-    state.destroy();
-    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
+  public void cleanup() throws Exception {
+    if (state != null) {
+      state.destroy();
+    }
+    assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, true));
   }
 
   /**
@@ -707,6 +707,7 @@ public class IndexTest {
     doFindEntriesSinceFailureTest(token, StoreErrorCodes.Unknown_Error);
 
     findEntriesSinceInEmptyIndexTest(false);
+    findEntriesSinceTtlUpdateCornerCaseTest();
   }
 
   /**
@@ -2005,8 +2006,8 @@ public class IndexTest {
     while (logEntry != null) {
       Offset startOffset = logEntry.getKey();
       MockId id = logEntry.getValue().getFirst();
-      // size returned is the size of the delete if the key has been deleted.
-      long size = state.getExpectedValue(id, false).getSize();
+      // size returned is the size of the most recent record
+      long size = state.getExpectedValue(id, EnumSet.allOf(PersistentIndex.IndexEntryType.class), null).getSize();
       StoreFindToken expectedEndToken = new StoreFindToken(startOffset, state.sessionId, state.incarnationId, false);
       Offset endOffset = state.log.getFileSpanForMessage(startOffset, size).getEndOffset();
       expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(endOffset));
@@ -2068,20 +2069,28 @@ public class IndexTest {
     List<MessageInfo> infos = findInfo.getMessageEntries();
     Set<StoreKey> keysExamined = new HashSet<>();
     for (MessageInfo info : infos) {
-      IndexValue value = state.getExpectedValue((MockId) info.getStoreKey(), true);
-      IndexValue deleteValue =
-          state.deletedKeys.contains(info.getStoreKey()) ? state.getExpectedValue((MockId) info.getStoreKey(), false)
-              : null;
+      MockId id = (MockId) info.getStoreKey();
+      IndexValue putValue = state.getExpectedValue(id, EnumSet.of(PersistentIndex.IndexEntryType.PUT), null);
+      IndexValue ttlUpdateValue =
+          state.getExpectedValue(id, EnumSet.of(PersistentIndex.IndexEntryType.TTL_UPDATE), null);
+      IndexValue deleteValue = state.getExpectedValue(id, EnumSet.of(PersistentIndex.IndexEntryType.DELETE), null);
       // size returned is hard to predict if the key has been updated - it depends on the locations of the PUT and
       // update entries and whether all or some of them are present in the return list. It is not useful to recompute
       // the situations here and check
-      long expiresAtMs = value != null ? value.getExpiresAtMs() : deleteValue.getExpiresAtMs();
-      short accountId = value != null ? value.getAccountId() : deleteValue.getAccountId();
-      short containerId = value != null ? value.getContainerId() : deleteValue.getContainerId();
-      long operationTimeMs = deleteValue != null ? deleteValue.getOperationTimeInMs() : value.getOperationTimeInMs();
+      long expiresAtMs = deleteValue != null ? deleteValue.getExpiresAtMs()
+          : ttlUpdateValue != null ? ttlUpdateValue.getExpiresAtMs() : putValue.getExpiresAtMs();
+      short accountId = deleteValue != null ? deleteValue.getAccountId()
+          : ttlUpdateValue != null ? ttlUpdateValue.getAccountId() : putValue.getAccountId();
+      short containerId = deleteValue != null ? deleteValue.getContainerId()
+          : ttlUpdateValue != null ? ttlUpdateValue.getContainerId() : putValue.getContainerId();
+      long operationTimeMs = deleteValue != null ? deleteValue.getOperationTimeInMs()
+          : ttlUpdateValue != null ? ttlUpdateValue.getOperationTimeInMs() : putValue.getOperationTimeInMs();
+      boolean isTtlUpdated =
+          deleteValue != null ? deleteValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) : ttlUpdateValue != null;
       // if a key is updated, it doesn't matter if we reached the update record or not, the updated state will be
       // the one that is returned.
-      assertEquals("Inconsistent delete state ", deleteValue != null, info.isDeleted());
+      assertEquals("Inconsistent delete state", deleteValue != null, info.isDeleted());
+      assertEquals("Inconsistent TTL update state", isTtlUpdated, info.isTtlUpdated());
       assertEquals("Inconsistent expiresAtMs", expiresAtMs, info.getExpirationTimeInMs());
       assertEquals("Inconsistent accountId", accountId, info.getAccountId());
       assertEquals("Inconsistent containerId", containerId, info.getContainerId());
@@ -2126,6 +2135,26 @@ public class IndexTest {
     } else {
       doFindEntriesSinceTest(token, Long.MAX_VALUE, Collections.EMPTY_SET, token);
     }
+  }
+
+  /**
+   * Tests the case where the PUT and TTL update entries are in different index segments and journal has the TTL update
+   * entry (immaterial whether it has the PUT or not).
+   * @throws IOException
+   * @throws StoreException
+   */
+  private void findEntriesSinceTtlUpdateCornerCaseTest() throws IOException, StoreException {
+    state.closeAndClearIndex();
+    state.properties.setProperty("store.index.max.number.of.inmem.elements", "1");
+    state.reloadIndex(false, false);
+    long expiresAtMs = state.time.milliseconds() + TimeUnit.HOURS.toMillis(1);
+    MockId id = (MockId) state.addPutEntries(1, PUT_RECORD_SIZE, expiresAtMs).get(0).getKey();
+    state.makePermanent(id, false);
+    StoreFindToken expectedEndToken =
+        new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false);
+    expectedEndToken.setBytesRead(state.index.getLogUsedCapacity());
+    doFindEntriesSinceTest(new StoreFindToken(), Long.MAX_VALUE, Collections.singleton(id), expectedEndToken);
+    findEntriesSinceOneByOneTest();
   }
 
   // findDeletedEntriesSinceTest() helpers

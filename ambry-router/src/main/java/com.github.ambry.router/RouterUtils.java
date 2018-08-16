@@ -85,6 +85,7 @@ class RouterUtils {
         case BlobDoesNotExist:
         case RangeNotSatisfiable:
         case ChannelClosed:
+        case BlobUpdateNotAllowed:
           isSystemHealthError = false;
           break;
       }

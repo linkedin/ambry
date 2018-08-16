@@ -890,7 +890,7 @@ class PersistentIndex {
           for (JournalEntry entry : entries) {
             IndexValue value =
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
-                    EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE), indexSegments);
+                    EnumSet.allOf(IndexEntryType.class), indexSegments);
             messageEntries.add(
                 new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                     value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
@@ -1193,7 +1193,7 @@ class PersistentIndex {
           }
           newTokenOffsetInJournal = entry.getOffset();
           IndexValue value = findKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSnapshot),
-              EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE), indexSegments);
+              EnumSet.allOf(IndexEntryType.class), indexSegments);
           messageEntries.add(
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                   value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
@@ -1288,7 +1288,7 @@ class PersistentIndex {
       MessageInfo messageInfo = messageEntriesIterator.next();
       if (!messageInfo.isDeleted()) {
         // ok to use most recent ref
-        IndexValue indexValue = findKey(messageInfo.getStoreKey());
+        IndexValue indexValue = findKey(messageInfo.getStoreKey(), null, EnumSet.allOf(IndexEntryType.class));
         messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
             indexValue.isFlagSet(IndexValue.Flags.Delete_Index),
             indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index), indexValue.getExpiresAtMs(),
@@ -1461,7 +1461,7 @@ class PersistentIndex {
 
             IndexValue value =
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
-                    EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE), indexSegments);
+                    EnumSet.allOf(IndexEntryType.class), indexSegments);
             if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
               messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), true,
                   value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),

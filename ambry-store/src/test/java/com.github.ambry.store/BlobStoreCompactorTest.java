@@ -88,8 +88,10 @@ public class BlobStoreCompactorTest {
    */
   @After
   public void cleanup() throws Exception {
-    destroyStateAndCleanDir();
-    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
+    if (state != null) {
+      state.destroy();
+    }
+    assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, true));
   }
 
   /**
@@ -1022,24 +1024,15 @@ public class BlobStoreCompactorTest {
   // general
 
   /**
-   * Destroys the existing state and cleans the store directory of all files.
-   * @throws Exception
-   */
-  private void destroyStateAndCleanDir() throws Exception {
-    if (state != null) {
-      state.destroy();
-    }
-    assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, false));
-  }
-
-  /**
    * Refreshes the state by destroying any existing state and creating a new one.
    * @param hardDeleteEnabled {@code true} if hard delete needs to be enabled. {@code false} otherwise.
    * @param initState {@code true} if some test state has to be created. {@code false} otherwise.
    * @throws Exception
    */
   private void refreshState(boolean hardDeleteEnabled, boolean initState) throws Exception {
-    destroyStateAndCleanDir();
+    if (state != null) {
+      state.destroy();
+    }
     state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true);
   }
 
