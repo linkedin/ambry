@@ -1288,12 +1288,15 @@ class PersistentIndex {
       MessageInfo messageInfo = messageEntriesIterator.next();
       if (!messageInfo.isDeleted()) {
         // ok to use most recent ref
-        IndexValue indexValue = findKey(messageInfo.getStoreKey(), null, EnumSet.allOf(IndexEntryType.class));
-        messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
-            indexValue.isFlagSet(IndexValue.Flags.Delete_Index),
-            indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index), indexValue.getExpiresAtMs(),
-            indexValue.getAccountId(), indexValue.getContainerId(), indexValue.getOperationTimeInMs());
-        messageEntriesIterator.set(messageInfo);
+        IndexValue indexValue =
+            findKey(messageInfo.getStoreKey(), null, EnumSet.of(IndexEntryType.TTL_UPDATE, IndexEntryType.DELETE));
+        if (indexValue != null) {
+          messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
+              indexValue.isFlagSet(IndexValue.Flags.Delete_Index),
+              indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index), indexValue.getExpiresAtMs(),
+              indexValue.getAccountId(), indexValue.getContainerId(), indexValue.getOperationTimeInMs());
+          messageEntriesIterator.set(messageInfo);
+        }
       }
     }
   }
