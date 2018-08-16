@@ -502,8 +502,9 @@ public class HelixClusterManagerTest {
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null);
     List<InstanceConfig> instanceConfigs = helixCluster.getAllInstanceConfigs();
     int instanceCount = instanceConfigs.size();
-    InstanceConfig aheadInstanceConfig =
-        instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size()));
+    int randomIndex = com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size());
+    InstanceConfig aheadInstanceConfig = instanceConfigs.get(randomIndex);
+    Collections.swap(instanceConfigs, randomIndex, instanceConfigs.size() - 1);
     aheadInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 1));
     HelixClusterManager clusterManager =
         new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
@@ -515,7 +516,7 @@ public class HelixClusterManagerTest {
 
     // Post-initialization InstanceConfig change:
     InstanceConfig ignoreInstanceConfig =
-        instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size()));
+        instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size() - 1));
     String ignoreInstanceName = ignoreInstanceConfig.getInstanceName();
     ignoreInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 2));
 
