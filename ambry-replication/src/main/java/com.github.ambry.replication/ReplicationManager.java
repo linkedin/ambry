@@ -578,7 +578,7 @@ public class ReplicationManager {
               new ReplicaThread(threadIdentity, replicasForThread, factory, clusterMap, correlationIdGenerator,
                   dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification, storeKeyFactory,
                   threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
-                  responseHandler);
+                  responseHandler, SystemTime.getInstance());
           if (replicaThreadPools.containsKey(datacenter)) {
             replicaThreadPools.get(datacenter).add(replicaThread);
           } else {

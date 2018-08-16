@@ -114,6 +114,8 @@ public class ReplicationTest {
   private static int CONSTANT_TIME_MS = 100000;
   private static long EXPIRY_TIME_MS = SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(7);
   private static long UPDATED_EXPIRY_TIME_MS = SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(14);
+  private final MockTime time = new MockTime();
+  private ReplicationConfig config;
 
   /**
    * Tests pausing all partitions and makes sure that the replica thread pauses. Also tests that it resumes when one
@@ -807,6 +809,27 @@ public class ReplicationTest {
     // 1 expired + 1 corrupt + 1 put (never present) + 1 deleted (never present) expected missing buffers
     verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
         idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex + 1, 4);
+
+    // Verify that the replica thread is throttling when replicas are synced.
+    long currentTimeMs = time.milliseconds();
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertEquals("Replicas are in sync, time should be advanced by exactly replication.sleep.duration.ms",
+        currentTimeMs + config.replicationSleepDurationMs, time.milliseconds());
+
+    // add 3 messages to the same partition in the remote host only
+    PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
+    addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3);
+    currentTimeMs = time.milliseconds();
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertEquals("Replicas are no longer in sync so the replica thread shouldn't sleep",
+        currentTimeMs, time.milliseconds());
+
+    // add 3 messages to the same partition in all hosts
+    addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(localHost, remoteHost), 3);
+    currentTimeMs = time.milliseconds();
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertEquals("No missing keys but the replica thread should still not sleep since remote has new token",
+        currentTimeMs, time.milliseconds());
   }
 
   /**
@@ -883,7 +906,7 @@ public class ReplicationTest {
       ClusterMap clusterMap, Host localHost, Host remoteHost, StoreKeyFactory storeKeyFactory,
       StoreKeyConverter storeKeyConverter, Transformer transformer, StoreEventListener listener) {
     Properties properties = new Properties();
-    ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(properties));
+    config = new ReplicationConfig(new VerifiableProperties(properties));
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
@@ -896,7 +919,7 @@ public class ReplicationTest {
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
             storeKeyFactory, storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
     return new Pair<>(replicasToReplicate, replicaThread);
   }
 

@@ -56,6 +56,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -86,6 +87,7 @@ class ReplicaThread implements Runnable {
   private final Set<PartitionId> allReplicatedPartitions;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
+  private boolean throttling;
   private final FindTokenFactory findTokenFactory;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationIdGenerator;
@@ -105,6 +107,7 @@ class ReplicaThread implements Runnable {
   private final String datacenterName;
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition pauseCondition = lock.newCondition();
+  private final Time time;
 
   private volatile boolean allDisabled = false;
 
@@ -113,10 +116,11 @@ class ReplicaThread implements Runnable {
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
-      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler) {
+      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
     this.running = true;
+    this.throttling = false;
     this.findTokenFactory = findTokenFactory;
     this.clusterMap = clusterMap;
     this.correlationIdGenerator = correlationIdGenerator;
@@ -132,6 +136,7 @@ class ReplicaThread implements Runnable {
     this.replicatingFromRemoteColo = !(dataNodeId.getDatacenterName().equals(datacenterName));
     this.replicatingOverSsl = replicatingOverSsl;
     this.datacenterName = datacenterName;
+    this.time = time;
     Set<PartitionId> partitions = new HashSet<>();
     for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : replicasToReplicateGroupedByNode.entrySet()) {
       for (RemoteReplicaInfo info : entry.getValue()) {
@@ -268,6 +273,7 @@ class ReplicaThread implements Runnable {
               exchangeMetadata(connectedChannel, activeReplicasPerNode);
           exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
 
+
           startTimeInMs = SystemTime.getInstance().milliseconds();
           fixMissingStoreKeys(connectedChannel, activeReplicasPerNode, exchangeMetadataResponseList);
           fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
@@ -303,6 +309,13 @@ class ReplicaThread implements Runnable {
           portTypeBasedContext.stop();
         }
       }
+    }
+    try {
+      if (throttling) {
+        time.sleep(replicationConfig.replicationSleepDurationMs);
+      }
+    } catch (Exception e) {
+      logger.error("Received interrupted exception during throttling", e);
     }
   }
 
@@ -406,6 +419,7 @@ class ReplicaThread implements Runnable {
               remoteNode);
       writeMessagesToLocalStoreAndAdvanceTokens(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode,
           remoteNode);
+
     } finally {
       long fixMissingStoreKeysTime = SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs;
       replicationMetrics.updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo,
@@ -719,6 +733,7 @@ class ReplicaThread implements Runnable {
       GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode)
       throws IOException, MessageFormatException {
     int partitionResponseInfoIndex = 0;
+    int meaningfulExchangeCount = 0;
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;
     long startTime = SystemTime.getInstance().milliseconds();
@@ -726,6 +741,9 @@ class ReplicaThread implements Runnable {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
+        if (!remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
+          meaningfulExchangeCount++;
+        }
         if (exchangeMetadataResponse.missingStoreKeys.size() > 0) {
           PartitionResponseInfo partitionResponseInfo =
               getResponse.getPartitionResponseInfoList().get(partitionResponseInfoIndex);
@@ -812,6 +830,10 @@ class ReplicaThread implements Runnable {
         }
       }
     }
+    throttling = meaningfulExchangeCount == 0;
+    replicationMetrics.percentageOfMeaningfulExchange.update(
+        Math.round(meaningfulExchangeCount * 100.0 / exchangeMetadataResponseList.size()));
+    replicationMetrics.totalBytesReplicatedPerCycle.update(totalBytesFixed);
     long batchStoreWriteTime = SystemTime.getInstance().milliseconds() - startTime;
     replicationMetrics.updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed,
         replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
