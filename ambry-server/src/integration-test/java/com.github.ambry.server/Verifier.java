@@ -28,14 +28,17 @@ import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -57,7 +60,7 @@ class Verifier implements Runnable {
   private ConnectionPool connectionPool;
   private MockNotificationSystem notificationSystem;
 
-  public Verifier(BlockingQueue<Payload> payloadQueue, CountDownLatch completedLatch, AtomicInteger totalRequests,
+  Verifier(BlockingQueue<Payload> payloadQueue, CountDownLatch completedLatch, AtomicInteger totalRequests,
       AtomicInteger requestsVerified, MockClusterMap clusterMap, AtomicBoolean cancelTest, PortType portType,
       ConnectionPool connectionPool, MockNotificationSystem notificationSystem) {
     this.payloadQueue = payloadQueue;
@@ -74,7 +77,7 @@ class Verifier implements Runnable {
   @Override
   public void run() {
     try {
-      ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+      List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       while (requestsVerified.get() != totalRequests.get() && !cancelTest.get()) {
         Payload payload = payloadQueue.poll(1000, TimeUnit.MILLISECONDS);
         if (payload != null) {
@@ -82,11 +85,12 @@ class Verifier implements Runnable {
           for (MockDataNodeId dataNodeId : clusterMap.getDataNodes()) {
             ConnectedChannel channel1 = null;
             try {
+              BlobId blobId = new BlobId(payload.blobId, clusterMap);
               Port port =
                   new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
               channel1 = connectionPool.checkOutConnection("localhost", port, 10000);
               ArrayList<BlobId> ids = new ArrayList<BlobId>();
-              ids.add(new BlobId(payload.blobId, clusterMap));
+              ids.add(blobId);
               partitionRequestInfoList.clear();
               PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);
@@ -137,15 +141,19 @@ class Verifier implements Runnable {
                     System.out.println(exceptionMsg);
                     throw new IllegalStateException(exceptionMsg);
                   }
+                  checkExpiryTimeMatch(payload, ServerTestUtil.getExpiryTimeMs(propertyOutput));
+                  long actualExpiryTimeMs =
+                      resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs();
+                  checkExpiryTimeMatch(payload, actualExpiryTimeMs);
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
-                  throw new IllegalStateException();
+                  throw new IllegalStateException(e);
                 }
               }
 
               // get user metadata
               ids.clear();
-              ids.add(new BlobId(payload.blobId, clusterMap));
+              ids.add(blobId);
               partitionRequestInfoList.clear();
               partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);
@@ -163,6 +171,9 @@ class Verifier implements Runnable {
                   if (userMetadataOutput.compareTo(ByteBuffer.wrap(payload.metadata)) != 0) {
                     throw new IllegalStateException();
                   }
+                  long actualExpiryTimeMs =
+                      resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs();
+                  checkExpiryTimeMatch(payload, actualExpiryTimeMs);
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
@@ -171,7 +182,7 @@ class Verifier implements Runnable {
 
               // get blob
               ids.clear();
-              ids.add(new BlobId(payload.blobId, clusterMap));
+              ids.add(blobId);
               partitionRequestInfoList.clear();
               partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);
@@ -195,6 +206,9 @@ class Verifier implements Runnable {
                   if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
                     throw new IllegalStateException();
                   }
+                  long actualExpiryTimeMs =
+                      resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs();
+                  checkExpiryTimeMatch(payload, actualExpiryTimeMs);
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
@@ -224,11 +238,22 @@ class Verifier implements Runnable {
                   if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
                     throw new IllegalStateException();
                   }
+                  checkExpiryTimeMatch(payload,
+                      ServerTestUtil.getExpiryTimeMs(blobAll.getBlobInfo().getBlobProperties()));
+                  long actualExpiryTimeMs =
+                      resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs();
+                  checkExpiryTimeMatch(payload, actualExpiryTimeMs);
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
                 }
               }
+
+              // ttl update, check and wait for replication
+              ServerTestUtil.updateBlobTtl(channel1, new BlobId(payload.blobId, clusterMap));
+              ServerTestUtil.checkTtlUpdateStatus(channel1, clusterMap, new BlobIdFactory(clusterMap), blobId,
+                  payload.blob, true, Utils.Infinite_Time);
+              notificationSystem.awaitBlobUpdates(payload.blobId, UpdateType.TTL_UPDATE);
             } catch (Exception e) {
               if (channel1 != null) {
                 connectionPool.destroyConnection(channel1);
@@ -249,6 +274,22 @@ class Verifier implements Runnable {
       cancelTest.set(true);
     } finally {
       completedLatch.countDown();
+    }
+  }
+
+  /**
+   * Checks that the actual expiry time matches what is in the payload.
+   * @param payload the payload that was provided to the PUT
+   * @param actualExpiryTimeMs the actual expiry time received
+   * @throws IllegalStateException if the times don't match
+   */
+  private void checkExpiryTimeMatch(Payload payload, long actualExpiryTimeMs) {
+    long expectedExpiryTimeMs = ServerTestUtil.getExpiryTimeMs(payload.blobProperties);
+    if (actualExpiryTimeMs != expectedExpiryTimeMs) {
+      String exceptionMsg =
+          "Expiry time (props) not matching " + " expected " + expectedExpiryTimeMs + " actual " + actualExpiryTimeMs;
+      System.out.println(exceptionMsg);
+      throw new IllegalStateException(exceptionMsg);
     }
   }
 }

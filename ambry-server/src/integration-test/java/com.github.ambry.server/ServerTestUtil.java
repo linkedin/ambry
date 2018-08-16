@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -42,6 +43,7 @@ import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.UpdateRecord;
 import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
@@ -49,6 +51,7 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SSLBlockingChannel;
+import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
@@ -61,6 +64,8 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.protocol.TtlUpdateRequest;
+import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.router.GetBlobOptionsBuilder;
@@ -70,10 +75,12 @@ import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -84,12 +91,16 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -103,11 +114,10 @@ import org.junit.Assert;
 import static org.junit.Assert.*;
 
 
-public final class ServerTestUtil {
+final class ServerTestUtil {
 
-  protected static void endToEndTest(Port targetPort, String routerDatacenter, MockCluster cluster,
-      SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory, Properties routerProps,
-      boolean testEncryption) {
+  static void endToEndTest(Port targetPort, String routerDatacenter, MockCluster cluster, SSLConfig clientSSLConfig,
+      SSLSocketFactory clientSSLSocketFactory, Properties routerProps, boolean testEncryption) {
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
@@ -117,7 +127,7 @@ public final class ServerTestUtil {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
 
-      BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId, false);
+      BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId, testEncryption);
       TestUtils.RANDOM.nextBytes(usermetadata);
       TestUtils.RANDOM.nextBytes(data);
       if (testEncryption) {
@@ -152,10 +162,15 @@ public final class ServerTestUtil {
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
       assertEquals(ServerErrorCode.No_Error, response.getError());
 
-      // put blob 2
+      // put blob 2 with an expiry time and apply TTL update later
+      BlobProperties propertiesForTtlUpdate =
+          new BlobProperties(31870, "serviceid1", "ownerid", "image/png", false, TestUtils.TTL_SECS, accountId,
+              containerId, testEncryption);
+      long ttlUpdateBlobExpiryTimeMs = getExpiryTimeMs(propertiesForTtlUpdate);
       PutRequest putRequest2 =
-          new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+          new PutRequest(1, "client1", blobId2, propertiesForTtlUpdate, ByteBuffer.wrap(usermetadata),
+              ByteBuffer.wrap(data), properties.getBlobSize(), BlobType.DataBlob,
+              testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       channel.send(putRequest2);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -172,7 +187,7 @@ public final class ServerTestUtil {
 
       // put blob 4 that is expired
       BlobProperties propertiesExpired =
-          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId, false);
+          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId, testEncryption);
       PutRequest putRequest4 =
           new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
@@ -351,6 +366,10 @@ public final class ServerTestUtil {
         router.close();
       }
 
+      checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId2, data, false, ttlUpdateBlobExpiryTimeMs);
+      updateBlobTtl(channel, blobId2);
+      checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId2, data, true, Utils.Infinite_Time);
+
       // fetch blob that does not exist
       // get blob properties
       ids = new ArrayList<BlobId>();
@@ -519,8 +538,8 @@ public final class ServerTestUtil {
     assertEquals(expectedErrorCode, response.getError());
   }
 
-  protected static void endToEndReplicationWithMultiNodeMultiPartitionTest(int interestedDataNodePortNumber,
-      Port dataNode1Port, Port dataNode2Port, Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1,
+  static void endToEndReplicationWithMultiNodeMultiPartitionTest(int interestedDataNodePortNumber, Port dataNode1Port,
+      Port dataNode2Port, Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1,
       SSLConfig clientSSLConfig2, SSLConfig clientSSLConfig3, SSLSocketFactory clientSSLSocketFactory1,
       SSLSocketFactory clientSSLSocketFactory2, SSLSocketFactory clientSSLSocketFactory3,
       MockNotificationSystem notificationSystem, boolean testEncryption) throws Exception {
@@ -533,7 +552,9 @@ public final class ServerTestUtil {
     byte[] encryptionKey = null;
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties properties = new BlobProperties(100, "serviceid1", accountId, containerId, false);
+    BlobProperties properties =
+        new BlobProperties(100, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId, false);
+    long expectedExpiryTimeMs = getExpiryTimeMs(properties);
     TestUtils.RANDOM.nextBytes(usermetadata);
     TestUtils.RANDOM.nextBytes(data);
     if (testEncryption) {
@@ -630,6 +651,9 @@ public final class ServerTestUtil {
           assertEquals("serviceid1", propertyOutput.getServiceId());
           assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
           assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
+          assertEquals("Expiration time mismatch (props)", expectedExpiryTimeMs, getExpiryTimeMs(propertyOutput));
+          assertEquals("Expiration time mismatch (MessageInfo)", expectedExpiryTimeMs,
+              resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
           Assert.fail();
         }
@@ -652,6 +676,8 @@ public final class ServerTestUtil {
             assertNull("MessageMetadata should have been null",
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
           }
+          assertEquals("Expiration time mismatch (MessageInfo)", expectedExpiryTimeMs,
+              resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
           e.printStackTrace();
           Assert.fail();
@@ -679,6 +705,8 @@ public final class ServerTestUtil {
             assertNull("MessageMetadata should have been null",
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
           }
+          assertEquals("Expiration time mismatch (MessageInfo)", expectedExpiryTimeMs,
+              resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
           e.printStackTrace();
           Assert.fail();
@@ -691,6 +719,10 @@ public final class ServerTestUtil {
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         try {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), blobIdFactory);
+          assertEquals("Expiration time mismatch (props)", expectedExpiryTimeMs,
+              getExpiryTimeMs(blobAll.getBlobInfo().getBlobProperties()));
+          assertEquals("Expiration time mismatch (MessageInfo)", expectedExpiryTimeMs,
+              resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
           byte[] blobout = new byte[(int) blobAll.getBlobData().getSize()];
           int readsize = 0;
           while (readsize < blobAll.getBlobData().getSize()) {
@@ -709,6 +741,39 @@ public final class ServerTestUtil {
           e.printStackTrace();
           Assert.fail();
         }
+      }
+    }
+
+    // ttl update all blobs and wait for replication
+    Map<BlockingChannel, List<BlobId>> channelToBlobIds = new HashMap<>();
+    for (int i = 0; i < blobIds.size(); i++) {
+      final BlobId blobId = blobIds.get(i);
+      if (i % 3 == 0) {
+        channelToBlobIds.computeIfAbsent(channel1, updateChannel -> new ArrayList<>()).add(blobId);
+      } else if (i % 3 == 1) {
+        channelToBlobIds.computeIfAbsent(channel2, updateChannel -> new ArrayList<>()).add(blobId);
+      } else {
+        channelToBlobIds.computeIfAbsent(channel3, updateChannel -> new ArrayList<>()).add(blobId);
+      }
+    }
+
+    channelToBlobIds.entrySet().stream().map(entry -> CompletableFuture.supplyAsync(() -> {
+      try {
+        for (BlobId blobId : entry.getValue()) {
+          updateBlobTtl(entry.getKey(), blobId);
+        }
+        return null;
+      } catch (Throwable e) {
+        throw new RuntimeException("Exception updating ttl for: " + entry, e);
+      }
+    })).forEach(CompletableFuture::join);
+
+    // check that the TTL update has propagated
+    blobIds.forEach(blobId -> notificationSystem.awaitBlobUpdates(blobId.getID(), UpdateType.TTL_UPDATE));
+    // check all servers
+    for (BlockingChannel channelToUse : new BlockingChannel[]{channel1, channel2, channel3}) {
+      for (BlobId blobId : blobIds) {
+        checkTtlUpdateStatus(channelToUse, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
       }
     }
 
@@ -785,6 +850,8 @@ public final class ServerTestUtil {
           } else {
             notificationSystem.decrementCreatedReplica(blobIds.get(i).getID(), dataNode.getHostname(),
                 dataNode.getPort());
+            notificationSystem.decrementUpdatedReplica(blobIds.get(i).getID(), dataNode.getHostname(),
+                dataNode.getPort(), UpdateType.TTL_UPDATE);
           }
         }
       }
@@ -799,6 +866,7 @@ public final class ServerTestUtil {
         notificationSystem.awaitBlobDeletions(blobIds.get(j).getID());
       } else {
         notificationSystem.awaitBlobCreations(blobIds.get(j).getID());
+        notificationSystem.awaitBlobUpdates(blobIds.get(j).getID(), UpdateType.TTL_UPDATE);
       }
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
       ids.add(blobIds.get(j));
@@ -820,6 +888,8 @@ public final class ServerTestUtil {
           assertEquals("serviceid1", propertyOutput.getServiceId());
           assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
           assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
+          assertEquals("Expiration time mismatch in MessageInfo", Utils.Infinite_Time,
+              resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
           Assert.fail();
         }
@@ -847,6 +917,8 @@ public final class ServerTestUtil {
             assertNull("MessageMetadata should have been null",
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
           }
+          assertEquals("Expiration time mismatch in MessageInfo", Utils.Infinite_Time,
+              resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
           Assert.fail();
         }
@@ -878,6 +950,8 @@ public final class ServerTestUtil {
             assertNull("MessageMetadata should have been null",
                 resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
           }
+          assertEquals("Expiration time mismatch in MessageInfo", Utils.Infinite_Time,
+              resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
           Assert.fail();
         }
@@ -910,6 +984,8 @@ public final class ServerTestUtil {
           } else {
             Assert.assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
           }
+          assertEquals("Expiration time mismatch in MessageInfo", Utils.Infinite_Time,
+              resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
         } catch (MessageFormatException e) {
           Assert.fail();
         }
@@ -1069,7 +1145,7 @@ public final class ServerTestUtil {
     channel3.disconnect();
   }
 
-  protected static void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter,
+  static void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter,
       String sslEnabledDatacenters, PortType portType, MockCluster cluster, MockNotificationSystem notificationSystem,
       Properties routerProps) throws Exception {
     Properties props = new Properties();
@@ -1097,7 +1173,7 @@ public final class ServerTestUtil {
     for (int i = 0; i < numberOfRequestsToSend; i++) {
       int size = new Random().nextInt(5000);
       final BlobProperties properties =
-          new BlobProperties(size, "service1", "owner id check", "image/jpeg", false, Utils.Infinite_Time, accountId,
+          new BlobProperties(size, "service1", "owner id check", "image/jpeg", false, TestUtils.TTL_SECS, accountId,
               containerId, false);
       final byte[] metadata = new byte[new Random().nextInt(1000)];
       final byte[] blob = new byte[size];
@@ -1262,7 +1338,7 @@ public final class ServerTestUtil {
     connectionPool.shutdown();
   }
 
-  protected static void endToEndReplicationWithMultiNodeSinglePartitionTest(String routerDatacenter,
+  static void endToEndReplicationWithMultiNodeSinglePartitionTest(String routerDatacenter,
       int interestedDataNodePortNumber, Port dataNode1Port, Port dataNode2Port, Port dataNode3Port, MockCluster cluster,
       SSLConfig clientSSLConfig1, SSLSocketFactory clientSSLSocketFactory1, MockNotificationSystem notificationSystem,
       Properties routerProps, boolean testEncryption) {
@@ -1282,7 +1358,9 @@ public final class ServerTestUtil {
       for (int i = 0; i < 11; i++) {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-        propertyList.add(new BlobProperties(1000, "serviceid1", accountId, containerId, testEncryption));
+        propertyList.add(
+            new BlobProperties(1000, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId,
+                testEncryption));
         blobIdList.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
             clusterMap.getLocalDatacenterId(), accountId, containerId, partition, false,
             BlobId.BlobDataType.DATACHUNK));
@@ -1384,6 +1462,14 @@ public final class ServerTestUtil {
       notificationSystem.awaitBlobCreations(blobIdList.get(3).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(4).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(5).getID());
+
+      checkTtlUpdateStatus(channel3, clusterMap, blobIdFactory, blobIdList.get(5), dataList.get(5), false,
+          getExpiryTimeMs(propertyList.get(5)));
+      updateBlobTtl(channel3, blobIdList.get(5));
+      expectedTokenSize += getUpdateRecordSize(blobIdList.get(5), UpdateRecord.Type.TTL_UPDATE);
+      checkTtlUpdateStatus(channel3, clusterMap, blobIdFactory, blobIdList.get(5), dataList.get(5), true,
+          Utils.Infinite_Time);
+      notificationSystem.awaitBlobUpdates(blobIdList.get(5).getID(), UpdateType.TTL_UPDATE);
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -1554,15 +1640,6 @@ public final class ServerTestUtil {
 
       // get the data node to inspect replication tokens on
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
-      // read the replica file and check correctness
-      // The token offset value of 13098 was derived as followed:
-      // - Up to this point we have done 6 puts and 1 delete
-
-      // - Each put takes up 2183 bytes in the log (1000 data, 1000 user metadata, 183 ambry metadata)
-      // - Each delete takes up 97 bytes in the log
-      // - The offset stored in the token will be the position of the last entry in the log (the delete, in this case)
-      // - Thus, it will be at the end of the 6 puts: 6 * 2183 = 13098
-
       checkReplicaTokens(clusterMap, dataNodeId, expectedTokenSize - getDeleteRecordSize(blobIdList.get(0)), "0");
 
       // Shut down server 1
@@ -1630,6 +1707,13 @@ public final class ServerTestUtil {
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       assertEquals(ServerErrorCode.No_Error, response2.getError());
 
+      checkTtlUpdateStatus(channel2, clusterMap, blobIdFactory, blobIdList.get(10), dataList.get(10), false,
+          getExpiryTimeMs(propertyList.get(10)));
+      updateBlobTtl(channel2, blobIdList.get(10));
+      expectedTokenSize += getUpdateRecordSize(blobIdList.get(10), UpdateRecord.Type.TTL_UPDATE);
+      checkTtlUpdateStatus(channel2, clusterMap, blobIdFactory, blobIdList.get(10), dataList.get(10), true,
+          Utils.Infinite_Time);
+
       cluster.getServers().get(0).startup();
       // wait for server to recover
       notificationSystem.awaitBlobCreations(blobIdList.get(6).getID());
@@ -1637,6 +1721,7 @@ public final class ServerTestUtil {
       notificationSystem.awaitBlobCreations(blobIdList.get(8).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(9).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(10).getID());
+      notificationSystem.awaitBlobUpdates(blobIdList.get(10).getID(), UpdateType.TTL_UPDATE);
       channel1.disconnect();
       channel1.connect();
 
@@ -1656,6 +1741,10 @@ public final class ServerTestUtil {
       } catch (MessageFormatException e) {
         Assert.fail();
       }
+
+      // check that the ttl update went through
+      checkTtlUpdateStatus(channel1, clusterMap, blobIdFactory, blobIdList.get(10), dataList.get(10), true,
+          Utils.Infinite_Time);
 
       // Shutdown server 1. Remove all its data from all mount path. Recover server 1 and ensure node is built
       cluster.getServers().get(0).shutdown();
@@ -1675,6 +1764,8 @@ public final class ServerTestUtil {
           dataNodeId.getPort());
       notificationSystem.decrementCreatedReplica(blobIdList.get(5).getID(), dataNodeId.getHostname(),
           dataNodeId.getPort());
+      notificationSystem.decrementUpdatedReplica(blobIdList.get(5).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort(), UpdateType.TTL_UPDATE);
       notificationSystem.decrementCreatedReplica(blobIdList.get(6).getID(), dataNodeId.getHostname(),
           dataNodeId.getPort());
       notificationSystem.decrementCreatedReplica(blobIdList.get(7).getID(), dataNodeId.getHostname(),
@@ -1685,6 +1776,8 @@ public final class ServerTestUtil {
           dataNodeId.getPort());
       notificationSystem.decrementCreatedReplica(blobIdList.get(10).getID(), dataNodeId.getHostname(),
           dataNodeId.getPort());
+      notificationSystem.decrementUpdatedReplica(blobIdList.get(10).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort(), UpdateType.TTL_UPDATE);
 
       cluster.getServers().get(0).startup();
       notificationSystem.awaitBlobCreations(blobIdList.get(1).getID());
@@ -1692,11 +1785,13 @@ public final class ServerTestUtil {
       notificationSystem.awaitBlobCreations(blobIdList.get(3).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(4).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(5).getID());
+      notificationSystem.awaitBlobUpdates(blobIdList.get(5).getID(), UpdateType.TTL_UPDATE);
       notificationSystem.awaitBlobCreations(blobIdList.get(6).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(7).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(8).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(9).getID());
       notificationSystem.awaitBlobCreations(blobIdList.get(10).getID());
+      notificationSystem.awaitBlobUpdates(blobIdList.get(10).getID(), UpdateType.TTL_UPDATE);
 
       channel1.disconnect();
       channel1.connect();
@@ -1717,6 +1812,12 @@ public final class ServerTestUtil {
       } catch (MessageFormatException e) {
         Assert.fail();
       }
+
+      // check that the ttl updates are present
+      checkTtlUpdateStatus(channel1, clusterMap, blobIdFactory, blobIdList.get(5), dataList.get(5), true,
+          Utils.Infinite_Time);
+      checkTtlUpdateStatus(channel1, clusterMap, blobIdFactory, blobIdList.get(10), dataList.get(10), true,
+          Utils.Infinite_Time);
 
       channel1.disconnect();
       channel2.disconnect();
@@ -1747,11 +1848,21 @@ public final class ServerTestUtil {
   /**
    * Fetches the delete record size in log
    * @param blobId {@link BlobId} associated with the delete
-   * @return the size of the put record in the log
+   * @return the size of the delete record in the log
    */
   private static long getDeleteRecordSize(BlobId blobId) {
     return MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() + blobId.sizeInBytes()
         + MessageFormatRecord.Update_Format_V2.getRecordSize();
+  }
+
+  /**
+   * @param blobId the blob ID being updated
+   * @param updateType the type of update
+   * @return the size of the update record in the log
+   */
+  private static long getUpdateRecordSize(BlobId blobId, UpdateRecord.Type updateType) {
+    return MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() + blobId.sizeInBytes()
+        + MessageFormatRecord.Update_Format_V3.getRecordSize(updateType);
   }
 
   /**
@@ -1929,13 +2040,89 @@ public final class ServerTestUtil {
   }
 
   /**
+   * Updates the TTL of the given {@code blobId}
+   * @param channel the {@link ConnectedChannel} to make the {@link GetRequest} on.
+   * @param blobId the ID of the blob to TTL update
+   * @throws IOException
+   */
+  static void updateBlobTtl(ConnectedChannel channel, BlobId blobId) throws IOException {
+    TtlUpdateRequest ttlUpdateRequest =
+        new TtlUpdateRequest(1, "updateBlobTtl", blobId, Utils.Infinite_Time, SystemTime.getInstance().milliseconds());
+    channel.send(ttlUpdateRequest);
+    InputStream stream = channel.receive().getInputStream();
+    TtlUpdateResponse ttlUpdateResponse = TtlUpdateResponse.readFrom(new DataInputStream(stream));
+    assertEquals("Unexpected ServerErrorCode for TtlUpdateRequest", ServerErrorCode.No_Error,
+        ttlUpdateResponse.getError());
+  }
+
+  /**
+   * Checks the TTL update status of the given {@code blobId} based on the args provided
+   * @param channel the {@link ConnectedChannel} to make the {@link GetRequest} on.
+   * @param clusterMap the {@link ClusterMap} to use
+   * @param storeKeyFactory the {@link StoreKeyFactory} to use
+   * @param blobId the ID of the blob to check
+   * @param expectedBlobData the expected blob data
+   * @param ttlUpdated {@code true} if the blob has been ttl updated
+   * @param expectedExpiryTimeMs the expected expiry time (in ms)
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  static void checkTtlUpdateStatus(ConnectedChannel channel, ClusterMap clusterMap, StoreKeyFactory storeKeyFactory,
+      BlobId blobId, byte[] expectedBlobData, boolean ttlUpdated, long expectedExpiryTimeMs)
+      throws IOException, MessageFormatException {
+    PartitionRequestInfo requestInfo =
+        new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId));
+    List<PartitionRequestInfo> requestInfos = Collections.singletonList(requestInfo);
+
+    // blob properties
+    GetRequest request =
+        new GetRequest(1, "checkTtlUpdateStatus", MessageFormatFlags.BlobProperties, requestInfos, GetOption.None);
+    channel.send(request);
+    InputStream stream = channel.receive().getInputStream();
+    GetResponse response = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+    BlobProperties blobProperties = MessageFormatRecord.deserializeBlobProperties(response.getInputStream());
+    if (!ttlUpdated) {
+      assertEquals("TTL does not match", expectedExpiryTimeMs, getExpiryTimeMs(blobProperties));
+    }
+    MessageInfo messageInfo = response.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0);
+    assertEquals("Blob ID not as expected", blobId, messageInfo.getStoreKey());
+    assertEquals("TTL update state not as expected", ttlUpdated, messageInfo.isTtlUpdated());
+    assertEquals("Expiry time is not as expected", expectedExpiryTimeMs, messageInfo.getExpirationTimeInMs());
+
+    // blob all
+    request = new GetRequest(1, "checkTtlUpdateStatus", MessageFormatFlags.All, requestInfos, GetOption.None);
+    channel.send(request);
+    stream = channel.receive().getInputStream();
+    response = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+    InputStream responseStream = response.getInputStream();
+    BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, storeKeyFactory);
+    byte[] actualBlobData = new byte[(int) blobAll.getBlobData().getSize()];
+    blobAll.getBlobData().getStream().getByteBuffer().get(actualBlobData);
+    assertArrayEquals("Content mismatch", expectedBlobData, actualBlobData);
+    messageInfo = response.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0);
+    assertEquals("Blob ID not as expected", blobId, messageInfo.getStoreKey());
+    assertEquals("TTL update state not as expected", ttlUpdated, messageInfo.isTtlUpdated());
+    assertEquals("Expiry time is not as expected", expectedExpiryTimeMs, messageInfo.getExpirationTimeInMs());
+  }
+
+  /**
+   * Gets the expiry time (in ms) as stored by the {@link com.github.ambry.store.BlobStore}.
+   * @param blobProperties the properties of the blob
+   * @return the expiry time (in ms)
+   */
+  static long getExpiryTimeMs(BlobProperties blobProperties) {
+    return Utils.getTimeInMsToTheNearestSec(
+        Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds()));
+  }
+
+  /**
    * Returns BlockingChannel or SSLBlockingChannel depending on whether the port type is PlainText or SSL
    * for the given targetPort
    * @param targetPort upon which connection has to be established
    * @param hostName upon which connection has to be established
    * @return BlockingChannel
    */
-  protected static BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
+  static BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
       SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.PLAINTEXT) {
