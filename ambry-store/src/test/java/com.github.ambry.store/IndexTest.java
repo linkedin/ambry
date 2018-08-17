@@ -536,7 +536,6 @@ public class IndexTest {
     final AtomicReference<Offset> logEndOffset = new AtomicReference<>(state.log.getEndOffset());
     state.appendToLog(ITERATIONS);
 
-
     final Set<IndexEntry> entriesAdded = Collections.newSetFromMap(new ConcurrentHashMap<IndexEntry, Boolean>());
     Runnable adder = new Runnable() {
       @Override
