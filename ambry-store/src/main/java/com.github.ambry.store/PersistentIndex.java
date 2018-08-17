@@ -509,6 +509,9 @@ class PersistentIndex {
   /**
    * Finds a key in the index and returns the blob index value associated with it. If not found,
    * returns null
+   * <br>
+   * This method only returns PUT or DELETE index entries. It does not return TTL_UPDATE entries but accounts for
+   * TTL updates by updating the flag and expiry time (if applicable).
    * @param key  The key to find in the index
    * @return The blob index value associated with the key. Null if the key is not found.
    * @throws StoreException
@@ -890,7 +893,7 @@ class PersistentIndex {
           for (JournalEntry entry : entries) {
             IndexValue value =
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
-                    EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE), indexSegments);
+                    EnumSet.allOf(IndexEntryType.class), indexSegments);
             messageEntries.add(
                 new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                     value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
@@ -932,7 +935,7 @@ class PersistentIndex {
 
             startTimeInMs = time.milliseconds();
             updateStateForMessages(messageEntries);
-            logger.trace("Journal based to segment based token, Time used to update delete state: {}",
+            logger.trace("Journal based to segment based token, Time used to update state: {}",
                 (time.milliseconds() - startTimeInMs));
           } else {
             newToken = storeToken;
@@ -957,8 +960,7 @@ class PersistentIndex {
 
         startTimeInMs = time.milliseconds();
         updateStateForMessages(messageEntries);
-        logger.trace("Segment based token, Time used to update delete state: {}",
-            (time.milliseconds() - startTimeInMs));
+        logger.trace("Segment based token, Time used to update state: {}", (time.milliseconds() - startTimeInMs));
 
         startTimeInMs = time.milliseconds();
         eliminateDuplicates(messageEntries);
@@ -1193,7 +1195,7 @@ class PersistentIndex {
           }
           newTokenOffsetInJournal = entry.getOffset();
           IndexValue value = findKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSnapshot),
-              EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE), indexSegments);
+              EnumSet.allOf(IndexEntryType.class), indexSegments);
           messageEntries.add(
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                   value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
@@ -1288,12 +1290,15 @@ class PersistentIndex {
       MessageInfo messageInfo = messageEntriesIterator.next();
       if (!messageInfo.isDeleted()) {
         // ok to use most recent ref
-        IndexValue indexValue = findKey(messageInfo.getStoreKey());
-        messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
-            indexValue.isFlagSet(IndexValue.Flags.Delete_Index),
-            indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index), indexValue.getExpiresAtMs(),
-            indexValue.getAccountId(), indexValue.getContainerId(), indexValue.getOperationTimeInMs());
-        messageEntriesIterator.set(messageInfo);
+        IndexValue indexValue =
+            findKey(messageInfo.getStoreKey(), null, EnumSet.of(IndexEntryType.TTL_UPDATE, IndexEntryType.DELETE));
+        if (indexValue != null) {
+          messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
+              indexValue.isFlagSet(IndexValue.Flags.Delete_Index),
+              indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index), indexValue.getExpiresAtMs(),
+              indexValue.getAccountId(), indexValue.getContainerId(), indexValue.getOperationTimeInMs());
+          messageEntriesIterator.set(messageInfo);
+        }
       }
     }
   }
@@ -1461,7 +1466,7 @@ class PersistentIndex {
 
             IndexValue value =
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
-                    EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE), indexSegments);
+                    EnumSet.allOf(IndexEntryType.class), indexSegments);
             if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
               messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), true,
                   value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),

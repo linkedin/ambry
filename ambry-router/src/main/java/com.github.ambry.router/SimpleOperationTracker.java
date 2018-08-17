@@ -145,7 +145,11 @@ class SimpleOperationTracker implements OperationTracker {
           .append(partitionId.getPartitionClass())
           .append(". Replicas selected are: ");
       for (ReplicaId replicaId : replicaPool) {
-        errMsg.append(replicaId.getDataNodeId()).append(" ");
+        errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+      }
+      errMsg.append("Original replicas are: ");
+      for (ReplicaId replicaId : replicas) {
+        errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
       }
       throw new IllegalArgumentException(errMsg.toString());
     }

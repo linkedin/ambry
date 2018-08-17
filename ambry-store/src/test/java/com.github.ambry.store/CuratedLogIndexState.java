@@ -52,6 +52,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 
 
@@ -108,9 +109,9 @@ class CuratedLogIndexState {
   final Properties properties = new Properties();
   // the time instance that will be used in the index
   final MockTime time = new MockTime();
-  // the scheduler used in the index
-  final ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
 
+  // the scheduler used in the index
+  ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
   // The MessageStoreRecovery that is used with the index
   MessageStoreRecovery recovery = new DummyMessageStoreRecovery();
   // The MessageStoreHardDelete that is used with the index
@@ -188,15 +189,14 @@ class CuratedLogIndexState {
 
   /**
    * Destroys state and cleans up as required.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
-  void destroy() throws InterruptedException, IOException, StoreException {
+  void destroy() throws IOException, StoreException {
+    shutDownExecutorService(scheduler, 30, TimeUnit.SECONDS);
     index.close();
     log.close();
-    scheduler.shutdown();
-    assertTrue(scheduler.awaitTermination(1, TimeUnit.SECONDS));
+    assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, false));
   }
 
   /**
@@ -824,6 +824,8 @@ class CuratedLogIndexState {
     sessionId = UUID.randomUUID();
     metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
+    shutDownExecutorService(scheduler, 1, TimeUnit.SECONDS);
+    scheduler = Utils.newScheduler(1, false);
     index = new PersistentIndex(tempDirStr, tempDirStr, scheduler, log, config, CuratedLogIndexState.STORE_KEY_FACTORY,
         recovery, hardDelete, DISK_IO_SCHEDULER, metrics, time, sessionId, incarnationId);
   }
