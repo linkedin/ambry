@@ -186,4 +186,11 @@ class Journal {
   StoreKey getKeyAtOffset(Offset offset) {
     return journal.get(offset);
   }
+
+  /**
+   * @return the maximum number of entries to journal.
+   */
+  int getMaxEntriesToJournal() {
+    return maxEntriesToJournal;
+  }
 }

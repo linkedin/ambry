@@ -209,10 +209,12 @@ class PersistentIndex {
       log.setActiveSegment(getCurrentEndOffset().getName());
       logEndOffsetOnStartup = log.getEndOffset();
 
-      // Validate store.index.max.number.of.inmem.elements to prevent incorrect Journal size
+      // Validate the max Journal size
       if (!getIndexSegments().isEmpty() &&
-          config.storeIndexMaxNumberOfInmemElements < getIndexSegments().lastEntry().getValue().getNumberOfItems()) {
-        throw new StoreException("store.index.max.number.of.inmem.elements is less than the number of entries in the last index segment",
+          this.journal.getMaxEntriesToJournal() < getIndexSegments().lastEntry().getValue().getNumberOfItems()) {
+        throw new StoreException("max journal size of " + this.journal.getMaxEntriesToJournal() +
+            " is less than the number of entries in the last index segment of " +
+            getIndexSegments().lastEntry().getValue().getNumberOfItems(),
             StoreErrorCodes.Illegal_Index_State);
       }
 
