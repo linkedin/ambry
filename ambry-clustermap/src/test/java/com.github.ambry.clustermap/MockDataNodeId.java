@@ -168,4 +168,9 @@ public class MockDataNodeId implements DataNodeId {
   public void onNodeResponse() {
     /* no-op for now */
   }
+
+  @Override
+  public String toString() {
+    return datacenter + ":" + hostname + ":" + portNum;
+  }
 }
