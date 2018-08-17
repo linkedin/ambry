@@ -231,6 +231,9 @@ public class ConsistencyCheckerTool {
           status.setIsDeprecated(isDeprecated);
           status.addDeletedOrExpiredOrDeprecated(replica);
         }
+        if (info.isPermanent()) {
+          status.addAsPermanent(replica);
+        }
       }
     }
     return keyReplicationStatusMap;
@@ -253,15 +256,18 @@ public class ConsistencyCheckerTool {
     for (StoreKey blobId : blobIdToStatusMap.keySet()) {
       ReplicationStatus consistencyBlobResult = blobIdToStatusMap.get(blobId);
       // valid blobs : count of available replicas = total replica count or count of deleted replicas = total replica count
-      boolean isValid = consistencyBlobResult.available.size() == replicaCount
-          || consistencyBlobResult.deletedOrExpiredOrDeprecated.size() == replicaCount;
+      boolean allAgreeOnPermanency =
+          consistencyBlobResult.permanentOn.size() == 0 || consistencyBlobResult.permanentOn.containsAll(
+              consistencyBlobResult.available);
+      boolean isValid = (consistencyBlobResult.available.size() == replicaCount
+          || consistencyBlobResult.deletedOrExpiredOrDeprecated.size() == replicaCount) && allAgreeOnPermanency;
       if (!isValid) {
         totalInconsistentBlobs++;
         if (consistencyBlobResult.isDeprecated) {
           totalDeprecatedBlobs++;
         }
-        if ((consistencyBlobResult.deletedOrExpiredOrDeprecated.size() + consistencyBlobResult.unavailable.size()
-            == replicaCount)) {
+        if (consistencyBlobResult.deletedOrExpiredOrDeprecated.size() + consistencyBlobResult.unavailable.size()
+            == replicaCount) {
           // acceptable inconsistent blobs : count of deleted + count of unavailable = total replica count
           logger.debug("Partially deleted (acceptable inconsistency) blob {} isDeletedOrExpired {}. Blob status - {}",
               blobId, consistencyBlobResult.isDeletedOrExpired, consistencyBlobResult);
@@ -299,6 +305,7 @@ public class ConsistencyCheckerTool {
     final Set<File> available = new HashSet<>();
     final Set<File> deletedOrExpiredOrDeprecated = new HashSet<>();
     final Set<File> unavailable = new HashSet<>();
+    final Set<File> permanentOn = new HashSet<>();
     boolean isDeletedOrExpired;
     boolean isDeprecated = false;
     boolean belongsToRecentIndexSegment = false;
@@ -323,6 +330,10 @@ public class ConsistencyCheckerTool {
 
     void setIsDeprecated(boolean isDeprecated) {
       this.isDeprecated = isDeprecated;
+    }
+
+    void addAsPermanent(File replica) {
+      permanentOn.add(replica);
     }
 
     void addDeletedOrExpiredOrDeprecated(File replica) {
