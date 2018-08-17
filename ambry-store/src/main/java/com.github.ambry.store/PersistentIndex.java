@@ -509,6 +509,9 @@ class PersistentIndex {
   /**
    * Finds a key in the index and returns the blob index value associated with it. If not found,
    * returns null
+   * <p/>
+   * This method only returns PUT or DELETE index entries. It does not return TTL_UPDATE entries but accounts for
+   * TTL updates by updating the flag and expiry time (if applicable).
    * @param key  The key to find in the index
    * @return The blob index value associated with the key. Null if the key is not found.
    * @throws StoreException
@@ -932,7 +935,7 @@ class PersistentIndex {
 
             startTimeInMs = time.milliseconds();
             updateStateForMessages(messageEntries);
-            logger.trace("Journal based to segment based token, Time used to update delete state: {}",
+            logger.trace("Journal based to segment based token, Time used to update state: {}",
                 (time.milliseconds() - startTimeInMs));
           } else {
             newToken = storeToken;
@@ -957,8 +960,7 @@ class PersistentIndex {
 
         startTimeInMs = time.milliseconds();
         updateStateForMessages(messageEntries);
-        logger.trace("Segment based token, Time used to update delete state: {}",
-            (time.milliseconds() - startTimeInMs));
+        logger.trace("Segment based token, Time used to update state: {}", (time.milliseconds() - startTimeInMs));
 
         startTimeInMs = time.milliseconds();
         eliminateDuplicates(messageEntries);
