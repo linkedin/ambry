@@ -107,6 +107,10 @@ public class RestUtils {
      * Header that is set in the response of OPTIONS request that specifies the validity of the options returned.
      */
     public static final String ACCESS_CONTROL_MAX_AGE = "Access-Control-Max-Age";
+    /**
+     * {@code "allow"}
+     */
+    public final static String ALLOW = "allow";
 
     // ambry specific headers
     /**
@@ -184,18 +188,15 @@ public class RestUtils {
     public static final String CHUNK_UPLOAD = "x-ambry-chunk-upload";
 
     /**
-     * This header will carry a UUID that represents a stitched upload session.
+     * This header will carry a UUID that represents a "session." For example, when performing a stitched upload, each
+     * chunk upload should be a part of the same session.
      */
-    public static final String CHUNK_UPLOAD_SESSION = "x-ambry-chunk-upload-session";
+    public static final String SESSION = "x-ambry-session";
 
     /**
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
-    /**
-     * {@code "allow"}
-     */
-    public final static String ALLOW = "allow";
   }
 
   /**
@@ -613,13 +614,13 @@ public class RestUtils {
   }
 
   /**
-   * Determine if {@link Headers#CHUNK_UPLOAD_SESSION} is set in the request args.
+   * Determine if {@link Headers#SESSION} is set in the request args.
    * @param args The request arguments.
-   * @return {@code true} if {@link Headers#CHUNK_UPLOAD_SESSION} is set.
+   * @return {@code true} if {@link Headers#SESSION} is set.
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
   public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {
-    return getHeader(args, Headers.CHUNK_UPLOAD_SESSION, false) != null;
+    return getHeader(args, Headers.CHUNK_UPLOAD, false) != null;
   }
 
   /**

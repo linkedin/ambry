@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
@@ -63,7 +64,8 @@ public class AmbryUrlSigningServiceTest {
     properties.setProperty("frontend.url.signer.max.url.ttl.secs", Long.toString(MAX_URL_TTL_SECS));
     properties.setProperty(FrontendConfig.CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY,
         Long.toString(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS));
-    properties.setProperty(FrontendConfig.CHUNK_UPLOAD_MAX_CHUNK_SIZE_KEY, Long.toString(CHUNK_UPLOAD_MAX_CHUNK_SIZE));
+    CommonTestUtils.populateRequiredRouterProps(properties);
+    properties.setProperty("router.max.put.chunk.size.bytes", Long.toString(CHUNK_UPLOAD_MAX_CHUNK_SIZE));
     UrlSigningService signer = new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
         new MetricRegistry()).getUrlSigningService();
     assertNotNull("UrlSigningService is null", signer);
@@ -238,10 +240,11 @@ public class AmbryUrlSigningServiceTest {
    * @param restMethod the {@link RestMethod} intended by {@code url}.
    * @param randomHeaderVal the expected value of {@link #RANDOM_AMBRY_HEADER}.
    * @param maxUploadSize the expected value of {@link RestUtils.Headers#MAX_UPLOAD_SIZE}.
+   * @param chunkUploadSet {@code true} if the signed URL should be a chunk upload URL.
    * @throws Exception
    */
   private void verifySignedUrl(AmbryUrlSigningService signer, String url, RestMethod restMethod, String randomHeaderVal,
-      long maxUploadSize, long blobTtl, boolean chunkUploadSessionSet) throws Exception {
+      long maxUploadSize, long blobTtl, boolean chunkUploadSet) throws Exception {
     RestRequest signedRequest = getRequestFromUrl(restMethod, url);
     assertTrue("Request should be declared as signed", signer.isRequestSigned(signedRequest));
     signer.verifySignedRequest(signedRequest);
@@ -249,23 +252,27 @@ public class AmbryUrlSigningServiceTest {
     assertEquals("URL type not as expected", restMethod.name(), args.get(RestUtils.Headers.URL_TYPE).toString());
     assertEquals("Random header value is not as expected", randomHeaderVal, args.get(RANDOM_AMBRY_HEADER).toString());
     Object blobTtlVal = args.get(RestUtils.Headers.TTL);
-    Object chunkUploadSessionVal = args.get(RestUtils.Headers.CHUNK_UPLOAD_SESSION);
+    Object chunkUploadVal = args.get(RestUtils.Headers.CHUNK_UPLOAD);
+    Object sessionVal = args.get(RestUtils.Headers.SESSION);
     if (restMethod.equals(RestMethod.POST)) {
       assertEquals("Max upload size not as expected", maxUploadSize,
           Long.parseLong(args.get(RestUtils.Headers.MAX_UPLOAD_SIZE).toString()));
       if (blobTtl != Utils.Infinite_Time) {
         assertEquals("Blob TTL not as expected", blobTtl, Long.parseLong(blobTtlVal.toString()));
       }
-      if (chunkUploadSessionSet) {
-        assertNotNull("Chunk upload session should be set", chunkUploadSessionVal);
+      if (chunkUploadSet) {
+        assertTrue("Chunk upload should be set", Boolean.valueOf(chunkUploadVal.toString()));
+        assertNotNull("Session should be set", sessionVal);
         // ensure that the x-ambry-chunk-upload-session value is a valid UUID.
-        UUID.fromString(chunkUploadSessionVal.toString());
+        UUID.fromString(sessionVal.toString());
       } else {
-        assertNull("Chunk upload session should not be set", chunkUploadSessionVal);
+        assertNull("Chunk upload should not be set", chunkUploadVal);
+        assertNull("Session should not be set", sessionVal);
       }
     } else {
       assertNull("Blob TTL should not be set", blobTtlVal);
-      assertNull("Chunk upload session should not be set", chunkUploadSessionVal);
+      assertNull("Chunk upload should not be set", chunkUploadVal);
+      assertNull("Session should not be set", sessionVal);
     }
   }
 

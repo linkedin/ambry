@@ -140,7 +140,8 @@ public class AmbryUrlSigningService implements UrlSigningService {
         // They also have a non-optional blob TTL to ensure that chunks that were not stitched within a reasonable time
         // span are cleaned up.
         argsForUrl.put(RestUtils.Headers.TTL, chunkUploadInitialChunkTtlSecs);
-        argsForUrl.put(RestUtils.Headers.CHUNK_UPLOAD_SESSION, UUID.randomUUID().toString());
+        argsForUrl.put(RestUtils.Headers.CHUNK_UPLOAD, true);
+        argsForUrl.put(RestUtils.Headers.SESSION, UUID.randomUUID().toString());
       }
       argsForUrl.put(RestUtils.Headers.MAX_UPLOAD_SIZE, maxUploadSize);
     }

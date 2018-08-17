@@ -17,7 +17,7 @@ package com.github.ambry.frontend;
 /**
  * IdSigningServiceFactory is a factory to generate all the supporting cast required to instantiate a
  * {@link IdSigningService}.
- * <p/>
+ * <p>
  * Usually called with the canonical class name and as such might have to support appropriate (multiple) constructors.
  */
 public interface IdSigningServiceFactory {

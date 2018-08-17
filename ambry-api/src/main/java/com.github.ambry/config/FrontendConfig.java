@@ -17,6 +17,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.GetBlobOptions;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -144,15 +145,13 @@ public class FrontendConfig {
   @Default("GetOption.None")
   public final GetOption frontendDefaultRouterGetOption;
 
+  /**
+   * The blob TTL in seconds to use for data chunks uploaded in a stitched upload session.
+   */
   public static final String CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY = PREFIX + "chunk.upload.initial.chunk.ttl.secs";
   @Config(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY)
-  @Default("24 * 60 * 60")
+  @Default("28 * 24 * 60 * 60")
   public final long chunkUploadInitialChunkTtlSecs;
-
-  public static final String CHUNK_UPLOAD_MAX_CHUNK_SIZE_KEY = PREFIX + "chunk.upload.max.chunk.size";
-  @Config(CHUNK_UPLOAD_MAX_CHUNK_SIZE_KEY)
-  @Default("4 * 1024 * 1024")
-  public final long chunkUploadMaxChunkSize;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -185,7 +184,6 @@ public class FrontendConfig {
     frontendDefaultRouterGetOption =
         GetOption.valueOf(verifiableProperties.getString("frontend.default.router.get.option", GetOption.None.name()));
     chunkUploadInitialChunkTtlSecs =
-        verifiableProperties.getLong(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY, 24 * 60 * 60);
-    chunkUploadMaxChunkSize = verifiableProperties.getLong(CHUNK_UPLOAD_MAX_CHUNK_SIZE_KEY, 4 * 1024 * 1024);
+        verifiableProperties.getLong(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY, TimeUnit.DAYS.toSeconds(28));
   }
 }

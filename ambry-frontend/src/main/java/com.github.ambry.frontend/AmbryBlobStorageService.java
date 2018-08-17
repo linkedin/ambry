@@ -14,12 +14,11 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.Histogram;
-import com.github.ambry.account.Account;
-import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.BlobStorageService;
@@ -40,6 +39,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
@@ -73,6 +73,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final SecurityServiceFactory securityServiceFactory;
   private final ClusterMap clusterMap;
   private final FrontendConfig frontendConfig;
+  private final RouterConfig routerConfig;
   private final FrontendMetrics frontendMetrics;
   private final GetReplicasHandler getReplicasHandler;
   private final UrlSigningService urlSigningService;
@@ -90,20 +91,21 @@ class AmbryBlobStorageService implements BlobStorageService {
    * Create a new instance of AmbryBlobStorageService by supplying it with config, metrics, cluster map, a
    * response handler controller and a router.
    * @param frontendConfig the {@link FrontendConfig} with configuration parameters.
+   * @param routerConfig
    * @param frontendMetrics the metrics instance to use in the form of {@link FrontendMetrics}.
    * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent out.
    * @param router the {@link Router} instance to use to perform blob operations.
    * @param clusterMap the {@link ClusterMap} in use.
    * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter} instance.
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService} instance.
-   * @param accountService the {@link AccountService} to use to query for target {@link Account} of a {@link RestRequest}.
    * @param urlSigningService the {@link UrlSigningService} used to sign URLs.
    */
-  AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
+  AmbryBlobStorageService(FrontendConfig frontendConfig, RouterConfig routerConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
-      SecurityServiceFactory securityServiceFactory, AccountService accountService, UrlSigningService urlSigningService,
+      SecurityServiceFactory securityServiceFactory, UrlSigningService urlSigningService,
       AccountAndContainerInjector accountAndContainerInjector) {
     this.frontendConfig = frontendConfig;
+    this.routerConfig = routerConfig;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
     this.router = router;
@@ -126,8 +128,8 @@ class AmbryBlobStorageService implements BlobStorageService {
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap);
     postBlobHandler =
-        new PostBlobHandler(securityService, idConverter, router, accountAndContainerInjector, frontendConfig,
-            frontendMetrics);
+        new PostBlobHandler(securityService, idConverter, router, accountAndContainerInjector, SystemTime.getInstance(),
+            frontendConfig, routerConfig, frontendMetrics);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap);

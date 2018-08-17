@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.RestRequest;
@@ -26,6 +27,8 @@ import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -40,12 +43,18 @@ import static com.github.ambry.frontend.FrontendUtils.*;
  */
 class PostBlobHandler {
   private static final Logger LOGGER = LoggerFactory.getLogger(PostBlobHandler.class);
+  /**
+   * Key to represent the time at which a blob will expire in ms. Used within the metadata map in signed IDs.
+   */
+  static final String EXPIRATION_TIME_MS_KEY = "et";
 
   private final SecurityService securityService;
   private final IdConverter idConverter;
   private final Router router;
   private final AccountAndContainerInjector accountAndContainerInjector;
+  private final Time time;
   private final FrontendConfig frontendConfig;
+  private final RouterConfig routerConfig;
   private final FrontendMetrics frontendMetrics;
 
   /**
@@ -54,17 +63,21 @@ class PostBlobHandler {
    * @param idConverter the {@link IdConverter} to use.
    * @param router the {@link Router} to use.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
+   * @param time the {@link Time} instance to use.
    * @param frontendConfig the {@link FrontendConfig} to use.
+   * @param routerConfig the {@link RouterConfig} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    */
   PostBlobHandler(SecurityService securityService, IdConverter idConverter, Router router,
-      AccountAndContainerInjector accountAndContainerInjector, FrontendConfig frontendConfig,
-      FrontendMetrics frontendMetrics) {
+      AccountAndContainerInjector accountAndContainerInjector, Time time, FrontendConfig frontendConfig,
+      RouterConfig routerConfig, FrontendMetrics frontendMetrics) {
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.router = router;
     this.accountAndContainerInjector = accountAndContainerInjector;
+    this.time = time;
     this.frontendConfig = frontendConfig;
+    this.routerConfig = routerConfig;
     this.frontendMetrics = frontendMetrics;
   }
 
@@ -117,7 +130,7 @@ class PostBlobHandler {
      */
     private Callback<Void> securityPreProcessRequestCallback() {
       return buildCallback(frontendMetrics.postSecurityPreProcessRequestMetrics, securityCheckResult -> {
-        BlobInfo blobInfo = parseBlobInfoFromRequest();
+        BlobInfo blobInfo = getBlobInfoFromRequest();
         checkUploadRequirements(blobInfo.getBlobProperties());
         securityService.processRequest(restRequest, securityProcessRequestCallback(blobInfo));
       }, restRequest.getUri(), LOGGER, finalCallback);
@@ -143,9 +156,7 @@ class PostBlobHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        PutBlobOptions options = new PutBlobOptionsBuilder().chunkUpload(RestUtils.isChunkUpload(restRequest.getArgs()))
-            .maxUploadSize(RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false))
-            .build();
+        PutBlobOptions options = getPutBlobOptionsFromRequest();
         router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
             routerPutBlobCallback(blobInfo));
       }, restRequest.getUri(), LOGGER, finalCallback);
@@ -159,7 +170,7 @@ class PostBlobHandler {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postRouterPutBlobMetrics, blobId -> {
-        setSignedIdMetadataIfRequired();
+        setSignedIdMetadataIfRequired(blobInfo.getBlobProperties());
         idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -192,7 +203,7 @@ class PostBlobHandler {
      * @return the {@link BlobInfo} parsed from the request arguments.
      * @throws RestServiceException if there is an error while parsing the {@link BlobInfo} arguments.
      */
-    private BlobInfo parseBlobInfoFromRequest() throws RestServiceException {
+    private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
       long propsBuildStartTime = System.currentTimeMillis();
       accountAndContainerInjector.injectAccountAndContainerForPostRequest(restRequest);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
@@ -214,16 +225,32 @@ class PostBlobHandler {
     }
 
     /**
+     * @return the {@link PutBlobOptions} to use, parsed from the request.
+     */
+    private PutBlobOptions getPutBlobOptionsFromRequest() throws RestServiceException {
+      PutBlobOptionsBuilder builder =
+          new PutBlobOptionsBuilder().chunkUpload(RestUtils.isChunkUpload(restRequest.getArgs()));
+      Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
+      if (maxUploadSize != null) {
+        builder.maxUploadSize(maxUploadSize);
+      }
+      return builder.build();
+    }
+
+    /**
      * Attach the metadata to include in a signed ID to the {@link RestRequest} if the request is for a chunk upload.
      * This will tell the ID converter that it needs to produce a signed ID to give back to the client.
+     * @param blobProperties the {@link BlobProperties} from the request.
      * @throws RestServiceException
      */
-    private void setSignedIdMetadataIfRequired() throws RestServiceException {
+    private void setSignedIdMetadataIfRequired(BlobProperties blobProperties) throws RestServiceException {
       if (RestUtils.isChunkUpload(restRequest.getArgs())) {
         Map<String, String> metadata = new HashMap<>(2);
         metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBytesReceived()));
-        metadata.put(RestUtils.Headers.CHUNK_UPLOAD_SESSION,
-            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.CHUNK_UPLOAD_SESSION, true));
+        metadata.put(RestUtils.Headers.SESSION,
+            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
+        metadata.put(EXPIRATION_TIME_MS_KEY,
+            Long.toString(Utils.addSecondsToEpochTime(time.milliseconds(), blobProperties.getTimeToLiveInSeconds())));
         restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
       }
     }
@@ -235,9 +262,11 @@ class PostBlobHandler {
      */
     private void checkUploadRequirements(BlobProperties blobProperties) throws RestServiceException {
       if (RestUtils.isChunkUpload(restRequest.getArgs())) {
+        // ensure that the x-ambry-session header is present.
+        RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true);
         // validate that max chunk size configuration is less than the chunking threshold.
         long maxChunkSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, true);
-        if (maxChunkSize > frontendConfig.chunkUploadMaxChunkSize) {
+        if (maxChunkSize > routerConfig.routerMaxPutChunkSizeBytes) {
           throw new RestServiceException("Invalid max chunk size: " + maxChunkSize, RestServiceErrorCode.InvalidArgs);
         }
         // validate that the TTL for the chunk is set correctly.

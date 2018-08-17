@@ -32,4 +32,13 @@ public class CommonTestUtils {
     props.setProperty("router.datacenter.name", "localDC");
     return new RouterConfig(new VerifiableProperties(props)).routerBlobidCurrentVersion;
   }
+
+  /**
+   * Set dummy values for the required {@link RouterConfig} properties for use in tests.
+   * @param props the {@link Properties} to set the required configs in.
+   */
+  public static void populateRequiredRouterProps(Properties props) {
+    props.setProperty("router.hostname", "localhost");
+    props.setProperty("router.datacenter.name", "localDC");
+  }
 }

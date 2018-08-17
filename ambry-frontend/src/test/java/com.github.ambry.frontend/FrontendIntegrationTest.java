@@ -397,7 +397,7 @@ public class FrontendIntegrationTest {
     assertTrue("Blob ID for chunk upload must be signed", idSigningService.isIdSigned(signedID.substring(1)));
     Pair<String, Map<String, String>> idAndMetadata = idSigningService.parseSignedId(signedID.substring(1));
     // Inspect metadata fields
-    String chunkUploadSession = idAndMetadata.getSecond().get(RestUtils.Headers.CHUNK_UPLOAD_SESSION);
+    String chunkUploadSession = idAndMetadata.getSecond().get(RestUtils.Headers.SESSION);
     assertNotNull("x-ambry-chunk-upload-session should be present in signed ID", chunkUploadSession);
     String blobSize = idAndMetadata.getSecond().get(RestUtils.Headers.BLOB_SIZE);
     assertNotNull("x-ambry-blob-size should be present in signed ID", blobSize);
@@ -537,6 +537,7 @@ public class FrontendIntegrationTest {
     properties.put("netty.server.request.buffer.watermark", "1");
     // to test that multipart requests over a certain size fail
     properties.put("netty.multipart.post.max.size.bytes", Long.toString(MAX_MULTIPART_POST_SIZE_BYTES));
+    CommonTestUtils.populateRequiredRouterProps(properties);
     TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     // add key for singleKeyManagementService
     properties.put("kms.default.container.key", TestUtils.getRandomKey(32));

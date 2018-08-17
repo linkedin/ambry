@@ -15,23 +15,20 @@
 
 package com.github.ambry.router;
 
-import java.util.Objects;
-
-
 /**
  * Represents any options associated with a putBlob request.
  * @todo honor these options within the router impl
  */
 public class PutBlobOptions {
   private final boolean chunkUpload;
-  private final Long maxUploadSize;
+  private final long maxUploadSize;
 
   /**
    * @param chunkUpload {@code true} to indicate that the {@code putBlob()} call is for a single data chunk of a
    *                    stitched blob.
    * @param maxUploadSize the max size of the uploaded blob in bytes. To be enforced by the router. Can be null.
    */
-  public PutBlobOptions(boolean chunkUpload, Long maxUploadSize) {
+  public PutBlobOptions(boolean chunkUpload, long maxUploadSize) {
     this.chunkUpload = chunkUpload;
     this.maxUploadSize = maxUploadSize;
   }
@@ -47,7 +44,7 @@ public class PutBlobOptions {
   /**
    * @return the max size of the uploaded blob in bytes. To be enforced by the router. Can be null.
    */
-  public Long getMaxUploadSize() {
+  public long getMaxUploadSize() {
     return maxUploadSize;
   }
 
@@ -59,13 +56,16 @@ public class PutBlobOptions {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    PutBlobOptions that = (PutBlobOptions) o;
-    return chunkUpload == that.chunkUpload && Objects.equals(maxUploadSize, that.maxUploadSize);
+
+    PutBlobOptions options = (PutBlobOptions) o;
+    return chunkUpload == options.chunkUpload && maxUploadSize == options.maxUploadSize;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(chunkUpload, maxUploadSize);
+    int result = (chunkUpload ? 1 : 0);
+    result = 31 * result + (int) (maxUploadSize ^ (maxUploadSize >>> 32));
+    return result;
   }
 
   @Override

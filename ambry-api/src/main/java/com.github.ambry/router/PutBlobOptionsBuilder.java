@@ -20,7 +20,7 @@ package com.github.ambry.router;
  */
 public class PutBlobOptionsBuilder {
   private boolean chunkUpload = false;
-  private Long maxUploadSize = null;
+  private long maxUploadSize = Long.MAX_VALUE;
 
   /**
    * @param chunkUpload {@code true} to indicate that this is an upload of
@@ -35,7 +35,7 @@ public class PutBlobOptionsBuilder {
    * @param maxUploadSize the max size of the uploaded blob in bytes. To be enforced by the router. Can be null.
    * @return this builder
    */
-  public PutBlobOptionsBuilder maxUploadSize(Long maxUploadSize) {
+  public PutBlobOptionsBuilder maxUploadSize(long maxUploadSize) {
     this.maxUploadSize = maxUploadSize;
     return this;
   }

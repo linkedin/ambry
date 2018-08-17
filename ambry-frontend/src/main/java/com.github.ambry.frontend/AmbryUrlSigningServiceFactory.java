@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.utils.SystemTime;
@@ -28,14 +29,16 @@ import org.json.JSONObject;
  * Returns a new instance of {@link UrlSigningService} on {@link #getUrlSigningService()} call.
  */
 public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
-  private final FrontendConfig config;
+  private final FrontendConfig frontendConfig;
+  private final RouterConfig routerConfig;
 
   public AmbryUrlSigningServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
-    config = new FrontendConfig(verifiableProperties);
+    frontendConfig = new FrontendConfig(verifiableProperties);
+    routerConfig = new RouterConfig(verifiableProperties);
   }
 
   @Override
-  public UrlSigningService getUrlSigningService()  {
+  public UrlSigningService getUrlSigningService() {
 
     String uploadEndpoint, downloadEndpoint;
     // Assume frontendUrlSignerEndpoints has only POST/GET, nothing nested
@@ -48,8 +51,8 @@ public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
     }
 
     return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint,
-        config.frontendUrlSignerDefaultUrlTtlSecs, config.frontendUrlSignerDefaultMaxUploadSizeBytes,
-        config.frontendUrlSignerMaxUrlTtlSecs, config.chunkUploadInitialChunkTtlSecs, config.chunkUploadMaxChunkSize,
-        SystemTime.getInstance());
+        frontendConfig.frontendUrlSignerDefaultUrlTtlSecs, frontendConfig.frontendUrlSignerDefaultMaxUploadSizeBytes,
+        frontendConfig.frontendUrlSignerMaxUrlTtlSecs, frontendConfig.chunkUploadInitialChunkTtlSecs,
+        routerConfig.routerMaxPutChunkSizeBytes, SystemTime.getInstance());
   }
 }
