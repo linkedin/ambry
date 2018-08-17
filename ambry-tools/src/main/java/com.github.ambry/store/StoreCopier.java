@@ -210,17 +210,17 @@ public class StoreCopier implements Closeable {
         logger.trace("Processing {} - isDeleted: {}, isExpired {}", messageInfo.getStoreKey(), messageInfo.isDeleted(),
             messageInfo.isExpired());
         if (!messageInfo.isExpired() && !messageInfo.isDeleted()) {
-          if (messageInfo.getSize() > Integer.MAX_VALUE) {
-            throw new IllegalStateException("Cannot copy blobs whose size > Integer.MAX_VALUE");
-          }
           if (tgt.findMissingKeys(Collections.singletonList(messageInfo.getStoreKey())).size() == 1) {
-            int size = (int) messageInfo.getSize();
             StoreInfo storeInfo =
                 src.get(Collections.singletonList(messageInfo.getStoreKey()), EnumSet.allOf(StoreGetOptions.class));
             MessageReadSet readSet = storeInfo.getMessageReadSet();
+            if (readSet.sizeInBytes(0) > Integer.MAX_VALUE) {
+              throw new IllegalStateException("Cannot copy blobs whose size > Integer.MAX_VALUE");
+            }
+            int size = (int) readSet.sizeInBytes(0);
             byte[] buf = new byte[size];
             readSet.writeTo(0, new ByteBufferChannel(ByteBuffer.wrap(buf)), 0, size);
-            Message message = new Message(messageInfo, new ByteArrayInputStream(buf));
+            Message message = new Message(storeInfo.getMessageReadSetInfo().get(0), new ByteArrayInputStream(buf));
             for (Transformer transformer : transformers) {
               TransformationOutput tfmOutput = transformer.transform(message);
               if (tfmOutput.getException() != null) {
