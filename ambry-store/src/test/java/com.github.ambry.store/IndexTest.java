@@ -520,16 +520,22 @@ public class IndexTest {
   @Test
   public void addToIndexAndChangeIndexSegmentsConcurrencyTest() throws Exception {
     long ITERATIONS = 500;
-    final Set<Offset> indexSegmentStartOffsets = new HashSet<>(state.referenceIndex.keySet());
-    final AtomicReference<Offset> logEndOffset = new AtomicReference<>(state.log.getEndOffset());
     final AtomicReference<Exception> exception = new AtomicReference<>(null);
     final AtomicReference<CountDownLatch> latch = new AtomicReference<>();
     ExecutorService executorService = Executors.newFixedThreadPool(2);
 
+    // clear the old index since the new config will no longer be valid
+    state.closeAndClearIndex();
     // make sure rollover occurs on every index entry
     state.properties.put("store.index.max.number.of.inmem.elements", "1");
     state.reloadIndex(true, false);
+    state.addPutEntries(50, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    // reload the index to persist the newly added entries
+    state.reloadIndex(true, false);
+    final Set<Offset> indexSegmentStartOffsets = new HashSet<>(state.referenceIndex.keySet());
+    final AtomicReference<Offset> logEndOffset = new AtomicReference<>(state.log.getEndOffset());
     state.appendToLog(ITERATIONS);
+
 
     final Set<IndexEntry> entriesAdded = Collections.newSetFromMap(new ConcurrentHashMap<IndexEntry, Boolean>());
     Runnable adder = new Runnable() {
@@ -1274,6 +1280,20 @@ public class IndexTest {
       assertEquals("More than the expected number of files were deleted", totalFilesInDir - filesToCheck.length,
           tempDir.listFiles().length);
       logSegment = nextSegment;
+    }
+  }
+
+  /**
+   * Tests that appropriate exceptions are thrown when there are invalid store configs.
+   */
+  @Test
+  public void invalidConfigTest() {
+    state.properties.put("store.index.max.number.of.inmem.elements", "1");
+    try {
+      state.reloadIndex(true, false);
+      fail("Invalid config, an Illegal_Index_State exception is expected");
+    } catch (StoreException e) {
+      assertTrue("Expected Illegal_Index_State exception", e.getErrorCode() == StoreErrorCodes.Illegal_Index_State);
     }
   }
 

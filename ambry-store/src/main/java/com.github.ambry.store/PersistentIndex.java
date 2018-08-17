@@ -209,6 +209,13 @@ class PersistentIndex {
       log.setActiveSegment(getCurrentEndOffset().getName());
       logEndOffsetOnStartup = log.getEndOffset();
 
+      // Validate store.index.max.number.of.inmem.elements to prevent incorrect Journal size
+      if (!getIndexSegments().isEmpty() &&
+          config.storeIndexMaxNumberOfInmemElements < getIndexSegments().lastEntry().getValue().getNumberOfItems()) {
+        throw new StoreException("store.index.max.number.of.inmem.elements is less than the number of entries in the last index segment",
+            StoreErrorCodes.Illegal_Index_State);
+      }
+
       if (hardDelete != null) {
         // After recovering the last messages, and setting the log end offset, let the hard delete thread do its recovery.
         // NOTE: It is safe to do the hard delete recovery after the regular recovery because we ensure that hard deletes
