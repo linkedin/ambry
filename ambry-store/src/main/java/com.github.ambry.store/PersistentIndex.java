@@ -509,7 +509,7 @@ class PersistentIndex {
   /**
    * Finds a key in the index and returns the blob index value associated with it. If not found,
    * returns null
-   * <p/>
+   * <br>
    * This method only returns PUT or DELETE index entries. It does not return TTL_UPDATE entries but accounts for
    * TTL updates by updating the flag and expiry time (if applicable).
    * @param key  The key to find in the index
