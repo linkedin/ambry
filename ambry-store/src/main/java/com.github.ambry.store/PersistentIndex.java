@@ -186,6 +186,7 @@ class PersistentIndex {
 
     List<File> indexFiles = getAllIndexSegmentFiles();
     try {
+      this.journal.startBootstrap();
       for (int i = 0; i < indexFiles.size(); i++) {
         // We map all the index segments except the most recent index segment.
         // The recent index segment would go through recovery after they have been
@@ -208,15 +209,7 @@ class PersistentIndex {
       setEndOffsets();
       log.setActiveSegment(getCurrentEndOffset().getName());
       logEndOffsetOnStartup = log.getEndOffset();
-
-      // Validate the max Journal size
-      if (!getIndexSegments().isEmpty() &&
-          this.journal.getMaxEntriesToJournal() < getIndexSegments().lastEntry().getValue().getNumberOfItems()) {
-        throw new StoreException("max journal size of " + this.journal.getMaxEntriesToJournal() +
-            " is less than the number of entries in the last index segment of " +
-            getIndexSegments().lastEntry().getValue().getNumberOfItems(),
-            StoreErrorCodes.Illegal_Index_State);
-      }
+      this.journal.finishBootstrap();
 
       if (hardDelete != null) {
         // After recovering the last messages, and setting the log end offset, let the hard delete thread do its recovery.

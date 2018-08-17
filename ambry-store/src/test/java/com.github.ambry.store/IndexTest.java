@@ -520,20 +520,15 @@ public class IndexTest {
   @Test
   public void addToIndexAndChangeIndexSegmentsConcurrencyTest() throws Exception {
     long ITERATIONS = 500;
+    final Set<Offset> indexSegmentStartOffsets = new HashSet<>(state.referenceIndex.keySet());
+    final AtomicReference<Offset> logEndOffset = new AtomicReference<>(state.log.getEndOffset());
     final AtomicReference<Exception> exception = new AtomicReference<>(null);
     final AtomicReference<CountDownLatch> latch = new AtomicReference<>();
     ExecutorService executorService = Executors.newFixedThreadPool(2);
 
-    // clear the old index since the new config will no longer be valid
-    state.closeAndClearIndex();
     // make sure rollover occurs on every index entry
     state.properties.put("store.index.max.number.of.inmem.elements", "1");
     state.reloadIndex(true, false);
-    state.addPutEntries(50, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    // reload the index to persist the newly added entries
-    state.reloadIndex(true, false);
-    final Set<Offset> indexSegmentStartOffsets = new HashSet<>(state.referenceIndex.keySet());
-    final AtomicReference<Offset> logEndOffset = new AtomicReference<>(state.log.getEndOffset());
     state.appendToLog(ITERATIONS);
 
     final Set<IndexEntry> entriesAdded = Collections.newSetFromMap(new ConcurrentHashMap<IndexEntry, Boolean>());
@@ -1283,17 +1278,33 @@ public class IndexTest {
   }
 
   /**
-   * Tests that appropriate exceptions are thrown when there are invalid store configs.
+   * Tests the behavior of {@link Journal} bootstrap.
    */
   @Test
-  public void invalidConfigTest() {
-    state.properties.put("store.index.max.number.of.inmem.elements", "1");
-    try {
-      state.reloadIndex(true, false);
-      fail("Invalid config, an Illegal_Index_State exception is expected");
-    } catch (StoreException e) {
-      assertTrue("Expected Illegal_Index_State exception", e.getErrorCode() == StoreErrorCodes.Illegal_Index_State);
+  public void journalBootstrapTest() throws StoreException, IOException {
+    if (state.getMaxInMemElements() <= 1) {
+      fail("This test can work only if the max in mem elements config > 1");
     }
+    if (state.index.getIndexSegments().lastEntry().getValue().getNumberOfItems() <= 1) {
+      state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    }
+    assertTrue("There should be more than one element in the last index segment for this test to work",
+        state.index.getIndexSegments().lastEntry().getValue().getNumberOfItems() > 1);
+    // change the config to lower max journal size
+    state.properties.put("store.index.max.number.of.inmem.elements", "1");
+    state.reloadIndex(true, false);
+    int entriesInJournal = state.index.journal.getCurrentNumberOfEntries();
+    assertEquals("Number of entries in the journal should be equal to the number of elements in the last index segment",
+        state.index.getIndexSegments().lastEntry().getValue().getNumberOfItems(),
+        state.index.journal.getCurrentNumberOfEntries());
+    // add some entries to trigger rollover.
+    state.addPutEntries(3, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    assertEquals("Number of entries in the journal should not have changed",
+        entriesInJournal, state.index.journal.getCurrentNumberOfEntries());
+    // Reload the index and the journal size should now reflect the config change
+    state.reloadIndex(true, false);
+    assertEquals("Number of entries in the journal should be exactly 1", 1,
+        state.index.journal.getCurrentNumberOfEntries());
   }
 
   // helpers
