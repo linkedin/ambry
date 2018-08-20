@@ -93,6 +93,37 @@ public class JournalTest {
     Assert.assertEquals(entries.get(4).getKey(), new MockId("id7"));
   }
 
+  @Test
+  public void testJournalBootstrapMode() {
+    long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+    long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+    String logSegmentName = LogSegmentNameHelper.getName(pos, gen);
+    Offset[] offsets = new Offset[4];
+    MockId[] keys = new MockId[4];
+    for (int i = 0; i < 4; i++) {
+      offsets[i] = new Offset(logSegmentName, i * 1000);
+      keys[i] = new MockId("id" + i);
+    }
+    // Bootstrap mode is off by default and journal entries should respect the max constraint
+    Journal journal = new Journal("test", 1, 1);
+    addEntryAndVerify(journal, offsets[0], keys[0]);
+    addEntryAndVerify(journal, offsets[1], keys[1]);
+    Assert.assertEquals("Unexpected journal size", 1, journal.getCurrentNumberOfEntries());
+    Assert.assertEquals("Old entry is not being replaced properly",
+        null, journal.getKeyAtOffset(offsets[0]));
+    // Bootstrap mode is turned on and journal entries should be able to exceed the max constraint
+    journal.startBootstrap();
+    addEntryAndVerify(journal, offsets[2], keys[2]);
+    Assert.assertEquals("Unexpected journal size", 2, journal.getCurrentNumberOfEntries());
+    Assert.assertEquals("Previous entry should not be replaced", keys[1], journal.getKeyAtOffset(offsets[1]));
+    // Bootstrap mode is off and journal entries should respect the max constraint again
+    journal.finishBootstrap();
+    addEntryAndVerify(journal, offsets[3], keys[3]);
+    Assert.assertEquals("Unexpected journal size", 2, journal.getCurrentNumberOfEntries());
+    Assert.assertEquals("Oldest entry is not being evicted", null, journal.getKeyAtOffset(offsets[1]));
+    Assert.assertEquals("Old entry is not being replaced properly", keys[2], journal.getKeyAtOffset(offsets[2]));
+  }
+
   /**
    * Adds an entry to the journal and verifies some getters
    * @param journal the {@link Journal} to add to
