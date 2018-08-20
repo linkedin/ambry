@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
@@ -52,8 +53,8 @@ public class AmbryUrlSigningServiceTest {
   @Test
   public void factoryTest() {
     Properties properties = new Properties();
-    properties.setProperty("frontend.url.signer.upload.endpoint", UPLOAD_ENDPOINT);
-    properties.setProperty("frontend.url.signer.download.endpoint", DOWNLOAD_ENDPOINT);
+    JSONObject jsonObject = new JSONObject().put("POST", UPLOAD_ENDPOINT).put("GET", DOWNLOAD_ENDPOINT);
+    properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
     properties.setProperty("frontend.url.signer.default.url.ttl.secs", Long.toString(DEFAULT_URL_TTL_SECS));
     properties.setProperty("frontend.url.signer.default.max.upload.size.bytes", Long.toString(DEFAULT_MAX_UPLOAD_SIZE));
     properties.setProperty("frontend.url.signer.max.url.ttl.secs", Long.toString(MAX_URL_TTL_SECS));
@@ -61,6 +62,42 @@ public class AmbryUrlSigningServiceTest {
         new MetricRegistry()).getUrlSigningService();
     assertNotNull("UrlSigningService is null", signer);
     assertTrue("UrlSigningService is AmbryUrlSigningService", signer instanceof AmbryUrlSigningService);
+    assertTrue(((AmbryUrlSigningService) signer).getUploadEndpoint().contains(UPLOAD_ENDPOINT));
+    assertTrue(((AmbryUrlSigningService) signer).getDownloadEndpoint().contains(DOWNLOAD_ENDPOINT));
+  }
+
+  /**
+   * Tests for {@link AmbryUrlSigningServiceFactory}.
+   */
+  @Test
+  public void factoryTestBadJson() {
+    Properties properties = new Properties();
+    // Missing GET
+    JSONObject jsonObject = new JSONObject().put("POST", UPLOAD_ENDPOINT);
+    properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
+    try {
+      new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
+          new MetricRegistry()).getUrlSigningService();
+      fail("Expected exception");
+    } catch (IllegalStateException ex) {
+    }
+    // Missing POST
+    jsonObject = new JSONObject().put("GET", DOWNLOAD_ENDPOINT);
+    properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
+    try {
+      new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
+          new MetricRegistry()).getUrlSigningService();
+      fail("Expected exception");
+    } catch (IllegalStateException ex) {
+    }
+    // Gibberish
+    properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, "[Garbage string &%#123");
+    try {
+      new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
+          new MetricRegistry()).getUrlSigningService();
+      fail("Expected exception");
+    } catch (IllegalStateException ex) {
+    }
   }
 
   /**

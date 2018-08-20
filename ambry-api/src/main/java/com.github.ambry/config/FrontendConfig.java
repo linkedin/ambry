@@ -24,6 +24,14 @@ import java.util.List;
  */
 public class FrontendConfig {
 
+  // Property keys
+  public static final String URL_SIGNER_ENDPOINTS = "frontend.url.signer.endpoints";
+
+  private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
+
+  private static final String DEFAULT_ENDPOINTS_STRING =
+      "{\"POST\": \"" + DEFAULT_ENDPOINT + "\", \"GET\": \"" + DEFAULT_ENDPOINT + "\"}";
+
   /**
    * Cache validity in seconds for non-private blobs for GET.
    */
@@ -89,18 +97,11 @@ public class FrontendConfig {
   public final boolean frontendAllowServiceIdBasedPostRequest;
 
   /**
-   * The endpoint that signed POST URLs will point to.
+   * The various endpoints for signed URLs, in JSON string.
    */
-  @Config("frontend.url.signer.upload.endpoint")
-  @Default("http://localhost:1174")
-  public final String frontendUrlSignerUploadEndpoint;
-
-  /**
-   * The endpoint that signed GET URLs will point to.
-   */
-  @Config("frontend.url.signer.download.endpoint")
-  @Default("http://localhost:1174")
-  public final String frontendUrlSignerDownloadEndpoint;
+  @Config(URL_SIGNER_ENDPOINTS)
+  @Default(DEFAULT_ENDPOINTS_STRING)
+  public final String frontendUrlSignerEndpoints;
 
   /**
    * The default maximum size (in bytes) that can be uploaded using a signed POST URL unless otherwise specified at
@@ -151,10 +152,7 @@ public class FrontendConfig {
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
     frontendAllowServiceIdBasedPostRequest =
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
-    frontendUrlSignerUploadEndpoint =
-        verifiableProperties.getString("frontend.url.signer.upload.endpoint", "http://localhost:1174");
-    frontendUrlSignerDownloadEndpoint =
-        verifiableProperties.getString("frontend.url.signer.download.endpoint", "http://localhost:1174");
+    frontendUrlSignerEndpoints = verifiableProperties.getString(URL_SIGNER_ENDPOINTS, DEFAULT_ENDPOINTS_STRING);
     frontendUrlSignerDefaultMaxUploadSizeBytes =
         verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,
             Long.MAX_VALUE);
