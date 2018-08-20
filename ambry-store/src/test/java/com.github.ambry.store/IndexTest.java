@@ -1295,10 +1295,9 @@ public class IndexTest {
     state.reloadIndex(true, false);
     int entriesInJournal = state.index.journal.getCurrentNumberOfEntries();
     assertEquals("Number of entries in the journal should be equal to the number of elements in the last index segment",
-        state.index.getIndexSegments().lastEntry().getValue().getNumberOfItems(),
-        state.index.journal.getCurrentNumberOfEntries());
+        state.index.getIndexSegments().lastEntry().getValue().getNumberOfItems(), entriesInJournal);
     // add some entries to trigger rollover.
-    state.addPutEntries(3, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
     assertEquals("Number of entries in the journal should not have changed",
         entriesInJournal, state.index.journal.getCurrentNumberOfEntries());
     // Reload the index and the journal size should now reflect the config change

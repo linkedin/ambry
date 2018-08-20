@@ -186,7 +186,7 @@ class PersistentIndex {
 
     List<File> indexFiles = getAllIndexSegmentFiles();
     try {
-      this.journal.startBootstrap();
+      journal.startBootstrap();
       for (int i = 0; i < indexFiles.size(); i++) {
         // We map all the index segments except the most recent index segment.
         // The recent index segment would go through recovery after they have been
@@ -209,7 +209,7 @@ class PersistentIndex {
       setEndOffsets();
       log.setActiveSegment(getCurrentEndOffset().getName());
       logEndOffsetOnStartup = log.getEndOffset();
-      this.journal.finishBootstrap();
+      journal.finishBootstrap();
 
       if (hardDelete != null) {
         // After recovering the last messages, and setting the log end offset, let the hard delete thread do its recovery.
