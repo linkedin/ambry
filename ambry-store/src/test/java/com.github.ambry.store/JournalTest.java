@@ -93,6 +93,12 @@ public class JournalTest {
     Assert.assertEquals(entries.get(4).getKey(), new MockId("id7"));
   }
 
+  /**
+   * Tests the {@link Journal}'s bootstrap mode by performing the following operations:
+   * 1. Add entries before going into bootstrap mode and the entries in the journal should respect the max constraint
+   * 2. Start bootstrap mode and add more entries. Verify the entries in the journal can exceed the max constraint
+   * 3. Finish bootstrap mode and verify the entries in the journal are respecting the max constraint again
+   */
   @Test
   public void testJournalBootstrapMode() {
     long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
@@ -109,19 +115,17 @@ public class JournalTest {
     addEntryAndVerify(journal, offsets[0], keys[0]);
     addEntryAndVerify(journal, offsets[1], keys[1]);
     Assert.assertEquals("Unexpected journal size", 1, journal.getCurrentNumberOfEntries());
-    Assert.assertEquals("Old entry is not being replaced properly",
-        null, journal.getKeyAtOffset(offsets[0]));
+    Assert.assertEquals("Oldest entry is not being replaced", offsets[1], journal.getFirstOffset());
     // Bootstrap mode is turned on and journal entries should be able to exceed the max constraint
     journal.startBootstrap();
     addEntryAndVerify(journal, offsets[2], keys[2]);
     Assert.assertEquals("Unexpected journal size", 2, journal.getCurrentNumberOfEntries());
-    Assert.assertEquals("Previous entry should not be replaced", keys[1], journal.getKeyAtOffset(offsets[1]));
+    Assert.assertEquals("Oldest entry should not be replaced", offsets[1], journal.getFirstOffset());
     // Bootstrap mode is off and journal entries should respect the max constraint again
     journal.finishBootstrap();
     addEntryAndVerify(journal, offsets[3], keys[3]);
     Assert.assertEquals("Unexpected journal size", 2, journal.getCurrentNumberOfEntries());
-    Assert.assertEquals("Oldest entry is not being evicted", null, journal.getKeyAtOffset(offsets[1]));
-    Assert.assertEquals("Old entry is not being replaced properly", keys[2], journal.getKeyAtOffset(offsets[2]));
+    Assert.assertEquals("Oldest entry is not being replaced", offsets[2], journal.getFirstOffset());
   }
 
   /**
