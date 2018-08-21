@@ -259,8 +259,8 @@ class ReplicaThread implements Runnable {
       boolean quarantined;
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-        quarantined = remoteReplicaInfo.getQuarantineTime() != Utils.Infinite_Time &&
-            (time.milliseconds() - remoteReplicaInfo.getQuarantineTime()) < replicationConfig.replicationQuarantineDurationMs;
+        quarantined = remoteReplicaInfo.getReEnableReplicationTime() != Utils.Infinite_Time &&
+            time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
         if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown() && !quarantined) {
           activeReplicasPerNode.add(remoteReplicaInfo);
         }
@@ -746,7 +746,7 @@ class ReplicaThread implements Runnable {
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         if (remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
-          remoteReplicaInfo.setQuarantineTime(time.milliseconds());
+          remoteReplicaInfo.setReEnableReplicationTime(time.milliseconds() + replicationConfig.replicationQuarantineDurationMs);
         } else {
           meaningfulExchangeCount++;
         }
