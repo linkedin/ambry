@@ -80,6 +80,7 @@ final class RemoteReplicaInfo {
   private FindToken tokenSafeToPersist = null;
   private long totalBytesReadFromLocalStore;
   private long localLagFromRemoteStore = -1;
+  private long quarantineTime = Utils.Infinite_Time;
 
   RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
@@ -108,6 +109,10 @@ final class RemoteReplicaInfo {
   Port getPort() {
     return this.port;
   }
+
+  long getQuarantineTime() { return  quarantineTime; }
+
+  void setQuarantineTime(long quarantineTime) { this.quarantineTime = quarantineTime; }
 
   long getRemoteLagFromLocalInBytes() {
     if (localStore != null) {

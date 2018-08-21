@@ -810,7 +810,7 @@ public class ReplicationTest {
     verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
         idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex + 1, 4);
 
-    // Verify that the replica thread is throttling when replicas are synced.
+    // Verify that the replica thread sleeps when all replicas are synced.
     long currentTimeMs = time.milliseconds();
     replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
     assertEquals("Replicas are in sync, time should be advanced by exactly replication.sleep.duration.ms",
@@ -821,12 +821,11 @@ public class ReplicationTest {
     addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3);
     currentTimeMs = time.milliseconds();
     replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
-    assertEquals("Replicas are no longer in sync so the replica thread shouldn't sleep",
+    assertEquals("Replicas are no longer in sync therefore the replica thread shouldn't sleep",
         currentTimeMs, time.milliseconds());
 
     // add 3 messages to the same partition in all hosts
     addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(localHost, remoteHost), 3);
-    currentTimeMs = time.milliseconds();
     replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
     assertEquals("No missing keys but the replica thread should still not sleep since remote has new token",
         currentTimeMs, time.milliseconds());

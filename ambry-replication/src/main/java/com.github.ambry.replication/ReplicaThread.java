@@ -57,6 +57,7 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -87,7 +88,6 @@ class ReplicaThread implements Runnable {
   private final Set<PartitionId> allReplicatedPartitions;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
-  private boolean throttling;
   private final FindTokenFactory findTokenFactory;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationIdGenerator;
@@ -120,7 +120,6 @@ class ReplicaThread implements Runnable {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
     this.running = true;
-    this.throttling = false;
     this.findTokenFactory = findTokenFactory;
     this.clusterMap = clusterMap;
     this.correlationIdGenerator = correlationIdGenerator;
@@ -221,6 +220,7 @@ class ReplicaThread implements Runnable {
    */
   void replicate(List<List<RemoteReplicaInfo>> replicasToReplicate) {
     // shuffle the nodes
+    boolean meaningfulReplication = false;
     Collections.shuffle(replicasToReplicate);
     for (List<RemoteReplicaInfo> replicasToReplicatePerNode : replicasToReplicate) {
       if (!running) {
@@ -256,13 +256,17 @@ class ReplicaThread implements Runnable {
       long startTimeInMs = replicationStartTimeInMs;
 
       List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<RemoteReplicaInfo>();
+      boolean quarantined;
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-        if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown()) {
+        quarantined = remoteReplicaInfo.getQuarantineTime() != Utils.Infinite_Time &&
+            (time.milliseconds() - remoteReplicaInfo.getQuarantineTime()) < replicationConfig.replicationQuarantineDurationMs;
+        if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown() && !quarantined) {
           activeReplicasPerNode.add(remoteReplicaInfo);
         }
       }
       if (activeReplicasPerNode.size() > 0) {
+        meaningfulReplication = true;
         try {
           connectedChannel =
               connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
@@ -310,12 +314,12 @@ class ReplicaThread implements Runnable {
         }
       }
     }
-    try {
-      if (throttling) {
+    if(!meaningfulReplication) {
+      try {
         time.sleep(replicationConfig.replicationSleepDurationMs);
+      } catch (InterruptedException e) {
+        logger.error("Received interrupted exception during throttling", e);
       }
-    } catch (Exception e) {
-      logger.error("Received interrupted exception during throttling", e);
     }
   }
 
@@ -741,7 +745,9 @@ class ReplicaThread implements Runnable {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
-        if (!remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
+        if (remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
+          remoteReplicaInfo.setQuarantineTime(time.milliseconds());
+        } else {
           meaningfulExchangeCount++;
         }
         if (exchangeMetadataResponse.missingStoreKeys.size() > 0) {
@@ -830,10 +836,8 @@ class ReplicaThread implements Runnable {
         }
       }
     }
-    throttling = meaningfulExchangeCount == 0;
     replicationMetrics.percentageOfMeaningfulExchange.update(
         Math.round(meaningfulExchangeCount * 100.0 / exchangeMetadataResponseList.size()));
-    replicationMetrics.totalBytesReplicatedPerCycle.update(totalBytesFixed);
     long batchStoreWriteTime = SystemTime.getInstance().milliseconds() - startTime;
     replicationMetrics.updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed,
         replicatingFromRemoteColo, replicatingOverSsl, datacenterName);

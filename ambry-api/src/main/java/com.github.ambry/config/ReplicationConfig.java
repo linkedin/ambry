@@ -60,11 +60,18 @@ public class ReplicationConfig {
   public final int replicationTokenFlushDelaySeconds;
 
   /**
-   * The time to sleep when the replica thread is being throttled
+   * The time to sleep when the replica thread is not doing any useful work
    */
   @Config("replication.sleep.duration.ms")
   @Default("1000")
   public final long replicationSleepDurationMs;
+
+  /**
+   * The time to temporarily disable replication for a replica in order to reduce wasteful network calls
+   */
+  @Config("replication.quarantine.duration.ms")
+  @Default("1000")
+  public final long replicationQuarantineDurationMs;
 
   /**
    * The fetch size is an approximate total size that a remote server would return on a fetch request.
@@ -91,6 +98,8 @@ public class ReplicationConfig {
         verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
     replicationSleepDurationMs =
         verifiableProperties.getLongInRange("replication.sleep.duration.ms", 1000, 0, Long.MAX_VALUE);
+    replicationQuarantineDurationMs =
+        verifiableProperties.getLongInRange("replication.quarantine.duration.ms", 1000, 0, Long.MAX_VALUE);
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
   }
