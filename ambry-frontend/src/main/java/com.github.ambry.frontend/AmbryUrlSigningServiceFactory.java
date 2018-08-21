@@ -16,7 +16,10 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.utils.SystemTime;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 
 /**
@@ -32,8 +35,19 @@ public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
   }
 
   @Override
-  public UrlSigningService getUrlSigningService() {
-    return new AmbryUrlSigningService(config.frontendUrlSignerUploadEndpoint, config.frontendUrlSignerDownloadEndpoint,
+  public UrlSigningService getUrlSigningService()  {
+
+    String uploadEndpoint, downloadEndpoint;
+    // Assume frontendUrlSignerEndpoints has only POST/GET, nothing nested
+    try {
+      JSONObject root = new JSONObject(config.frontendUrlSignerEndpoints);
+      uploadEndpoint = root.getString(RestMethod.POST.name());
+      downloadEndpoint = root.getString(RestMethod.GET.name());
+    } catch (JSONException ex) {
+      throw new IllegalStateException("Invalid config value: " + config.frontendUrlSignerEndpoints, ex);
+    }
+
+    return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint,
         config.frontendUrlSignerDefaultUrlTtlSecs, config.frontendUrlSignerDefaultMaxUploadSizeBytes,
         config.frontendUrlSignerMaxUrlTtlSecs, SystemTime.getInstance());
   }

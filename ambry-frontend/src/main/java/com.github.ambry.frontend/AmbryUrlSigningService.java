@@ -39,6 +39,7 @@ public class AmbryUrlSigningService implements UrlSigningService {
 
   private final String uploadEndpoint;
   private final String downloadEndpoint;
+
   private final long defaultUrlTtlSecs;
   private final long defaultMaxUploadSize;
   private final long maxUrlTtlSecs;
@@ -147,5 +148,14 @@ public class AmbryUrlSigningService implements UrlSigningService {
       throw new RestServiceException("Type of request being made not compatible with signed URL",
           RestServiceErrorCode.Unauthorized);
     }
+  }
+
+  // Mainly for test verification
+  public String getUploadEndpoint() {
+    return uploadEndpoint;
+  }
+
+  public String getDownloadEndpoint() {
+    return downloadEndpoint;
   }
 }

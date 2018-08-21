@@ -142,10 +142,11 @@ public class AmbryBlobStorageServiceTest {
     clusterMap.setPermanentMetricRegistry(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
-    urlSigningService = new AmbryUrlSigningService(frontendConfig.frontendUrlSignerUploadEndpoint,
-        frontendConfig.frontendUrlSignerDownloadEndpoint, frontendConfig.frontendUrlSignerDefaultUrlTtlSecs,
-        frontendConfig.frontendUrlSignerDefaultMaxUploadSizeBytes, frontendConfig.frontendUrlSignerMaxUrlTtlSecs,
-        SystemTime.getInstance());
+    String endpoint = "http://localhost:1174";
+    urlSigningService =
+        new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.frontendUrlSignerDefaultUrlTtlSecs,
+            frontendConfig.frontendUrlSignerDefaultMaxUploadSizeBytes, frontendConfig.frontendUrlSignerMaxUrlTtlSecs,
+            SystemTime.getInstance());
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService,
         accountAndContainerInjector);
