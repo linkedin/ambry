@@ -188,6 +188,13 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
+  /**
+   * Return if ssl ports are enabled in this cluster.
+   */
+  public boolean isSslPortsEnabled() {
+    return enableSSLPorts;
+  }
+
   @Override
   public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
     DataInputStream dataInputStream = new DataInputStream(stream);

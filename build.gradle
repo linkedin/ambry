@@ -153,10 +153,12 @@ project(':ambry-network') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
-                project(':ambry-commons')
+                project(':ambry-commons'),
+                project(':ambry-clustermap')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
+        testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }

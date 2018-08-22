@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.Time;
 import java.io.Closeable;
@@ -184,6 +185,67 @@ public class NetworkClient implements Closeable {
       }
     }
     return sends;
+  }
+
+  /**
+   * Warm up connections to dataNodes in a specified time window.
+   * If a connection established successfully, it's a successConnection.
+   * If a connection failed(for example, target dataNode offline), it's a failedConnection.
+   * If a connection breaks after successfully established, it's counted as a failedConnection. This impact the
+   * counting in the method, but this is tolerable as other good/bad connections can be handled in next selector.poll().
+   * If a connection established after this time window of timeForWarmUp, it can be handled in next selector.poll().
+   * @param dataNodeIds warm up target nodes.
+   * @param connectionWarmUpPercentagePerDataNode percentage of max connections would like to establish in the warmup.
+   * @param timeForWarmUp max time to wait for connections' establish.
+   * @return number of connections established successfully.
+   */
+  public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionWarmUpPercentagePerDataNode,
+      long timeForWarmUp) {
+    int expectedConnections = 0;
+    logger.info("Connections warm up start.");
+    if (dataNodeIds.size() == 0) {
+      return 0;
+    }
+    int numberOfConnections = connectionWarmUpPercentagePerDataNode == 0 ? 0 : Math.max(1,
+        connectionWarmUpPercentagePerDataNode * (
+            dataNodeIds.get(0).getPortToConnectTo().getPortType() == PortType.PLAINTEXT
+                ? connectionTracker.getMaxConnectionsPerPortPlainText()
+                : connectionTracker.getMaxConnectionsPerPortSsl()) / 100);
+    for (DataNodeId dataNodeId : dataNodeIds) {
+      for (int i = 0; i < numberOfConnections; i++) {
+        try {
+          String connId = selector.connect(
+              new InetSocketAddress(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo().getPort()),
+              networkConfig.socketSendBufferBytes, networkConfig.socketReceiveBufferBytes,
+              dataNodeId.getPortToConnectTo().getPortType());
+          connectionTracker.startTrackingInitiatedConnection(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(),
+              connId);
+          expectedConnections++;
+        } catch (IOException e) {
+          logger.error("Received exception while warming up connection: {}", e);
+        }
+      }
+    }
+    long startTime = System.currentTimeMillis();
+    int successfulConnections = 0;
+    int failedConnections = 0;
+    while (successfulConnections + failedConnections < expectedConnections) {
+      try {
+        selector.poll(1000L);
+        successfulConnections += selector.connected().size();
+        failedConnections += selector.disconnected().size();
+        handleSelectorEvents(null);
+      } catch (IOException e) {
+        logger.error("Warm up received unexpected error while polling: {}", e);
+      }
+      if (System.currentTimeMillis() - startTime > timeForWarmUp) {
+        break;
+      }
+    }
+    logger.info("Connections warm up done. Tried: {} Success: {} Failed: {} Time elapsed: {}ms", expectedConnections,
+        successfulConnections, failedConnections, System.currentTimeMillis() - startTime);
+
+    return successfulConnections;
   }
 
   /**

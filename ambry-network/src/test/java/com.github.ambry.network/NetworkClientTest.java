@@ -14,6 +14,9 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
@@ -23,10 +26,12 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -72,6 +77,70 @@ public class NetworkClientTest {
     networkClient =
         new NetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), MAX_PORTS_PLAIN_TEXT,
             MAX_PORTS_SSL, CHECKOUT_TIMEOUT_MS, time);
+  }
+
+  /**
+   * Test {@link NetworkClient#warmUpConnections(List, int, long)}
+   */
+  @Test
+  public void testWarmUpConnections() throws IOException {
+    MockClusterMap mockClusterMap = new MockClusterMap(true, 9, 3, 3, false);
+    List<DataNodeId> localDataNodeIds = mockClusterMap.getDataNodeIds()
+        .stream()
+        .filter(dataNodeId -> mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())
+            .equals(dataNodeId.getDatacenterName()))
+        .collect(Collectors.toList());
+    int maxPort = mockClusterMap.isSslPortsEnabled() ? MAX_PORTS_SSL : MAX_PORTS_PLAIN_TEXT;
+    // warm up plain-text connections.
+    doTestWarmUpConnections(localDataNodeIds, maxPort, PortType.PLAINTEXT);
+    // enable SSL to local DC.
+    for (DataNodeId dataNodeId : localDataNodeIds) {
+      ((MockDataNodeId) dataNodeId).setSslEnabledDataCenters(
+          Collections.singletonList(mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())));
+    }
+    // warm up SSL connections.`
+    doTestWarmUpConnections(localDataNodeIds, maxPort, PortType.SSL);
+  }
+
+  /**
+   * Test {@link NetworkClient#warmUpConnections(List, int, long)}
+   */
+  @Test
+  public void testWarmUpConnectionsSsl() throws IOException {
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    List<DataNodeId> localDataNodeIds = mockClusterMap.getDataNodeIds()
+        .stream()
+        .filter(dataNodeId -> mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())
+            .equals(dataNodeId.getDatacenterName()))
+        .collect(Collectors.toList());
+    int maxPort = mockClusterMap.isSslPortsEnabled() ? MAX_PORTS_SSL : MAX_PORTS_PLAIN_TEXT;
+    Assert.assertEquals("Connection count is not expected", maxPort * localDataNodeIds.size(),
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
+    Assert.assertEquals("Connection count is not expected", 50 * maxPort / 100 * localDataNodeIds.size(),
+        networkClient.warmUpConnections(localDataNodeIds, 50, 2000));
+    Assert.assertEquals("Connection count is not expected", 0,
+        networkClient.warmUpConnections(localDataNodeIds, 0, 2000));
+    selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
+    Assert.assertEquals("Connection count is not expected", 0,
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
+    selector.setState(MockSelectorState.Good);
+  }
+
+  /**
+   * Test connection warm up failed case.
+   */
+  @Test
+  public void testWarmUpConnectionsFailedAll() throws IOException {
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    List<DataNodeId> localDataNodeIds = mockClusterMap.getDataNodeIds()
+        .stream()
+        .filter(dataNodeId -> mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())
+            .equals(dataNodeId.getDatacenterName()))
+        .collect(Collectors.toList());
+    selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
+    Assert.assertEquals("Connection count is not expected", 0,
+        networkClient.warmUpConnections(localDataNodeIds, 2, 2000));
+    selector.setState(MockSelectorState.Good);
   }
 
   /**
@@ -347,6 +416,24 @@ public class NetworkClientTest {
       Assert.fail("Polling after close should throw");
     } catch (IllegalStateException e) {
     }
+  }
+
+  /**
+   * Helper function to test {@link NetworkClient#warmUpConnections(List, int, long)}
+   */
+  private void doTestWarmUpConnections(List<DataNodeId> localDataNodeIds, int maxPort, PortType expectedPortType) {
+    Assert.assertEquals("Port type is not expected.", expectedPortType,
+        localDataNodeIds.get(0).getPortToConnectTo().getPortType());
+    Assert.assertEquals("Connection count is not expected", maxPort * localDataNodeIds.size(),
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
+    Assert.assertEquals("Connection count is not expected", 50 * maxPort / 100 * localDataNodeIds.size(),
+        networkClient.warmUpConnections(localDataNodeIds, 50, 2000));
+    Assert.assertEquals("Connection count is not expected", 0,
+        networkClient.warmUpConnections(localDataNodeIds, 0, 2000));
+    selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
+    Assert.assertEquals("Connection count is not expected", 0,
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
+    selector.setState(MockSelectorState.Good);
   }
 }
 

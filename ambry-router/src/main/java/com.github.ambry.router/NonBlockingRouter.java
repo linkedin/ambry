@@ -41,6 +41,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -521,6 +522,13 @@ class NonBlockingRouter implements Router {
      */
     OperationController(String suffix, String defaultPartitionClass, AccountService accountService) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
+      // Warm up connections to dataNodes in local DC.
+      networkClient.warmUpConnections(clusterMap.getDataNodeIds()
+              .stream()
+              .filter(dataNodeId -> clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId())
+                  .equals(dataNodeId.getDatacenterName()))
+              .collect(Collectors.toList()), routerConfig.routerConnectionsWarmUpPercentagePerPort,
+          routerConfig.routerConnectionsWarmUpTimeoutMs);
       routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
       putManager =
           new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,

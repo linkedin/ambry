@@ -145,6 +145,19 @@ class ConnectionTracker {
   }
 
   /**
+   * Returns max number of connections allowed for a plain text port.
+   */
+  int getMaxConnectionsPerPortPlainText() {
+    return maxConnectionsPerPortPlainText;
+  }
+
+  /**
+   * Returns max number of connections allowed for a ssl port.
+   */
+  int getMaxConnectionsPerPortSsl() {
+    return maxConnectionsPerPortSsl;
+  }
+  /**
    * HostPortPoolManager manages all the connections to a specific (host,
    * port) pair. The  {@link ConnectionTracker} creates one for every (host, port) pair it knows of.
    */
