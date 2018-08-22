@@ -113,7 +113,8 @@ public class ReplicationMetrics {
   public final Histogram sslIntraColoTotalReplicationTime;
   public final Counter blobDeletedOnGetCount;
   public final Counter blobAuthorizationFailureCount;
-  public final Histogram percentageOfMeaningfulExchange;
+  public final Counter replicaQuarantineCount;
+  public final Counter replicaThreadSleepCount;
 
   public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
@@ -211,7 +212,8 @@ public class ReplicationMetrics {
     blobDeletedOnGetCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "BlobDeletedOnGetCount"));
     blobAuthorizationFailureCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "BlobAuthorizationFailureCount"));
-    percentageOfMeaningfulExchange = registry.histogram(MetricRegistry.name(ReplicaThread.class, "PercentageOfMeaningfulExchange"));
+    replicaQuarantineCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicaQuarantineCount"));
+    replicaThreadSleepCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicaThreadSleepCount"));
     this.registry = registry;
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
     populateInvalidMessageMetricForReplicas(replicaIds);

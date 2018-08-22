@@ -810,24 +810,44 @@ public class ReplicationTest {
     verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
         idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex + 1, 4);
 
-    // Verify that the replica thread sleeps when all replicas are synced.
+    // tests to verify replica thread throttling function in the following steps:
+    // 1. all replicas are in sync, thread level sleep and replica quarantine are both enabled.
+    // 2. add put messages to some replica and verify that replication for replicas remain disabled.
+    // 3. forward the time so replication for replicas are re-enabled and check replication resumes.
+    // 4. add more put messages to ensure replication happens continuously when replication is needed.
+
+    // 1. verify that the replica thread sleeps and replicas are temporarily disable when all replicas are synced.
     long currentTimeMs = time.milliseconds();
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
-    assertEquals("Replicas are in sync, time should be advanced by exactly replication.sleep.duration.ms",
+    List<List<RemoteReplicaInfo>> replicasToReplicateList = new ArrayList<>(replicasToReplicate.values());
+    replicaThread.replicate(replicasToReplicateList);
+    assertEquals("Replicas are in sync, replica thread should sleep by replication.sleep.duration.ms",
         currentTimeMs + config.replicationSleepDurationMs, time.milliseconds());
 
-    // add 3 messages to the same partition in the remote host only
+    // 2. add 3 messages to a partition in the remote host only and verify replication for all replicas should be disabled.
     PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
     addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3);
+    int[] missingKeys = new int[replicasToReplicate.get(remoteHost.dataNodeId).size()];
+    for (int i = 0; i < missingKeys.length; i++) {
+      missingKeys[i] = replicasToReplicate.get(remoteHost.dataNodeId).get(i).getReplicaId().getPartitionId().isEqual(partitionId.toString()) ? 3 : 0;
+    }
     currentTimeMs = time.milliseconds();
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
-    assertEquals("Replicas are no longer in sync therefore the replica thread shouldn't sleep",
-        currentTimeMs, time.milliseconds());
+    replicaThread.replicate(replicasToReplicateList);
+    assertEquals("Replication for all replicas should be disabled and the thread should sleep",
+        currentTimeMs + config.replicationSleepDurationMs, time.milliseconds());
+    assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
 
-    // add 3 messages to the same partition in all hosts
+    // 3. forward the time and run replicate and verify the replication.
+    time.sleep(config.replicationQuarantineDurationMs);
+    currentTimeMs = time.milliseconds();
+    replicaThread.replicate(replicasToReplicateList);
+    missingKeys = new int[replicasToReplicate.get(remoteHost.dataNodeId).size()];
+    assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
+
+    // 4. add more put messages and verify that replication continues
     addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(localHost, remoteHost), 3);
     replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
-    assertEquals("No missing keys but the replica thread should still not sleep since remote has new token",
+    assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
+    assertEquals("Replica thread should not sleep since remote has new token",
         currentTimeMs, time.milliseconds());
   }
 
@@ -905,6 +925,7 @@ public class ReplicationTest {
       ClusterMap clusterMap, Host localHost, Host remoteHost, StoreKeyFactory storeKeyFactory,
       StoreKeyConverter storeKeyConverter, Transformer transformer, StoreEventListener listener) {
     Properties properties = new Properties();
+    properties.setProperty("replication.quarantine.duration.ms", "3000");
     config = new ReplicationConfig(new VerifiableProperties(properties));
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
@@ -977,6 +998,27 @@ public class ReplicationTest {
           replicasToReplicate.get(remoteHost.dataNodeId).get(i).getToken());
     }
     return expectedIndex;
+  }
+
+  /**
+   * Asserts the number of missing keys between the local and remote replicas
+   * @param expectedMissingKeysSum the number of missing keys expected for each replica
+   * @param batchSize how large of a batch size the internal MockConnection will use for fixing missing store keys
+   * @param replicaThread replicaThread that will be performing replication
+   * @param remoteHost the remote host that keys are being pulled from
+   * @param replicasToReplicate list of replicas to replicate between
+   * @throws Exception
+   */
+  private void assertMissingKeys(int[] expectedMissingKeysSum, int batchSize, ReplicaThread replicaThread,
+      Host remoteHost, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {
+    List<ReplicaThread.ExchangeMetadataResponse> response =
+        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+            replicasToReplicate.get(remoteHost.dataNodeId));
+    assertEquals("Response should contain a response for each replica",
+        replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
+    for (int i = 0; i < response.size(); i++) {
+      assertEquals(expectedMissingKeysSum[i], response.get(i).missingStoreKeys.size());
+    }
   }
 
   /**

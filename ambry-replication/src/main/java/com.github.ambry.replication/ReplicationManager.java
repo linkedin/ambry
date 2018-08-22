@@ -80,7 +80,7 @@ final class RemoteReplicaInfo {
   private FindToken tokenSafeToPersist = null;
   private long totalBytesReadFromLocalStore;
   private long localLagFromRemoteStore = -1;
-  private long reEnableReplicationTime = Utils.Infinite_Time;
+  private long reEnableReplicationTime = 0;
 
   RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
@@ -110,8 +110,16 @@ final class RemoteReplicaInfo {
     return this.port;
   }
 
+  /**
+   * Gets the time re-enable replication for this replica.
+   * @return time to re-enable replication in ms.
+   */
   long getReEnableReplicationTime() { return reEnableReplicationTime; }
 
+  /**
+   * Sets the time to re-enable replication for this replica.
+   * @param reEnableReplicationTime time to re-enable replication in ms.
+   */
   void setReEnableReplicationTime(long reEnableReplicationTime) { this.reEnableReplicationTime =
       reEnableReplicationTime; }
 

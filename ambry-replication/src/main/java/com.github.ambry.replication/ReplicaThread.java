@@ -259,8 +259,7 @@ class ReplicaThread implements Runnable {
       boolean quarantined;
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-        quarantined = remoteReplicaInfo.getReEnableReplicationTime() != Utils.Infinite_Time &&
-            time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+        quarantined = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
         if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown() && !quarantined) {
           activeReplicasPerNode.add(remoteReplicaInfo);
         }
@@ -320,6 +319,7 @@ class ReplicaThread implements Runnable {
       } catch (InterruptedException e) {
         logger.error("Received interrupted exception during throttling", e);
       }
+      replicationMetrics.replicaThreadSleepCount.inc();
     }
   }
 
@@ -737,7 +737,6 @@ class ReplicaThread implements Runnable {
       GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode)
       throws IOException, MessageFormatException {
     int partitionResponseInfoIndex = 0;
-    int meaningfulExchangeCount = 0;
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;
     long startTime = SystemTime.getInstance().milliseconds();
@@ -747,8 +746,7 @@ class ReplicaThread implements Runnable {
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         if (remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
           remoteReplicaInfo.setReEnableReplicationTime(time.milliseconds() + replicationConfig.replicationQuarantineDurationMs);
-        } else {
-          meaningfulExchangeCount++;
+          replicationMetrics.replicaQuarantineCount.inc();
         }
         if (exchangeMetadataResponse.missingStoreKeys.size() > 0) {
           PartitionResponseInfo partitionResponseInfo =
@@ -836,8 +834,6 @@ class ReplicaThread implements Runnable {
         }
       }
     }
-    replicationMetrics.percentageOfMeaningfulExchange.update(
-        Math.round(meaningfulExchangeCount * 100.0 / exchangeMetadataResponseList.size()));
     long batchStoreWriteTime = SystemTime.getInstance().milliseconds() - startTime;
     replicationMetrics.updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed,
         replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
