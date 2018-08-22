@@ -114,14 +114,17 @@ final class RemoteReplicaInfo {
    * Gets the time re-enable replication for this replica.
    * @return time to re-enable replication in ms.
    */
-  long getReEnableReplicationTime() { return reEnableReplicationTime; }
+  long getReEnableReplicationTime() {
+    return reEnableReplicationTime;
+  }
 
   /**
    * Sets the time to re-enable replication for this replica.
    * @param reEnableReplicationTime time to re-enable replication in ms.
    */
-  void setReEnableReplicationTime(long reEnableReplicationTime) { this.reEnableReplicationTime =
-      reEnableReplicationTime; }
+  void setReEnableReplicationTime(long reEnableReplicationTime) {
+    this.reEnableReplicationTime = reEnableReplicationTime;
+  }
 
   long getRemoteLagFromLocalInBytes() {
     if (localStore != null) {

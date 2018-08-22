@@ -830,7 +830,11 @@ public class ReplicationTest {
     addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3);
     int[] missingKeys = new int[replicasToReplicate.get(remoteHost.dataNodeId).size()];
     for (int i = 0; i < missingKeys.length; i++) {
-      missingKeys[i] = replicasToReplicate.get(remoteHost.dataNodeId).get(i).getReplicaId().getPartitionId().isEqual(partitionId.toString()) ? 3 : 0;
+      missingKeys[i] = replicasToReplicate.get(remoteHost.dataNodeId)
+          .get(i)
+          .getReplicaId()
+          .getPartitionId()
+          .isEqual(partitionId.toString()) ? 3 : 0;
     }
     currentTimeMs = time.milliseconds();
     replicaThread.replicate(replicasToReplicateList);
@@ -849,8 +853,7 @@ public class ReplicationTest {
     addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(localHost, remoteHost), 3);
     replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
-    assertEquals("Replica thread should not sleep since remote has new token",
-        currentTimeMs, time.milliseconds());
+    assertEquals("Replica thread should not sleep since remote has new token", currentTimeMs, time.milliseconds());
   }
 
   /**

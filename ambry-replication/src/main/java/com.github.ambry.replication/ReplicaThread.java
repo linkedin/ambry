@@ -57,7 +57,6 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -312,7 +311,7 @@ class ReplicaThread implements Runnable {
         }
       }
     }
-    if(allCaughtUp) {
+    if (allCaughtUp) {
       try {
         time.sleep(replicationConfig.replicationThreadSleepDurationMs);
       } catch (InterruptedException e) {
@@ -422,7 +421,6 @@ class ReplicaThread implements Runnable {
               remoteNode);
       writeMessagesToLocalStoreAndAdvanceTokens(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode,
           remoteNode);
-
     } finally {
       long fixMissingStoreKeysTime = SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs;
       replicationMetrics.updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo,
@@ -744,7 +742,8 @@ class ReplicaThread implements Runnable {
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         if (remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
-          remoteReplicaInfo.setReEnableReplicationTime(time.milliseconds() + replicationConfig.replicationReplicaBackoffDurationMs);
+          remoteReplicaInfo.setReEnableReplicationTime(
+              time.milliseconds() + replicationConfig.replicationReplicaBackoffDurationMs);
           replicationMetrics.replicaSyncedBackoffCount.inc();
         }
         if (exchangeMetadataResponse.missingStoreKeys.size() > 0) {
