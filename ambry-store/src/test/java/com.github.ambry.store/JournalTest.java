@@ -94,6 +94,41 @@ public class JournalTest {
   }
 
   /**
+   * Tests the {@link Journal}'s bootstrap mode by performing the following operations:
+   * 1. Add entries before going into bootstrap mode and the entries in the journal should respect the max constraint
+   * 2. Start bootstrap mode and add more entries. Verify the entries in the journal can exceed the max constraint
+   * 3. Finish bootstrap mode and verify the entries in the journal are respecting the max constraint again
+   */
+  @Test
+  public void testJournalBootstrapMode() {
+    long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+    long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+    String logSegmentName = LogSegmentNameHelper.getName(pos, gen);
+    Offset[] offsets = new Offset[4];
+    MockId[] keys = new MockId[4];
+    for (int i = 0; i < 4; i++) {
+      offsets[i] = new Offset(logSegmentName, i * 1000);
+      keys[i] = new MockId("id" + i);
+    }
+    // Bootstrap mode is off by default and journal entries should respect the max constraint
+    Journal journal = new Journal("test", 1, 1);
+    addEntryAndVerify(journal, offsets[0], keys[0]);
+    addEntryAndVerify(journal, offsets[1], keys[1]);
+    Assert.assertEquals("Unexpected journal size", 1, journal.getCurrentNumberOfEntries());
+    Assert.assertEquals("Oldest entry is not being replaced", offsets[1], journal.getFirstOffset());
+    // Bootstrap mode is turned on and journal entries should be able to exceed the max constraint
+    journal.startBootstrap();
+    addEntryAndVerify(journal, offsets[2], keys[2]);
+    Assert.assertEquals("Unexpected journal size", 2, journal.getCurrentNumberOfEntries());
+    Assert.assertEquals("Oldest entry should not be replaced", offsets[1], journal.getFirstOffset());
+    // Bootstrap mode is off and journal entries should respect the max constraint again
+    journal.finishBootstrap();
+    addEntryAndVerify(journal, offsets[3], keys[3]);
+    Assert.assertEquals("Unexpected journal size", 2, journal.getCurrentNumberOfEntries());
+    Assert.assertEquals("Oldest entry is not being replaced", offsets[2], journal.getFirstOffset());
+  }
+
+  /**
    * Adds an entry to the journal and verifies some getters
    * @param journal the {@link Journal} to add to
    * @param offset the {@link Offset} to add an entry for

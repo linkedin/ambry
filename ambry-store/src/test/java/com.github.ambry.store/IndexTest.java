@@ -1277,6 +1277,35 @@ public class IndexTest {
     }
   }
 
+  /**
+   * Tests the behavior of {@link Journal} bootstrap.
+   */
+  @Test
+  public void journalBootstrapTest() throws StoreException, IOException {
+    if (state.getMaxInMemElements() <= 1) {
+      fail("This test can work only if the max in mem elements config > 1");
+    }
+    if (state.index.getIndexSegments().lastEntry().getValue().getNumberOfItems() <= 1) {
+      state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    }
+    assertTrue("There should be more than one element in the last index segment for this test to work",
+        state.index.getIndexSegments().lastEntry().getValue().getNumberOfItems() > 1);
+    // change the config to lower max journal size
+    state.properties.put("store.index.max.number.of.inmem.elements", "1");
+    state.reloadIndex(true, false);
+    int entriesInJournal = state.index.journal.getCurrentNumberOfEntries();
+    assertEquals("Number of entries in the journal should be equal to the number of elements in the last index segment",
+        state.index.getIndexSegments().lastEntry().getValue().getNumberOfItems(), entriesInJournal);
+    // add some entries to trigger rollover.
+    state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    assertEquals("Number of entries in the journal should not have changed",
+        entriesInJournal, state.index.journal.getCurrentNumberOfEntries());
+    // Reload the index and the journal size should now reflect the config change
+    state.reloadIndex(true, false);
+    assertEquals("Number of entries in the journal should be exactly 1", 1,
+        state.index.journal.getCurrentNumberOfEntries());
+  }
+
   // helpers
 
   // general

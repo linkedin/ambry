@@ -54,6 +54,7 @@ class Journal {
   private final AtomicInteger currentNumberOfEntries;
   private final String dataDir;
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private boolean inBootstrapMode = false;
 
   /**
    * The journal that holds the most recent entries in a store sorted by offset of the blob on disk
@@ -81,7 +82,7 @@ class Journal {
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
     }
     if (maxEntriesToJournal > 0) {
-      if (currentNumberOfEntries.get() == maxEntriesToJournal) {
+      if (!inBootstrapMode && currentNumberOfEntries.get() >= maxEntriesToJournal) {
         Map.Entry<Offset, StoreKey> earliestEntry = journal.firstEntry();
         journal.remove(earliestEntry.getKey());
         recentCrcs.remove(earliestEntry.getValue());
@@ -186,4 +187,26 @@ class Journal {
   StoreKey getKeyAtOffset(Offset offset) {
     return journal.get(offset);
   }
+
+  /**
+   * Puts the {@link Journal} into bootstrap mode to ignore the {@code maxEntriesToJournal} constraint temporarily.
+   */
+  void startBootstrap() {
+    inBootstrapMode = true;
+  }
+
+  /**
+   * Signals the {@link Journal} is done bootstrapping and will start to honor {@code maxEntriesToJournal}.
+   */
+  void finishBootstrap() {
+    inBootstrapMode = false;
+  }
+
+  /**
+   * @return the number of entries that is currently in the {@link Journal}.
+   */
+  int getCurrentNumberOfEntries() {
+    return currentNumberOfEntries.get();
+  }
+
 }
