@@ -14,6 +14,7 @@
 
 package com.github.ambry.commons;
 
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.IOException;
@@ -72,8 +73,8 @@ public class CommonUtilsTest {
 
     // Ensure the HelixPropertyStore works correctly
     List<String> list = Arrays.asList("first", "second", "third");
-    String path = propertyStoreConfig.rootPath + CommonUtils.PROPERTYSTORE_ZNODE_PATH;
-    ZNRecord znRecord = new ZNRecord(CommonUtils.ZNODE_NAME);
+    String path = propertyStoreConfig.rootPath + ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;
+    ZNRecord znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);
     znRecord.setListField("AmbryList", list);
     if (!propertyStore.set(path, znRecord, AccessOption.PERSISTENT)) {
       fail("Failed to set HelixPropertyStore");

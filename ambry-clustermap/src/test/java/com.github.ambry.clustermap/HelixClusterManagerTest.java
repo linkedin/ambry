@@ -53,6 +53,7 @@ import org.mockito.MockitoAnnotations;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 
 
 /**
@@ -215,9 +216,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void badInstantiationTest() throws Exception {
-    if (overrideEnabled) {
-      return;
-    }
+    assumeTrue(!overrideEnabled);
+
     // Good test happened in the constructor
     assertEquals(0L,
         metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
@@ -261,26 +261,24 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void emptyPartitionOverrideTest() throws Exception {
-    if (overrideEnabled) {
-      metricRegistry = new MetricRegistry();
-      // create a MockHelixManagerFactory
-      ClusterMap clusterManagerWithEmptyRecord =
-          new HelixClusterManager(clusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
-              metricRegistry);
+    assumeTrue(overrideEnabled);
+    metricRegistry = new MetricRegistry();
+    // create a MockHelixManagerFactory
+    ClusterMap clusterManagerWithEmptyRecord =
+        new HelixClusterManager(clusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
+            metricRegistry);
 
-      Set<String> writableInClusterManager = new HashSet<>();
-      for (PartitionId partition : clusterManagerWithEmptyRecord.getWritablePartitionIds(null)) {
-        String partitionStr =
-            useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
-        writableInClusterManager.add(partitionStr);
-      }
-      Set<String> writableInCluster = helixCluster.getWritablePartitions();
-      if (writableInCluster.isEmpty()) {
-        writableInCluster = helixCluster.getAllWritablePartitions();
-      }
-      assertEquals("Mismatch in writable partitions during initialization", writableInCluster,
-          writableInClusterManager);
+    Set<String> writableInClusterManager = new HashSet<>();
+    for (PartitionId partition : clusterManagerWithEmptyRecord.getWritablePartitionIds(null)) {
+      String partitionStr =
+          useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
+      writableInClusterManager.add(partitionStr);
     }
+    Set<String> writableInCluster = helixCluster.getWritablePartitions();
+    if (writableInCluster.isEmpty()) {
+      writableInCluster = helixCluster.getAllWritablePartitions();
+    }
+    assertEquals("Mismatch in writable partitions during initialization", writableInCluster, writableInClusterManager);
   }
 
   /**
@@ -289,9 +287,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void basicInterfaceTest() throws Exception {
-    if (overrideEnabled) {
-      return;
-    }
+    assumeTrue(!overrideEnabled);
+
     for (String metricName : clusterManager.getMetricRegistry().getNames()) {
       System.out.println(metricName);
     }
@@ -308,10 +305,9 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void helixInitiatedLivenessChangeTest() throws Exception {
-    // this test is not intended for the composite cluster manager.
-    if (useComposite || overrideEnabled) {
-      return;
-    }
+    // this test is not intended for the composite cluster manager and override enabled cases.
+    assumeTrue(!useComposite && !overrideEnabled);
+
     // all instances are up initially.
     assertStateEquivalency();
 
@@ -339,9 +335,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void clientInitiatedLivenessChangeTest() {
-    if (overrideEnabled) {
-      return;
-    }
+    assumeTrue(!overrideEnabled);
+
     ReplicaId replica = clusterManager.getWritablePartitionIds(null).get(0).getReplicaIds().get(0);
     DataNodeId dataNode = replica.getDataNodeId();
     assertTrue(clusterManager.getReplicaIds(dataNode).contains(replica));
@@ -411,9 +406,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void onServerEventTest() {
-    if (useComposite) {
-      return;
-    }
+    assumeTrue(!useComposite);
+
     // Test configuration: we select the disk from one datanode and select the replica on that disk
 
     // Initial state: only disk is down; Server event: Replica_Unavailable; Expected result: disk becomes available again and replica becomes down
@@ -466,9 +460,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void sealedReplicaChangeTest() throws Exception {
-    if (useComposite || overrideEnabled) {
-      return;
-    }
+    assumeTrue(!useComposite && !overrideEnabled);
 
     // all instances are up initially.
     assertStateEquivalency();
@@ -507,9 +499,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void clusterMapOverrideEnabledAndDisabledTest() throws Exception {
-    if (useComposite) {
-      return;
-    }
+    assumeTrue(!useComposite);
+
     // Get the writable partitions in OverrideMap
     Set<String> writableInOverrideMap = new HashSet<>();
     for (Map.Entry<String, Map<String, String>> entry : partitionOverrideMap.entrySet()) {
@@ -602,9 +593,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void stoppedReplicaChangeTest() {
-    if (useComposite || overrideEnabled) {
-      return;
-    }
+    assumeTrue(!useComposite && !overrideEnabled);
 
     // all instances are up initially.
     assertStateEquivalency();
@@ -642,9 +631,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void dynamicNodeAdditionsTest() throws Exception {
-    if (useComposite || overrideEnabled) {
-      return;
-    }
+    assumeTrue(!useComposite && !overrideEnabled);
+
     testHardwareLayout.addNewDataNodes(1);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     // this triggers a notification.
@@ -657,9 +645,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void xidTest() throws Exception {
-    if (useComposite) {
-      return;
-    }
+    assumeTrue(!useComposite);
+
     // Close the one initialized in the constructor, as this test needs to test initialization flow as well.
     clusterManager.close();
 
@@ -713,9 +700,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void metricsTest() throws Exception {
-    if (overrideEnabled) {
-      return;
-    }
+    assumeTrue(!overrideEnabled);
+
     counters = clusterManager.getMetricRegistry().getCounters();
     gauges = clusterManager.getMetricRegistry().getGauges();
 
@@ -787,9 +773,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void getPartitionsTest() {
-    if (overrideEnabled) {
-      return;
-    }
+    assumeTrue(!overrideEnabled);
+
     // "good" cases for getPartitions() and getWritablePartitions() only
     // getPartitions(), class null
     List<? extends PartitionId> returnedPartitions = clusterManager.getAllPartitionIds(null);

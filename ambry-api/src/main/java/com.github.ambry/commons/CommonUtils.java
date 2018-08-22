@@ -25,9 +25,6 @@ import org.apache.helix.store.zk.ZkHelixPropertyStore;
 
 
 public class CommonUtils {
-  static final String ZNODE_NAME = "PartitionOverride";
-  static final String PROPERTYSTORE_ZNODE_PATH = "/PROPERTYSTORE/ClusterConfigs/" + ZNODE_NAME;
-
   /**
    * Create a instance of {@link HelixPropertyStore} based on given {@link HelixPropertyStoreConfig}.
    * @param zkServers the ZooKeeper server address.

@@ -201,17 +201,17 @@ class HelixClusterManager implements ClusterMap {
       HelixPropertyListener helixListener = new HelixPropertyListener() {
         @Override
         public void onDataChange(String path) {
-          logger.info("Message is changed for topic {} at path {}", ClusterMapUtils.ZNODE_NAME, path);
+          logger.info("Received data change notification for: {}", path);
         }
 
         @Override
         public void onDataCreate(String path) {
-          logger.info("Message is created for topic {} at path {}", ClusterMapUtils.ZNODE_NAME, path);
+          logger.info("Received data create notification for: {}", path);
         }
 
         @Override
         public void onDataDelete(String path) {
-          logger.info("Message is deleted for topic {} at path {}", ClusterMapUtils.ZNODE_NAME, path);
+          logger.info("Received data delete notification for: {}", path);
         }
       };
       logger.info("Getting ZNRecord from HelixPropertyStore");
@@ -460,14 +460,15 @@ class HelixClusterManager implements ClusterMap {
                 Set<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
                 Set<String> stoppedReplicas = new HashSet<>(getStoppedReplicas(instanceConfig));
                 for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node)) {
+                  String partitionId = replica.getPartitionId().toPathString();
                   if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(
-                      replica.getPartitionId().toPathString())) {
+                      partitionId)) {
                     logger.trace(
                         "Ignoring instanceConfig change for partition {} on instance {} because partition override is enabled",
-                        replica.getPartitionId().toPathString(), instanceName);
+                        partitionId, instanceName);
                   } else {
-                    replica.setSealedState(sealedReplicas.contains(replica.getPartitionId().toPathString()));
-                    replica.setStoppedState(stoppedReplicas.contains(replica.getPartitionId().toPathString()));
+                    replica.setSealedState(sealedReplicas.contains(partitionId));
+                    replica.setStoppedState(stoppedReplicas.contains(partitionId));
                   }
                 }
               }

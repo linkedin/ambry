@@ -160,7 +160,6 @@ class HelixBootstrapUpgradeUtil {
    */
   static void uploadClusterConfigs(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory) throws Exception {
-
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
             maxPartitionsInOneResource, false, false, helixAdminFactory);
@@ -264,6 +263,18 @@ class HelixBootstrapUpgradeUtil {
 
   /**
    * Generate the partition override map containing partition state from all datacenters.
+   * @return the constructed partitionOverrideInfos. The format is as follows.
+   *
+   * "mapFields": {
+   *    "0": {
+   *      "partitionClass": "max-replicas-all-datacenters", (TODO)
+   *      "state": "RW"
+   *    },
+   *    "1": {
+   *      "partitionClass": "max-replicas-all-datacenters", (TODO)
+   *      "state": "RO"
+   *    }
+   * }
    */
   private Map<String, Map<String, String>> generatePartitionOverrideFromAllDCs() {
     Map<String, Map<String, String>> partitionOverrideInfos = new HashMap<>();
@@ -280,6 +291,17 @@ class HelixBootstrapUpgradeUtil {
 
   /**
    * Uploads the seal state of all partitions in the format of map.
+   * @param partitionOverrideInfos the override information for each partition. The current format is as follows.
+   *
+   * "mapFields": {
+   *    "0": {
+   *      "state": "RW"
+   *    },
+   *    "1": {
+   *      "state": "RO"
+   *    }
+   * }
+   *
    */
   private void uploadPartitionOverride(Map<String, Map<String, String>> partitionOverrideInfos) {
     Properties storeProps = new Properties();
