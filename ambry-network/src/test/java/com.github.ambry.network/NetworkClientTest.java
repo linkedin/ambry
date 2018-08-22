@@ -103,24 +103,6 @@ public class NetworkClientTest {
   }
 
   /**
-   * Helper function to test {@link NetworkClient#warmUpConnections(List, int, long)}
-   */
-  private void doTestWarmUpConnections(List<DataNodeId> localDataNodeIds, int maxPort, PortType expectedPortType) {
-    Assert.assertEquals("Port type is not expected.", expectedPortType,
-        localDataNodeIds.get(0).getPortToConnectTo().getPortType());
-    Assert.assertEquals("Connection count is not expected", maxPort * localDataNodeIds.size(),
-        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
-    Assert.assertEquals("Connection count is not expected", 50 * maxPort / 100 * localDataNodeIds.size(),
-        networkClient.warmUpConnections(localDataNodeIds, 50, 2000));
-    Assert.assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(localDataNodeIds, 0, 2000));
-    selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
-    Assert.assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
-    selector.setState(MockSelectorState.Good);
-  }
-
-  /**
    * Test {@link NetworkClient#warmUpConnections(List, int, long)}
    */
   @Test
@@ -434,6 +416,24 @@ public class NetworkClientTest {
       Assert.fail("Polling after close should throw");
     } catch (IllegalStateException e) {
     }
+  }
+
+  /**
+   * Helper function to test {@link NetworkClient#warmUpConnections(List, int, long)}
+   */
+  private void doTestWarmUpConnections(List<DataNodeId> localDataNodeIds, int maxPort, PortType expectedPortType) {
+    Assert.assertEquals("Port type is not expected.", expectedPortType,
+        localDataNodeIds.get(0).getPortToConnectTo().getPortType());
+    Assert.assertEquals("Connection count is not expected", maxPort * localDataNodeIds.size(),
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
+    Assert.assertEquals("Connection count is not expected", 50 * maxPort / 100 * localDataNodeIds.size(),
+        networkClient.warmUpConnections(localDataNodeIds, 50, 2000));
+    Assert.assertEquals("Connection count is not expected", 0,
+        networkClient.warmUpConnections(localDataNodeIds, 0, 2000));
+    selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
+    Assert.assertEquals("Connection count is not expected", 0,
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
+    selector.setState(MockSelectorState.Good);
   }
 }
 
