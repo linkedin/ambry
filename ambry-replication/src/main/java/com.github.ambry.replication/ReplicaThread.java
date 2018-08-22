@@ -220,8 +220,8 @@ class ReplicaThread implements Runnable {
    */
   void replicate(List<List<RemoteReplicaInfo>> replicasToReplicate) {
     // shuffle the nodes
-    boolean meaningfulReplication = false;
     Collections.shuffle(replicasToReplicate);
+    boolean allCaughtUp = true;
     for (List<RemoteReplicaInfo> replicasToReplicatePerNode : replicasToReplicate) {
       if (!running) {
         break;
@@ -256,16 +256,16 @@ class ReplicaThread implements Runnable {
       long startTimeInMs = replicationStartTimeInMs;
 
       List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<RemoteReplicaInfo>();
-      boolean quarantined;
+      boolean inBackoff;
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-        quarantined = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
-        if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown() && !quarantined) {
+        inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+        if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown() && !inBackoff) {
           activeReplicasPerNode.add(remoteReplicaInfo);
         }
       }
       if (activeReplicasPerNode.size() > 0) {
-        meaningfulReplication = true;
+        allCaughtUp = false;
         try {
           connectedChannel =
               connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
@@ -275,7 +275,6 @@ class ReplicaThread implements Runnable {
           List<ExchangeMetadataResponse> exchangeMetadataResponseList =
               exchangeMetadata(connectedChannel, activeReplicasPerNode);
           exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-
 
           startTimeInMs = SystemTime.getInstance().milliseconds();
           fixMissingStoreKeys(connectedChannel, activeReplicasPerNode, exchangeMetadataResponseList);
@@ -313,9 +312,9 @@ class ReplicaThread implements Runnable {
         }
       }
     }
-    if(!meaningfulReplication) {
+    if(allCaughtUp) {
       try {
-        time.sleep(replicationConfig.replicationSleepDurationMs);
+        time.sleep(replicationConfig.replicationThreadSleepDurationMs);
       } catch (InterruptedException e) {
         logger.error("Received interrupted exception during throttling", e);
       }
@@ -745,8 +744,8 @@ class ReplicaThread implements Runnable {
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         if (remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
-          remoteReplicaInfo.setReEnableReplicationTime(time.milliseconds() + replicationConfig.replicationQuarantineDurationMs);
-          replicationMetrics.replicaQuarantineCount.inc();
+          remoteReplicaInfo.setReEnableReplicationTime(time.milliseconds() + replicationConfig.replicationReplicaBackoffDurationMs);
+          replicationMetrics.replicaSyncedBackoffCount.inc();
         }
         if (exchangeMetadataResponse.missingStoreKeys.size() > 0) {
           PartitionResponseInfo partitionResponseInfo =

@@ -62,16 +62,16 @@ public class ReplicationConfig {
   /**
    * The time to sleep when the replica thread is not doing any useful work
    */
-  @Config("replication.sleep.duration.ms")
+  @Config("replication.replica.thread.sleep.duration.ms")
   @Default("1000")
-  public final long replicationSleepDurationMs;
+  public final long replicationThreadSleepDurationMs;
 
   /**
    * The time to temporarily disable replication for a replica in order to reduce wasteful network calls
    */
-  @Config("replication.quarantine.duration.ms")
+  @Config("replication.synced.replica.backoff.duration.ms")
   @Default("1000")
-  public final long replicationQuarantineDurationMs;
+  public final long replicationReplicaBackoffDurationMs;
 
   /**
    * The fetch size is an approximate total size that a remote server would return on a fetch request.
@@ -96,10 +96,10 @@ public class ReplicationConfig {
         verifiableProperties.getIntInRange("replication.token.flush.interval.seconds", 300, 5, Integer.MAX_VALUE);
     replicationTokenFlushDelaySeconds =
         verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
-    replicationSleepDurationMs =
-        verifiableProperties.getLongInRange("replication.sleep.duration.ms", 1000, 0, Long.MAX_VALUE);
-    replicationQuarantineDurationMs =
-        verifiableProperties.getLongInRange("replication.quarantine.duration.ms", 1000, 0, Long.MAX_VALUE);
+    replicationThreadSleepDurationMs =
+        verifiableProperties.getLongInRange("replication.replica.thread.sleep.duration.ms", 1000, 0, Long.MAX_VALUE);
+    replicationReplicaBackoffDurationMs =
+        verifiableProperties.getLongInRange("replication.synced.replica.backoff.duration.ms", 1000, 0, Long.MAX_VALUE);
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
   }
