@@ -313,7 +313,7 @@ class HelixBootstrapUpgradeUtil {
           CommonUtils.createHelixPropertyStore(entry.getValue().getZkConnectStr(), propertyStoreConfig, null);
       ZNRecord znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);
       znRecord.setMapFields(partitionOverrideInfos);
-      String path = "/" + clusterName + ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;
+      String path = ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;
       if (!helixPropertyStore.set(path, znRecord, AccessOption.PERSISTENT)) {
         info("Failed to upload partition override for datacenter {}", entry.getKey());
       }

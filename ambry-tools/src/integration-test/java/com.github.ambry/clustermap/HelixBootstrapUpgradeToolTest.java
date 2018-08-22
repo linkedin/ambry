@@ -247,7 +247,7 @@ public class HelixBootstrapUpgradeToolTest {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      String getPath = ROOT_PATH + ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;
+      String getPath = ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;
       ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
       assertNotNull(zNRecord);
       Map<String, Map<String, String>> overridePartition = zNRecord.getMapFields();
