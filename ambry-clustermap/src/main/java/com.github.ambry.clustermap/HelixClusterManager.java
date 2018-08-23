@@ -33,6 +33,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceConfigChangeListener;
@@ -42,7 +43,6 @@ import org.apache.helix.NotificationContext;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
-import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -193,29 +193,25 @@ class HelixClusterManager implements ClusterMap {
     ZkHelixPropertyStore<ZNRecord> helixPropertyStore = null;
     try {
       manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
-      helixPropertyStore = manager.getHelixPropertyStore();
-      logger.info("Connecting to Helix manager in local datacenter at {}", zkConnectStr);
+      logger.info("Connecting to Helix manager in local zookeeper at {}", zkConnectStr);
       manager.connect();
-      logger.info("Established connection to Helix manager in local datacenter at {}", zkConnectStr);
-
-      HelixPropertyListener helixListener = new HelixPropertyListener() {
+      logger.info("Established connection to Helix manager in local zookeeper at {}", zkConnectStr);
+      helixPropertyStore = manager.getHelixPropertyStore();
+      logger.info("HelixPropertyStore from local datacenter {} is: {}", dcZkInfo.getDcName(), helixPropertyStore);
+      IZkDataListener dataListener = new IZkDataListener() {
         @Override
-        public void onDataChange(String path) {
-          logger.info("Received data change notification for: {}", path);
+        public void handleDataChange(String dataPath, Object data) throws Exception {
+          logger.info("Received data change notification for: {}", dataPath);
         }
 
         @Override
-        public void onDataCreate(String path) {
-          logger.info("Received data create notification for: {}", path);
-        }
-
-        @Override
-        public void onDataDelete(String path) {
-          logger.info("Received data delete notification for: {}", path);
+        public void handleDataDeleted(String dataPath) throws Exception {
+          logger.info("Received data delete notification for: {}", dataPath);
         }
       };
+      logger.info("Subscribing data listener to HelixPropertyStore.");
+      helixPropertyStore.subscribeDataChanges(ClusterMapUtils.ZNODE_PATH, dataListener);
       logger.info("Getting ZNRecord from HelixPropertyStore");
-      helixPropertyStore.subscribe(ClusterMapUtils.ZNODE_PATH, helixListener);
       ZNRecord zNRecord = helixPropertyStore.get(ClusterMapUtils.ZNODE_PATH, null, AccessOption.PERSISTENT);
       if (clusterMapConfig.clusterMapEnablePartitionOverride) {
         if (zNRecord != null) {
