@@ -39,6 +39,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -180,6 +181,22 @@ public class BlobIdTransformerTest {
     } catch (NullPointerException e) {
       //expected
     }
+  }
+
+  /**
+   * Tests BlobIdTransformer's warmup() method
+   * @throws Exception
+   */
+  @Test
+  public void testWarmup() throws Exception {
+    InputAndExpected inputAndExpected = new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], true);
+    BlobIdTransformer transformer = new BlobIdTransformer(blobIdFactory, factory.getStoreKeyConverter());
+    TransformationOutput output = transformer.transform(inputAndExpected.getInput());
+    Assert.assertTrue("Should lead to IllegalStateException", output.getException() instanceof IllegalStateException);
+    transformer.warmup(Collections.singletonList(inputAndExpected.getInput().getMessageInfo()));
+    output = transformer.transform(inputAndExpected.getInput());
+    assertNull(output.getException());
+    verifyOutput(output.getMsg(), inputAndExpected.getExpected());
   }
 
   /**

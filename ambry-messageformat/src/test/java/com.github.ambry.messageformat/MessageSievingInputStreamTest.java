@@ -997,4 +997,9 @@ class ValidatingKeyConvertingTransformer implements Transformer {
     }
     return transformationOutput;
   }
+
+  @Override
+  public void warmup(List<MessageInfo> messageInfos) throws Exception {
+    //no-op
+  }
 }

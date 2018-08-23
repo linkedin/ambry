@@ -23,6 +23,7 @@ import com.github.ambry.store.Transformer;
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.List;
 
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
 
@@ -87,6 +88,11 @@ public class ValidatingTransformer implements Transformer {
       transformationOutput = new TransformationOutput(e);
     }
     return transformationOutput;
+  }
+
+  @Override
+  public void warmup(List<MessageInfo> messageInfos) throws Exception {
+    //no-op
   }
 }
 

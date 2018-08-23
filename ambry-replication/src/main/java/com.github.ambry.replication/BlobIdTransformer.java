@@ -31,6 +31,8 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
@@ -71,6 +73,17 @@ public class BlobIdTransformer implements Transformer {
       return new TransformationOutput(e);
     }
     return new TransformationOutput(transformedMsg);
+  }
+
+  @Override
+  public void warmup(List<MessageInfo> messageInfos) throws Exception {
+    List<StoreKey> storeKeys = new ArrayList<>();
+    for (MessageInfo messageInfo : messageInfos) {
+      if (!messageInfo.isExpired() && !messageInfo.isDeleted()) {
+        storeKeys.add(messageInfo.getStoreKey());
+      }
+    }
+    storeKeyConverter.convert(storeKeys);
   }
 
   /**

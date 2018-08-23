@@ -13,6 +13,8 @@
  */
 package com.github.ambry.store;
 
+import java.util.List;
+
 /**
  * An interface for a transformation function. Transformations parse the message and may modify any data in the message
  * (including keys).
@@ -26,6 +28,14 @@ public interface Transformer {
    * @return the output {@link TransformationOutput}.
    */
   TransformationOutput transform(Message message);
+
+  /**
+   * Warms up transformer with message infos representing messages
+   * it will transform later
+   * @param messageInfos
+   * @throws Exception
+   */
+  void warmup(List<MessageInfo> messageInfos) throws Exception;
 }
 
 
