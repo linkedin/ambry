@@ -118,6 +118,16 @@ public class ReplicationTest {
   private ReplicationConfig config;
 
   /**
+   * Constructor to set the configs
+   */
+  public ReplicationTest() {
+    Properties properties = new Properties();
+    properties.setProperty("replication.synced.replica.backoff.duration.ms", "3000");
+    properties.setProperty("replication.replica.thread.throttle.sleep.duration.ms", "100");
+    config = new ReplicationConfig(new VerifiableProperties(properties));
+  }
+
+  /**
    * Tests pausing all partitions and makes sure that the replica thread pauses. Also tests that it resumes when one
    * eligible partition is reenabled and that replication completes successfully.
    * @throws Exception
@@ -810,20 +820,20 @@ public class ReplicationTest {
     verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
         idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex + 1, 4);
 
-    // tests to verify replica thread throttling function in the following steps:
+    // tests to verify replica thread throttling and idling functions in the following steps:
     // 1. all replicas are in sync, thread level sleep and replica quarantine are both enabled.
     // 2. add put messages to some replica and verify that replication for replicas remain disabled.
     // 3. forward the time so replication for replicas are re-enabled and check replication resumes.
-    // 4. add more put messages to ensure replication happens continuously when replication is needed.
+    // 4. add more put messages to ensure replication happens continuously when needed and is throttled appropriately.
 
     // 1. verify that the replica thread sleeps and replicas are temporarily disable when all replicas are synced.
-    long currentTimeMs = time.milliseconds();
     List<List<RemoteReplicaInfo>> replicasToReplicateList = new ArrayList<>(replicasToReplicate.values());
     replicaThread.replicate(replicasToReplicateList);
     // replicate is called twice to trigger the sleep (replication for all replica is disabled then replicate is put to sleep).
+    long currentTimeMs = time.milliseconds();
     replicaThread.replicate(replicasToReplicateList);
-    assertTrue("Replicas are in sync, replica thread should sleep by replication.sleep.duration.ms",
-        currentTimeMs + config.replicationThreadSleepDurationMs <= time.milliseconds());
+    assertEquals("Replicas are in sync, replica thread should sleep by replication.thread.idle.sleep.duration.ms",
+        currentTimeMs + config.replicationThreadIdleSleepDurationMs, time.milliseconds());
 
     // 2. add 3 messages to a partition in the remote host only and verify replication for all replicas should be disabled.
     PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
@@ -839,21 +849,36 @@ public class ReplicationTest {
     currentTimeMs = time.milliseconds();
     replicaThread.replicate(replicasToReplicateList);
     assertEquals("Replication for all replicas should be disabled and the thread should sleep",
-        currentTimeMs + config.replicationThreadSleepDurationMs, time.milliseconds());
+        currentTimeMs + config.replicationThreadIdleSleepDurationMs, time.milliseconds());
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
 
     // 3. forward the time and run replicate and verify the replication.
     time.sleep(config.replicationReplicaBackoffDurationMs);
-    currentTimeMs = time.milliseconds();
     replicaThread.replicate(replicasToReplicateList);
     missingKeys = new int[replicasToReplicate.get(remoteHost.dataNodeId).size()];
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
 
-    // 4. add more put messages and verify that replication continues
+    // 4. add more put messages and verify that replication continues and is throttled appropriately.
     addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(localHost, remoteHost), 3);
+    currentTimeMs = time.milliseconds();
     replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
-    assertEquals("Replica thread should not sleep since remote has new token", currentTimeMs, time.milliseconds());
+    assertEquals(
+        "Replica thread should sleep exactly replication.thread.throttle.sleep.duration.ms since remote has new token",
+        currentTimeMs + config.replicationThreadThrottleSleepDurationMs, time.milliseconds());
+
+    // verify that throttling on the replica thread is disabled when replication.thread.throttle.sleep.duration.ms is 0.
+    Properties properties = new Properties();
+    properties.setProperty("replication.thread.throttle.sleep.duration.ms", "0");
+    config = new ReplicationConfig(new VerifiableProperties(properties));
+    replicasAndThread = getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyFactory,
+        storeKeyConverter, transformer, null);
+    replicasToReplicateList = new ArrayList<>(replicasAndThread.getFirst().values());
+    replicaThread = replicasAndThread.getSecond();
+    currentTimeMs = time.milliseconds();
+    replicaThread.replicate(replicasToReplicateList);
+    assertEquals("Replica thread should not sleep when throttling is disabled and replicas are out of sync",
+        currentTimeMs, time.milliseconds());
   }
 
   /**
@@ -929,9 +954,6 @@ public class ReplicationTest {
   private Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> getRemoteReplicasAndReplicaThread(int batchSize,
       ClusterMap clusterMap, Host localHost, Host remoteHost, StoreKeyFactory storeKeyFactory,
       StoreKeyConverter storeKeyConverter, Transformer transformer, StoreEventListener listener) {
-    Properties properties = new Properties();
-    properties.setProperty("replication.quarantine.duration.ms", "3000");
-    config = new ReplicationConfig(new VerifiableProperties(properties));
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
