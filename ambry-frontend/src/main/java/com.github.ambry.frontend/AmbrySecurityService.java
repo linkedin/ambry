@@ -134,7 +134,8 @@ class AmbrySecurityService implements SecurityService {
         operationOrBlobId = operationOrBlobId.substring(1);
       }
       RestMethod restMethod = restRequest.getRestMethod();
-      if (blobInfo == null && !restMethod.equals(RestMethod.OPTIONS) && !restMethod.equals(RestMethod.PUT)) {
+      if (blobInfo == null && !restMethod.equals(RestMethod.OPTIONS) && !restMethod.equals(RestMethod.PUT)
+          && !restMethod.equals(RestMethod.DELETE)) {
         if (!operationOrBlobId.equals(Operations.GET_SIGNED_URL)) {
           throw new IllegalArgumentException("BlobInfo is null");
         }
@@ -186,6 +187,7 @@ class AmbrySecurityService implements SecurityService {
             break;
           case OPTIONS:
           case PUT:
+          case DELETE:
             break;
           default:
             exception = new RestServiceException("Cannot process response for request with method " + restMethod,
