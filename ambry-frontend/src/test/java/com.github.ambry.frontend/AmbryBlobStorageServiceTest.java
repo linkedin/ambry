@@ -29,7 +29,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
-import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -106,6 +105,8 @@ import static org.junit.Assert.*;
  * Unit tests for {@link AmbryBlobStorageService}. Also tests {@link AccountAndContainerInjector}.
  */
 public class AmbryBlobStorageServiceTest {
+  private static final int CHUNK_UPLOAD_MAX_CHUNK_SIZE = 4 * 1024 * 1024;
+
   private final Account refAccount;
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -119,7 +120,6 @@ public class AmbryBlobStorageServiceTest {
   private final String referenceBlobIdStr;
   private final short blobIdVersion;
   private final UrlSigningService urlSigningService;
-  private final RouterConfig routerConfig;
   private FrontendConfig frontendConfig;
   private VerifiableProperties verifiableProperties;
   private boolean shouldAllowServiceIdBasedPut = true;
@@ -139,19 +139,16 @@ public class AmbryBlobStorageServiceTest {
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     configProps.setProperty("frontend.allow.service.id.based.post.request",
         String.valueOf(shouldAllowServiceIdBasedPut));
-    CommonTestUtils.populateRequiredRouterProps(configProps);
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    routerConfig = new RouterConfig(verifiableProperties);
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     String endpoint = "http://localhost:1174";
     urlSigningService =
         new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.frontendUrlSignerDefaultUrlTtlSecs,
             frontendConfig.frontendUrlSignerDefaultMaxUploadSizeBytes, frontendConfig.frontendUrlSignerMaxUrlTtlSecs,
-            frontendConfig.chunkUploadInitialChunkTtlSecs, routerConfig.routerMaxPutChunkSizeBytes,
-            SystemTime.getInstance());
+            frontendConfig.chunkUploadInitialChunkTtlSecs, CHUNK_UPLOAD_MAX_CHUNK_SIZE, SystemTime.getInstance());
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, new AmbryIdSigningService());
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService,
         accountAndContainerInjector);
@@ -726,8 +723,9 @@ public class AmbryBlobStorageServiceTest {
   public void deleteServiceIdTest() throws Exception {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, routerConfig, frontendMetrics, responseHandler, testRouter,
-            clusterMap, idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+        new AmbryBlobStorageService(frontendConfig, CHUNK_UPLOAD_MAX_CHUNK_SIZE, frontendMetrics, responseHandler,
+            testRouter, clusterMap, idConverterFactory, securityServiceFactory, urlSigningService,
+            accountAndContainerInjector);
     ambryBlobStorageService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
@@ -747,8 +745,9 @@ public class AmbryBlobStorageServiceTest {
     ambryBlobStorageService.shutdown();
     TailoredPeersClusterMap clusterMap = new TailoredPeersClusterMap();
     ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, routerConfig, frontendMetrics, responseHandler, router, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+        new AmbryBlobStorageService(frontendConfig, CHUNK_UPLOAD_MAX_CHUNK_SIZE, frontendMetrics, responseHandler,
+            router, clusterMap, idConverterFactory, securityServiceFactory, urlSigningService,
+            accountAndContainerInjector);
     ambryBlobStorageService.start();
     // test good requests
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
@@ -924,8 +923,9 @@ public class AmbryBlobStorageServiceTest {
     testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.BlobUpdateNotAllowed);
     testRouter.exceptionOpType = FrontendTestRouter.OpType.UpdateBlobTtl;
     ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, routerConfig, frontendMetrics, responseHandler, testRouter,
-            clusterMap, idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+        new AmbryBlobStorageService(frontendConfig, CHUNK_UPLOAD_MAX_CHUNK_SIZE, frontendMetrics, responseHandler,
+            testRouter, clusterMap, idConverterFactory, securityServiceFactory, urlSigningService,
+            accountAndContainerInjector);
     ambryBlobStorageService.start();
 
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
@@ -1165,8 +1165,8 @@ public class AmbryBlobStorageServiceTest {
    * @return an instance of {@link AmbryBlobStorageService}.
    */
   private AmbryBlobStorageService getAmbryBlobStorageService() {
-    return new AmbryBlobStorageService(frontendConfig, routerConfig, frontendMetrics, responseHandler, router,
-        clusterMap, idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+    return new AmbryBlobStorageService(frontendConfig, CHUNK_UPLOAD_MAX_CHUNK_SIZE, frontendMetrics, responseHandler,
+        router, clusterMap, idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -1789,8 +1789,9 @@ public class AmbryBlobStorageServiceTest {
   private void doIdConverterExceptionTest(FrontendTestIdConverterFactory converterFactory, String expectedExceptionMsg)
       throws InstantiationException, JSONException {
     ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, routerConfig, frontendMetrics, responseHandler, router, clusterMap,
-            converterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+        new AmbryBlobStorageService(frontendConfig, CHUNK_UPLOAD_MAX_CHUNK_SIZE, frontendMetrics, responseHandler,
+            router, clusterMap, converterFactory, securityServiceFactory, urlSigningService,
+            accountAndContainerInjector);
     ambryBlobStorageService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     doExternalServicesBadInputTest(restMethods, expectedExceptionMsg, false);
@@ -1819,7 +1820,7 @@ public class AmbryBlobStorageServiceTest {
         restMethods = RestMethod.values();
       }
       ambryBlobStorageService =
-          new AmbryBlobStorageService(frontendConfig, routerConfig, frontendMetrics, responseHandler,
+          new AmbryBlobStorageService(frontendConfig, CHUNK_UPLOAD_MAX_CHUNK_SIZE, frontendMetrics, responseHandler,
               new FrontendTestRouter(), clusterMap, idConverterFactory, securityFactory, urlSigningService,
               accountAndContainerInjector);
       ambryBlobStorageService.start();
@@ -1876,8 +1877,9 @@ public class AmbryBlobStorageServiceTest {
    */
   private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
     ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, routerConfig, frontendMetrics, responseHandler, testRouter,
-            clusterMap, idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+        new AmbryBlobStorageService(frontendConfig, CHUNK_UPLOAD_MAX_CHUNK_SIZE, frontendMetrics, responseHandler,
+            testRouter, clusterMap, idConverterFactory, securityServiceFactory, urlSigningService,
+            accountAndContainerInjector);
     ambryBlobStorageService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {

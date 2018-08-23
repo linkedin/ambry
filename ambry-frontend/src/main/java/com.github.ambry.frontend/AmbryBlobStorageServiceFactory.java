@@ -36,7 +36,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory {
   private final FrontendConfig frontendConfig;
-  private final RouterConfig routerConfig;
+  private final int chunkUploadMaxChunkSize;
   private final FrontendMetrics frontendMetrics;
   private final VerifiableProperties verifiableProperties;
   private final ClusterMap clusterMap;
@@ -63,7 +63,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
     this.router = Objects.requireNonNull(router, "Provided Router is null");
     this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
     frontendConfig = new FrontendConfig(verifiableProperties);
-    routerConfig = new RouterConfig(verifiableProperties);
+    chunkUploadMaxChunkSize = new RouterConfig(verifiableProperties).routerMaxPutChunkSizeBytes;
     frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
     logger.trace("Instantiated AmbryBlobStorageServiceFactory");
   }
@@ -89,8 +89,9 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, accountAndContainerInjector);
-      return new AmbryBlobStorageService(frontendConfig, routerConfig, frontendMetrics, responseHandler, router,
-          clusterMap, idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+      return new AmbryBlobStorageService(frontendConfig, chunkUploadMaxChunkSize, frontendMetrics, responseHandler,
+          router, clusterMap, idConverterFactory, securityServiceFactory, urlSigningService,
+          accountAndContainerInjector);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate AmbryBlobStorageService", e);
     }

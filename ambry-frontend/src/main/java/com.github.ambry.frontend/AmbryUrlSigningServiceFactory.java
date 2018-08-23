@@ -29,12 +29,12 @@ import org.json.JSONObject;
  * Returns a new instance of {@link UrlSigningService} on {@link #getUrlSigningService()} call.
  */
 public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
-  private final FrontendConfig frontendConfig;
-  private final RouterConfig routerConfig;
+  private final FrontendConfig config;
+  private final int chunkUploadMaxChunkSize;
 
   public AmbryUrlSigningServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
-    frontendConfig = new FrontendConfig(verifiableProperties);
-    routerConfig = new RouterConfig(verifiableProperties);
+    config = new FrontendConfig(verifiableProperties);
+    chunkUploadMaxChunkSize = new RouterConfig(verifiableProperties).routerMaxPutChunkSizeBytes;
   }
 
   @Override
@@ -50,9 +50,8 @@ public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
       throw new IllegalStateException("Invalid config value: " + config.frontendUrlSignerEndpoints, ex);
     }
 
-    return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint,
-        frontendConfig.frontendUrlSignerDefaultUrlTtlSecs, frontendConfig.frontendUrlSignerDefaultMaxUploadSizeBytes,
-        frontendConfig.frontendUrlSignerMaxUrlTtlSecs, frontendConfig.chunkUploadInitialChunkTtlSecs,
-        routerConfig.routerMaxPutChunkSizeBytes, SystemTime.getInstance());
+    return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint, config.frontendUrlSignerDefaultUrlTtlSecs,
+        config.frontendUrlSignerDefaultMaxUploadSizeBytes, config.frontendUrlSignerMaxUrlTtlSecs,
+        config.chunkUploadInitialChunkTtlSecs, chunkUploadMaxChunkSize, SystemTime.getInstance());
   }
 }

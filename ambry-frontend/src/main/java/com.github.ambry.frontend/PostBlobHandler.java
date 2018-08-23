@@ -14,7 +14,6 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.config.FrontendConfig;
-import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.RestRequest;
@@ -54,7 +53,7 @@ class PostBlobHandler {
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final Time time;
   private final FrontendConfig frontendConfig;
-  private final RouterConfig routerConfig;
+  private final int chunkUploadMaxChunkSize;
   private final FrontendMetrics frontendMetrics;
 
   /**
@@ -65,19 +64,19 @@ class PostBlobHandler {
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    * @param time the {@link Time} instance to use.
    * @param frontendConfig the {@link FrontendConfig} to use.
-   * @param routerConfig the {@link RouterConfig} to use.
+   * @param chunkUploadMaxChunkSize the preconfigured max size for chunks of a stitched upload.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    */
   PostBlobHandler(SecurityService securityService, IdConverter idConverter, Router router,
       AccountAndContainerInjector accountAndContainerInjector, Time time, FrontendConfig frontendConfig,
-      RouterConfig routerConfig, FrontendMetrics frontendMetrics) {
+      int chunkUploadMaxChunkSize, FrontendMetrics frontendMetrics) {
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.router = router;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.time = time;
     this.frontendConfig = frontendConfig;
-    this.routerConfig = routerConfig;
+    this.chunkUploadMaxChunkSize = chunkUploadMaxChunkSize;
     this.frontendMetrics = frontendMetrics;
   }
 
@@ -266,7 +265,7 @@ class PostBlobHandler {
         RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true);
         // validate that max chunk size configuration is less than the chunking threshold.
         long maxChunkSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, true);
-        if (maxChunkSize > routerConfig.routerMaxPutChunkSizeBytes) {
+        if (maxChunkSize > chunkUploadMaxChunkSize) {
           throw new RestServiceException("Invalid max chunk size: " + maxChunkSize, RestServiceErrorCode.InvalidArgs);
         }
         // validate that the TTL for the chunk is set correctly.
