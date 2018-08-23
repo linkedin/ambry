@@ -17,6 +17,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -40,6 +41,7 @@ class HelixClusterManagerMetrics {
   public final Counter ignoredUpdatesCount;
 
   public Gauge<Long> helixClusterManagerInstantiationFailed;
+  public Gauge<Long> helixClusterManagerCurrentXid;
 
   /**
    * Metrics for the {@link HelixClusterManager}
@@ -81,6 +83,12 @@ class HelixClusterManagerMetrics {
     helixClusterManagerInstantiationFailed = () -> instantiated ? 0L : 1L;
     registry.register(MetricRegistry.name(HelixClusterManager.class, "instantiationFailed"),
         helixClusterManagerInstantiationFailed);
+  }
+
+  void initializeXidMetric(final AtomicLong currentXid) {
+    helixClusterManagerCurrentXid = currentXid::get;
+    registry.register(MetricRegistry.name(HelixClusterManager.class, "currentXid"),
+        helixClusterManagerCurrentXid);
   }
 
   /**

@@ -191,11 +191,10 @@ public class ClusterMapUtils {
    * Get the xid associated with this instance. The xid is like a timestamp or a change number, so if it is absent,
    * a value representing the earliest point in time is returned.
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
-   * @return the xid associated with the given instance.
+   * @return the xid string associated with the given instance, if there is one; else null.
    */
-  static long getXid(InstanceConfig instanceConfig) {
-    String xid = instanceConfig.getRecord().getSimpleField(XID_STR);
-    return xid == null ? Long.MIN_VALUE : Long.valueOf(xid);
+  static String getXid(InstanceConfig instanceConfig) {
+    return instanceConfig.getRecord().getSimpleField(XID_STR);
   }
 
   /**

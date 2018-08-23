@@ -77,4 +77,10 @@ public interface DataNodeId extends Resource, Comparable<DataNodeId> {
    * @return a valid rack ID, or null if no rack ID is assigned
    */
   String getRackId();
+
+  /**
+   * Get the xid associated with this node. The xid marks a change number.
+   * @return the xid associated with this node.
+   */
+  String getXid();
 }

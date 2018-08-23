@@ -119,6 +119,11 @@ public class MockDataNodeId implements DataNodeId {
     return null;
   }
 
+  @Override
+  public String getXid() {
+    return null;
+  }
+
   public List<String> getMountPaths() {
     return mountPaths;
   }
