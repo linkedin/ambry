@@ -833,7 +833,7 @@ public class ReplicationTest {
     long currentTimeMs = time.milliseconds();
     replicaThread.replicate(replicasToReplicateList);
     assertEquals("Replicas are in sync, replica thread should sleep by replication.thread.idle.sleep.duration.ms",
-        currentTimeMs + config.replicationThreadIdleSleepDurationMs, time.milliseconds());
+        currentTimeMs + config.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
 
     // 2. add 3 messages to a partition in the remote host only and verify replication for all replicas should be disabled.
     PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
@@ -849,11 +849,11 @@ public class ReplicationTest {
     currentTimeMs = time.milliseconds();
     replicaThread.replicate(replicasToReplicateList);
     assertEquals("Replication for all replicas should be disabled and the thread should sleep",
-        currentTimeMs + config.replicationThreadIdleSleepDurationMs, time.milliseconds());
+        currentTimeMs + config.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
 
     // 3. forward the time and run replicate and verify the replication.
-    time.sleep(config.replicationReplicaBackoffDurationMs);
+    time.sleep(config.replicationSyncedReplicaBackoffDurationMs);
     replicaThread.replicate(replicasToReplicateList);
     missingKeys = new int[replicasToReplicate.get(remoteHost.dataNodeId).size()];
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
@@ -865,7 +865,7 @@ public class ReplicationTest {
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
     assertEquals(
         "Replica thread should sleep exactly replication.thread.throttle.sleep.duration.ms since remote has new token",
-        currentTimeMs + config.replicationThreadThrottleSleepDurationMs, time.milliseconds());
+        currentTimeMs + config.replicationReplicaThreadThrottleSleepDurationMs, time.milliseconds());
 
     // verify that throttling on the replica thread is disabled when replication.thread.throttle.sleep.duration.ms is 0.
     Properties properties = new Properties();

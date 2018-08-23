@@ -255,10 +255,9 @@ class ReplicaThread implements Runnable {
       long startTimeInMs = replicationStartTimeInMs;
 
       List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<RemoteReplicaInfo>();
-      boolean inBackoff;
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-        inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+        boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
         if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown() && !inBackoff) {
           activeReplicasPerNode.add(remoteReplicaInfo);
         }
@@ -313,10 +312,10 @@ class ReplicaThread implements Runnable {
     }
     long sleepDurationMs;
     if (allCaughtUp) {
-      sleepDurationMs = replicationConfig.replicationThreadIdleSleepDurationMs;
+      sleepDurationMs = replicationConfig.replicationReplicaThreadIdleSleepDurationMs;
       replicationMetrics.replicaThreadIdleCount.inc();
     } else {
-      sleepDurationMs = replicationConfig.replicationThreadThrottleSleepDurationMs;
+      sleepDurationMs = replicationConfig.replicationReplicaThreadThrottleSleepDurationMs;
     }
     if (sleepDurationMs > 0) {
       try {
@@ -749,7 +748,7 @@ class ReplicaThread implements Runnable {
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         if (remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
           remoteReplicaInfo.setReEnableReplicationTime(
-              time.milliseconds() + replicationConfig.replicationReplicaBackoffDurationMs);
+              time.milliseconds() + replicationConfig.replicationSyncedReplicaBackoffDurationMs);
           replicationMetrics.replicaSyncedBackoffCount.inc();
         }
         if (exchangeMetadataResponse.missingStoreKeys.size() > 0) {
