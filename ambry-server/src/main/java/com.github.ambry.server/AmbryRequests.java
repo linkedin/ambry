@@ -246,6 +246,7 @@ public class AmbryRequests implements RequestAPI {
     Histogram responseTotalTime = null;
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
+    boolean isReplicaRequest = getRequest.getClientId().startsWith(GetRequest.Replication_Client_Id_Prefix);
     if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob) {
       metrics.getBlobRequestQueueTimeInMs.update(requestQueueTime);
       metrics.getBlobRequestRate.mark();
@@ -271,12 +272,21 @@ public class AmbryRequests implements RequestAPI {
       responseSendTime = metrics.getBlobInfoSendTimeInMs;
       responseTotalTime = metrics.getBlobInfoTotalTimeInMs;
     } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
-      metrics.getBlobAllRequestQueueTimeInMs.update(requestQueueTime);
-      metrics.getBlobAllRequestRate.mark();
-      responseQueueTime = metrics.getBlobAllResponseQueueTimeInMs;
-      responseSendTime = metrics.getBlobAllSendTimeInMs;
-      responseTotalTime = metrics.getBlobAllTotalTimeInMs;
+      if (isReplicaRequest) {
+        metrics.getBlobAllByReplicaRequestQueueTimeInMs.update(requestQueueTime);
+        metrics.getBlobAllByReplicaRequestRate.mark();
+        responseQueueTime = metrics.getBlobAllByReplicaResponseQueueTimeInMs;
+        responseSendTime = metrics.getBlobAllByReplicaSendTimeInMs;
+        responseTotalTime = metrics.getBlobAllByReplicaTotalTimeInMs;
+      } else {
+        metrics.getBlobAllRequestQueueTimeInMs.update(requestQueueTime);
+        metrics.getBlobAllRequestRate.mark();
+        responseQueueTime = metrics.getBlobAllResponseQueueTimeInMs;
+        responseSendTime = metrics.getBlobAllSendTimeInMs;
+        responseTotalTime = metrics.getBlobAllTotalTimeInMs;
+      }
     }
+
     long startTime = SystemTime.getInstance().milliseconds();
     GetResponse response = null;
     try {
@@ -376,8 +386,12 @@ public class AmbryRequests implements RequestAPI {
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobInfo) {
         metrics.getBlobInfoProcessingTimeInMs.update(processingTime);
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
-        metrics.getBlobAllProcessingTimeInMs.update(processingTime);
-        metrics.updateGetBlobProcessingTimeBySize(response.sizeInBytes(), processingTime);
+        if (isReplicaRequest) {
+          metrics.getBlobAllByReplicaProcessingTimeInMs.update(processingTime);
+        } else {
+          metrics.getBlobAllProcessingTimeInMs.update(processingTime);
+          metrics.updateGetBlobProcessingTimeBySize(response.sizeInBytes(), processingTime);
+        }
       }
     }
     sendGetResponse(requestResponseChannel, response, request, responseQueueTime, responseSendTime, responseTotalTime,

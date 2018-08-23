@@ -343,6 +343,11 @@ class IndexSegment {
                 indexFile.getAbsolutePath(), startOffset, keyToFind);
           }
           // binary search on the mapped file
+          if (mmap.isLoaded()) {
+            metrics.indexSegmentInMemory.inc();
+          } else {
+            metrics.indexSegmentNotInMemory.inc();
+          }
           ByteBuffer duplicate = mmap.duplicate();
           int low = 0;
           int totalEntries = numberOfEntries(duplicate);

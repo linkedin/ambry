@@ -57,6 +57,8 @@ public class StoreMetrics {
   public final Counter bloomAccessedCount;
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
+  public final Counter indexSegmentInMemory;
+  public final Counter indexSegmentNotInMemory;
   public final Counter keySizeMismatchCount;
   public final Counter hardDeleteDoneCount;
   public final Counter hardDeleteFailedCount;
@@ -133,6 +135,10 @@ public class StoreMetrics {
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomPositiveCount"));
     bloomFalsePositiveCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomFalsePositiveCount"));
+    indexSegmentInMemory =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "IndexSegmentInMemoryCount"));
+    indexSegmentNotInMemory =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "IndexSegmentNotInMemoryCount"));
     keySizeMismatchCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "KeySizeMismatchCount"));
     hardDeleteDoneCount = registry.counter(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteDoneCount"));
     hardDeleteFailedCount =
