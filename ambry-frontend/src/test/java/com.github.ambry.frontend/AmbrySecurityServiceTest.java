@@ -101,7 +101,8 @@ public class AmbrySecurityServiceTest {
   @Test
   public void preProcessRequestTest() throws Exception {
     RestMethod[] methods =
-        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS, RestMethod.PUT};
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS,
+            RestMethod.PUT};
     for (RestMethod restMethod : methods) {
       // add a header that is prohibited
       JSONObject headers = new JSONObject();
@@ -133,7 +134,8 @@ public class AmbrySecurityServiceTest {
 
     // without callbacks
     RestMethod[] methods =
-        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS, RestMethod.PUT};
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS,
+            RestMethod.PUT};
     for (RestMethod restMethod : methods) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
       securityService.preProcessRequest(restRequest).get();
@@ -184,13 +186,6 @@ public class AmbrySecurityServiceTest {
     //blob info being null
     TestUtils.assertException(IllegalArgumentException.class,
         () -> securityService.processResponse(restRequest, new MockRestResponseChannel(), null).get(), null);
-
-    // for unsupported methods
-    RestMethod[] methods = {RestMethod.DELETE};
-    for (RestMethod restMethod : methods) {
-      testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), DEFAULT_INFO,
-          RestServiceErrorCode.InternalServerError);
-    }
 
     // OPTIONS (should be no errors)
     securityService.processResponse(createRestRequest(RestMethod.OPTIONS, "/", null), new MockRestResponseChannel(),
@@ -297,7 +292,7 @@ public class AmbrySecurityServiceTest {
 
     // security service closed
     securityService.close();
-    methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
+    RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
       testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), blobInfo,
           RestServiceErrorCode.ServiceUnavailable);

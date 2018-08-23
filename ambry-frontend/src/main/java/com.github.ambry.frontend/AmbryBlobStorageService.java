@@ -235,6 +235,7 @@ class AmbryBlobStorageService implements BlobStorageService {
       if (operationOrBlobId.startsWith("/")) {
         operationOrBlobId = operationOrBlobId.substring(1);
       }
+      securityService.processResponse(restRequest, restResponseChannel, null).get();
       if (operationOrBlobId.equalsIgnoreCase(Operations.UPDATE_TTL)) {
         ttlUpdateHandler.handle(restRequest, restResponseChannel, (r, e) -> {
           if (e != null && e instanceof RouterException
@@ -905,6 +906,7 @@ class AmbryBlobStorageService implements BlobStorageService {
           restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
           restResponseChannel.setStatus(ResponseStatus.Accepted);
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          securityService.processResponse(restRequest, restResponseChannel, null).get();
         }
       } catch (Exception e) {
         frontendMetrics.deleteCallbackProcessingError.inc();
