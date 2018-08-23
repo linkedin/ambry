@@ -80,6 +80,7 @@ public class AmbryUrlSigningServiceTest {
   @Test
   public void factoryTestBadJson() {
     Properties properties = new Properties();
+    CommonTestUtils.populateRequiredRouterProps(properties);
     // Missing GET
     JSONObject jsonObject = new JSONObject().put("POST", UPLOAD_ENDPOINT);
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
