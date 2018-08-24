@@ -102,7 +102,7 @@ public class DataNodeTest {
     assertEquals(dataNode.getRawCapacityInBytes(), diskCount * diskCapacityInBytes);
 
     assertNull(dataNode.getRackId());
-    assertNull(dataNode.getXid());
+    assertEquals(Long.toString(TestUtils.DEFAULT_XID), dataNode.getXid());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
