@@ -34,6 +34,7 @@ import static org.junit.Assert.*;
 public class TestUtils {
 
   static final String DEFAULT_PARTITION_CLASS = "defaultPartitionClass";
+  static final int DEFAULT_XID = 64;
 
   enum ReplicaStateType {
     SealedState, StoppedState
@@ -84,6 +85,7 @@ public class TestUtils {
     jsonObject.put("port", port);
     jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("disks", disks);
+    jsonObject.put("xid", Long.toString(DEFAULT_XID));
     return jsonObject;
   }
 
@@ -95,6 +97,7 @@ public class TestUtils {
     jsonObject.put("sslport", sslPort);
     jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("disks", disks);
+    jsonObject.put("xid", Long.toString(DEFAULT_XID));
     return jsonObject;
   }
 
@@ -181,7 +184,7 @@ public class TestUtils {
       int numRacks, HardwareState hardwareState, JSONArray disks) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, i % numRacks, 64, hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, i % numRacks, DEFAULT_XID, hardwareState, disks));
     }
     return jsonArray;
   }
@@ -203,7 +206,7 @@ public class TestUtils {
       int basePort, int sslPort, int numRacks, HardwareState hardwareState, JSONArray disks) throws JSONException {
     for (int i = dataNodeJsonArray.length(); i < dataNodeCount; ++i) {
       dataNodeJsonArray.put(
-          getJsonDataNode(hostname, basePort + i, sslPort + i, i % numRacks, 64, hardwareState, disks));
+          getJsonDataNode(hostname, basePort + i, sslPort + i, i % numRacks, DEFAULT_XID, hardwareState, disks));
     }
   }
 
@@ -227,7 +230,7 @@ public class TestUtils {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
       JSONObject jsonDataNode =
-          (i % 2 == 0) ? getJsonDataNode(hostname, basePort + i, sslPort + i, i, 64, hardwareState, disks)
+          (i % 2 == 0) ? getJsonDataNode(hostname, basePort + i, sslPort + i, i, DEFAULT_XID, hardwareState, disks)
               : getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks);
       jsonArray.put(jsonDataNode);
     }

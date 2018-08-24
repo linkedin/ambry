@@ -84,6 +84,7 @@ public class DynamicClusterManagerComponentsTest {
     assertEquals(datanode1.getPort(), PORT_NUM1);
     assertEquals(datanode1.getSSLPort(), SSL_PORT_NUM);
     assertEquals(datanode1.getRackId(), RACK_ID);
+    assertEquals(datanode1.getXid(), XID);
     assertTrue(datanode1.hasSSLPort());
     assertEquals(PortType.PLAINTEXT, datanode1.getPortToConnectTo().getPortType());
     assertTrue(datanode2.hasSSLPort());

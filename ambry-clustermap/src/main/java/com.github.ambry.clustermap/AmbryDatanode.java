@@ -49,6 +49,7 @@ class AmbryDataNode implements DataNodeId {
    * @param portNum the port identifying this data node.
    * @param rackId the rack Id associated with this data node (may be null).
    * @param sslPortNum the ssl port associated with this data node (may be null).
+   * @param xid the xid associated with this data node (may be null).
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
   AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int portNum, String rackId,
