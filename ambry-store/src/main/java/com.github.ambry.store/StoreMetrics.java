@@ -57,8 +57,8 @@ public class StoreMetrics {
   public final Counter bloomAccessedCount;
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
-  public final Counter indexSegmentInMemoryDuringFindCount;
-  public final Counter indexSegmentNotInMemoryDuringFindCount;
+  public final Counter mappedSegmentIsLoadedDuringFindCount;
+  public final Counter mappedSegmentIsNotLoadedDuringFindCount;
   public final Counter keySizeMismatchCount;
   public final Counter hardDeleteDoneCount;
   public final Counter hardDeleteFailedCount;
@@ -135,10 +135,10 @@ public class StoreMetrics {
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomPositiveCount"));
     bloomFalsePositiveCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomFalsePositiveCount"));
-    indexSegmentInMemoryDuringFindCount =
-        registry.counter(MetricRegistry.name(IndexSegment.class, name + "IndexSegmentInMemoryDuringFindCount"));
-    indexSegmentNotInMemoryDuringFindCount =
-        registry.counter(MetricRegistry.name(IndexSegment.class, name + "IndexSegmentNotInMemoryDuringFindCount"));
+    mappedSegmentIsLoadedDuringFindCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "MappedSegmentIsLoadedDuringFindCount"));
+    mappedSegmentIsNotLoadedDuringFindCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "MappedSegmentIsNotLoadedDuringFindCount"));
     keySizeMismatchCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "KeySizeMismatchCount"));
     hardDeleteDoneCount = registry.counter(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteDoneCount"));
     hardDeleteFailedCount =
