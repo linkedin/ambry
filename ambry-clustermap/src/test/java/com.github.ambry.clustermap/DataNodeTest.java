@@ -109,10 +109,10 @@ public class DataNodeTest {
 
     // Test with defined rackId
     jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 42, 64, HardwareState.AVAILABLE, getDisks());
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 42, TestUtils.DEFAULT_XID, HardwareState.AVAILABLE, getDisks());
     dataNode = new TestDataNode("datacenter", jsonObject, clusterMapConfig);
     assertEquals("42", dataNode.getRackId());
-    assertEquals("64", dataNode.getXid());
+    assertEquals(Long.toString(TestUtils.DEFAULT_XID), dataNode.getXid());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
