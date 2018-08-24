@@ -101,6 +101,9 @@ public class HelixBootstrapUpgradeTool {
     OptionSpec forceRemove = parser.accepts("forceRemove",
         "Specifies that any instances or partitions absent in the json files be removed from Helix. Use this with care");
 
+    OptionSpec uploadConfig = parser.accepts("uploadConfig",
+        "Upload cluster configs to HelixPropertyStore based on the json files. This option will not touch instanceConfig");
+
     ArgumentAcceptingOptionSpec<String> hardwareLayoutPathOpt =
         parser.accepts("hardwareLayoutPath", "The path to the hardware layout json file")
             .requiredUnless(dropClusterOpt)
@@ -176,6 +179,16 @@ public class HelixBootstrapUpgradeTool {
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
           new HelixAdminFactory());
+    } else if (options.has(uploadConfig)) {
+      ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
+      expectedOpts.add(uploadConfig);
+      expectedOpts.add(zkLayoutPathOpt);
+      expectedOpts.add(hardwareLayoutPathOpt);
+      expectedOpts.add(partitionLayoutPathOpt);
+      expectedOpts.add(clusterNamePrefixOpt);
+      ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
+      HelixBootstrapUpgradeUtil.uploadClusterConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          clusterNamePrefix, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
     } else {
       ToolUtils.ensureOrExit(listOpt, options, parser);
       HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,

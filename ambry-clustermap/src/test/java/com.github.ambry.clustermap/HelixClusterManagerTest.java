@@ -22,6 +22,7 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -39,6 +40,7 @@ import java.util.Random;
 import java.util.Set;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
+import org.apache.helix.ZNRecord;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -46,10 +48,12 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.MockitoAnnotations;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 
 
 /**
@@ -71,7 +75,9 @@ public class HelixClusterManagerTest {
   private Map<String, Gauge> gauges;
   private Map<String, Counter> counters;
   private final boolean useComposite;
+  private final boolean overrideEnabled;
   private final String hardwareLayoutPath;
+  private final String partitionLayoutPath;
   private static final long CURRENT_XID = 64;
 
   // for verifying getPartitions() and getWritablePartitions()
@@ -80,6 +86,8 @@ public class HelixClusterManagerTest {
   private final PartitionRangeCheckParams specialRw;
   private final PartitionRangeCheckParams defaultRo;
   private final PartitionRangeCheckParams specialRo;
+  private final Map<String, Map<String, String>> partitionOverrideMap;
+  private final ZNRecord znRecord;
 
   /**
    * Resource state associated with datanode, disk and replica.
@@ -90,17 +98,21 @@ public class HelixClusterManagerTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{false, false}, {false, true}, {true, false}});
   }
 
   /**
    * Construct the static layout files and use that to instantiate a {@link MockHelixCluster}.
    * Instantiate a {@link MockHelixManagerFactory} for use by the cluster manager.
    * @param useComposite whether or not the test are to be done for the {@link CompositeClusterManager}
+   * @param overrideEnabled whether or not the {@link ClusterMapConfig#clusterMapEnablePartitionOverride} is enabled. This config
+   *                        is only applicable for {@link HelixClusterManager}
    * @throws Exception
    */
-  public HelixClusterManagerTest(boolean useComposite) throws Exception {
+  public HelixClusterManagerTest(boolean useComposite, boolean overrideEnabled) throws Exception {
     this.useComposite = useComposite;
+    this.overrideEnabled = overrideEnabled;
+    MockitoAnnotations.initMocks(this);
     String localDc = dcs[0];
     Random random = new Random();
     File tempDir = Files.createTempDirectory("helixClusterManager-" + random.nextInt(1000)).toFile();
@@ -111,8 +123,8 @@ public class HelixClusterManagerTest {
     for (String dcName : dcs) {
       dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port++, false));
     }
-    this.hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
-    String partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
+    hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
+    partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
     JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
     testHardwareLayout = constructInitialHardwareLayoutJSON(clusterNameStatic);
@@ -139,12 +151,29 @@ public class HelixClusterManagerTest {
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+
+    // Mock the override partition map
+    Random rand = new Random();
+    int totalPartitionNum = testPartitionLayout.getPartitionCount();
+    int numOfReadOnly = rand.nextInt(totalPartitionNum / 2 - 1);
+    int numOfReadWrite = totalPartitionNum - numOfReadOnly;
+    partitionOverrideMap = new HashMap<>();
+    for (int i = 0; i < numOfReadWrite; ++i) {
+      partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>())
+          .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_WRITE_STR);
+    }
+    for (int i = numOfReadWrite; i < totalPartitionNum; ++i) {
+      partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>())
+          .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_ONLY_STR);
+    }
+    znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);
+    znRecord.setMapFields(partitionOverrideMap);
+
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath);
     for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       if (partitionId.getPartitionState().equals(PartitionState.READ_ONLY)) {
-        String partitionName = partitionId.toString();
-        String helixPartitionName = partitionName.substring(partitionName.indexOf('[') + 1, partitionName.indexOf(']'));
+        String helixPartitionName = partitionId.toPathString();
         helixCluster.setPartitionState(helixPartitionName, PartitionState.READ_ONLY);
       }
     }
@@ -156,8 +185,9 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.datacenter.name", localDc);
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
+    props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null);
+    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
     if (useComposite) {
       StaticClusterAgentsFactory staticClusterAgentsFactory =
           new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath);
@@ -186,6 +216,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void badInstantiationTest() throws Exception {
+    assumeTrue(!overrideEnabled);
+
     // Good test happened in the constructor
     assertEquals(0L,
         metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
@@ -202,7 +234,7 @@ public class HelixClusterManagerTest {
     ClusterMapConfig invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     metricRegistry = new MetricRegistry();
     try {
-      new HelixClusterManager(invalidClusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null),
+      new HelixClusterManager(invalidClusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
           metricRegistry);
       fail("Instantiation should have failed with invalid zk addresses");
     } catch (IOException e) {
@@ -213,7 +245,7 @@ public class HelixClusterManagerTest {
     metricRegistry = new MetricRegistry();
     try {
       new HelixClusterManager(clusterMapConfig, hostname,
-          new MockHelixManagerFactory(helixCluster, new Exception("beBad")), metricRegistry);
+          new MockHelixManagerFactory(helixCluster, null, new Exception("beBad")), metricRegistry);
       fail("Instantiation should fail with a HelixManager factory that throws exception on listener registrations");
     } catch (Exception e) {
       assertEquals(1L,
@@ -223,11 +255,40 @@ public class HelixClusterManagerTest {
   }
 
   /**
+   * Test HelixClusterManager initialize with null ZNRecord. In such case, HelixClusterManager will initialize replica
+   * state based on instanceConfigs.
+   * @throws Exception
+   */
+  @Test
+  public void emptyPartitionOverrideTest() throws Exception {
+    assumeTrue(overrideEnabled);
+    metricRegistry = new MetricRegistry();
+    // create a MockHelixManagerFactory
+    ClusterMap clusterManagerWithEmptyRecord =
+        new HelixClusterManager(clusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
+            metricRegistry);
+
+    Set<String> writableInClusterManager = new HashSet<>();
+    for (PartitionId partition : clusterManagerWithEmptyRecord.getWritablePartitionIds(null)) {
+      String partitionStr =
+          useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
+      writableInClusterManager.add(partitionStr);
+    }
+    Set<String> writableInCluster = helixCluster.getWritablePartitions();
+    if (writableInCluster.isEmpty()) {
+      writableInCluster = helixCluster.getAllWritablePartitions();
+    }
+    assertEquals("Mismatch in writable partitions during initialization", writableInCluster, writableInClusterManager);
+  }
+
+  /**
    * Tests all the interface methods.
    * @throws Exception
    */
   @Test
   public void basicInterfaceTest() throws Exception {
+    assumeTrue(!overrideEnabled);
+
     for (String metricName : clusterManager.getMetricRegistry().getNames()) {
       System.out.println(metricName);
     }
@@ -244,10 +305,9 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void helixInitiatedLivenessChangeTest() throws Exception {
-    // this test is not intended for the composite cluster manager.
-    if (useComposite) {
-      return;
-    }
+    // this test is not intended for the composite cluster manager and override enabled cases.
+    assumeTrue(!useComposite && !overrideEnabled);
+
     // all instances are up initially.
     assertStateEquivalency();
 
@@ -275,6 +335,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void clientInitiatedLivenessChangeTest() {
+    assumeTrue(!overrideEnabled);
+
     ReplicaId replica = clusterManager.getWritablePartitionIds(null).get(0).getReplicaIds().get(0);
     DataNodeId dataNode = replica.getDataNodeId();
     assertTrue(clusterManager.getReplicaIds(dataNode).contains(replica));
@@ -344,9 +406,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void onServerEventTest() {
-    if (useComposite) {
-      return;
-    }
+    assumeTrue(!useComposite);
+
     // Test configuration: we select the disk from one datanode and select the replica on that disk
 
     // Initial state: only disk is down; Server event: Replica_Unavailable; Expected result: disk becomes available again and replica becomes down
@@ -398,10 +459,8 @@ public class HelixClusterManagerTest {
    * {@link org.apache.helix.NotificationContext.Type#INIT} and that they are dealt with correctly.
    */
   @Test
-  public void sealedReplicaChangeTest() {
-    if (useComposite) {
-      return;
-    }
+  public void sealedReplicaChangeTest() throws Exception {
+    assumeTrue(!useComposite && !overrideEnabled);
 
     // all instances are up initially.
     assertStateEquivalency();
@@ -433,13 +492,108 @@ public class HelixClusterManagerTest {
   }
 
   /**
+   * Test that ClusterManger will use seal state in PartitionOverride/InstanceConfig when {@link ClusterMapConfig#clusterMapEnablePartitionOverride}
+   * is enabled/disabled. This test verifies that InstanceConfig changes won't affect any seal state of partition if clusterMapEnablePartitionOverride
+   * is enabled. It also tests seal state can be dynamically changed by InstanceConfig change when PartitionOverride is
+   * non-empty but disabled.
+   */
+  @Test
+  public void clusterMapOverrideEnabledAndDisabledTest() throws Exception {
+    assumeTrue(!useComposite);
+
+    // Get the writable partitions in OverrideMap
+    Set<String> writableInOverrideMap = new HashSet<>();
+    for (Map.Entry<String, Map<String, String>> entry : partitionOverrideMap.entrySet()) {
+      if (entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(ClusterMapUtils.READ_WRITE_STR)) {
+        writableInOverrideMap.add(entry.getKey());
+      }
+    }
+    // Get the writable partitions in InstanceConfig(PartitionLayout)
+    List<PartitionId> writableInLayout = testPartitionLayout.getPartitionLayout().getWritablePartitions(null);
+    Set<String> writableInInstanceConfig = new HashSet<>();
+    writableInLayout.forEach(k -> writableInInstanceConfig.add(k.toPathString()));
+
+    if (overrideEnabled) {
+      // Verify clustermap uses partition override for initialization
+      Set<String> writableInClusterManager = getWritablePartitions().getSecond();
+      assertEquals("Mismatch in writable partitions during initialization", writableInOverrideMap,
+          writableInClusterManager);
+      // Ensure clustermap ignores the InstanceConfig when override is enabled.
+      assertFalse(
+          "Writable partitions in ClusterManager should not equal to those in InstanceConfigs when override is enabled",
+          writableInClusterManager.equals(writableInInstanceConfig));
+
+      // Verify writable partitions in clustermap remain unchanged when instanceConfig changes in Helix cluster
+      AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds(null).get(0);
+      List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
+      Counter instanceTriggerCounter =
+          ((HelixClusterManager) clusterManager).helixClusterManagerMetrics.instanceConfigChangeTriggerCount;
+      long countVal = instanceTriggerCounter.getCount();
+      helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.SealedState, true, false);
+      assertEquals("Mismatch in instanceTriggerCounter", countVal + 1, instanceTriggerCounter.getCount());
+      writableInClusterManager = getWritablePartitions().getSecond();
+      assertEquals("Mismatch in writable partitions when instanceConfig changes", writableInOverrideMap,
+          writableInClusterManager);
+
+      // Verify the partition state could be changed if this partition is not in partition override map.
+      // Following test re-initializes clusterManager with new partitionLayout and then triggers instanceConfig change on new added partition
+      testPartitionLayout.addNewPartitions(1, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, dcs[0]);
+      Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+      helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+      clusterManager.close();
+      MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
+      HelixClusterManager clusterManager =
+          new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
+      // Ensure the new RW partition is added
+      assertEquals("Mismatch in writable partitions when instanceConfig changes", writableInOverrideMap.size() + 1,
+          clusterManager.getWritablePartitionIds(null).size());
+      // Find out the new added partition which is not in partition override map
+      for (PartitionId partitionId : clusterManager.getAllPartitionIds(null)) {
+        if (partitionId.toPathString().equals(String.valueOf(testPartitionLayout.getPartitionCount() - 1))) {
+          partition = (AmbryPartition) partitionId;
+        }
+      }
+      instances = helixCluster.getInstancesForPartition((partition.toPathString()));
+      // Change the replica from RW to RO, which triggers instanceConfig change
+      helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.SealedState, true, false);
+      // Ensure the partition state becomes Read_Only
+      assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
+          clusterManager.getWritablePartitionIds(null).contains(partition));
+      assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
+          partition.getPartitionState());
+    } else {
+      // Verify clustermap uses instanceConfig for initialization when override map is non-empty but disabled.
+      Set<String> writableInClusterManager = getWritablePartitions().getSecond();
+      assertEquals("Mismatch in writable partitions during initialization", writableInInstanceConfig,
+          writableInClusterManager);
+      // Ensure clustermap ignores partition override map when override is disabled.
+      assertFalse(
+          "Writable partitions in ClusterManager should not equal to those in OverrideMap when override is disabled",
+          writableInClusterManager.equals(writableInOverrideMap));
+
+      // Verify partition state in clustermap is changed when instanceConfig changes in Helix cluster.
+      // This is to ensure partition override doesn't take any effect when it is disabled.
+      AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds(null).get(0);
+      List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
+      helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.SealedState, true, false);
+      assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
+          clusterManager.getWritablePartitionIds(null).contains(partition));
+      assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
+          partition.getPartitionState());
+      // Ensure that after instanceConfig changes, the writable partitions in clusterManager match those in InstanceConfig
+      writableInInstanceConfig.remove(partition.toPathString());
+      writableInClusterManager = getWritablePartitions().getSecond();
+      assertEquals("Mismatch in writable partitions during initialization", writableInInstanceConfig,
+          writableInClusterManager);
+    }
+  }
+
+  /**
    * Test that the changes to the stopped states of replicas get reflected correctly in the cluster manager.
    */
   @Test
   public void stoppedReplicaChangeTest() {
-    if (useComposite) {
-      return;
-    }
+    assumeTrue(!useComposite && !overrideEnabled);
 
     // all instances are up initially.
     assertStateEquivalency();
@@ -477,9 +631,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void dynamicNodeAdditionsTest() throws Exception {
-    if (useComposite) {
-      return;
-    }
+    assumeTrue(!useComposite && !overrideEnabled);
+
     testHardwareLayout.addNewDataNodes(1);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     // this triggers a notification.
@@ -492,14 +645,13 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void xidTest() throws Exception {
-    if (useComposite) {
-      return;
-    }
+    assumeTrue(!useComposite);
+
     // Close the one initialized in the constructor, as this test needs to test initialization flow as well.
     clusterManager.close();
 
     // Initialization path:
-    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null);
+    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null, null);
     List<InstanceConfig> instanceConfigs = helixCluster.getAllInstanceConfigs();
     int instanceCount = instanceConfigs.size();
     int randomIndex = com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size());
@@ -548,6 +700,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void metricsTest() throws Exception {
+    assumeTrue(!overrideEnabled);
+
     counters = clusterManager.getMetricRegistry().getCounters();
     gauges = clusterManager.getMetricRegistry().getGauges();
 
@@ -619,6 +773,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void getPartitionsTest() {
+    assumeTrue(!overrideEnabled);
+
     // "good" cases for getPartitions() and getWritablePartitions() only
     // getPartitions(), class null
     List<? extends PartitionId> returnedPartitions = clusterManager.getAllPartitionIds(null);
@@ -717,10 +873,10 @@ public class HelixClusterManagerTest {
   }
 
   /**
-   * Tests that the writable partitions returned by the {@link HelixClusterManager} is the same as the writable
-   * partitions in the cluster.
+   * Get the writable partitions returned by the {@link HelixClusterManager} as well as those in helix cluster.
+   * @return two writable partition sets from helix cluster and {@link HelixClusterManager}.
    */
-  private void testWritablePartitions() {
+  private Pair<Set<String>, Set<String>> getWritablePartitions() {
     Set<String> writableInClusterManager = new HashSet<>();
     for (PartitionId partition : clusterManager.getWritablePartitionIds(null)) {
       String partitionStr =
@@ -731,7 +887,7 @@ public class HelixClusterManagerTest {
     if (writableInCluster.isEmpty()) {
       writableInCluster = helixCluster.getAllWritablePartitions();
     }
-    assertEquals(writableInCluster, writableInClusterManager);
+    return new Pair<>(writableInCluster, writableInClusterManager);
   }
 
   /**
@@ -827,25 +983,29 @@ public class HelixClusterManagerTest {
     }
     assertEquals(downInstancesInCluster, downInstancesInClusterManager);
     assertEquals(upInstancesInCluster, upInstancesInClusterManager);
-    testWritablePartitions();
+    Pair<Set<String>, Set<String>> writablePartitionsInTwoPlaces = getWritablePartitions();
+    assertEquals(writablePartitionsInTwoPlaces.getFirst(), writablePartitionsInTwoPlaces.getSecond());
     testAllPartitions();
   }
 
   /**
-   * A Mock implementaion of {@link HelixFactory} that returns the {@link MockHelixManager}
+   * A Mock implementation of {@link HelixFactory} that returns the {@link MockHelixManager}
    */
   private static class MockHelixManagerFactory extends HelixFactory {
     private final MockHelixCluster helixCluster;
     private final Exception beBadException;
+    private final ZNRecord znRecord;
 
     /**
      * Construct this factory
      * @param helixCluster the {@link MockHelixCluster} that this factory's manager will be associated with.
+     * @param znRecord the {@link ZNRecord} that will be used to set HelixPropertyStore by this factory's manager.
      * @param beBadException the {@link Exception} that the Helix Manager constructed by this factory will throw.
      */
-    MockHelixManagerFactory(MockHelixCluster helixCluster, Exception beBadException) {
+    MockHelixManagerFactory(MockHelixCluster helixCluster, ZNRecord znRecord, Exception beBadException) {
       this.helixCluster = helixCluster;
       this.beBadException = beBadException;
+      this.znRecord = znRecord;
     }
 
     /**
@@ -858,7 +1018,7 @@ public class HelixClusterManagerTest {
      */
     HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
       if (helixCluster.getZkAddrs().contains(zkAddr)) {
-        return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, beBadException);
+        return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, znRecord, beBadException);
       } else {
         throw new IllegalArgumentException("Invalid ZkAddr");
       }

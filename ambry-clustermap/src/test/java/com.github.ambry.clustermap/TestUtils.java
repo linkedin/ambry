@@ -440,7 +440,7 @@ public class TestUtils {
 
     /**
      * @param rangeStart start of the range of partitions.
-     * @param count the numebr of partitions in the range.
+     * @param count the number of partitions in the range.
      * @param expectedClass the expected class of all of the partitions
      * @param expectedState the expected state of all of the partitions
      */

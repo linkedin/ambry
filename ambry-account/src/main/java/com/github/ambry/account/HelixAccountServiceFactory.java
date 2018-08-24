@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
@@ -22,11 +23,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.util.concurrent.ScheduledExecutorService;
 import org.apache.helix.ZNRecord;
-import org.apache.helix.manager.zk.ZNRecordSerializer;
-import org.apache.helix.manager.zk.ZkBaseDataAccessor;
-import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.store.HelixPropertyStore;
-import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,10 +74,8 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
     try {
       long startTimeMs = System.currentTimeMillis();
       logger.info("Starting a HelixAccountService");
-      ZkClient zkClient = new ZkClient(accountServiceConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
-          storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
       HelixPropertyStore<ZNRecord> helixStore =
-          new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, null);
+          CommonUtils.createHelixPropertyStore(accountServiceConfig.zkClientConnectString, storeConfig, null);
       logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
               + "zkClientConnectionTimeoutMs={}, rootPath={}", accountServiceConfig.zkClientConnectString,
           storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath);

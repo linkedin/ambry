@@ -36,8 +36,12 @@ import org.json.JSONObject;
 public class ClusterMapUtils {
   // datacenterId == UNKNOWN_DATACENTER_ID indicate datacenterId is not available at the time when this blobId is formed.
   public static final byte UNKNOWN_DATACENTER_ID = -1;
+  public static final String ZNODE_NAME = "PartitionOverride";
+  public static final String ZNODE_PATH = "/ClusterConfigs/" + ZNODE_NAME;
+  public static final String PROPERTYSTORE_ZNODE_PATH = "/PROPERTYSTORE/ClusterConfigs/" + ZNODE_NAME;
   static final String DISK_CAPACITY_STR = "capacityInBytes";
   static final String DISK_STATE = "diskState";
+  static final String PARTITION_STATE = "state";
   static final String REPLICAS_STR = "Replicas";
   static final String REPLICAS_DELIM_STR = ",";
   static final String REPLICAS_STR_SEPARATOR = ":";
@@ -46,6 +50,8 @@ public class ClusterMapUtils {
   static final String SEALED_STR = "SEALED";
   static final String STOPPED_REPLICAS_STR = "STOPPED";
   static final String AVAILABLE_STR = "AVAILABLE";
+  static final String READ_ONLY_STR = "RO";
+  static final String READ_WRITE_STR = "RW";
   static final String UNAVAILABLE_STR = "UNAVAILABLE";
   static final String ZKCONNECTSTR_STR = "zkConnectStr";
   static final String ZKINFO_STR = "zkInfo";

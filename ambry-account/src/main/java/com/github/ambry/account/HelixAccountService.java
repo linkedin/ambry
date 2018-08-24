@@ -292,7 +292,7 @@ class HelixAccountService implements AccountService {
    * Reads the full set of {@link Account} metadata from {@link HelixPropertyStore}, and update the local cache.
    *
    * @param pathToFullAccountMetadata The path to read the full set of {@link Account} metadata.
-   * @param isCalledFromListener {@code true} if the caller is the account update listener, {@@code false} otherwise.
+   * @param isCalledFromListener {@code true} if the caller is the account update listener, {@code false} otherwise.
    */
   private void readFullAccountAndUpdateCache(String pathToFullAccountMetadata, boolean isCalledFromListener)
       throws JSONException {

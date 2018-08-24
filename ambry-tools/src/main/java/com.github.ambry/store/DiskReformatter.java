@@ -163,8 +163,7 @@ public class DiskReformatter {
         Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, config.hardwareLayoutFilePath,
             config.partitionLayoutFilePath);
     try (ClusterMap clusterMap = clusterAgentsFactory.getClusterMap()) {
-      StoreKeyConverterFactory storeKeyConverterFactory =
-          Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, clusterMap.getMetricRegistry());
+      StoreKeyConverterFactory storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, clusterMap.getMetricRegistry());
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       DataNodeId dataNodeId = clusterMap.getDataNodeId(config.datanodeHostname, config.datanodePort);
       if (dataNodeId == null) {

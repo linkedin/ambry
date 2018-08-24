@@ -13,7 +13,9 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -31,11 +33,14 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.ZNRecord;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.model.ResourceConfig;
+import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -141,6 +146,31 @@ class HelixBootstrapUpgradeUtil {
   }
 
   /**
+   * Takes in the path to the files that make up the static cluster map and uploads the cluster configs(such as partition
+   * override) to HelixPropertyStore in zookeeper.
+   * @param hardwareLayoutPath the path to the hardware layout file.
+   * @param partitionLayoutPath the path to the partition layout file.
+   * @param zkLayoutPath the path to the zookeeper layout file.
+   * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
+   *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param maxPartitionsInOneResource the maximum number of Ambry partitions to group under a single Helix resource.
+   * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
+   * @throws IOException if there is an error reading a file.
+   * @throws JSONException if there is an error parsing the JSON content in any of the files.
+   */
+  static void uploadClusterConfigs(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String clusterNamePrefix, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory) throws Exception {
+    HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
+            maxPartitionsInOneResource, false, false, helixAdminFactory);
+    Map<String, Map<String, String>> partitionOverrideInfos =
+        clusterMapToHelixMapper.generatePartitionOverrideFromAllDCs();
+    info("Uploading partition override to HelixPropertyStore based on override json file.");
+    clusterMapToHelixMapper.uploadPartitionOverride(partitionOverrideInfos);
+    info("Upload cluster configs completed.");
+  }
+
+  /**
    * Takes in the path to the files that make up the static cluster map and validates that the information is consistent
    * with the information in Helix.
    * @param hardwareLayoutPath the path to the hardware layout file.
@@ -216,7 +246,7 @@ class HelixBootstrapUpgradeUtil {
           null))).getClusterMap();
     }
     String clusterNameInStaticClusterMap = staticClusterMap.partitionLayout.getClusterName();
-    this.clusterName = clusterNamePrefix + clusterNameInStaticClusterMap;
+    clusterName = clusterNamePrefix + clusterNameInStaticClusterMap;
     info("Associating static Ambry cluster \"" + clusterNameInStaticClusterMap + "\" with cluster\"" + clusterName
         + "\" in Helix");
     for (Datacenter datacenter : staticClusterMap.hardwareLayout.getDatacenters()) {
@@ -228,6 +258,65 @@ class HelixBootstrapUpgradeUtil {
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
       HelixAdmin admin = helixAdminFactory.getHelixAdmin(entry.getValue().getZkConnectStr());
       adminForDc.put(entry.getKey(), admin);
+    }
+  }
+
+  /**
+   * Generate the partition override map containing partition state from all datacenters.
+   * @return the constructed partitionOverrideInfos. The format is as follows.
+   *
+   * "mapFields": {
+   *    "0": {
+   *      "partitionClass": "max-replicas-all-datacenters", (TODO)
+   *      "state": "RW"
+   *    },
+   *    "1": {
+   *      "partitionClass": "max-replicas-all-datacenters", (TODO)
+   *      "state": "RO"
+   *    }
+   * }
+   */
+  private Map<String, Map<String, String>> generatePartitionOverrideFromAllDCs() {
+    Map<String, Map<String, String>> partitionOverrideInfos = new HashMap<>();
+    for (PartitionId partitionId : staticClusterMap.getAllPartitionIds(null)) {
+      String partitionName = partitionId.toPathString();
+      Map<String, String> partitionProperties = new HashMap<>();
+      partitionProperties.put(ClusterMapUtils.PARTITION_STATE,
+          partitionId.getPartitionState() == PartitionState.READ_WRITE ? ClusterMapUtils.READ_WRITE_STR
+              : ClusterMapUtils.READ_ONLY_STR);
+      partitionOverrideInfos.put(partitionName, partitionProperties);
+    }
+    return partitionOverrideInfos;
+  }
+
+  /**
+   * Uploads the seal state of all partitions in the format of map.
+   * @param partitionOverrideInfos the override information for each partition. The current format is as follows.
+   *
+   * "mapFields": {
+   *    "0": {
+   *      "state": "RW"
+   *    },
+   *    "1": {
+   *      "state": "RO"
+   *    }
+   * }
+   *
+   */
+  private void uploadPartitionOverride(Map<String, Map<String, String>> partitionOverrideInfos) {
+    Properties storeProps = new Properties();
+    storeProps.setProperty("helix.property.store.root.path", "/" + clusterName);
+    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
+    info("Setting partition override for all datacenters.");
+    for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
+      HelixPropertyStore<ZNRecord> helixPropertyStore =
+          CommonUtils.createHelixPropertyStore(entry.getValue().getZkConnectStr(), propertyStoreConfig, null);
+      ZNRecord znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);
+      znRecord.setMapFields(partitionOverrideInfos);
+      String path = ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;
+      if (!helixPropertyStore.set(path, znRecord, AccessOption.PERSISTENT)) {
+        info("Failed to upload partition override for datacenter {}", entry.getKey());
+      }
     }
   }
 

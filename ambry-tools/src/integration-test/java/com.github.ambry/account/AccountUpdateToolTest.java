@@ -15,10 +15,10 @@ package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.HelixNotifier;
-import com.github.ambry.commons.HelixStoreOperator;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.utils.TestUtils;
 import java.io.File;
 import java.io.IOException;

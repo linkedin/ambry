@@ -14,7 +14,7 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.HelixStoreOperator;
+import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
@@ -800,7 +800,7 @@ public class HelixAccountServiceTest {
 
   /**
    * Pre-populates a collection of {@link Account}s to the underlying {@link org.apache.helix.store.HelixPropertyStore}
-   * using {@link com.github.ambry.commons.HelixStoreOperator} (not through the {@link HelixAccountService}). This method
+   * using {@link com.github.ambry.clustermap.HelixStoreOperator} (not through the {@link HelixAccountService}). This method
    * does not check any conflict among the {@link Account}s to write.
    * @throws Exception Any unexpected exception.
    */

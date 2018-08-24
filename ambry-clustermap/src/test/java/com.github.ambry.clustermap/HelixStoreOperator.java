@@ -11,8 +11,9 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.commons;
+package com.github.ambry.clustermap;
 
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.Collections;
 import java.util.List;
@@ -20,12 +21,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
-import org.apache.helix.manager.zk.ZNRecordSerializer;
-import org.apache.helix.manager.zk.ZkBaseDataAccessor;
-import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
-import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,12 +56,9 @@ public class HelixStoreOperator {
     }
     long startTimeMs = System.currentTimeMillis();
     logger.info("Starting a HelixStoreOperator");
-    ZkClient zkClient =
-        new ZkClient(zkServers, storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs,
-            new ZNRecordSerializer());
     List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath);
     HelixPropertyStore<ZNRecord> helixStore =
-        new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
+        CommonUtils.createHelixPropertyStore(zkServers, storeConfig, subscribedPaths);
     logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
             + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", zkServers,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
@@ -169,7 +163,7 @@ public class HelixStoreOperator {
   /**
    * The type of store operations.
    */
-  enum StoreOperationType {
+  public enum StoreOperationType {
     CREATE, WRITE, DELETE
   }
 }
