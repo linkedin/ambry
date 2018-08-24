@@ -32,7 +32,8 @@ public interface Transformer {
   /**
    * Warms up transformer with message infos representing messages
    * it will transform later
-   * @param messageInfos
+   * @param messageInfos message infos that will be used to warmup transformer,
+   *                     each mesage info
    * @throws Exception
    */
   void warmup(List<MessageInfo> messageInfos) throws Exception;
