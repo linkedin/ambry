@@ -34,6 +34,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import org.apache.helix.AccessOption;
+import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.model.IdealState;
@@ -821,17 +822,20 @@ class HelixBootstrapUpgradeUtil {
       String partitionName = Long.toString(partition.getId());
       Set<String> replicaHostsInHelix = allPartitionsToInstancesInHelix.remove(partitionName);
       Set<String> expectedInHelix = new HashSet<>();
-      ensureOrThrow(replicaHostsInHelix != null, "No replicas found for partition " + partitionName + " in Helix");
-      for (Replica replica : partition.getReplicas()) {
-        if (replica.getDataNodeId().getDatacenterName().equals(dcName)) {
-          String instanceName = getInstanceName(replica.getDataNodeId());
-          expectedInHelix.add(instanceName);
-          ensureOrThrow(replicaHostsInHelix.remove(instanceName),
-              "Instance " + instanceName + " for the given replica in the clustermap not found in Helix");
-        }
+      List<Replica> replicaHostsInStatic = partition.getReplicas()
+          .stream()
+          .filter(replica -> replica.getDataNodeId().getDatacenterName().equals(dcName))
+          .collect(Collectors.toList());
+      ensureOrThrow(replicaHostsInStatic.size() == 0 || replicaHostsInHelix != null,
+          "No replicas found for partition " + partitionName + " in Helix");
+      for (Replica replica : replicaHostsInStatic) {
+        String instanceName = getInstanceName(replica.getDataNodeId());
+        expectedInHelix.add(instanceName);
+        ensureOrThrow(replicaHostsInHelix.remove(instanceName),
+            "Instance " + instanceName + " for the given replica in the clustermap not found in Helix");
       }
       if (!expectMoreInHelixDuringValidate) {
-        ensureOrThrow(replicaHostsInHelix.isEmpty(),
+        ensureOrThrow(replicaHostsInHelix == null || replicaHostsInHelix.isEmpty(),
             "More instances in Helix than in clustermap for partition: " + partitionName + ", expected: "
                 + expectedInHelix + ", found additional instances: " + replicaHostsInHelix);
       }
