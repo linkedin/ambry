@@ -58,6 +58,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 class HelixClusterManager implements ClusterMap {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final String clusterName;
+  private final String selfInstanceName;
   private final MetricRegistry metricRegistry;
   private final ClusterMapConfig clusterMapConfig;
   private final ConcurrentHashMap<String, DcInfo> dcToDcZkInfo = new ConcurrentHashMap<>();
@@ -100,6 +101,7 @@ class HelixClusterManager implements ClusterMap {
     currentXid = new AtomicLong(clusterMapConfig.clustermapCurrentXid);
     this.metricRegistry = metricRegistry;
     clusterName = clusterMapConfig.clusterMapClusterName;
+    selfInstanceName = instanceName;
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
     try {
@@ -124,7 +126,7 @@ class HelixClusterManager implements ClusterMap {
                 manager = localManager;
               } else {
                 manager =
-                    helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+                    helixFactory.getZKHelixManager(clusterName, selfInstanceName, InstanceType.SPECTATOR, zkConnectStr);
                 logger.info("Connecting to Helix manager at {}", zkConnectStr);
                 manager.connect();
                 logger.info("Established connection to Helix manager at {}", zkConnectStr);
@@ -415,7 +417,7 @@ class HelixClusterManager implements ClusterMap {
             String instanceName = instanceConfig.getInstanceName();
             String instanceXidStr = getXid(instanceConfig);
             long instanceXid = instanceXidStr == null ? Long.MIN_VALUE : Long.valueOf(instanceXidStr);
-            if (instanceXid <= currentXid.get()) {
+            if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
               logger.info("Adding node {} and its disks and replicas", instanceName);
               AmbryDataNode datanode =
                   new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
@@ -454,7 +456,7 @@ class HelixClusterManager implements ClusterMap {
             String instanceXidStr = getXid(instanceConfig);
             long instanceXid = instanceXidStr == null ? Long.MIN_VALUE : Long.valueOf(instanceXidStr);
             AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceName);
-            if (instanceXid <= currentXid.get()) {
+            if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
               if (node == null) {
                 logger.info("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
                     instanceConfig);

@@ -666,6 +666,13 @@ public class HelixClusterManagerTest {
       assertFalse(instanceName.equals(aheadInstanceConfig.getInstanceName()));
     }
 
+    // Ahead instance should be honored if the cluster manager is of the aheadInstance.
+    HelixClusterManager aheadInstanceClusterManager =
+        new HelixClusterManager(clusterMapConfig, aheadInstanceConfig.getInstanceName(), helixManagerFactory,
+            new MetricRegistry());
+    assertEquals(instanceCount, aheadInstanceClusterManager.getDataNodeIds().size());
+    aheadInstanceClusterManager.close();
+
     // Post-initialization InstanceConfig change:
     InstanceConfig ignoreInstanceConfig =
         instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size() - 1));
