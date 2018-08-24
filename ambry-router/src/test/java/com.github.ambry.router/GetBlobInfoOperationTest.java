@@ -403,8 +403,9 @@ public class GetBlobInfoOperationTest {
             ServerErrorCode.Blob_Authorization_Failure, ServerErrorCode.Blob_Not_Found));
     for (ServerErrorCode serverErrorCode : serverErrors) {
       mockServerLayout.getMockServers().forEach(server -> server.setServerErrorForAllRequests(serverErrorCode));
-      assertOperationFailure(serverErrorCode == ServerErrorCode.Disk_Unavailable ? RouterErrorCode.AmbryUnavailable
-          : RouterErrorCode.UnexpectedInternalError);
+      assertOperationFailure(
+          EnumSet.of(ServerErrorCode.Disk_Unavailable, ServerErrorCode.Replica_Unavailable).contains(serverErrorCode)
+              ? RouterErrorCode.AmbryUnavailable : RouterErrorCode.UnexpectedInternalError);
     }
   }
 

@@ -659,6 +659,7 @@ public class NonBlockingRouterTest {
     testsAndExpected.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
     testsAndExpected.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
     testsAndExpected.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    testsAndExpected.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
     testsAndExpected.put(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError);
     for (Map.Entry<ServerErrorCode, RouterErrorCode> testAndExpected : testsAndExpected.entrySet()) {
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(testAndExpected.getKey()));

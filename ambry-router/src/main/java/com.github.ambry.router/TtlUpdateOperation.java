@@ -264,6 +264,7 @@ class TtlUpdateOperation {
         updateOperationState(replica, RouterErrorCode.BlobDoesNotExist);
         break;
       case Disk_Unavailable:
+      case Replica_Unavailable:
         updateOperationState(replica, RouterErrorCode.AmbryUnavailable);
         break;
       case Blob_Update_Not_Allowed:
@@ -310,7 +311,7 @@ class TtlUpdateOperation {
   private void checkAndMaybeComplete() {
     // operationCompleted is true if Blob_Authorization_Failure was received.
     if (operationTracker.isDone() || operationCompleted == true) {
-      if (!operationTracker.hasSucceeded() ) {
+      if (!operationTracker.hasSucceeded()) {
         setOperationException(
             new RouterException("The TtlUpdateOperation could not be completed.", resolvedRouterErrorCode));
       }

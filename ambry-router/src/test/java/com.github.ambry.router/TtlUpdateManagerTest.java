@@ -114,8 +114,7 @@ public class TtlUpdateManagerTest {
     }
     ttlUpdateManager =
         new TtlUpdateManager(clusterMap, new ResponseHandler(clusterMap), notificationSystem, accountService,
-            routerConfig, metrics,
-            time);
+            routerConfig, metrics, time);
     networkClient = networkClientFactory.getNetworkClient();
   }
 
@@ -197,6 +196,7 @@ public class TtlUpdateManagerTest {
     errorCodeMap.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
     errorCodeMap.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
     errorCodeMap.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    errorCodeMap.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
     errorCodeMap.put(ServerErrorCode.Blob_Update_Not_Allowed, RouterErrorCode.BlobUpdateNotAllowed);
     errorCodeMap.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
     for (ServerErrorCode errorCode : ServerErrorCode.values()) {

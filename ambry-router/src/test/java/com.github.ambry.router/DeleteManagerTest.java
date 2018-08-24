@@ -252,6 +252,7 @@ public class DeleteManagerTest {
     codesToSetAndTest.clear();
     codesToSetAndTest.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
     codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    codesToSetAndTest.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
     codesToSetAndTest.put(ServerErrorCode.Partition_Unknown, RouterErrorCode.UnexpectedInternalError);
     doRouterErrorCodeResolutionTest(codesToSetAndTest);
   }
@@ -265,6 +266,7 @@ public class DeleteManagerTest {
     map.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
     map.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
     map.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    map.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
     map.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
     for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
       if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted

@@ -496,8 +496,8 @@ public class GetBlobOperationTest {
       mockServerLayout.getMockServers().forEach(server -> server.setServerErrorForAllRequests(serverErrorCode));
       GetBlobOperation op = createOperationAndComplete(null);
       assertFailureAndCheckErrorCode(op,
-          serverErrorCode == ServerErrorCode.Disk_Unavailable ? RouterErrorCode.AmbryUnavailable
-              : RouterErrorCode.UnexpectedInternalError);
+          EnumSet.of(ServerErrorCode.Disk_Unavailable, ServerErrorCode.Replica_Unavailable).contains(serverErrorCode)
+              ? RouterErrorCode.AmbryUnavailable : RouterErrorCode.UnexpectedInternalError);
     }
   }
 
