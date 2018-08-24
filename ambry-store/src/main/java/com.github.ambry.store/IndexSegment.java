@@ -344,9 +344,9 @@ class IndexSegment {
           }
           // binary search on the mapped file
           if (mmap.isLoaded()) {
-            metrics.indexSegmentInMemory.inc();
+            metrics.indexSegmentInMemoryDuringFindCount.inc();
           } else {
-            metrics.indexSegmentNotInMemory.inc();
+            metrics.indexSegmentNotInMemoryDuringFindCount.inc();
           }
           ByteBuffer duplicate = mmap.duplicate();
           int low = 0;
