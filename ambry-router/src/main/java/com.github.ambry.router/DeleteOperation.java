@@ -273,6 +273,7 @@ class DeleteOperation {
         updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
         break;
       case Disk_Unavailable:
+      case Replica_Unavailable:
         updateOperationState(replica, RouterErrorCode.AmbryUnavailable);
         break;
       default:

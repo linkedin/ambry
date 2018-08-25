@@ -1075,7 +1075,9 @@ class GetBlobOperation extends GetOperation {
           setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDoesNotExist));
           break;
         case Disk_Unavailable:
+        case Replica_Unavailable:
           setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.AmbryUnavailable));
+          break;
         default:
           setChunkException(
               new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
