@@ -614,9 +614,9 @@ public class RestUtils {
   }
 
   /**
-   * Determine if {@link Headers#SESSION} is set in the request args.
+   * Determine if {@link Headers#CHUNK_UPLOAD} is set in the request args.
    * @param args The request arguments.
-   * @return {@code true} if {@link Headers#SESSION} is set.
+   * @return {@code true} if {@link Headers#CHUNK_UPLOAD} is set.
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
   public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {

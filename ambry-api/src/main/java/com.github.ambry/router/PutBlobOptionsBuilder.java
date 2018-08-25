@@ -23,7 +23,7 @@ public class PutBlobOptionsBuilder {
   private long maxUploadSize = Long.MAX_VALUE;
 
   /**
-   * @param chunkUpload {@code true} to indicate that this is an upload of
+   * @param chunkUpload {@code true} to indicate that this is an upload of a data chunk of a stitched upload.
    * @return this builder
    */
   public PutBlobOptionsBuilder chunkUpload(boolean chunkUpload) {
@@ -32,7 +32,7 @@ public class PutBlobOptionsBuilder {
   }
 
   /**
-   * @param maxUploadSize the max size of the uploaded blob in bytes. To be enforced by the router. Can be null.
+   * @param maxUploadSize the max size of the uploaded blob in bytes. To be enforced by the router.
    * @return this builder
    */
   public PutBlobOptionsBuilder maxUploadSize(long maxUploadSize) {
