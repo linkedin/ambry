@@ -48,7 +48,7 @@ class DataNode implements DataNodeId {
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
   private final String rackId;
-  private final String xid;
+  private final long xid;
   private final ArrayList<String> sslEnabledDataCenters;
   private final ClusterMapConfig clusterMapConfig;
 
@@ -86,7 +86,7 @@ class DataNode implements DataNodeId {
     this.ports.put(PortType.PLAINTEXT, new Port(portNum, PortType.PLAINTEXT));
     populatePorts(jsonObject);
     this.rackId = jsonObject.optString("rackId", null);
-    this.xid = jsonObject.optString("xid", null);
+    this.xid = jsonObject.optLong("xid", Long.MIN_VALUE);
 
     validate();
   }
@@ -195,7 +195,7 @@ class DataNode implements DataNodeId {
   }
 
   @Override
-  public String getXid() {
+  public long getXid() {
     return xid;
   }
 

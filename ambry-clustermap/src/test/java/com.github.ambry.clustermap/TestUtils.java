@@ -83,7 +83,7 @@ public class TestUtils {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
-    jsonObject.put("xid", Long.toString(DEFAULT_XID));
+    jsonObject.put("xid", DEFAULT_XID);
     jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("disks", disks);
     return jsonObject;
@@ -95,7 +95,7 @@ public class TestUtils {
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
     jsonObject.put("sslport", sslPort);
-    jsonObject.put("xid", Long.toString(DEFAULT_XID));
+    jsonObject.put("xid", DEFAULT_XID);
     jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("disks", disks);
     return jsonObject;
@@ -121,7 +121,7 @@ public class TestUtils {
     jsonObject.put("port", port);
     jsonObject.put("sslport", sslPort);
     jsonObject.put("rackId", Long.toString(rackId));
-    jsonObject.put("xid", Long.toString(xid));
+    jsonObject.put("xid", xid);
     jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("disks", disks);
     return jsonObject;

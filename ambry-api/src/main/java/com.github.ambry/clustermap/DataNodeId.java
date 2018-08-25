@@ -82,5 +82,5 @@ public interface DataNodeId extends Resource, Comparable<DataNodeId> {
    * Get the xid associated with this node. The xid marks a change number.
    * @return the xid associated with this node.
    */
-  String getXid();
+  long getXid();
 }

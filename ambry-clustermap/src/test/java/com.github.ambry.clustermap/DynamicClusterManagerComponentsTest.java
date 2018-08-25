@@ -37,7 +37,7 @@ public class DynamicClusterManagerComponentsTest {
   private static final int PORT_NUM1 = 2000;
   private static final int PORT_NUM2 = 2001;
   private static final String RACK_ID = "1";
-  private static final String XID = "64";
+  private static final long XID = 64;
   private static final int SSL_PORT_NUM = 3000;
   private static final String HOST_NAME = TestUtils.getLocalHost();
   private final ClusterMapConfig clusterMapConfig1;
@@ -77,8 +77,10 @@ public class DynamicClusterManagerComponentsTest {
     } catch (IllegalArgumentException e) {
       // OK
     }
-    AmbryDataNode datanode1 = new AmbryDataNode("DC0", clusterMapConfig1, HOST_NAME, PORT_NUM1, RACK_ID, SSL_PORT_NUM, XID);
-    AmbryDataNode datanode2 = new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM2, RACK_ID, SSL_PORT_NUM, XID);
+    AmbryDataNode datanode1 =
+        new AmbryDataNode("DC0", clusterMapConfig1, HOST_NAME, PORT_NUM1, RACK_ID, SSL_PORT_NUM, XID);
+    AmbryDataNode datanode2 =
+        new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM2, RACK_ID, SSL_PORT_NUM, XID);
     assertEquals(datanode1.getDatacenterName(), "DC0");
     assertEquals(datanode1.getHostname(), HOST_NAME);
     assertEquals(datanode1.getPort(), PORT_NUM1);

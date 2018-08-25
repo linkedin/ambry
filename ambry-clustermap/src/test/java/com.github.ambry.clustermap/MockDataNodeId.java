@@ -120,8 +120,8 @@ public class MockDataNodeId implements DataNodeId {
   }
 
   @Override
-  public String getXid() {
-    return null;
+  public long getXid() {
+    return Long.MIN_VALUE;
   }
 
   public List<String> getMountPaths() {

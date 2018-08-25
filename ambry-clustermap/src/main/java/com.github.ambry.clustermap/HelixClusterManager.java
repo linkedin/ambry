@@ -415,14 +415,13 @@ class HelixClusterManager implements ClusterMap {
         switch (schemaVersion) {
           case 0:
             String instanceName = instanceConfig.getInstanceName();
-            String instanceXidStr = getXid(instanceConfig);
-            long instanceXid = instanceXidStr == null ? Long.MIN_VALUE : Long.valueOf(instanceXidStr);
+            long instanceXid = getXid(instanceConfig);
             if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
               logger.info("Adding node {} and its disks and replicas", instanceName);
               AmbryDataNode datanode =
                   new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
                       Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig),
-                      getSslPortStr(instanceConfig), instanceXidStr);
+                      getSslPortStr(instanceConfig), instanceXid);
               initializeDisksAndReplicasOnNode(datanode, instanceConfig);
               instanceNameToAmbryDataNode.put(instanceName, datanode);
               allInstances.add(instanceName);
@@ -453,8 +452,7 @@ class HelixClusterManager implements ClusterMap {
         switch (schemaVersion) {
           case 0:
             String instanceName = instanceConfig.getInstanceName();
-            String instanceXidStr = getXid(instanceConfig);
-            long instanceXid = instanceXidStr == null ? Long.MIN_VALUE : Long.valueOf(instanceXidStr);
+            long instanceXid = getXid(instanceConfig);
             AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceName);
             if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
               if (node == null) {

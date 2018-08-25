@@ -102,7 +102,7 @@ public class DataNodeTest {
     assertEquals(dataNode.getRawCapacityInBytes(), diskCount * diskCapacityInBytes);
 
     assertNull(dataNode.getRackId());
-    assertEquals(Long.toString(TestUtils.DEFAULT_XID), dataNode.getXid());
+    assertEquals(TestUtils.DEFAULT_XID, dataNode.getXid());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
@@ -112,13 +112,13 @@ public class DataNodeTest {
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 42, TestUtils.DEFAULT_XID, HardwareState.AVAILABLE, getDisks());
     dataNode = new TestDataNode("datacenter", jsonObject, clusterMapConfig);
     assertEquals("42", dataNode.getRackId());
-    assertEquals(Long.toString(TestUtils.DEFAULT_XID), dataNode.getXid());
+    assertEquals(TestUtils.DEFAULT_XID, dataNode.getXid());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
   }
 
-  public void failValidation(JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
+  private void failValidation(JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     try {
       new TestDataNode("datacenter", jsonObject, clusterMapConfig);
       fail("Construction of TestDataNode should have failed validation.");

@@ -424,7 +424,7 @@ class HelixBootstrapUpgradeUtil {
       // instances (and hence will have outdated information in the static map). Such as
       // 1. RO/RW status of replicas.
       // 2. Replica availability (for which support has not yet been added).
-      // 3. xid (for which support has not yet been added).
+      // 3. xid.
       if (!instanceConfigFromStatic.getRecord().equals(instanceConfigInHelix.getRecord())) {
         info("Instance {} already present in Helix, but InstanceConfig has changed, updating. Remaining instances: {}",
             instanceName, --totalInstances);
@@ -582,10 +582,9 @@ class HelixBootstrapUpgradeUtil {
     }
     instanceConfig.getRecord().setSimpleField(ClusterMapUtils.DATACENTER_STR, node.getDatacenterName());
     instanceConfig.getRecord().setSimpleField(ClusterMapUtils.RACKID_STR, node.getRackId());
-    instanceConfig.getRecord().setSimpleField(ClusterMapUtils.XID_STR, node.getXid());
+    instanceConfig.getRecord().setSimpleField(ClusterMapUtils.XID_STR, Long.toString(node.getXid()));
     instanceConfig.getRecord()
         .setSimpleField(ClusterMapUtils.SCHEMA_VERSION_STR, Integer.toString(ClusterMapUtils.CURRENT_SCHEMA_VERSION));
-    // xid support has not yet been added.
 
     List<String> sealedPartitionsList = new ArrayList<>();
 
@@ -769,7 +768,7 @@ class HelixBootstrapUpgradeUtil {
           Objects.equals(dataNode.getRackId(), instanceConfig.getRecord().getSimpleField(ClusterMapUtils.RACKID_STR)),
           "Rack Id mismatch for instance " + instanceName);
       ensureOrThrow(
-          Objects.equals(dataNode.getXid(), instanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR)),
+          Objects.equals(Long.toString(dataNode.getXid()), instanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR)),
           "Xid mismatch for instance " + instanceName);
       Set<String> sealedReplicasInHelix =
           new HashSet<>(instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR));
