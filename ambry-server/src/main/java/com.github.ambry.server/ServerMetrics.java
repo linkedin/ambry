@@ -82,6 +82,12 @@ public class ServerMetrics {
   public final Histogram getBlobAllSendTimeInMs;
   public final Histogram getBlobAllTotalTimeInMs;
 
+  public final Histogram getBlobAllByReplicaRequestQueueTimeInMs;
+  public final Histogram getBlobAllByReplicaProcessingTimeInMs;
+  public final Histogram getBlobAllByReplicaResponseQueueTimeInMs;
+  public final Histogram getBlobAllByReplicaSendTimeInMs;
+  public final Histogram getBlobAllByReplicaTotalTimeInMs;
+
   public final Histogram getBlobInfoRequestQueueTimeInMs;
   public final Histogram getBlobInfoProcessingTimeInMs;
   public final Histogram getBlobInfoResponseQueueTimeInMs;
@@ -147,6 +153,7 @@ public class ServerMetrics {
   public final Meter getBlobPropertiesRequestRate;
   public final Meter getBlobUserMetadataRequestRate;
   public final Meter getBlobAllRequestRate;
+  public final Meter getBlobAllByReplicaRequestRate;
   public final Meter getBlobInfoRequestRate;
   public final Meter deleteBlobRequestRate;
   public final Meter updateBlobTtlRequestRate;
@@ -269,6 +276,17 @@ public class ServerMetrics {
     getBlobAllSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllSendTime"));
     getBlobAllTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllTotalTime"));
 
+    getBlobAllByReplicaRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllByReplicaRequestQueueTime"));
+    getBlobAllByReplicaProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllByReplicaProcessingTime"));
+    getBlobAllByReplicaResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllByReplicaResponseQueueTime"));
+    getBlobAllByReplicaSendTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllByReplicaSendTime"));
+    getBlobAllByReplicaTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllByReplicaTotalTime"));
+
     getBlobInfoRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobInfoRequestQueueTime"));
     getBlobInfoProcessingTimeInMs =
@@ -375,6 +393,8 @@ public class ServerMetrics {
     getBlobUserMetadataRequestRate =
         registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataRequestRate"));
     getBlobAllRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobAllRequestRate"));
+    getBlobAllByReplicaRequestRate =
+        registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobAllByReplicaRequestRate"));
     getBlobInfoRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobInfoRequestRate"));
     deleteBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "DeleteBlobRequestRate"));
     updateBlobTtlRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "UpdateBlobTtlRequestRate"));

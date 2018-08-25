@@ -347,6 +347,15 @@ class IndexSegment {
                 indexFile.getAbsolutePath(), startOffset, keyToFind);
           }
           // binary search on the mapped file
+          if (mmap.isLoaded()) {
+            // isLoaded() will be true only if the entire buffer is in memory - so it being false does not necessarily
+            // mean that the pages in the scope of the search need to be loaded from disk.
+            // Secondly, even if it returned true (or false), by the time the actual lookup is done,
+            // the situation may be different.
+            metrics.mappedSegmentIsLoadedDuringFindCount.inc();
+          } else {
+            metrics.mappedSegmentIsNotLoadedDuringFindCount.inc();
+          }
           ByteBuffer duplicate = mmap.duplicate();
           int low = 0;
           int totalEntries = numberOfEntries(duplicate);

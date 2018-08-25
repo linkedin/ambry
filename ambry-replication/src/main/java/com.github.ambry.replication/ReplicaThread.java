@@ -679,9 +679,9 @@ class ReplicaThread implements Runnable {
     }
     GetResponse getResponse = null;
     if (!partitionRequestInfoList.isEmpty()) {
-      GetRequest getRequest =
-          new GetRequest(correlationIdGenerator.incrementAndGet(), "replication-fetch-" + dataNodeId.getHostname(),
-              MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
+      GetRequest getRequest = new GetRequest(correlationIdGenerator.incrementAndGet(),
+          GetRequest.Replication_Client_Id_Prefix + dataNodeId.getHostname(), MessageFormatFlags.All,
+          partitionRequestInfoList, GetOption.None);
       long startTime = SystemTime.getInstance().milliseconds();
       try {
         connectedChannel.send(getRequest);
