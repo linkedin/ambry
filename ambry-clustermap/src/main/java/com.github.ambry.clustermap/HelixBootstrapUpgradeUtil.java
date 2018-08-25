@@ -33,8 +33,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import org.apache.helix.AccessOption;
 import java.util.stream.Collectors;
+import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.model.IdealState;
@@ -822,13 +822,13 @@ class HelixBootstrapUpgradeUtil {
       String partitionName = Long.toString(partition.getId());
       Set<String> replicaHostsInHelix = allPartitionsToInstancesInHelix.remove(partitionName);
       Set<String> expectedInHelix = new HashSet<>();
-      List<Replica> replicaHostsInStatic = partition.getReplicas()
+      List<Replica> replicasInStatic = partition.getReplicas()
           .stream()
           .filter(replica -> replica.getDataNodeId().getDatacenterName().equals(dcName))
           .collect(Collectors.toList());
-      ensureOrThrow(replicaHostsInStatic.size() == 0 || replicaHostsInHelix != null,
+      ensureOrThrow(replicasInStatic.size() == 0 || replicaHostsInHelix != null,
           "No replicas found for partition " + partitionName + " in Helix");
-      for (Replica replica : replicaHostsInStatic) {
+      for (Replica replica : replicasInStatic) {
         String instanceName = getInstanceName(replica.getDataNodeId());
         expectedInHelix.add(instanceName);
         ensureOrThrow(replicaHostsInHelix.remove(instanceName),
