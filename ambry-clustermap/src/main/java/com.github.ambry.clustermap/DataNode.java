@@ -48,6 +48,7 @@ class DataNode implements DataNodeId {
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
   private final String rackId;
+  private final long xid;
   private final ArrayList<String> sslEnabledDataCenters;
   private final ClusterMapConfig clusterMapConfig;
 
@@ -85,6 +86,7 @@ class DataNode implements DataNodeId {
     this.ports.put(PortType.PLAINTEXT, new Port(portNum, PortType.PLAINTEXT));
     populatePorts(jsonObject);
     this.rackId = jsonObject.optString("rackId", null);
+    this.xid = jsonObject.optLong("xid", Long.MIN_VALUE);
 
     validate();
   }
@@ -192,6 +194,11 @@ class DataNode implements DataNodeId {
     return rackId;
   }
 
+  @Override
+  public long getXid() {
+    return xid;
+  }
+
   protected void validateDatacenter() {
     if (datacenter == null) {
       throw new IllegalStateException("Datacenter cannot be null.");
@@ -239,6 +246,7 @@ class DataNode implements DataNodeId {
     JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", portNum);
     addSSLPortToJson(jsonObject);
     jsonObject.putOpt("rackId", rackId);
+    jsonObject.putOpt("xid", xid);
     jsonObject.put("hardwareState",
         dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE.name() : HardwareState.AVAILABLE.name())
         .put("disks", new JSONArray());

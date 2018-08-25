@@ -70,7 +70,7 @@ public class HelixClusterManagerTest {
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
   private final String hostname;
-  private final ClusterMap clusterManager;
+  private ClusterMap clusterManager;
   private MetricRegistry metricRegistry;
   private Map<String, Gauge> gauges;
   private Map<String, Counter> counters;
@@ -658,12 +658,17 @@ public class HelixClusterManagerTest {
     InstanceConfig aheadInstanceConfig = instanceConfigs.get(randomIndex);
     Collections.swap(instanceConfigs, randomIndex, instanceConfigs.size() - 1);
     aheadInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 1));
-    HelixClusterManager clusterManager =
-        new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
+    clusterManager = new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
     assertEquals(instanceCount - 1, clusterManager.getDataNodeIds().size());
-    for (AmbryDataNode dataNode : clusterManager.getDataNodeIds()) {
+    for (DataNodeId dataNode : clusterManager.getDataNodeIds()) {
       String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
       assertFalse(instanceName.equals(aheadInstanceConfig.getInstanceName()));
+    }
+
+    // Ahead instance should be honored if the cluster manager is of the aheadInstance.
+    try (HelixClusterManager aheadInstanceClusterManager = new HelixClusterManager(clusterMapConfig,
+        aheadInstanceConfig.getInstanceName(), helixManagerFactory, new MetricRegistry())) {
+      assertEquals(instanceCount, aheadInstanceClusterManager.getDataNodeIds().size());
     }
 
     // Post-initialization InstanceConfig change:
@@ -673,10 +678,10 @@ public class HelixClusterManagerTest {
     ignoreInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 2));
 
     AmbryReplica ignoreInstanceReplica = null;
-    for (AmbryDataNode dataNode : clusterManager.getDataNodeIds()) {
+    for (DataNodeId dataNode : clusterManager.getDataNodeIds()) {
       String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
       if (instanceName.equals(ignoreInstanceName)) {
-        ignoreInstanceReplica = clusterManager.getReplicaIds(dataNode).get(0);
+        ignoreInstanceReplica = (AmbryReplica) clusterManager.getReplicaIds(dataNode).get(0);
         ignoreInstanceConfig.getRecord()
             .setListField(STOPPED_REPLICAS_STR,
                 Collections.singletonList(ignoreInstanceReplica.getPartitionId().toPathString()));

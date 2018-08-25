@@ -58,6 +58,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 class HelixClusterManager implements ClusterMap {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final String clusterName;
+  private final String selfInstanceName;
   private final MetricRegistry metricRegistry;
   private final ClusterMapConfig clusterMapConfig;
   private final ConcurrentHashMap<String, DcInfo> dcToDcZkInfo = new ConcurrentHashMap<>();
@@ -79,8 +80,11 @@ class HelixClusterManager implements ClusterMap {
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final PartitionSelectionHelper partitionSelectionHelper;
-  private long currentXid;
   private final Map<String, Map<String, String>> partitionOverrideInfoMap = new HashMap<>();
+  // The current xid currently does not change after instantiation. This can change in the future, allowing the cluster
+  // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
+  // reflects the current value.
+  private final AtomicLong currentXid;
 
   /**
    * Instantiate a HelixClusterManager.
@@ -94,9 +98,10 @@ class HelixClusterManager implements ClusterMap {
   HelixClusterManager(ClusterMapConfig clusterMapConfig, String instanceName, HelixFactory helixFactory,
       MetricRegistry metricRegistry) throws IOException {
     this.clusterMapConfig = clusterMapConfig;
-    currentXid = clusterMapConfig.clustermapCurrentXid;
+    currentXid = new AtomicLong(clusterMapConfig.clustermapCurrentXid);
     this.metricRegistry = metricRegistry;
     clusterName = clusterMapConfig.clusterMapClusterName;
+    selfInstanceName = instanceName;
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
     try {
@@ -121,7 +126,7 @@ class HelixClusterManager implements ClusterMap {
                 manager = localManager;
               } else {
                 manager =
-                    helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+                    helixFactory.getZKHelixManager(clusterName, selfInstanceName, InstanceType.SPECTATOR, zkConnectStr);
                 logger.info("Connecting to Helix manager at {}", zkConnectStr);
                 manager.connect();
                 logger.info("Established connection to Helix manager at {}", zkConnectStr);
@@ -160,6 +165,7 @@ class HelixClusterManager implements ClusterMap {
       }
       initializeCapacityStats();
       helixClusterManagerMetrics.initializeInstantiationMetric(true);
+      helixClusterManagerMetrics.initializeXidMetric(currentXid);
       helixClusterManagerMetrics.initializeDatacenterMetrics();
       helixClusterManagerMetrics.initializeDataNodeMetrics();
       helixClusterManagerMetrics.initializeDiskMetrics();
@@ -410,19 +416,19 @@ class HelixClusterManager implements ClusterMap {
           case 0:
             String instanceName = instanceConfig.getInstanceName();
             long instanceXid = getXid(instanceConfig);
-            if (instanceXid <= currentXid) {
+            if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
               logger.info("Adding node {} and its disks and replicas", instanceName);
               AmbryDataNode datanode =
                   new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
                       Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig),
-                      getSslPortStr(instanceConfig));
+                      getSslPortStr(instanceConfig), instanceXid);
               initializeDisksAndReplicasOnNode(datanode, instanceConfig);
               instanceNameToAmbryDataNode.put(instanceName, datanode);
               allInstances.add(instanceName);
             } else {
               logger.info(
                   "Ignoring instanceConfig for {} because the xid associated with it ({}) is later than current xid ({})",
-                  instanceName, instanceXid, currentXid);
+                  instanceName, instanceXid, currentXid.get());
               helixClusterManagerMetrics.ignoredUpdatesCount.inc();
             }
             break;
@@ -448,7 +454,7 @@ class HelixClusterManager implements ClusterMap {
             String instanceName = instanceConfig.getInstanceName();
             long instanceXid = getXid(instanceConfig);
             AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceName);
-            if (instanceXid <= currentXid) {
+            if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
               if (node == null) {
                 logger.info("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
                     instanceConfig);
@@ -471,7 +477,7 @@ class HelixClusterManager implements ClusterMap {
             } else {
               logger.trace(
                   "Ignoring instanceConfig change for {} because the xid associated with it ({}) is later than current xid ({})",
-                  instanceName, instanceXid, currentXid);
+                  instanceName, instanceXid, currentXid.get());
               helixClusterManagerMetrics.ignoredUpdatesCount.inc();
             }
             break;
