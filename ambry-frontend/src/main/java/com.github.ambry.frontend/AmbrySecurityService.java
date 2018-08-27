@@ -75,6 +75,7 @@ class AmbrySecurityService implements SecurityService {
         exception = e;
       }
     }
+    restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, new Boolean(true));
     frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
   }

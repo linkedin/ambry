@@ -50,6 +50,9 @@ public class AmbryBlobStorageServiceFactoryTest {
     Properties properties = new Properties();
     CommonTestUtils.populateRequiredRouterProps(properties);
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
+    properties.setProperty("clustermap.cluster.name", "CLuster-Name");
+    properties.setProperty("clustermap.datacenter.name", "Datacenter-Name");
+    properties.setProperty("clustermap.host.name", "localhost");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
     AmbryBlobStorageServiceFactory ambryBlobStorageServiceFactory =

@@ -197,6 +197,15 @@ public class RestUtils {
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
+
+    /**
+     * Response header for the name of the datacenter that the responding frontend belongs to.
+     */
+    public static final String DATACENTER_NAME = "x-ambry-datacenter";
+    /**
+     * Response header for the hostname of the responding frontend.
+     */
+    public static final String FRONTEND_NAME = "x-ambry-frontend";
   }
 
   /**
@@ -226,6 +235,11 @@ public class RestUtils {
      * Not authoritative, only a hint
      */
     public final static String KEEP_ALIVE_ON_ERROR_HINT = KEY_PREFIX + "keep-alive-on-error-hint";
+
+    /**
+     * To be set if tracking info should be attached to frontend responses.
+     */
+    public final static String SEND_TRACKING_INFO = "ambry-internal-keys-send-tracking-info";
   }
 
   /**

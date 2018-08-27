@@ -541,6 +541,9 @@ public class FrontendIntegrationTest {
     TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     // add key for singleKeyManagementService
     properties.put("kms.default.container.key", TestUtils.getRandomKey(32));
+    properties.setProperty("clustermap.cluster.name", "CLuster-Name");
+    properties.setProperty("clustermap.datacenter.name", "Datacenter-Name");
+    properties.setProperty("clustermap.host.name", "localhost");
     return new VerifiableProperties(properties);
   }
 
