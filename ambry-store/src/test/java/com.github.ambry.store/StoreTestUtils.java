@@ -109,6 +109,11 @@ class StoreTestUtils {
       return isSealed;
     }
 
+    @Override
+    public void markDiskDown() {
+      // Null OK
+    }
+
     public void setSealedState(boolean isSealed) {
       this.isSealed = isSealed;
     }

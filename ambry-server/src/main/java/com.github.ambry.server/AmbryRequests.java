@@ -1097,21 +1097,23 @@ public class AmbryRequests implements RequestAPI {
     }
     if (!skipPartitionAndDiskAvailableCheck) {
       // 2. ensure the disk for the partition/replica is available
-      List<? extends ReplicaId> replicaIds = partition.getReplicaIds();
-      for (ReplicaId replica : replicaIds) {
-        if (replica.getDataNodeId().getHostname().equals(currentNode.getHostname())
-            && replica.getDataNodeId().getPort() == currentNode.getPort()) {
-          if (replica.getDiskId().getState() == HardwareState.UNAVAILABLE) {
-            metrics.diskUnavailableError.inc();
-            return ServerErrorCode.Disk_Unavailable;
-          }
-        }
+      ReplicaId localReplica = storageManager.getLocalReplica(partition);
+      if (localReplica != null && localReplica.getDiskId().getState() == HardwareState.UNAVAILABLE) {
+        metrics.diskUnavailableError.inc();
+        return ServerErrorCode.Disk_Unavailable;
       }
       // 3. check if partition exists on this node and that the store for this partition is available
       if (storageManager.getStore(partition) == null) {
-        if (partitionsInCurrentNode.contains(partition)) {
-          metrics.replicaUnavailableError.inc();
-          return ServerErrorCode.Replica_Unavailable;
+        if (localReplica != null) {
+          // check stores on the disk
+          if (storageManager.isDiskUnavailable(storageManager.getDiskManager(partition))) {
+            metrics.diskUnavailableError.inc();
+            localReplica.markDiskDown();
+            return ServerErrorCode.Disk_Unavailable;
+          } else {
+            metrics.replicaUnavailableError.inc();
+            return ServerErrorCode.Replica_Unavailable;
+          }
         } else {
           metrics.partitionUnknownError.inc();
           return ServerErrorCode.Partition_Unknown;

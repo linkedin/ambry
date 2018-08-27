@@ -235,6 +235,10 @@ class DiskManager {
     return disk;
   }
 
+  ReplicaId getLocalReplica(PartitionId id){
+    return partitionToReplicaMap.get(id);
+  }
+
   /**
    * Schedules the {@link PartitionId} {@code id} for compaction next.
    * @param id the {@link PartitionId} of the {@link BlobStore} to compact.
@@ -365,5 +369,14 @@ class DiskManager {
       throw new StoreException("Mount path does not exist: " + mountPath + " ; cannot start stores on this disk",
           StoreErrorCodes.Initialization_Error);
     }
+  }
+
+  boolean areAllStoresDown() {
+    for (BlobStore store : stores.values()) {
+      if (store.isStarted()) {
+        return false;
+      }
+    }
+    return true;
   }
 }

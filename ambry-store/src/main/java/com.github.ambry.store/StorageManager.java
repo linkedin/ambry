@@ -153,8 +153,17 @@ public class StorageManager {
    * @return the {@link DiskManager} corresponding to the given {@link PartitionId}, or {@code null} if no DiskManager was found for
    *         that partition
    */
-  DiskManager getDiskManager(PartitionId id) {
+  public DiskManager getDiskManager(PartitionId id) {
     return partitionToDiskManager.get(id);
+  }
+
+  public boolean isDiskUnavailable(DiskManager diskManager) {
+    return diskManager.areAllStoresDown();
+  }
+
+  public ReplicaId getLocalReplica(PartitionId id) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null ? diskManager.getLocalReplica(id) : null;
   }
 
   /**
@@ -203,6 +212,7 @@ public class StorageManager {
       for (Thread shutdownThread : shutdownThreads) {
         shutdownThread.join();
       }
+      metrics.deregisterCompactionThreadsTracker();
       logger.info("Shutting down storage manager complete");
     } finally {
       metrics.storageManagerShutdownTimeMs.update(time.milliseconds() - startTimeMs);

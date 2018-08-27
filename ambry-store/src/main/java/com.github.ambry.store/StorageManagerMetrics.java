@@ -106,6 +106,14 @@ public class StorageManagerMetrics {
   }
 
   /**
+   * Deregister the Metrics related to the compaction thread.
+   */
+  void deregisterCompactionThreadsTracker() {
+    registry.remove(MetricRegistry.name(StorageManager.class, "CompactionThreadsAlive"));
+    registry.remove(MetricRegistry.name(StorageManager.class, "CompactionHealth"));
+  }
+
+  /**
    * Marks the beginning of a compaction.
    * @param incrementUniqueCompactionsCount {@code true} if this is a new compaction and not the resume of a suspended
    *                                                    one. {@code false otherwise}
