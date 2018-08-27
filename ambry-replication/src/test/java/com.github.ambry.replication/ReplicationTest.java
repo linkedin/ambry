@@ -828,9 +828,18 @@ public class ReplicationTest {
 
     // 1. verify that the replica thread sleeps and replicas are temporarily disable when all replicas are synced.
     List<List<RemoteReplicaInfo>> replicasToReplicateList = new ArrayList<>(replicasToReplicate.values());
+    // replicate is called and time is moved forward to prepare the replica states for tests.
     replicaThread.replicate(replicasToReplicateList);
-    // replicate is called twice to trigger the sleep (replication for all replica is disabled then replicate is put to sleep).
+    time.sleep(config.replicationSyncedReplicaBackoffDurationMs);
     long currentTimeMs = time.milliseconds();
+    replicaThread.replicate(replicasToReplicateList);
+    for (List<RemoteReplicaInfo> replicaInfos : replicasToReplicateList) {
+      for (RemoteReplicaInfo replicaInfo : replicaInfos) {
+        assertEquals("Unexpected re-enable replication time",
+            currentTimeMs + config.replicationSyncedReplicaBackoffDurationMs, replicaInfo.getReEnableReplicationTime());
+      }
+    }
+    currentTimeMs = time.milliseconds();
     replicaThread.replicate(replicasToReplicateList);
     assertEquals("Replicas are in sync, replica thread should sleep by replication.thread.idle.sleep.duration.ms",
         currentTimeMs + config.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
