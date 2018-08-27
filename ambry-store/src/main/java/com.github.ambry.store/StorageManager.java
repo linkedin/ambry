@@ -157,10 +157,19 @@ public class StorageManager {
     return partitionToDiskManager.get(id);
   }
 
+  /**
+   * Check if a certain disk is unavailable.
+   * @param diskManager the {@link DiskManager} to check.
+   * @return {@code true} if the disk is unavailable. {@code false} if not.
+   */
   public boolean isDiskUnavailable(DiskManager diskManager) {
     return diskManager.areAllStoresDown();
   }
 
+  /**
+   * @param id the {@link PartitionId} used to find the local replica.
+   * @return the {@link ReplicaId} corresponding to the given {@link PartitionId}, or {@code null} if no replica was found.
+   */
   public ReplicaId getLocalReplica(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null ? diskManager.getLocalReplica(id) : null;

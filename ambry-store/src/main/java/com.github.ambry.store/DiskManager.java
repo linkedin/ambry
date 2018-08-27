@@ -235,7 +235,11 @@ class DiskManager {
     return disk;
   }
 
-  ReplicaId getLocalReplica(PartitionId id){
+  /**
+   * @param id the {@link PartitionId} used to find the local replica.
+   * @return the local {@link ReplicaId} associated with the given {@link PartitionId}.
+   */
+  ReplicaId getLocalReplica(PartitionId id) {
     return partitionToReplicaMap.get(id);
   }
 
@@ -371,6 +375,10 @@ class DiskManager {
     }
   }
 
+  /**
+   * Check if all stores on this disk are down.
+   * @return {@code true} if all stores are down. {@code false} at least one store is up.
+   */
   boolean areAllStoresDown() {
     for (BlobStore store : stores.values()) {
       if (store.isStarted()) {
