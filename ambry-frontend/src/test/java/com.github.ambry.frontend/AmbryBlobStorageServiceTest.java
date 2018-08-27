@@ -337,6 +337,23 @@ public class AmbryBlobStorageServiceTest {
     } finally {
       responseHandler.start();
     }
+
+    // verify tracking infos are attached accordingly.
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null, null);
+    assertTrue("Response header should not contain tracking info",
+        restResponseChannel.getHeader(RestUtils.Headers.DATACENTER_NAME) == null);
+    assertTrue("Response header should not contain tracking info",
+        restResponseChannel.getHeader(RestUtils.Headers.FRONTEND_NAME) == null);
+    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.setArg(RestUtils.InternalKeys.SEND_TRACKING_INFO, new Boolean(true));
+    restResponseChannel = new MockRestResponseChannel();
+    ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null, null);
+    assertEquals("Unexpected or missing tracking info", datacenterName,
+        restResponseChannel.getHeader(RestUtils.Headers.DATACENTER_NAME));
+    assertEquals("Unexpected or missing tracking info", hostname,
+        restResponseChannel.getHeader(RestUtils.Headers.FRONTEND_NAME));
   }
 
   /**
