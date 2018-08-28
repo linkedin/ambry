@@ -32,6 +32,7 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.Response;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
 import com.github.ambry.rest.RestMethod;
@@ -108,6 +109,8 @@ public class FrontendIntegrationTest {
   private static final FrontendConfig FRONTEND_CONFIG;
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
+  private static final String DATA_CENTER_NAME = "Datacenter-Name";
+  private static final String HOST_NAME = "localhost";
 
   static {
     try {
@@ -432,6 +435,7 @@ public class FrontendIntegrationTest {
     assertEquals("Unexpected value for " + HttpHeaderNames.ACCESS_CONTROL_MAX_AGE,
         FRONTEND_CONFIG.frontendOptionsValiditySeconds,
         Long.parseLong(response.headers().get(HttpHeaderNames.ACCESS_CONTROL_MAX_AGE)));
+    verifyTrackingHeaders(response);
   }
 
   // helpers
@@ -541,9 +545,9 @@ public class FrontendIntegrationTest {
     TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     // add key for singleKeyManagementService
     properties.put("kms.default.container.key", TestUtils.getRandomKey(32));
-    properties.setProperty("clustermap.cluster.name", "CLuster-Name");
-    properties.setProperty("clustermap.datacenter.name", "Datacenter-Name");
-    properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("clustermap.cluster.name", "Cluster-Name");
+    properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
+    properties.setProperty("clustermap.host.name", HOST_NAME);
     return new VerifiableProperties(properties);
   }
 
@@ -682,6 +686,7 @@ public class FrontendIntegrationTest {
     assertNotNull("Blob ID from POST should not be null", blobId);
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
     return blobId;
   }
 
@@ -750,6 +755,7 @@ public class FrontendIntegrationTest {
     byte[] responseContentArray = getContent(responseParts.queue, expectedContentArray.length).array();
     assertArrayEquals("GET content does not match original content", expectedContentArray, responseContentArray);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -883,6 +889,7 @@ public class FrontendIntegrationTest {
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -1003,6 +1010,7 @@ public class FrontendIntegrationTest {
     assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -1073,6 +1081,7 @@ public class FrontendIntegrationTest {
     assertTrue("No Date header", response.headers().get(HttpHeaderNames.DATE, null) != null);
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -1159,5 +1168,16 @@ public class FrontendIntegrationTest {
           "Should have received response. completion context: " + responseParts.completionContext);
     }
     return httpResponse;
+  }
+
+  /**
+   * Verify the tracking headers were attached to the response properly.
+   * @param response the {@link Response} to be verified.
+   */
+  private void verifyTrackingHeaders(HttpResponse response) {
+    Assert.assertEquals("Unexpected or missing tracking header for datacenter name", DATA_CENTER_NAME,
+        response.headers().get(RestUtils.Headers.DATACENTER_NAME));
+    Assert.assertEquals("Unexpected or missing tracking header for hostname", HOST_NAME,
+        response.headers().get(RestUtils.Headers.FRONTEND_NAME));
   }
 }
