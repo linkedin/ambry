@@ -32,7 +32,6 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.protocol.Response;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
 import com.github.ambry.rest.RestMethod;
@@ -1172,7 +1171,7 @@ public class FrontendIntegrationTest {
 
   /**
    * Verify the tracking headers were attached to the response properly.
-   * @param response the {@link Response} to be verified.
+   * @param response the {@link HttpResponse} to be verified.
    */
   private void verifyTrackingHeaders(HttpResponse response) {
     Assert.assertEquals("Unexpected or missing tracking header for datacenter name", DATA_CENTER_NAME,
