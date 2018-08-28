@@ -53,11 +53,17 @@ public class HelixClusterAggregator {
     Map<String, Long> partitionTimestampMap = new HashMap<>();
     StatsSnapshot rawPartitionSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
     for (Map.Entry<String, String> statsWrapperJSON : statsWrappersJSON.entrySet()) {
-      if (statsWrapperJSON != null) {
-        StatsWrapper snapshotWrapper = mapper.readValue(statsWrapperJSON.getValue(), StatsWrapper.class);
-        StatsWrapper snapshotWrapperCopy = mapper.readValue(statsWrapperJSON.getValue(), StatsWrapper.class);
-        combineRaw(rawPartitionSnapshot, snapshotWrapper);
-        combine(partitionSnapshot, snapshotWrapperCopy, statsWrapperJSON.getKey(), partitionTimestampMap);
+      if (statsWrapperJSON != null && statsWrapperJSON.getValue() != null) {
+        try {
+          StatsWrapper snapshotWrapper = mapper.readValue(statsWrapperJSON.getValue(), StatsWrapper.class);
+          StatsWrapper snapshotWrapperCopy = mapper.readValue(statsWrapperJSON.getValue(), StatsWrapper.class);
+
+          combineRaw(rawPartitionSnapshot, snapshotWrapper);
+          combine(partitionSnapshot, snapshotWrapperCopy, statsWrapperJSON.getKey(), partitionTimestampMap);
+        } catch (Exception e) {
+          logger.error("Exception occurred while processing stats from {} with the error message: {}",
+              statsWrapperJSON.getKey(), e);
+        }
       }
     }
     if (logger.isTraceEnabled()) {
