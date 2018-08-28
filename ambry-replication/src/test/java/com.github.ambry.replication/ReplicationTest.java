@@ -114,6 +114,18 @@ public class ReplicationTest {
   private static int CONSTANT_TIME_MS = 100000;
   private static long EXPIRY_TIME_MS = SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(7);
   private static long UPDATED_EXPIRY_TIME_MS = SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(14);
+  private final MockTime time = new MockTime();
+  private ReplicationConfig config;
+
+  /**
+   * Constructor to set the configs
+   */
+  public ReplicationTest() {
+    Properties properties = new Properties();
+    properties.setProperty("replication.synced.replica.backoff.duration.ms", "3000");
+    properties.setProperty("replication.replica.thread.throttle.sleep.duration.ms", "100");
+    config = new ReplicationConfig(new VerifiableProperties(properties));
+  }
 
   /**
    * Tests pausing all partitions and makes sure that the replica thread pauses. Also tests that it resumes when one
@@ -807,6 +819,75 @@ public class ReplicationTest {
     // 1 expired + 1 corrupt + 1 put (never present) + 1 deleted (never present) expected missing buffers
     verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
         idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex + 1, 4);
+
+    // tests to verify replica thread throttling and idling functions in the following steps:
+    // 1. all replicas are in sync, thread level sleep and replica quarantine are both enabled.
+    // 2. add put messages to some replica and verify that replication for replicas remain disabled.
+    // 3. forward the time so replication for replicas are re-enabled and check replication resumes.
+    // 4. add more put messages to ensure replication happens continuously when needed and is throttled appropriately.
+
+    // 1. verify that the replica thread sleeps and replicas are temporarily disable when all replicas are synced.
+    List<List<RemoteReplicaInfo>> replicasToReplicateList = new ArrayList<>(replicasToReplicate.values());
+    // replicate is called and time is moved forward to prepare the replicas for testing.
+    replicaThread.replicate(replicasToReplicateList);
+    time.sleep(config.replicationSyncedReplicaBackoffDurationMs + 1);
+    long currentTimeMs = time.milliseconds();
+    replicaThread.replicate(replicasToReplicateList);
+    for (List<RemoteReplicaInfo> replicaInfos : replicasToReplicateList) {
+      for (RemoteReplicaInfo replicaInfo : replicaInfos) {
+        assertEquals("Unexpected re-enable replication time",
+            currentTimeMs + config.replicationSyncedReplicaBackoffDurationMs, replicaInfo.getReEnableReplicationTime());
+      }
+    }
+    currentTimeMs = time.milliseconds();
+    replicaThread.replicate(replicasToReplicateList);
+    assertEquals("Replicas are in sync, replica thread should sleep by replication.thread.idle.sleep.duration.ms",
+        currentTimeMs + config.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
+
+    // 2. add 3 messages to a partition in the remote host only and verify replication for all replicas should be disabled.
+    PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
+    addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3);
+    int[] missingKeys = new int[replicasToReplicate.get(remoteHost.dataNodeId).size()];
+    for (int i = 0; i < missingKeys.length; i++) {
+      missingKeys[i] = replicasToReplicate.get(remoteHost.dataNodeId)
+          .get(i)
+          .getReplicaId()
+          .getPartitionId()
+          .isEqual(partitionId.toString()) ? 3 : 0;
+    }
+    currentTimeMs = time.milliseconds();
+    replicaThread.replicate(replicasToReplicateList);
+    assertEquals("Replication for all replicas should be disabled and the thread should sleep",
+        currentTimeMs + config.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
+    assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
+
+    // 3. forward the time and run replicate and verify the replication.
+    time.sleep(config.replicationSyncedReplicaBackoffDurationMs);
+    replicaThread.replicate(replicasToReplicateList);
+    missingKeys = new int[replicasToReplicate.get(remoteHost.dataNodeId).size()];
+    assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
+
+    // 4. add more put messages and verify that replication continues and is throttled appropriately.
+    addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(localHost, remoteHost), 3);
+    currentTimeMs = time.milliseconds();
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
+    assertEquals(
+        "Replica thread should sleep exactly replication.thread.throttle.sleep.duration.ms since remote has new token",
+        currentTimeMs + config.replicationReplicaThreadThrottleSleepDurationMs, time.milliseconds());
+
+    // verify that throttling on the replica thread is disabled when replication.thread.throttle.sleep.duration.ms is 0.
+    Properties properties = new Properties();
+    properties.setProperty("replication.thread.throttle.sleep.duration.ms", "0");
+    config = new ReplicationConfig(new VerifiableProperties(properties));
+    replicasAndThread = getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyFactory,
+        storeKeyConverter, transformer, null);
+    replicasToReplicateList = new ArrayList<>(replicasAndThread.getFirst().values());
+    replicaThread = replicasAndThread.getSecond();
+    currentTimeMs = time.milliseconds();
+    replicaThread.replicate(replicasToReplicateList);
+    assertEquals("Replica thread should not sleep when throttling is disabled and replicas are out of sync",
+        currentTimeMs, time.milliseconds());
   }
 
   /**
@@ -882,8 +963,6 @@ public class ReplicationTest {
   private Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> getRemoteReplicasAndReplicaThread(int batchSize,
       ClusterMap clusterMap, Host localHost, Host remoteHost, StoreKeyFactory storeKeyFactory,
       StoreKeyConverter storeKeyConverter, Transformer transformer, StoreEventListener listener) {
-    Properties properties = new Properties();
-    ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(properties));
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
@@ -896,7 +975,7 @@ public class ReplicationTest {
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
             storeKeyFactory, storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
     return new Pair<>(replicasToReplicate, replicaThread);
   }
 
@@ -955,6 +1034,27 @@ public class ReplicationTest {
           replicasToReplicate.get(remoteHost.dataNodeId).get(i).getToken());
     }
     return expectedIndex;
+  }
+
+  /**
+   * Asserts the number of missing keys between the local and remote replicas
+   * @param expectedMissingKeysSum the number of missing keys expected for each replica
+   * @param batchSize how large of a batch size the internal MockConnection will use for fixing missing store keys
+   * @param replicaThread replicaThread that will be performing replication
+   * @param remoteHost the remote host that keys are being pulled from
+   * @param replicasToReplicate list of replicas to replicate between
+   * @throws Exception
+   */
+  private void assertMissingKeys(int[] expectedMissingKeysSum, int batchSize, ReplicaThread replicaThread,
+      Host remoteHost, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {
+    List<ReplicaThread.ExchangeMetadataResponse> response =
+        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+            replicasToReplicate.get(remoteHost.dataNodeId));
+    assertEquals("Response should contain a response for each replica",
+        replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
+    for (int i = 0; i < response.size(); i++) {
+      assertEquals(expectedMissingKeysSum[i], response.get(i).missingStoreKeys.size());
+    }
   }
 
   /**

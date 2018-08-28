@@ -60,6 +60,27 @@ public class ReplicationConfig {
   public final int replicationTokenFlushDelaySeconds;
 
   /**
+   * The time to sleep between replication cycles to throttle the replica thread
+   */
+  @Config("replication.replica.thread.throttle.sleep.duration.ms")
+  @Default("0")
+  public final long replicationReplicaThreadThrottleSleepDurationMs;
+
+  /**
+   * The time to sleep between replication cycles when the replica thread is not doing any useful work
+   */
+  @Config("replication.replica.thread.idle.sleep.duration.ms")
+  @Default("1000")
+  public final long replicationReplicaThreadIdleSleepDurationMs;
+
+  /**
+   * The time to temporarily disable replication for a replica in order to reduce wasteful network calls
+   */
+  @Config("replication.synced.replica.backoff.duration.ms")
+  @Default("1000")
+  public final long replicationSyncedReplicaBackoffDurationMs;
+
+  /**
    * The fetch size is an approximate total size that a remote server would return on a fetch request.
    * This is not guaranteed to be always obeyed. For example, if a single blob is larger than the fetch size
    * the entire blob would be returned
@@ -82,6 +103,14 @@ public class ReplicationConfig {
         verifiableProperties.getIntInRange("replication.token.flush.interval.seconds", 300, 5, Integer.MAX_VALUE);
     replicationTokenFlushDelaySeconds =
         verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
+    replicationReplicaThreadThrottleSleepDurationMs =
+        verifiableProperties.getLongInRange("replication.replica.thread.throttle.sleep.duration.ms", 0, 0,
+            Long.MAX_VALUE);
+    replicationReplicaThreadIdleSleepDurationMs =
+        verifiableProperties.getLongInRange("replication.replica.thread.idle.sleep.duration.ms", 1000, 0,
+            Long.MAX_VALUE);
+    replicationSyncedReplicaBackoffDurationMs =
+        verifiableProperties.getLongInRange("replication.synced.replica.backoff.duration.ms", 1000, 0, Long.MAX_VALUE);
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
   }

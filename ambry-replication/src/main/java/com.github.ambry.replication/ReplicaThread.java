@@ -56,6 +56,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -105,6 +106,7 @@ class ReplicaThread implements Runnable {
   private final String datacenterName;
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition pauseCondition = lock.newCondition();
+  private final Time time;
 
   private volatile boolean allDisabled = false;
 
@@ -113,7 +115,7 @@ class ReplicaThread implements Runnable {
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
-      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler) {
+      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
     this.running = true;
@@ -132,6 +134,7 @@ class ReplicaThread implements Runnable {
     this.replicatingFromRemoteColo = !(dataNodeId.getDatacenterName().equals(datacenterName));
     this.replicatingOverSsl = replicatingOverSsl;
     this.datacenterName = datacenterName;
+    this.time = time;
     Set<PartitionId> partitions = new HashSet<>();
     for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : replicasToReplicateGroupedByNode.entrySet()) {
       for (RemoteReplicaInfo info : entry.getValue()) {
@@ -217,6 +220,7 @@ class ReplicaThread implements Runnable {
   void replicate(List<List<RemoteReplicaInfo>> replicasToReplicate) {
     // shuffle the nodes
     Collections.shuffle(replicasToReplicate);
+    boolean allCaughtUp = true;
     for (List<RemoteReplicaInfo> replicasToReplicatePerNode : replicasToReplicate) {
       if (!running) {
         break;
@@ -253,11 +257,13 @@ class ReplicaThread implements Runnable {
       List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<RemoteReplicaInfo>();
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-        if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown()) {
+        boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+        if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown() && !inBackoff) {
           activeReplicasPerNode.add(remoteReplicaInfo);
         }
       }
       if (activeReplicasPerNode.size() > 0) {
+        allCaughtUp = false;
         try {
           connectedChannel =
               connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
@@ -302,6 +308,20 @@ class ReplicaThread implements Runnable {
           context.stop();
           portTypeBasedContext.stop();
         }
+      }
+    }
+    long sleepDurationMs;
+    if (allCaughtUp) {
+      sleepDurationMs = replicationConfig.replicationReplicaThreadIdleSleepDurationMs;
+      replicationMetrics.replicaThreadIdleCount.inc();
+    } else {
+      sleepDurationMs = replicationConfig.replicationReplicaThreadThrottleSleepDurationMs;
+    }
+    if (sleepDurationMs > 0) {
+      try {
+        time.sleep(sleepDurationMs);
+      } catch (InterruptedException e) {
+        logger.error("Received interrupted exception during throttling", e);
       }
     }
   }
@@ -726,6 +746,11 @@ class ReplicaThread implements Runnable {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
+        if (remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
+          remoteReplicaInfo.setReEnableReplicationTime(
+              time.milliseconds() + replicationConfig.replicationSyncedReplicaBackoffDurationMs);
+          replicationMetrics.replicaSyncedBackoffCount.inc();
+        }
         if (exchangeMetadataResponse.missingStoreKeys.size() > 0) {
           PartitionResponseInfo partitionResponseInfo =
               getResponse.getPartitionResponseInfoList().get(partitionResponseInfoIndex);
