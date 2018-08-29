@@ -745,6 +745,7 @@ public class AmbryBlobStorageServiceTest {
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
             hostname);
+    ambryBlobStorageService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
     headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
@@ -766,6 +767,7 @@ public class AmbryBlobStorageServiceTest {
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
             hostname);
+    ambryBlobStorageService.start();
     // test good requests
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
       String[] parts = datanode.split(":");
@@ -943,7 +945,7 @@ public class AmbryBlobStorageServiceTest {
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
             hostname);
-
+    ambryBlobStorageService.start();
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getAllPartitionIds(null).get(0), false,
         BlobId.BlobDataType.DATACHUNK).getID();
@@ -1897,6 +1899,7 @@ public class AmbryBlobStorageServiceTest {
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
             hostname);
+    ambryBlobStorageService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {
         case HEAD:

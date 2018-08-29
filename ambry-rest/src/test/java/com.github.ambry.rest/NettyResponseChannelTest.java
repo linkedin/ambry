@@ -1114,48 +1114,18 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         restResponseChannel.onResponseComplete(null);
         break;
       case OnResponseCompleteWithRestException:
-        String errorCodeStr = (String) request.getArgs().get(REST_SERVICE_ERROR_CODE_HEADER_NAME);
-        boolean includeExceptionMessageInResponse =
-            request.getArgs().containsKey(INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME);
-        RestServiceErrorCode errorCode = RestServiceErrorCode.valueOf(errorCodeStr);
-        if (errorCode == RestServiceErrorCode.NotAllowed) {
-          restResponseChannel.setHeader(RestUtils.Headers.ALLOW, METHOD_NOT_ALLOWED_ALLOW_HEADER_VALUE);
-        }
-        restResponseChannel.onResponseComplete(
-            new RestServiceException(errorCodeStr, errorCode, includeExceptionMessageInResponse));
-        assertEquals("ResponseStatus does not reflect error", ResponseStatus.getResponseStatus(errorCode),
-            restResponseChannel.getStatus());
-        assertFalse("Request channel is not closed", request.isOpen());
+        onResponseCompleteWithRestException();
         break;
       case OnResponseCompleteWithNonRestException:
-        restResponseChannel.onResponseComplete(
-            new RuntimeException(TestingUri.OnResponseCompleteWithNonRestException.toString()));
-        assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
-            restResponseChannel.getStatus());
-        assertFalse("Request channel is not closed", request.isOpen());
+        onResponseCompleteWithNonRestException();
         break;
       case CopyHeadersAndOnResponseCompleteWithRestException:
         copyTrackingHeaders(httpRequest);
-        errorCodeStr = (String) request.getArgs().get(REST_SERVICE_ERROR_CODE_HEADER_NAME);
-        includeExceptionMessageInResponse =
-            request.getArgs().containsKey(INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME);
-        errorCode = RestServiceErrorCode.valueOf(errorCodeStr);
-        if (errorCode == RestServiceErrorCode.NotAllowed) {
-          restResponseChannel.setHeader(RestUtils.Headers.ALLOW, METHOD_NOT_ALLOWED_ALLOW_HEADER_VALUE);
-        }
-        restResponseChannel.onResponseComplete(
-            new RestServiceException(errorCodeStr, errorCode, includeExceptionMessageInResponse));
-        assertEquals("ResponseStatus does not reflect error", ResponseStatus.getResponseStatus(errorCode),
-            restResponseChannel.getStatus());
-        assertFalse("Request channel is not closed", request.isOpen());
+        onResponseCompleteWithRestException();
         break;
       case CopyHeadersAndOnResponseCompleteWithNonRestException:
         copyTrackingHeaders(httpRequest);
-        restResponseChannel.onResponseComplete(
-            new RuntimeException(TestingUri.OnResponseCompleteWithNonRestException.toString()));
-        assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
-            restResponseChannel.getStatus());
-        assertFalse("Request channel is not closed", request.isOpen());
+        onResponseCompleteWithNonRestException();
         break;
       case OnResponseCompleteWithEarlyClientTermination:
         restResponseChannel.onResponseComplete(Utils.convertToClientTerminationException(new Exception()));
@@ -1240,6 +1210,36 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         }
         break;
     }
+  }
+
+  /**
+   * Forces the response to complete with a Rest Exception for testing purpose.
+   * @throws RestServiceException
+   */
+  private void onResponseCompleteWithRestException() throws RestServiceException {
+    String errorCodeStr = (String) request.getArgs().get(REST_SERVICE_ERROR_CODE_HEADER_NAME);
+    boolean includeExceptionMessageInResponse =
+        request.getArgs().containsKey(INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME);
+    RestServiceErrorCode errorCode = RestServiceErrorCode.valueOf(errorCodeStr);
+    if (errorCode == RestServiceErrorCode.NotAllowed) {
+      restResponseChannel.setHeader(RestUtils.Headers.ALLOW, METHOD_NOT_ALLOWED_ALLOW_HEADER_VALUE);
+    }
+    restResponseChannel.onResponseComplete(
+        new RestServiceException(errorCodeStr, errorCode, includeExceptionMessageInResponse));
+    assertEquals("ResponseStatus does not reflect error", ResponseStatus.getResponseStatus(errorCode),
+        restResponseChannel.getStatus());
+    assertFalse("Request channel is not closed", request.isOpen());
+  }
+
+  /**
+   * Forces the response to complete with a non Rest Exception for testing purpose.
+   */
+  private void onResponseCompleteWithNonRestException() {
+    restResponseChannel.onResponseComplete(
+        new RuntimeException(TestingUri.OnResponseCompleteWithNonRestException.toString()));
+    assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
+        restResponseChannel.getStatus());
+    assertFalse("Request channel is not closed", request.isOpen());
   }
 
   /**
