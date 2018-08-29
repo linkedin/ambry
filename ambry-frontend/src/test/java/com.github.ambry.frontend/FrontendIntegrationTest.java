@@ -248,7 +248,6 @@ public class FrontendIntegrationTest {
     assertEquals("Unexpected response status", HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE, response.status());
     assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
     assertFalse("Channel should not be active", HttpUtil.isKeepAlive(response));
-    verifyTrackingHeaders(response);
   }
 
   /*
@@ -264,7 +263,6 @@ public class FrontendIntegrationTest {
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
-    verifyTrackingHeaders(response);
     final String expectedResponseBody = "GOOD";
     ByteBuffer content = getContent(responseParts.queue, expectedResponseBody.length());
     assertEquals("GET content does not match original content", expectedResponseBody, new String(content.array()));
