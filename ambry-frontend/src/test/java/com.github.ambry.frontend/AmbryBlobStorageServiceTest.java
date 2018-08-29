@@ -118,6 +118,8 @@ public class AmbryBlobStorageServiceTest {
   private final String referenceBlobIdStr;
   private final short blobIdVersion;
   private final UrlSigningService urlSigningService;
+  private final String datacenterName = "Data-Center";
+  private final String hostname = "localhost";
   private FrontendConfig frontendConfig;
   private VerifiableProperties verifiableProperties;
   private boolean shouldAllowServiceIdBasedPut = true;
@@ -335,6 +337,24 @@ public class AmbryBlobStorageServiceTest {
     } finally {
       responseHandler.start();
     }
+
+    // verify tracking infos are attached accordingly.
+    RestRequest restRequest;
+    MockRestResponseChannel restResponseChannel;
+    for (String header : RestUtils.TrackingHeaders.TRACKING_HEADERS) {
+      restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+      restResponseChannel = new MockRestResponseChannel();
+      ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null, null);
+      assertTrue("Response header should not contain tracking info", restResponseChannel.getHeader(header) == null);
+    }
+    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+    restRequest.setArg(RestUtils.InternalKeys.SEND_TRACKING_INFO, new Boolean(true));
+    restResponseChannel = new MockRestResponseChannel();
+    ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null, null);
+    assertEquals("Unexpected or missing tracking info", datacenterName,
+        restResponseChannel.getHeader(RestUtils.TrackingHeaders.DATACENTER_NAME));
+    assertEquals("Unexpected or missing tracking info", hostname,
+        restResponseChannel.getHeader(RestUtils.TrackingHeaders.FRONTEND_NAME));
   }
 
   /**
@@ -722,7 +742,8 @@ public class AmbryBlobStorageServiceTest {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
+            hostname);
     ambryBlobStorageService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
@@ -743,7 +764,8 @@ public class AmbryBlobStorageServiceTest {
     TailoredPeersClusterMap clusterMap = new TailoredPeersClusterMap();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
+            hostname);
     ambryBlobStorageService.start();
     // test good requests
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
@@ -920,9 +942,9 @@ public class AmbryBlobStorageServiceTest {
     testRouter.exceptionOpType = FrontendTestRouter.OpType.UpdateBlobTtl;
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
+            hostname);
     ambryBlobStorageService.start();
-
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getAllPartitionIds(null).get(0), false,
         BlobId.BlobDataType.DATACHUNK).getID();
@@ -1161,7 +1183,8 @@ public class AmbryBlobStorageServiceTest {
    */
   private AmbryBlobStorageService getAmbryBlobStorageService() {
     return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-        idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+        idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
+        hostname);
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -1785,7 +1808,8 @@ public class AmbryBlobStorageServiceTest {
       throws InstantiationException, JSONException {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            converterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+            converterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
+            hostname);
     ambryBlobStorageService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     doExternalServicesBadInputTest(restMethods, expectedExceptionMsg, false);
@@ -1815,7 +1839,8 @@ public class AmbryBlobStorageServiceTest {
       }
       ambryBlobStorageService =
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
-              clusterMap, idConverterFactory, securityFactory, urlSigningService, accountAndContainerInjector);
+              clusterMap, idConverterFactory, securityFactory, urlSigningService, accountAndContainerInjector,
+              datacenterName, hostname);
       ambryBlobStorageService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg,
           mode == FrontendTestSecurityServiceFactory.Mode.ProcessResponse);
@@ -1871,7 +1896,8 @@ public class AmbryBlobStorageServiceTest {
   private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector);
+            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
+            hostname);
     ambryBlobStorageService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {

@@ -461,6 +461,40 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Tests that tracking headers are copied over correctly for error responses.
+   */
+  @Test
+  public void errorResponseTrackingHeadersTest() {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    for (boolean shouldTrackingHeadersExist : new boolean[]{true, false}) {
+      TestingUri uri;
+      HttpHeaders httpHeaders;
+      HttpResponse response;
+      for (RestServiceErrorCode errorCode : RestServiceErrorCode.values()) {
+        httpHeaders = new DefaultHttpHeaders();
+        if (shouldTrackingHeadersExist) {
+          addTrackingHeaders(httpHeaders);
+        }
+        uri = shouldTrackingHeadersExist ? TestingUri.CopyHeadersAndOnResponseCompleteWithRestException
+            : TestingUri.OnResponseCompleteWithRestException;
+        httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, errorCode);
+        channel.writeInbound(RestTestUtils.createRequest(HttpMethod.HEAD, uri.toString(), httpHeaders));
+        response = channel.readOutbound();
+        verifyTrackingHeaders(response, shouldTrackingHeadersExist);
+      }
+      httpHeaders = new DefaultHttpHeaders();
+      if (shouldTrackingHeadersExist) {
+        addTrackingHeaders(httpHeaders);
+      }
+      uri = shouldTrackingHeadersExist ? TestingUri.CopyHeadersAndOnResponseCompleteWithNonRestException
+          : TestingUri.OnResponseCompleteWithNonRestException;
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.HEAD, uri.toString(), httpHeaders));
+      response = channel.readOutbound();
+      verifyTrackingHeaders(response, shouldTrackingHeadersExist);
+    }
+  }
+
+  /**
    * Tests keep-alive for different HTTP methods and error statuses.
    */
   @Test
@@ -836,6 +870,31 @@ public class NettyResponseChannelTest {
     }
     return channel;
   }
+
+  /**
+   * Add tracking headers to the {@link HttpHeaders}
+   * @param httpHeaders the {@link HttpHeaders} to be added with tracking headers
+   */
+  private void addTrackingHeaders(HttpHeaders httpHeaders) {
+    for (String header : RestUtils.TrackingHeaders.TRACKING_HEADERS) {
+      httpHeaders.set(header, header);
+    }
+  }
+
+  /**
+   * Verify tracking headers exist in the response when they are suppose to be and vice versa.
+   * @param response the {@link HttpResponse} that will have its headers checked.
+   * @param shouldTrackingHeadersExist the boolean indicating are tracking headers expected.
+   */
+  private void verifyTrackingHeaders(HttpResponse response, boolean shouldTrackingHeadersExist) {
+    for (String header : RestUtils.TrackingHeaders.TRACKING_HEADERS) {
+      if (shouldTrackingHeadersExist) {
+        assertEquals("Unexpected tracking header", header, response.headers().get(header));
+      } else {
+        assertFalse("Response should not contain any tracking headers", response.headers().contains(header));
+      }
+    }
+  }
 }
 
 /**
@@ -880,6 +939,12 @@ enum TestingUri {
    * immediately with a {@link RuntimeException} as {@code cause}. The exception message is the URI string.
    */
   OnResponseCompleteWithNonRestException, /**
+   * When this request is received tracking headers are copied over and then behaviors of OnResponseCompleteWithRestException is applied.
+   */
+  CopyHeadersAndOnResponseCompleteWithRestException, /**
+   * When this request is received tracking headers are copied over and then behaviors of OnResponseCompleteWithNonRestException is applied.
+   */
+  CopyHeadersAndOnResponseCompleteWithNonRestException, /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with an {@link IOException} with message {@link Utils#CLIENT_RESET_EXCEPTION_MSG}.
    */
@@ -1049,25 +1114,18 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         restResponseChannel.onResponseComplete(null);
         break;
       case OnResponseCompleteWithRestException:
-        String errorCodeStr = (String) request.getArgs().get(REST_SERVICE_ERROR_CODE_HEADER_NAME);
-        boolean includeExceptionMessageInResponse =
-            request.getArgs().containsKey(INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME);
-        RestServiceErrorCode errorCode = RestServiceErrorCode.valueOf(errorCodeStr);
-        if (errorCode == RestServiceErrorCode.NotAllowed) {
-          restResponseChannel.setHeader(RestUtils.Headers.ALLOW, METHOD_NOT_ALLOWED_ALLOW_HEADER_VALUE);
-        }
-        restResponseChannel.onResponseComplete(
-            new RestServiceException(errorCodeStr, errorCode, includeExceptionMessageInResponse));
-        assertEquals("ResponseStatus does not reflect error", ResponseStatus.getResponseStatus(errorCode),
-            restResponseChannel.getStatus());
-        assertFalse("Request channel is not closed", request.isOpen());
+        onResponseCompleteWithRestException();
         break;
       case OnResponseCompleteWithNonRestException:
-        restResponseChannel.onResponseComplete(
-            new RuntimeException(TestingUri.OnResponseCompleteWithNonRestException.toString()));
-        assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
-            restResponseChannel.getStatus());
-        assertFalse("Request channel is not closed", request.isOpen());
+        onResponseCompleteWithNonRestException();
+        break;
+      case CopyHeadersAndOnResponseCompleteWithRestException:
+        copyTrackingHeaders(httpRequest);
+        onResponseCompleteWithRestException();
+        break;
+      case CopyHeadersAndOnResponseCompleteWithNonRestException:
+        copyTrackingHeaders(httpRequest);
+        onResponseCompleteWithNonRestException();
         break;
       case OnResponseCompleteWithEarlyClientTermination:
         restResponseChannel.onResponseComplete(Utils.convertToClientTerminationException(new Exception()));
@@ -1155,6 +1213,36 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   }
 
   /**
+   * Forces the response to complete with a Rest Exception for testing purpose.
+   * @throws RestServiceException
+   */
+  private void onResponseCompleteWithRestException() throws RestServiceException {
+    String errorCodeStr = (String) request.getArgs().get(REST_SERVICE_ERROR_CODE_HEADER_NAME);
+    boolean includeExceptionMessageInResponse =
+        request.getArgs().containsKey(INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME);
+    RestServiceErrorCode errorCode = RestServiceErrorCode.valueOf(errorCodeStr);
+    if (errorCode == RestServiceErrorCode.NotAllowed) {
+      restResponseChannel.setHeader(RestUtils.Headers.ALLOW, METHOD_NOT_ALLOWED_ALLOW_HEADER_VALUE);
+    }
+    restResponseChannel.onResponseComplete(
+        new RestServiceException(errorCodeStr, errorCode, includeExceptionMessageInResponse));
+    assertEquals("ResponseStatus does not reflect error", ResponseStatus.getResponseStatus(errorCode),
+        restResponseChannel.getStatus());
+    assertFalse("Request channel is not closed", request.isOpen());
+  }
+
+  /**
+   * Forces the response to complete with a non Rest Exception for testing purpose.
+   */
+  private void onResponseCompleteWithNonRestException() {
+    restResponseChannel.onResponseComplete(
+        new RuntimeException(TestingUri.OnResponseCompleteWithNonRestException.toString()));
+    assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
+        restResponseChannel.getStatus());
+    assertFalse("Request channel is not closed", request.isOpen());
+  }
+
+  /**
    * Handles a {@link HttpContent}. Checks state and echoes back the content.
    * @param httpContent the {@link HttpContent} that needs to be handled.
    * @throws Exception
@@ -1234,6 +1322,16 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     restResponseChannel.setHeader(CUSTOM_HEADER_NAME, httpRequest.headers().get(CUSTOM_HEADER_NAME));
     assertEquals("Value of [" + CUSTOM_HEADER_NAME + "] differs from what was set",
         httpRequest.headers().get(CUSTOM_HEADER_NAME), restResponseChannel.getHeader(CUSTOM_HEADER_NAME));
+  }
+
+  /**
+   * Copies tracking headers from request to response.
+   * @param httpRequest the {@link HttpRequest} to copy headers from.
+   */
+  private void copyTrackingHeaders(HttpRequest httpRequest) throws RestServiceException {
+    for (String header : RestUtils.TrackingHeaders.TRACKING_HEADERS) {
+      restResponseChannel.setHeader(header, httpRequest.headers().get(header));
+    }
   }
 
   /**

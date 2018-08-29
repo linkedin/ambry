@@ -107,6 +107,13 @@ public class FrontendConfig {
   public final boolean frontendAllowServiceIdBasedPostRequest;
 
   /**
+   * Boolean indicator to specify if tracking information should be attached to responses.
+   */
+  @Config("frontend.attach.tracking.info")
+  @Default("true")
+  public final boolean frontendAttachTrackingInfo;
+
+  /**
    * The various endpoints for signed URLs, in JSON string.
    */
   @Config(URL_SIGNER_ENDPOINTS)
@@ -172,6 +179,7 @@ public class FrontendConfig {
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
     frontendAllowServiceIdBasedPostRequest =
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
+    frontendAttachTrackingInfo = verifiableProperties.getBoolean("frontend.attach.tracking.info", true);
     frontendUrlSignerEndpoints = verifiableProperties.getString(URL_SIGNER_ENDPOINTS, DEFAULT_ENDPOINTS_STRING);
     frontendUrlSignerDefaultMaxUploadSizeBytes =
         verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,

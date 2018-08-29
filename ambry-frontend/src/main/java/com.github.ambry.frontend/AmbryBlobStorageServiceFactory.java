@@ -15,8 +15,8 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
-import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.BlobStorageServiceFactory;
@@ -39,6 +39,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
   private final FrontendMetrics frontendMetrics;
   private final VerifiableProperties verifiableProperties;
   private final ClusterMap clusterMap;
+  private final ClusterMapConfig clusterMapConfig;
   private final RestResponseHandler responseHandler;
   private final Router router;
   private final AccountService accountService;
@@ -61,6 +62,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
     this.responseHandler = Objects.requireNonNull(responseHandler, "Provided RestResponseHandler is null");
     this.router = Objects.requireNonNull(router, "Provided Router is null");
     this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
+    clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     frontendConfig = new FrontendConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
     logger.trace("Instantiated AmbryBlobStorageServiceFactory");
@@ -87,9 +89,9 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, accountAndContainerInjector);
-      return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler,
-          router, clusterMap, idConverterFactory, securityServiceFactory, urlSigningService,
-          accountAndContainerInjector);
+      return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
+          idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector,
+          clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate AmbryBlobStorageService", e);
     }

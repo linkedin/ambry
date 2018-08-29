@@ -101,7 +101,8 @@ public class AmbrySecurityServiceTest {
   @Test
   public void preProcessRequestTest() throws Exception {
     RestMethod[] methods =
-        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS, RestMethod.PUT};
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS,
+            RestMethod.PUT};
     for (RestMethod restMethod : methods) {
       // add a header that is prohibited
       JSONObject headers = new JSONObject();
@@ -116,6 +117,21 @@ public class AmbrySecurityServiceTest {
         Assert.assertEquals("Should be a bad request", RestServiceErrorCode.BadRequest, rse.getErrorCode());
       }
     }
+    // verify request args regarding to tracking is set accordingly
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null);
+    securityService.preProcessRequest(restRequest).get();
+    Assert.assertTrue("The arg with key: ambry-internal-keys-send-tracking-info should be set to true",
+        (Boolean) restRequest.getArgs().get(RestUtils.InternalKeys.SEND_TRACKING_INFO));
+    Properties properties = new Properties();
+    properties.setProperty("frontend.attach.tracking.info", "false");
+    FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(properties));
+    SecurityService securityServiceWithTrackingDisabled =
+        new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry()),
+            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService());
+    restRequest = createRestRequest(RestMethod.GET, "/", null);
+    securityServiceWithTrackingDisabled.preProcessRequest(restRequest);
+    Assert.assertFalse("The arg with key: ambry-internal-keys-send-tracking-info should be set to false",
+        (Boolean) restRequest.getArgs().get(RestUtils.InternalKeys.SEND_TRACKING_INFO));
   }
 
   /**
@@ -133,7 +149,8 @@ public class AmbrySecurityServiceTest {
 
     // without callbacks
     RestMethod[] methods =
-        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS, RestMethod.PUT};
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS,
+            RestMethod.PUT};
     for (RestMethod restMethod : methods) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
       securityService.preProcessRequest(restRequest).get();

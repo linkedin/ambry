@@ -77,6 +77,8 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final UrlSigningService urlSigningService;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
+  private final String datacenterName;
+  private final String hostname;
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
   private GetPeersHandler getPeersHandler;
@@ -100,7 +102,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
       SecurityServiceFactory securityServiceFactory, UrlSigningService urlSigningService,
-      AccountAndContainerInjector accountAndContainerInjector) {
+      AccountAndContainerInjector accountAndContainerInjector, String datacenterName, String hostname) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
@@ -110,6 +112,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.securityServiceFactory = securityServiceFactory;
     this.urlSigningService = urlSigningService;
     this.accountAndContainerInjector = accountAndContainerInjector;
+    this.datacenterName = datacenterName;
+    this.hostname = hostname;
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
     logger.trace("Instantiated AmbryBlobStorageService");
   }
@@ -358,6 +362,11 @@ class AmbryBlobStorageService implements BlobStorageService {
   void submitResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
       ReadableStreamChannel responseBody, Exception exception) {
     try {
+      if (restRequest.getArgs().containsKey(InternalKeys.SEND_TRACKING_INFO) && (Boolean) restRequest.getArgs()
+          .get(InternalKeys.SEND_TRACKING_INFO)) {
+        restResponseChannel.setHeader(TrackingHeaders.DATACENTER_NAME, datacenterName);
+        restResponseChannel.setHeader(TrackingHeaders.FRONTEND_NAME, hostname);
+      }
       if (exception != null && exception instanceof RouterException) {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));

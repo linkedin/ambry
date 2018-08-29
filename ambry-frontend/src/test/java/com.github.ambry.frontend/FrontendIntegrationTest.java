@@ -108,6 +108,8 @@ public class FrontendIntegrationTest {
   private static final FrontendConfig FRONTEND_CONFIG;
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
+  private static final String DATA_CENTER_NAME = "Datacenter-Name";
+  private static final String HOST_NAME = "localhost";
 
   static {
     try {
@@ -286,6 +288,7 @@ public class FrontendIntegrationTest {
       ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
       HttpResponse response = getHttpResponse(responseParts);
       assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+      verifyTrackingHeaders(response);
       ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
       JSONObject responseJson = new JSONObject(new String(content.array()));
       String returnedReplicasStr = responseJson.get(GetReplicasHandler.REPLICAS_KEY).toString().replace("\"", "");
@@ -319,6 +322,7 @@ public class FrontendIntegrationTest {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, headers, null);
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
+    verifyTrackingHeaders(response);
     assertNotNull("There should be a response from the server", response);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
@@ -347,6 +351,7 @@ public class FrontendIntegrationTest {
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
     String signedGetUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed GET URL", signedGetUrl);
     discardContent(responseParts.queue, 1);
@@ -385,6 +390,7 @@ public class FrontendIntegrationTest {
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
     String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed POST URL", signedPostUrl);
     discardContent(responseParts.queue, 1);
@@ -432,6 +438,7 @@ public class FrontendIntegrationTest {
     assertEquals("Unexpected value for " + HttpHeaderNames.ACCESS_CONTROL_MAX_AGE,
         FRONTEND_CONFIG.frontendOptionsValiditySeconds,
         Long.parseLong(response.headers().get(HttpHeaderNames.ACCESS_CONTROL_MAX_AGE)));
+    verifyTrackingHeaders(response);
   }
 
   // helpers
@@ -541,6 +548,9 @@ public class FrontendIntegrationTest {
     TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     // add key for singleKeyManagementService
     properties.put("kms.default.container.key", TestUtils.getRandomKey(32));
+    properties.setProperty("clustermap.cluster.name", "Cluster-Name");
+    properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
+    properties.setProperty("clustermap.host.name", HOST_NAME);
     return new VerifiableProperties(properties);
   }
 
@@ -679,6 +689,7 @@ public class FrontendIntegrationTest {
     assertNotNull("Blob ID from POST should not be null", blobId);
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
     return blobId;
   }
 
@@ -747,6 +758,7 @@ public class FrontendIntegrationTest {
     byte[] responseContentArray = getContent(responseParts.queue, expectedContentArray.length).array();
     assertArrayEquals("GET content does not match original content", expectedContentArray, responseContentArray);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -774,6 +786,7 @@ public class FrontendIntegrationTest {
     assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     assertNull("Content-Type should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
+    verifyTrackingHeaders(response);
     verifyCacheHeaders(isPrivate, response);
     assertNoContent(responseParts.queue);
   }
@@ -798,6 +811,7 @@ public class FrontendIntegrationTest {
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
     checkCommonGetHeadHeaders(response.headers());
     verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts.queue);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
@@ -827,6 +841,7 @@ public class FrontendIntegrationTest {
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     checkCommonGetHeadHeaders(response.headers());
+    verifyTrackingHeaders(response);
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts.queue);
@@ -880,6 +895,7 @@ public class FrontendIntegrationTest {
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -1000,6 +1016,7 @@ public class FrontendIntegrationTest {
     assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -1070,6 +1087,7 @@ public class FrontendIntegrationTest {
     assertTrue("No Date header", response.headers().get(HttpHeaderNames.DATE, null) != null);
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -1156,5 +1174,16 @@ public class FrontendIntegrationTest {
           "Should have received response. completion context: " + responseParts.completionContext);
     }
     return httpResponse;
+  }
+
+  /**
+   * Verify the tracking headers were attached to the response properly.
+   * @param response the {@link HttpResponse} to be verified.
+   */
+  private void verifyTrackingHeaders(HttpResponse response) {
+    Assert.assertEquals("Unexpected or missing tracking header for datacenter name", DATA_CENTER_NAME,
+        response.headers().get(RestUtils.TrackingHeaders.DATACENTER_NAME));
+    Assert.assertEquals("Unexpected or missing tracking header for hostname", HOST_NAME,
+        response.headers().get(RestUtils.TrackingHeaders.FRONTEND_NAME));
   }
 }
