@@ -61,8 +61,7 @@ public class HelixClusterAggregator {
           combineRaw(rawPartitionSnapshot, snapshotWrapper);
           combine(partitionSnapshot, snapshotWrapperCopy, statsWrapperJSON.getKey(), partitionTimestampMap);
         } catch (Exception e) {
-          logger.error("Exception occurred while processing stats from {} with the error message: {}",
-              statsWrapperJSON.getKey(), e);
+          logger.error("Exception occurred while processing stats from {}", statsWrapperJSON.getKey(), e);
         }
       }
     }
