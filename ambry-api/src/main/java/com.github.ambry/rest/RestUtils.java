@@ -264,9 +264,9 @@ public class RestUtils {
     public final static String KEEP_ALIVE_ON_ERROR_HINT = KEY_PREFIX + "keep-alive-on-error-hint";
 
     /**
-     * To be set if tracking info should be attached to frontend responses.
+     * To be set to {@code true} if tracking info should be attached to frontend responses.
      */
-    public final static String SEND_TRACKING_INFO = "ambry-internal-keys-send-tracking-info";
+    public final static String SEND_TRACKING_INFO = KEY_PREFIX + "ambry-internal-keys-send-tracking-info";
   }
 
   /**

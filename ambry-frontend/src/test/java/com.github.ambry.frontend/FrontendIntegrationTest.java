@@ -248,6 +248,7 @@ public class FrontendIntegrationTest {
     assertEquals("Unexpected response status", HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE, response.status());
     assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
     assertFalse("Channel should not be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /*
@@ -263,6 +264,7 @@ public class FrontendIntegrationTest {
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
     final String expectedResponseBody = "GOOD";
     ByteBuffer content = getContent(responseParts.queue, expectedResponseBody.length());
     assertEquals("GET content does not match original content", expectedResponseBody, new String(content.array()));
@@ -288,6 +290,7 @@ public class FrontendIntegrationTest {
       ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
       HttpResponse response = getHttpResponse(responseParts);
       assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+      verifyTrackingHeaders(response);
       ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
       JSONObject responseJson = new JSONObject(new String(content.array()));
       String returnedReplicasStr = responseJson.get(GetReplicasHandler.REPLICAS_KEY).toString().replace("\"", "");
@@ -321,6 +324,7 @@ public class FrontendIntegrationTest {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, headers, null);
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
+    verifyTrackingHeaders(response);
     assertNotNull("There should be a response from the server", response);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
@@ -349,6 +353,7 @@ public class FrontendIntegrationTest {
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
     String signedGetUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed GET URL", signedGetUrl);
     discardContent(responseParts.queue, 1);
@@ -387,6 +392,7 @@ public class FrontendIntegrationTest {
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
     String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed POST URL", signedPostUrl);
     discardContent(responseParts.queue, 1);
@@ -782,6 +788,7 @@ public class FrontendIntegrationTest {
     assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     assertNull("Content-Type should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
+    verifyTrackingHeaders(response);
     verifyCacheHeaders(isPrivate, response);
     assertNoContent(responseParts.queue);
   }
@@ -806,6 +813,7 @@ public class FrontendIntegrationTest {
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
     checkCommonGetHeadHeaders(response.headers());
     verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts.queue);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
@@ -835,6 +843,7 @@ public class FrontendIntegrationTest {
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     checkCommonGetHeadHeaders(response.headers());
+    verifyTrackingHeaders(response);
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts.queue);

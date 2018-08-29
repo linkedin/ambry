@@ -179,8 +179,7 @@ public class FrontendConfig {
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
     frontendAllowServiceIdBasedPostRequest =
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
-    frontendAttachTrackingInfo =
-        verifiableProperties.getBoolean("frontend.attach.tracking.info", true);
+    frontendAttachTrackingInfo = verifiableProperties.getBoolean("frontend.attach.tracking.info", true);
     frontendUrlSignerEndpoints = verifiableProperties.getString(URL_SIGNER_ENDPOINTS, DEFAULT_ENDPOINTS_STRING);
     frontendUrlSignerDefaultMaxUploadSizeBytes =
         verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,

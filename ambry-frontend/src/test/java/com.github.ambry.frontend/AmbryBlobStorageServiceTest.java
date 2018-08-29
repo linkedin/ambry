@@ -345,8 +345,7 @@ public class AmbryBlobStorageServiceTest {
       restRequest = createRestRequest(RestMethod.GET, "/", null, null);
       restResponseChannel = new MockRestResponseChannel();
       ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null, null);
-      assertTrue("Response header should not contain tracking info",
-          restResponseChannel.getHeader(header) == null);
+      assertTrue("Response header should not contain tracking info", restResponseChannel.getHeader(header) == null);
     }
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restRequest.setArg(RestUtils.InternalKeys.SEND_TRACKING_INFO, new Boolean(true));
