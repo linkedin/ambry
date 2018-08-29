@@ -1175,8 +1175,8 @@ public class FrontendIntegrationTest {
    */
   private void verifyTrackingHeaders(HttpResponse response) {
     Assert.assertEquals("Unexpected or missing tracking header for datacenter name", DATA_CENTER_NAME,
-        response.headers().get(RestUtils.Headers.DATACENTER_NAME));
+        response.headers().get(RestUtils.TrackingHeaders.DATACENTER_NAME));
     Assert.assertEquals("Unexpected or missing tracking header for hostname", HOST_NAME,
-        response.headers().get(RestUtils.Headers.FRONTEND_NAME));
+        response.headers().get(RestUtils.TrackingHeaders.FRONTEND_NAME));
   }
 }

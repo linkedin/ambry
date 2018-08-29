@@ -364,8 +364,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     try {
       if (restRequest.getArgs().containsKey(InternalKeys.SEND_TRACKING_INFO) && (Boolean) restRequest.getArgs()
           .get(InternalKeys.SEND_TRACKING_INFO)) {
-        restResponseChannel.setHeader(Headers.DATACENTER_NAME, datacenterName);
-        restResponseChannel.setHeader(Headers.FRONTEND_NAME, hostname);
+        restResponseChannel.setHeader(TrackingHeaders.DATACENTER_NAME, datacenterName);
+        restResponseChannel.setHeader(TrackingHeaders.FRONTEND_NAME, hostname);
       }
       if (exception != null && exception instanceof RouterException) {
         exception = new RestServiceException(exception,

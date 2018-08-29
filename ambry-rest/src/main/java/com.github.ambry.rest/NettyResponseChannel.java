@@ -428,13 +428,10 @@ class NettyResponseChannel implements RestResponseChannel {
    * @param targetResponse the target response that the tracking headers will be copied over.
    */
   private void copyTrackingHeaders(HttpResponse sourceResponse, HttpResponse targetResponse) {
-    if (sourceResponse.headers().contains(RestUtils.Headers.DATACENTER_NAME)) {
-      targetResponse.headers()
-          .set(RestUtils.Headers.DATACENTER_NAME, sourceResponse.headers().get(RestUtils.Headers.DATACENTER_NAME));
-    }
-    if (sourceResponse.headers().contains(RestUtils.Headers.FRONTEND_NAME)) {
-      targetResponse.headers()
-          .set(RestUtils.Headers.FRONTEND_NAME, sourceResponse.headers().get(RestUtils.Headers.FRONTEND_NAME));
+    for (String header : RestUtils.TrackingHeaders.TRACKING_HEADERS) {
+      if (sourceResponse.headers().contains(header)) {
+        targetResponse.headers().set(header, sourceResponse.headers().get(header));
+      }
     }
   }
 

@@ -23,10 +23,12 @@ import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -201,11 +203,36 @@ public class RestUtils {
     /**
      * Response header for the name of the datacenter that the responding frontend belongs to.
      */
+  }
+
+  public static final class TrackingHeaders {
+
+    /**
+     * Response header for the the name of the datacenter that the frontend responding belongs to.
+     */
     public static final String DATACENTER_NAME = "x-ambry-datacenter";
     /**
      * Response header for the hostname of the responding frontend.
      */
     public static final String FRONTEND_NAME = "x-ambry-frontend";
+    /**
+     * A list of all tracking headers.
+     */
+    public static final List<String> TRACKING_HEADERS;
+
+    static {
+      Field[] fields = RestUtils.TrackingHeaders.class.getDeclaredFields();
+      TRACKING_HEADERS = new ArrayList<>(fields.length);
+      try {
+        for (Field field : fields) {
+          if (field.getType() == String.class) {
+            TRACKING_HEADERS.add(field.get(null).toString());
+          }
+        }
+      } catch (IllegalAccessException e) {
+        throw new IllegalStateException("Could not get values of the tracking headers", e);
+      }
+    }
   }
 
   /**
