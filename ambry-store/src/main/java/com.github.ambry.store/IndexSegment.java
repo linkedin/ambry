@@ -89,7 +89,7 @@ class IndexSegment {
   private final File indexFile;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final AtomicBoolean mapped = new AtomicBoolean(false);
-  private final AtomicBoolean immutable = new AtomicBoolean(false);
+  private final AtomicBoolean sealed = new AtomicBoolean(false);
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final AtomicLong sizeWritten = new AtomicLong(0);
   private final StoreKeyFactory factory;
@@ -146,7 +146,7 @@ class IndexSegment {
    * Initializes an existing segment. Memory maps the segment or reads the segment into memory. Also reads the
    * persisted bloom filter from disk.
    * @param indexFile The index file that the segment needs to be initialized from
-   * @param immutable Indicates that the segment is immutable
+   * @param sealed Indicates that the segment is sealed
    * @param factory The store key factory used to create new store keys
    * @param config The store config used to initialize the index segment
    * @param metrics The store metrics used to track metrics
@@ -154,7 +154,7 @@ class IndexSegment {
    * @param time the {@link Time} instance to use
    * @throws StoreException
    */
-  IndexSegment(File indexFile, boolean immutable, StoreKeyFactory factory, StoreConfig config, StoreMetrics metrics,
+  IndexSegment(File indexFile, boolean sealed, StoreKeyFactory factory, StoreConfig config, StoreMetrics metrics,
       Journal journal, Time time) throws StoreException {
     try {
       this.config = config;
@@ -162,12 +162,12 @@ class IndexSegment {
       this.factory = factory;
       this.metrics = metrics;
       this.time = time;
-      this.immutable.set(immutable);
+      this.sealed.set(sealed);
       startOffset = getIndexSegmentStartOffset(indexFile.getName());
       endOffset = new AtomicReference<>(startOffset);
       indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix(startOffset);
       bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
-      if (immutable && !config.storeKeepIndexInMemory) {
+      if (sealed && !config.storeKeepIndexInMemory) {
         map();
         if (!bloomFile.exists()) {
           generateBloomFilterAndPersist();
@@ -189,15 +189,15 @@ class IndexSegment {
           stream.close();
         }
       } else {
-        index = immutable ? new TreeMap<>() : new ConcurrentSkipListMap<>();
-        if (!immutable) {
+        index = sealed ? new TreeMap<>() : new ConcurrentSkipListMap<>();
+        if (!sealed) {
           bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
               config.storeIndexBloomMaxFalsePositiveProbability);
         }
         try {
           readFromFile(indexFile, journal);
         } catch (StoreException e) {
-          if (!immutable && (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure
+          if (!sealed && (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure
               || e.getErrorCode() == StoreErrorCodes.Index_Version_Error)) {
             // we just log the error here and retain the index so far created.
             // subsequent recovery process will add the missed out entries
@@ -207,7 +207,7 @@ class IndexSegment {
             throw e;
           }
         }
-        if (immutable) {
+        if (sealed) {
           index = Collections.unmodifiableNavigableMap(index);
         }
       }
@@ -234,7 +234,6 @@ class IndexSegment {
   }
 
   /**
-   * The end offset that this segment represents
    * @return The end offset that this segment represents
    */
   Offset getEndOffset() {
@@ -242,15 +241,13 @@ class IndexSegment {
   }
 
   /**
-   * Returns if this segment is immutable or not
    * @return {@code true}, if the segment is sealed
    */
-  boolean isImmutable() {
-    return immutable.get();
+  boolean isSealed() {
+    return sealed.get();
   }
 
   /**
-   * The underlying file that this segment represents
    * @return The file that this segment represents
    */
   File getFile() {
@@ -258,7 +255,6 @@ class IndexSegment {
   }
 
   /**
-   * The persisted entry size of this segment
    * @return The persisted entry size of this segment
    */
   int getPersistedEntrySize() {
@@ -266,7 +262,6 @@ class IndexSegment {
   }
 
   /**
-   * The value size in this segment
    * @return The value size in this segment
    */
   int getValueSize() {
@@ -274,7 +269,6 @@ class IndexSegment {
   }
 
   /**
-   * The time of last modification of this segment in ms
    * @return The time in ms of the last modification of this segment.
    */
   long getLastModifiedTimeMs() {
@@ -282,7 +276,6 @@ class IndexSegment {
   }
 
   /**
-   * The time of last modification of this segment in secs
    * @return The time in secs of the last modification of this segment.
    */
   long getLastModifiedTimeSecs() {
@@ -290,15 +283,13 @@ class IndexSegment {
   }
 
   /**
-   * Sets the last modified time (secs) of this segment.
-   * @param lastModifiedTimeSec the value to set to (secs).
+   * @param lastModifiedTimeSec the value to set last modified time to (secs).
    */
   void setLastModifiedTimeSecs(long lastModifiedTimeSec) {
     this.lastModifiedTimeSec.set(lastModifiedTimeSec);
   }
 
   /**
-   * The version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
    * @return the version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
    */
   short getVersion() {
@@ -306,7 +297,6 @@ class IndexSegment {
   }
 
   /**
-   * The resetKey for the index segment.
    * @return the reset key for the index segment which is a {@link Pair} of StoreKey and
    * {@link PersistentIndex.IndexEntryType}
    */
@@ -487,8 +477,8 @@ class IndexSegment {
   void addEntry(IndexEntry entry, Offset fileEndOffset) throws StoreException {
     try {
       rwLock.readLock().lock();
-      if (immutable.get()) {
-        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " cannot add to an immutable index ",
+      if (sealed.get()) {
+        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " cannot add to a sealed index ",
             StoreErrorCodes.Illegal_Index_Operation);
       }
       logger.trace("IndexSegment {} inserting key - {} value - offset {} size {} ttl {} "
@@ -543,8 +533,8 @@ class IndexSegment {
   long getSizeWritten() {
     try {
       rwLock.readLock().lock();
-      if (immutable.get()) {
-        throw new UnsupportedOperationException("Operation supported only on mutable indexes");
+      if (sealed.get()) {
+        throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed");
       }
       return sizeWritten.get();
     } finally {
@@ -559,8 +549,8 @@ class IndexSegment {
   int getNumberOfItems() {
     try {
       rwLock.readLock().lock();
-      if (immutable.get()) {
-        throw new UnsupportedOperationException("Operation supported only on mutable indexes");
+      if (sealed.get()) {
+        throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed");
       }
       return numberOfItems.get();
     } finally {
@@ -635,8 +625,8 @@ class IndexSegment {
    * @throws StoreException
    */
   void writeIndexSegmentToFile(Offset safeEndPoint) throws IOException, StoreException {
-    if (immutable.get()) {
-      throw new StoreException("Cannot persist an immutable index segment", StoreErrorCodes.Illegal_Index_Operation);
+    if (sealed.get()) {
+      throw new StoreException("Cannot persist sealed index segment", StoreErrorCodes.Illegal_Index_Operation);
     }
     if (safeEndPoint.compareTo(startOffset) <= 0) {
       return;
@@ -707,12 +697,12 @@ class IndexSegment {
   }
 
   /**
-   * Marks the segment as immutable. Optionally, it also persist the bloom filter to disk
+   * Marks the segment as sealed. Optionally, it also persist the bloom filter to disk
    * @throws IOException if there is any problem with I/O
    * @throws StoreException if there are problems with the index
    */
   void seal() throws IOException, StoreException {
-    if (immutable.compareAndSet(false, true)) {
+    if (sealed.compareAndSet(false, true)) {
       if (!config.storeKeepIndexInMemory) {
         map();
       }
@@ -846,8 +836,8 @@ class IndexSegment {
           index.computeIfAbsent(key, k -> new ConcurrentSkipListSet<>()).add(blobValue);
           logger.trace("IndexSegment : {} putting key {} in index offset {} size {}", indexFile.getAbsolutePath(), key,
               blobValue.getOffset(), blobValue.getSize());
-          if (!immutable.get()) {
-            // regenerate the bloom filter for mutable indexes
+          if (!sealed.get()) {
+            // regenerate the bloom filter for index segments that are not sealed
             if (!isPresent) {
               bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
             }
@@ -885,7 +875,7 @@ class IndexSegment {
         valueSize = VALUE_SIZE_INVALID_VALUE;
         endOffset.set(startOffset);
         index.clear();
-        if (!immutable.get()) {
+        if (!sealed.get()) {
           bloomFilter.clear();
         }
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",

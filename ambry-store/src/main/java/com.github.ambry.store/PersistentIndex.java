@@ -188,11 +188,11 @@ class PersistentIndex {
     try {
       journal.startBootstrap();
       for (int i = 0; i < indexFiles.size(); i++) {
-        // We mark as immutable all the index segments except the most recent index segment.
+        // We mark as sealed all the index segments except the most recent index segment.
         // The recent index segment would go through recovery after they have been
         // read into memory
-        boolean immutable = i < indexFiles.size() - 1;
-        IndexSegment info = new IndexSegment(indexFiles.get(i), immutable, factory, config, metrics, journal, time);
+        boolean sealed = i < indexFiles.size() - 1;
+        IndexSegment info = new IndexSegment(indexFiles.get(i), sealed, factory, config, metrics, journal, time);
         logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
             indexFiles.get(i), info.getStartOffset(), info.getEndOffset());
         validIndexSegments.put(info.getStartOffset(), info);
@@ -1637,7 +1637,7 @@ class PersistentIndex {
           IndexSegment prevInfo = prevEntry != null ? prevEntry.getValue() : null;
           List<IndexSegment> prevInfosToWrite = new ArrayList<>();
           Offset currentLogEndPointer = log.getEndOffset();
-          while (prevInfo != null && !prevInfo.isImmutable()) {
+          while (prevInfo != null && !prevInfo.isSealed()) {
             if (prevInfo.getEndOffset().compareTo(currentLogEndPointer) > 0) {
               String message = "The read only index cannot have a file end pointer " + prevInfo.getEndOffset()
                   + " greater than the log end offset " + currentLogEndPointer;

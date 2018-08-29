@@ -1424,8 +1424,8 @@ public class BlobStoreCompactorTest {
       Offset indexSegmentStartOffset = indexSegmentEntry.getKey();
       assertTrue("Index segment does not refer to any active log segments",
           allSegmentNames.contains(indexSegmentEntry.getKey().getName()));
-      assertEquals("Index segment mutable state not as expected",
-          !indexSegmentStartOffset.equals(lastIndexSegmentStartOffset), indexSegmentEntry.getValue().isImmutable());
+      assertEquals("Index segment sealed state not as expected",
+          !indexSegmentStartOffset.equals(lastIndexSegmentStartOffset), indexSegmentEntry.getValue().isSealed());
     }
     // verify sanity of compacted index
     state.verifyRealIndexSanity();

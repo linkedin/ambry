@@ -275,10 +275,10 @@ public class IndexSegmentTest {
     indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 3150));
     indexSegment.seal();
     List<IndexEntry> entries = new ArrayList<>();
-    for (boolean immutable : new boolean[]{false, true}) {
+    for (boolean sealed : new boolean[]{false, true}) {
       Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
       IndexSegment fromDisk =
-          new IndexSegment(indexSegment.getFile(), immutable, STORE_KEY_FACTORY, config, metrics, journal, time);
+          new IndexSegment(indexSegment.getFile(), sealed, STORE_KEY_FACTORY, config, metrics, journal, time);
       // getIndexEntriesSince with maxSize = 0 should not return anything
       FindEntriesCondition condition = new FindEntriesCondition(0);
       assertFalse("getIndexEntriesSince() should not return anything",
@@ -351,7 +351,7 @@ public class IndexSegmentTest {
    * and {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong)}.
    * 3. Adds some delete entries (deletes some existing put entries and creates deletes for puts not in this segment)
    * and does the same checks as #2.
-   * 4. Writes index to a file and loads it immutable and mutable and does all the checks in #2 once again along with
+   * 4. Writes index to a file and loads it sealed and not sealed and does all the checks in #2 once again along with
    * checking that journal entries are populated correctly.
    * @throws IOException
    * @throws StoreException
@@ -501,13 +501,13 @@ public class IndexSegmentTest {
   /**
    * Creates an {@link IndexSegment} from the given {@code file}.
    * @param file the {@link File} to use to build the {@link IndexSegment}.
-   * @param immutable {@code true} if the segment needs to be immutable
+   * @param sealed {@code true} if the segment needs to be sealed
    * @param journal the {@link Journal} to use.
    * @return an {@link IndexSegment} from the given {@code file}.
    * @throws StoreException
    */
-  private IndexSegment createIndexSegmentFromFile(File file, boolean immutable, Journal journal) throws StoreException {
-    return new IndexSegment(file, immutable, STORE_KEY_FACTORY, config, metrics, journal, time);
+  private IndexSegment createIndexSegmentFromFile(File file, boolean sealed, Journal journal) throws StoreException {
+    return new IndexSegment(file, sealed, STORE_KEY_FACTORY, config, metrics, journal, time);
   }
 
   /**
@@ -558,13 +558,13 @@ public class IndexSegmentTest {
    * @param startOffset the expected start {@link Offset} of the {@code indexSegment}
    * @param numItems the expected number of items the {@code indexSegment}
    * @param sizeWritten the expected number of bytes written to the {@code indexSegment}
-   * @param immutable the expected mutable state of the {@code indexSegment}
+   * @param sealed the expected sealed state of the {@code indexSegment}
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time in ms
    * @param resetKey the reset key for the index segment
    */
   private void verifyIndexSegmentDetails(IndexSegment indexSegment, Offset startOffset, int numItems, int sizeWritten,
-      boolean immutable, long endOffset, long lastModifiedTimeInMs,
+      boolean sealed, long endOffset, long lastModifiedTimeInMs,
       Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) {
     String logSegmentName = startOffset.getName();
     long valueSize = version == PersistentIndex.VERSION_0 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0
@@ -573,7 +573,7 @@ public class IndexSegmentTest {
     assertEquals("LogSegment name not as expected", logSegmentName, indexSegment.getLogSegmentName());
     assertEquals("Start offset not as expected", startOffset, indexSegment.getStartOffset());
     assertEquals("End offset not as expected", new Offset(logSegmentName, endOffset), indexSegment.getEndOffset());
-    assertEquals("Immutable state is incorrect", immutable, indexSegment.isImmutable());
+    assertEquals("Sealed state is incorrect", sealed, indexSegment.isSealed());
     assertEquals("Entry size is incorrect: " + version, indexPersistedEntrySize, indexSegment.getPersistedEntrySize());
     assertEquals("Value size is incorrect", valueSize, indexSegment.getValueSize());
     assertEquals("Reset key mismatch ", resetKey, indexSegment.getResetKey());
@@ -581,7 +581,7 @@ public class IndexSegmentTest {
       assertEquals("Last modified time is incorrect", lastModifiedTimeInMs, indexSegment.getLastModifiedTimeMs());
     }
     // incase of version 0, last modified time is calculated based on SystemTime and hence cannot verify for equivalency
-    if (!immutable) {
+    if (!sealed) {
       assertEquals("Size written not as expected", sizeWritten, indexSegment.getSizeWritten());
       assertEquals("Number of items not as expected", numItems, indexSegment.getNumberOfItems());
     }
@@ -924,7 +924,7 @@ public class IndexSegmentTest {
   private void verifyReadFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, File file,
       Offset startOffset, int numItems, int expectedSizeWritten, long endOffset, long lastModifiedTimeInMs,
       Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) throws IOException, StoreException {
-    // read from file (mutable) and verify that everything is ok
+    // read from file (not sealed) and verify that everything is ok
     Journal journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     IndexSegment fromDisk = createIndexSegmentFromFile(file, false, journal);
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, false,
@@ -938,7 +938,7 @@ public class IndexSegmentTest {
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
         endOffset, lastModifiedTimeInMs, resetKey);
 
-    // read from file (immutable) and verify that everything is ok
+    // read from file (sealed) and verify that everything is ok
     journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     fromDisk = createIndexSegmentFromFile(file, true, journal);
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
@@ -951,7 +951,7 @@ public class IndexSegmentTest {
       // delete the bloom file
       assertTrue("File could not be deleted", bloomFile.delete());
 
-      // read from file (immutable) again and verify that everything is ok
+      // read from file (sealed) again and verify that everything is ok
       journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
       fromDisk = createIndexSegmentFromFile(file, true, journal);
       assertTrue("Bloom file does not exist", bloomFile.exists());
@@ -969,7 +969,7 @@ public class IndexSegmentTest {
    * @param startOffset the expected start {@link Offset} of the {@link IndexSegment}
    * @param numItems the expected number of items the {@code indexSegment}
    * @param expectedSizeWritten the expected number of bytes written to the {@code indexSegment}
-   * @param immutable the expected mutable state of the {@code indexSegment}
+   * @param sealed the expected sealed state of the {@code indexSegment}
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time of the index segment in ms
    * @param resetKey the resetKey of the index segment
@@ -977,10 +977,10 @@ public class IndexSegmentTest {
    * @throws StoreException
    */
   private void verifyAllForIndexSegmentFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
-      IndexSegment fromDisk, Offset startOffset, int numItems, int expectedSizeWritten, boolean immutable,
-      long endOffset, long lastModifiedTimeInMs, Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey)
+      IndexSegment fromDisk, Offset startOffset, int numItems, int expectedSizeWritten, boolean sealed, long endOffset,
+      long lastModifiedTimeInMs, Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey)
       throws StoreException, IOException {
-    verifyIndexSegmentDetails(fromDisk, startOffset, numItems, expectedSizeWritten, immutable, endOffset,
+    verifyIndexSegmentDetails(fromDisk, startOffset, numItems, expectedSizeWritten, sealed, endOffset,
         lastModifiedTimeInMs, resetKey);
     verifyFind(referenceIndex, fromDisk);
     verifyGetEntriesSince(referenceIndex, fromDisk);
