@@ -261,7 +261,6 @@ class PostBlobHandler {
         // ensure that the x-ambry-session header is present.
         RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true);
         // validate that a max chunk size is set.
-        //TODO wah
         RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, true);
         // validate that the TTL for the chunk is set correctly.
         long chunkTtl = blobProperties.getTimeToLiveInSeconds();

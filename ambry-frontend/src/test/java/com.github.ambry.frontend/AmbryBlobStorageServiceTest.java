@@ -105,8 +105,6 @@ import static org.junit.Assert.*;
  * Unit tests for {@link AmbryBlobStorageService}. Also tests {@link AccountAndContainerInjector}.
  */
 public class AmbryBlobStorageServiceTest {
-  private static final int CHUNK_UPLOAD_MAX_CHUNK_SIZE = 4 * 1024 * 1024;
-
   private final Account refAccount;
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -148,7 +146,7 @@ public class AmbryBlobStorageServiceTest {
     urlSigningService =
         new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.frontendUrlSignerDefaultUrlTtlSecs,
             frontendConfig.frontendUrlSignerDefaultMaxUploadSizeBytes, frontendConfig.frontendUrlSignerMaxUrlTtlSecs,
-            frontendConfig.chunkUploadInitialChunkTtlSecs, CHUNK_UPLOAD_MAX_CHUNK_SIZE, SystemTime.getInstance());
+            frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance());
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, new AmbryIdSigningService());
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService,
         accountAndContainerInjector);
