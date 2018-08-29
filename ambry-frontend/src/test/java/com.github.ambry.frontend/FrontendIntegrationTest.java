@@ -211,8 +211,8 @@ public class FrontendIntegrationTest {
     doPostGetHeadUpdateDeleteTest(refContentSize, null, null, "unknown_service_id", false, null, null, false);
     doPostGetHeadUpdateDeleteTest(refContentSize, null, null, "unknown_service_id", true, null, null, false);
     // different sizes
-    for (int contentSize : new int[]{0, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes
-        - 1, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, refContentSize}) {
+    for (int contentSize : new int[]{0, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1,
+        FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, refContentSize}) {
       doPostGetHeadUpdateDeleteTest(contentSize, refAccount, publicContainer, refAccount.getName(),
           !publicContainer.isCacheable(), refAccount.getName(), publicContainer.getName(), false);
     }
@@ -346,7 +346,6 @@ public class FrontendIntegrationTest {
     httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, getHeaders, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     response = getHttpResponse(responseParts);
-    assertNotNull("There should be a response from the server", response);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     String signedGetUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed GET URL", signedGetUrl);
@@ -357,6 +356,62 @@ public class FrontendIntegrationTest {
     httpRequest = buildRequest(HttpMethod.GET, uri.getPath() + "?" + uri.getQuery(), null, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     verifyGetBlobResponse(responseParts, null, headers, !container.isCacheable(), content);
+  }
+
+  /**
+   * Test the stitched (multipart) upload flow.
+   * @todo test the stitch operation once it is implemented.
+   * @throws Exception
+   */
+  @Test
+  public void stitchedUploadTest() throws Exception {
+    Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    Container container = account.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
+    // setup
+    IdSigningService idSigningService = new AmbryIdSigningService();
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
+    String serviceId = "stitchedUploadTest";
+    String contentType = "application/octet-stream";
+    String ownerId = "stitchedUploadTest";
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.add(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
+    headers.add(RestUtils.Headers.CHUNK_UPLOAD, "true");
+    setAmbryHeadersForPut(headers, TTL_SECS, !container.isCacheable(), serviceId, contentType, ownerId,
+        account.getName(), container.getName());
+
+    // POST
+    // Get signed URL
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, headers, null);
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
+    assertNotNull("Did not get a signed POST URL", signedPostUrl);
+    discardContent(responseParts.queue, 1);
+
+    // Use signed URL to POST
+    URI uri = new URI(signedPostUrl);
+    httpRequest = buildRequest(HttpMethod.POST, uri.getPath() + "?" + uri.getQuery(), null, content);
+    responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    String signedID = verifyPostAndReturnBlobId(responseParts);
+    assertTrue("Blob ID for chunk upload must be signed", idSigningService.isIdSigned(signedID.substring(1)));
+    Pair<String, Map<String, String>> idAndMetadata = idSigningService.parseSignedId(signedID.substring(1));
+    // Inspect metadata fields
+    String chunkUploadSession = idAndMetadata.getSecond().get(RestUtils.Headers.SESSION);
+    assertNotNull("x-ambry-chunk-upload-session should be present in signed ID", chunkUploadSession);
+    String blobSize = idAndMetadata.getSecond().get(RestUtils.Headers.BLOB_SIZE);
+    assertNotNull("x-ambry-blob-size should be present in signed ID", blobSize);
+    assertEquals("wrong size value in signed id", content.capacity(), Long.parseLong(blobSize));
+
+    // Use signed ID and blob ID for GET request
+    headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
+    // Blob TTL for chunk upload is fixed
+    headers.set(RestUtils.Headers.TTL, FRONTEND_CONFIG.chunkUploadInitialChunkTtlSecs);
+    for (String id : new String[]{signedID, idAndMetadata.getFirst()}) {
+      getBlobAndVerify(id, null, GetOption.None, headers, !container.isCacheable(), content);
+      getBlobInfoAndVerify(id, GetOption.None, headers, !container.isCacheable(), account.getName(),
+          container.getName(), null);
+    }
   }
 
   /**
@@ -482,6 +537,7 @@ public class FrontendIntegrationTest {
     properties.put("netty.server.request.buffer.watermark", "1");
     // to test that multipart requests over a certain size fail
     properties.put("netty.multipart.post.max.size.bytes", Long.toString(MAX_MULTIPART_POST_SIZE_BYTES));
+    CommonTestUtils.populateRequiredRouterProps(properties);
     TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     // add key for singleKeyManagementService
     properties.put("kms.default.container.key", TestUtils.getRandomKey(32));

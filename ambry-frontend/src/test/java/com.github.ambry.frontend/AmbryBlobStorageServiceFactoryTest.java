@@ -17,6 +17,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
@@ -44,8 +45,10 @@ public class AmbryBlobStorageServiceFactoryTest {
   @Test
   public void getAmbryBlobStorageServiceTest() throws Exception {
     // dud properties. server should pick up defaults
-    JSONObject jsonObject = new JSONObject().put("POST", "http://uploadUrl:15158").put("GET", "http://downloadUrl:15158");
+    JSONObject jsonObject =
+        new JSONObject().put("POST", "http://uploadUrl:15158").put("GET", "http://downloadUrl:15158");
     Properties properties = new Properties();
+    CommonTestUtils.populateRequiredRouterProps(properties);
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 

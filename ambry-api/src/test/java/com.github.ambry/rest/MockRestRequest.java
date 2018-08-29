@@ -96,6 +96,7 @@ public class MockRestRequest implements RestRequest {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final List<EventListener> listeners = new ArrayList<EventListener>();
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
+  private final AtomicLong bytesReceived = new AtomicLong(0);
 
   private MessageDigest digest = null;
   private byte[] digestBytes = null;
@@ -134,6 +135,7 @@ public class MockRestRequest implements RestRequest {
     JSONObject headers = data.has(HEADERS_KEY) ? data.getJSONObject(HEADERS_KEY) : null;
     populateArgs(headers);
     if (requestContents != null) {
+      requestContents.forEach(buf -> bytesReceived.getAndAdd(buf != null ? buf.remaining() : 0));
       this.requestContents = requestContents;
     } else {
       this.requestContents = new LinkedList<ByteBuffer>();
@@ -249,6 +251,11 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
+  public long getBytesReceived() {
+    return bytesReceived.get();
+  }
+
+  @Override
   public boolean isOpen() {
     onEventComplete(Event.IsOpen);
     return channelOpen.get();
@@ -294,7 +301,9 @@ public class MockRestRequest implements RestRequest {
       try {
         if (!isOpen()) {
           throw new ClosedChannelException();
-        } else if (writeChannel != null) {
+        }
+        bytesReceived.getAndAdd(content != null ? content.remaining() : 0);
+        if (writeChannel != null) {
           writeContent(writeChannel, callbackWrapper, content);
         } else {
           requestContents.add(content);

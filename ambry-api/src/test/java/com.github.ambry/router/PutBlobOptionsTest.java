@@ -17,6 +17,7 @@ package com.github.ambry.router;
 
 import org.junit.Test;
 
+import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
 
 
@@ -25,10 +26,30 @@ import static org.junit.Assert.*;
  */
 public class PutBlobOptionsTest {
   /**
-   * Test {@link PutBlobOptions#toString()}.
+   * Test that the chunk upload and max size options can be assigned and retrieved correctly.
+   * @throws Exception
    */
   @Test
-  public void testToString() {
-    assertEquals("Unexpected toString() result", "PutBlobOptions{}", new PutBlobOptions().toString());
+  public void testOptions() {
+    PutBlobOptions options = new PutBlobOptionsBuilder().chunkUpload(true).build();
+    assertTrue("chunkUpload from options not as expected.", options.isChunkUpload());
+    assertEquals("maxUploadSize from options not as expected.", Long.MAX_VALUE, options.getMaxUploadSize());
+    options = new PutBlobOptionsBuilder().chunkUpload(false).maxUploadSize(3).build();
+    assertFalse("chunkUpload from options not as expected.", options.isChunkUpload());
+    assertEquals("maxUploadSize from options not as expected.", 3, options.getMaxUploadSize());
+  }
+
+  /**
+   * Test toString, equals, and hashCode methods.
+   */
+  @Test
+  public void testToStringEqualsAndHashcode() {
+    PutBlobOptions a = new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(3).build();
+    PutBlobOptions b = new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(3).build();
+    assertEquals("PutBlobOptions should be equal", a, b);
+    assertEquals("PutBlobOptions hashcodes should be equal", a.hashCode(), b.hashCode());
+    assertEquals("toString output not as expected", "PutBlobOptions{chunkUpload=true, maxUploadSize=3}", a.toString());
+    b = new PutBlobOptionsBuilder().chunkUpload(false).maxUploadSize(3).build();
+    assertThat("PutBlobOptions should not be equal.", a, not(b));
   }
 }

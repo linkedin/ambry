@@ -19,8 +19,11 @@ import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.utils.Pair;
+import java.util.Map;
 import java.util.concurrent.Future;
 
 
@@ -28,23 +31,27 @@ import java.util.concurrent.Future;
  * Factory that instantiates an {@link IdConverter} implementation for the frontend.
  */
 public class AmbryIdConverterFactory implements IdConverterFactory {
-
+  private final IdSigningService idSigningService;
   private final FrontendMetrics frontendMetrics;
 
-  public AmbryIdConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+  public AmbryIdConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+      IdSigningService idSigningService) {
+    this.idSigningService = idSigningService;
     frontendMetrics = new FrontendMetrics(metricRegistry);
   }
 
   @Override
   public IdConverter getIdConverter() {
-    return new AmbryIdConverter(frontendMetrics);
+    return new AmbryIdConverter(idSigningService, frontendMetrics);
   }
 
   private static class AmbryIdConverter implements IdConverter {
     private boolean isOpen = true;
+    private final IdSigningService idSigningService;
     private final FrontendMetrics frontendMetrics;
 
-    AmbryIdConverter(FrontendMetrics frontendMetrics) {
+    AmbryIdConverter(IdSigningService idSigningService, FrontendMetrics frontendMetrics) {
+      this.idSigningService = idSigningService;
       this.frontendMetrics = frontendMetrics;
     }
 
@@ -73,10 +80,16 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       long startTimeInMs = System.currentTimeMillis();
       if (!isOpen) {
         exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
-      } else if (restRequest.getRestMethod().equals(RestMethod.POST)) {
-        convertedId = "/" + input;
       } else {
-        convertedId = input.startsWith("/") ? input.substring(1) : input;
+        try {
+          if (restRequest.getRestMethod().equals(RestMethod.POST)) {
+            convertedId = "/" + signIdIfRequired(restRequest, input);
+          } else {
+            convertedId = parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);
+          }
+        } catch (Exception e) {
+          exception = e;
+        }
       }
       futureResult.done(convertedId, exception);
       if (callback != null) {
@@ -84,6 +97,42 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       }
       frontendMetrics.idConverterProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
       return futureResult;
+    }
+
+    /**
+     * If the incoming ID is signed, parse the signed ID and set the
+     * {@link RestUtils.InternalKeys#SIGNED_ID_METADATA_KEY} in the {@link RestRequest}. Otherwise, just return the
+     * provided ID.
+     * @param restRequest the {@link RestRequest} to potentially set the signed ID metadata in.
+     * @param incomingId the incoming ID, with the leading slash removed.
+     * @return a blob ID that can be passed to the router.
+     * @throws RestServiceException if parsing the signed ID fails.
+     */
+    private String parseSignedIdIfRequired(RestRequest restRequest, String incomingId) throws RestServiceException {
+      String blobId;
+      if (idSigningService.isIdSigned(incomingId)) {
+        Pair<String, Map<String, String>> idAndMetadata = idSigningService.parseSignedId(incomingId);
+        restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, idAndMetadata.getSecond());
+        blobId = idAndMetadata.getFirst();
+      } else {
+        blobId = incomingId;
+      }
+      return blobId;
+    }
+
+    /**
+     * If {@link RestUtils.InternalKeys#SIGNED_ID_METADATA_KEY} is set in the {@link RestRequest}, return a signed id.
+     * Otherwise, return the provided blob ID.
+     * @param restRequest the {@link RestRequest} that might contain the signed ID metadata.
+     * @param blobId the blob ID to potentially sign.
+     * @return the signed ID, if required. Otherwise, just the provided blob ID.
+     * @throws RestServiceException if building the signed ID fails.
+     */
+    private String signIdIfRequired(RestRequest restRequest, String blobId) throws RestServiceException {
+      @SuppressWarnings("unchecked")
+      Map<String, String> metadata =
+          (Map<String, String>) restRequest.getArgs().get(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY);
+      return metadata != null ? idSigningService.getSignedId(blobId, metadata) : blobId;
     }
   }
 }

@@ -17,6 +17,7 @@ package com.github.ambry.router;
 import com.github.ambry.protocol.GetOption;
 import org.junit.Test;
 
+import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
 
 
@@ -44,7 +45,7 @@ public class GetBlobOptionsTest {
    * @throws Exception
    */
   @Test
-  public void testGetOperationTypeOption() {
+  public void testOperationTypeOption() {
     GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
     assertEquals("OperationType from options not as expected.", GetBlobOptions.OperationType.BlobInfo,
         options.getOperationType());
@@ -55,7 +56,7 @@ public class GetBlobOptionsTest {
    * @throws Exception
    */
   @Test
-  public void testGetGetOptionmOption() {
+  public void testGetOptionOption() {
     GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
         .getOption(GetOption.Include_All)
         .build();
@@ -82,13 +83,13 @@ public class GetBlobOptionsTest {
         .getOption(getOption)
         .range(ByteRange.fromOffsetRange(2, 7))
         .build();
-    assertFalse("GetBlobOptions should not be equal.", a.equals(b));
+    assertThat("GetBlobOptions should not be equal.", a, not(b));
     b = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .getOption(getOption)
         .range(byteRange)
         .build();
-    assertFalse("GetBlobOptions should not be equal.", a.equals(b));
+    assertThat("GetBlobOptions should not be equal.", a, not(b));
     b = new GetBlobOptionsBuilder().operationType(type).getOption(GetOption.Include_All).range(byteRange).build();
-    assertFalse("GetBlobOptions should not be equal.", a.equals(b));
+    assertThat("GetBlobOptions should not be equal.", a, not(b));
   }
 }
