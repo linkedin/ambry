@@ -27,14 +27,24 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 
+/**
+ * Test {@link AmbryIdSigningService}
+ */
 public class AmbryIdSigningServiceTest {
 
+  /**
+   * Test that {@link AmbryIdSigningServiceFactory} works correctly.
+   */
   @Test
   public void factoryTest() {
     IdSigningService idSigningService = new AmbryIdSigningServiceFactory(null, null).getIdSigningService();
     assertEquals("Type does not match expected", AmbryIdSigningService.class, idSigningService.getClass());
   }
 
+  /**
+   * Testing signing and parsing IDs use {@link AmbryIdSigningService}.
+   * @throws Exception
+   */
   @Test
   public void signAndParseTest() throws Exception {
     AmbryIdSigningService idSigningService = new AmbryIdSigningService();

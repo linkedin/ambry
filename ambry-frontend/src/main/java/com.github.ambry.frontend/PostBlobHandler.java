@@ -53,7 +53,6 @@ class PostBlobHandler {
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final Time time;
   private final FrontendConfig frontendConfig;
-  private final int chunkUploadMaxChunkSize;
   private final FrontendMetrics frontendMetrics;
 
   /**
@@ -64,19 +63,17 @@ class PostBlobHandler {
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    * @param time the {@link Time} instance to use.
    * @param frontendConfig the {@link FrontendConfig} to use.
-   * @param chunkUploadMaxChunkSize the preconfigured max size for chunks of a stitched upload.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    */
   PostBlobHandler(SecurityService securityService, IdConverter idConverter, Router router,
       AccountAndContainerInjector accountAndContainerInjector, Time time, FrontendConfig frontendConfig,
-      int chunkUploadMaxChunkSize, FrontendMetrics frontendMetrics) {
+      FrontendMetrics frontendMetrics) {
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.router = router;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.time = time;
     this.frontendConfig = frontendConfig;
-    this.chunkUploadMaxChunkSize = chunkUploadMaxChunkSize;
     this.frontendMetrics = frontendMetrics;
   }
 
@@ -263,11 +260,9 @@ class PostBlobHandler {
       if (RestUtils.isChunkUpload(restRequest.getArgs())) {
         // ensure that the x-ambry-session header is present.
         RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true);
-        // validate that max chunk size configuration is less than the chunking threshold.
-        long maxChunkSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, true);
-        if (maxChunkSize > chunkUploadMaxChunkSize) {
-          throw new RestServiceException("Invalid max chunk size: " + maxChunkSize, RestServiceErrorCode.InvalidArgs);
-        }
+        // validate that a max chunk size is set.
+        //TODO wah
+        RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, true);
         // validate that the TTL for the chunk is set correctly.
         long chunkTtl = blobProperties.getTimeToLiveInSeconds();
         if (chunkTtl <= 0 || chunkTtl > frontendConfig.chunkUploadInitialChunkTtlSecs) {

@@ -73,7 +73,6 @@ public class PostBlobHandlerTest {
   private static final String CONTENT_TYPE = "text/plain";
   private static final String OWNER_ID = "tester";
   private static final String CONVERTED_ID = "/abcdef";
-  private static final int CHUNK_UPLOAD_MAX_CHUNK_SIZE = 4 * 1024 * 1024;
 
   static {
     try {
@@ -102,7 +101,7 @@ public class PostBlobHandlerTest {
     FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
     postBlobHandler =
         new PostBlobHandler(securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(), router,
-            accountAndContainerInjector, time, frontendConfig, CHUNK_UPLOAD_MAX_CHUNK_SIZE, metrics);
+            accountAndContainerInjector, time, frontendConfig, metrics);
   }
 
   /**
@@ -112,25 +111,23 @@ public class PostBlobHandlerTest {
   @Test
   public void chunkUploadTest() throws Exception {
     // valid request arguments
-    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), CHUNK_UPLOAD_MAX_CHUNK_SIZE - 1,
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025,
         frontendConfig.chunkUploadInitialChunkTtlSecs, null);
-    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), CHUNK_UPLOAD_MAX_CHUNK_SIZE,
-        frontendConfig.chunkUploadInitialChunkTtlSecs - 1, null);
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1024,
+        frontendConfig.chunkUploadInitialChunkTtlSecs, null);
     // blob exceeds max blob size
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1023, 7200,
         routerExceptionChecker(RouterErrorCode.BlobTooLarge));
     // no session header
-    doChunkUploadTest(1024, true, null, CHUNK_UPLOAD_MAX_CHUNK_SIZE, 7200,
+    doChunkUploadTest(1024, true, null, 1025, 7200,
         restServiceExceptionChecker(RestServiceErrorCode.MissingArgs));
-    // invalid max blob size
+    // missing max blob size
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), null, 7200,
         restServiceExceptionChecker(RestServiceErrorCode.MissingArgs));
-    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), CHUNK_UPLOAD_MAX_CHUNK_SIZE + 1, 7200,
-        restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs));
     // invalid TTL
-    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), CHUNK_UPLOAD_MAX_CHUNK_SIZE, Utils.Infinite_Time,
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, Utils.Infinite_Time,
         restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs));
-    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), CHUNK_UPLOAD_MAX_CHUNK_SIZE,
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025,
         frontendConfig.chunkUploadInitialChunkTtlSecs + 1,
         restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs));
     // ensure that the chunk upload request requirements are not enforced for non chunk uploads.

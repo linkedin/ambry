@@ -72,7 +72,6 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final SecurityServiceFactory securityServiceFactory;
   private final ClusterMap clusterMap;
   private final FrontendConfig frontendConfig;
-  private final int chunkUploadMaxChunkSize;
   private final FrontendMetrics frontendMetrics;
   private final GetReplicasHandler getReplicasHandler;
   private final UrlSigningService urlSigningService;
@@ -90,7 +89,6 @@ class AmbryBlobStorageService implements BlobStorageService {
    * Create a new instance of AmbryBlobStorageService by supplying it with config, metrics, cluster map, a
    * response handler controller and a router.
    * @param frontendConfig the {@link FrontendConfig} with configuration parameters.
-   * @param chunkUploadMaxChunkSize the preconfigured max size for chunks of a stitched upload.
    * @param frontendMetrics the metrics instance to use in the form of {@link FrontendMetrics}.
    * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent out.
    * @param router the {@link Router} instance to use to perform blob operations.
@@ -99,12 +97,11 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService} instance.
    * @param urlSigningService the {@link UrlSigningService} used to sign URLs.
    */
-  AmbryBlobStorageService(FrontendConfig frontendConfig, int chunkUploadMaxChunkSize, FrontendMetrics frontendMetrics,
+  AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
       SecurityServiceFactory securityServiceFactory, UrlSigningService urlSigningService,
       AccountAndContainerInjector accountAndContainerInjector) {
     this.frontendConfig = frontendConfig;
-    this.chunkUploadMaxChunkSize = chunkUploadMaxChunkSize;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
     this.router = router;
@@ -128,7 +125,7 @@ class AmbryBlobStorageService implements BlobStorageService {
             frontendMetrics, clusterMap);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, router, accountAndContainerInjector, SystemTime.getInstance(),
-            frontendConfig, chunkUploadMaxChunkSize, frontendMetrics);
+            frontendConfig, frontendMetrics);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap);
