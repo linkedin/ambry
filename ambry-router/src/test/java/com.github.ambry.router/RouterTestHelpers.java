@@ -13,12 +13,20 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.TestUtils;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -26,8 +34,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import org.junit.Assert;
 
 import static org.junit.Assert.*;
@@ -39,6 +50,7 @@ import static org.junit.Assert.*;
 class RouterTestHelpers {
   private static final int AWAIT_TIMEOUT_SECONDS = 10;
   static final int AWAIT_TIMEOUT_MS = 2000;
+  private static final short BLOB_ID_VERSION = CommonTestUtils.getCurrentBlobIdVersion();
 
   /**
    * Test whether two {@link BlobProperties} have the same fields
@@ -214,8 +226,8 @@ class RouterTestHelpers {
    * @throws Exception
    */
   static void assertTtl(Router router, Collection<String> blobIds, long expectedTtlSecs) throws Exception {
-    GetBlobOptions options[] = {new GetBlobOptionsBuilder().build(), new GetBlobOptionsBuilder().operationType(
-        GetBlobOptions.OperationType.BlobInfo).build()};
+    GetBlobOptions options[] = {new GetBlobOptionsBuilder().build(),
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build()};
     for (String blobId : blobIds) {
       for (GetBlobOptions option : options) {
         GetBlobResult result = router.getBlob(blobId, option).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -226,6 +238,81 @@ class RouterTestHelpers {
         }
       }
     }
+  }
+
+  /**
+   * @param totalSize the total size of the composite blob.
+   * @param maxChunkSize the size to use for intermediate data chunks.j
+   * @return a {@link LongStream} that returns valid chunk sizes that conform to {@code totalSize} and
+   *         {@code maxChunkSize}
+   */
+  static LongStream buildValidChunkSizeStream(long totalSize, int maxChunkSize) {
+    int numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(totalSize, maxChunkSize);
+    return LongStream.range(0, numChunks)
+        .map(index -> index == numChunks - 1 ? totalSize - (maxChunkSize * index) : maxChunkSize);
+  }
+
+  /**
+   * Compare and assert that the content in the given {@link ReadableStreamChannel} is exactly the same as
+   * the original content argument.
+   * @param originalContent the content array to check against.
+   * @param range if non-null, apply this range to {@code originalContent} before comparison.
+   * @param readableStreamChannel the {@link ReadableStreamChannel} that is the candidate for comparison.
+   */
+  static void compareContent(byte[] originalContent, ByteRange range, ReadableStreamChannel readableStreamChannel)
+      throws ExecutionException, InterruptedException {
+    ByteBuffer putContentBuf = ByteBuffer.wrap(originalContent);
+    // If a range is set, compare the result against the specified byte range.
+    if (range != null) {
+      ByteRange resolvedRange = range.toResolvedByteRange(originalContent.length);
+      putContentBuf =
+          ByteBuffer.wrap(originalContent, (int) resolvedRange.getStartOffset(), (int) resolvedRange.getRangeSize());
+    }
+    ByteBufferAsyncWritableChannel getChannel = new ByteBufferAsyncWritableChannel();
+    Future<Long> readIntoFuture = readableStreamChannel.readInto(getChannel, null);
+    final int bytesToRead = putContentBuf.remaining();
+    int readBytes = 0;
+    do {
+      ByteBuffer buf = getChannel.getNextChunk();
+      int bufLength = buf.remaining();
+      assertTrue("total content read should not be greater than length of put content",
+          readBytes + bufLength <= bytesToRead);
+      while (buf.hasRemaining()) {
+        assertEquals("Get and Put blob content should match", putContentBuf.get(), buf.get());
+        readBytes++;
+      }
+      getChannel.resolveOldestChunk(null);
+    } while (readBytes < bytesToRead);
+    assertEquals("the returned length in the future should be the length of data written", (long) readBytes,
+        (long) readIntoFuture.get());
+    assertNull("There should be no more data in the channel", getChannel.getNextChunk(0));
+  }
+
+  /**
+   *
+   * @param clusterMap the {@link ClusterMap} for generating blob IDs.
+   * @param blobDataType the {@link BlobId.BlobDataType} field to set for the chunk blob IDs.
+   * @param ttl the TTL for the chunks.
+   * @param chunkSizeStream a stream of chunk sizes to use for the chunks in the list.
+   * @return a list of {@link ChunkInfo} objects for a stitch call.
+   */
+  static List<ChunkInfo> buildChunkList(ClusterMap clusterMap, BlobId.BlobDataType blobDataType, long ttl,
+      LongStream chunkSizeStream) {
+    return chunkSizeStream.mapToObj(
+        chunkSize -> new ChunkInfo(getRandomBlobId(clusterMap, blobDataType), chunkSize, ttl))
+        .collect(Collectors.toList());
+  }
+
+  /**
+   *
+   * @param clusterMap the {@link ClusterMap} for generating blob IDs.
+   * @param blobDataType the {@link BlobId.BlobDataType}.
+   * @return a new blob ID with the specified {@link BlobId.BlobDataType} and a random UUID.
+   */
+  private static String getRandomBlobId(ClusterMap clusterMap, BlobId.BlobDataType blobDataType) {
+    PartitionId partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    return new BlobId(BLOB_ID_VERSION, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+        Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partitionId, false, blobDataType).getID();
   }
 
   /**

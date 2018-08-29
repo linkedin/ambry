@@ -202,7 +202,7 @@ public class NetworkClient implements Closeable {
   public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionWarmUpPercentagePerDataNode,
       long timeForWarmUp) {
     int expectedConnections = 0;
-    logger.info("Connections warm up start.");
+    logger.info("Connection warm up start.");
     if (dataNodeIds.size() == 0) {
       return 0;
     }
@@ -242,8 +242,8 @@ public class NetworkClient implements Closeable {
         break;
       }
     }
-    logger.info("Connections warm up done. Tried: {} Success: {} Failed: {} Time elapsed: {}ms", expectedConnections,
-        successfulConnections, failedConnections, System.currentTimeMillis() - startTime);
+    logger.info("Connection warm up done. Tried: {}, Succeeded: {}, Failed: {}, Time elapsed: {} ms",
+        expectedConnections, successfulConnections, failedConnections, System.currentTimeMillis() - startTime);
 
     return successfulConnections;
   }

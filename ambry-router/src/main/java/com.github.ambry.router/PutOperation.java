@@ -23,7 +23,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobId.BlobDataType;
 import com.github.ambry.commons.BlobId.BlobIdType;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
-import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
@@ -40,6 +39,7 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -47,6 +47,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
@@ -82,13 +83,17 @@ class PutOperation {
   private final RouterConfig routerConfig;
   private final NonBlockingRouterMetrics routerMetrics;
   private final ClusterMap clusterMap;
-  private final ResponseHandler responseHandler;
   private final NotificationSystem notificationSystem;
   private final AccountService accountService;
   private final BlobProperties passedInBlobProperties;
   private final byte[] userMetadata;
   private final String partitionClass;
+  private final PutBlobOptions options;
+  // optional ?
   private final ReadableStreamChannel channel;
+  // optional ?
+  private final List<ChunkInfo> chunksToStitch;
+  // optional ?
   private final ByteBufferAsyncWritableChannel chunkFillerChannel;
   private final FutureResult<String> futureResult;
   private final Callback<String> callback;
@@ -154,11 +159,48 @@ class PutOperation {
    * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
-   * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param notificationSystem the {@link NotificationSystem} to use for blob creation notifications.
    * @param accountService the {@link AccountService} used for account/container id and name mapping.
    * @param userMetadata the userMetadata associated with the put operation.
-   * @param channel the {@link ReadableStreamChannel} containing the blob data.
+   * @param channel the {@link ReadableStreamChannel} containing the blob data. This cannot be null.
+   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
+   * @param futureResult the future that will contain the result of the operation.
+   * @param callback the callback that is to be called when the operation completes.
+   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
+   * @param writableChannelEventListener a callback to be called on certain chunk filler channel events.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param time the Time instance to use.
+   * @param blobProperties the BlobProperties associated with the put operation.
+   * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
+   * @return the {@link PutOperation}.
+   */
+  static PutOperation forUpload(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      ClusterMap clusterMap, NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
+      ReadableStreamChannel channel, PutBlobOptions options, FutureResult<String> futureResult,
+      Callback<String> callback, RouterCallback routerCallback,
+      ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
+      String partitionClass) {
+    return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
+        channel, null, options, futureResult, callback, routerCallback, writableChannelEventListener, kms,
+        cryptoService, cryptoJobHandler, time, blobProperties, partitionClass);
+  }
+
+  /**
+   * Construct a PutOperation for composite blob stitching with the given parameters. This will upload a single metadata
+   * blob containing information about each of the chunks in {@code chunksToStitch}. The metadata blob created will
+   * behave like a normal composite blob where the data chunks are the blobs listed in {@code chunksToStitch}.
+   * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param clusterMap the {@link ClusterMap} of the cluster
+   * @param notificationSystem the {@link NotificationSystem} to use for blob creation notifications.
+   * @param accountService the {@link AccountService} used for account/container id and name mapping.
+   * @param userMetadata the userMetadata associated with the put operation.
+   * @param chunksToStitch the list of chunks to stitch together. The put operation business logic will treat the
+   *                       metadata in the {@link ChunkInfo} object as a source of truth when validating that the
+   *                       chunks can be stitched.
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
@@ -168,25 +210,60 @@ class PutOperation {
    * @param time the Time instance to use.
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
-   * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
+   * @return the {@link PutOperation}.
    */
-  PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, NotificationSystem notificationSystem, AccountService accountService,
-      byte[] userMetadata, ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
-      RouterCallback routerCallback, ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      BlobProperties blobProperties, String partitionClass) {
+  static PutOperation forStitching(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      ClusterMap clusterMap, NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
+      List<ChunkInfo> chunksToStitch, FutureResult<String> futureResult, Callback<String> callback,
+      RouterCallback routerCallback, KeyManagementService kms, CryptoService cryptoService,
+      CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties, String partitionClass) {
+    return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
+        null, chunksToStitch, PutBlobOptions.DEFAULT, futureResult, callback, routerCallback, null, kms, cryptoService,
+        cryptoJobHandler, time, blobProperties, partitionClass);
+  }
+
+  /**
+   * Construct a PutOperation with the given parameters. This private constructor is used for both blob uploads and
+   * post-upload stitching.
+   * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param clusterMap the {@link ClusterMap} of the cluster
+   * @param notificationSystem the {@link NotificationSystem} to use for blob creation notifications.
+   * @param accountService the {@link AccountService} used for account/container id and name mapping.
+   * @param userMetadata the userMetadata associated with the put operation.
+   * @param channel the {@link ReadableStreamChannel} containing the blob data, or null for stitch requests.
+   * @param chunksToStitch the list of chunks to stitch together, or null for data upload put operations.
+   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
+   * @param futureResult the future that will contain the result of the operation.
+   * @param callback the callback that is to be called when the operation completes.
+   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
+   * @param writableChannelEventListener a callback to be called on certain chunk filler channel events.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param time the Time instance to use.
+   * @param blobProperties the BlobProperties associated with the put operation.
+   * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
+   */
+  private PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
+      NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
+      ReadableStreamChannel channel, List<ChunkInfo> chunksToStitch, PutBlobOptions options,
+      FutureResult<String> futureResult, Callback<String> callback, RouterCallback routerCallback,
+      ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
+      String partitionClass) {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
-    this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
     this.accountService = accountService;
     this.passedInBlobProperties = blobProperties;
     this.userMetadata = userMetadata;
     this.partitionClass = Objects.requireNonNull(partitionClass, "The provided partitionClass is null");
     this.channel = channel;
+    this.options = options;
+    this.chunksToStitch = chunksToStitch;
     this.futureResult = futureResult;
     this.callback = callback;
     this.routerCallback = routerCallback;
@@ -210,22 +287,105 @@ class PutOperation {
   }
 
   /**
+   * Either start reading from the channel containing the blob data for normal put requests or assemble the metadata
+   * chunk for stitch requests.
+   */
+  void startOperation() {
+    Exception exception = null;
+    try {
+      if (options.isChunkUpload() && options.getMaxUploadSize() > routerConfig.routerMaxPutChunkSizeBytes) {
+        exception = new RouterException("Invalid max upload size for chunk upload: " + options.getMaxUploadSize(),
+            RouterErrorCode.InvalidPutArgument);
+      } else if (isStitchOperation()) {
+        processChunksToStitch();
+      } else {
+        startReadingFromChannel();
+      }
+    } catch (Exception e) {
+      exception = e;
+    } finally {
+      if (exception != null) {
+        setOperationExceptionAndComplete(exception);
+        routerCallback.onPollReady();
+      }
+    }
+  }
+
+  /**
    * Start reading from the channel containing the data for this operation.
    */
-  void startReadingFromChannel() {
-    channel.readInto(chunkFillerChannel, new Callback<Long>() {
-      @Override
-      public void onCompletion(Long result, Exception exception) {
-        if (exception != null) {
-          setOperationExceptionAndComplete(exception);
-          routerCallback.onPollReady();
-        } else {
-          blobSize = result;
-          chunkFillingCompletedSuccessfully = true;
-        }
-        chunkFillerChannel.close();
+  private void startReadingFromChannel() {
+    channel.readInto(chunkFillerChannel, (result, exception) -> {
+      if (exception != null) {
+        setOperationExceptionAndComplete(exception);
+        routerCallback.onPollReady();
+      } else {
+        blobSize = result;
+        chunkFillingCompletedSuccessfully = true;
       }
+      chunkFillerChannel.close();
     });
+  }
+
+  /**
+   * Process the list of data chunks provided and prepare a metadata chunk with the provided chunk IDs.
+   * @throws RouterException if validation of the chunks to stitch failed.
+   */
+  private void processChunksToStitch() throws RouterException {
+    if (chunksToStitch.isEmpty()) {
+      // The current metadata format does not support empty chunk lists
+      throw new RouterException("Must provide at least one chunk for stitchBlob call",
+          RouterErrorCode.InvalidPutArgument);
+    }
+    long totalSize = 0;
+    long intermediateChunkSize = chunksToStitch.get(0).getChunkSizeInBytes();
+    metadataPutChunk.setIntermediateChunkSize(intermediateChunkSize);
+    for (ListIterator<ChunkInfo> iter = chunksToStitch.listIterator(); iter.hasNext(); ) {
+      int chunkIndex = iter.nextIndex();
+      ChunkInfo chunkInfo = iter.next();
+      BlobId chunkId = unwrapChunkInfo(chunkInfo, intermediateChunkSize, !iter.hasNext());
+      metadataPutChunk.addChunkId(chunkId, chunkIndex);
+      totalSize += chunkInfo.getChunkSizeInBytes();
+    }
+    blobSize = totalSize;
+    chunkFillingCompletedSuccessfully = true;
+  }
+
+  /**
+   * Extract the {@link BlobId} from a {@link ChunkInfo} object and check the metadata in the object to ensure that this
+   * is a valid chunk for stitching.
+   * @param chunkInfo the {@link ChunkInfo} containing the blob ID and extra metadata.
+   * @param intermediateChunkSize the size in bytes that intermediate chunks must be with the current metadata format.
+   * @param lastChunk {@code true} if this is the last chunk in the list of blobs to stitch.
+   * @return the {@link BlobId}.
+   * @throws RouterException if validation of the chunk or blob ID parsing failed.
+   */
+  private BlobId unwrapChunkInfo(ChunkInfo chunkInfo, long intermediateChunkSize, boolean lastChunk)
+      throws RouterException {
+    long chunkSize = chunkInfo.getChunkSizeInBytes();
+    long chunkExpirationTimeInMs = chunkInfo.getExpirationTimeInMs();
+
+    if (chunkSize == 0 || (lastChunk ? chunkSize > intermediateChunkSize : chunkSize != intermediateChunkSize)) {
+      throw new RouterException("Invalid chunkSize: " + chunkSize + "; intermediateChunkSize: " + intermediateChunkSize,
+          RouterErrorCode.InvalidPutArgument);
+    }
+
+    long metadataExpirationTimeInMs = Utils.addSecondsToEpochTime(passedInBlobProperties.getCreationTimeInMs(),
+        passedInBlobProperties.getTimeToLiveInSeconds());
+    // the chunk TTL must be at least as long as the metadata blob to ensure that they do not become inaccessible before
+    // the metadata chunk does.
+    if (Utils.compareTimes(chunkExpirationTimeInMs, metadataExpirationTimeInMs) < 0) {
+      throw new RouterException("Chunk expiration time (" + chunkExpirationTimeInMs + ") < metadata expiration time ("
+          + metadataExpirationTimeInMs + ")", RouterErrorCode.InvalidPutArgument);
+    }
+
+    BlobId blobId = RouterUtils.getBlobIdFromString(chunkInfo.getBlobId(), clusterMap);
+    // the metadata blob format does not support nested composite blobs.
+    if (blobId.getBlobDataType() != BlobDataType.DATACHUNK) {
+      throw new RouterException("Cannot stitch together multiple composite blobs", RouterErrorCode.InvalidBlobId);
+    }
+
+    return blobId;
   }
 
   /**
@@ -242,16 +402,19 @@ class PutOperation {
    */
   void maybeNotifyForBlobCreation() {
     if (isOperationComplete()) {
-      boolean composite = !getSuccessfullyPutChunkIdsIfComposite().isEmpty();
-      if (composite) {
+      boolean composite = isComposite();
+      // only notify for data chunk creation on direct uploads.
+      if (composite && !isStitchOperation()) {
         metadataPutChunk.maybeNotifyForFirstChunkCreation();
       }
       if (blobId != null) {
         Pair<Account, Container> accountContainer =
             RouterUtils.getAccountContainer(accountService, getBlobProperties().getAccountId(),
                 getBlobProperties().getContainerId());
+        NotificationBlobType blobType = composite ? NotificationBlobType.Composite
+            : options.isChunkUpload() ? NotificationBlobType.DataChunk : NotificationBlobType.Simple;
         notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), accountContainer.getFirst(),
-            accountContainer.getSecond(), composite ? NotificationBlobType.Composite : NotificationBlobType.Simple);
+            accountContainer.getSecond(), blobType);
       }
     }
   }
@@ -344,7 +507,7 @@ class PutOperation {
    * @return true if chunk filling is complete, false otherwise.
    */
   boolean isChunkFillingDone() {
-    return chunkFillingCompletedSuccessfully || operationCompleted;
+    return isStitchOperation() || chunkFillingCompletedSuccessfully || operationCompleted;
   }
 
   /**
@@ -372,6 +535,7 @@ class PutOperation {
             // channel has data, and there is a chunk that can be filled.
             maybeStopTrackingWaitForChunkTime();
             bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
+            enforceMaxUploadSize();
 
             if (chunkToFill.isReady() && !chunkToFill.chunkBlobProperties.isEncrypted()) {
               routerCallback.onPollReady();
@@ -409,8 +573,8 @@ class PutOperation {
           : new RouterException("PutOperation fillChunks encountered unexpected error", e,
               RouterErrorCode.UnexpectedInternalError);
       routerMetrics.chunkFillerUnexpectedErrorCount.inc();
-      routerCallback.onPollReady();
       setOperationExceptionAndComplete(routerException);
+      routerCallback.onPollReady();
     }
   }
 
@@ -474,6 +638,17 @@ class PutOperation {
   }
 
   /**
+   * Enforce that the bytes filled so far is less than or equal to the max blob size in the {@link PutBlobOptions}.
+   * @throws RouterException
+   */
+  private void enforceMaxUploadSize() throws RouterException {
+    if (bytesFilledSoFar > options.getMaxUploadSize()) {
+      throw new RouterException("Blob is larger than max upload size argument: " + options.getMaxUploadSize(),
+          RouterErrorCode.BlobTooLarge);
+    }
+  }
+
+  /**
    * Get the chunk to be filled. At most one chunk for an operation will ever be in Building state. If there is such
    * a chunk, that is returned. If not, if there is a Free chunk, that is returned. If no Free chunks are available
    * either, then null is returned.
@@ -533,7 +708,8 @@ class PutOperation {
    * @throws IllegalStateException if the chunk filling has not yet completed.
    */
   int getNumDataChunks() {
-    return RouterUtils.getNumChunksForBlobAndChunkSize(getBlobSize(), routerConfig.routerMaxPutChunkSizeBytes);
+    return chunksToStitch != null ? chunksToStitch.size()
+        : RouterUtils.getNumChunksForBlobAndChunkSize(getBlobSize(), routerConfig.routerMaxPutChunkSizeBytes);
   }
 
   /**
@@ -615,18 +791,32 @@ class PutOperation {
   }
 
   /**
-   * If this is a composite object, fill the list with successfully put chunk ids.
-   * @return the list of successfully put chunk ids if this is a composite object, empty list otherwise.
+   * If this is a composite object, fill the list with chunk IDs successfully created by this operation.
+   * This does not include IDs being stitched together by a stitchBlob call.
+   * @return the list of successfully put chunk ids if this is a composite object and not a stitch operation, empty list
+   *         otherwise.
    */
-  List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
-    List<StoreKey> successfulChunks = metadataPutChunk.getSuccessfullyPutChunkIds();
+  List<StoreKey> getSuccessfullyPutChunkIdsIfCompositeDirectUpload() {
+    boolean compositeDirectUpload = !isStitchOperation() && isComposite();
+    return compositeDirectUpload ? metadataPutChunk.getSuccessfullyPutChunkIds() : Collections.emptyList();
+  }
+
+  /**
+   * @return {@code true} if this is a composite blob upload, or if the operation failed. Stitch operations count as
+   *         composite uploads since they upload a metadata chunk.
+   */
+  private boolean isComposite() {
     // If the overall operation failed, we treat the successfully put chunks as part of a composite blob.
     boolean operationFailed = blobId == null || getOperationException() != null;
-    if (operationFailed || successfulChunks.size() > 1) {
-      return successfulChunks;
-    } else {
-      return Collections.emptyList();
-    }
+    return operationFailed || metadataPutChunk.indexToChunkIds.size() > 1 || isStitchOperation();
+  }
+
+
+  /**
+   * @return {@code true} if this is a blob stitching operation instead of a standard upload.
+   */
+  private boolean isStitchOperation() {
+    return chunksToStitch != null;
   }
 
   /**
@@ -639,21 +829,7 @@ class PutOperation {
    */
   void setOperationExceptionAndComplete(Exception exception) {
     if (exception instanceof RouterException) {
-      RouterErrorCode routerErrorCode = ((RouterException) exception).getErrorCode();
-      if (operationException.get() == null) {
-        operationException.set(exception);
-      } else {
-        Integer currentOperationExceptionLevel = null;
-        if (operationException.get() instanceof RouterException) {
-          currentOperationExceptionLevel =
-              getPrecedenceLevel(((RouterException) operationException.get()).getErrorCode());
-        } else {
-          currentOperationExceptionLevel = getPrecedenceLevel(RouterErrorCode.UnexpectedInternalError);
-        }
-        if (getPrecedenceLevel(routerErrorCode) < currentOperationExceptionLevel) {
-          operationException.set(exception);
-        }
-      }
+      RouterUtils.replaceOperationException(operationException, (RouterException) exception, this::getPrecedenceLevel);
     } else {
       operationException.set(exception);
     }
@@ -667,7 +843,7 @@ class PutOperation {
    * @param routerErrorCode The {@link RouterErrorCode} for which to get its precedence level.
    * @return The precedence level of the {@link RouterErrorCode}.
    */
-  private Integer getPrecedenceLevel(RouterErrorCode routerErrorCode) {
+  private int getPrecedenceLevel(RouterErrorCode routerErrorCode) {
     switch (routerErrorCode) {
       case InsufficientCapacity:
         return 1;
@@ -909,9 +1085,10 @@ class PutOperation {
         }
         partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
 
-        chunkBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE,
-            clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
-            passedInBlobProperties.getContainerId(), partitionId, passedInBlobProperties.isEncrypted(), blobDataType);
+        chunkBlobId =
+            new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+                passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
+                passedInBlobProperties.isEncrypted(), blobDataType);
 
         chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
@@ -1322,8 +1499,9 @@ class PutOperation {
    * on it.
    */
   private class MetadataPutChunk extends PutChunk {
-    TreeMap<Integer, StoreKey> indexToChunkIds;
-    Pair<? extends StoreKey, BlobProperties> firstChunkIdAndProperties = null;
+    private final TreeMap<Integer, StoreKey> indexToChunkIds;
+    private int intermediateChunkSize = routerConfig.routerMaxPutChunkSizeBytes;
+    private Pair<? extends StoreKey, BlobProperties> firstChunkIdAndProperties = null;
 
     /**
      * Initialize the MetadataPutChunk.
@@ -1337,6 +1515,22 @@ class PutOperation {
     @Override
     boolean isMetadataChunk() {
       return true;
+    }
+
+    /**
+     * Change the max chunk size option to support stitching chunks where the intermediate chunk sizes differ from
+     * the current router chunking configuration. This setter is temporary and will be removed once a new metadata
+     * blob format is introduced that supports intermediate chunks of arbitrary size.
+     * @param intermediateChunkSize the chunk size for the intermediate (not last) data chunks listed in the metadata
+     *                              blob.
+     * @throws RouterException if the intermediate chunk size is invalid.
+     */
+    void setIntermediateChunkSize(long intermediateChunkSize) throws RouterException {
+      if (intermediateChunkSize <= 0 || intermediateChunkSize > routerConfig.routerMaxPutChunkSizeBytes) {
+        throw new RouterException("Invalid intermediate chunk size: " + intermediateChunkSize,
+            RouterErrorCode.InvalidPutArgument);
+      }
+      this.intermediateChunkSize = (int) intermediateChunkSize;
     }
 
     /**
@@ -1406,11 +1600,10 @@ class PutOperation {
               passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs(),
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
               passedInBlobProperties.isEncrypted());
-      if (getNumDataChunks() > 1) {
+      if (isStitchOperation() || getNumDataChunks() > 1) {
         // values returned are in the right order as TreeMap returns them in key-order.
         List<StoreKey> orderedChunkIdList = new ArrayList<>(indexToChunkIds.values());
-        buf = MetadataContentSerDe.serializeMetadataContent(routerConfig.routerMaxPutChunkSizeBytes, getBlobSize(),
-            orderedChunkIdList);
+        buf = MetadataContentSerDe.serializeMetadataContent(intermediateChunkSize, getBlobSize(), orderedChunkIdList);
         onFillComplete(false);
       } else {
         // if there is only one chunk
@@ -1448,16 +1641,20 @@ class PutOperation {
     /**
      * The Chunk is free and can be filled with data.
      */
-    Free, /**
+    Free,
+    /**
      * The Chunk is being built. It may have some data but is not yet ready to be sent.
      */
-    Building, /**
+    Building,
+    /**
      * The Chunk is being encrypted.
      */
-    Encrypting, /**
+    Encrypting,
+    /**
      * The Chunk is ready to be sent out.
      */
-    Ready, /**
+    Ready,
+    /**
      * The Chunk is complete.
      */
     Complete,

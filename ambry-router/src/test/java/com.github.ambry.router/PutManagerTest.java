@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,8 +37,10 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
@@ -62,6 +64,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.LongStream;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -84,7 +87,7 @@ public class PutManagerTest {
   private final MockClusterMap mockClusterMap;
   private final InMemAccountService accountService;
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
-  private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
+  private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>();
   private TestNotificationSystem notificationSystem;
   private NonBlockingRouter router;
   private NonBlockingRouterMetrics metrics;
@@ -93,7 +96,7 @@ public class PutManagerTest {
   private CryptoJobHandler cryptoJobHandler;
   private boolean instantiateEncryptionCast = true;
 
-  private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<RequestAndResult>();
+  private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<>();
   private int chunkSize;
   private int requestParallelism;
   private int successTarget;
@@ -116,12 +119,12 @@ public class PutManagerTest {
 
   /**
    * Pre-initialization common to all tests.
-   * @param {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
+   * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
   public PutManagerTest(boolean testEncryption) throws Exception {
     this.testEncryption = testEncryption;
-    // random chunkSize in the range [1, 1 MB]
-    chunkSize = random.nextInt(1024 * 1024) + 1;
+    // random chunkSize in the range [2, 1 MB]
+    chunkSize = random.nextInt(1024 * 1024) + 2;
     requestParallelism = 3;
     successTarget = 2;
     mockSelectorState.set(MockSelectorState.Good);
@@ -141,7 +144,13 @@ public class PutManagerTest {
   @After
   public void postCheck() {
     if (router != null) {
-      Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
+      if (router.isOpen()) {
+        try {
+          Assert.fail("Router should be closed at the end of each test");
+        } finally {
+          router.close();
+        }
+      }
     }
   }
 
@@ -197,6 +206,92 @@ public class PutManagerTest {
     }
   }
 
+  @Test
+  public void testStitchBlobSuccess() throws Exception {
+    ThrowingConsumer<List<ChunkInfo>> runTest = chunksToStitch -> {
+      requestAndResultsList.clear();
+      requestAndResultsList.add(new RequestAndResult(chunksToStitch));
+      mockClusterMap.clearLastNRequestedPartitionClasses();
+      submitPutsAndAssertSuccess(true);
+      // since the puts are processed one at a time, it is fair to check the last partition class set
+      checkLastRequestPartitionClasses(1, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    };
+
+    for (int i = 1; i < 10; i++) {
+      // Chunks are all the same size.
+      runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+          RouterTestHelpers.buildValidChunkSizeStream(chunkSize * i, chunkSize)));
+      // All intermediate chunks are the same size. Last is smaller.
+      runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+          RouterTestHelpers.buildValidChunkSizeStream(chunkSize * i + random.nextInt(chunkSize - 1) + 1, chunkSize)));
+      // Chunks are all the same size but smaller than routerMaxPutChunkSizeBytes.
+      int dataChunkSize = 1 + random.nextInt(chunkSize - 1);
+      runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+          RouterTestHelpers.buildValidChunkSizeStream(dataChunkSize * i, dataChunkSize)));
+      // All intermediate chunks are the same size but smaller than routerMaxPutChunkSizeBytes. Last is smaller.
+      runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+          RouterTestHelpers.buildValidChunkSizeStream(dataChunkSize * i + random.nextInt(dataChunkSize - 1) + 1,
+              dataChunkSize)));
+    }
+  }
+
+  /**
+   * Test different cases where a stitch operation should fail.
+   * @throws Exception
+   */
+  @Test
+  public void testStitchBlobFailures() throws Exception {
+
+    ThrowingConsumer<Pair<List<ChunkInfo>, RouterErrorCode>> runTest = chunksAndErrorCode -> {
+      requestAndResultsList.clear();
+      requestAndResultsList.add(new RequestAndResult(chunksAndErrorCode.getFirst()));
+      submitPutsAndAssertFailure(new RouterException("", chunksAndErrorCode.getSecond()), true, false, true);
+    };
+
+    // chunk size issues
+    // intermediate chunk sizes do not match
+    runTest.accept(new Pair<>(
+        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+            LongStream.of(200, 10, 200)), RouterErrorCode.InvalidPutArgument));
+    // last chunk larger than intermediate chunks
+    runTest.accept(new Pair<>(
+        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+            LongStream.of(200, 201)), RouterErrorCode.InvalidPutArgument));
+    // last chunk is size 0 (0 not supported by current metadata format)
+    runTest.accept(new Pair<>(
+        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+            LongStream.of(200, 0)), RouterErrorCode.InvalidPutArgument));
+    // intermediate chunk is size 0 (0 not supported by current metadata format)
+    runTest.accept(new Pair<>(
+        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+            LongStream.of(200, 0, 200)), RouterErrorCode.InvalidPutArgument));
+    // invalid intermediate chunk size (0 not supported by current metadata format)
+    runTest.accept(new Pair<>(
+        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+            LongStream.of(0, 0)), RouterErrorCode.InvalidPutArgument));
+    // chunks sizes must be less than or equal to put chunk size config
+    runTest.accept(new Pair<>(
+        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+            RouterTestHelpers.buildValidChunkSizeStream((chunkSize + 1) * 3, chunkSize + 1)),
+        RouterErrorCode.InvalidPutArgument));
+
+    // must provide at least 1 chunk for stitching
+    runTest.accept(new Pair<>(
+        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+            LongStream.empty()), RouterErrorCode.InvalidPutArgument));
+
+    // TTL shorter than metadata blob TTL
+    runTest.accept(new Pair<>(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, 25,
+        RouterTestHelpers.buildValidChunkSizeStream(chunkSize * 3, chunkSize)), RouterErrorCode.InvalidPutArgument));
+
+    // Chunk IDs must all be DATACHUNK type
+    runTest.accept(new Pair<>(
+        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.METADATA, Utils.Infinite_Time,
+            RouterTestHelpers.buildValidChunkSizeStream(chunkSize * 3, chunkSize)), RouterErrorCode.InvalidBlobId));
+    runTest.accept(new Pair<>(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.SIMPLE, Utils.Infinite_Time,
+        RouterTestHelpers.buildValidChunkSizeStream(chunkSize * 3, chunkSize)), RouterErrorCode.InvalidBlobId));
+  }
+
   /**
    * Test that a bad user defined callback will not crash the router.
    * @throws Exception
@@ -214,12 +309,9 @@ public class PutManagerTest {
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(req.putContent));
     Future future =
         router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-            new Callback<String>() {
-              @Override
-              public void onCompletion(String result, Exception exception) {
-                callbackCalled.countDown();
-                throw new RuntimeException("Throwing an exception in the user callback");
-              }
+            (result, exception) -> {
+              callbackCalled.countDown();
+              throw new RuntimeException("Throwing an exception in the user callback");
             });
     submitPutsAndAssertSuccess(false);
     //future.get() for operation with bad callback should still succeed
@@ -384,9 +476,9 @@ public class PutManagerTest {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
     List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
-    for (int i = 0; i < dataNodeIds.size(); i++) {
-      String host = dataNodeIds.get(i).getHostname();
-      int port = dataNodeIds.get(i).getPort();
+    for (DataNodeId dataNodeId : dataNodeIds) {
+      String host = dataNodeId.getHostname();
+      int port = dataNodeId.getPort();
       MockServer server = mockServerLayout.getMockServer(host, port);
       server.setServerErrorForAllRequests(ServerErrorCode.Unknown_Error);
     }
@@ -458,7 +550,7 @@ public class PutManagerTest {
     // but later ones succeed. With 3 nodes, for slipped puts, all partitions will come from the same nodes,
     // so we set the errors in such a way that the first request received by every node fails.
     // Note: The assumption is that there are 3 nodes per DC.
-    List<ServerErrorCode> serverErrorList = new ArrayList<ServerErrorCode>();
+    List<ServerErrorCode> serverErrorList = new ArrayList<>();
     serverErrorList.add(ServerErrorCode.Unknown_Error);
     serverErrorList.add(ServerErrorCode.No_Error);
     for (DataNodeId dataNodeId : dataNodeIds) {
@@ -481,7 +573,7 @@ public class PutManagerTest {
     // Set the state of the mock servers so that they return success for the first send issued,
     // but later ones fail. With 3 nodes, all partitions will come from the same nodes,
     // so we set the errors in such a way that the first request received by every node succeeds and later ones fail.
-    List<ServerErrorCode> serverErrorList = new ArrayList<ServerErrorCode>();
+    List<ServerErrorCode> serverErrorList = new ArrayList<>();
     serverErrorList.add(ServerErrorCode.No_Error);
     for (int i = 0; i < 5; i++) {
       serverErrorList.add(ServerErrorCode.Unknown_Error);
@@ -811,21 +903,23 @@ public class PutManagerTest {
       router = getNonBlockingRouter();
     }
     for (final RequestAndResult requestAndResult : requestAndResultsList) {
-      Utils.newThread(new Runnable() {
-        @Override
-        public void run() {
-          try {
-            ReadableStreamChannel putChannel =
-                new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
+      Utils.newThread(() -> {
+        try {
+          ReadableStreamChannel putChannel =
+              new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
+          if (requestAndResult.chunksToStitch == null) {
             requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), null);
-            requestAndResult.result.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
-          } catch (Exception e) {
-            requestAndResult.result = new FutureResult<>();
-            requestAndResult.result.done(null, e);
-          } finally {
-            doneLatch.countDown();
+                requestAndResult.putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null);
+          } else {
+            requestAndResult.result = (FutureResult<String>) router.stitchBlob(requestAndResult.putBlobProperties,
+                requestAndResult.putUserMetadata, requestAndResult.chunksToStitch, null);
           }
+          requestAndResult.result.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+          requestAndResult.result = new FutureResult<>();
+          requestAndResult.result.done(null, e);
+        } finally {
+          doneLatch.countDown();
         }
       }, true).start();
     }
@@ -838,7 +932,7 @@ public class PutManagerTest {
   private void assertSuccess() throws Exception {
     // Go through all the requests received by all the servers and ensure that all requests for the same blob id are
     // identical. In the process also fill in the map of blobId to serializedPutRequests.
-    HashMap<String, ByteBuffer> allChunks = new HashMap<String, ByteBuffer>();
+    HashMap<String, ByteBuffer> allChunks = new HashMap<>();
     for (MockServer mockServer : mockServerLayout.getMockServers()) {
       for (Map.Entry<String, StoredBlob> blobEntry : mockServer.getBlobs().entrySet()) {
         ByteBuffer chunk = allChunks.get(blobEntry.getKey());
@@ -855,62 +949,79 @@ public class PutManagerTest {
     for (RequestAndResult requestAndResult : requestAndResultsList) {
       String blobId = requestAndResult.result.result();
       Exception exception = requestAndResult.result.error();
+      if (exception != null) {
+        throw exception;
+      }
       Assert.assertNotNull("blobId should not be null", blobId);
-      Assert.assertNull("exception should be null", exception);
-      verifyBlob(blobId, requestAndResult.putBlobProperties, requestAndResult.putContent,
-          requestAndResult.putUserMetadata, allChunks);
+      verifyBlob(requestAndResult, allChunks);
     }
   }
 
   /**
    * Verifies that the blob associated with the blob id returned by a successful put operation has exactly the same
    * data as the original object that was put.
-   * @param blobId the blobId of the blob that is to be verified.
-   * @param properties the {@link BlobProperties} of the blob that is to be verified
-   * @param originalPutContent original content of the blob
-   * @param originalUserMetadata original user-metadata of the blob
+   * @param requestAndResult the {@link RequestAndResult} to use for verification.
    * @param serializedRequests the mapping from blob ids to their corresponding serialized {@link PutRequest}.
    */
-  private void verifyBlob(String blobId, BlobProperties properties, byte[] originalPutContent,
-      byte[] originalUserMetadata, HashMap<String, ByteBuffer> serializedRequests) throws Exception {
+  private void verifyBlob(RequestAndResult requestAndResult, HashMap<String, ByteBuffer> serializedRequests)
+      throws Exception {
+    String blobId = requestAndResult.result.result();
     ByteBuffer serializedRequest = serializedRequests.get(blobId);
     PutRequest.ReceivedPutRequest request = deserializePutRequest(serializedRequest);
     NotificationBlobType notificationBlobType;
     BlobId origBlobId = new BlobId(blobId, mockClusterMap);
-
+    boolean stitchOperation = requestAndResult.chunksToStitch != null;
+    if (stitchOperation) {
+      assertEquals("Stitch operations should always produce metadata blobs", BlobType.MetadataBlob,
+          request.getBlobType());
+    }
     if (request.getBlobType() == BlobType.MetadataBlob) {
       notificationBlobType = NotificationBlobType.Composite;
       assertEquals("Expected metadata", BlobDataType.METADATA, origBlobId.getBlobDataType());
       byte[] data = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
       CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe.deserializeMetadataContentRecord(ByteBuffer.wrap(data),
           new BlobIdFactory(mockClusterMap));
-      assertEquals("Wrong max chunk size in metadata", chunkSize, compositeBlobInfo.getChunkSize());
-      assertEquals("Wrong total size in metadata", originalPutContent.length, compositeBlobInfo.getTotalSize());
       List<StoreKey> dataBlobIds = compositeBlobInfo.getKeys();
-      assertEquals("Number of chunks is not as expected",
-          RouterUtils.getNumChunksForBlobAndChunkSize(originalPutContent.length, chunkSize), dataBlobIds.size());
+      long expectedMaxChunkSize;
+      long expectedTotalSize;
+      int expectedNumChunks;
+      if (stitchOperation) {
+        expectedMaxChunkSize =
+            requestAndResult.chunksToStitch.stream().mapToLong(ChunkInfo::getChunkSizeInBytes).max().orElse(0);
+        expectedTotalSize = requestAndResult.chunksToStitch.stream().mapToLong(ChunkInfo::getChunkSizeInBytes).sum();
+        expectedNumChunks = requestAndResult.chunksToStitch.size();
+      } else {
+        expectedMaxChunkSize = chunkSize;
+        expectedTotalSize = requestAndResult.putContent.length;
+        expectedNumChunks = RouterUtils.getNumChunksForBlobAndChunkSize(requestAndResult.putContent.length, chunkSize);
+      }
+      assertEquals("Wrong max chunk size in metadata", expectedMaxChunkSize, compositeBlobInfo.getChunkSize());
+      assertEquals("Wrong total size in metadata", expectedTotalSize, compositeBlobInfo.getTotalSize());
+      assertEquals("Number of chunks is not as expected", expectedNumChunks, dataBlobIds.size());
       // Verify all dataBlobIds are DataChunk
-      for (StoreKey key: dataBlobIds) {
+      for (StoreKey key : dataBlobIds) {
         BlobId origDataBlobId = (BlobId) key;
         assertEquals("Expected datachunk", BlobDataType.DATACHUNK, origDataBlobId.getBlobDataType());
       }
       // verify user-metadata
-      if (properties.isEncrypted()) {
+      if (requestAndResult.putBlobProperties.isEncrypted()) {
         ByteBuffer userMetadata = request.getUsermetadata();
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), null, userMetadata, cryptoService, kms,
             new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
-          Assert.assertNull("Exception should not be thrown", exception);
+          assertNull("Exception should not be thrown", exception);
           assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
-          Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+          assertArrayEquals("UserMetadata mismatch", requestAndResult.putUserMetadata,
               result.getDecryptedUserMetadata().array());
         }).run();
       } else {
-        Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata, request.getUsermetadata().array());
+        assertArrayEquals("UserMetadata mismatch", requestAndResult.putUserMetadata, request.getUsermetadata().array());
       }
-      verifyCompositeBlob(properties, originalPutContent, originalUserMetadata, dataBlobIds, request,
-          serializedRequests);
+      if (!stitchOperation) {
+        verifyCompositeBlob(requestAndResult.putBlobProperties, requestAndResult.putContent,
+            requestAndResult.putUserMetadata, dataBlobIds, request, serializedRequests);
+      }
     } else {
       notificationBlobType = NotificationBlobType.Simple;
       // TODO: Currently, we don't have the logic to distinguish Simple vs DataChunk for the first chunk
@@ -919,28 +1030,22 @@ public class PutManagerTest {
       assertTrue("Invalid blob data type", dataType == BlobDataType.DATACHUNK || dataType == BlobDataType.SIMPLE);
 
       byte[] content = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
-      if (!properties.isEncrypted()) {
-        Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
-        Assert.assertArrayEquals("UserMetadata mismatch for simple blob", originalUserMetadata,
+      if (!requestAndResult.putBlobProperties.isEncrypted()) {
+        assertArrayEquals("Input blob and written blob should be the same", requestAndResult.putContent, content);
+        assertArrayEquals("UserMetadata mismatch for simple blob", requestAndResult.putUserMetadata,
             request.getUsermetadata().array());
-        notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
       } else {
         ByteBuffer userMetadata = request.getUsermetadata();
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), ByteBuffer.wrap(content), userMetadata,
-            cryptoService, kms, new CryptoJobMetricsTracker(metrics.decryptJobMetrics),
-            new Callback<DecryptJob.DecryptJobResult>() {
-              @Override
-              public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
-                Assert.assertNull("Exception should not be thrown", exception);
-                assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
-                Assert.assertArrayEquals("Content mismatch", originalPutContent,
-                    result.getDecryptedBlobContent().array());
-                Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
-                    result.getDecryptedUserMetadata().array());
-              }
-            }).run();
+            cryptoService, kms, new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
+          assertNull("Exception should not be thrown", exception);
+          assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
+          assertArrayEquals("Content mismatch", requestAndResult.putContent, result.getDecryptedBlobContent().array());
+          assertArrayEquals("UserMetadata mismatch", requestAndResult.putUserMetadata,
+              result.getDecryptedUserMetadata().array());
+        }).run();
       }
     }
     notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
@@ -1103,10 +1208,16 @@ public class PutManagerTest {
     BlobProperties putBlobProperties;
     byte[] putUserMetadata;
     byte[] putContent;
+    List<ChunkInfo> chunksToStitch;
     FutureResult<String> result;
 
     RequestAndResult(int blobSize) {
       this(blobSize, null);
+    }
+
+    RequestAndResult(List<ChunkInfo> chunksToStitch) {
+      this(0, null);
+      this.chunksToStitch = chunksToStitch;
     }
 
     RequestAndResult(int blobSize, Container container) {
@@ -1130,12 +1241,8 @@ public class PutManagerTest {
     @Override
     public void onBlobCreated(String blobId, BlobProperties blobProperties, Account account, Container container,
         NotificationBlobType notificationBlobType) {
-      List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
-      if (events == null) {
-        events = new ArrayList<>();
-        blobCreatedEvents.put(blobId, events);
-      }
-      events.add(new BlobCreatedEvent(blobProperties, notificationBlobType));
+      blobCreatedEvents.computeIfAbsent(blobId, k -> new ArrayList<>())
+          .add(new BlobCreatedEvent(blobProperties, notificationBlobType));
     }
 
     /**
@@ -1278,7 +1385,7 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     this.writableChannel = asyncWritableChannel;
     this.callback = callback;
-    this.returnedFuture = new FutureResult<Long>();
+    this.returnedFuture = new FutureResult<>();
     return returnedFuture;
   }
 
@@ -1294,7 +1401,7 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
    * {@inheritDoc}
    */
   @Override
-  public void close() throws IOException {
+  public void close() {
     // no op.
   }
 }

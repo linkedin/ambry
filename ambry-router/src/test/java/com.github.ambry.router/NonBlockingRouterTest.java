@@ -40,6 +40,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -49,9 +50,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.PrimitiveIterator;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -59,6 +62,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -191,12 +196,24 @@ public class NonBlockingRouterTest {
         cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
   }
 
+  /**
+   * Setup test suite to perform a {@link Router#putBlob} call using the constant {@link #PUT_CONTENT_SIZE}
+   */
   private void setOperationParams() {
-    putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, TTL_SECS,
+    setOperationParams(PUT_CONTENT_SIZE, TTL_SECS);
+  }
+
+  /**
+   * Setup test suite to perform a {@link Router#putBlob} call.
+   * @param putContentSize the size of the content to put
+   * @param ttlSecs the TTL in seconds for the blob.
+   */
+  private void setOperationParams(int putContentSize, long ttlSecs) {
+    putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, ttlSecs,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
-    putContent = new byte[PUT_CONTENT_SIZE];
+    putContent = new byte[putContentSize];
     random.nextBytes(putContent);
     putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
   }
@@ -231,26 +248,39 @@ public class NonBlockingRouterTest {
   public void testRouterBasic() throws Exception {
     setRouter();
     assertExpectedThreadCounts(2, 1);
-    setOperationParams();
 
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
-    String blobId =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
-    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
-    router.updateBlobTtl(blobId, null, Utils.Infinite_Time);
-    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
-    router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
-        .get();
-    router.deleteBlob(blobId, null).get();
-    try {
-      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
-    } catch (ExecutionException e) {
-      RouterException r = (RouterException) e.getCause();
-      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+    List<String> blobIds = new ArrayList<>();
+    for (int i = 0; i < 2; i++) {
+      setOperationParams();
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+      blobIds.add(blobId);
     }
-    router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build()).get();
-    router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build()).get();
+    setOperationParams();
+    String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, blobIds.stream()
+        .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
+        .collect(Collectors.toList())).get();
+    blobIds.add(stitchedBlobId);
+
+    for (String blobId : blobIds) {
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+      router.updateBlobTtl(blobId, null, Utils.Infinite_Time);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
+          .get();
+      router.deleteBlob(blobId, null).get();
+      try {
+        router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+      } catch (ExecutionException e) {
+        RouterException r = (RouterException) e.getCause();
+        Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+      }
+      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build()).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build()).get();
+    }
+
     router.close();
     assertExpectedThreadCounts(0, 0);
 
@@ -640,6 +670,80 @@ public class NonBlockingRouterTest {
   @Test
   public void testCompositeBlobTtlUpdate() throws Exception {
     doTtlUpdateTest(4);
+  }
+
+  /**
+   * Test that stitched blobs are usable by the other router methods.
+   * @throws Exception
+   */
+  @Test
+  public void testStitchGetUpdateDelete() throws Exception {
+    AtomicReference<CountDownLatch> deletesDoneLatch = new AtomicReference<>();
+    Set<String> deletedBlobs = ConcurrentHashMap.newKeySet();
+    LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
+      @Override
+      public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
+        deletedBlobs.add(blobId);
+        deletesDoneLatch.get().countDown();
+      }
+    };
+    setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap),
+        deleteTrackingNotificationSystem);
+    for (int intermediateChunkSize : new int[]{maxPutChunkSize, maxPutChunkSize / 2}) {
+      for (LongStream chunkSizeStream : new LongStream[]{
+          RouterTestHelpers.buildValidChunkSizeStream(3 * intermediateChunkSize, intermediateChunkSize),
+          RouterTestHelpers.buildValidChunkSizeStream(
+              3 * intermediateChunkSize + random.nextInt(intermediateChunkSize - 1) + 1, intermediateChunkSize)}) {
+        // Upload data chunks
+        ByteArrayOutputStream stitchedContentStream = new ByteArrayOutputStream();
+        List<ChunkInfo> chunksToStitch = new ArrayList<>();
+        PrimitiveIterator.OfLong chunkSizeIter = chunkSizeStream.iterator();
+        while (chunkSizeIter.hasNext()) {
+          long chunkSize = chunkSizeIter.nextLong();
+          setOperationParams((int) chunkSize, TTL_SECS);
+          String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel,
+              new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(PUT_CONTENT_SIZE).build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          long expirationTime = Utils.addSecondsToEpochTime(putBlobProperties.getCreationTimeInMs(),
+              putBlobProperties.getTimeToLiveInSeconds());
+          chunksToStitch.add(new ChunkInfo(blobId, chunkSize, expirationTime));
+          stitchedContentStream.write(putContent);
+        }
+        byte[] expectedContent = stitchedContentStream.toByteArray();
+
+        // Stitch the chunks together
+        setOperationParams(0, TTL_SECS / 2);
+        String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch)
+            .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+        // Fetch the stitched blob
+        GetBlobResult getBlobResult = router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build())
+            .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        assertTrue("Blob properties must be the same",
+            RouterTestHelpers.haveEquivalentFields(putBlobProperties, getBlobResult.getBlobInfo().getBlobProperties()));
+        assertArrayEquals("User metadata must be the same", putUserMetadata,
+            getBlobResult.getBlobInfo().getUserMetadata());
+        RouterTestHelpers.compareContent(expectedContent, null, getBlobResult.getBlobDataChannel());
+
+        // TtlUpdate the blob.
+        router.updateBlobTtl(stitchedBlobId, "update-service", Utils.Infinite_Time)
+            .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+        // Ensure that TTL was updated on the metadata blob and all data chunks
+        Set<String> allBlobIds = chunksToStitch.stream().map(ChunkInfo::getBlobId).collect(Collectors.toSet());
+        allBlobIds.add(stitchedBlobId);
+        assertTtl(router, allBlobIds, Utils.Infinite_Time);
+
+        // Delete and ensure that all stitched chunks are deleted
+        deletedBlobs.clear();
+        deletesDoneLatch.set(new CountDownLatch(chunksToStitch.size() + 1));
+        router.deleteBlob(stitchedBlobId, "delete-service").get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        TestUtils.awaitLatchOrTimeout(deletesDoneLatch.get(), AWAIT_TIMEOUT_MS);
+        assertEquals("Metadata chunk and all data chunks should be deleted", allBlobIds, deletedBlobs);
+      }
+    }
+    router.close();
+    assertExpectedThreadCounts(0, 0);
   }
 
   /**
@@ -1097,18 +1201,14 @@ public class NonBlockingRouterTest {
         case PUT:
           futureResult = new FutureResult<String>();
           ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
-          putManager.submitPutBlobOperation(putBlobProperties, putUserMetadata, putChannel, futureResult, null);
+          putManager.submitPutBlobOperation(putBlobProperties, putUserMetadata, putChannel,
+              new PutBlobOptionsBuilder().build(), futureResult, null);
           break;
         case GET:
-          final FutureResult getFutureResult = new FutureResult<GetBlobResultInternal>();
+          final FutureResult<GetBlobResultInternal> getFutureResult = new FutureResult<>();
           getManager.submitGetBlobOperation(blobId.getID(), new GetBlobOptionsInternal(
               new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
-              routerMetrics.ageAtGet), new Callback<GetBlobResultInternal>() {
-            @Override
-            public void onCompletion(GetBlobResultInternal result, Exception exception) {
-              getFutureResult.done(result, exception);
-            }
-          });
+              routerMetrics.ageAtGet), getFutureResult::done);
           futureResult = getFutureResult;
           break;
         case DELETE:

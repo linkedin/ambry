@@ -137,9 +137,16 @@ class PerfRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] usermetadata, List<ChunkInfo> chunksToStitch,
       Callback<String> callback) {
-    throw new UnsupportedOperationException("Only in full PR");
+    logger.trace("Received stitchBlob call");
+    final FutureResult<String> futureResult = new FutureResult<>();
+    if (!routerOpen) {
+      completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      completeOperation(futureResult, callback, BLOB_ID, null);
+    }
+    return futureResult;
   }
 
   /**

@@ -183,25 +183,9 @@ abstract class GetOperation {
    */
   void setOperationException(Exception exception) {
     if (exception instanceof RouterException) {
-      RouterErrorCode routerErrorCode = ((RouterException) exception).getErrorCode();
-      if (operationException.get() == null) {
-        operationException.set(exception);
-      } else {
-        Integer currentOperationExceptionLevel = null;
-        if (operationException.get() instanceof RouterException) {
-          currentOperationExceptionLevel =
-              getPrecedenceLevel(((RouterException) operationException.get()).getErrorCode());
-        } else {
-          currentOperationExceptionLevel = getPrecedenceLevel(RouterErrorCode.UnexpectedInternalError);
-        }
-        if (getPrecedenceLevel(routerErrorCode) < currentOperationExceptionLevel) {
-          operationException.set(exception);
-        }
-      }
+      RouterUtils.replaceOperationException(operationException, (RouterException) exception, this::getPrecedenceLevel);
     } else {
-      if (operationException.get() == null) {
-        operationException.set(exception);
-      }
+      operationException.compareAndSet(null, exception);
     }
   }
 
@@ -212,7 +196,7 @@ abstract class GetOperation {
    * @param routerErrorCode The {@link RouterErrorCode} for which to get its precedence level.
    * @return The precedence level of the {@link RouterErrorCode}.
    */
-  private Integer getPrecedenceLevel(RouterErrorCode routerErrorCode) {
+  private int getPrecedenceLevel(RouterErrorCode routerErrorCode) {
     switch (routerErrorCode) {
       case BlobAuthorizationFailure:
         return 1;

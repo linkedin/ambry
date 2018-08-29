@@ -33,7 +33,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -122,16 +121,13 @@ class PutManager {
     this.routerMetrics = routerMetrics;
     this.routerCallback = routerCallback;
     this.defaultPartitionClass = defaultPartitionClass;
-    this.chunkArrivalListener = new ByteBufferAsyncWritableChannel.ChannelEventListener() {
-      @Override
-      public void onEvent(ByteBufferAsyncWritableChannel.EventType e) {
-        synchronized (chunkFillerSynchronizer) {
-          // At this point, the chunk for which this notification came in (if any) could already have been consumed by
-          // the chunk filler, and this might unnecessarily wake it up from its sleep, which should be okay.
-          chunkFillerThreadMaySleep = false;
-          if (isChunkFillerThreadAsleep) {
-            chunkFillerSynchronizer.notify();
-          }
+    this.chunkArrivalListener = eventType -> {
+      synchronized (chunkFillerSynchronizer) {
+        // At this point, the chunk for which this notification came in (if any) could already have been consumed by
+        // the chunk filler, and this might unnecessarily wake it up from its sleep, which should be okay.
+        chunkFillerThreadMaySleep = false;
+        if (isChunkFillerThreadAsleep) {
+          chunkFillerSynchronizer.notify();
         }
       }
     };
@@ -140,8 +136,8 @@ class PutManager {
     this.cryptoJobHandler = cryptoJobHandler;
     this.accountService = accountService;
     this.time = time;
-    putOperations = Collections.newSetFromMap(new ConcurrentHashMap<PutOperation, Boolean>());
-    correlationIdToPutOperation = new HashMap<Integer, PutOperation>();
+    putOperations = ConcurrentHashMap.newKeySet();
+    correlationIdToPutOperation = new HashMap<>();
     chunkFillerThread = Utils.newThread("ChunkFillerThread-" + suffix, new ChunkFiller(), true);
     chunkFillerThread.start();
     routerMetrics.initializePutManagerMetrics(chunkFillerThread);
@@ -152,19 +148,38 @@ class PutManager {
    * @param blobProperties the blobProperties associated with the blob being put.
    * @param userMetaData the userMetaData associated with the blob being put.
    * @param channel the {@link ReadableStreamChannel} containing the blob content.
+   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param futureResult the {@link FutureResult} that contains the pending result of the operation.
    * @param callback the {@link Callback} object to be called on completion of the operation.
    */
   void submitPutBlobOperation(BlobProperties blobProperties, byte[] userMetaData, ReadableStreamChannel channel,
+      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback) {
+    String partitionClass = getPartitionClass(blobProperties);
+    PutOperation putOperation =
+        PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
+            userMetaData, channel, options, futureResult, callback, routerCallback, chunkArrivalListener, kms,
+            cryptoService, cryptoJobHandler, time, blobProperties, partitionClass);
+    putOperations.add(putOperation);
+    putOperation.startOperation();
+  }
+
+  /**
+   * Submit a put blob operation to be processed asynchronously.
+   * @param blobProperties the blobProperties associated with the blob being put.
+   * @param userMetaData the userMetaData associated with the blob being put.
+   * @param chunksToStitch the list of chunks to stitch together.
+   * @param futureResult the {@link FutureResult} that contains the pending result of the operation.
+   * @param callback the {@link Callback} object to be called on completion of the operation.
+   */
+  void submitStitchBlobOperation(BlobProperties blobProperties, byte[] userMetaData, List<ChunkInfo> chunksToStitch,
       FutureResult<String> futureResult, Callback<String> callback) {
     String partitionClass = getPartitionClass(blobProperties);
     PutOperation putOperation =
-        new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, notificationSystem, accountService,
-            userMetaData,
-            channel, futureResult, callback, routerCallback, chunkArrivalListener, kms, cryptoService, cryptoJobHandler,
+        PutOperation.forStitching(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
+            userMetaData, chunksToStitch, futureResult, callback, routerCallback, kms, cryptoService, cryptoJobHandler,
             time, blobProperties, partitionClass);
     putOperations.add(putOperation);
-    putOperation.startReadingFromChannel();
+    putOperation.startOperation();
   }
 
   /**
@@ -280,7 +295,7 @@ class PutManager {
     if (e != null) {
       blobId = null;
       routerMetrics.onPutBlobError(e, op.isEncryptionEnabled());
-      routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfComposite(), op.getServiceId());
+      routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfCompositeDirectUpload(), op.getServiceId());
     } else {
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }

@@ -136,7 +136,6 @@ public class ChunkFillTest {
     MockClusterMap mockClusterMap = new MockClusterMap();
     RouterConfig routerConfig = new RouterConfig(vProps);
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
-    ResponseHandler responseHandler = new ResponseHandler(mockClusterMap);
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
     BlobProperties putBlobProperties =
@@ -150,11 +149,11 @@ public class ChunkFillTest {
     MockTime time = new MockTime();
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     PutOperation op =
-        new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
-            new InMemAccountService(true, false), putUserMetadata, putChannel, futureResult, null,
-            new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            futureResult, null, new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<>()), null,
             null, null, null, new MockTime(), putBlobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    op.startReadingFromChannel();
+    op.startOperation();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     // largeBlobSize is not a multiple of chunkSize
     int expectedNumChunks = (int) (blobSize / chunkSize + 1);
@@ -260,10 +259,11 @@ public class ChunkFillTest {
     MockRouterCallback routerCallback =
         new MockRouterCallback(networkClientFactory.getNetworkClient(), Collections.EMPTY_LIST);
     PutOperation op =
-        new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
-            new InMemAccountService(true, false), putUserMetadata, putChannel, futureResult, null, routerCallback, null,
-            kms, cryptoService, cryptoJobHandler, time, putBlobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    op.startReadingFromChannel();
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            futureResult, null, routerCallback, null, kms, cryptoService, cryptoJobHandler, time, putBlobProperties,
+            MockClusterMap.DEFAULT_PARTITION_CLASS);
+    op.startOperation();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     compositeBuffers = new ByteBuffer[numChunks];
     compositeEncryptionKeys = new ByteBuffer[numChunks];

@@ -59,8 +59,8 @@ public class AmbryUrlSigningService implements UrlSigningService {
    * @param defaultMaxUploadSize the default max size of upload from signed POST URLs if the request does not customize
    *                             it.
    * @param maxUrlTtlSecs the maximum ttl of signed URLs. If the request specifies a higher TTL, it will be lowered
-   * @param  chunkUploadInitialChunkTtlSecs the preconfigured blob TTL for chunks of a stitched upload. These chunks
-   *                                        will be made permanent once the blob is stitched together.
+   * @param chunkUploadInitialChunkTtlSecs the preconfigured blob TTL for chunks of a stitched upload. These chunks
+   *                                       will be made permanent once the blob is stitched together.
    * @param chunkUploadMaxChunkSize the preconfigured max size for chunks of a stitched upload.
    * @param time the {@link Time} instance to use.
    */

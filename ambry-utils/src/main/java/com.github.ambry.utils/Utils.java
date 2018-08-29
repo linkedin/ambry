@@ -36,6 +36,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
@@ -873,6 +874,25 @@ public class Utils {
   public static long getTtlInSecsFromExpiryMs(long expiresAtMs, long creationTimeMs) {
     return expiresAtMs == Utils.Infinite_Time ? Utils.Infinite_Time
         : Math.max(0, TimeUnit.MILLISECONDS.toSeconds(expiresAtMs - creationTimeMs));
+  }
+
+  /**
+   * Compare two times or durations, accounting for the {@link Utils#Infinite_Time} constant.
+   * @param time1 the first time.
+   * @param time2 the second time.
+   * @return -1 if {@code time1} is earlier than {@code time2}, 0 if the times are equal, and 1 if {@code time1} is
+   *         later than {@code time2}. {@link Utils#Infinite_Time} is considered greater than any other time.
+   */
+  public static int compareTimes(long time1, long time2) {
+    if (time1 == time2) {
+      return 0;
+    } else if (time1 == Utils.Infinite_Time) {
+      return 1;
+    } else if (time2 == Utils.Infinite_Time) {
+      return -1;
+    } else {
+      return Long.compare(time1, time2);
+    }
   }
 
   /**

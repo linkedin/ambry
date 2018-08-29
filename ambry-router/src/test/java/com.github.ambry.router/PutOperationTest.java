@@ -15,9 +15,9 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.stream.LongStream;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -50,7 +51,6 @@ public class PutOperationTest {
   private final RouterConfig routerConfig;
   private final MockClusterMap mockClusterMap = new MockClusterMap();
   private final NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
-  private final ResponseHandler responseHandler;
   private final Time time;
   private final Map<Integer, PutOperation> correlationIdToPutOperation = new TreeMap<>();
   private final MockServer mockServer = new MockServer(mockClusterMap, "");
@@ -82,7 +82,6 @@ public class PutOperationTest {
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     routerConfig = new RouterConfig(vProps);
-    responseHandler = new ResponseHandler(mockClusterMap);
     time = new MockTime();
   }
 
@@ -103,11 +102,11 @@ public class PutOperationTest {
     FutureResult<String> future = new FutureResult<>();
     MockNetworkClient mockNetworkClient = new MockNetworkClient();
     PutOperation op =
-        new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
-            new InMemAccountService(true, false), userMetadata, channel, future, null,
-            new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>()), null, null, null, null,
-            time, blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    op.startReadingFromChannel();
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, new PutBlobOptionsBuilder().build(), future,
+            null, new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time,
+            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    op.startOperation();
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestInfos;
     // Since this channel is in memory, one call to fill chunks would end up filling the maximum number of PutChunks.
@@ -211,10 +210,10 @@ public class PutOperationTest {
     FutureResult<String> future = new FutureResult<>();
     MockNetworkClient mockNetworkClient = new MockNetworkClient();
     PutOperation op =
-        new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
-            new InMemAccountService(true, false), userMetadata, channel, future, null,
-            new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>()), null, null, null, null,
-            time, blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, new PutBlobOptionsBuilder().build(), future,
+            null, new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time,
+            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
     RouterErrorCode[] routerErrorCodes = new RouterErrorCode[5];
     routerErrorCodes[0] = RouterErrorCode.OperationTimedOut;
     routerErrorCodes[1] = RouterErrorCode.UnexpectedInternalError;
@@ -240,6 +239,36 @@ public class PutOperationTest {
     op.setOperationExceptionAndComplete(new RouterException("RouterError", RouterErrorCode.InsufficientCapacity));
     Assert.assertEquals(((RouterException) op.getOperationException()).getErrorCode(),
         RouterErrorCode.InsufficientCapacity);
+  }
+
+  /**
+   * Ensure that errors while stitching blobs do not result in data chunk deletions.
+   * @throws Exception
+   */
+  @Test
+  public void testStitchErrorDataChunkHandling() throws Exception {
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false);
+    byte[] userMetadata = new byte[10];
+    FutureResult<String> future = new FutureResult<>();
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    List<ChunkInfo> chunksToStitch =
+        RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
+            LongStream.of(10, 10, 11));
+    PutOperation op =
+        PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, chunksToStitch, future, null,
+            new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
+            MockClusterMap.DEFAULT_PARTITION_CLASS);
+    // Trigger an exception by making the last chunk size too large.
+    op.startOperation();
+    Assert.assertTrue("Operation should be completed", op.isOperationComplete());
+    Assert.assertEquals("Wrong RouterException error code", RouterErrorCode.InvalidPutArgument,
+        ((RouterException) op.getOperationException()).getErrorCode());
+    // Ensure that the operation does not provide the background deleter with any data chunks to delete.
+    Assert.assertEquals("List of chunks to delete should be empty", 0,
+        op.getSuccessfullyPutChunkIdsIfCompositeDirectUpload().size());
   }
 
   /**

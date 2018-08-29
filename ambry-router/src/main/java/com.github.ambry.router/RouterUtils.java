@@ -22,6 +22,8 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.ToIntFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -119,5 +121,35 @@ class RouterUtils {
     Account account = accountService.getAccountById(accountId);
     Container container = account == null ? null : account.getContainerById(containerId);
     return new Pair<>(account, container);
+  }
+
+  /**
+   * Atomically replace the exception for an operation depending on the precedence of the new exception.
+   * First, if the current operationException is null, directly set operationException as exception;
+   * Second, if operationException exists, compare ErrorCodes of exception and existing operation Exception depending
+   * on precedence level. An ErrorCode with a smaller precedence level overrides an ErrorCode with a larger precedence
+   * level. Update the operationException if necessary.
+   * @param operationExceptionRef the {@link AtomicReference} to the operation exception to potentially replace.
+   * @param exception the new {@link RouterException} to set if it the precedence level is lower than that of the
+   *                  current exception.
+   * @param precedenceLevelFn a function that translates a {@link RouterErrorCode} into an integer precedence level,
+   *                          where lower values signify greater precedence.
+   */
+  static void replaceOperationException(AtomicReference<Exception> operationExceptionRef, RouterException exception,
+      ToIntFunction<RouterErrorCode> precedenceLevelFn) {
+    RouterErrorCode routerErrorCode = exception.getErrorCode();
+    Exception currentException;
+    Exception newException;
+    do {
+      currentException = operationExceptionRef.get();
+      if (currentException == null) {
+        newException = exception;
+      } else {
+        int currentPrecedence = precedenceLevelFn.applyAsInt(
+            currentException instanceof RouterException ? ((RouterException) currentException).getErrorCode()
+                : RouterErrorCode.UnexpectedInternalError);
+        newException = precedenceLevelFn.applyAsInt(routerErrorCode) < currentPrecedence ? exception : currentException;
+      }
+    } while (!operationExceptionRef.compareAndSet(currentException, newException));
   }
 }
