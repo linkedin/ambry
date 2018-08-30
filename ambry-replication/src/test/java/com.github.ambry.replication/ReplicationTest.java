@@ -124,6 +124,7 @@ public class ReplicationTest {
     Properties properties = new Properties();
     properties.setProperty("replication.synced.replica.backoff.duration.ms", "3000");
     properties.setProperty("replication.replica.thread.throttle.sleep.duration.ms", "100");
+    properties.setProperty("replication.replica.thread.idle.sleep.duration.ms", "1000");
     config = new ReplicationConfig(new VerifiableProperties(properties));
   }
 

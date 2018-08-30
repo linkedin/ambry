@@ -70,14 +70,14 @@ public class ReplicationConfig {
    * The time to sleep between replication cycles when the replica thread is not doing any useful work
    */
   @Config("replication.replica.thread.idle.sleep.duration.ms")
-  @Default("1000")
+  @Default("0")
   public final long replicationReplicaThreadIdleSleepDurationMs;
 
   /**
    * The time to temporarily disable replication for a replica in order to reduce wasteful network calls
    */
   @Config("replication.synced.replica.backoff.duration.ms")
-  @Default("1000")
+  @Default("0")
   public final long replicationSyncedReplicaBackoffDurationMs;
 
   /**
@@ -107,10 +107,10 @@ public class ReplicationConfig {
         verifiableProperties.getLongInRange("replication.replica.thread.throttle.sleep.duration.ms", 0, 0,
             Long.MAX_VALUE);
     replicationReplicaThreadIdleSleepDurationMs =
-        verifiableProperties.getLongInRange("replication.replica.thread.idle.sleep.duration.ms", 1000, 0,
+        verifiableProperties.getLongInRange("replication.replica.thread.idle.sleep.duration.ms", 0, 0,
             Long.MAX_VALUE);
     replicationSyncedReplicaBackoffDurationMs =
-        verifiableProperties.getLongInRange("replication.synced.replica.backoff.duration.ms", 1000, 0, Long.MAX_VALUE);
+        verifiableProperties.getLongInRange("replication.synced.replica.backoff.duration.ms", 0, 0, Long.MAX_VALUE);
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
   }
