@@ -294,6 +294,8 @@ class BlobStore implements Store {
           existingIdenticalEntries++;
           metrics.identicalPutAttemptCount.inc();
         } else {
+          logger.trace("COLLISION: For key {} in WriteSet with crc {}, index already has the key with journal crc {}",
+              info.getStoreKey(), info.getCrc(), index.journal.getCrcOfKey(info.getStoreKey()));
           return MessageWriteSetStateInStore.COLLIDING;
         }
       }

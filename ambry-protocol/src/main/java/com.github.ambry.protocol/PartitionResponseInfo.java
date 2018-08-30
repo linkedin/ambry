@@ -104,6 +104,9 @@ public class PartitionResponseInfo {
     sb.append("PartitionId=").append(partitionId);
     sb.append(" ServerErrorCode=").append(errorCode);
     sb.append(" MessageInfoAndMetadataListSize=").append(messageInfoAndMetadataListSize);
+    if (errorCode == ServerErrorCode.No_Error) {
+      sb.append(" MessageInfoList=").append(messageInfoAndMetadataListSerde.getMessageInfoList());
+    }
     sb.append("]");
     return sb.toString();
   }
