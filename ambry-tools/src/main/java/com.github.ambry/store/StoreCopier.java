@@ -200,6 +200,7 @@ public class StoreCopier implements Closeable {
    */
   public Pair<FindToken, Boolean> copy(FindToken startToken) throws Exception {
     boolean sourceHasProblems = false;
+    long numDetectedDups = 0;
     FindToken lastToken;
     FindToken token = startToken;
     do {
@@ -256,10 +257,14 @@ public class StoreCopier implements Closeable {
             }
             logger.trace("Copied {} as {}", messageInfo.getStoreKey(), tgtMsgInfo.getStoreKey());
           } else if (!messageInfo.isTtlUpdated()) {
-            logger.warn("Found a duplicate entry for {} while copying data", messageInfo.getStoreKey());
+//            logger.warn("Found a duplicate entry for {} while copying data", messageInfo.getStoreKey());
+            numDetectedDups++;
             sourceHasProblems = true;
           }
         }
+      }
+      if (sourceHasProblems) {
+        logger.warn("Found {} duplicate entries while copying data", numDetectedDups);
       }
       token = findInfo.getFindToken();
       double percentBytesRead = src.isEmpty() ? 100.0 : token.getBytesRead() * 100.0 / src.getSizeInBytes();
