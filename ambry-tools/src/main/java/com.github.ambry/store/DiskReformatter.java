@@ -82,6 +82,7 @@ public class DiskReformatter {
   private final ConsistencyCheckerTool consistencyChecker;
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
+  private final boolean checkConsistecyIfDupsFound;
 
   /**
    * Config for the reformatter.
@@ -136,6 +137,15 @@ public class DiskReformatter {
     final long fetchSizeInBytes;
 
     /**
+     * Check target store consistency if duplicates in the source are detected
+     * (if false, target store consistency check will be skipped if duplicates
+     * in the source are detected)
+     */
+    @Config("check.consistency.if.duplicates.detected")
+    @Default("true")
+    final boolean checkConsistencyIfDuplicatesDetected;
+
+    /**
      * Constructs the configs associated with the tool.
      * @param verifiableProperties the props to use to load the config.
      */
@@ -147,6 +157,7 @@ public class DiskReformatter {
       diskMountPaths = verifiableProperties.getString("disk.mount.paths").split(",");
       scratchPaths = verifiableProperties.getString("scratch.paths").split(",");
       fetchSizeInBytes = verifiableProperties.getLongInRange("fetch.size.in.bytes", 4 * 1024 * 1024, 1, Long.MAX_VALUE);
+      checkConsistencyIfDuplicatesDetected = verifiableProperties.getBoolean("check.consistency.if.duplicates.detected", true);
       if (scratchPaths.length != diskMountPaths.length) {
         throw new IllegalArgumentException("The number of disk mount paths != scratch paths");
       }
@@ -173,7 +184,7 @@ public class DiskReformatter {
       }
       DiskReformatter reformatter =
           new DiskReformatter(dataNodeId, Collections.EMPTY_LIST, config.fetchSizeInBytes, storeConfig, storeKeyFactory,
-              clusterMap, SystemTime.getInstance(), storeKeyConverterFactory.getStoreKeyConverter());
+              clusterMap, SystemTime.getInstance(), storeKeyConverterFactory.getStoreKeyConverter(), config.checkConsistencyIfDuplicatesDetected);
       AtomicInteger exitStatus = new AtomicInteger(0);
       CountDownLatch latch = new CountDownLatch(config.diskMountPaths.length);
       for (int i = 0; i < config.diskMountPaths.length; i++) {
@@ -207,10 +218,13 @@ public class DiskReformatter {
    * @param storeKeyFactory the {@link StoreKeyFactory} to use.
    * @param clusterMap the {@link ClusterMap} to use get details of replicas and partitions.
    * @param time the {@link Time} instance to use.
+   * @param storeKeyConverter store key converter used with the consistency checker
+   * @param checkConsistecyIfDupsFound if true consistency checker will be used even if duplicates
+   *                                   were found in the source store
    */
   public DiskReformatter(DataNodeId dataNodeId, List<Transformer> transformers, long fetchSizeInBytes,
       StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Time time,
-      StoreKeyConverter storeKeyConverter) {
+      StoreKeyConverter storeKeyConverter, boolean checkConsistecyIfDupsFound) {
     this.dataNodeId = dataNodeId;
     this.transformers = transformers;
     this.fetchSizeInBytes = fetchSizeInBytes;
@@ -218,6 +232,7 @@ public class DiskReformatter {
     this.storeKeyFactory = storeKeyFactory;
     this.clusterMap = clusterMap;
     this.time = time;
+    this.checkConsistecyIfDupsFound = checkConsistecyIfDupsFound;
     diskSpaceAllocator =
         new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(clusterMap.getMetricRegistry()));
     consistencyChecker = new ConsistencyCheckerTool(clusterMap, storeKeyFactory, storeConfig, null, null,
@@ -324,7 +339,7 @@ public class DiskReformatter {
    * @throws Exception
    */
   private void copy(String storeId, File src, File tgt, long capacityInBytes) throws Exception {
-    boolean sourceHasProblems;
+    boolean sourceHasDuplicates;
     // NOTE: Ideally, we would have liked one MetricRegistry instance to record metrics across all these stores
     // However, due to the fact that PersistentIndex and HardDeleter initialize gauges inside StoreMetrics, the
     // MetricRegistry retains references to the PersistentIndex causing a memory leak. If the same instance is to be
@@ -333,9 +348,9 @@ public class DiskReformatter {
     try (
         StoreCopier copier = new StoreCopier(storeId, src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig, metrics,
             storeKeyFactory, diskIOScheduler, diskSpaceAllocator, transformers, time)) {
-      sourceHasProblems = copier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken()).getSecond();
+      sourceHasDuplicates = copier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken()).getSecond();
     }
-    if (!sourceHasProblems) {
+    if (checkConsistecyIfDupsFound || !sourceHasDuplicates) {
       // verify that the stores are equivalent
       File[] replicas = {src, tgt};
       Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> consistencyCheckResult =
