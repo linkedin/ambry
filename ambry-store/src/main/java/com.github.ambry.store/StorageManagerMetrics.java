@@ -88,9 +88,9 @@ public class StorageManagerMetrics {
     compactionExecutorErrorCount =
         registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionExecutorErrorCount"));
 
-    Gauge<Long> compactionsInProgressGauge = compactionsInProgress::longValue;
-    registry.register(MetricRegistry.name(CompactionManager.class, "CompactionsInProgress"),
-        compactionsInProgressGauge);
+//    Gauge<Long> compactionsInProgressGauge = compactionsInProgress::longValue;
+//    registry.register(MetricRegistry.name(CompactionManager.class, "CompactionsInProgress"),
+//        compactionsInProgressGauge);
   }
 
   /**
