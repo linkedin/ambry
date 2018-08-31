@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
@@ -38,6 +39,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
   private final FrontendMetrics frontendMetrics;
   private final VerifiableProperties verifiableProperties;
   private final ClusterMap clusterMap;
+  private final ClusterMapConfig clusterMapConfig;
   private final RestResponseHandler responseHandler;
   private final Router router;
   private final AccountService accountService;
@@ -60,6 +62,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
     this.responseHandler = Objects.requireNonNull(responseHandler, "Provided RestResponseHandler is null");
     this.router = Objects.requireNonNull(router, "Provided Router is null");
     this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
+    clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     frontendConfig = new FrontendConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
     logger.trace("Instantiated AmbryBlobStorageServiceFactory");
@@ -72,19 +75,23 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
   @Override
   public BlobStorageService getBlobStorageService() {
     try {
+      IdSigningService idSigningService =
+          Utils.<IdSigningServiceFactory>getObj(frontendConfig.frontendIdSigningServiceFactory, verifiableProperties,
+              clusterMap.getMetricRegistry()).getIdSigningService();
       IdConverterFactory idConverterFactory =
-          Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, clusterMap.getMetricRegistry());
-      UrlSigningServiceFactory urlSigningServiceFactory =
-          Utils.getObj(frontendConfig.frontendUrlSigningServiceFactory, verifiableProperties,
-              clusterMap.getMetricRegistry());
-      UrlSigningService urlSigningService = urlSigningServiceFactory.getUrlSigningService();
+          Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, clusterMap.getMetricRegistry(),
+              idSigningService);
+      UrlSigningService urlSigningService =
+          Utils.<UrlSigningServiceFactory>getObj(frontendConfig.frontendUrlSigningServiceFactory, verifiableProperties,
+              clusterMap.getMetricRegistry()).getUrlSigningService();
       AccountAndContainerInjector accountAndContainerInjector =
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, accountAndContainerInjector);
       return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-          idConverterFactory, securityServiceFactory, accountService, urlSigningService, accountAndContainerInjector);
+          idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector,
+          clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate AmbryBlobStorageService", e);
     }

@@ -43,7 +43,7 @@ public class SystemTime extends Time {
 
   @Override
   public long seconds() {
-    return System.currentTimeMillis() / MsPerSec;
+    return TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis());
   }
 
   @Override

@@ -882,6 +882,8 @@ public class NettyRequestTest {
     long futureBytesRead = future.get();
     assertEquals("Total bytes read does not match (callback)", content.limit(), callback.bytesRead);
     assertEquals("Total bytes read does not match (future)", content.limit(), futureBytesRead);
+    assertEquals("nettyRequest.getBytesReceived() does not match expected", content.limit(),
+        nettyRequest.getBytesReceived());
 
     // check twice to make sure the same digest is returned every time
     for (int i = 0; i < 2; i++) {
@@ -906,8 +908,9 @@ public class NettyRequestTest {
     ByteBuffer content = ByteBuffer.wrap(contentBytes);
     splitContent(contentBytes, GENERATED_CONTENT_PART_COUNT, httpContents, useCopyForcingByteBuf);
     int chunkSize = httpContents.get(0).content().readableBytes();
-    int[] bufferWatermarks = {1, chunkSize - 1, chunkSize,
-        chunkSize + 1, chunkSize * httpContents.size() / 2, content.limit() - 1, content.limit(), content.limit() + 1};
+    int[] bufferWatermarks =
+        {1, chunkSize - 1, chunkSize, chunkSize + 1, chunkSize * httpContents.size() / 2, content.limit() - 1,
+            content.limit(), content.limit() + 1};
     for (int bufferWatermark : bufferWatermarks) {
       NettyRequest.bufferWatermark = bufferWatermark;
       // start reading before addition of content

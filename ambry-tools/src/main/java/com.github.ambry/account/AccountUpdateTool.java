@@ -203,13 +203,14 @@ public class AccountUpdateTool {
     long startTime = System.currentTimeMillis();
     Collection<Account> accountsToUpdate = getAccountsFromJson(accountJsonFilePath);
     if (!hasDuplicateAccountIdOrName(accountsToUpdate)) {
-      AccountService accountService =
-          getHelixAccountService(zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs);
-      if (accountService.updateAccounts(accountsToUpdate)) {
-        System.out.println(accountsToUpdate.size() + " accounts have been successfully created or updated, took " + (
-            System.currentTimeMillis() - startTime) + " ms");
-      } else {
-        throw new Exception("Updating accounts failed with unknown reason.");
+      try (AccountService accountService = getHelixAccountService(zkServer, storePath, zkConnectionTimeoutMs,
+          zkSessionTimeoutMs)) {
+        if (accountService.updateAccounts(accountsToUpdate)) {
+          System.out.println(accountsToUpdate.size() + " accounts have been successfully created or updated, took " + (
+              System.currentTimeMillis() - startTime) + " ms");
+        } else {
+          throw new Exception("Updating accounts failed with unknown reason.");
+        }
       }
     } else {
       throw new IllegalArgumentException("Duplicate id or name exists in the accounts to update");

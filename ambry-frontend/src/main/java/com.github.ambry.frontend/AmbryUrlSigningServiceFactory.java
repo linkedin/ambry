@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.utils.SystemTime;
@@ -29,13 +30,15 @@ import org.json.JSONObject;
  */
 public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
   private final FrontendConfig config;
+  private final int chunkUploadMaxChunkSize;
 
   public AmbryUrlSigningServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     config = new FrontendConfig(verifiableProperties);
+    chunkUploadMaxChunkSize = new RouterConfig(verifiableProperties).routerMaxPutChunkSizeBytes;
   }
 
   @Override
-  public UrlSigningService getUrlSigningService()  {
+  public UrlSigningService getUrlSigningService() {
 
     String uploadEndpoint, downloadEndpoint;
     // Assume frontendUrlSignerEndpoints has only POST/GET, nothing nested
@@ -47,8 +50,8 @@ public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
       throw new IllegalStateException("Invalid config value: " + config.frontendUrlSignerEndpoints, ex);
     }
 
-    return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint,
-        config.frontendUrlSignerDefaultUrlTtlSecs, config.frontendUrlSignerDefaultMaxUploadSizeBytes,
-        config.frontendUrlSignerMaxUrlTtlSecs, SystemTime.getInstance());
+    return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint, config.frontendUrlSignerDefaultUrlTtlSecs,
+        config.frontendUrlSignerDefaultMaxUploadSizeBytes, config.frontendUrlSignerMaxUrlTtlSecs,
+        config.chunkUploadInitialChunkTtlSecs, chunkUploadMaxChunkSize, SystemTime.getInstance());
   }
 }

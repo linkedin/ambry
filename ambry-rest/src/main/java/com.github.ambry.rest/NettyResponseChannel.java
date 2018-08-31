@@ -417,8 +417,22 @@ class NettyResponseChannel implements RestResponseChannel {
       logger.warn("Response is {} but there is no value for {}", ResponseStatus.MethodNotAllowed,
           HttpHeaderNames.ALLOW);
     }
+    copyTrackingHeaders(responseMetadata, response);
     HttpUtil.setKeepAlive(response, shouldKeepAlive(status));
     return response;
+  }
+
+  /**
+   * Copy tracking headers (if any) from sourceResponse to targetResponse.
+   * @param sourceResponse the source response with the tracking headers.
+   * @param targetResponse the target response that the tracking headers will be copied over.
+   */
+  private void copyTrackingHeaders(HttpResponse sourceResponse, HttpResponse targetResponse) {
+    for (String header : RestUtils.TrackingHeaders.TRACKING_HEADERS) {
+      if (sourceResponse.headers().contains(header)) {
+        targetResponse.headers().set(header, sourceResponse.headers().get(header));
+      }
+    }
   }
 
   /**

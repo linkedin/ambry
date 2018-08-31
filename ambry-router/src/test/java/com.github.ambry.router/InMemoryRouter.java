@@ -208,7 +208,7 @@ public class InMemoryRouter implements Router {
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
-    PostData postData = new PostData(blobProperties, usermetadata, channel, futureResult, callback);
+    PostData postData = new PostData(blobProperties, usermetadata, channel, options, callback, futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
     return futureResult;
@@ -293,7 +293,8 @@ public class InMemoryRouter implements Router {
   public Future<String> putBlobWithIdVersion(BlobProperties blobProperties, byte[] usermetadata,
       ReadableStreamChannel channel, Short blobIdVersion) {
     FutureResult<String> futureResult = new FutureResult<>();
-    PostData postData = new PostData(blobProperties, usermetadata, channel, futureResult, null);
+    PostData postData =
+        new PostData(blobProperties, usermetadata, channel, new PutBlobOptionsBuilder().build(), null, futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap, blobIdVersion));
     return futureResult;
   }
@@ -401,12 +402,13 @@ class InMemoryBlobPoster implements Runnable {
       if (blobs.containsKey(blobId)) {
         exception = new RouterException("Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
       }
-      ByteBuffer blobData = readBlob(postData.getReadableStreamChannel());
+      ByteBuffer blobData = readBlob(postData.getReadableStreamChannel(), postData.getOptions().getMaxUploadSize());
       InMemoryRouter.InMemoryBlob blob =
           new InMemoryRouter.InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData);
       blobs.put(blobId, blob);
       if (notificationSystem != null) {
-        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), null, null, NotificationBlobType.Simple);
+        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), null, null,
+            postData.getOptions().isChunkUpload() ? NotificationBlobType.DataChunk : NotificationBlobType.Simple);
       }
       operationResult = blobId;
     } catch (RouterException e) {
@@ -421,10 +423,13 @@ class InMemoryBlobPoster implements Runnable {
   /**
    * Reads blob data and returns the content as a {@link ByteBuffer}.
    * @param postContent the blob data.
+   * @param maxBlobSize the max blob size to be enforced, or null for no restriction.
    * @return the blob data in a {@link ByteBuffer}.
+   * @throws RouterException
    * @throws InterruptedException
    */
-  private ByteBuffer readBlob(ReadableStreamChannel postContent) throws InterruptedException {
+  private ByteBuffer readBlob(ReadableStreamChannel postContent, Long maxBlobSize)
+      throws RouterException, InterruptedException {
     ByteArrayOutputStream blobDataStream = new ByteArrayOutputStream();
     ByteBufferAWC channel = new ByteBufferAWC();
     postContent.readInto(channel, new CloseWriteChannelCallback(channel));
@@ -441,6 +446,9 @@ class InMemoryBlobPoster implements Runnable {
       } else {
         chunk = channel.getNextChunk();
       }
+    }
+    if (maxBlobSize != null && blobDataStream.size() > maxBlobSize) {
+      throw new RouterException("Blob exceeded max allowed size: " + maxBlobSize, RouterErrorCode.BlobTooLarge);
     }
     return ByteBuffer.wrap(blobDataStream.toByteArray());
   }
@@ -468,6 +476,7 @@ class PostData {
   private final BlobProperties blobProperties;
   private final byte[] usermetadata;
   private final ReadableStreamChannel readableStreamChannel;
+  private final PutBlobOptions options;
   private final FutureResult<String> future;
   private final Callback<String> callback;
 
@@ -483,6 +492,10 @@ class PostData {
     return readableStreamChannel;
   }
 
+  public PutBlobOptions getOptions() {
+    return options;
+  }
+
   public FutureResult<String> getFuture() {
     return future;
   }
@@ -491,11 +504,12 @@ class PostData {
     return callback;
   }
 
-  public PostData(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel readableStreamChannel,
-      FutureResult<String> future, Callback<String> callback) {
+  PostData(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel readableStreamChannel,
+      PutBlobOptions options, Callback<String> callback, FutureResult<String> future) {
     this.blobProperties = blobProperties;
     this.usermetadata = usermetadata;
     this.readableStreamChannel = readableStreamChannel;
+    this.options = options;
     this.future = future;
     this.callback = callback;
   }

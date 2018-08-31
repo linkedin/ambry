@@ -108,6 +108,8 @@ public class FrontendIntegrationTest {
   private static final FrontendConfig FRONTEND_CONFIG;
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
+  private static final String DATA_CENTER_NAME = "Datacenter-Name";
+  private static final String HOST_NAME = "localhost";
 
   static {
     try {
@@ -211,8 +213,8 @@ public class FrontendIntegrationTest {
     doPostGetHeadUpdateDeleteTest(refContentSize, null, null, "unknown_service_id", false, null, null, false);
     doPostGetHeadUpdateDeleteTest(refContentSize, null, null, "unknown_service_id", true, null, null, false);
     // different sizes
-    for (int contentSize : new int[]{0, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes
-        - 1, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, refContentSize}) {
+    for (int contentSize : new int[]{0, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1,
+        FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, refContentSize}) {
       doPostGetHeadUpdateDeleteTest(contentSize, refAccount, publicContainer, refAccount.getName(),
           !publicContainer.isCacheable(), refAccount.getName(), publicContainer.getName(), false);
     }
@@ -286,6 +288,7 @@ public class FrontendIntegrationTest {
       ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
       HttpResponse response = getHttpResponse(responseParts);
       assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+      verifyTrackingHeaders(response);
       ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
       JSONObject responseJson = new JSONObject(new String(content.array()));
       String returnedReplicasStr = responseJson.get(GetReplicasHandler.REPLICAS_KEY).toString().replace("\"", "");
@@ -319,6 +322,7 @@ public class FrontendIntegrationTest {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, headers, null);
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
+    verifyTrackingHeaders(response);
     assertNotNull("There should be a response from the server", response);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
@@ -346,8 +350,8 @@ public class FrontendIntegrationTest {
     httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, getHeaders, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     response = getHttpResponse(responseParts);
-    assertNotNull("There should be a response from the server", response);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
     String signedGetUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed GET URL", signedGetUrl);
     discardContent(responseParts.queue, 1);
@@ -357,6 +361,63 @@ public class FrontendIntegrationTest {
     httpRequest = buildRequest(HttpMethod.GET, uri.getPath() + "?" + uri.getQuery(), null, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     verifyGetBlobResponse(responseParts, null, headers, !container.isCacheable(), content);
+  }
+
+  /**
+   * Test the stitched (multipart) upload flow.
+   * @todo test the stitch operation once it is implemented.
+   * @throws Exception
+   */
+  @Test
+  public void stitchedUploadTest() throws Exception {
+    Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    Container container = account.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
+    // setup
+    IdSigningService idSigningService = new AmbryIdSigningService();
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
+    String serviceId = "stitchedUploadTest";
+    String contentType = "application/octet-stream";
+    String ownerId = "stitchedUploadTest";
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.add(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
+    headers.add(RestUtils.Headers.CHUNK_UPLOAD, "true");
+    setAmbryHeadersForPut(headers, TTL_SECS, !container.isCacheable(), serviceId, contentType, ownerId,
+        account.getName(), container.getName());
+
+    // POST
+    // Get signed URL
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, headers, null);
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
+    String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
+    assertNotNull("Did not get a signed POST URL", signedPostUrl);
+    discardContent(responseParts.queue, 1);
+
+    // Use signed URL to POST
+    URI uri = new URI(signedPostUrl);
+    httpRequest = buildRequest(HttpMethod.POST, uri.getPath() + "?" + uri.getQuery(), null, content);
+    responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    String signedID = verifyPostAndReturnBlobId(responseParts);
+    assertTrue("Blob ID for chunk upload must be signed", idSigningService.isIdSigned(signedID.substring(1)));
+    Pair<String, Map<String, String>> idAndMetadata = idSigningService.parseSignedId(signedID.substring(1));
+    // Inspect metadata fields
+    String chunkUploadSession = idAndMetadata.getSecond().get(RestUtils.Headers.SESSION);
+    assertNotNull("x-ambry-chunk-upload-session should be present in signed ID", chunkUploadSession);
+    String blobSize = idAndMetadata.getSecond().get(RestUtils.Headers.BLOB_SIZE);
+    assertNotNull("x-ambry-blob-size should be present in signed ID", blobSize);
+    assertEquals("wrong size value in signed id", content.capacity(), Long.parseLong(blobSize));
+
+    // Use signed ID and blob ID for GET request
+    headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
+    // Blob TTL for chunk upload is fixed
+    headers.set(RestUtils.Headers.TTL, FRONTEND_CONFIG.chunkUploadInitialChunkTtlSecs);
+    for (String id : new String[]{signedID, idAndMetadata.getFirst()}) {
+      getBlobAndVerify(id, null, GetOption.None, headers, !container.isCacheable(), content);
+      getBlobInfoAndVerify(id, GetOption.None, headers, !container.isCacheable(), account.getName(),
+          container.getName(), null);
+    }
   }
 
   /**
@@ -377,6 +438,7 @@ public class FrontendIntegrationTest {
     assertEquals("Unexpected value for " + HttpHeaderNames.ACCESS_CONTROL_MAX_AGE,
         FRONTEND_CONFIG.frontendOptionsValiditySeconds,
         Long.parseLong(response.headers().get(HttpHeaderNames.ACCESS_CONTROL_MAX_AGE)));
+    verifyTrackingHeaders(response);
   }
 
   // helpers
@@ -482,9 +544,13 @@ public class FrontendIntegrationTest {
     properties.put("netty.server.request.buffer.watermark", "1");
     // to test that multipart requests over a certain size fail
     properties.put("netty.multipart.post.max.size.bytes", Long.toString(MAX_MULTIPART_POST_SIZE_BYTES));
+    CommonTestUtils.populateRequiredRouterProps(properties);
     TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     // add key for singleKeyManagementService
     properties.put("kms.default.container.key", TestUtils.getRandomKey(32));
+    properties.setProperty("clustermap.cluster.name", "Cluster-Name");
+    properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
+    properties.setProperty("clustermap.host.name", HOST_NAME);
     return new VerifiableProperties(properties);
   }
 
@@ -623,6 +689,7 @@ public class FrontendIntegrationTest {
     assertNotNull("Blob ID from POST should not be null", blobId);
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
     return blobId;
   }
 
@@ -691,6 +758,7 @@ public class FrontendIntegrationTest {
     byte[] responseContentArray = getContent(responseParts.queue, expectedContentArray.length).array();
     assertArrayEquals("GET content does not match original content", expectedContentArray, responseContentArray);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -718,6 +786,7 @@ public class FrontendIntegrationTest {
     assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     assertNull("Content-Type should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
+    verifyTrackingHeaders(response);
     verifyCacheHeaders(isPrivate, response);
     assertNoContent(responseParts.queue);
   }
@@ -742,6 +811,7 @@ public class FrontendIntegrationTest {
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
     checkCommonGetHeadHeaders(response.headers());
     verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts.queue);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
@@ -771,6 +841,7 @@ public class FrontendIntegrationTest {
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     checkCommonGetHeadHeaders(response.headers());
+    verifyTrackingHeaders(response);
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts.queue);
@@ -824,6 +895,7 @@ public class FrontendIntegrationTest {
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -944,6 +1016,7 @@ public class FrontendIntegrationTest {
     assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -1014,6 +1087,7 @@ public class FrontendIntegrationTest {
     assertTrue("No Date header", response.headers().get(HttpHeaderNames.DATE, null) != null);
     discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    verifyTrackingHeaders(response);
   }
 
   /**
@@ -1100,5 +1174,16 @@ public class FrontendIntegrationTest {
           "Should have received response. completion context: " + responseParts.completionContext);
     }
     return httpResponse;
+  }
+
+  /**
+   * Verify the tracking headers were attached to the response properly.
+   * @param response the {@link HttpResponse} to be verified.
+   */
+  private void verifyTrackingHeaders(HttpResponse response) {
+    Assert.assertEquals("Unexpected or missing tracking header for datacenter name", DATA_CENTER_NAME,
+        response.headers().get(RestUtils.TrackingHeaders.DATACENTER_NAME));
+    Assert.assertEquals("Unexpected or missing tracking header for hostname", HOST_NAME,
+        response.headers().get(RestUtils.TrackingHeaders.FRONTEND_NAME));
   }
 }

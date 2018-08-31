@@ -14,8 +14,6 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.Histogram;
-import com.github.ambry.account.Account;
-import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -40,6 +38,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
@@ -78,6 +77,8 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final UrlSigningService urlSigningService;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
+  private final String datacenterName;
+  private final String hostname;
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
   private GetPeersHandler getPeersHandler;
@@ -96,13 +97,12 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param clusterMap the {@link ClusterMap} in use.
    * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter} instance.
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService} instance.
-   * @param accountService the {@link AccountService} to use to query for target {@link Account} of a {@link RestRequest}.
    * @param urlSigningService the {@link UrlSigningService} used to sign URLs.
    */
   AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
-      SecurityServiceFactory securityServiceFactory, AccountService accountService, UrlSigningService urlSigningService,
-      AccountAndContainerInjector accountAndContainerInjector) {
+      SecurityServiceFactory securityServiceFactory, UrlSigningService urlSigningService,
+      AccountAndContainerInjector accountAndContainerInjector, String datacenterName, String hostname) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
@@ -112,6 +112,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.securityServiceFactory = securityServiceFactory;
     this.urlSigningService = urlSigningService;
     this.accountAndContainerInjector = accountAndContainerInjector;
+    this.datacenterName = datacenterName;
+    this.hostname = hostname;
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
     logger.trace("Instantiated AmbryBlobStorageService");
   }
@@ -126,7 +128,8 @@ class AmbryBlobStorageService implements BlobStorageService {
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap);
     postBlobHandler =
-        new PostBlobHandler(securityService, idConverter, accountAndContainerInjector, frontendMetrics, router);
+        new PostBlobHandler(securityService, idConverter, router, accountAndContainerInjector, SystemTime.getInstance(),
+            frontendConfig, frontendMetrics);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap);
@@ -359,6 +362,11 @@ class AmbryBlobStorageService implements BlobStorageService {
   void submitResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
       ReadableStreamChannel responseBody, Exception exception) {
     try {
+      if (restRequest.getArgs().containsKey(InternalKeys.SEND_TRACKING_INFO) && (Boolean) restRequest.getArgs()
+          .get(InternalKeys.SEND_TRACKING_INFO)) {
+        restResponseChannel.setHeader(TrackingHeaders.DATACENTER_NAME, datacenterName);
+        restResponseChannel.setHeader(TrackingHeaders.FRONTEND_NAME, hostname);
+      }
       if (exception != null && exception instanceof RouterException) {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));

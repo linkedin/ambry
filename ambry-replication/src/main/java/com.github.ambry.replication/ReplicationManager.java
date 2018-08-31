@@ -80,6 +80,7 @@ final class RemoteReplicaInfo {
   private FindToken tokenSafeToPersist = null;
   private long totalBytesReadFromLocalStore;
   private long localLagFromRemoteStore = -1;
+  private long reEnableReplicationTime = 0;
 
   RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
@@ -107,6 +108,22 @@ final class RemoteReplicaInfo {
 
   Port getPort() {
     return this.port;
+  }
+
+  /**
+   * Gets the time re-enable replication for this replica.
+   * @return time to re-enable replication in ms.
+   */
+  long getReEnableReplicationTime() {
+    return reEnableReplicationTime;
+  }
+
+  /**
+   * Sets the time to re-enable replication for this replica.
+   * @param reEnableReplicationTime time to re-enable replication in ms.
+   */
+  void setReEnableReplicationTime(long reEnableReplicationTime) {
+    this.reEnableReplicationTime = reEnableReplicationTime;
   }
 
   long getRemoteLagFromLocalInBytes() {
@@ -578,7 +595,7 @@ public class ReplicationManager {
               new ReplicaThread(threadIdentity, replicasForThread, factory, clusterMap, correlationIdGenerator,
                   dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification, storeKeyFactory,
                   threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
-                  responseHandler);
+                  responseHandler, SystemTime.getInstance());
           if (replicaThreadPools.containsKey(datacenter)) {
             replicaThreadPools.get(datacenter).add(replicaThread);
           } else {

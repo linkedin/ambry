@@ -307,6 +307,11 @@ class PerfNioServer implements NioServer {
       return null;
     }
 
+    @Override
+    public long getBytesReceived() {
+      return 0;
+    }
+
     /**
      * Adds a value for a header.
      * @param toAddTo the map to add the {@code key} with value {@code value} to.
