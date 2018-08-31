@@ -218,7 +218,7 @@ class BlobStore implements Store {
             new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs, logSegmentForecastOffsetMs,
                 queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
                 taskScheduler, diskIOScheduler, metrics);
-        checkCapacityAndUpdateReplicaStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
+        checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
         started = true;
       } catch (Exception e) {
@@ -310,10 +310,8 @@ class BlobStore implements Store {
   /**
    * Checks the used capacity of the store against the configured percentage thresholds to see if the store
    * should be read-only or read-write
-   * @param totalCapacity total capacity of the store in bytes
-   * @param usedCapacity total used capacity of the store in bytes
    */
-  private void checkCapacityAndUpdateReplicaStatusDelegate(long totalCapacity, long usedCapacity) {
+  private void checkCapacityAndUpdateReplicaStatusDelegate() {
     if (replicaStatusDelegate != null) {
       logger.debug("The current used capacity is {} bytes on store {}", index.getLogUsedCapacity(),
           replicaId.getPartitionId());
@@ -385,7 +383,7 @@ class BlobStore implements Store {
               blobStoreStats.handleNewPutEntry(newEntry.getValue());
             }
             logger.trace("Store : {} message set written to index ", dataDir);
-            checkCapacityAndUpdateReplicaStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
+            checkCapacityAndUpdateReplicaStatusDelegate();
           }
         }
       }
@@ -705,7 +703,7 @@ class BlobStore implements Store {
   void compact(CompactionDetails details, ByteBuffer bundleReadBuffer) throws IOException, StoreException {
     checkStarted();
     compactor.compact(details, bundleReadBuffer);
-    checkCapacityAndUpdateReplicaStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
+    checkCapacityAndUpdateReplicaStatusDelegate();
     logger.trace("One cycle of compaction is completed on the store {}", storeId);
   }
 
@@ -719,7 +717,7 @@ class BlobStore implements Store {
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
       compactor.resumeCompaction(bundleReadBuffer);
-      checkCapacityAndUpdateReplicaStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
+      checkCapacityAndUpdateReplicaStatusDelegate();
     }
   }
 

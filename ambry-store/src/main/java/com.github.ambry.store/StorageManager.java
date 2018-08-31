@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
  */
 public class StorageManager {
   private final Map<PartitionId, DiskManager> partitionToDiskManager = new HashMap<>();
-  private final List<DiskManager> diskManagers = new ArrayList<>();
+  private final Map<DiskId, DiskManager> diskToDiskManager = new HashMap<>();
   private final StorageManagerMetrics metrics;
   private final Time time;
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
@@ -80,7 +80,7 @@ public class StorageManager {
           new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, scheduler, metrics, storeMainMetrics,
               storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate, stoppedReplicas,
               time);
-      diskManagers.add(diskManager);
+      diskToDiskManager.put(disk, diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);
       }
@@ -116,7 +116,7 @@ public class StorageManager {
     try {
       logger.info("Starting storage manager");
       List<Thread> startupThreads = new ArrayList<>();
-      for (final DiskManager diskManager : diskManagers) {
+      for (final DiskManager diskManager : diskToDiskManager.values()) {
         Thread thread = Utils.newThread("disk-manager-startup-" + diskManager.getDisk(), () -> {
           try {
             diskManager.start();
@@ -131,7 +131,7 @@ public class StorageManager {
       for (Thread startupThread : startupThreads) {
         startupThread.join();
       }
-      metrics.initializeCompactionThreadsTracker(this, diskManagers.size());
+      metrics.initializeCompactionThreadsTracker(this, diskToDiskManager.size());
       logger.info("Starting storage manager complete");
     } finally {
       metrics.storageManagerStartTimeMs.update(time.milliseconds() - startTimeMs);
@@ -153,26 +153,18 @@ public class StorageManager {
    * @return the {@link DiskManager} corresponding to the given {@link PartitionId}, or {@code null} if no DiskManager was found for
    *         that partition
    */
-  public DiskManager getDiskManager(PartitionId id) {
+  DiskManager getDiskManager(PartitionId id) {
     return partitionToDiskManager.get(id);
   }
 
   /**
    * Check if a certain disk is unavailable.
-   * @param diskManager the {@link DiskManager} to check.
+   * @param disk the {@link DiskId} to check.
    * @return {@code true} if the disk is unavailable. {@code false} if not.
    */
-  public boolean isDiskUnavailable(DiskManager diskManager) {
-    return diskManager.areAllStoresDown();
-  }
-
-  /**
-   * @param id the {@link PartitionId} used to find the local replica.
-   * @return the {@link ReplicaId} corresponding to the given {@link PartitionId}, or {@code null} if no replica was found.
-   */
-  public ReplicaId getLocalReplica(PartitionId id) {
-    DiskManager diskManager = partitionToDiskManager.get(id);
-    return diskManager != null ? diskManager.getLocalReplica(id) : null;
+  public boolean isDiskUnavailable(DiskId disk) {
+    DiskManager diskManager = diskToDiskManager.get(disk);
+    return diskManager == null || diskManager.areAllStoresDown();
   }
 
   /**
@@ -206,7 +198,7 @@ public class StorageManager {
     try {
       logger.info("Shutting down storage manager");
       List<Thread> shutdownThreads = new ArrayList<>();
-      for (final DiskManager diskManager : diskManagers) {
+      for (final DiskManager diskManager : diskToDiskManager.values()) {
         Thread thread = Utils.newThread("disk-manager-shutdown-" + diskManager.getDisk(), () -> {
           try {
             diskManager.shutdown();
@@ -276,7 +268,7 @@ public class StorageManager {
    */
   int getCompactionThreadCount() {
     int count = 0;
-    for (DiskManager diskManager : diskManagers) {
+    for (DiskManager diskManager : diskToDiskManager.values()) {
       if (diskManager.isCompactionExecutorRunning()) {
         count++;
       }

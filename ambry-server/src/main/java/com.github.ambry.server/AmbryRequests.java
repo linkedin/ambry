@@ -87,7 +87,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -109,7 +109,7 @@ public class AmbryRequests implements RequestAPI {
   private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private final ClusterMap clusterMap;
   private final DataNodeId currentNode;
-  private final Collection<PartitionId> partitionsInCurrentNode;
+  private final Map<PartitionId, ReplicaId> localPartitionToReplicaMap;
   private final ServerMetrics metrics;
   private final MessageFormatMetrics messageFormatMetrics;
   private final FindTokenFactory findTokenFactory;
@@ -144,11 +144,11 @@ public class AmbryRequests implements RequestAPI {
       requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     }
 
-    Set<PartitionId> partitionIds = new HashSet<>();
+    Map<PartitionId, ReplicaId> partitionToReplica = new HashMap<>();
     for (ReplicaId replicaId : clusterMap.getReplicaIds(currentNode)) {
-      partitionIds.add(replicaId.getPartitionId());
+      partitionToReplica.put(replicaId.getPartitionId(), replicaId);
     }
-    partitionsInCurrentNode = Collections.unmodifiableSet(partitionIds);
+    localPartitionToReplicaMap = Collections.unmodifiableMap(partitionToReplica);
   }
 
   public void handleRequests(Request request) throws InterruptedException {
@@ -806,7 +806,7 @@ public class AmbryRequests implements RequestAPI {
         error = validateRequest(controlRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
         partitionIds = Collections.singletonList(controlRequest.getPartitionId());
       } else {
-        partitionIds = partitionsInCurrentNode;
+        partitionIds = localPartitionToReplicaMap.keySet();
       }
       if (!error.equals(ServerErrorCode.Partition_Unknown)) {
         controlRequestForPartitions(EnumSet.of(toControl), partitionIds, controlRequest.shouldEnable());
@@ -836,7 +836,7 @@ public class AmbryRequests implements RequestAPI {
       error = validateRequest(replControlRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
       partitionIds = Collections.singletonList(replControlRequest.getPartitionId());
     } else {
-      partitionIds = partitionsInCurrentNode;
+      partitionIds = localPartitionToReplicaMap.keySet();
     }
     if (!error.equals(ServerErrorCode.Partition_Unknown)) {
       if (replicationManager.controlReplicationForPartitions(partitionIds, replControlRequest.getOrigins(),
@@ -873,7 +873,7 @@ public class AmbryRequests implements RequestAPI {
         error = validateRequest(catchupStatusRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
         partitionIds = Collections.singletonList(catchupStatusRequest.getPartitionId());
       } else {
-        partitionIds = partitionsInCurrentNode;
+        partitionIds = localPartitionToReplicaMap.keySet();
       }
       if (!error.equals(ServerErrorCode.Partition_Unknown)) {
         error = ServerErrorCode.No_Error;
@@ -1097,7 +1097,7 @@ public class AmbryRequests implements RequestAPI {
     }
     if (!skipPartitionAndDiskAvailableCheck) {
       // 2. ensure the disk for the partition/replica is available
-      ReplicaId localReplica = storageManager.getLocalReplica(partition);
+      ReplicaId localReplica = localPartitionToReplicaMap.get(partition);
       if (localReplica != null && localReplica.getDiskId().getState() == HardwareState.UNAVAILABLE) {
         metrics.diskUnavailableError.inc();
         return ServerErrorCode.Disk_Unavailable;
@@ -1106,7 +1106,7 @@ public class AmbryRequests implements RequestAPI {
       if (storageManager.getStore(partition) == null) {
         if (localReplica != null) {
           // check stores on the disk
-          if (storageManager.isDiskUnavailable(storageManager.getDiskManager(partition))) {
+          if (storageManager.isDiskUnavailable(localReplica.getDiskId())) {
             metrics.diskUnavailableError.inc();
             localReplica.markDiskDown();
             return ServerErrorCode.Disk_Unavailable;
