@@ -189,7 +189,8 @@ public class BlobIdTransformerTest {
    */
   @Test
   public void testWarmup() throws Exception {
-    InputAndExpected inputAndExpected = new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], true);
+    InputAndExpected inputAndExpected =
+        new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], true);
     BlobIdTransformer transformer = new BlobIdTransformer(blobIdFactory, factory.getStoreKeyConverter());
     TransformationOutput output = transformer.transform(inputAndExpected.getInput());
     Assert.assertTrue("Should lead to IllegalStateException", output.getException() instanceof IllegalStateException);
@@ -297,14 +298,16 @@ public class BlobIdTransformerTest {
     InputAndExpected(Pair<String, String> pair, Class clazz, boolean divergeInfoFromData)
         throws IOException, MessageFormatException {
       boolean hasEncryption = clazz == PutMessageFormatInputStream.class;
-      input = buildMessage(pair.getFirst(), clazz, hasEncryption, divergeInfoFromData);
+      Long crcInput = buildRandom.nextLong();
+      input = buildMessage(pair.getFirst(), clazz, hasEncryption, crcInput, divergeInfoFromData);
       if (pair.getSecond() == null) {
         //can't just assign 'input' since Message has an
         //InputStream that is modified when read
         expected = null;//buildMessage(pair.getFirst(), PutMessageFormatInputStream.class, hasEncryption);
       } else {
-        expected =
-            buildMessage(pair.getSecond(), PutMessageFormatInputStream.class, hasEncryption, divergeInfoFromData);
+        Long crcExpected = pair.getSecond().equals(pair.getFirst()) ? crcInput : null;
+        expected = buildMessage(pair.getSecond(), PutMessageFormatInputStream.class, hasEncryption, crcExpected,
+            divergeInfoFromData);
       }
     }
 
@@ -326,8 +329,8 @@ public class BlobIdTransformerTest {
       return ByteBuffer.wrap(randomByteArray(size));
     }
 
-    private Message buildMessage(String blobIdString, Class clazz, boolean hasEncryption, boolean divergeInfoFromData)
-        throws IOException, MessageFormatException {
+    private Message buildMessage(String blobIdString, Class clazz, boolean hasEncryption, Long crcInMsgInfo,
+        boolean divergeInfoFromData) throws IOException, MessageFormatException {
       buildRandom = new Random(randomStaticSeed);
       BlobId blobId = createBlobId(blobIdString);
       ByteBuffer blobEncryptionKey = randomByteBuffer(BLOB_ENCRYPTION_KEY_SIZE);
@@ -370,7 +373,7 @@ public class BlobIdTransformerTest {
         expiryTimeMs = Utils.Infinite_Time;
       }
       messageInfo =
-          new MessageInfo(blobId, inputStreamSize, false, ttlUpdated, expiryTimeMs, null, blobId.getAccountId(),
+          new MessageInfo(blobId, inputStreamSize, false, ttlUpdated, expiryTimeMs, crcInMsgInfo, blobId.getAccountId(),
               blobId.getContainerId(), blobProperties.getCreationTimeInMs());
       return new Message(messageInfo, inputStream);
     }
