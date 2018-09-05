@@ -138,7 +138,7 @@ class DiskManager {
             "Could not start " + numStoreFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
       }
 
-      initializeDiskSpaceAllocatorPool(false);
+      initializeDiskSpaceAllocatorPool();
 
       compactionManager.enable();
 
@@ -228,9 +228,9 @@ class DiskManager {
 
   /**
    * Compute {@link DiskSpaceRequirements} for all stores and initialize the disk space pool.
-   * @param isAddingStore {@code true} if the method is invoked for adding new store. {@code false} otherwise.
+   * @throws StoreException
    */
-  private void initializeDiskSpaceAllocatorPool(boolean isAddingStore) throws StoreException {
+  private void initializeDiskSpaceAllocatorPool() throws StoreException {
     // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
     // from each store.
     List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
@@ -242,7 +242,7 @@ class DiskManager {
         }
       }
     }
-    diskSpaceAllocator.initializePool(requirementsList, isAddingStore);
+    diskSpaceAllocator.initializePool(requirementsList);
   }
 
   /**
@@ -273,6 +273,7 @@ class DiskManager {
    */
   boolean addBlobStore(ReplicaId replica) {
     if (!running || stores.containsKey(replica.getPartitionId())) {
+      logger.error("fail to add {} because disk manager is not running", replica.getPartitionId());
       return false;
     }
     boolean succeed = true;
@@ -285,9 +286,10 @@ class DiskManager {
     }
     if (succeed) {
       try {
-        initializeDiskSpaceAllocatorPool(true);
+        initializeDiskSpaceAllocatorPool();
       } catch (StoreException e) {
-        logger.error("Error while initializing DiskSpaceAllocatorPool for " + disk.getMountPath(), e);
+        logger.error("Error while initializing DiskSpaceAllocatorPool on {} for new added store {}",
+            disk.getMountPath(), replica.getPartitionId(), e);
         succeed = false;
       }
 

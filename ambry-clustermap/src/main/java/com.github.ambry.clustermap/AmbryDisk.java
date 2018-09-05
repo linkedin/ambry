@@ -85,6 +85,26 @@ class AmbryDisk implements DiskId, Resource {
     return "Disk[" + datanode.getHostname() + ":" + datanode.getPort() + ":" + getMountPath() + "]";
   }
 
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    AmbryDisk disk = (AmbryDisk) o;
+    return datanode.equals(disk.datanode) && mountPath.equals(disk.mountPath);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = 17;
+    result = 31 * result + datanode.hashCode();
+    result = 31 * result + mountPath.hashCode();
+    return result;
+  }
+
   /**
    * @return the {@link AmbryDataNode} associated with this disk.
    */

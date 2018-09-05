@@ -37,7 +37,7 @@ import org.slf4j.LoggerFactory;
  * {@link DiskSpaceAllocator} handles the allocation of disk space to entities that require disk segments, such as the
  * {@link BlobStore}s and {@link BlobStoreCompactor}s. The disk segments will be preallocated on platforms that support
  * the fallocate syscall. The entities that require disk space register there requirements using the
- * {@link #initializePool(Collection, boolean)} method. Disk space is allocated using the
+ * {@link #initializePool(Collection)} method. Disk space is allocated using the
  * {@link DiskSpaceAllocator#allocate(File, long)} method. If a segment matching the requested size is not in the pool,
  * it will be created at runtime. Disk space is returned to the pool using the
  * {@link DiskSpaceAllocator#free(File, long)} method. It is up to the requester to keep track of the size of the
@@ -65,7 +65,7 @@ class DiskSpaceAllocator {
   /**
    * This constructor will inventory any existing reserve files in the pool (adding them to the in-memory map) and
    * create the reserve directory if it does not exist. Any files that already exist in the pool can be checked out
-   * prior to calling {@link #initializePool(Collection, boolean)}. If a file of the correct size does not yet exist, a new file
+   * prior to calling {@link #initializePool(Collection)}. If a file of the correct size does not yet exist, a new file
    * will be allocated at runtime.
    * @param enablePooling if set to {@code false}, the reserve pool will not be initialized/used and new files will be
    *                      created each time a segment is allocated.
@@ -122,10 +122,10 @@ class DiskSpaceAllocator {
    *                         segment size needed by each store.
    * @throws StoreException if the pool could not be allocated to meet the provided requirements
    */
-  void initializePool(Collection<DiskSpaceRequirements> requirementsList, boolean isAddingStore) throws StoreException {
+  void initializePool(Collection<DiskSpaceRequirements> requirementsList) throws StoreException {
     long startTime = System.currentTimeMillis();
     try {
-      if (enablePooling || isAddingStore) {
+      if (enablePooling) {
         if (poolState == PoolState.NOT_INVENTORIED) {
           throw inventoryException;
         }

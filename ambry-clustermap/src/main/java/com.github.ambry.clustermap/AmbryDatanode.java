@@ -158,6 +158,28 @@ class AmbryDataNode implements DataNodeId {
     return "DataNode[" + getHostname() + ":" + getPort() + "]";
   }
 
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    AmbryDataNode dataNode = (AmbryDataNode) o;
+    return dataCenterName.equals(dataNode.dataCenterName) && hostName.equals(dataNode.hostName)
+        && plainTextPort.getPort() == dataNode.plainTextPort.getPort();
+  }
+
+  @Override
+  public int hashCode() {
+    int result = 17;
+    result = 31 * result + dataCenterName.hashCode();
+    result = 31 * result + hostName.hashCode();
+    result = 31 * result + plainTextPort.getPort();
+    return result;
+  }
+
   /**
    * Set the hard state of this data node dynamically.
    * @param newState the updated {@link HardwareState}

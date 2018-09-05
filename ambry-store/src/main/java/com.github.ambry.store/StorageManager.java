@@ -236,7 +236,7 @@ public class StorageManager {
     }
     DiskManager diskManager = diskToDiskManager.computeIfAbsent(replica.getDiskId(), disk -> {
       DiskManager newDiskManager = diskManagerFactory.getDiskManager(disk, Collections.EMPTY_LIST);
-      logger.info("Creating new DiskManager for new added store if certain disk is available");
+      logger.info("Creating new DiskManager on {} for new added store", replica.getDiskId().getMountPath());
       try {
         newDiskManager.start();
       } catch (Exception e) {
