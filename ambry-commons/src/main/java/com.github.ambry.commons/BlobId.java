@@ -138,9 +138,9 @@ public class BlobId extends StoreKey {
 
   private final short version;
   private final BlobIdType type;
-  private final Byte datacenterId;
-  private final Short accountId;
-  private final Short containerId;
+  private final byte datacenterId;
+  private final short accountId;
+  private final short containerId;
   private final PartitionId partitionId;
   private final String uuid;
   private final boolean isEncrypted;
@@ -515,11 +515,11 @@ public class BlobId extends StoreKey {
         case BLOB_ID_V2:
           result = type.compareTo(other.type);
           if (result == 0) {
-            result = datacenterId.compareTo(other.datacenterId);
+            result = Byte.compare(datacenterId, other.datacenterId);
             if (result == 0) {
-              result = accountId.compareTo(other.accountId);
+              result = Short.compare(accountId, other.accountId);
               if (result == 0) {
-                result = containerId.compareTo(other.containerId);
+                result = Short.compare(containerId, other.containerId);
                 if (result == 0) {
                   result = partitionId.compareTo(other.partitionId);
                   if (result == 0) {
