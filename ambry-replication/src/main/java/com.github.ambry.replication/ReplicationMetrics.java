@@ -115,6 +115,7 @@ public class ReplicationMetrics {
   public final Counter blobAuthorizationFailureCount;
   public final Counter replicaSyncedBackoffCount;
   public final Counter replicaThreadIdleCount;
+  public final Counter replicaThreadThrottleCount;
 
   public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
@@ -214,6 +215,7 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(ReplicaThread.class, "BlobAuthorizationFailureCount"));
     replicaSyncedBackoffCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicaSyncedBackoffCount"));
     replicaThreadIdleCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicaThreadIdleCount"));
+    replicaThreadThrottleCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicaThreadThrottleCount"));
     this.registry = registry;
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
     populateInvalidMessageMetricForReplicas(replicaIds);

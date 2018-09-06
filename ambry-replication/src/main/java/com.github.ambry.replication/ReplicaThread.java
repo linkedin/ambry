@@ -310,16 +310,20 @@ class ReplicaThread implements Runnable {
         }
       }
     }
-    long sleepDurationMs;
-    if (allCaughtUp) {
+    long sleepDurationMs = 0;
+    if (allCaughtUp && replicationConfig.replicationReplicaThreadIdleSleepDurationMs > 0) {
       sleepDurationMs = replicationConfig.replicationReplicaThreadIdleSleepDurationMs;
       replicationMetrics.replicaThreadIdleCount.inc();
-    } else {
+    } else if (replicationConfig.replicationReplicaThreadThrottleSleepDurationMs > 0) {
       sleepDurationMs = replicationConfig.replicationReplicaThreadThrottleSleepDurationMs;
+      replicationMetrics.replicaThreadThrottleCount.inc();
     }
+
     if (sleepDurationMs > 0) {
       try {
+        long currentTime = time.milliseconds();
         time.sleep(sleepDurationMs);
+        logger.trace("Replica thread slep for {} ms", time.milliseconds() - currentTime);
       } catch (InterruptedException e) {
         logger.error("Received interrupted exception during throttling", e);
       }
