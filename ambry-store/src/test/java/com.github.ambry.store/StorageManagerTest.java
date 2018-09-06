@@ -168,6 +168,7 @@ public class StorageManagerTest {
    */
   @Test
   public void addBlobStoreTest() throws Exception {
+    generateConfigs(true);
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     int newMountPathIndex = 3;
@@ -181,11 +182,13 @@ public class StorageManagerTest {
         new MockPartitionId(10L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), newMountPathIndex);
     StorageManager storageManager = createStorageManager(localReplicas, metricRegistry, null);
     storageManager.start();
-    // test add store that already exists
+    // test add store that already exists, which should fail
     assertFalse("Add store which is already existing should fail", storageManager.addBlobStore(localReplicas.get(0)));
-    // test add store onto a new disk
+    // test add store onto a new disk, which should succeed
     assertTrue("Add new store should succeed", storageManager.addBlobStore(newPartition1.getReplicaIds().get(0)));
-    // test add store whose diskManager is not running
+    assertNotNull("The store shouldn't be null because new store is successfully added",
+        storageManager.getStore(newPartition1));
+    // test add store whose diskManager is not running, which should fail
     PartitionId newPartition2 =
         new MockPartitionId(11L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), 0);
     storageManager.getDiskManager(localReplicas.get(0).getPartitionId()).shutdown();
@@ -193,6 +196,21 @@ public class StorageManagerTest {
         storageManager.addBlobStore(newPartition2.getReplicaIds().get(0)));
     storageManager.getDiskManager(localReplicas.get(0).getPartitionId()).start();
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+    // test add store but the store couldn't start, which should fail. (This is simulated by inducing initializePool failure to make store inaccessible)
+    List<String> mountPaths = localNode.getMountPaths();
+    String diskToFail = mountPaths.get(0);
+    File reservePoolDir = new File(diskToFail, diskManagerConfig.diskManagerReserveFileDirName);
+    File fileSizeDir =
+        new File(reservePoolDir, DiskSpaceAllocator.generateFileSizeDirName(storeConfig.storeSegmentSizeInBytes));
+    StorageManager storageManager2 = createStorageManager(localReplicas, new MetricRegistry(), null);
+    storageManager2.start();
+    Utils.deleteFileOrDirectory(fileSizeDir);
+    assertTrue("File creation should have succeeded", fileSizeDir.createNewFile());
+
+    assertFalse("Add store should fail if store couldn't start due to initializePool failure",
+        storageManager2.addBlobStore(newPartition2.getReplicaIds().get(0)));
+    assertNull("New store shouldn't be in in-memory data structure", storageManager2.getStore(newPartition2));
+    shutdownAndAssertStoresInaccessible(storageManager2, localReplicas);
   }
 
   /**
@@ -615,7 +633,7 @@ public class StorageManagerTest {
    * @throws StoreException
    */
   private StorageManager createStorageManager(List<ReplicaId> replicas, MetricRegistry metricRegistry,
-      ReplicaStatusDelegate replicaStatusDelegate) throws StoreException, InterruptedException {
+      ReplicaStatusDelegate replicaStatusDelegate) throws StoreException {
     StorageManager storageManager =
         new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, replicas,
             new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
@@ -627,11 +645,10 @@ public class StorageManagerTest {
    * Shutdown a {@link StorageManager} and assert that the stores cannot be accessed for the provided replicas.
    * @param storageManager the {@link StorageManager} to shutdown.
    * @param replicas the {@link ReplicaId}s to check for store inaccessibility.
-   * @throws StoreException
    * @throws InterruptedException
    */
   private static void shutdownAndAssertStoresInaccessible(StorageManager storageManager, List<ReplicaId> replicas)
-      throws StoreException, InterruptedException {
+      throws InterruptedException {
     storageManager.shutdown();
     for (ReplicaId replica : replicas) {
       assertNull(storageManager.getStore(replica.getPartitionId()));

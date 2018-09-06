@@ -272,7 +272,7 @@ class DiskManager {
    * @return {@code true} if adding store was successful. {@code false} if not.
    */
   boolean addBlobStore(ReplicaId replica) {
-    if (!running || stores.containsKey(replica.getPartitionId())) {
+    if (!running) {
       logger.error("fail to add {} because disk manager is not running", replica.getPartitionId());
       return false;
     }

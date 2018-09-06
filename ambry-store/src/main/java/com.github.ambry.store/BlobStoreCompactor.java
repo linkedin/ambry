@@ -254,7 +254,7 @@ class BlobStoreCompactor {
   int getSwapSegmentsInUse() throws StoreException {
     String[] tempSegments = dataDir.list(TEMP_LOG_SEGMENTS_FILTER);
     if (tempSegments == null) {
-      throw new StoreException("Error occured while listing files in data dir:" + dataDir.getAbsolutePath(),
+      throw new StoreException("Error occurred while listing files in data dir:" + dataDir.getAbsolutePath(),
           StoreErrorCodes.IOError);
     }
     return tempSegments.length;
