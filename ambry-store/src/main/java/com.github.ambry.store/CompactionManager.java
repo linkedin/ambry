@@ -175,10 +175,6 @@ class CompactionManager {
     return compactionExecutor == null || compactionExecutor.controlCompactionForBlobStore(store, false);
   }
 
-  void removeBlobStore(BlobStore store) {
-    stores.remove(store);
-  }
-
   /**
    * A {@link Runnable} that cycles through the stores and executes compaction if required.
    */

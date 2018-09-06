@@ -299,7 +299,7 @@ class DiskManager {
     }
 
     if (!succeed) {
-      // revoke all updates if add BlobStore failed.
+      // revoke all updates if adding BlobStore failed.
       stores.remove(replica.getPartitionId());
       partitionToReplicaMap.remove(replica.getPartitionId());
     }
