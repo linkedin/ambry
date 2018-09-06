@@ -323,7 +323,7 @@ class ReplicaThread implements Runnable {
       try {
         long currentTime = time.milliseconds();
         time.sleep(sleepDurationMs);
-        logger.trace("Replica thread slep for {} ms", time.milliseconds() - currentTime);
+        logger.trace("Replica thread: {} slept for {} ms", threadName, time.milliseconds() - currentTime);
       } catch (InterruptedException e) {
         logger.error("Received interrupted exception during throttling", e);
       }
