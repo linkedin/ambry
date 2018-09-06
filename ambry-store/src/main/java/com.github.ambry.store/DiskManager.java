@@ -236,14 +236,6 @@ class DiskManager {
   }
 
   /**
-   * @param id the {@link PartitionId} used to find the local replica.
-   * @return the local {@link ReplicaId} associated with the given {@link PartitionId}.
-   */
-  ReplicaId getLocalReplica(PartitionId id) {
-    return partitionToReplicaMap.get(id);
-  }
-
-  /**
    * Schedules the {@link PartitionId} {@code id} for compaction next.
    * @param id the {@link PartitionId} of the {@link BlobStore} to compact.
    * @return {@code true} if the scheduling was successful. {@code false} if not.

@@ -1106,7 +1106,7 @@ public class AmbryRequests implements RequestAPI {
       if (storageManager.getStore(partition) == null) {
         if (localReplica != null) {
           // check stores on the disk
-          if (storageManager.isDiskUnavailable(localReplica.getDiskId())) {
+          if (!storageManager.isDiskAvailable(localReplica.getDiskId())) {
             metrics.diskUnavailableError.inc();
             localReplica.markDiskDown();
             return ServerErrorCode.Disk_Unavailable;

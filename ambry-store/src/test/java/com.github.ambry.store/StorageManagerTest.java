@@ -348,7 +348,7 @@ public class StorageManagerTest {
    * Tests that{@link StorageManager} can correctly determine if disk is unavailable based on states of all stores.
    */
   @Test
-  public void isDiskUnavailableTest() throws Exception {
+  public void isDiskAvailableTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     Map<DiskId, List<ReplicaId>> diskToReplicas = new HashMap<>();
@@ -365,7 +365,7 @@ public class StorageManagerTest {
     }
     // verify all disks are still available because at least one store on them is up
     for (List<ReplicaId> replicasOnDisk : diskToReplicas.values()) {
-      assertFalse("Disk should be available", storageManager.isDiskUnavailable(replicasOnDisk.get(0).getDiskId()));
+      assertTrue("Disk should be available", storageManager.isDiskAvailable(replicasOnDisk.get(0).getDiskId()));
     }
 
     // now, shutdown the last store on each disk
@@ -374,7 +374,7 @@ public class StorageManagerTest {
     }
     // verify all disks are unavailable because all stores are down
     for (List<ReplicaId> replicasOnDisk : diskToReplicas.values()) {
-      assertTrue("Disk should be unavailable", storageManager.isDiskUnavailable(replicasOnDisk.get(0).getDiskId()));
+      assertFalse("Disk should be unavailable", storageManager.isDiskAvailable(replicasOnDisk.get(0).getDiskId()));
     }
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }

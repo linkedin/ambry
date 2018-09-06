@@ -160,9 +160,7 @@ public class AmbryRequestsTest {
    */
   @After
   public void after() throws InterruptedException {
-    if (storageManager != null) {
-      storageManager.shutdown();
-    }
+    storageManager.shutdown();
   }
 
   /**

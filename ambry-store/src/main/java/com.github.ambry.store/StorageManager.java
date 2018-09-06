@@ -158,13 +158,13 @@ public class StorageManager {
   }
 
   /**
-   * Check if a certain disk is unavailable.
+   * Check if a certain disk is available.
    * @param disk the {@link DiskId} to check.
-   * @return {@code true} if the disk is unavailable. {@code false} if not.
+   * @return {@code true} if the disk is available. {@code false} if not.
    */
-  public boolean isDiskUnavailable(DiskId disk) {
+  public boolean isDiskAvailable(DiskId disk) {
     DiskManager diskManager = diskToDiskManager.get(disk);
-    return diskManager == null || diskManager.areAllStoresDown();
+    return diskManager != null && !diskManager.areAllStoresDown();
   }
 
   /**
