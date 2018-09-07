@@ -13,6 +13,8 @@
  */
 package com.github.ambry.account;
 
+import java.util.List;
+
 import static com.github.ambry.account.Container.*;
 
 
@@ -37,6 +39,7 @@ public class ContainerBuilder {
   private boolean mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
   private String replicationPolicy = null;
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
+  private List<CloudReplicationConfig> cloudConfigs;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -59,6 +62,7 @@ public class ContainerBuilder {
     replicationPolicy = origin.getReplicationPolicy();
     ttlRequired = origin.isTtlRequired();
     parentAccountId = origin.getParentAccountId();
+    cloudConfigs = origin.getCloudReplicationConfigs();
   }
 
   /**
@@ -187,6 +191,11 @@ public class ContainerBuilder {
     return this;
   }
 
+  public ContainerBuilder setCloudConfigs(List<CloudReplicationConfig> cloudConfigs) {
+    this.cloudConfigs = cloudConfigs;
+    return this;
+  }
+
   /**
    * Builds a {@link Container} object. {@code id}, {@code name}, {@code status}, {@code isPrivate}, and
    * {@code parentAccountId} are required before build.
@@ -195,6 +204,6 @@ public class ContainerBuilder {
    */
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, replicationPolicy, ttlRequired, parentAccountId);
+        mediaScanDisabled, replicationPolicy, ttlRequired, parentAccountId, cloudConfigs);
   }
 }

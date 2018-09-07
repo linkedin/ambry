@@ -19,6 +19,7 @@ import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -62,8 +63,11 @@ public class AccountContainerTest {
   private List<Boolean> refContainerMediaScanDisabledValues;
   private List<String> refContainerReplicationPolicyValues;
   private List<Boolean> refContainerTtlRequiredValues;
+  private List<CloudReplicationConfig> refContainerCloudReplicationConfigValues;
   private List<JSONObject> containerJsonList;
   private List<Container> refContainers;
+
+  private CloudReplicationConfig[] refCloudConfigs;
 
   /**
    * Run this test for all versions of the container schema.
@@ -101,6 +105,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testConstructAccountFromJson() throws Exception {
+    System.out.println(refAccountJson);
     assertAccountAgainstReference(Account.fromJson(refAccountJson), true, true);
   }
 
@@ -357,7 +362,8 @@ public class AccountContainerTest {
               .setCacheable(refContainerCachingValues.get(i))
               .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(i))
               .setReplicationPolicy(refContainerReplicationPolicyValues.get(i))
-              .setTtlRequired(refContainerTtlRequiredValues.get(i));
+              .setTtlRequired(refContainerTtlRequiredValues.get(i))
+              .setCloudConfigs(refContainerCloudReplicationConfigValues);
       Container containerFromBuilder = containerBuilder.build();
       assertContainer(containerFromBuilder, i);
 
@@ -505,6 +511,9 @@ public class AccountContainerTest {
       boolean updatedMediaScanDisabled = !container.isMediaScanDisabled();
       String updatedReplicationPolicy = container.getReplicationPolicy() + "---updated";
       boolean updatedTtlRequired = !container.isTtlRequired();
+      List<CloudReplicationConfig> updatedCloudConfigList = new ArrayList<>();
+      updatedCloudConfigList.add(refCloudConfigs[0]);
+      updatedCloudConfigList.add(refCloudConfigs[1]);
 
       containerBuilder.setId(updatedContainerId)
           .setName(updatedContainerName)
@@ -514,7 +523,8 @@ public class AccountContainerTest {
           .setCacheable(updatedCacheable)
           .setMediaScanDisabled(updatedMediaScanDisabled)
           .setReplicationPolicy(updatedReplicationPolicy)
-          .setTtlRequired(updatedTtlRequired);
+          .setTtlRequired(updatedTtlRequired)
+          .setCloudConfigs(updatedCloudConfigList);
       accountBuilder.addOrUpdateContainer(containerBuilder.build());
 
       // build account and assert
@@ -535,6 +545,7 @@ public class AccountContainerTest {
               updatedContainer.isMediaScanDisabled());
           assertNull("Wrong replication policy", updatedContainer.getReplicationPolicy());
           assertFalse("Wrong ttl required setting", updatedContainer.isTtlRequired());
+          assertNull("Wrong cloud config", updatedContainer.getCloudReplicationConfigs());
           break;
         case Container.JSON_VERSION_2:
           assertEquals("Wrong encryption setting", updatedEncrypted, updatedContainer.isEncrypted());
@@ -544,6 +555,7 @@ public class AccountContainerTest {
               updatedContainer.isMediaScanDisabled());
           assertEquals("Wrong replication policy", updatedReplicationPolicy, updatedContainer.getReplicationPolicy());
           assertEquals("Wrong ttl required setting", updatedTtlRequired, updatedContainer.isTtlRequired());
+          assertEquals("Wrong cloud configs", updatedCloudConfigList, updatedContainer.getCloudReplicationConfigs());
           break;
         default:
           throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
@@ -825,7 +837,7 @@ public class AccountContainerTest {
       default:
         throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
     }
-    assertEquals("Deserialization failed", container, Container.fromJson(buildContainerJson(container), refAccountId));
+    assertEquals("Deserialization failed", container, Container.fromJson(container.toJson(), refAccountId));
   }
 
   /**
@@ -863,7 +875,7 @@ public class AccountContainerTest {
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
-          (short) 0);
+          (short) 0, null);
     }, null);
   }
 
@@ -882,6 +894,7 @@ public class AccountContainerTest {
     refContainerMediaScanDisabledValues = new ArrayList<>();
     refContainerReplicationPolicyValues = new ArrayList<>();
     refContainerTtlRequiredValues = new ArrayList<>();
+    refContainerCloudReplicationConfigValues = new ArrayList<>();
     containerJsonList = new ArrayList<>();
     refContainers = new ArrayList<>();
     Set<Short> containerIdSet = new HashSet<>();
@@ -909,12 +922,22 @@ public class AccountContainerTest {
         refContainerReplicationPolicyValues.add(null);
       }
       refContainerTtlRequiredValues.add(random.nextBoolean());
+
+      // @formatter:off
+      refCloudConfigs = new CloudReplicationConfig[] {
+          new CloudReplicationConfig.Builder("AZURE", "spec 1").setCloudContainerName("c1").build(),
+          new CloudReplicationConfig.Builder("AZURE", "spec 2").setCloudContainerName("c2").build(),
+          new CloudReplicationConfig.Builder("AZURE", "spec 3").setCloudContainerName("c3").build()
+      };
+      // @formatter:on
+
+      refContainerCloudReplicationConfigValues = Collections.singletonList(refCloudConfigs[0]);
       refContainers.add(new Container(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
           refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
-          refContainerTtlRequiredValues.get(i), refAccountId));
-      containerJsonList.add(buildContainerJson(refContainers.get(i)));
+          refContainerTtlRequiredValues.get(i), refAccountId, refContainerCloudReplicationConfigValues));
+      containerJsonList.add(refContainers.get(i).toJson());
     }
   }
 
@@ -947,6 +970,7 @@ public class AccountContainerTest {
         containerJson.put(MEDIA_SCAN_DISABLED_KEY, container.isMediaScanDisabled());
         containerJson.putOpt(REPLICATION_POLICY_KEY, container.getReplicationPolicy());
         containerJson.put(TTL_REQUIRED_KEY, container.isTtlRequired());
+        containerJson.put(CLOUD_CONFIG_KEY, container.getCloudReplicationConfigs());
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + Container.getCurrentJsonVersion());

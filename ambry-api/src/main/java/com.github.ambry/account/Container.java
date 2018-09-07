@@ -13,7 +13,10 @@
  */
 package com.github.ambry.account;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -66,6 +69,8 @@ public class Container {
   static final String REPLICATION_POLICY_KEY = "replicationPolicy";
   static final String TTL_REQUIRED_KEY = "ttlRequired";
   static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
+  static final String CLOUD_CONFIG_KEY = "cloudConfigs";
+
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
   static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
@@ -257,7 +262,7 @@ public class Container {
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
           UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, UNKNOWN_CONTAINER_CACHEABLE_SETTING,
           UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING,
-          UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
+          UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID, null);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -271,7 +276,7 @@ public class Container {
           DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING,
-          DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
+          DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID, null);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -285,7 +290,7 @@ public class Container {
           DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING,
-          DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
+          DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID, null);
 
   // container field variables
   private final short id;
@@ -299,6 +304,7 @@ public class Container {
   private final String replicationPolicy;
   private final boolean ttlRequired;
   private final short parentAccountId;
+  private final List<CloudReplicationConfig> cloudConfigs;
 
   /**
    * Constructing an {@link Container} object from container metadata.
@@ -323,6 +329,7 @@ public class Container {
         mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         replicationPolicy = null;
         ttlRequired = false;
+        cloudConfigs = null;
         break;
       case JSON_VERSION_2:
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
@@ -335,6 +342,14 @@ public class Container {
         mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED_KEY, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
         replicationPolicy = metadata.optString(REPLICATION_POLICY_KEY, null);
         ttlRequired = metadata.optBoolean(TTL_REQUIRED_KEY, false);
+        cloudConfigs = new ArrayList<>();
+        JSONArray cloudConfigsArray = metadata.optJSONArray(CLOUD_CONFIG_KEY);
+        if (cloudConfigsArray != null) {
+          for (int index = 0; index < cloudConfigsArray.length(); index++) {
+            JSONObject cloudJson = cloudConfigsArray.getJSONObject(index);
+            cloudConfigs.add(new CloudReplicationConfig(cloudJson));
+          }
+        }
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
@@ -357,10 +372,11 @@ public class Container {
    * @param replicationPolicy the replication policy to use. If {@code null}, the cluster's default will be used.
    * @param ttlRequired {@code true} if ttl is required on content created in this container.
    * @param parentAccountId The id of the parent {@link Account} of this container.
+   * @param cloudConfigs List of cloud configs for the container.
    */
   Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
-      boolean ttlRequired, short parentAccountId) {
+      boolean ttlRequired, short parentAccountId, List<CloudReplicationConfig> cloudConfigs) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -375,6 +391,7 @@ public class Container {
         this.mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         this.replicationPolicy = null;
         this.ttlRequired = false;
+        this.cloudConfigs = null;
         break;
       case JSON_VERSION_2:
         this.encrypted = encrypted;
@@ -382,6 +399,7 @@ public class Container {
         this.mediaScanDisabled = mediaScanDisabled;
         this.replicationPolicy = replicationPolicy;
         this.ttlRequired = ttlRequired;
+        this.cloudConfigs = cloudConfigs;
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -445,6 +463,13 @@ public class Container {
         metadata.put(MEDIA_SCAN_DISABLED_KEY, mediaScanDisabled);
         metadata.putOpt(REPLICATION_POLICY_KEY, replicationPolicy);
         metadata.put(TTL_REQUIRED_KEY, ttlRequired);
+        if (cloudConfigs != null && !cloudConfigs.isEmpty()) {
+          JSONArray configsArray = new JSONArray();
+          for (CloudReplicationConfig config : cloudConfigs) {
+            configsArray.put(config.toJson());
+          }
+          metadata.put(CLOUD_CONFIG_KEY, configsArray);
+        }
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -534,6 +559,10 @@ public class Container {
    */
   public short getParentAccountId() {
     return parentAccountId;
+  }
+
+  public List<CloudReplicationConfig> getCloudReplicationConfigs() {
+    return cloudConfigs;
   }
 
   /**
