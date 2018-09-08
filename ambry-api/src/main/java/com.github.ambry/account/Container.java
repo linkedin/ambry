@@ -561,6 +561,9 @@ public class Container {
     return parentAccountId;
   }
 
+  /**
+   * @return the cloud replication configs for this container.
+   */
   public List<CloudReplicationConfig> getCloudReplicationConfigs() {
     return cloudConfigs;
   }

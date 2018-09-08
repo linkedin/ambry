@@ -27,8 +27,8 @@ import org.json.JSONObject;
  * </p>
  *  <pre><code>
  *  {
- *    "destinationType": "AZURE",
- *    "configSpec": "Encrypted config spec for cloud service account",
+ *    "cloudDestinationType": "AZURE",
+ *    "cloudConfigSpec": "Encrypted config spec for cloud service account",
  *    "cloudContainerName": "My container name"
  *  }
  *  </code></pre>
@@ -124,19 +124,55 @@ public class CloudReplicationConfig {
     // optional
     private String cloudContainerName;
 
-    public Builder(CloudReplicationConfig config) {
-      this.destinationType = config.destinationType;
-      this.configSpec = config.configSpec;
-      this.cloudContainerName = config.cloudContainerName;
+    /**
+     * Constructor to build a new {@link CloudReplicationConfig} from an existing {@link CloudReplicationConfig}.
+     * The builder will include all the information of the existing {@link CloudReplicationConfig}.
+     * This constructor should be used when modifying an existing config.
+     * @param origin The {@link CloudReplicationConfig} to build from.
+     */
+    public Builder(CloudReplicationConfig origin) {
+      this.destinationType = origin.destinationType;
+      this.configSpec = origin.configSpec;
+      this.cloudContainerName = origin.cloudContainerName;
     }
 
+    /**
+     * Constructor for a {@link CloudReplicationConfig} taking individual arguments.
+     * @param destinationType The destination type of the {@link CloudReplicationConfig} to build.
+     * @param configSpec The configuration spec of the {@link CloudReplicationConfig} to build.
+     */
     public Builder(String destinationType, String configSpec) {
       this.destinationType = destinationType;
       this.configSpec = configSpec;
     }
 
-    public Builder setCloudContainerName(String containerName) {
-      this.cloudContainerName = containerName;
+    /**
+     * Sets the destination type of the {@link CloudReplicationConfig} to build.
+     * @param destinationType The destination type to set.
+     * @return This builder.
+     */
+    public Builder setDestinationType(String destinationType) {
+      this.destinationType = destinationType;
+      return this;
+    }
+
+    /**
+     * Sets the configuration spec of the {@link CloudReplicationConfig} to build.
+     * @param configSpec The configuration spec to set.
+     * @return This builder.
+     */
+    public Builder setConfigSpec(String configSpec) {
+      this.configSpec = configSpec;
+      return this;
+    }
+
+    /**
+     * Sets the cloud container name of the {@link CloudReplicationConfig} to build.
+     * @param cloudContainerName The cloud container name to set.
+     * @return This builder.
+     */
+    public Builder setCloudContainerName(String cloudContainerName) {
+      this.cloudContainerName = cloudContainerName;
       return this;
     }
 

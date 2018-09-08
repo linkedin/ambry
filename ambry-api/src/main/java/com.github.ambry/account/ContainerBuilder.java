@@ -191,6 +191,11 @@ public class ContainerBuilder {
     return this;
   }
 
+  /**
+   * Sets the cloud replication configurations for the {@link Container}.
+   * @param cloudConfigs the list of cloud replication configs.
+   * @return This builder.
+   */
   public ContainerBuilder setCloudConfigs(List<CloudReplicationConfig> cloudConfigs) {
     this.cloudConfigs = cloudConfigs;
     return this;

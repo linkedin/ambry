@@ -67,8 +67,6 @@ public class AccountContainerTest {
   private List<JSONObject> containerJsonList;
   private List<Container> refContainers;
 
-  private CloudReplicationConfig[] refCloudConfigs;
-
   /**
    * Run this test for all versions of the container schema.
    * @return the constructor arguments to use.
@@ -105,7 +103,6 @@ public class AccountContainerTest {
    */
   @Test
   public void testConstructAccountFromJson() throws Exception {
-    System.out.println(refAccountJson);
     assertAccountAgainstReference(Account.fromJson(refAccountJson), true, true);
   }
 
@@ -363,7 +360,7 @@ public class AccountContainerTest {
               .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(i))
               .setReplicationPolicy(refContainerReplicationPolicyValues.get(i))
               .setTtlRequired(refContainerTtlRequiredValues.get(i))
-              .setCloudConfigs(refContainerCloudReplicationConfigValues);
+              .setCloudConfigs(Collections.singletonList(refContainerCloudReplicationConfigValues.get(i)));
       Container containerFromBuilder = containerBuilder.build();
       assertContainer(containerFromBuilder, i);
 
@@ -512,8 +509,12 @@ public class AccountContainerTest {
       String updatedReplicationPolicy = container.getReplicationPolicy() + "---updated";
       boolean updatedTtlRequired = !container.isTtlRequired();
       List<CloudReplicationConfig> updatedCloudConfigList = new ArrayList<>();
-      updatedCloudConfigList.add(refCloudConfigs[0]);
-      updatedCloudConfigList.add(refCloudConfigs[1]);
+      if (container.getCloudReplicationConfigs() != null) {
+        updatedCloudConfigList.add(
+            new CloudReplicationConfig.Builder(container.getCloudReplicationConfigs().get(0)).setConfigSpec(
+                "updated spec" + 1).build());
+      }
+      updatedCloudConfigList.add(new CloudReplicationConfig.Builder("AWS", "updated spec" + i).build());
 
       containerBuilder.setId(updatedContainerId)
           .setName(updatedContainerName)
@@ -923,20 +924,16 @@ public class AccountContainerTest {
       }
       refContainerTtlRequiredValues.add(random.nextBoolean());
 
-      // @formatter:off
-      refCloudConfigs = new CloudReplicationConfig[] {
-          new CloudReplicationConfig.Builder("AZURE", "spec 1").setCloudContainerName("c1").build(),
-          new CloudReplicationConfig.Builder("AZURE", "spec 2").setCloudContainerName("c2").build(),
-          new CloudReplicationConfig.Builder("AZURE", "spec 3").setCloudContainerName("c3").build()
-      };
-      // @formatter:on
+      CloudReplicationConfig cloudConfig =
+          new CloudReplicationConfig.Builder("AZURE", "spec" + i).setCloudContainerName("ctr" + i).build();
+      refContainerCloudReplicationConfigValues.add(cloudConfig);
 
-      refContainerCloudReplicationConfigValues = Collections.singletonList(refCloudConfigs[0]);
       refContainers.add(new Container(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
           refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
-          refContainerTtlRequiredValues.get(i), refAccountId, refContainerCloudReplicationConfigValues));
+          refContainerTtlRequiredValues.get(i), refAccountId,
+          Collections.singletonList(refContainerCloudReplicationConfigValues.get(i))));
       containerJsonList.add(refContainers.get(i).toJson());
     }
   }
