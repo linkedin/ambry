@@ -57,7 +57,7 @@ public class DiskSpaceAllocatorTest {
   }
 
   @After
-  public void after() throws Exception {
+  public void after() {
     if (exec != null) {
       exec.shutdownNow();
     }
@@ -90,6 +90,40 @@ public class DiskSpaceAllocatorTest {
     verifyPoolState(new ExpectedState().add(50, 2).add(20, 1).add(21, 1));
     freeAndVerify(f4, 50);
     verifyPoolState(new ExpectedState().add(50, 3).add(20, 1).add(21, 1));
+  }
+
+  /**
+   * Test online-initialize behavior when adding new store or removing old store during runtime.
+   * @throws Exception
+   */
+  @Test
+  public void onlineInitializeTest() throws Exception {
+    alloc = constructAllocator();
+    // initialize pool for existing stores.
+    alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(50, 1, 0), new DiskSpaceRequirements(20, 1, 0)));
+    // allocate file for existing stores
+    File f1 = allocateAndVerify("file1", 50);
+    File f2 = allocateAndVerify("file2", 20);
+    verifyPoolState(new ExpectedState().add(50, 0).add(20, 0));
+
+    // initialize the pool again for new added store and verify
+    alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(20, 1, 0)));
+    verifyPoolState(new ExpectedState().add(20, 1));
+    // allocate file for new added store
+    File f3 = allocateAndVerify("file3", 20);
+    verifyPoolState(new ExpectedState().add(20, 0));
+
+    // free f1, f3 and verify
+    freeAndVerify(f1, 50);
+    freeAndVerify(f3, 20);
+    verifyPoolState(new ExpectedState().add(50, 1).add(20, 1));
+
+    // removing one existing store with f2 and initialize the pool again to free old files.
+    freeAndVerify(f2, 20);
+    verifyPoolState(new ExpectedState().add(50, 1).add(20, 2));
+    alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(50, 1, 0), new DiskSpaceRequirements(20, 1, 0)));
+    // verify only one file with size 20 is in the pool
+    verifyPoolState(new ExpectedState().add(50, 1).add(20, 1));
   }
 
   /**

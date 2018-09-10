@@ -287,12 +287,7 @@ class DiskSpaceAllocator {
         File dirToDelete = new File(reserveDir, generateFileSizeDirName(sizeInBytes));
         Utils.deleteFileOrDirectory(dirToDelete);
       } else {
-        while (reserveFiles.getCount(sizeInBytes) > segmentsNeeded) {
-          File fileToDelete = reserveFiles.remove(sizeInBytes);
-          if (!fileToDelete.delete()) {
-            throw new IOException("Could not delete the following reserve file: " + fileToDelete.getAbsolutePath());
-          }
-        }
+        reserveFiles.deleteExtra(sizeInBytes, segmentsNeeded);
       }
     }
   }
@@ -300,15 +295,12 @@ class DiskSpaceAllocator {
   /**
    * Add additional reserve files that are required by {@code overallRequirements}.
    * @param overallRequirements a map between segment sizes in bytes and the number of segments needed for that size.
-   * @throws IOException
    */
-  private void addRequiredSegments(Map<Long, Long> overallRequirements) throws IOException {
+  private void addRequiredSegments(Map<Long, Long> overallRequirements) {
     for (Map.Entry<Long, Long> sizeAndSegmentsNeeded : overallRequirements.entrySet()) {
       long sizeInBytes = sizeAndSegmentsNeeded.getKey();
       long segmentsNeeded = sizeAndSegmentsNeeded.getValue();
-      while (reserveFiles.getCount(sizeInBytes) < segmentsNeeded) {
-        reserveFiles.add(sizeInBytes, createReserveFile(sizeInBytes));
-      }
+      reserveFiles.addRequired(sizeInBytes, segmentsNeeded);
     }
   }
 
@@ -316,7 +308,7 @@ class DiskSpaceAllocator {
    * Create and preallocate (if supported) a reserve file of the specified size.
    * @param sizeInBytes the size to preallocate for the reserve file.
    * @return the created file.
-   * @throws IOException if the file could not be created, or if an error occured during the fallocate call.
+   * @throws IOException if the file could not be created, or if an error occurred during the fallocate call.
    */
   private File createReserveFile(long sizeInBytes) throws IOException {
     File fileSizeDir = prepareDirectory(new File(reserveDir, FILE_SIZE_DIR_PREFIX + sizeInBytes));
@@ -378,7 +370,7 @@ class DiskSpaceAllocator {
   /**
    * This is a thread safe data structure that is used to keep track of the files in the reserve pool.
    */
-  private static class ReserveFileMap {
+  private class ReserveFileMap {
     private final ConcurrentMap<Long, Queue<File>> internalMap = new ConcurrentHashMap<>();
 
     /**
@@ -405,19 +397,52 @@ class DiskSpaceAllocator {
     }
 
     /**
-     * @param sizeInBytes the size of files of interest
-     * @return the number of files in the map of size {@code sizeInBytes}
-     */
-    int getCount(long sizeInBytes) {
-      Queue<File> reserveFilesForSize = internalMap.get(sizeInBytes);
-      return reserveFilesForSize != null ? reserveFilesForSize.size() : 0;
-    }
-
-    /**
      * @return the set of file sizes present in the map.
      */
     Set<Long> getFileSizeSet() {
       return internalMap.keySet();
+    }
+
+    /**
+     * Delete extra reserve files that are not required by requirements.
+     * @param sizeInBytes the size of the reserve file to check.
+     * @param segmentsNeeded the actual number of segments needed for that size.
+     */
+    void deleteExtra(long sizeInBytes, long segmentsNeeded) {
+      internalMap.compute(sizeInBytes, (k, v) -> {
+        Queue<File> reserveFilesForSize = v == null ? new ConcurrentLinkedQueue<>() : v;
+        while (reserveFilesForSize.size() > segmentsNeeded) {
+          File fileToDelete = null;
+          if (reserveFilesForSize.size() != 0) {
+            fileToDelete = reserveFilesForSize.remove();
+          }
+          if (fileToDelete != null && !fileToDelete.delete()) {
+            throw new RuntimeException(
+                "Could not delete the following reserve file: " + fileToDelete.getAbsolutePath());
+          }
+        }
+        return reserveFilesForSize;
+      });
+    }
+
+    /**
+     * Add additional reserve files that are required by requirements
+     * @param sizeInBytes the size of the reserve file to check.
+     * @param segmentsNeeded the actual number of segments needed for that size.
+     */
+    void addRequired(long sizeInBytes, long segmentsNeeded) {
+      internalMap.compute(sizeInBytes, (k, v) -> {
+        Queue<File> reserveFilesForSize = v == null ? new ConcurrentLinkedQueue<>() : v;
+        while (reserveFilesForSize.size() < segmentsNeeded) {
+          try {
+            File fileToAdd = createReserveFile(sizeInBytes);
+            reserveFilesForSize.add(fileToAdd);
+          } catch (IOException e) {
+            throw new RuntimeException("Could not create reserve file", e);
+          }
+        }
+        return reserveFilesForSize;
+      });
     }
   }
 
