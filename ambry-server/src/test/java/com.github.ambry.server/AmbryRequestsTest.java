@@ -17,9 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.MockDiskId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
@@ -201,6 +199,8 @@ public class AmbryRequestsTest {
     doScheduleCompactionTest(id, ServerErrorCode.Disk_Unavailable);
     storageManager.returnNullStore = false;
     storageManager.start();
+    // make sure the disk is up when storageManager is restarted.
+    doScheduleCompactionTest(id, ServerErrorCode.No_Error);
 
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
 
@@ -380,8 +380,6 @@ public class AmbryRequestsTest {
     PartitionId id = partitionIds.get(0);
     List<? extends ReplicaId> replicaIds = id.getReplicaIds();
     assertTrue("This test needs more than one replica for the first partition to work", replicaIds.size() > 1);
-    int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
     long acceptableLagInBytes = 0;
     short numReplicasCaughtUpPerPartition = 3;
     replicationManager.reset();
@@ -417,8 +415,6 @@ public class AmbryRequestsTest {
   public void startBlobStoreFailureTest() throws InterruptedException, IOException {
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
-    int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
     short numReplicasCaughtUpPerPartition = 3;
     // test start BlobStore failure
     storageManager.returnValueOfStartingBlobStore = false;
@@ -464,7 +460,6 @@ public class AmbryRequestsTest {
     sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Disk_Unavailable);
     storageManager.returnNullStore = false;
     storageManager.start();
-    ((MockDiskId) findReplica(id).getDiskId()).setDiskState(HardwareState.AVAILABLE, true);
     // test invalid numReplicasCaughtUpPerPartition
     numReplicasCaughtUpPerPartition = -1;
     sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Bad_Request);

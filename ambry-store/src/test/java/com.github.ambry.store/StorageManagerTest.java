@@ -18,6 +18,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DiskId;
+import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -366,6 +367,7 @@ public class StorageManagerTest {
     // verify all disks are still available because at least one store on them is up
     for (List<ReplicaId> replicasOnDisk : diskToReplicas.values()) {
       assertTrue("Disk should be available", storageManager.isDiskAvailable(replicasOnDisk.get(0).getDiskId()));
+      assertEquals("Disk state be available", HardwareState.AVAILABLE, replicasOnDisk.get(0).getDiskId().getState());
     }
 
     // now, shutdown the last store on each disk
@@ -376,6 +378,17 @@ public class StorageManagerTest {
     for (List<ReplicaId> replicasOnDisk : diskToReplicas.values()) {
       assertFalse("Disk should be unavailable", storageManager.isDiskAvailable(replicasOnDisk.get(0).getDiskId()));
     }
+
+    // then, start the one store on each disk to test if disk is up again
+    for (List<ReplicaId> replicasOnDisk : diskToReplicas.values()) {
+      storageManager.startBlobStore(replicasOnDisk.get(0).getPartitionId());
+    }
+    // verify all disks are available again because one store is started
+    for (List<ReplicaId> replicasOnDisk : diskToReplicas.values()) {
+      assertTrue("Disk should be available", storageManager.isDiskAvailable(replicasOnDisk.get(0).getDiskId()));
+      assertEquals("Disk state be available", HardwareState.AVAILABLE, replicasOnDisk.get(0).getDiskId().getState());
+    }
+
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 

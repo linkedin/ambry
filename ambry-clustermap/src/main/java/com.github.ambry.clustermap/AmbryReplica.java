@@ -127,8 +127,13 @@ class AmbryReplica implements ReplicaId, Resource {
   }
 
   @Override
-  public void markDiskDown(){
+  public void markDiskDown() {
     disk.onDiskError();
+  }
+
+  @Override
+  public void markDiskUp() {
+    disk.onDiskOk();
   }
 
   /**
