@@ -35,6 +35,7 @@ import static org.junit.Assert.*;
 public class HelixClusterAggregatorTest {
   private static final long RELEVANT_PERIOD_IN_MINUTES = 60;
   private static final long DEFAULT_TIMESTAMP = 1000;
+  private final String EXCEPTION_INSTANCE_NAME = "Exception_Instance";
   private final HelixClusterAggregator clusterAggregator;
   private final ObjectMapper mapper = new ObjectMapper();
 
@@ -64,6 +65,7 @@ public class HelixClusterAggregatorTest {
       statsWrappersJSON.put("Store_" + i, (nodeStatsJSON));
     }
     statsWrappersJSON.put("Store_" + nodeCount, emptyNodeStatsJSON);
+    statsWrappersJSON.put(EXCEPTION_INSTANCE_NAME, "");
     for (int i = 1; i < storeSnapshots.size(); i++) {
       StatsSnapshot.aggregate(storeSnapshots.get(0), storeSnapshots.get(i));
     }
@@ -93,6 +95,9 @@ public class HelixClusterAggregatorTest {
     // verify cluster wide aggregation
     StatsSnapshot actualSnapshot = mapper.readValue(results.getSecond(), StatsSnapshot.class);
     assertTrue("Mismatch in the aggregated snapshot", expectedSnapshot.equals(actualSnapshot));
+    // verify aggregator keeps track of instances where exception occurred.
+    assertEquals("Mismatch in instances where exception occurred", Collections.singletonList(EXCEPTION_INSTANCE_NAME),
+        clusterAggregator.getExceptionOccurredInstances());
   }
 
   /**
@@ -115,6 +120,7 @@ public class HelixClusterAggregatorTest {
     statsWrappersJSON.put("Store_0", mapper.writeValueAsString(outdatedNodeStats));
     statsWrappersJSON.put("Store_1", mapper.writeValueAsString(upToDateNodeStats));
     statsWrappersJSON.put("Store_2", mapper.writeValueAsString(emptyNodeStats));
+    statsWrappersJSON.put(EXCEPTION_INSTANCE_NAME, "");
     Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON);
     StatsSnapshot expectedSnapshot = upToDateStoreSnapshots.get(0);
     // verify cluster wide aggregation with outdated node stats
@@ -124,6 +130,9 @@ public class HelixClusterAggregatorTest {
     StatsSnapshot.aggregate(expectedSnapshot, outdatedStoreSnapshots.get(0));
     StatsSnapshot rawSnapshot = mapper.readValue(results.getFirst(), StatsSnapshot.class);
     assertTrue("Mismatch in the raw aggregated snapshot", expectedSnapshot.equals(rawSnapshot));
+    // verify aggregator keeps track of instances where exception occurred.
+    assertEquals("Mismatch in instances where exception occurred", Collections.singletonList(EXCEPTION_INSTANCE_NAME),
+        clusterAggregator.getExceptionOccurredInstances());
   }
 
   /**
@@ -144,6 +153,7 @@ public class HelixClusterAggregatorTest {
     statsWrappersJSON.put("Store_0", mapper.writeValueAsString(smallerNodeStats));
     statsWrappersJSON.put("Store_1", mapper.writeValueAsString(greaterNodeStats));
     statsWrappersJSON.put("Store_2", mapper.writeValueAsString(emptyNodeStats));
+    statsWrappersJSON.put(EXCEPTION_INSTANCE_NAME, "");
     Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON);
     StatsSnapshot expectedSnapshot = greaterStoreSnapshots.get(0);
     // verify cluster wide aggregation with different node stats
@@ -153,6 +163,9 @@ public class HelixClusterAggregatorTest {
     StatsSnapshot.aggregate(expectedSnapshot, smallerStoreSnapshots.get(0));
     StatsSnapshot rawSnapshot = mapper.readValue(results.getFirst(), StatsSnapshot.class);
     assertTrue("Mismatch in the raw aggregated snapshot", expectedSnapshot.equals(rawSnapshot));
+    // verify aggregator keeps track of instances where exception occurred.
+    assertEquals("Mismatch in instances where exception occurred", Collections.singletonList(EXCEPTION_INSTANCE_NAME),
+        clusterAggregator.getExceptionOccurredInstances());
   }
 
   /**

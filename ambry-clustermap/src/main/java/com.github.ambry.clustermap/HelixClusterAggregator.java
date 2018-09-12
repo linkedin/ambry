@@ -18,7 +18,9 @@ import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -33,6 +35,7 @@ public class HelixClusterAggregator {
   private static final Logger logger = LoggerFactory.getLogger(HelixClusterAggregator.class);
   private final ObjectMapper mapper = new ObjectMapper();
   private final long relevantTimePeriodInMs;
+  private final List<String> exceptionOccurredInstances = new ArrayList<>();
 
   HelixClusterAggregator(long relevantTimePeriodInMinutes) {
     relevantTimePeriodInMs = TimeUnit.MINUTES.toMillis(relevantTimePeriodInMinutes);
@@ -52,6 +55,7 @@ public class HelixClusterAggregator {
     StatsSnapshot partitionSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
     Map<String, Long> partitionTimestampMap = new HashMap<>();
     StatsSnapshot rawPartitionSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
+    exceptionOccurredInstances.clear();
     for (Map.Entry<String, String> statsWrapperJSON : statsWrappersJSON.entrySet()) {
       if (statsWrapperJSON != null && statsWrapperJSON.getValue() != null) {
         try {
@@ -62,6 +66,7 @@ public class HelixClusterAggregator {
           combine(partitionSnapshot, snapshotWrapperCopy, statsWrapperJSON.getKey(), partitionTimestampMap);
         } catch (Exception e) {
           logger.error("Exception occurred while processing stats from {}", statsWrapperJSON.getKey(), e);
+          exceptionOccurredInstances.add(statsWrapperJSON.getKey());
         }
       }
     }
@@ -172,5 +177,12 @@ public class HelixClusterAggregator {
       }
     }
     return reducedSnapshot;
+  }
+
+  /**
+   * @return the list of instances on which exception occurred during cluster wide stats aggregation.
+   */
+  List<String> getExceptionOccurredInstances() {
+    return exceptionOccurredInstances;
   }
 }

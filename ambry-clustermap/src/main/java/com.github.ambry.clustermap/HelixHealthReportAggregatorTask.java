@@ -41,6 +41,7 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
   private static final String RAW_VALID_SIZE_FIELD_NAME = "raw_valid_data_size";
   private static final String VALID_SIZE_FIELD_NAME = "valid_data_size";
   private static final String TIMESTAMP_FIELD_NAME = "timestamp";
+  private static final String ERROR_OCCURRED_INSTANCES_FIELD_NAME = "error_occurred_instances";
   private final HelixManager manager;
   private final HelixClusterAggregator clusterAggregator;
   private final String healthReportName;
@@ -82,6 +83,7 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
       znRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME, results.getFirst());
       znRecord.setSimpleField(VALID_SIZE_FIELD_NAME, results.getSecond());
       znRecord.setSimpleField(TIMESTAMP_FIELD_NAME, String.valueOf(SystemTime.getInstance().milliseconds()));
+      znRecord.setListField(ERROR_OCCURRED_INSTANCES_FIELD_NAME, clusterAggregator.getExceptionOccurredInstances());
       String path = String.format("/%s", resultId);
       manager.getHelixPropertyStore().set(path, znRecord, AccessOption.PERSISTENT);
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
