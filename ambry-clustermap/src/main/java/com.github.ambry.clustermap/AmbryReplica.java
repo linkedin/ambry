@@ -126,6 +126,16 @@ class AmbryReplica implements ReplicaId, Resource {
     return "Replica[" + getDataNodeId().getHostname() + ":" + getDataNodeId().getPort() + ":" + getReplicaPath() + "]";
   }
 
+  @Override
+  public void markDiskDown() {
+    disk.onDiskError();
+  }
+
+  @Override
+  public void markDiskUp() {
+    disk.onDiskOk();
+  }
+
   /**
    * Take actions, if any, when this replica is unavailable.
    */

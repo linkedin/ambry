@@ -113,6 +113,16 @@ public class MockReplicaId implements ReplicaId {
     return "Mount Path " + mountPath + " Replica Path " + replicaPath;
   }
 
+  @Override
+  public void markDiskDown() {
+    diskId.onDiskError();
+  }
+
+  @Override
+  public void markDiskUp() {
+    diskId.onDiskOk();
+  }
+
   public void cleanup() {
     File replicaDir = new File(replicaPath);
     File[] replicaDirFiles = replicaDir.listFiles();

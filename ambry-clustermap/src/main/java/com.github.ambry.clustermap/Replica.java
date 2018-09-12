@@ -100,6 +100,16 @@ class Replica implements ReplicaId {
     return partition.getPartitionState().equals(PartitionState.READ_ONLY);
   }
 
+  @Override
+  public void markDiskDown() {
+    disk.onDiskError();
+  }
+
+  @Override
+  public void markDiskUp() {
+    disk.onDiskOk();
+  }
+
   Partition getPartition() {
     return partition;
   }
@@ -114,10 +124,6 @@ class Replica implements ReplicaId {
     return peers;
   }
 
-  void setStoppedState(boolean isStopped) {
-    this.isStopped = isStopped;
-  }
-  
   protected void validatePartition() {
     if (partition == null) {
       throw new IllegalStateException("Partition cannot be null.");

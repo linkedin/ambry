@@ -108,6 +108,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.junit.After;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -129,9 +130,8 @@ public class AmbryRequestsTest {
   private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
   private final MockStoreKeyConverterFactory storeKeyConverterFactory;
 
-  public AmbryRequestsTest() throws IOException, ReplicationException, StoreException {
+  public AmbryRequestsTest() throws IOException, ReplicationException, StoreException, InterruptedException {
     clusterMap = new MockClusterMap();
-    storageManager = new MockStorageManager(validKeysInStore);
     Properties properties = new Properties();
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
@@ -141,6 +141,7 @@ public class AmbryRequestsTest {
     properties.setProperty("replication.no.of.inter.dc.replica.threads", "0");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     dataNodeId = clusterMap.getDataNodeIds().get(0);
+    storageManager = new MockStorageManager(validKeysInStore, clusterMap.getReplicaIds(dataNodeId));
     storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(conversionMap);
     replicationManager =
@@ -149,6 +150,15 @@ public class AmbryRequestsTest {
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false,
         storeKeyConverterFactory);
+    storageManager.start();
+  }
+
+  /**
+   * Close the storageManager created.
+   */
+  @After
+  public void after() throws InterruptedException {
+    storageManager.shutdown();
   }
 
   /**
@@ -178,11 +188,20 @@ public class AmbryRequestsTest {
     doScheduleCompactionTest(null, ServerErrorCode.Bad_Request);
 
     PartitionId id = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
-
     // store is not started - Replica_Unavailable
     storageManager.returnNullStore = true;
     doScheduleCompactionTest(id, ServerErrorCode.Replica_Unavailable);
     storageManager.returnNullStore = false;
+
+    // all stores are shutdown - Disk_Unavailable. This is simulated by shutting down the storage manager.
+    storageManager.shutdown();
+    storageManager.returnNullStore = true;
+    doScheduleCompactionTest(id, ServerErrorCode.Disk_Unavailable);
+    storageManager.returnNullStore = false;
+    storageManager.start();
+    // make sure the disk is up when storageManager is restarted.
+    doScheduleCompactionTest(id, ServerErrorCode.No_Error);
+
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
 
     // disk unavailable
@@ -361,20 +380,13 @@ public class AmbryRequestsTest {
     PartitionId id = partitionIds.get(0);
     List<? extends ReplicaId> replicaIds = id.getReplicaIds();
     assertTrue("This test needs more than one replica for the first partition to work", replicaIds.size() > 1);
-    int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
     long acceptableLagInBytes = 0;
     short numReplicasCaughtUpPerPartition = 3;
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     generateLagOverrides(0, acceptableLagInBytes);
     // stop BlobStore
-    AdminRequest adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    BlobStoreControlAdminRequest stopBlobStoreAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.No_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.No_Error);
     // verify APIs are called in the process of stopping BlobStore
     assertEquals("Compaction on store should be disabled after stopping the BlobStore", false,
         storageManager.compactionEnableVal);
@@ -384,11 +396,7 @@ public class AmbryRequestsTest {
     assertEquals("Replication on given BlobStore should be disabled", false, replicationManager.enableVal);
     assertEquals("Partition shutdown not as expected", id, storageManager.shutdownPartitionId);
     // start BlobStore
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    BlobStoreControlAdminRequest startBlobStoreAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
-    response = sendRequestGetResponse(startBlobStoreAdminRequest, ServerErrorCode.No_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.No_Error);
     // verify APIs are called in the process of starting BlobStore
     assertEquals("Partition started not as expected", id, storageManager.startedPartitionId);
     assertEquals("Replication on given BlobStore should be enabled", true, replicationManager.enableVal);
@@ -407,49 +415,26 @@ public class AmbryRequestsTest {
   public void startBlobStoreFailureTest() throws InterruptedException, IOException {
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
-    int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
     short numReplicasCaughtUpPerPartition = 3;
     // test start BlobStore failure
-    AdminRequest adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    BlobStoreControlAdminRequest blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
     storageManager.returnValueOfStartingBlobStore = false;
-    Response response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfStartingBlobStore = true;
     // test start BlobStore with runtime exception
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
     storageManager.exceptionToThrowOnStartingBlobStore = new IllegalStateException();
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnStartingBlobStore = null;
     // test enable replication failure
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
     replicationManager.controlReplicationReturnVal = false;
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
     replicationManager.controlReplicationReturnVal = true;
     // test enable compaction failure
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
     storageManager.returnValueOfControllingCompaction = false;
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfControllingCompaction = true;
     // test enable compaction with runtime exception
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
     storageManager.exceptionToThrowOnControllingCompaction = new IllegalStateException();
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnControllingCompaction = null;
   }
 
@@ -462,83 +447,50 @@ public class AmbryRequestsTest {
   public void stopBlobStoreFailureTest() throws InterruptedException, IOException {
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
-    int correlationId = TestUtils.RANDOM.nextInt();
-    String clientId = UtilsTest.getRandomString(10);
     short numReplicasCaughtUpPerPartition = 3;
     // test partition unknown
-    AdminRequest adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, null, correlationId, clientId);
-    BlobStoreControlAdminRequest blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    Response response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Bad_Request);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-    // test validate request failure
+    sendAndVerifyStoreControlRequest(null, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Bad_Request);
+    // test validate request failure - Replica_Unavailable
     storageManager.returnNullStore = true;
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Replica_Unavailable);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Replica_Unavailable);
     storageManager.returnNullStore = false;
+    // test validate request failure - Disk_Unavailable
+    storageManager.shutdown();
+    storageManager.returnNullStore = true;
+    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Disk_Unavailable);
+    storageManager.returnNullStore = false;
+    storageManager.start();
     // test invalid numReplicasCaughtUpPerPartition
     numReplicasCaughtUpPerPartition = -1;
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Bad_Request);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Bad_Request);
     numReplicasCaughtUpPerPartition = 3;
     // test disable compaction failure
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
     storageManager.returnValueOfControllingCompaction = false;
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfControllingCompaction = true;
     // test disable compaction with runtime exception
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
     storageManager.exceptionToThrowOnControllingCompaction = new IllegalStateException();
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnControllingCompaction = null;
     // test disable replication failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = false;
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
     // test peers catchup failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     // all replicas of this partition > acceptableLag
     generateLagOverrides(1, 1);
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Retry_After_Backoff);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Retry_After_Backoff);
     // test shutdown BlobStore failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     storageManager.returnValueOfShutdownBlobStore = false;
     generateLagOverrides(0, 0);
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
     // test shutdown BlobStore with runtime exception
     storageManager.exceptionToThrowOnShuttingDownBlobStore = new IllegalStateException();
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnShuttingDownBlobStore = null;
   }
 
@@ -696,6 +648,29 @@ public class AmbryRequestsTest {
         assertEquals("Error code does not match expected", expectedErrorCode, info.getError());
       }
     }
+  }
+
+  /**
+   * Sends and verifies that a {@link AdminRequestOrResponseType#BlobStoreControl} request received the error code
+   * expected.
+   * @param partitionId the {@link PartitionId} to send the request for. Can be {@code null}.
+   * @param enable {@code true} if BlobStore needs to be started. {@code false} otherwise.
+   * @param numReplicasCaughtUpPerPartition the number of peer replicas which have caught up with this store before proceeding.
+   * @param expectedServerErrorCode the {@link ServerErrorCode} expected in the response.
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  private void sendAndVerifyStoreControlRequest(PartitionId partitionId, boolean enable,
+      short numReplicasCaughtUpPerPartition, ServerErrorCode expectedServerErrorCode)
+      throws InterruptedException, IOException {
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = UtilsTest.getRandomString(10);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, correlationId, clientId);
+    BlobStoreControlAdminRequest blobStoreControlAdminRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, enable, adminRequest);
+    Response response = sendRequestGetResponse(blobStoreControlAdminRequest, expectedServerErrorCode);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
   }
 
   /**
@@ -1087,7 +1062,6 @@ public class AmbryRequestsTest {
     sendAndVerifyOperationRequest(RequestOrResponseType.TtlUpdateRequest, Collections.singletonList(id),
         ServerErrorCode.Unknown_Error, true);
     MockStorageManager.runtimeException = null;
-
     // store is not started/is stopped/otherwise unavailable - Replica_Unavailable
     storageManager.returnNullStore = true;
     sendAndVerifyOperationRequest(RequestOrResponseType.TtlUpdateRequest, Collections.singletonList(id),
@@ -1101,7 +1075,6 @@ public class AmbryRequestsTest {
     sendAndVerifyOperationRequest(RequestOrResponseType.TtlUpdateRequest, Collections.singletonList(id),
         ServerErrorCode.Disk_Unavailable, false);
     clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Ok);
-
     // request disabled is checked in request control tests
   }
 
@@ -1444,9 +1417,9 @@ public class AmbryRequestsTest {
 
     private final Set<StoreKey> validKeysInStore;
 
-    MockStorageManager(Set<StoreKey> validKeysInStore) throws StoreException {
+    MockStorageManager(Set<StoreKey> validKeysInStore, List<? extends ReplicaId> replicas) throws StoreException {
       super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
-          Collections.emptyList(), null, null, null, null, new MockTime());
+          replicas, null, null, null, null, new MockTime());
       this.validKeysInStore = validKeysInStore;
     }
 

@@ -366,4 +366,17 @@ class DiskManager {
           StoreErrorCodes.Initialization_Error);
     }
   }
+
+  /**
+   * Check if all stores on this disk are down.
+   * @return {@code true} if all stores are down. {@code false} at least one store is up.
+   */
+  boolean areAllStoresDown() {
+    for (BlobStore store : stores.values()) {
+      if (store.isStarted()) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
