@@ -644,7 +644,9 @@ public class AmbryRequests implements RequestAPI {
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
       totalTimeSpent += processingTime;
-      publicAccessLogger.info("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
+      // This is too expensive to log as response can be very large and nested
+      // TODO: come up with a condensed representation of response fit for logging
+      publicAccessLogger.trace("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       logger.trace("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
     }
