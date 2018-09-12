@@ -150,8 +150,8 @@ public class FrontendMetrics {
   // AmbryBlobStorageService
   public final Counter responseSubmissionError;
   public final Counter resourceReleaseError;
-  public final Counter routerCallbackError;
   public final Counter ttlTooLargeError;
+  public final Counter ttlNotCompliantError;
   // DeleteCallback
   public final Counter deleteCallbackProcessingError;
   // HeadCallback
@@ -363,8 +363,6 @@ public class FrontendMetrics {
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "ResponseSubmissionError"));
     resourceReleaseError =
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "ResourceReleaseError"));
-    routerCallbackError =
-        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "RouterCallbackError"));
     // DeleteCallback
     deleteCallbackProcessingError =
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "DeleteCallbackProcessingError"));
@@ -378,6 +376,8 @@ public class FrontendMetrics {
         MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityResponseCallbackProcessingError"));
     // PostBlobHandler
     ttlTooLargeError = metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "TtlTooLargeError"));
+    ttlNotCompliantError =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "TtlNotCompliantError"));
     // GetPeersHandler
     unknownDatanodeError = metricRegistry.counter(MetricRegistry.name(GetPeersHandler.class, "UnknownDatanodeError"));
     // GetReplicasHandler

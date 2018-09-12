@@ -101,8 +101,7 @@ public class AmbrySecurityServiceTest {
   @Test
   public void preProcessRequestTest() throws Exception {
     RestMethod[] methods =
-        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS,
-            RestMethod.PUT};
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS, RestMethod.PUT};
     for (RestMethod restMethod : methods) {
       // add a header that is prohibited
       JSONObject headers = new JSONObject();
@@ -149,8 +148,7 @@ public class AmbrySecurityServiceTest {
 
     // without callbacks
     RestMethod[] methods =
-        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS,
-            RestMethod.PUT};
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS, RestMethod.PUT};
     for (RestMethod restMethod : methods) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
       securityService.preProcessRequest(restRequest).get();

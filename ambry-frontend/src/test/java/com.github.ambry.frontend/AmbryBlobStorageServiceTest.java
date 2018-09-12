@@ -290,8 +290,7 @@ public class AmbryBlobStorageServiceTest {
     // What the test is looking for -> No exceptions thrown when the handle is run and the original exception arrives
     // safely.
     responseHandler.shutdown();
-    for (String methodName : new String[]{"handleGet", "handlePost", "handleHead", "handleDelete", "handleOptions",
-        "handlePut"}) {
+    for (String methodName : new String[]{"handleGet", "handlePost", "handleHead", "handleDelete", "handleOptions", "handlePut"}) {
       Method method =
           AmbryBlobStorageService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
       responseHandler.reset();
@@ -1048,7 +1047,7 @@ public class AmbryBlobStorageServiceTest {
   static void setAmbryHeadersForPut(JSONObject headers, long ttlInSecs, boolean isPrivate, String serviceId,
       String contentType, String ownerId, String targetAccountName, String targetContainerName) throws JSONException {
     if (headers != null && serviceId != null && contentType != null) {
-      if (ttlInSecs > -1) {
+      if (ttlInSecs != Utils.Infinite_Time) {
         headers.put(RestUtils.Headers.TTL, Long.toString(ttlInSecs));
       }
       headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
@@ -2489,6 +2488,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
   Exception exceptionToReturn = null;
   RuntimeException exceptionToThrow = null;
   String translation = null;
+  boolean returnInputIfTranslationNull = false;
 
   @Override
   public IdConverter getIdConverter() {
@@ -2503,7 +2503,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       if (!isOpen) {
         throw new IllegalStateException("IdConverter closed");
       }
-      return completeOperation(callback);
+      return completeOperation(input, callback);
     }
 
     @Override
@@ -2513,15 +2513,19 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
 
     /**
      * Completes the operation by creating and invoking a {@link Future} and invoking the {@code callback} if non-null.
+     * @param input the original input ID received
      * @param callback the {@link Callback} to invoke. Can be null.
      * @return the created {@link Future}.
      */
-    private Future<String> completeOperation(Callback<String> callback) {
+    private Future<String> completeOperation(String input, Callback<String> callback) {
       if (exceptionToThrow != null) {
         throw exceptionToThrow;
       }
       FutureResult<String> futureResult = new FutureResult<String>();
-      String toReturn = exceptionToReturn == null ? translation : null;
+      String toReturn = null;
+      if (exceptionToReturn == null) {
+        toReturn = translation == null ? returnInputIfTranslationNull ? input : null : translation;
+      }
       futureResult.done(toReturn, exceptionToReturn);
       if (callback != null) {
         callback.onCompletion(toReturn, exceptionToReturn);

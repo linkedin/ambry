@@ -160,6 +160,17 @@ public class FrontendConfig {
   @Default("28 * 24 * 60 * 60")
   public final long chunkUploadInitialChunkTtlSecs;
 
+  public static final String FAIL_TTL_REQUIRED_NOT_PROVIDED_KEY = PREFIX + "fail.ttl.required.not.provided";
+  @Config(FAIL_TTL_REQUIRED_NOT_PROVIDED_KEY)
+  @Default("false")
+  public final boolean failTtlRequiredNotProvided;
+
+  public static final String MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY =
+      PREFIX + "max.acceptable.ttl.secs.if.ttl.required";
+  @Config(MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY)
+  @Default("30 * 24 * 60 * 60")
+  public final int maxAcceptableTtlSecsIfTtlRequired;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     frontendOptionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
@@ -193,5 +204,8 @@ public class FrontendConfig {
         GetOption.valueOf(verifiableProperties.getString("frontend.default.router.get.option", GetOption.None.name()));
     chunkUploadInitialChunkTtlSecs =
         verifiableProperties.getLong(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY, TimeUnit.DAYS.toSeconds(28));
+    failTtlRequiredNotProvided = verifiableProperties.getBoolean(FAIL_TTL_REQUIRED_NOT_PROVIDED_KEY, false);
+    maxAcceptableTtlSecsIfTtlRequired = verifiableProperties.getIntInRange(MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY,
+        (int) TimeUnit.DAYS.toSeconds(30), 0, Integer.MAX_VALUE);
   }
 }
