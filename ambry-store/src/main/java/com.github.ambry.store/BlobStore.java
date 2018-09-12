@@ -220,10 +220,10 @@ class BlobStore implements Store {
                 taskScheduler, diskIOScheduler, metrics);
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
+        started = true;
         if (replicaId != null) {
           replicaId.markDiskUp();
         }
-        started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
         throw new StoreException("Error while starting store for dir " + dataDir, e,
