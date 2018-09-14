@@ -59,6 +59,7 @@ public class ClusterMapUtils {
   static final String DATACENTER_ID_STR = "id";
   static final String SCHEMA_VERSION_STR = "schemaVersion";
   static final String XID_STR = "xid";
+  static final long DEFAULT_XID = Long.MIN_VALUE;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
   static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
@@ -195,7 +196,7 @@ public class ClusterMapUtils {
    */
   static long getXid(InstanceConfig instanceConfig) {
     String xid = instanceConfig.getRecord().getSimpleField(XID_STR);
-    return xid == null ? Long.MIN_VALUE : Long.valueOf(xid);
+    return xid == null ? DEFAULT_XID : Long.valueOf(xid);
   }
 
   /**

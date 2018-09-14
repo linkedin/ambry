@@ -419,13 +419,7 @@ class HelixBootstrapUpgradeUtil {
       InstanceConfig instanceConfigInHelix = dcAdmin.getInstanceConfig(clusterName, instanceName);
       InstanceConfig instanceConfigFromStatic =
           createInstanceConfigFromStaticInfo(dcToInstanceNameToDataNodeId.get(dcName).get(instanceName),
-              partitionsToInstancesInDc);
-      // Note about the following check: This compares ZNode data for exact equality, which suffices for now.
-      // However, in the future, this needs to discount comparisons for certain things that are dynamically set by
-      // instances (and hence will have outdated information in the static map). Such as
-      // 1. RO/RW status of replicas.
-      // 2. Replica availability (for which support has not yet been added).
-      // 3. xid.
+              partitionsToInstancesInDc, instanceToDiskReplicasMap, instanceConfigInHelix);
       if (!instanceConfigFromStatic.getRecord().equals(instanceConfigInHelix.getRecord())) {
         info("Instance {} already present in Helix, but InstanceConfig has changed, updating. Remaining instances: {}",
             instanceName, --totalInstances);
@@ -445,7 +439,7 @@ class HelixBootstrapUpgradeUtil {
     for (String instanceName : instancesInStatic) {
       InstanceConfig instanceConfigFromStatic =
           createInstanceConfigFromStaticInfo(dcToInstanceNameToDataNodeId.get(dcName).get(instanceName),
-              partitionsToInstancesInDc);
+              partitionsToInstancesInDc, instanceToDiskReplicasMap, null);
       info("Instance {} is new, adding to Helix. Remaining instances: {}", instanceName, --totalInstances);
       if (!dryRun) {
         dcAdmin.addInstance(clusterName, instanceConfigFromStatic);
@@ -570,10 +564,16 @@ class HelixBootstrapUpgradeUtil {
    * Create an {@link InstanceConfig} for the given node from the static cluster information.
    * @param node the {@link DataNodeId}
    * @param partitionToInstances the map of partitions to instances that will be populated for this instance.
+   * @param instanceToDiskReplicasMap the map of instances to the map of disk to set of replicas.
+   * @param referenceInstanceConfig the InstanceConfig used to set the fields that are not derived from the json files.
+   *                                These are the SEALED state and STOPPED_REPLICAS configurations. If this field is null,
+   *                                then these fields are derived from the json files. This can happen if this is a newly
+   *                                added node.
    * @return the constructed {@link InstanceConfig}
    */
-  private InstanceConfig createInstanceConfigFromStaticInfo(DataNodeId node,
-      Map<String, Set<String>> partitionToInstances) {
+  static InstanceConfig createInstanceConfigFromStaticInfo(DataNodeId node,
+      Map<String, Set<String>> partitionToInstances,
+      Map<String, Map<DiskId, SortedSet<Replica>>> instanceToDiskReplicasMap, InstanceConfig referenceInstanceConfig) {
     String instanceName = getInstanceName(node);
     InstanceConfig instanceConfig = new InstanceConfig(instanceName);
     instanceConfig.setHostName(node.getHostname());
@@ -583,12 +583,16 @@ class HelixBootstrapUpgradeUtil {
     }
     instanceConfig.getRecord().setSimpleField(ClusterMapUtils.DATACENTER_STR, node.getDatacenterName());
     instanceConfig.getRecord().setSimpleField(ClusterMapUtils.RACKID_STR, node.getRackId());
-    instanceConfig.getRecord().setSimpleField(ClusterMapUtils.XID_STR, Long.toString(node.getXid()));
+    long xid = node.getXid();
+    if (xid != ClusterMapUtils.DEFAULT_XID) {
+      // Set the XID only if it is not the default, in order to avoid unnecessary updates.
+      instanceConfig.getRecord().setSimpleField(ClusterMapUtils.XID_STR, Long.toString(node.getXid()));
+    }
     instanceConfig.getRecord()
         .setSimpleField(ClusterMapUtils.SCHEMA_VERSION_STR, Integer.toString(ClusterMapUtils.CURRENT_SCHEMA_VERSION));
 
     List<String> sealedPartitionsList = new ArrayList<>();
-
+    List<String> stoppedReplicasList = new ArrayList<>();
     if (instanceToDiskReplicasMap.containsKey(instanceName)) {
       Map<String, Map<String, String>> diskInfos = new HashMap<>();
       for (HashMap.Entry<DiskId, SortedSet<Replica>> diskToReplicas : instanceToDiskReplicasMap.get(instanceName)
@@ -607,7 +611,7 @@ class HelixBootstrapUpgradeUtil {
               .append(ClusterMapUtils.REPLICAS_STR_SEPARATOR)
               .append(replica.getPartition().getPartitionClass())
               .append(ClusterMapUtils.REPLICAS_DELIM_STR);
-          if (replica.isSealed()) {
+          if (referenceInstanceConfig == null && replica.isSealed()) {
             sealedPartitionsList.add(Long.toString(replica.getPartition().getId()));
           }
           partitionToInstances.computeIfAbsent(Long.toString(replica.getPartition().getId()), k -> new HashSet<>())
@@ -621,8 +625,14 @@ class HelixBootstrapUpgradeUtil {
       }
       instanceConfig.getRecord().setMapFields(diskInfos);
     }
+
+    // Set the fields that need to be preserved from the referenceInstanceConfig.
+    if (referenceInstanceConfig != null) {
+      sealedPartitionsList = referenceInstanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
+      stoppedReplicasList = referenceInstanceConfig.getRecord().getListField(ClusterMapUtils.STOPPED_REPLICAS_STR);
+    }
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedPartitionsList);
-    instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, new ArrayList<>());
+    instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicasList);
     return instanceConfig;
   }
 
@@ -768,19 +778,13 @@ class HelixBootstrapUpgradeUtil {
       ensureOrThrow(
           Objects.equals(dataNode.getRackId(), instanceConfig.getRecord().getSimpleField(ClusterMapUtils.RACKID_STR)),
           "Rack Id mismatch for instance " + instanceName);
-      ensureOrThrow(
-          Objects.equals(Long.toString(dataNode.getXid()), instanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR)),
-          "Xid mismatch for instance " + instanceName);
-      Set<String> sealedReplicasInHelix =
-          new HashSet<>(instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR));
-      Set<String> sealedReplicasInClusterMap = new HashSet<>();
-      for (Replica replica : staticClusterMap.getReplicas(dataNodeId)) {
-        if (replica.getPartition().partitionState.equals(PartitionState.READ_ONLY)) {
-          sealedReplicasInClusterMap.add(Long.toString(replica.getPartition().getId()));
-        }
+
+      String xidInHelix = instanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR);
+      if (xidInHelix == null) {
+        xidInHelix = Long.toString(ClusterMapUtils.DEFAULT_XID);
       }
-      ensureOrThrow(sealedReplicasInClusterMap.equals(sealedReplicasInHelix),
-          "Sealed replicas info mismatch for " + "instance " + instanceName);
+      ensureOrThrow(Objects.equals(Long.toString(dataNode.getXid()), xidInHelix),
+          "Xid mismatch for instance " + instanceName);
     }
     if (expectMoreInHelixDuringValidate) {
       ensureOrThrow(allInstancesInHelix.equals(instancesNotForceRemovedByDc.get(dc.getName())),

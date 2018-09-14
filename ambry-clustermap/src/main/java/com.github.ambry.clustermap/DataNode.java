@@ -86,7 +86,7 @@ class DataNode implements DataNodeId {
     this.ports.put(PortType.PLAINTEXT, new Port(portNum, PortType.PLAINTEXT));
     populatePorts(jsonObject);
     this.rackId = jsonObject.optString("rackId", null);
-    this.xid = jsonObject.optLong("xid", Long.MIN_VALUE);
+    this.xid = jsonObject.optLong("xid", ClusterMapUtils.DEFAULT_XID);
 
     validate();
   }

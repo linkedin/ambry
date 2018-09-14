@@ -16,10 +16,12 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.clustermap.TestUtils.*;
 import com.github.ambry.commons.CommonUtils;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,6 +32,7 @@ import java.util.Set;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -40,6 +43,7 @@ import org.junit.Test;
 import static com.github.ambry.clustermap.HelixBootstrapUpgradeTool.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
+import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
 
 
@@ -115,6 +119,50 @@ public class HelixBootstrapUpgradeToolTest {
         // OK
       }
     }
+  }
+
+  /**
+   * Tests the method to create instance config and ensures that derived fields are set correctly.
+   */
+  @Test
+  public void testCreateInstanceConfig() {
+    DataNode dataNode = (DataNode) ((Partition) testPartitionLayout.getPartitionLayout()
+        .getPartitions(DEFAULT_PARTITION_CLASS)
+        .get(0)).getReplicas().get(0).getDataNodeId();
+    Map<String, Set<String>> partitionToInstances = new HashMap<>();
+    JSONObject jsonObject = dataNode.toJSONObject();
+    jsonObject.put("xid", ClusterMapUtils.DEFAULT_XID);
+    ClusterMapConfig clusterMapConfig = testHardwareLayout.clusterMapConfig;
+    dataNode = new DataNode(dataNode.getDatacenter(), jsonObject, clusterMapConfig);
+    InstanceConfig referenceInstanceConfig =
+        HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
+            Collections.emptyMap(), null);
+    // Assert that xid field does not get set in InstanceConfig when it is the default.
+    assertNull(referenceInstanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR));
+
+    // Assert that xid field does get set if not the default.
+    jsonObject.put("xid", "10");
+    dataNode = new DataNode(dataNode.getDatacenter(), jsonObject, clusterMapConfig);
+    InstanceConfig instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
+        Collections.emptyMap(), null);
+    assertEquals("10", instanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR));
+    assertThat(referenceInstanceConfig.getRecord(), not(equalTo(instanceConfig.getRecord())));
+
+    referenceInstanceConfig = instanceConfig;
+
+    // Assert that sealed list being different does not affect equality
+    List<String> sealedList = Arrays.asList("5", "10");
+    referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedList);
+    instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
+        Collections.emptyMap(), referenceInstanceConfig);
+    assertEquals(instanceConfig.getRecord(), referenceInstanceConfig.getRecord());
+
+    // Assert that stopped list being different does not affect equality
+    List<String> stoppedReplicas = Arrays.asList("11", "15");
+    referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);
+    instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
+        Collections.emptyMap(), referenceInstanceConfig);
+    assertEquals(instanceConfig.getRecord(), referenceInstanceConfig.getRecord());
   }
 
   /**
