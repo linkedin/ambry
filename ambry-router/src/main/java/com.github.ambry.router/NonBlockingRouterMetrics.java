@@ -52,6 +52,19 @@ public class NonBlockingRouterMetrics {
   public final Meter deleteBlobNotOriginateLocalOperationRate;
   public final Meter ttlUpdateBlobNotOriginateLocalOperationRate;
 
+  // Request to data nodes rate.
+  public final Meter putBlobLocalColoRequestRate;
+  public final Meter getBlobInfoLocalColoRequestRate;
+  public final Meter getBlobLocalColoRequestRate;
+  public final Meter deleteBlobLocalColoRequestRate;
+  public final Meter updateBlobTtlLocalColoRequestRate;
+
+  public final Meter putBlobCrossColoRequestRate;
+  public final Meter getBlobInfoCrossColoRequestRate;
+  public final Meter getBlobCrossColoRequestRate;
+  public final Meter deleteBlobCrossColoRequestRate;
+  public final Meter updateBlobTtlCrossColoRequestRate;
+
   // Latency.
   public final Histogram putBlobOperationLatencyMs;
   public final Histogram putChunkOperationLatencyMs;
@@ -202,6 +215,28 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobNotOriginateLocalOperationRate"));
     ttlUpdateBlobNotOriginateLocalOperationRate = metricRegistry.meter(
         MetricRegistry.name(TtlUpdateOperation.class, "TtlUpdateBlobNotOriginateLocalOperationRate"));
+
+    // Request to data nodes rate.
+    putBlobLocalColoRequestRate =
+        metricRegistry.meter(MetricRegistry.name(PutOperation.class, "putBlobLocalColoRequestRate"));
+    putBlobCrossColoRequestRate =
+        metricRegistry.meter(MetricRegistry.name(PutOperation.class, "putBlobCrossColoRequestRate"));
+    getBlobInfoLocalColoRequestRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobInfoOperation.class, "getBlobInfoLocalColoRequestRate"));
+    getBlobInfoCrossColoRequestRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobInfoOperation.class, "getBlobInfoCrossColoRequestRate"));
+    getBlobLocalColoRequestRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "getBlobLocalColoRequestRate"));
+    getBlobCrossColoRequestRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "getBlobCrossColoRequestRate"));
+    deleteBlobLocalColoRequestRate =
+        metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "deleteBlobLocalColoRequestRate"));
+    deleteBlobCrossColoRequestRate =
+        metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "deleteBlobCrossColoRequestRate"));
+    updateBlobTtlLocalColoRequestRate =
+        metricRegistry.meter(MetricRegistry.name(TtlUpdateOperation.class, "updateBlobTtlLocalColoRequestRate"));
+    updateBlobTtlCrossColoRequestRate =
+        metricRegistry.meter(MetricRegistry.name(TtlUpdateOperation.class, "updateBlobTtlCrossColoRequestRate"));
 
     // Latency.
     putBlobOperationLatencyMs =

@@ -135,7 +135,9 @@ class DeleteOperation {
         logger.trace("Making request with correlationId {} to a remote replica {} in {} ",
             deleteRequest.getCorrelationId(), replica.getDataNodeId(), replica.getDataNodeId().getDatacenterName());
         routerMetrics.crossColoRequestCount.inc();
+        routerMetrics.deleteBlobCrossColoRequestRate.mark();
       } else {
+        routerMetrics.deleteBlobLocalColoRequestRate.mark();
         logger.trace("Making request with correlationId {} to a local replica {} ", deleteRequest.getCorrelationId(),
             replica.getDataNodeId());
       }
