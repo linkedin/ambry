@@ -636,7 +636,9 @@ class GetBlobOperation extends GetOperation {
           logger.trace("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
               replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
           routerMetrics.crossColoRequestCount.inc();
+          routerMetrics.getBlobCrossColoRequestRate.mark();
         } else {
+          routerMetrics.getBlobLocalColoRequestRate.mark();
           logger.trace("Making request with correlationId {} to a local replica {}", correlationId,
               replicaId.getDataNodeId());
         }

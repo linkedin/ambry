@@ -129,7 +129,9 @@ class TtlUpdateOperation {
         LOGGER.trace("Making request with correlationId {} to a remote replica {} in {} ",
             ttlUpdateRequest.getCorrelationId(), replica.getDataNodeId(), replica.getDataNodeId().getDatacenterName());
         routerMetrics.crossColoRequestCount.inc();
+        routerMetrics.updateBlobTtlCrossColoRequestRate.mark();
       } else {
+        routerMetrics.updateBlobTtlLocalColoRequestRate.mark();
         LOGGER.trace("Making request with correlationId {} to a local replica {} ", ttlUpdateRequest.getCorrelationId(),
             replica.getDataNodeId());
       }
