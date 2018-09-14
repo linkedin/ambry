@@ -191,7 +191,7 @@ public class ConsistencyCheckerTool {
         dumpIndexTool.getIndexProcessingResults(replicas, filterSet);
     boolean success = resultsByReplica.getFirst();
     if (success) {
-      Map<StoreKey, ReplicationStatus> blobIdToStatusMap =
+      Map<StoreKeyStringCompare, ReplicationStatus> blobIdToStatusMap =
           getBlobStatusByReplica(replicas, resultsByReplica.getSecond());
       success = checkConsistency(blobIdToStatusMap, replicas.length).size() == 0;
     }
@@ -207,29 +207,38 @@ public class ConsistencyCheckerTool {
    * If storeKeyConverter returns null, count the key as deleted / expired
    * @throws Exception
    */
-  private Map<StoreKey, ReplicationStatus> getBlobStatusByReplica(File[] replicas,
+  private Map<StoreKeyStringCompare, ReplicationStatus> getBlobStatusByReplica(File[] replicas,
       Map<File, DumpIndexTool.IndexProcessingResults> results) throws Exception {
-    Map<StoreKey, ReplicationStatus> keyReplicationStatusMap = new HashMap<>();
+    Map<StoreKeyStringCompare, ReplicationStatus> keyReplicationStatusMap = new HashMap<>();
     Map<StoreKey, StoreKey> convertMap = dumpIndexTool.createConversionKeyMap(replicas, results);
     for (File replica : replicas) {
       DumpIndexTool.IndexProcessingResults result = results.get(replica);
-      for (Map.Entry<StoreKey, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
-        StoreKey key = entry.getKey();
+      for (Map.Entry<StoreKeyStringCompare, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
+        StoreKey key = entry.getKey().getStoreKey();
         StoreKey newKey = convertMap.get(key);
         boolean isDeprecated = false;
+        boolean hasConvert = false;
         if (newKey == null) {
           newKey = key;
           isDeprecated = true;
+        } else if (!newKey.getID().equals(key.getID())) {
+          hasConvert = true;
         }
-        ReplicationStatus status =
-            keyReplicationStatusMap.computeIfAbsent(newKey, k -> new ReplicationStatus(replicas));
+        ReplicationStatus status = keyReplicationStatusMap.computeIfAbsent(new StoreKeyStringCompare(newKey),
+            k -> new ReplicationStatus(replicas));
+        status.setHasConvertEquiv(hasConvert);
         DumpIndexTool.Info info = entry.getValue();
         status.setBelongsToRecentIndexSegment(info.isInRecentIndexSegment());
-        if (!isDeprecated && info.getStates().contains(DumpIndexTool.BlobState.Valid)) {
-          status.addAvailable(replica);
+        status.setIsDeprecated(isDeprecated);
+        if (info.getStates().contains(DumpIndexTool.BlobState.Valid)) {
+          if (isDeprecated) {
+            status.addDeprecated(replica);
+          } else {
+            status.addAvailable(replica);
+          }
         } else {
-          status.setIsDeprecated(isDeprecated);
-          status.addDeletedOrExpiredOrDeprecated(replica);
+//          status.setIsDeprecated(isDeprecated);
+          status.addDeletedOrExpired(replica);
         }
         if (info.isPermanent()) {
           status.addAsPermanent(replica);
@@ -246,14 +255,19 @@ public class ConsistencyCheckerTool {
    * @param replicaCount total replica count
    * @return {@link List} of real inconsistent blobIds
    */
-  private List<StoreKey> checkConsistency(Map<StoreKey, ReplicationStatus> blobIdToStatusMap, int replicaCount) {
+  private List<StoreKey> checkConsistency(Map<StoreKeyStringCompare, ReplicationStatus> blobIdToStatusMap,
+      int replicaCount) {
     List<StoreKey> realInconsistentBlobs = new ArrayList<>();
     logger.info("Total Blobs Found {}", blobIdToStatusMap.size());
     long totalInconsistentBlobs = 0;
     long totalDeprecatedBlobs = 0;
+    long totalDeprecatedAndDeletedOrDeprecatedAndExpired = 0;
     long inconsistentDueToReplicationCount = 0;
     long acceptableInconsistentBlobs = 0;
-    for (StoreKey blobId : blobIdToStatusMap.keySet()) {
+    long invalidAndConvertedAndDorE = 0;
+    long validAndConvertedAndAlive = 0;
+    long validAndConverted = 0;
+    for (StoreKeyStringCompare blobId : blobIdToStatusMap.keySet()) {
       ReplicationStatus consistencyBlobResult = blobIdToStatusMap.get(blobId);
       // valid blobs : count of available replicas = total replica count or count of deleted replicas = total replica count
       boolean allAgreeOnPermanency =
@@ -261,10 +275,20 @@ public class ConsistencyCheckerTool {
               consistencyBlobResult.available);
       boolean isValid = (consistencyBlobResult.available.size() == replicaCount
           || consistencyBlobResult.deletedOrExpiredOrDeprecated.size() == replicaCount) && allAgreeOnPermanency;
+      if (isValid && consistencyBlobResult.hasConvertEquiv) {
+        validAndConvertedAndAlive++;
+      }
       if (!isValid) {
         totalInconsistentBlobs++;
         if (consistencyBlobResult.isDeprecated) {
           totalDeprecatedBlobs++;
+          if (consistencyBlobResult.isDeletedOrExpired) {
+            totalDeprecatedAndDeletedOrDeprecatedAndExpired++;
+          }
+        } else if (consistencyBlobResult.hasConvertEquiv) {
+          if (consistencyBlobResult.isDeletedOrExpired) {
+            invalidAndConvertedAndDorE++;
+          }
         }
         if (consistencyBlobResult.deletedOrExpiredOrDeprecated.size() + consistencyBlobResult.unavailable.size()
             == replicaCount) {
@@ -273,14 +297,15 @@ public class ConsistencyCheckerTool {
               blobId, consistencyBlobResult.isDeletedOrExpired, consistencyBlobResult);
           acceptableInconsistentBlobs++;
         } else {
-          if (consistencyBlobResult.belongsToRecentIndexSegment) {
-            logger.debug("Inconsistent blob found possibly due to replication {} Status map {} ", blobId,
-                consistencyBlobResult);
-            inconsistentDueToReplicationCount++;
-          } else {
-            logger.error("Inconsistent blob found {} Status map {}", blobId, consistencyBlobResult);
-            realInconsistentBlobs.add(blobId);
-          }
+//          if (consistencyBlobResult.belongsToRecentIndexSegment) {
+//            logger.debug("Inconsistent blob found possibly due to replication {} Status map {} ", blobId,
+//                consistencyBlobResult);
+//            inconsistentDueToReplicationCount++;
+//          }
+//          else {
+          logger.error("Inconsistent blob found {} Status map {}", blobId, consistencyBlobResult);
+          realInconsistentBlobs.add(blobId.getStoreKey());
+//          }
         }
       }
     }
@@ -291,6 +316,12 @@ public class ConsistencyCheckerTool {
     // Anything else is considered to be real inconsistent blobs
     logger.info("Total Inconsistent blobs count : {}", totalInconsistentBlobs);
     logger.info("Total Deprecated blobs count : {}", totalDeprecatedBlobs);
+    logger.info("Total Deprecated and (deleted or expired) blobs count : {}",
+        totalDeprecatedAndDeletedOrDeprecatedAndExpired);
+    logger.info("Total Deprecated and active blobs count : {}",
+        totalDeprecatedBlobs - totalDeprecatedAndDeletedOrDeprecatedAndExpired);
+    logger.info("Total Converted blobs deleted or expired count : {}", invalidAndConvertedAndDorE);
+    logger.info("Total Converted blobs alive count : {}", validAndConvertedAndAlive);
     logger.info("Acceptable Inconsistent blobs count : {}", acceptableInconsistentBlobs);
     logger.info("Inconsistent blobs count due to replication lag : {}", inconsistentDueToReplicationCount);
     logger.info("Real Inconsistent blobs count : {} ", realInconsistentBlobs.size());
@@ -308,6 +339,7 @@ public class ConsistencyCheckerTool {
     final Set<File> permanentOn = new HashSet<>();
     boolean isDeletedOrExpired;
     boolean isDeprecated = false;
+    boolean hasConvertEquiv = false;
     boolean belongsToRecentIndexSegment = false;
 
     /**
@@ -332,13 +364,25 @@ public class ConsistencyCheckerTool {
       this.isDeprecated = isDeprecated;
     }
 
+    void setHasConvertEquiv(boolean hasConvertEquiv) {
+      this.hasConvertEquiv = hasConvertEquiv;
+    }
+
     void addAsPermanent(File replica) {
       permanentOn.add(replica);
     }
 
-    void addDeletedOrExpiredOrDeprecated(File replica) {
+    void addDeletedOrExpired(File replica) {
       deletedOrExpiredOrDeprecated.add(replica);
       isDeletedOrExpired = true;
+      unavailable.remove(replica);
+      available.remove(replica);
+    }
+
+    void addDeprecated(File replica) {
+      deletedOrExpiredOrDeprecated.add(replica);
+      isDeletedOrExpired = false;
+      isDeprecated = true;
       unavailable.remove(replica);
       available.remove(replica);
     }
@@ -346,10 +390,11 @@ public class ConsistencyCheckerTool {
     @Override
     public String toString() {
       int totalReplicas = available.size() + deletedOrExpiredOrDeprecated.size() + unavailable.size();
-      return "Available size: " + available.size() + ", Available :: " + available + "\nDeleted/Expired size: "
-          + deletedOrExpiredOrDeprecated.size() + " Deleted/Expired/Deprecated :: " + deletedOrExpiredOrDeprecated
-          + "\nUnavailable size: " + unavailable.size() + " Unavailable :: " + unavailable + "\nTotal Replica count: "
-          + totalReplicas;
+      return "Available size: " + available.size() + ", Available :: " + available
+          + "\nDeleted/Expired/Deprecated size: " + deletedOrExpiredOrDeprecated.size()
+          + " Deleted/Expired/Deprecated :: " + deletedOrExpiredOrDeprecated + "\nUnavailable size: "
+          + unavailable.size() + " Unavailable :: " + unavailable + "\nHas Convert Equiv: " + hasConvertEquiv
+          + " Deprecated: " + isDeprecated + "\nTotal Replica count: " + totalReplicas;
     }
   }
 }

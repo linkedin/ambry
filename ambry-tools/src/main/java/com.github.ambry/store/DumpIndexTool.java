@@ -115,21 +115,21 @@ public class DumpIndexTool {
    * Contains all the results obtained from processing the index.
    */
   public class IndexProcessingResults {
-    private final Map<StoreKey, Info> keyToState;
+    private final Map<StoreKeyStringCompare, Info> keyToState;
     private final long processedCount;
     private final long putCount;
     private final long ttlUpdateCount;
     private final long deleteCount;
-    private final Set<StoreKey> duplicatePuts;
-    private final Set<StoreKey> putAfterUpdates;
-    private final Set<StoreKey> duplicateDeletes;
-    private final Set<StoreKey> duplicateUpdates;
-    private final Set<StoreKey> updateAfterDeletes;
+    private final Set<StoreKeyStringCompare> duplicatePuts;
+    private final Set<StoreKeyStringCompare> putAfterUpdates;
+    private final Set<StoreKeyStringCompare> duplicateDeletes;
+    private final Set<StoreKeyStringCompare> duplicateUpdates;
+    private final Set<StoreKeyStringCompare> updateAfterDeletes;
     private final long activeCount;
 
-    IndexProcessingResults(Map<StoreKey, Info> keyToState, long processedCount, long putCount, long ttlUpdateCount,
-        long deleteCount, Set<StoreKey> duplicatePuts, Set<StoreKey> putAfterUpdates, Set<StoreKey> duplicateDeletes,
-        Set<StoreKey> duplicateUpdates, Set<StoreKey> updateAfterDeletes) {
+    IndexProcessingResults(Map<StoreKeyStringCompare, Info> keyToState, long processedCount, long putCount, long ttlUpdateCount,
+        long deleteCount, Set<StoreKeyStringCompare> duplicatePuts, Set<StoreKeyStringCompare> putAfterUpdates, Set<StoreKeyStringCompare> duplicateDeletes,
+        Set<StoreKeyStringCompare> duplicateUpdates, Set<StoreKeyStringCompare> updateAfterDeletes) {
       this.keyToState = keyToState;
       this.processedCount = processedCount;
       this.putCount = putCount;
@@ -146,7 +146,7 @@ public class DumpIndexTool {
     /**
      * @return the map of {@link StoreKey} to an {@link Info} object that contains some details about it.
      */
-    public Map<StoreKey, Info> getKeyToState() {
+    public Map<StoreKeyStringCompare, Info> getKeyToState() {
       return keyToState;
     }
 
@@ -188,35 +188,35 @@ public class DumpIndexTool {
     /**
      * @return the number of duplicate put entries found.
      */
-    public Set<StoreKey> getDuplicatePuts() {
+    public Set<StoreKeyStringCompare> getDuplicatePuts() {
       return duplicatePuts;
     }
 
     /**
      * @return the number of put entries that were found after a update (ttl update, delete etc) entry for the same key.
      */
-    public Set<StoreKey> getPutAfterUpdates() {
+    public Set<StoreKeyStringCompare> getPutAfterUpdates() {
       return putAfterUpdates;
     }
 
     /**
      * @return the number of duplicate delete entries found.
      */
-    public Set<StoreKey> getDuplicateDeletes() {
+    public Set<StoreKeyStringCompare> getDuplicateDeletes() {
       return duplicateDeletes;
     }
 
     /**
      * @return the number of duplicate update entries found.
      */
-    public Set<StoreKey> getDuplicateUpdates() {
+    public Set<StoreKeyStringCompare> getDuplicateUpdates() {
       return duplicateUpdates;
     }
 
     /**
      * @return the number of update entries that were found after a delete (ttl update) entry for the same key.
      */
-    public Set<StoreKey> getUpdateAfterDeletes() {
+    public Set<StoreKeyStringCompare> getUpdateAfterDeletes() {
       return updateAfterDeletes;
     }
 
@@ -259,7 +259,7 @@ public class DumpIndexTool {
      * Processes all the index segments (deserialization check) and makes sure that there are no duplicate records
      * and no put after delete records.
      */
-    VerifyIndex
+    VerifyIndex, Random
   }
 
   /**
@@ -398,7 +398,29 @@ public class DumpIndexTool {
           logger.info("Processing results: {}", results);
           break;
         default:
-          throw new IllegalArgumentException("Unrecognized operation: " + config.typeOfOperation);
+          //throw new IllegalArgumentException("Unrecognized operation: " + config.typeOfOperation);
+          File[] segmentFiles = getSegmentFilesFromDir(config.pathOfInput);
+          SortedMap<File, List<IndexEntry>> segmentFileToIndexEntries =
+              dumpIndexTool.getAllEntriesFromIndex(segmentFiles, throttler);
+          Map<String, BlobId> uuids = new HashMap<>();
+          int count = 0;
+          for (List<IndexEntry> entries : segmentFileToIndexEntries.values()) {
+            for (IndexEntry entry : entries) {
+              if (entry.getValue().getFlags() == IndexValue.FLAGS_DEFAULT_VALUE) {
+                BlobId blobId = (BlobId) entry.getKey();
+                String uuid = blobId.getUuid();
+                if (uuids.containsKey(uuid)) {
+                  count++;
+                  if (!BlobId.isCrafted(blobId.getID())) {
+                    System.out.println("Store contains both " + blobId + " and " + uuids.get(uuid));
+                  }
+                } else {
+                  uuids.put(uuid, blobId);
+                }
+              }
+            }
+          }
+          System.out.println("Total count of duplicated blobs: " + count);
       }
     }
   }
@@ -432,23 +454,23 @@ public class DumpIndexTool {
     try {
       File[] segmentFiles = getSegmentFilesFromDir(replicaDir);
       SortedMap<File, List<IndexEntry>> segmentFileToIndexEntries = getAllEntriesFromIndex(segmentFiles, throttler);
-      Map<StoreKey, Info> keyToState = new HashMap<>();
+      Map<StoreKeyStringCompare, Info> keyToState = new HashMap<>();
       long processedCount = 0;
       long putCount = 0;
       long deleteCount = 0;
       long ttlUpdateCount = 0;
-      Set<StoreKey> duplicatePuts = new HashSet<>();
-      Set<StoreKey> putAfterUpdates = new HashSet<>();
-      Set<StoreKey> duplicateDeletes = new HashSet<>();
-      Set<StoreKey> duplicateUpdates = new HashSet<>();
-      Set<StoreKey> updatesAfterDeletes = new HashSet<>();
+      Set<StoreKeyStringCompare> duplicatePuts = new HashSet<>();
+      Set<StoreKeyStringCompare> putAfterUpdates = new HashSet<>();
+      Set<StoreKeyStringCompare> duplicateDeletes = new HashSet<>();
+      Set<StoreKeyStringCompare> duplicateUpdates = new HashSet<>();
+      Set<StoreKeyStringCompare> updatesAfterDeletes = new HashSet<>();
       long indexSegmentCount = segmentFileToIndexEntries.size();
       for (int i = 0; i < indexSegmentCount; i++) {
         List<IndexEntry> entries = segmentFileToIndexEntries.get(segmentFiles[i]);
         boolean isInRecentIndexSegment = i >= indexSegmentCount - 2;
         processedCount += entries.size();
         for (IndexEntry entry : entries) {
-          StoreKey key = entry.getKey();
+          StoreKeyStringCompare key = new StoreKeyStringCompare(entry.getKey());
           if (filterSet == null || filterSet.isEmpty() || filterSet.contains(key)) {
             boolean isDelete = entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index);
             boolean isTtlUpdate = !isDelete && entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index);
@@ -573,8 +595,8 @@ public class DumpIndexTool {
     Set<StoreKey> storeKeys = new HashSet<>();
     for (File replica : replicas) {
       DumpIndexTool.IndexProcessingResults result = results.get(replica);
-      for (Map.Entry<StoreKey, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
-        storeKeys.add(entry.getKey());
+      for (Map.Entry<StoreKeyStringCompare, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
+        storeKeys.add(entry.getKey().getStoreKey());
       }
     }
     logger.info("Converting {} store keys...", storeKeys.size());

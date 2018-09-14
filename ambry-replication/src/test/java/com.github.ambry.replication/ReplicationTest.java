@@ -457,6 +457,102 @@ public class ReplicationTest {
     assertTrue(missingBuffers.isEmpty());
     missingBuffers = localHost.getMissingBuffers(expectedLocalHost.buffersByPartition);
     assertTrue(missingBuffers.isEmpty());
+//TODO this section tests scenarios where the source replica has both converted and unconverted nodes
+    //in various deleted states on it.  Currently fails
+//
+//    /*
+//        BEFORE
+//        Local   Remote
+//        B0'     B0
+//        B1'     B1
+//        dB0'    B2
+//                dB0
+//                dB2
+//
+//                B3
+//                B3'
+//                dB3
+//
+//                B4
+//                dB4
+//                B4'
+//
+//                B5
+//                B5'
+//                dB5'
+//        AFTER
+//        Local   Remote
+//        B0'     B0
+//        B1'     B1
+//        dB0'    B2
+//        B3'     dB0
+//        dB3'    dB2
+//        B4'
+//        dB4'    B3
+//        B5'     B3'
+//        dB5'    dB3
+//
+//                B4
+//                dB4
+//                B4'
+//
+//                B5
+//                B5'
+//                dB5'
+//        delete B0 gets converted
+//        to delete B0' in Local
+//        Missing Keys: 3
+//
+//     */
+//    //delete blob
+//    for (int i = 0; i < partitionIds.size(); i++) {
+//      PartitionId partitionId = partitionIds.get(i);
+//      BlobId b3 = generateRandomBlobId(partitionId);
+//      BlobId b3p = generateRandomBlobId(partitionId);
+//      BlobId b4 = generateRandomBlobId(partitionId);
+//      BlobId b4p = generateRandomBlobId(partitionId);
+//      BlobId b5 = generateRandomBlobId(partitionId);
+//      BlobId b5p = generateRandomBlobId(partitionId);
+//
+//      conversionMap.put(b3, b3p);
+//      conversionMap.put(b4, b4p);
+//      conversionMap.put(b5, b5p);
+//      //Convert current conversion map so that BlobIdTransformer can
+//      //create b1p in expectedLocalHost
+//      storeKeyConverter.convert(conversionMap.keySet());
+//
+//      //setup remote host
+//      addPutMessagesToReplicasOfPartition(Arrays.asList(b3, b3p), Arrays.asList(remoteHost));
+//      addDeleteMessagesToReplicasOfPartition(partitionId, b3, Arrays.asList(remoteHost));
+//
+//      addPutMessagesToReplicasOfPartition(Arrays.asList(b4), Arrays.asList(remoteHost));
+//      addDeleteMessagesToReplicasOfPartition(partitionId, b4, Arrays.asList(remoteHost));
+//      addPutMessagesToReplicasOfPartition(Arrays.asList(b4p), Arrays.asList(remoteHost));
+//
+//      addPutMessagesToReplicasOfPartition(Arrays.asList(b5, b5p), Arrays.asList(remoteHost));
+//      addDeleteMessagesToReplicasOfPartition(partitionId, b5p, Arrays.asList(remoteHost));
+//
+//      //setup expected local host
+//      addPutMessagesToReplicasOfPartition(Arrays.asList(b3p), Arrays.asList(expectedLocalHost));
+//      addDeleteMessagesToReplicasOfPartition(partitionId, b3p, Arrays.asList(expectedLocalHost));
+//      addPutMessagesToReplicasOfPartition(Arrays.asList(b4p), Arrays.asList(expectedLocalHost));
+//      addDeleteMessagesToReplicasOfPartition(partitionId, b4p, Arrays.asList(expectedLocalHost));
+//      addPutMessagesToReplicasOfPartition(Arrays.asList(b5p), Arrays.asList(expectedLocalHost));
+//      addDeleteMessagesToReplicasOfPartition(partitionId, b5p, Arrays.asList(expectedLocalHost));
+//    }
+//
+//    expectedIndex = assertMissingKeysAndFixMissingStoreKeys(expectedIndex, 9, 12, 3, replicaThread, remoteHost,
+//        replicasToReplicate);
+//
+//    //Check that there are no missing buffers between expectedLocalHost and LocalHost
+//    missingBuffers = expectedLocalHost.getMissingBuffers(localHost.buffersByPartition);
+//    assertTrue(missingBuffers.isEmpty());
+//    missingBuffers = localHost.getMissingBuffers(expectedLocalHost.buffersByPartition);
+//    assertTrue(missingBuffers.isEmpty());
+//
+//    // 3 unconverted + 2 unconverted deleted expected missing buffers
+//    verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
+//        idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex, 10);
 
     // 3 unconverted + 2 unconverted deleted expected missing buffers
     verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
