@@ -73,7 +73,8 @@ public class MockPartitionId implements PartitionId {
   @Override
   public int compareTo(PartitionId o) {
     MockPartitionId mockPartition = (MockPartitionId) o;
-    return (partition < mockPartition.partition) ? -1 : ((partition == mockPartition.partition) ? 0 : 1);
+    return (partition < mockPartition.partition) ? -1
+        : ((partition.longValue() == mockPartition.partition.longValue()) ? 0 : 1);
   }
 
   @Override
@@ -92,7 +93,7 @@ public class MockPartitionId implements PartitionId {
 
     MockPartitionId mockPartition = (MockPartitionId) o;
 
-    if (partition != mockPartition.partition) {
+    if (partition.longValue() != mockPartition.partition.longValue()) {
       return false;
     }
 

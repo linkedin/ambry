@@ -35,6 +35,7 @@ public class StatsHeader {
   private int storesContactedCount;
   private int storesRespondedCount;
   private List<String> unreachableStores;
+  // TODO: add hostname and change unreachableStores to Map<Disk, List<Store>> unreachableStoresOnDisk
 
   public StatsHeader(StatsDescription description, long timestamp, int storesContactedCount, int storesRespondedCount,
       List<String> unreachableStores) {

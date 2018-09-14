@@ -57,6 +57,7 @@ class StatsManager {
   private final StatsManagerMetrics metrics;
   private final Time time;
   private final ObjectMapper mapper = new ObjectMapper();
+
   private ScheduledExecutorService scheduler = null;
   private StatsAggregator statsAggregator = null;
 
@@ -95,7 +96,7 @@ class StatsManager {
   /**
    * Stops the periodic task that is collecting, aggregating and publishing stats.
    */
-  void shutdown() throws InterruptedException {
+  void shutdown() {
     if (statsAggregator != null) {
       statsAggregator.cancel();
     }
@@ -109,7 +110,7 @@ class StatsManager {
    * @param statsWrapper the {@link StatsWrapper} to be published
    * @throws IOException
    */
-  void publish(StatsWrapper statsWrapper) throws IOException {
+  void publishLocally(StatsWrapper statsWrapper) throws IOException {
     File tempFile = new File(statsOutputFile.getAbsolutePath() + ".tmp");
     if (tempFile.createNewFile()) {
       mapper.defaultPrettyPrintingWriter().writeValue(tempFile, statsWrapper);
@@ -128,7 +129,8 @@ class StatsManager {
    * @param partitionId specifies the {@link Store} to be fetched from
    * @param unreachableStores a {@link List} containing partition Ids that were unable to successfully fetch from
    */
-  void collectAndAggregate(StatsSnapshot aggregatedSnapshot, PartitionId partitionId, List<String> unreachableStores) {
+  void collectAndAggregateLocally(StatsSnapshot aggregatedSnapshot, PartitionId partitionId,
+      List<String> unreachableStores) {
     Store store = storageManager.getStore(partitionId);
     if (store == null) {
       unreachableStores.add(partitionId.toString());
@@ -145,61 +147,77 @@ class StatsManager {
   }
 
   /**
-   * Fetch the {@link StatsSnapshot} for the given {@link PartitionId}.
+   * Fetch all types of {@link StatsSnapshot}s for the given {@link PartitionId}.
    * @param partitionId the {@link PartitionId} to try to fetch the {@link StatsSnapshot} from
    * @param unreachableStores a list of partitionIds to keep track of the unreachable stores (partitions)
-   * @return
+   * @return a map in which all types of {@link StatsSnapshot}s are associated with corresponding {@link StatsReportType}
+   * for the given {@link PartitionId}.
    */
-  StatsSnapshot fetchSnapshot(PartitionId partitionId, List<String> unreachableStores) {
-    StatsSnapshot statsSnapshot = null;
+  private Map<StatsReportType, StatsSnapshot> fetchAllSnapshots(PartitionId partitionId, List<String> unreachableStores) {
+    Map<StatsReportType, StatsSnapshot> allSnapshots = null;
     Store store = storageManager.getStore(partitionId);
     if (store == null) {
       unreachableStores.add(partitionId.toString());
     } else {
       try {
-        statsSnapshot = store.getStoreStats().getStatsSnapshot(time.milliseconds());
+        allSnapshots = store.getStoreStats().getAllStatsSnapshots(time.milliseconds());
       } catch (StoreException e) {
-        logger.error("StoreException on fetching stats snapshot for store {}", store, e);
+        logger.error("StoreException on fetching stats snapshots for store {}", store, e);
         unreachableStores.add(partitionId.toString());
       }
     }
-    return statsSnapshot;
+    return allSnapshots;
   }
 
   /**
-   * Get the combined {@link StatsSnapshot} of all partitions in this node. This json will contain one entry per partition
+   * Get all types of combined {@link StatsSnapshot} of all partitions in this node. This json will contain one entry per partition
    * wrt valid data size.
    * @return a combined {@link StatsSnapshot} of this node
    */
-  String getNodeStatsInJSON() {
-    String statsWrapperJSON = "";
+  Map<String, String> getNodeStatsInJSON() {
+    Map<String, String> allStatsInJSON = new HashMap<>();
     try {
       long totalFetchAndAggregateStartTimeMs = time.milliseconds();
-      StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
+      StatsSnapshot combinedPartitionClassSnapshot = new StatsSnapshot(0L, new HashMap<>());
+      StatsSnapshot combinedAccountSnapshot = new StatsSnapshot(0L, new HashMap<>());
+      Map<String, StatsSnapshot> combinedSubMapForPartitionClass = new HashMap<>();
+      Map<String, StatsSnapshot> combinedSubMapForAccount = new HashMap<>();
       long totalValue = 0;
       List<String> unreachableStores = new ArrayList<>();
-      Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
-      while (iterator.hasNext()) {
-        PartitionId partitionId = iterator.next();
+      for (PartitionId partitionId : partitionToReplicaMap.keySet()) {
         long fetchSnapshotStartTimeMs = time.milliseconds();
-        StatsSnapshot statsSnapshot = fetchSnapshot(partitionId, unreachableStores);
-        if (statsSnapshot != null) {
-          combinedSnapshot.getSubMap().put(partitionId.toString(), statsSnapshot);
-          totalValue += statsSnapshot.getValue();
+        Map<StatsReportType, StatsSnapshot> allSnapshots = fetchAllSnapshots(partitionId, unreachableStores);
+        if (allSnapshots != null) {
+          StatsSnapshot containerSnapshot = allSnapshots.get(StatsReportType.PARTITION_CLASS_REPORT);
+          StatsSnapshot accountSnapshot = allSnapshots.get(StatsReportType.ACCOUNT_REPORT);
+          StatsSnapshot partitionClassSnapshot =
+              combinedSubMapForPartitionClass.getOrDefault(partitionId.getPartitionClass(),
+                  new StatsSnapshot(0L, new HashMap<>()));
+          partitionClassSnapshot.setValue(partitionClassSnapshot.getValue() + containerSnapshot.getValue());
+          partitionClassSnapshot.getSubMap().put(partitionId.toString(), containerSnapshot);
+          combinedSubMapForPartitionClass.put(partitionId.getPartitionClass(), partitionClassSnapshot);
+          combinedSubMapForAccount.put(partitionId.toString(), accountSnapshot);
+          totalValue += containerSnapshot.getValue();
         }
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchSnapshotStartTimeMs);
       }
-      combinedSnapshot.setValue(totalValue);
+      combinedPartitionClassSnapshot.setValue(totalValue);
+      combinedPartitionClassSnapshot.setSubMap(combinedSubMapForPartitionClass);
+      combinedAccountSnapshot.setValue(totalValue);
+      combinedAccountSnapshot.setSubMap(combinedSubMapForAccount);
       metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
       StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(),
           partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
           unreachableStores);
-      statsWrapperJSON = mapper.writeValueAsString(new StatsWrapper(statsHeader, combinedSnapshot));
+      allStatsInJSON.put("PartitionClassStats",
+          mapper.writeValueAsString(new StatsWrapper(statsHeader, combinedPartitionClassSnapshot)));
+      allStatsInJSON.put("AccountStats",
+          mapper.writeValueAsString(new StatsWrapper(statsHeader, combinedAccountSnapshot)));
     } catch (Exception | Error e) {
       metrics.statsAggregationFailureCount.inc();
       logger.error("Exception while aggregating stats.", e);
     }
-    return statsWrapperJSON;
+    return allStatsInJSON;
   }
 
   /**
@@ -219,14 +237,14 @@ class StatsManager {
         while (!cancelled && iterator.hasNext()) {
           PartitionId partitionId = iterator.next();
           logger.info("Aggregating stats started for store {}", partitionId);
-          collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
+          collectAndAggregateLocally(aggregatedSnapshot, partitionId, unreachableStores);
         }
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
           StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(),
               partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
               unreachableStores);
-          publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
+          publishLocally(new StatsWrapper(statsHeader, aggregatedSnapshot));
           logger.info("Stats snapshot published to {}", statsOutputFile.getAbsolutePath());
         }
       } catch (Exception | Error e) {

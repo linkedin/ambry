@@ -14,7 +14,6 @@
 
 package com.github.ambry.server;
 
-import java.util.HashMap;
 import java.util.Map;
 import org.apache.helix.healthcheck.HealthReportProvider;
 
@@ -34,14 +33,12 @@ class QuotaHealthReport extends HealthReportProvider implements AmbryHealthRepor
   }
 
   /**
-   * Get the node wide aggregated quota stats in this node
+   * Get all types of node wide aggregated quota stats in this node
    * @return a {@link Map} with the aggregated quota stats mapped with {@link QuotaHealthReport}'s static key
    */
   @Override
   public Map<String, String> getRecentHealthReport() {
-    Map<String, String> report = new HashMap<>();
-    report.put(QUOTA_STATS_FIELD_NAME, statsManager.getNodeStatsInJSON());
-    return report;
+    return statsManager.getNodeStatsInJSON();
   }
 
   @Override

@@ -14,6 +14,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.server.StatsReportType;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.util.HashMap;
@@ -69,23 +70,46 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
     try {
       HelixDataAccessor helixDataAccessor = manager.getHelixDataAccessor();
       List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
-      Map<String, String> statsWrappersJSON = new HashMap<>();
+      Map<String, String> partitionClassStatsWrappers = new HashMap<>();
+      Map<String, String> accountStatsWrappers = new HashMap<>();
       for (String instanceName : instanceNames) {
         PropertyKey.Builder keyBuilder = helixDataAccessor.keyBuilder();
         HelixProperty record = helixDataAccessor.getProperty(keyBuilder.healthReport(instanceName, healthReportName));
         if (record != null && record.getRecord() != null) {
-          statsWrappersJSON.put(instanceName, record.getRecord().getSimpleField(quotaStatsFieldName));
+          partitionClassStatsWrappers.put(instanceName, record.getRecord().getSimpleField("PartitionClassStats"));
+          accountStatsWrappers.put(instanceName, record.getRecord().getSimpleField("AccountStats"));
         }
       }
-      Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON);
-      String resultId = String.format("Aggregated_%s", healthReportName);
-      ZNRecord znRecord = new ZNRecord(resultId);
-      znRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME, results.getFirst());
-      znRecord.setSimpleField(VALID_SIZE_FIELD_NAME, results.getSecond());
-      znRecord.setSimpleField(TIMESTAMP_FIELD_NAME, String.valueOf(SystemTime.getInstance().milliseconds()));
-      znRecord.setListField(ERROR_OCCURRED_INSTANCES_FIELD_NAME, clusterAggregator.getExceptionOccurredInstances());
-      String path = String.format("/%s", resultId);
-      manager.getHelixPropertyStore().set(path, znRecord, AccessOption.PERSISTENT);
+      Pair<String, String> partitionClassResults =
+          clusterAggregator.doWork(partitionClassStatsWrappers, StatsReportType.PARTITION_CLASS_REPORT);
+      Pair<String, String> accountResults =
+          clusterAggregator.doWork(accountStatsWrappers, StatsReportType.ACCOUNT_REPORT);
+      String partitionClassResultId = String.format("PartitionClass_Aggregated_%s", healthReportName);
+      String accountResultId = String.format("Account_Aggregated_%s", healthReportName);
+      ZNRecord partitionClassZNRecord = new ZNRecord(partitionClassResultId);
+      ZNRecord accountZNRecord = new ZNRecord(accountResultId);
+
+      partitionClassZNRecord.setVersion(0);
+      partitionClassZNRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME, partitionClassResults.getFirst());
+      partitionClassZNRecord.setSimpleField(VALID_SIZE_FIELD_NAME, partitionClassResults.getSecond());
+      partitionClassZNRecord.setSimpleField(TIMESTAMP_FIELD_NAME,
+          String.valueOf(SystemTime.getInstance().milliseconds()));
+      partitionClassZNRecord.setListField(ERROR_OCCURRED_INSTANCES_FIELD_NAME,
+          clusterAggregator.getExceptionOccurredInstances(StatsReportType.PARTITION_CLASS_REPORT));
+
+      accountZNRecord.setVersion(0);
+      accountZNRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME, accountResults.getFirst());
+      accountZNRecord.setSimpleField(VALID_SIZE_FIELD_NAME, accountResults.getSecond());
+      accountZNRecord.setSimpleField(TIMESTAMP_FIELD_NAME, String.valueOf(SystemTime.getInstance().milliseconds()));
+      accountZNRecord.setListField(ERROR_OCCURRED_INSTANCES_FIELD_NAME,
+          clusterAggregator.getExceptionOccurredInstances(StatsReportType.ACCOUNT_REPORT));
+
+      String partitionClassPath = String.format("/%s", partitionClassResultId);
+      String accountPath = String.format("/%s", accountResultId);
+
+      manager.getHelixPropertyStore().set(partitionClassPath, partitionClassZNRecord, AccessOption.PERSISTENT);
+      manager.getHelixPropertyStore().set(accountPath, accountZNRecord, AccessOption.PERSISTENT);
+
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
     } catch (Exception e) {
       logger.error("Exception thrown while aggregating stats from health reports across all nodes ", e);
