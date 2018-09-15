@@ -508,7 +508,7 @@ class HelixBootstrapUpgradeUtil {
           resourceModified = true;
         }
       }
-      if (resourceModified) {
+      if (!dryRun && resourceModified) {
         if (resourceIs.getPartitionSet().isEmpty()) {
           dcAdmin.dropResource(clusterName, resourceName);
           resourcesDropped++;
