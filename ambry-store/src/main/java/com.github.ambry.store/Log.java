@@ -170,9 +170,7 @@ class Log implements Write {
     LogSegment newActiveSegment = segmentsByName.get(name);
     if (newActiveSegment != activeSegment) {
       // If activeSegment needs to be changed, then drop buffer for old activeSegment and init buffer for new activeSegment.
-      if (activeSegment != null) {
-        activeSegment.dropBufferForAppend();
-      }
+      activeSegment.dropBufferForAppend();
       activeSegment = newActiveSegment;
       activeSegment.initBufferForAppend();
     }
@@ -352,7 +350,6 @@ class Log implements Write {
    * @throws IOException if there is any I/O error during initialization.
    */
   private void initialize(List<LogSegment> segmentsToLoad, long segmentCapacityInBytes) throws IOException {
-    metrics.registerByteBufferForAppendTotalCount(LogSegment.byteBufferForAppendTotalCount);
     if (segmentsToLoad.size() == 0) {
       // bootstrapping log.
       segmentsToLoad = Collections.singletonList(checkArgsAndGetFirstSegment(segmentCapacityInBytes));
