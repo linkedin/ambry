@@ -123,7 +123,8 @@ public class ReplicationTest {
   public ReplicationTest() {
     Properties properties = new Properties();
     properties.setProperty("replication.synced.replica.backoff.duration.ms", "3000");
-    properties.setProperty("replication.replica.thread.throttle.sleep.duration.ms", "100");
+    properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
+    properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "200");
     properties.setProperty("replication.replica.thread.idle.sleep.duration.ms", "1000");
     config = new ReplicationConfig(new VerifiableProperties(properties));
   }
@@ -159,8 +160,8 @@ public class ReplicationTest {
     AtomicReference<CountDownLatch> reachedLimitLatch = new AtomicReference<>(new CountDownLatch(1));
     AtomicReference<Exception> exception = new AtomicReference<>();
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
-        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyFactory,
-            storeKeyConverter, transformer, (store, messageInfos) -> {
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            (store, messageInfos) -> {
               try {
                 readyToPause.countDown();
                 readyToProceed.await();
@@ -242,8 +243,8 @@ public class ReplicationTest {
     Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
-        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyFactory,
-            storeKeyConverter, transformer, null);
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
@@ -335,8 +336,8 @@ public class ReplicationTest {
     Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
-        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyFactory,
-            storeKeyConverter, transformer, null);
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
@@ -566,8 +567,8 @@ public class ReplicationTest {
 
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
-        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyFactory,
-            storeKeyConverter, transformer, null);
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null);
     List<RemoteReplicaInfo> remoteReplicaInfos = replicasAndThread.getFirst().get(remoteHost.dataNodeId);
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
@@ -683,6 +684,10 @@ public class ReplicationTest {
     Pair<Host, Host> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
     Host localHost = localAndRemoteHosts.getFirst();
     Host remoteHost = localAndRemoteHosts.getSecond();
+    long expectedThrottleDurationMs =
+        localHost.dataNodeId.getDatacenterName().equals(remoteHost.dataNodeId.getDatacenterName())
+            ? config.replicationIntraReplicaThreadThrottleSleepDurationMs
+            : config.replicationInterReplicaThreadThrottleSleepDurationMs;
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     storeKeyConverterFactory.setReturnInputIfAbsent(true);
@@ -753,8 +758,8 @@ public class ReplicationTest {
     Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
-        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyFactory,
-            storeKeyConverter, transformer, null);
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
@@ -873,16 +878,16 @@ public class ReplicationTest {
     currentTimeMs = time.milliseconds();
     replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
-    assertEquals(
-        "Replica thread should sleep exactly replication.thread.throttle.sleep.duration.ms since remote has new token",
-        currentTimeMs + config.replicationReplicaThreadThrottleSleepDurationMs, time.milliseconds());
+    assertEquals("Replica thread should sleep exactly " + expectedThrottleDurationMs + " since remote has new token",
+        currentTimeMs + expectedThrottleDurationMs, time.milliseconds());
 
     // verify that throttling on the replica thread is disabled when replication.thread.throttle.sleep.duration.ms is 0.
     Properties properties = new Properties();
     properties.setProperty("replication.thread.throttle.sleep.duration.ms", "0");
     config = new ReplicationConfig(new VerifiableProperties(properties));
-    replicasAndThread = getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyFactory,
-        storeKeyConverter, transformer, null);
+    replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null);
     replicasToReplicateList = new ArrayList<>(replicasAndThread.getFirst().values());
     replicaThread = replicasAndThread.getSecond();
     currentTimeMs = time.milliseconds();
@@ -955,15 +960,14 @@ public class ReplicationTest {
    * @param clusterMap the {@link ClusterMap} to use
    * @param localHost the local {@link Host} (the one running the replica thread)
    * @param remoteHost the remote {@link Host} (the target of replication)
-   * @param storeKeyFactory the {@link StoreKeyFactory} to be used in {@link ReplicaThread}
    * @param storeKeyConverter the {@link StoreKeyConverter} to be used in {@link ReplicaThread}
    * @param transformer the {@link Transformer} to be used in {@link ReplicaThread}
    *  param listener the {@link StoreEventListener} to use.
    * @return a pair whose first element is the set of remote replicas and the second element is the {@link ReplicaThread}
    */
   private Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> getRemoteReplicasAndReplicaThread(int batchSize,
-      ClusterMap clusterMap, Host localHost, Host remoteHost, StoreKeyFactory storeKeyFactory,
-      StoreKeyConverter storeKeyConverter, Transformer transformer, StoreEventListener listener) {
+      ClusterMap clusterMap, Host localHost, Host remoteHost, StoreKeyConverter storeKeyConverter,
+      Transformer transformer, StoreEventListener listener) {
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
@@ -975,7 +979,7 @@ public class ReplicationTest {
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
+            storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
             localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
     return new Pair<>(replicasToReplicate, replicaThread);
   }

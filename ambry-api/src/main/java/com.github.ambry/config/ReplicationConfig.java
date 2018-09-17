@@ -60,21 +60,30 @@ public class ReplicationConfig {
   public final int replicationTokenFlushDelaySeconds;
 
   /**
-   * The time to sleep between replication cycles to throttle the replica thread
+   * The time (in ms) to sleep between replication cycles to throttle the replica thread in case the thread handles
+   * intra datacenter replicas
    */
-  @Config("replication.replica.thread.throttle.sleep.duration.ms")
+  @Config("replication.intra.replica.thread.throttle.sleep.duration.ms")
   @Default("0")
-  public final long replicationReplicaThreadThrottleSleepDurationMs;
+  public final long replicationIntraReplicaThreadThrottleSleepDurationMs;
 
   /**
-   * The time to sleep between replication cycles when the replica thread is not doing any useful work
+   * The time (in ms) to sleep between replication cycles to throttle the replica thread in case the thread handles
+   * inter datacenter replicas
+   */
+  @Config("replication.inter.replica.thread.throttle.sleep.duration.ms")
+  @Default("0")
+  public final long replicationInterReplicaThreadThrottleSleepDurationMs;
+
+  /**
+   * The time (in ms) to sleep between replication cycles when the replica thread is not doing any useful work
    */
   @Config("replication.replica.thread.idle.sleep.duration.ms")
   @Default("0")
   public final long replicationReplicaThreadIdleSleepDurationMs;
 
   /**
-   * The time to temporarily disable replication for a replica in order to reduce wasteful network calls
+   * The time (in ms) to temporarily disable replication for a replica in order to reduce wasteful network calls
    */
   @Config("replication.synced.replica.backoff.duration.ms")
   @Default("0")
@@ -103,12 +112,14 @@ public class ReplicationConfig {
         verifiableProperties.getIntInRange("replication.token.flush.interval.seconds", 300, 5, Integer.MAX_VALUE);
     replicationTokenFlushDelaySeconds =
         verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
-    replicationReplicaThreadThrottleSleepDurationMs =
-        verifiableProperties.getLongInRange("replication.replica.thread.throttle.sleep.duration.ms", 0, 0,
+    replicationIntraReplicaThreadThrottleSleepDurationMs =
+        verifiableProperties.getLongInRange("replication.intra.replica.thread.throttle.sleep.duration.ms", 0, 0,
+            Long.MAX_VALUE);
+    replicationInterReplicaThreadThrottleSleepDurationMs =
+        verifiableProperties.getLongInRange("replication.inter.replica.thread.throttle.sleep.duration.ms", 0, 0,
             Long.MAX_VALUE);
     replicationReplicaThreadIdleSleepDurationMs =
-        verifiableProperties.getLongInRange("replication.replica.thread.idle.sleep.duration.ms", 0, 0,
-            Long.MAX_VALUE);
+        verifiableProperties.getLongInRange("replication.replica.thread.idle.sleep.duration.ms", 0, 0, Long.MAX_VALUE);
     replicationSyncedReplicaBackoffDurationMs =
         verifiableProperties.getLongInRange("replication.synced.replica.backoff.duration.ms", 0, 0, Long.MAX_VALUE);
     replicationFetchSizeInBytes =
