@@ -167,7 +167,15 @@ class Log implements Write {
       iterator.remove();
     }
     logger.info("Setting active segment to [{}]", name);
-    activeSegment = segmentsByName.get(name);
+    LogSegment newActiveSegment = segmentsByName.get(name);
+    if (newActiveSegment != activeSegment) {
+      // If activeSegment needs to be changed, then drop buffer for old activeSegment and init buffer for new activeSegment.
+      if (activeSegment != null) {
+        activeSegment.dropBufferForAppend();
+      }
+      activeSegment = newActiveSegment;
+      activeSegment.initBufferForAppend();
+    }
   }
 
   /**
@@ -344,6 +352,7 @@ class Log implements Write {
    * @throws IOException if there is any I/O error during initialization.
    */
   private void initialize(List<LogSegment> segmentsToLoad, long segmentCapacityInBytes) throws IOException {
+    metrics.registerByteBufferForAppendTotalCount(LogSegment.byteBufferForAppendTotalCount);
     if (segmentsToLoad.size() == 0) {
       // bootstrapping log.
       segmentsToLoad = Collections.singletonList(checkArgsAndGetFirstSegment(segmentCapacityInBytes));
@@ -357,6 +366,7 @@ class Log implements Write {
     }
     remainingUnallocatedSegments.set(totalSegments - segmentsByName.size());
     activeSegment = segmentsByName.lastEntry().getValue();
+    activeSegment.initBufferForAppend();
   }
 
   /**
@@ -401,6 +411,8 @@ class Log implements Write {
       logger.info("Rolling over writes to {} from {} on write of data of size {}. End offset was {} and capacity is {}",
           nextActiveSegment.getName(), activeSegment.getName(), writeSize, activeSegment.getEndOffset(),
           activeSegment.getCapacityInBytes());
+      activeSegment.dropBufferForAppend();
+      nextActiveSegment.initBufferForAppend();
       activeSegment = nextActiveSegment;
     }
   }

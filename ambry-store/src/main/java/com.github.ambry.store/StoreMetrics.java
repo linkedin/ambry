@@ -21,6 +21,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -261,6 +262,23 @@ public class StoreMetrics {
   }
 
   /**
+   * Register the {@link LogSegment#byteBufferForAppendTotalCount} to track buffer allocate for PUT.
+   * @param byteBufferForAppendTotalCount total buffer allocated.
+   */
+  void registerByteBufferForAppendTotalCount(final AtomicInteger byteBufferForAppendTotalCount) {
+    Gauge<Integer> byteBufferForAppendTotalCountGauge = byteBufferForAppendTotalCount::get;
+    registry.register(MetricRegistry.name(Log.class, "ByteBufferForAppendTotalCount"),
+        byteBufferForAppendTotalCountGauge);
+  }
+
+  /**
+   * Deregister the Gauge for {@link LogSegment#byteBufferForAppendTotalCount}.
+   */
+  void deregisterByteBufferForAppendTotalCountGauge() {
+    registry.remove(MetricRegistry.name(Log.class, "ByteBufferForAppendTotalCount"));
+  }
+
+  /**
    * Deregister the Metrics related to the given {@code store}.
    * @param storeId the {@link BlobStore} for which some Metrics should be deregistered.
    */
@@ -268,5 +286,6 @@ public class StoreMetrics {
     deregisterIndexGauges(storeId);
     deregisterHardDeleteMetric(storeId);
     deregisterCompactorGauges(storeId);
+    deregisterByteBufferForAppendTotalCountGauge();
   }
 }

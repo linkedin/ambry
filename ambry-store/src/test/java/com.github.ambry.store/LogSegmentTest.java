@@ -41,7 +41,7 @@ import static org.junit.Assert.*;
  */
 public class LogSegmentTest {
   private static final int STANDARD_SEGMENT_SIZE = 1024;
-  private static final int BIG_SEGMENT_SIZE = 3 * LogSegment.THREAD_LOCAL_BYTE_BUFFER_SIZE;
+  private static final int BIG_SEGMENT_SIZE = 3 * LogSegment.BYTE_BUFFER_SIZE_FOR_APPEND;
 
   private final File tempDir;
   private final StoreMetrics metrics;
@@ -79,6 +79,7 @@ public class LogSegmentTest {
   public void basicWriteAndReadTest() throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
+    segment.initBufferForAppend();
     try {
       assertEquals("Name of segment is inconsistent with what was provided", segmentName, segment.getName());
       assertEquals("Capacity of segment is inconsistent with what was provided", STANDARD_SEGMENT_SIZE,
@@ -571,11 +572,12 @@ public class LogSegmentTest {
   private void doAppendTest(Appender appender) throws IOException {
     String currSegmentName = "log_current";
     LogSegment segment = getSegment(currSegmentName, BIG_SEGMENT_SIZE, true);
+    segment.initBufferForAppend();
     try {
       long writeStartOffset = segment.getStartOffset();
       byte[] bufOne = TestUtils.getRandomBytes(BIG_SEGMENT_SIZE / 6);
       byte[] bufTwo = TestUtils.getRandomBytes(BIG_SEGMENT_SIZE / 9);
-      byte[] bufThree = TestUtils.getRandomBytes(LogSegment.THREAD_LOCAL_BYTE_BUFFER_SIZE * 2 + 3);
+      byte[] bufThree = TestUtils.getRandomBytes(LogSegment.BYTE_BUFFER_SIZE_FOR_APPEND * 2 + 3);
 
       appender.append(segment, ByteBuffer.wrap(bufOne));
       assertEquals("End offset is not as expected", writeStartOffset + bufOne.length, segment.getEndOffset());
