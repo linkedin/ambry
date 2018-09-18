@@ -204,7 +204,7 @@ class LogSegment implements Read, Write {
    */
   void initBufferForAppend() throws IOException{
     if (byteBufferForAppend != null) {
-      throw new IOException("has been initialized");
+      throw new IOException("ByteBufferForAppend has been initialized.");
     }
     byteBufferForAppend = ByteBuffer.allocateDirect(BYTE_BUFFER_SIZE_FOR_APPEND);
     byteBufferForAppendTotalCount.incrementAndGet();
