@@ -617,7 +617,15 @@ public class AmbryRequests implements RequestAPI {
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
                 new ReplicaMetadataResponseInfo(partitionId, findInfo.getFindToken(), findInfo.getMessageEntries(),
                     remoteReplicaLagInBytes);
+            if (replicaMetadataResponseInfo.getTotalSizeOfAllMessages()
+                > 5 * replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes()) {
+              logger.debug("{} generated a metadata response {} where the cumulative size of messages is {}",
+                  replicaMetadataRequest, replicaMetadataResponseInfo,
+                  replicaMetadataResponseInfo.getTotalSizeOfAllMessages());
+              metrics.replicationResponseMessageSizeTooHigh.inc();
+            }
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
+            metrics.replicaMetadataTotalSizeOfMessages.update(replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
           } catch (StoreException e) {
             logger.error(
                 "Store exception on a replica metadata request with error code " + e.getErrorCode() + " for partition "
@@ -644,9 +652,7 @@ public class AmbryRequests implements RequestAPI {
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
       totalTimeSpent += processingTime;
-      // This is too expensive to log as response can be very large and nested
-      // TODO: come up with a condensed representation of response fit for logging
-      publicAccessLogger.trace("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
+      publicAccessLogger.info("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       logger.trace("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
     }

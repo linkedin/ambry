@@ -111,6 +111,7 @@ public class ServerMetrics {
   public final Histogram replicaMetadataResponseQueueTimeInMs;
   public final Histogram replicaMetadataSendTimeInMs;
   public final Histogram replicaMetadataTotalTimeInMs;
+  public final Histogram replicaMetadataTotalSizeOfMessages;
 
   public final Histogram triggerCompactionRequestQueueTimeInMs;
   public final Histogram triggerCompactionRequestProcessingTimeInMs;
@@ -197,6 +198,7 @@ public class ServerMetrics {
   public final Counter ttlUpdateAuthorizationFailure;
   public final Counter ttlAlreadyUpdatedError;
   public final Counter ttlUpdateRejectedError;
+  public final Counter replicationResponseMessageSizeTooHigh;
 
   public ServerMetrics(MetricRegistry registry) {
     putBlobRequestQueueTimeInMs =
@@ -324,6 +326,8 @@ public class ServerMetrics {
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataSendTime"));
     replicaMetadataTotalTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataTotalTime"));
+    replicaMetadataTotalSizeOfMessages =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataTotalSizeOfMessages"));
 
     triggerCompactionRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionRequestQueueTimeInMs"));
@@ -447,6 +451,8 @@ public class ServerMetrics {
         registry.counter(MetricRegistry.name(AmbryRequests.class, "TtlUpdateAuthorizationFailure"));
     ttlAlreadyUpdatedError = registry.counter(MetricRegistry.name(AmbryRequests.class, "TtlAlreadyUpdatedError"));
     ttlUpdateRejectedError = registry.counter(MetricRegistry.name(AmbryRequests.class, "TtlUpdateRejectedError"));
+    replicationResponseMessageSizeTooHigh =
+        registry.counter(MetricRegistry.name(AmbryRequests.class, "ReplicationResponseMessageSizeTooHigh"));
   }
 
   /**

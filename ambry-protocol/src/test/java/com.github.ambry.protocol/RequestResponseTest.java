@@ -433,12 +433,14 @@ public class RequestResponseTest {
     }
 
     long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
-    MessageInfo messageInfo = new MessageInfo(id1, 1000, accountId, containerId, operationTimeMs);
+    int size = 1000;
+    MessageInfo messageInfo = new MessageInfo(id1, size, accountId, containerId, operationTimeMs);
     List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
     messageInfoList.add(messageInfo);
     ReplicaMetadataResponseInfo responseInfo = new ReplicaMetadataResponseInfo(
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), new MockFindToken(0, 1000),
         messageInfoList, 1000);
+    Assert.assertEquals("Total size of messages not as expected", size, responseInfo.getTotalSizeOfAllMessages());
     List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList = new ArrayList<ReplicaMetadataResponseInfo>();
     replicaMetadataResponseInfoList.add(responseInfo);
     ReplicaMetadataResponse response =
@@ -452,9 +454,11 @@ public class RequestResponseTest {
         deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().size());
     Assert.assertEquals("MsgInfo list size in ReplicaMetadataResponse mismatch ", 1,
         deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().get(0).getMessageInfoList().size());
+    Assert.assertEquals("Total size of messages not as expected", size,
+        deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().get(0).getTotalSizeOfAllMessages());
     MessageInfo msgInfo =
         deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().get(0).getMessageInfoList().get(0);
-    Assert.assertEquals("MsgInfo size mismatch ", 1000, msgInfo.getSize());
+    Assert.assertEquals("MsgInfo size mismatch ", size, msgInfo.getSize());
     Assert.assertEquals("MsgInfo key mismatch ", id1, msgInfo.getStoreKey());
     Assert.assertEquals("MsgInfo expiration value mismatch ", Utils.Infinite_Time, msgInfo.getExpirationTimeInMs());
     if (ReplicaMetadataResponse.getCurrentVersion() >= ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_3) {
