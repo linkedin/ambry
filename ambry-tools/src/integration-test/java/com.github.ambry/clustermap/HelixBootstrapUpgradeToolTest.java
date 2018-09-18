@@ -153,8 +153,12 @@ public class HelixBootstrapUpgradeToolTest {
     // Assert that sealed list being different does not affect equality
     List<String> sealedList = Arrays.asList("5", "10");
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedList);
+    // set the field to null. The created InstanceConfig should not have null fields.
+    referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, null);
     instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
         Collections.emptyMap(), referenceInstanceConfig);
+    // Stopped replicas should be an empty list and not null, so set that in referenceInstanceConfig for comparison.
+    referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, Collections.emptyList());
     assertEquals(instanceConfig.getRecord(), referenceInstanceConfig.getRecord());
 
     // Assert that stopped list being different does not affect equality
