@@ -100,15 +100,15 @@ public class HelixParticipantTest {
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
     HelixParticipant helixParticipant =
         new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory);
-    helixParticipant.participate(Collections.EMPTY_LIST);
+    helixParticipant.participate(Collections.emptyList());
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     InstanceConfig instanceConfig = new InstanceConfig("someInstanceId");
     helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
 
-    //Make sure the current sealedReplicas list is null
+    //Make sure the current sealedReplicas list is empty
     List<String> sealedReplicas = helixParticipant.getSealedReplicas();
-    assertNull("sealedReplicas is not null", sealedReplicas);
+    assertEquals("sealedReplicas should be empty", Collections.emptyList(), sealedReplicas);
 
     String listName = "sealedReplicas";
 

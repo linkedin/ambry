@@ -631,8 +631,8 @@ class HelixBootstrapUpgradeUtil {
 
     // Set the fields that need to be preserved from the referenceInstanceConfig.
     if (referenceInstanceConfig != null) {
-      sealedPartitionsList = referenceInstanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
-      stoppedReplicasList = referenceInstanceConfig.getRecord().getListField(ClusterMapUtils.STOPPED_REPLICAS_STR);
+      sealedPartitionsList = ClusterMapUtils.getSealedReplicas(referenceInstanceConfig);
+      stoppedReplicasList = ClusterMapUtils.getStoppedReplicas(referenceInstanceConfig);
     }
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedPartitionsList);
     instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicasList);

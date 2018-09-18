@@ -142,16 +142,19 @@ public class ClusterMapUtils {
   }
 
   /**
-   * Get the list of sealed replicas on a given instance.
+   * Get the list of sealed replicas on a given instance. This is guaranteed to return a non-null list. It would return
+   * an empty list if there are no sealed replicas or if the field itself is absent for this instance.
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the list of sealed replicas.
    */
   static List<String> getSealedReplicas(InstanceConfig instanceConfig) {
-    return instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
+    List<String> sealedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
+    return sealedReplicas == null ? Collections.emptyList() : sealedReplicas;
   }
 
   /**
-   * Get the list of stopped replicas on a given instance.
+   * Get the list of stopped replicas on a given instance. This is guaranteed to return a non-null list. It would return
+   * an empty list if there are no stopped replicas or if the field itself is absent for this instance.
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the list of stopped replicas.
    */
