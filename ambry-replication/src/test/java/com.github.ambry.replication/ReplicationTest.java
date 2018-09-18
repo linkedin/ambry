@@ -881,9 +881,10 @@ public class ReplicationTest {
     assertEquals("Replica thread should sleep exactly " + expectedThrottleDurationMs + " since remote has new token",
         currentTimeMs + expectedThrottleDurationMs, time.milliseconds());
 
-    // verify that throttling on the replica thread is disabled when replication.thread.throttle.sleep.duration.ms is 0.
+    // verify that throttling on the replica thread is disabled when relevant configs are 0.
     Properties properties = new Properties();
-    properties.setProperty("replication.thread.throttle.sleep.duration.ms", "0");
+    properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "0");
+    properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "0");
     config = new ReplicationConfig(new VerifiableProperties(properties));
     replicasAndThread =
         getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
