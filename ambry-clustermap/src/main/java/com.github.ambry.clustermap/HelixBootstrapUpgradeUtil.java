@@ -505,6 +505,9 @@ class HelixBootstrapUpgradeUtil {
           ArrayList<String> newInstances = new ArrayList<>(instanceSetInStatic);
           Collections.shuffle(newInstances);
           resourceIs.setPreferenceList(partitionName, newInstances);
+          // Existing resources may not have ANY_LIVEINSTANCE set as the numReplicas (which allows for different replication
+          // for different partitions under the same resource). So set it here.
+          resourceIs.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.toString());
           resourceModified = true;
         }
       }
