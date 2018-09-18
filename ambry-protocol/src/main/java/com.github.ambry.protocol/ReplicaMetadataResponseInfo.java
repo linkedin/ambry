@@ -140,14 +140,13 @@ public class ReplicaMetadataResponseInfo {
     sb.append(partitionId);
     sb.append(" ServerErrorCode=").append(errorCode);
     if (errorCode == ServerErrorCode.No_Error) {
-      int size = messageInfoAndMetadataListSerde.getMessageInfoList().size();
+      List<MessageInfo> messageInfos = messageInfoAndMetadataListSerde.getMessageInfoList();
+      int size = messageInfos.size();
       sb.append(" Token=").append(token);
       sb.append(" MessageInfoListSize=").append(size);
       sb.append(" MessagesTotalSize=").append(totalSizeOfAllMessages);
-      sb.append(" MessageInfoListFirstId=")
-          .append(messageInfoAndMetadataListSerde.getMessageInfoList().get(0).getStoreKey());
-      sb.append(" MessageInfoListLastId=")
-          .append(messageInfoAndMetadataListSerde.getMessageInfoList().get(size - 1).getStoreKey());
+      sb.append(" MessageInfoListFirstId=").append(messageInfos.get(0).getStoreKey());
+      sb.append(" MessageInfoListLastId=").append(messageInfos.get(size - 1).getStoreKey());
       sb.append(" RemoteReplicaLagInBytes=").append(remoteReplicaLagInBytes);
     }
     return sb.toString();

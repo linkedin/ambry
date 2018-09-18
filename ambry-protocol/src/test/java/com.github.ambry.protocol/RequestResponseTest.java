@@ -401,12 +401,6 @@ public class RequestResponseTest {
   private void doReplicaMetadataRequestTest(short responseVersionToUse) throws IOException {
     ReplicaMetadataResponse.CURRENT_VERSION = responseVersionToUse;
     MockClusterMap clusterMap = new MockClusterMap();
-    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
-        BlobId.BlobDataType.DATACHUNK);
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
         new ReplicaMetadataRequestInfo(new MockPartitionId(), new MockFindToken(0, 1000), "localhost", "path");
@@ -419,30 +413,44 @@ public class RequestResponseTest {
     Assert.assertEquals(replicaMetadataRequestFromBytes.getReplicaMetadataRequestInfoList().size(), 1);
 
     try {
-      request = new ReplicaMetadataRequest(1, "id", null, 12);
-      serAndPrepForRead(request, -1, true);
-      Assert.assertEquals(true, false);
+      new ReplicaMetadataRequest(1, "id", null, 12);
+      Assert.fail("Serializing should have failed");
     } catch (IllegalArgumentException e) {
-      Assert.assertEquals(true, true);
+      // expected. Nothing to do
     }
     try {
-      replicaMetadataRequestInfo = new ReplicaMetadataRequestInfo(new MockPartitionId(), null, "localhost", "path");
-      Assert.assertTrue(false);
+      new ReplicaMetadataRequestInfo(new MockPartitionId(), null, "localhost", "path");
+      Assert.fail("Construction should have failed");
     } catch (IllegalArgumentException e) {
-      Assert.assertTrue(true);
+      // expected. Nothing to do
     }
 
     long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
-    int size = 1000;
-    MessageInfo messageInfo = new MessageInfo(id1, size, accountId, containerId, operationTimeMs);
-    List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
-    messageInfoList.add(messageInfo);
-    ReplicaMetadataResponseInfo responseInfo = new ReplicaMetadataResponseInfo(
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), new MockFindToken(0, 1000),
-        messageInfoList, 1000);
-    Assert.assertEquals("Total size of messages not as expected", size, responseInfo.getTotalSizeOfAllMessages());
-    List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList = new ArrayList<ReplicaMetadataResponseInfo>();
-    replicaMetadataResponseInfoList.add(responseInfo);
+    int numResponseInfos = 5;
+    int numMessagesInEachResponseInfo = 200;
+    List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList = new ArrayList<>();
+    for (int j = 0; j < numResponseInfos; j++) {
+      List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
+      int totalSizeOfAllMessages = 0;
+      for (int i = 0; i < numMessagesInEachResponseInfo; i++) {
+        int msgSize = TestUtils.RANDOM.nextInt(1000) + 1;
+        short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+        short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+        BlobId id = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+            ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+            clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+            BlobId.BlobDataType.DATACHUNK);
+        MessageInfo messageInfo = new MessageInfo(id, msgSize, accountId, containerId, operationTimeMs);
+        messageInfoList.add(messageInfo);
+        totalSizeOfAllMessages += msgSize;
+      }
+      ReplicaMetadataResponseInfo responseInfo = new ReplicaMetadataResponseInfo(
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), new MockFindToken(0, 1000),
+          messageInfoList, 1000);
+      Assert.assertEquals("Total size of messages not as expected", totalSizeOfAllMessages,
+          responseInfo.getTotalSizeOfAllMessages());
+      replicaMetadataResponseInfoList.add(responseInfo);
+    }
     ReplicaMetadataResponse response =
         new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, replicaMetadataResponseInfoList);
     requestStream = serAndPrepForRead(response, -1, false);
@@ -450,26 +458,41 @@ public class RequestResponseTest {
         ReplicaMetadataResponse.readFrom(requestStream, new MockFindTokenFactory(), clusterMap);
     Assert.assertEquals(deserializedReplicaMetadataResponse.getCorrelationId(), 1234);
     Assert.assertEquals(deserializedReplicaMetadataResponse.getError(), ServerErrorCode.No_Error);
-    Assert.assertEquals("ReplicaMetadataResponse list size mismatch ", 1,
+    Assert.assertEquals("ReplicaMetadataResponse list size mismatch ", numResponseInfos,
         deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().size());
-    Assert.assertEquals("MsgInfo list size in ReplicaMetadataResponse mismatch ", 1,
-        deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().get(0).getMessageInfoList().size());
-    Assert.assertEquals("Total size of messages not as expected", size,
-        deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().get(0).getTotalSizeOfAllMessages());
-    MessageInfo msgInfo =
-        deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().get(0).getMessageInfoList().get(0);
-    Assert.assertEquals("MsgInfo size mismatch ", size, msgInfo.getSize());
-    Assert.assertEquals("MsgInfo key mismatch ", id1, msgInfo.getStoreKey());
-    Assert.assertEquals("MsgInfo expiration value mismatch ", Utils.Infinite_Time, msgInfo.getExpirationTimeInMs());
-    if (ReplicaMetadataResponse.getCurrentVersion() >= ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_3) {
-      Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
-      Assert.assertEquals("ContainerId mismatch ", containerId, msgInfo.getContainerId());
-      Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
-    } else {
-      Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, msgInfo.getAccountId());
-      Assert.assertEquals("ContainerId mismatch ", UNKNOWN_CONTAINER_ID, msgInfo.getContainerId());
-      Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
+    for (int j = 0; j < replicaMetadataResponseInfoList.size(); j++) {
+      ReplicaMetadataResponseInfo originalMetadataResponse = replicaMetadataResponseInfoList.get(j);
+      ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+          deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().get(j);
+      Assert.assertEquals("MsgInfo list size in ReplicaMetadataResponse mismatch ", numMessagesInEachResponseInfo,
+          replicaMetadataResponseInfo.getMessageInfoList().size());
+      Assert.assertEquals("Total size of messages not as expected",
+          originalMetadataResponse.getTotalSizeOfAllMessages(),
+          replicaMetadataResponseInfo.getTotalSizeOfAllMessages());
+      List<MessageInfo> deserializedMsgInfoList = replicaMetadataResponseInfo.getMessageInfoList();
+      for (int i = 0; i < originalMetadataResponse.getMessageInfoList().size(); i++) {
+        MessageInfo originalMsgInfo = originalMetadataResponse.getMessageInfoList().get(i);
+        MessageInfo msgInfo = deserializedMsgInfoList.get(i);
+        Assert.assertEquals("MsgInfo size mismatch ", originalMsgInfo.getSize(), msgInfo.getSize());
+        Assert.assertEquals("MsgInfo key mismatch ", originalMsgInfo.getStoreKey(), msgInfo.getStoreKey());
+        Assert.assertEquals("MsgInfo expiration value mismatch ", Utils.Infinite_Time, msgInfo.getExpirationTimeInMs());
+        if (ReplicaMetadataResponse.getCurrentVersion()
+            >= ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_3) {
+          Assert.assertEquals("AccountId mismatch ", originalMsgInfo.getAccountId(), msgInfo.getAccountId());
+          Assert.assertEquals("ContainerId mismatch ", originalMsgInfo.getContainerId(), msgInfo.getContainerId());
+          Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
+        } else {
+          Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, msgInfo.getAccountId());
+          Assert.assertEquals("ContainerId mismatch ", UNKNOWN_CONTAINER_ID, msgInfo.getContainerId());
+          Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
+        }
+      }
     }
+    // to ensure that the toString() representation does not go overboard, a random bound check is executed here.
+    // a rough estimate is that each response info should contribute about 500 chars to the toString() representation
+    int maxLength = 100 + numResponseInfos * 500;
+    Assert.assertTrue("toString() representation longer than " + maxLength + " characters",
+        response.toString().length() < maxLength);
   }
 
   /**

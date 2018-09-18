@@ -625,7 +625,7 @@ public class AmbryRequests implements RequestAPI {
               metrics.replicationResponseMessageSizeTooHigh.inc();
             }
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
-            metrics.replicaMetadataTotalSizeOfMessages.update(replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
+            metrics.replicaMetadataTotalSizeOfMessages.update(replicaMetadataResponseInfo.getTotalSizeOfAllMessages());
           } catch (StoreException e) {
             logger.error(
                 "Store exception on a replica metadata request with error code " + e.getErrorCode() + " for partition "
