@@ -57,6 +57,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.After;
 import org.junit.Test;
 
@@ -77,7 +78,9 @@ public class StatsManagerTest {
   private final StatsSnapshot preAggregatedSnapshot;
   private final Map<PartitionId, Store> storeMap;
   private final Map<PartitionId, StatsSnapshot> partitionToSnapshot;
+  private final List<ReplicaId> replicas;
   private final Random random = new Random();
+  private final ObjectMapper mapper = new ObjectMapper();
   private final StatsManagerConfig config;
 
   /**
@@ -103,7 +106,7 @@ public class StatsManagerTest {
     partitionToSnapshot = new HashMap<>();
     preAggregatedSnapshot = generateRandomSnapshot().get(StatsReportType.ACCOUNT_REPORT);
     Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
-    List<ReplicaId> replicaIds = new ArrayList<>();
+    replicas = new ArrayList<>();
     PartitionId partitionId;
     DataNodeId dataNodeId;
     for (int i = 0; i < 2; i++) {
@@ -117,7 +120,7 @@ public class StatsManagerTest {
       StoreStats storeStats = new MockStoreStats(snapshotsByType, false);
       storeMap.put(partitionId, new MockStore(storeStats));
       partitionToSnapshot.put(partitionId, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
-      replicaIds.add(partitionId.getReplicaIds().get(0));
+      replicas.add(partitionId.getReplicaIds().get(0));
     }
     Map<StatsReportType, StatsSnapshot> snapshotsByType = new HashMap<>();
     snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, baseSliceAndNewSlice.getFirst());
@@ -128,7 +131,7 @@ public class StatsManagerTest {
     Properties properties = new Properties();
     properties.put("stats.output.file.path", outputFileString);
     config = new StatsManagerConfig(new VerifiableProperties(properties));
-    statsManager = new StatsManager(storageManager, replicaIds, new MetricRegistry(), config, new MockTime());
+    statsManager = new StatsManager(storageManager, replicas, new MetricRegistry(), config, new MockTime());
   }
 
   /**
@@ -160,10 +163,9 @@ public class StatsManagerTest {
   /**
    * Test to verify the behavior when dealing with {@link Store} that is null and when {@link StoreException} is thrown.
    * @throws StoreException
-   * @throws IOException
    */
   @Test
-  public void testStatsManagerWithProblematicStores() throws StoreException, IOException {
+  public void testStatsManagerWithProblematicStores() throws StoreException {
     DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
         Collections.singletonList("/tmp"), "DC1");
     Map<PartitionId, Store> problematicStoreMap = new HashMap<>();
@@ -220,21 +222,56 @@ public class StatsManagerTest {
   }
 
   /**
-   * Test to verify {@link StatsManager} can start and shutdown properly.
-   * @throws InterruptedException
+   * Test to verify the {@link StatsManager} behaves correctly when dynamically adding/removing {@link com.github.ambry.store.BlobStore}.
+   * @throws StoreException
+   * @throws IOException
    */
   @Test
-  public void testStatsManagerStartAndShutdown() throws InterruptedException {
+  public void testAddAndRemoveBlobStore() throws StoreException, IOException {
+    StatsManager testStatsManager =
+        new StatsManager(new MockStorageManager(storeMap), replicas, new MetricRegistry(), config, new MockTime());
+    // verify that adding an existing store to StatsManager should fail
+    assertFalse("Adding a store which already exists should fail", testStatsManager.addBlobStore(replicas.get(0)));
+    DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
+        Collections.singletonList("/tmp"), "DC1");
+    PartitionId partitionId2 =
+        new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
+    // verify that partitionId2 is not in stats report before adding to statsManager
+    String statsWrapperJSON = testStatsManager.getNodeStatsInJSON();
+    StatsWrapper statsWrapper = mapper.readValue(statsWrapperJSON, StatsWrapper.class);
+    assertFalse("ParitionId2 should not present in stats report",
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId2.toPathString()));
+    // verify that after adding into statsManager, PartitionId2 is in stats report
+    testStatsManager.addBlobStore(partitionId2.getReplicaIds().get(0));
+    statsWrapperJSON = testStatsManager.getNodeStatsInJSON();
+    statsWrapper = mapper.readValue(statsWrapperJSON, StatsWrapper.class);
+    assertTrue("PartitionId2 should present in stats report",
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId2.toPathString()));
+    // verify that after removing PartitionId0 (corresponding to the first replica in replicas list), PartitionId0 is not in the stats report
+    PartitionId partitionId0 = replicas.get(0).getPartitionId();
+    assertTrue("ParitionId0 should present in stats report before removal",
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toPathString()));
+    testStatsManager.removeBlobStore(replicas.get(0));
+    statsWrapperJSON = testStatsManager.getNodeStatsInJSON();
+    statsWrapper = mapper.readValue(statsWrapperJSON, StatsWrapper.class);
+    assertFalse("ParitionId0 should not present in stats report after removal",
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toPathString()));
+  }
+
+  /**
+   * Test to verify {@link StatsManager} can start and shutdown properly.
+   */
+  @Test
+  public void testStatsManagerStartAndShutdown() {
     statsManager.start();
     statsManager.shutdown();
   }
 
   /**
    * Test to verify {@link StatsManager} can shutdown properly even before it's started.
-   * @throws InterruptedException
    */
   @Test
-  public void testShutdownBeforeStart() throws InterruptedException {
+  public void testShutdownBeforeStart() {
     statsManager.shutdown();
   }
 

@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -54,7 +55,7 @@ class StatsManager {
   private final File statsOutputFile;
   private final long publishPeriodInSecs;
   private final int initialDelayInSecs;
-  private final Map<PartitionId, ReplicaId> partitionToReplicaMap;
+  private final ConcurrentMap<PartitionId, ReplicaId> partitionToReplicaMap;
   private final StatsManagerMetrics metrics;
   private final Time time;
   private final ObjectMapper mapper = new ObjectMapper();
@@ -68,17 +69,16 @@ class StatsManager {
    * @param registry the {@link MetricRegistry} to be used for {@link StatsManagerMetrics}
    * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period
    * @param time the {@link Time} instance to be used for reporting
-   * @throws IOException
    */
   StatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry registry,
-      StatsManagerConfig config, Time time) throws IOException {
+      StatsManagerConfig config, Time time) {
     this.storageManager = storageManager;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
     initialDelayInSecs = config.initialDelayUpperBoundInSecs;
     metrics = new StatsManagerMetrics(registry);
     partitionToReplicaMap =
-        replicaIds.stream().collect(Collectors.toMap(ReplicaId::getPartitionId, Function.identity()));
+        replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
   }
 
@@ -96,7 +96,7 @@ class StatsManager {
   /**
    * Stops the periodic task that is collecting, aggregating and publishing stats.
    */
-  void shutdown() throws InterruptedException {
+  void shutdown() {
     if (statsAggregator != null) {
       statsAggregator.cancel();
     }
@@ -150,7 +150,7 @@ class StatsManager {
    * Fetch the {@link StatsSnapshot} for the given {@link PartitionId}.
    * @param partitionId the {@link PartitionId} to try to fetch the {@link StatsSnapshot} from
    * @param unreachableStores a list of partitionIds to keep track of the unreachable stores (partitions)
-   * @return
+   * @return the generated {@link StatsSnapshot}
    */
   StatsSnapshot fetchSnapshot(PartitionId partitionId, List<String> unreachableStores, StatsReportType reportType) {
     StatsSnapshot statsSnapshot = null;
@@ -170,6 +170,28 @@ class StatsManager {
       }
     }
     return statsSnapshot;
+  }
+
+  /**
+   * Add new {@link com.github.ambry.store.BlobStore} to StatsManager and thus stats of this store will be collected during
+   * next round of aggregation.
+   * @param id the {@link ReplicaId} associated with store to be added
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  boolean addBlobStore(ReplicaId id) {
+    if (partitionToReplicaMap.containsKey(id.getPartitionId())) {
+      return false;
+    }
+    partitionToReplicaMap.put(id.getPartitionId(), id);
+    return true;
+  }
+
+  /**
+   * Remove {@link com.github.ambry.store.BlobStore} from StatsManager and thus it won't be checked during next round of aggregation.
+   * @param id the {@link ReplicaId} associated with store to be removed
+   */
+  void removeBlobStore(ReplicaId id) {
+    partitionToReplicaMap.remove(id.getPartitionId());
   }
 
   /**
@@ -204,7 +226,7 @@ class StatsManager {
       statsWrapperJSON = mapper.writeValueAsString(new StatsWrapper(statsHeader, combinedSnapshot));
     } catch (Exception | Error e) {
       metrics.statsAggregationFailureCount.inc();
-      logger.error("Exception while aggregating stats.", e);
+      logger.error("Exception while aggregating stats for Helix quota report", e);
     }
     return statsWrapperJSON;
   }
@@ -217,7 +239,7 @@ class StatsManager {
 
     @Override
     public void run() {
-      logger.info("Aggregating stats");
+      logger.info("Aggregating stats for local quota report");
       try {
         long totalFetchAndAggregateStartTimeMs = time.milliseconds();
         StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
@@ -225,7 +247,7 @@ class StatsManager {
         Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
         while (!cancelled && iterator.hasNext()) {
           PartitionId partitionId = iterator.next();
-          logger.info("Aggregating stats started for store {}", partitionId);
+          logger.info("Aggregating stats for local report started for store {}", partitionId);
           collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
         }
         if (!cancelled) {
@@ -234,11 +256,11 @@ class StatsManager {
               partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
               unreachableStores);
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
-          logger.info("Stats snapshot published to {}", statsOutputFile.getAbsolutePath());
+          logger.info("Local stats snapshot published to {}", statsOutputFile.getAbsolutePath());
         }
       } catch (Exception | Error e) {
         metrics.statsAggregationFailureCount.inc();
-        logger.error("Exception while aggregating stats. Stats output file path - {}",
+        logger.error("Exception while aggregating stats for local quota report. Stats output file path - {}",
             statsOutputFile.getAbsolutePath(), e);
       }
     }
