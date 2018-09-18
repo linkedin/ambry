@@ -73,6 +73,7 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics updateBlobTtlIdConversionMetrics;
   public final AsyncOperationTracker.Metrics updateBlobTtlSecurityProcessResponseMetrics;
 
+  public final AsyncOperationTracker.Metrics getHeadDeleteSecurityPostProcessRequestMetrics;
   // Rates
   // AmbrySecurityService
   public final Meter securityServicePreProcessRequestRate;
@@ -236,6 +237,10 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "idConversion", metricRegistry);
     updateBlobTtlSecurityProcessResponseMetrics =
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "securityProcessResponse", metricRegistry);
+
+    getHeadDeleteSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(AmbryBlobStorageService.class, "getHeadDeleteSecurityPostProcessRequest",
+            metricRegistry);
 
     // Rates
     // AmbrySecurityService
