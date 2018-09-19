@@ -113,9 +113,12 @@ public class ReplicationMetrics {
   public final Histogram sslIntraColoTotalReplicationTime;
   public final Counter blobDeletedOnGetCount;
   public final Counter blobAuthorizationFailureCount;
-  public final Counter replicaSyncedBackoffCount;
-  public final Counter replicaThreadIdleCount;
-  public final Counter replicaThreadThrottleCount;
+  public final Counter intraColoReplicaSyncedBackoffCount;
+  public final Counter interColoReplicaSyncedBackoffCount;
+  public final Counter intraColoReplicaThreadIdleCount;
+  public final Counter interColoReplicaThreadIdleCount;
+  public final Counter intraColoReplicaThreadThrottleCount;
+  public final Counter interColoReplicaThreadThrottleCount;
 
   public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
@@ -213,9 +216,18 @@ public class ReplicationMetrics {
     blobDeletedOnGetCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "BlobDeletedOnGetCount"));
     blobAuthorizationFailureCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "BlobAuthorizationFailureCount"));
-    replicaSyncedBackoffCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicaSyncedBackoffCount"));
-    replicaThreadIdleCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicaThreadIdleCount"));
-    replicaThreadThrottleCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicaThreadThrottleCount"));
+    intraColoReplicaSyncedBackoffCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicaSyncedBackoffCount"));
+    interColoReplicaSyncedBackoffCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicaSyncedBackoffCount"));
+    intraColoReplicaThreadIdleCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicaThreadIdleCount"));
+    interColoReplicaThreadIdleCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicaThreadIdleCount"));
+    intraColoReplicaThreadThrottleCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicaThreadThrottleCount"));
+    interColoReplicaThreadThrottleCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicaThreadThrottleCount"));
     this.registry = registry;
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
     populateInvalidMessageMetricForReplicas(replicaIds);
@@ -401,7 +413,7 @@ public class ReplicationMetrics {
     }
   }
 
-  public void populateInvalidMessageMetricForReplicas(List<? extends ReplicaId> replicaIds) {
+  private void populateInvalidMessageMetricForReplicas(List<? extends ReplicaId> replicaIds) {
     for (ReplicaId replicaId : replicaIds) {
       PartitionId partitionId = replicaId.getPartitionId();
       if (!partitionIdToInvalidMessageStreamErrorCounter.containsKey(partitionId)) {

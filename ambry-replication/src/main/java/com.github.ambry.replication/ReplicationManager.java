@@ -593,7 +593,7 @@ public class ReplicationManager {
               Utils.getObj(transformerClassName, storeKeyFactory, threadSpecificKeyConverter);
           ReplicaThread replicaThread =
               new ReplicaThread(threadIdentity, replicasForThread, factory, clusterMap, correlationIdGenerator,
-                  dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification, storeKeyFactory,
+                  dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification,
                   threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
                   responseHandler, SystemTime.getInstance());
           if (replicaThreadPools.containsKey(datacenter)) {
