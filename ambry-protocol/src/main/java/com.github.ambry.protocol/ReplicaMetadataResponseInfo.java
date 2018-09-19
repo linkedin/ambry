@@ -37,6 +37,8 @@ public class ReplicaMetadataResponseInfo {
   private final PartitionId partitionId;
   private final ServerErrorCode errorCode;
 
+  private long totalSizeOfAllMessages = 0;
+
   private static final int Error_Size_InBytes = 2;
   private static final int Remote_Replica_Lag_Size_In_Bytes = 8;
 
@@ -53,6 +55,7 @@ public class ReplicaMetadataResponseInfo {
     messageInfoListSize = messageInfoAndMetadataListSerde.getMessageInfoAndMetadataListSize();
     this.token = findToken;
     this.errorCode = ServerErrorCode.No_Error;
+    messageInfoList.forEach(info -> totalSizeOfAllMessages += info.getSize());
   }
 
   public ReplicaMetadataResponseInfo(PartitionId partitionId, ServerErrorCode errorCode) {
@@ -124,14 +127,26 @@ public class ReplicaMetadataResponseInfo {
         + +partitionId.getBytes().length + Error_Size_InBytes;
   }
 
+  /**
+   * @return the cumulative size of all the messages represented by this response. 0 if the response signifies an error
+   */
+  public long getTotalSizeOfAllMessages() {
+    return totalSizeOfAllMessages;
+  }
+
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append(partitionId);
     sb.append(" ServerErrorCode=").append(errorCode);
     if (errorCode == ServerErrorCode.No_Error) {
+      List<MessageInfo> messageInfos = messageInfoAndMetadataListSerde.getMessageInfoList();
+      int size = messageInfos.size();
       sb.append(" Token=").append(token);
-      sb.append(" MessageInfoList=").append(messageInfoAndMetadataListSerde.getMessageInfoList());
+      sb.append(" MessageInfoListSize=").append(size);
+      sb.append(" MessagesTotalSize=").append(totalSizeOfAllMessages);
+      sb.append(" MessageInfoListFirstId=").append(messageInfos.get(0).getStoreKey());
+      sb.append(" MessageInfoListLastId=").append(messageInfos.get(size - 1).getStoreKey());
       sb.append(" RemoteReplicaLagInBytes=").append(remoteReplicaLagInBytes);
     }
     return sb.toString();
