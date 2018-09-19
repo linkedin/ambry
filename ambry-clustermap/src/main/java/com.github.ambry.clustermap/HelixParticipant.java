@@ -117,10 +117,7 @@ class HelixParticipant implements ClusterParticipant {
           "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
     }
     synchronized (helixAdministrationLock) {
-      List<String> sealedReplicas = getSealedReplicas();
-      if (sealedReplicas == null) {
-        sealedReplicas = new ArrayList<>();
-      }
+      List<String> sealedReplicas = new ArrayList<>(getSealedReplicas());
       String partitionId = replicaId.getPartitionId().toPathString();
       boolean success = true;
       if (!isSealed && sealedReplicas.contains(partitionId)) {
@@ -178,7 +175,7 @@ class HelixParticipant implements ClusterParticipant {
 
   /**
    * Get the list of sealed replicas from the HelixAdmin.
-   * @return list of sealed replicas from HelixAdmin
+   * @return list of sealed replicas from HelixAdmin.
    */
   @Override
   public List<String> getSealedReplicas() {

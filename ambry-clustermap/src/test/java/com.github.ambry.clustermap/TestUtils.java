@@ -184,7 +184,8 @@ public class TestUtils {
       int numRacks, HardwareState hardwareState, JSONArray disks) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, i % numRacks, DEFAULT_XID, hardwareState, disks));
+      jsonArray.put(
+          getJsonDataNode(hostname, basePort + i, sslPort + i, i % numRacks, DEFAULT_XID, hardwareState, disks));
     }
     return jsonArray;
   }
@@ -481,6 +482,8 @@ public class TestUtils {
 
     private HardwareLayout hardwareLayout;
 
+    ClusterMapConfig clusterMapConfig;
+
     protected JSONArray getDisks() throws JSONException {
       return getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
     }
@@ -540,8 +543,9 @@ public class TestUtils {
       properties.setProperty("clustermap.cluster.name", "test");
       properties.setProperty("clustermap.datacenter.name", "dc1");
       properties.setProperty("clustermap.host.name", "localhost");
-      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(true)),
-          new ClusterMapConfig(new VerifiableProperties(properties)));
+      clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+      this.hardwareLayout =
+          new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(true)), clusterMapConfig);
     }
 
     void addNewDataNodes(int i) throws JSONException {

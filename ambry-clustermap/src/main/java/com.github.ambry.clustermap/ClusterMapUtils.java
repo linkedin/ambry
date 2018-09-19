@@ -59,6 +59,7 @@ public class ClusterMapUtils {
   static final String DATACENTER_ID_STR = "id";
   static final String SCHEMA_VERSION_STR = "schemaVersion";
   static final String XID_STR = "xid";
+  static final long DEFAULT_XID = Long.MIN_VALUE;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
   static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
@@ -141,16 +142,19 @@ public class ClusterMapUtils {
   }
 
   /**
-   * Get the list of sealed replicas on a given instance.
+   * Get the list of sealed replicas on a given instance. This is guaranteed to return a non-null list. It would return
+   * an empty list if there are no sealed replicas or if the field itself is absent for this instance.
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the list of sealed replicas.
    */
   static List<String> getSealedReplicas(InstanceConfig instanceConfig) {
-    return instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
+    List<String> sealedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
+    return sealedReplicas == null ? Collections.emptyList() : sealedReplicas;
   }
 
   /**
-   * Get the list of stopped replicas on a given instance.
+   * Get the list of stopped replicas on a given instance. This is guaranteed to return a non-null list. It would return
+   * an empty list if there are no stopped replicas or if the field itself is absent for this instance.
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the list of stopped replicas.
    */
@@ -195,7 +199,7 @@ public class ClusterMapUtils {
    */
   static long getXid(InstanceConfig instanceConfig) {
     String xid = instanceConfig.getRecord().getSimpleField(XID_STR);
-    return xid == null ? Long.MIN_VALUE : Long.valueOf(xid);
+    return xid == null ? DEFAULT_XID : Long.valueOf(xid);
   }
 
   /**
