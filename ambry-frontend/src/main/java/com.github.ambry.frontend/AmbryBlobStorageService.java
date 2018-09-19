@@ -38,6 +38,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -670,8 +671,22 @@ class AmbryBlobStorageService implements BlobStorageService {
       DeleteCallback deleteCallback) {
     Callback<ReadableStreamChannel> completionCallback =
         (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception);
-    return FrontendUtils.buildCallback(frontendMetrics.getHeadDeleteSecurityPostProcessRequestMetrics, result -> {
-      RestMethod restMethod = restRequest.getRestMethod();
+    RestMethod restMethod = restRequest.getRestMethod();
+    AsyncOperationTracker.Metrics metrics;
+    switch (restMethod) {
+      case GET:
+        metrics = frontendMetrics.getSecurityPostProcessRequestMetrics;
+        break;
+      case HEAD:
+        metrics = frontendMetrics.headSecurityPostProcessRequestMetrics;
+        break;
+      case DELETE:
+        metrics = frontendMetrics.deleteSecurityPostProcessRequestMetrics;
+        break;
+      default:
+        throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);
+    }
+    return FrontendUtils.buildCallback(metrics, result -> {
       ReadableStreamChannel response = null;
       switch (restMethod) {
         case GET:
