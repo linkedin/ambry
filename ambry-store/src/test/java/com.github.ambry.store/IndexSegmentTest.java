@@ -74,7 +74,8 @@ public class IndexSegmentTest {
   private final File tempDir;
   private final StoreMetrics metrics;
   private final short version;
-  private final StoreConfig config;
+  private StoreConfig config;
+  private final Properties properties = new Properties();
 
   /**
    * Running for {@link PersistentIndex#VERSION_0} and {@link PersistentIndex#VERSION_1}
@@ -95,9 +96,7 @@ public class IndexSegmentTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
     this.version = version;
-    Properties properties = new Properties();
-    properties.setProperty(StoreConfig.storeKeepIndexInMemoryName, Boolean.toString(keepIndexInMemory));
-    config = new StoreConfig(new VerifiableProperties(properties));
+    setKeepIndexInMemory(keepIndexInMemory);
   }
 
   /**
@@ -342,6 +341,15 @@ public class IndexSegmentTest {
   }
 
   // helpers
+
+  /**
+   * @param keepIndexInMemory the value for {@link StoreConfig#storeKeepIndexInMemoryName}
+   */
+  private void setKeepIndexInMemory(boolean keepIndexInMemory) {
+    properties.setProperty(StoreConfig.storeKeepIndexInMemoryName, Boolean.toString(keepIndexInMemory));
+    config = new StoreConfig(new VerifiableProperties(properties));
+  }
+
   // comprehensiveTest() helpers
 
   /**
@@ -463,6 +471,13 @@ public class IndexSegmentTest {
       indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
           time.milliseconds(), resetKey);
+
+      // verify that flipping StoreConfig.storeKeepIndexInMemoryName does not break anything
+      boolean saved = config.storeKeepIndexInMemory;
+      setKeepIndexInMemory(!saved);
+      verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
+          time.milliseconds(), resetKey);
+      setKeepIndexInMemory(saved);
     }
   }
 

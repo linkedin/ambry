@@ -168,7 +168,7 @@ class IndexSegment {
       indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix(startOffset);
       bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
       if (sealed && !config.storeKeepIndexInMemory) {
-        map();
+        mmap();
         if (!bloomFile.exists()) {
           generateBloomFilterAndPersist();
         } else {
@@ -697,18 +697,17 @@ class IndexSegment {
   }
 
   /**
-   * Marks the segment as sealed. Optionally, it also persist the bloom filter to disk
+   * Marks the segment as sealed. Also persists the bloom filter to disk and conditionally mmaps the index segment.
    * @throws IOException if there is any problem with I/O
    * @throws StoreException if there are problems with the index
    */
   void seal() throws IOException, StoreException {
-    if (sealed.compareAndSet(false, true)) {
-      if (!config.storeKeepIndexInMemory) {
-        map();
-      }
-      // we should be fine reading bloom filter here without synchronization as the index is read only
-      persistBloomFilter();
+    sealed.set(true);
+    if (!config.storeKeepIndexInMemory) {
+      mmap();
     }
+    // we should be fine reading bloom filter here without synchronization as the index is read only
+    persistBloomFilter();
   }
 
   /**
@@ -716,7 +715,7 @@ class IndexSegment {
    * @throws IOException if there is any problem reading or mapping files
    * @throws StoreException if there are problems with the index
    */
-  private void map() throws IOException, StoreException {
+  private void mmap() throws IOException, StoreException {
     rwLock.writeLock().lock();
     try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
       mmap = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
