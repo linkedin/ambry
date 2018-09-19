@@ -13,6 +13,7 @@
  */
 package com.github.ambry.replication;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
@@ -104,9 +105,12 @@ class ReplicaThread implements Runnable {
   private final boolean replicatingOverSsl;
   private final String datacenterName;
   private final long threadThrottleDurationMs;
+  private final Time time;
+  private final Counter throttleCount;
+  private final Counter syncedBackOffCount;
+  private final Counter idleCount;
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition pauseCondition = lock.newCondition();
-  private final Time time;
 
   private volatile boolean allDisabled = false;
 
@@ -142,9 +146,17 @@ class ReplicaThread implements Runnable {
       }
     }
     allReplicatedPartitions = Collections.unmodifiableSet(partitions);
-    threadThrottleDurationMs =
-        replicatingFromRemoteColo ? replicationConfig.replicationInterReplicaThreadThrottleSleepDurationMs
-            : replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs;
+    if (replicatingFromRemoteColo) {
+      threadThrottleDurationMs = replicationConfig.replicationInterReplicaThreadThrottleSleepDurationMs;
+      syncedBackOffCount = replicationMetrics.interColoReplicaSyncedBackoffCount;
+      idleCount = replicationMetrics.interColoReplicaThreadIdleCount;
+      throttleCount = replicationMetrics.interColoReplicaThreadThrottleCount;
+    } else {
+      threadThrottleDurationMs = replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs;
+      syncedBackOffCount = replicationMetrics.intraColoReplicaSyncedBackoffCount;
+      idleCount = replicationMetrics.intraColoReplicaThreadIdleCount;
+      throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
+    }
   }
 
   /**
@@ -316,10 +328,10 @@ class ReplicaThread implements Runnable {
     long sleepDurationMs = 0;
     if (allCaughtUp && replicationConfig.replicationReplicaThreadIdleSleepDurationMs > 0) {
       sleepDurationMs = replicationConfig.replicationReplicaThreadIdleSleepDurationMs;
-      replicationMetrics.replicaThreadIdleCount.inc();
+      idleCount.inc();
     } else if (threadThrottleDurationMs > 0) {
       sleepDurationMs = threadThrottleDurationMs;
-      replicationMetrics.replicaThreadThrottleCount.inc();
+      throttleCount.inc();
     }
 
     if (sleepDurationMs > 0) {
@@ -756,7 +768,7 @@ class ReplicaThread implements Runnable {
         if (remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
           remoteReplicaInfo.setReEnableReplicationTime(
               time.milliseconds() + replicationConfig.replicationSyncedReplicaBackoffDurationMs);
-          replicationMetrics.replicaSyncedBackoffCount.inc();
+          syncedBackOffCount.inc();
         }
         if (exchangeMetadataResponse.missingStoreKeys.size() > 0) {
           PartitionResponseInfo partitionResponseInfo =
