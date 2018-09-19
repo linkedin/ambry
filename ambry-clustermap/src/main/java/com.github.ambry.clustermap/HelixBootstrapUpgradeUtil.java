@@ -428,8 +428,8 @@ class HelixBootstrapUpgradeUtil {
         // the appropriate instanceConfig that is constructed with the correct values from both).
         if (!dryRun) {
           dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfigFromStatic);
-          instancesUpdated++;
         }
+        instancesUpdated++;
       } else {
         info("Instance {} already present in Helix, with same InstanceConfig, skipping. Remaining instances: {}",
             instanceName, --totalInstances);
@@ -443,15 +443,17 @@ class HelixBootstrapUpgradeUtil {
       info("Instance {} is new, adding to Helix. Remaining instances: {}", instanceName, --totalInstances);
       if (!dryRun) {
         dcAdmin.addInstance(clusterName, instanceConfigFromStatic);
-        instancesAdded++;
       }
+      instancesAdded++;
     }
 
     for (String instanceName : instancesInHelix) {
-      if (!dryRun && forceRemove) {
+      if (forceRemove) {
         info("Instance {} is in Helix, but not in static. Forcefully removing. Remaining instances: {}", instanceName,
             --totalInstances);
-        dcAdmin.dropInstance(clusterName, new InstanceConfig(instanceName));
+        if (!dryRun) {
+          dcAdmin.dropInstance(clusterName, new InstanceConfig(instanceName));
+        }
         instancesDropped++;
       } else {
         info("Instance {} is in Helix, but not in static. Ignoring for now (use --forceRemove to forcefully remove). "
@@ -505,18 +507,24 @@ class HelixBootstrapUpgradeUtil {
           ArrayList<String> newInstances = new ArrayList<>(instanceSetInStatic);
           Collections.shuffle(newInstances);
           resourceIs.setPreferenceList(partitionName, newInstances);
-          // Existing resources may not have ANY_LIVEINSTANCE set as the numReplicas (which allows for different replication
-          // for different partitions under the same resource). So set it here.
-          resourceIs.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.toString());
+          // Existing resources may not have ANY_LIVEINSTANCE set as the numReplicas (which allows for different
+          // replication for different partitions under the same resource). So set it here (We use the name() method and
+          // not the toString() method for the enum as that is what Helix uses).
+          resourceIs.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.name());
           resourceModified = true;
         }
       }
-      if (!dryRun && resourceModified) {
+      resourceIs.setNumPartitions(resourceIs.getPartitionSet().size());
+      if (resourceModified) {
         if (resourceIs.getPartitionSet().isEmpty()) {
-          dcAdmin.dropResource(clusterName, resourceName);
+          if (!dryRun) {
+            dcAdmin.dropResource(clusterName, resourceName);
+          }
           resourcesDropped++;
         } else {
-          dcAdmin.setResourceIdealState(clusterName, resourceName, resourceIs);
+          if (!dryRun) {
+            dcAdmin.setResourceIdealState(clusterName, resourceName, resourceIs);
+          }
           resourcesUpdated++;
         }
       }
@@ -540,14 +548,14 @@ class HelixBootstrapUpgradeUtil {
         idealState.setPreferenceList(partitionName, instances);
       }
       idealState.setNumPartitions(partitionsUnderNextResource.size());
-      idealState.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.toString());
+      idealState.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.name());
       if (!idealState.isValid()) {
         throw new IllegalStateException("IdealState could not be validated for new resource " + resourceName);
       }
       if (!dryRun) {
         dcAdmin.addResource(clusterName, resourceName, idealState);
-        resourcesAdded++;
       }
+      resourcesAdded++;
       info("Added {} new partitions under resource {} in datacenter {}", partitionsUnderNextResource.size(),
           resourceName, dcName);
     }
@@ -912,7 +920,11 @@ class HelixBootstrapUpgradeUtil {
   private void logSummary() {
     if (instancesUpdated + instancesAdded + instancesDropped + resourcesUpdated + resourcesAdded + resourcesDropped
         > 0) {
-      info("========Cluster in Helix was updated, summary:========");
+      if (!dryRun) {
+        info("========Cluster in Helix was updated, summary:========");
+      } else {
+        info("========Dry run: Actual run would update the cluster in the following way:========");
+      }
       info("New instances added: {}", instancesAdded);
       info("Existing instances updated: {}", instancesUpdated);
       info("Existing instances dropped: {}", instancesDropped);

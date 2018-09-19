@@ -192,18 +192,18 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipantDummy =
         new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(propsDummy)), helixManagerFactory);
     HelixParticipant helixParticipantSpy = Mockito.spy(helixParticipant);
-    helixParticipant.participate(Collections.EMPTY_LIST);
-    helixParticipantDummy.participate(Collections.EMPTY_LIST);
-    helixParticipantSpy.participate(Collections.EMPTY_LIST);
+    helixParticipant.participate(Collections.emptyList());
+    helixParticipantDummy.participate(Collections.emptyList());
+    helixParticipantSpy.participate(Collections.emptyList());
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     InstanceConfig instanceConfig = new InstanceConfig("testInstanceId");
     helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
     helixAdmin.setInstanceConfig(clusterName, instanceNameDummy, null);
 
-    //Make sure the current stoppedReplicas list is null
+    //Make sure the current stoppedReplicas list is non-null and empty
     List<String> stoppedReplicas = helixParticipant.getStoppedReplicas();
-    assertTrue("stoppedReplicas list should be empty", stoppedReplicas.isEmpty());
+    assertEquals("stoppedReplicas list should be empty", Collections.emptyList(), stoppedReplicas);
 
     String listName = "stoppedReplicas list";
 
@@ -275,7 +275,7 @@ public class HelixParticipantTest {
     helixManagerFactory.helixManager.beBad = true;
     HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
     try {
-      helixParticipant.participate(Collections.EMPTY_LIST);
+      helixParticipant.participate(Collections.emptyList());
       fail("Participation should have failed");
     } catch (IOException e) {
       // OK
@@ -310,7 +310,7 @@ public class HelixParticipantTest {
   public void testHelixParticipant() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
-    participant.participate(Collections.EMPTY_LIST);
+    participant.participate(Collections.emptyList());
     MockHelixManager helixManager = helixManagerFactory.helixManager;
     assertTrue(helixManager.isConnected());
     assertEquals(LeaderStandbySMD.name, helixManager.stateModelDef);

@@ -156,7 +156,7 @@ public class ClusterMapConfig {
    * The current xid for this cluster manager. Any changes beyond this xid will be ignored by the cluster manager.
    */
   @Config("clustermap.current.xid")
-  @Default("Long.MAX")
+  @Default("Long.MAX_VALUE")
   public final Long clustermapCurrentXid;
 
   /**
