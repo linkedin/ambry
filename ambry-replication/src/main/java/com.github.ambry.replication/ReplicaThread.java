@@ -720,7 +720,7 @@ class ReplicaThread implements Runnable {
     if (!partitionRequestInfoList.isEmpty()) {
       GetRequest getRequest = new GetRequest(correlationIdGenerator.incrementAndGet(),
           GetRequest.Replication_Client_Id_Prefix + dataNodeId.getHostname(), MessageFormatFlags.All,
-          partitionRequestInfoList, GetOption.None);
+          partitionRequestInfoList, GetOption.Include_All);
       long startTime = SystemTime.getInstance().milliseconds();
       try {
         connectedChannel.send(getRequest);
@@ -801,7 +801,8 @@ class ReplicaThread implements Runnable {
               }
               messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
               if (messageInfoList.size() == 0) {
-                logger.error("MessageInfoList is of size 0 as all messages are invalidated or deprecated");
+                logger.error(
+                    "MessageInfoList is of size 0 as all messages are invalidated, deprecated, deleted or expired.");
               } else {
                 writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
                 remoteReplicaInfo.getLocalStore().put(writeset);

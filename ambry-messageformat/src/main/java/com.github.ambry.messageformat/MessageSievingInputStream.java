@@ -51,6 +51,8 @@ public class MessageSievingInputStream extends InputStream {
   public final Histogram batchMessageSieveTime;
   public final Counter messageSievingCorruptMessagesDiscardedCount;
   public final Counter messageSievingDeprecatedMessagesDiscardedCount;
+  public final Counter messageSievingDeletedMessagesDiscardedCount;
+  public final Counter messageSievingExpiredMessagesDiscardedCount;
 
   /**
    * @param inStream The stream from which bytes need to be read. If the underlying stream is SocketInputStream, it needs
@@ -63,16 +65,18 @@ public class MessageSievingInputStream extends InputStream {
       List<Transformer> transformers, MetricRegistry metricRegistry) throws IOException {
     this.logger = LoggerFactory.getLogger(getClass());
     this.transformers = transformers;
-    singleMessageSieveTime = metricRegistry.histogram(
-        MetricRegistry.name(MessageSievingInputStream.class, "SingleMessageSieveTime"));
-    batchMessageSieveTime = metricRegistry.histogram(
-        MetricRegistry.name(MessageSievingInputStream.class, "BatchMessageSieveTime"));
+    singleMessageSieveTime =
+        metricRegistry.histogram(MetricRegistry.name(MessageSievingInputStream.class, "SingleMessageSieveTime"));
+    batchMessageSieveTime =
+        metricRegistry.histogram(MetricRegistry.name(MessageSievingInputStream.class, "BatchMessageSieveTime"));
     messageSievingCorruptMessagesDiscardedCount = metricRegistry.counter(
-        MetricRegistry.name(MessageSievingInputStream.class,
-            "MessageSievingCorruptMessagesDiscardedCount"));
+        MetricRegistry.name(MessageSievingInputStream.class, "MessageSievingCorruptMessagesDiscardedCount"));
     messageSievingDeprecatedMessagesDiscardedCount = metricRegistry.counter(
-        MetricRegistry.name(MessageSievingInputStream.class,
-            "MessageSievingDeprecatedMessagesDiscardedCount"));
+        MetricRegistry.name(MessageSievingInputStream.class, "MessageSievingDeprecatedMessagesDiscardedCount"));
+    messageSievingDeletedMessagesDiscardedCount = metricRegistry.counter(
+        MetricRegistry.name(MessageSievingInputStream.class, "MessageSievingDeletedMessagesDiscardedCount"));
+    messageSievingExpiredMessagesDiscardedCount = metricRegistry.counter(
+        MetricRegistry.name(MessageSievingInputStream.class, "MessageSievingExpiredMessagesDiscardedCount"));
     sievedStreamSize = 0;
     hasInvalidMessages = false;
     hasDeprecatedMessages = false;
@@ -102,7 +106,15 @@ public class MessageSievingInputStream extends InputStream {
       // @todo: (say, due to corruption). This can help avoid a copy.
       Message msg = new Message(msgInfo, new ByteArrayInputStream(Utils.readBytesFromStream(inStream, msgSize)));
       logger.trace("Read stream for message info " + msgInfo + "  into memory");
-      sieve(msg, msgStreamList, bytesRead);
+      if (msg.getMessageInfo().isDeleted()) {
+        messageSievingDeletedMessagesDiscardedCount.inc();
+        logger.trace("Skipping message with key {}, because it is deleted.", msg.getMessageInfo().getStoreKey());
+      } else if (msg.getMessageInfo().isExpired()) {
+        messageSievingExpiredMessagesDiscardedCount.inc();
+        logger.trace("Skipping message with key {}, because it has expired.", msg.getMessageInfo().getStoreKey());
+      } else {
+        validateAndTransform(msg, msgStreamList, bytesRead);
+      }
       bytesRead += msgSize;
     }
     if (bytesRead != totalMessageListSize) {
@@ -179,7 +191,7 @@ public class MessageSievingInputStream extends InputStream {
    * @param msgOffset the offset of the message in the stream.
    * @throws IOException if an exception was encountered reading or writing bytes to/from streams.
    */
-  private void sieve(Message inMsg, List<InputStream> msgStreamList, int msgOffset) throws IOException {
+  private void validateAndTransform(Message inMsg, List<InputStream> msgStreamList, int msgOffset) throws IOException {
     if (transformers == null || transformers.isEmpty()) {
       // Write the message without any transformations.
       sievedMessageInfoList.add(inMsg.getMessageInfo());

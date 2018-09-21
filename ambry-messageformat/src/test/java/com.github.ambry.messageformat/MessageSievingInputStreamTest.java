@@ -372,20 +372,25 @@ public class MessageSievingInputStreamTest {
   }
 
   /**
-   * Test the case where there are corrupt messages.
+   * Test the case where there are corrupt messages, messages that are deleted and messages that are expired.
    */
   @Test
-  public void testInValidBlobsAgainstCorruption() throws Exception {
-    testInValidBlobs(Blob_Version_V1, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1);
-    testInValidBlobs(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
-    testInValidBlobs(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
+  public void testInValidDeletedAndExpiredBlobsAgainstCorruption() throws Exception {
+    testInValidDeletedAndExpiredBlobs(Blob_Version_V1, BlobType.DataBlob,
+        MessageFormatRecord.Message_Header_Version_V1);
+    testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.DataBlob,
+        MessageFormatRecord.Message_Header_Version_V2);
+    testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.MetadataBlob,
+        MessageFormatRecord.Message_Header_Version_V2);
   }
 
-  private void testInValidBlobs(short blobVersion, BlobType blobType, short headerVersionToUse) throws Exception {
+  private void testInValidDeletedAndExpiredBlobs(short blobVersion, BlobType blobType, short headerVersionToUse)
+      throws Exception {
     MessageFormatRecord.headerVersionToUse = headerVersionToUse;
 
-    // MessageSievingInputStream contains put records for 2 valid blobs and 1 corrupt blob
-    // id1(put record for valid blob), id2(corrupt) and id3(put record for valid blob)
+    // MessageSievingInputStream contains put records for 2 valid blobs, 1 corrupt blob, 1 deleted blob and 1 expired.
+    // id1(put record for valid blob), id2(corrupt), id3(put record of deleted blob), id4(put record of expired blob)
+    // and id3(put record for valid blob)
 
     // create message stream for blob 1
     StoreKey key1 = new MockId("id1");
@@ -453,13 +458,11 @@ public class MessageSievingInputStreamTest {
 
     InputStream corruptStream = new ByteBufferInputStream(ByteBuffer.wrap(corruptMessageStream));
 
-    // create message stream for blob 3
+    // create message stream for blob 3 that is deleted.
     StoreKey key3 = new MockId("id3");
     short accountId3 = Utils.getRandomShort(RANDOM);
     short containerId3 = Utils.getRandomShort(RANDOM);
     BlobProperties prop3 = new BlobProperties(10, "servid3", accountId3, containerId3, false);
-    byte[] encryptionKey3 = new byte[100];
-    RANDOM.nextBytes(encryptionKey3);
     byte[] usermetadata3 = new byte[1000];
     RANDOM.nextBytes(usermetadata3);
     blobContentSize = 2000;
@@ -473,24 +476,89 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
     MessageFormatInputStream messageFormatStream3 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key3, ByteBuffer.wrap(encryptionKey3), prop3,
+        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key3, null, prop3,
             ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
 
+    // MessageInfo marks this blob as deleted.
     MessageInfo msgInfo3 =
-        new MessageInfo(key3, messageFormatStream3.getSize(), accountId3, containerId3, prop3.getCreationTimeInMs());
+        new MessageInfo(key3, messageFormatStream3.getSize(), true, false, Utils.Infinite_Time, accountId3,
+            containerId3, prop3.getCreationTimeInMs());
+
+    // create message stream for blob 4 that is expired.
+    StoreKey key4 = new MockId("id4");
+    short accountId4 = Utils.getRandomShort(RANDOM);
+    short containerId4 = Utils.getRandomShort(RANDOM);
+    BlobProperties prop4 = new BlobProperties(10, "servid4", accountId4, containerId4, false);
+    byte[] usermetadata4 = new byte[1000];
+    RANDOM.nextBytes(usermetadata4);
+    blobContentSize = 2000;
+    byte[] data4 = new byte[blobContentSize];
+    RANDOM.nextBytes(data4);
+    if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
+      data4 = byteBufferBlob.array();
+      blobContentSize = data4.length;
+    }
+    ByteBufferInputStream stream4 = new ByteBufferInputStream(ByteBuffer.wrap(data4));
+
+    MessageFormatInputStream messageFormatStream4 =
+        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key4, null, prop4,
+            ByteBuffer.wrap(usermetadata4), stream4, blobContentSize, blobType)
+            : new PutMessageFormatBlobV1InputStream(key4, prop4, ByteBuffer.wrap(usermetadata4), stream4,
+                blobContentSize, blobType);
+
+    // MessageInfo marks this as already expired (the third field is an absolute expiresAt time).
+    MessageInfo msgInfo4 =
+        new MessageInfo(key4, messageFormatStream4.getSize(), 1, accountId4, containerId4, prop4.getCreationTimeInMs());
+
+    // create message stream for blob 5
+    StoreKey key5 = new MockId("id5");
+    short accountId5 = Utils.getRandomShort(RANDOM);
+    short containerId5 = Utils.getRandomShort(RANDOM);
+    BlobProperties prop5 = new BlobProperties(10, "servid5", accountId5, containerId5, false);
+    byte[] encryptionKey5 = new byte[100];
+    RANDOM.nextBytes(encryptionKey5);
+    byte[] usermetadata5 = new byte[1000];
+    RANDOM.nextBytes(usermetadata5);
+    blobContentSize = 2000;
+    byte[] data5 = new byte[blobContentSize];
+    RANDOM.nextBytes(data5);
+    if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
+      data5 = byteBufferBlob.array();
+      blobContentSize = data5.length;
+    }
+    ByteBufferInputStream stream5 = new ByteBufferInputStream(ByteBuffer.wrap(data5));
+
+    MessageFormatInputStream messageFormatStream5 =
+        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key5, ByteBuffer.wrap(encryptionKey5), prop5,
+            ByteBuffer.wrap(usermetadata5), stream5, blobContentSize, blobType)
+            : new PutMessageFormatBlobV1InputStream(key5, prop5, ByteBuffer.wrap(usermetadata5), stream5,
+                blobContentSize, blobType);
+
+    MessageInfo msgInfo5 =
+        new MessageInfo(key5, messageFormatStream5.getSize(), accountId5, containerId5, prop5.getCreationTimeInMs());
 
     //create input stream for all blob messages together
     byte[] totalMessageStreamContent =
         new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
-            + (int) messageFormatStream3.getSize()];
+            + (int) messageFormatStream3.getSize() + (int) messageFormatStream4.getSize()
+            + (int) messageFormatStream5.getSize()];
     messageFormatStream1.read(totalMessageStreamContent, 0, (int) messageFormatStream1.getSize());
     corruptStream.read(totalMessageStreamContent, (int) messageFormatStream1.getSize(),
         (int) messageFormatStream2.getSize());
     messageFormatStream3.read(totalMessageStreamContent,
         (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
         (int) messageFormatStream3.getSize());
+    messageFormatStream4.read(totalMessageStreamContent,
+        (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
+            + (int) messageFormatStream3.getSize(), (int) messageFormatStream4.getSize());
+    messageFormatStream5.read(totalMessageStreamContent,
+        (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
+            + (int) messageFormatStream3.getSize() + (int) messageFormatStream4.getSize(),
+        (int) messageFormatStream5.getSize());
 
     InputStream inputStream = new ByteBufferInputStream(ByteBuffer.wrap(totalMessageStreamContent));
 
@@ -498,11 +566,13 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo1);
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
+    msgInfoList.add(msgInfo4);
+    msgInfoList.add(msgInfo5);
 
     MessageSievingInputStream sievedStream =
         new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry());
 
-    Map<StoreKey, StoreKey> convertedMap = randomKeyConverter.convert(Arrays.asList(key1, key2, key3));
+    Map<StoreKey, StoreKey> convertedMap = randomKeyConverter.convert(Arrays.asList(key1, key2, key3, key4, key5));
 
     int headerSize =
         headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
@@ -515,11 +585,11 @@ public class MessageSievingInputStreamTest {
     int totalUserMetadataSize = 2 * userMetadataSize;
     int totalBlobSize = 2 * (int) blobSize;
     int totalKeySize =
-        options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key1).sizeInBytes() + convertedMap.get(key3)
-            .sizeInBytes() : key1.sizeInBytes() + key3.sizeInBytes();
+        options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key1).sizeInBytes() + convertedMap.get(key5)
+            .sizeInBytes() : key1.sizeInBytes() + key5.sizeInBytes();
     int totalEncryptionRecordSize = blobVersion > Blob_Version_V1 ?
         BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey1))
-            + BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey3)) : 0;
+            + BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey5)) : 0;
 
     if (!options.isEmpty()) {
       Assert.assertTrue(sievedStream.hasInvalidMessages());
@@ -535,30 +605,39 @@ public class MessageSievingInputStreamTest {
           blobType);
 
       verifySievedTransformedMessage(sievedStream,
-          options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key3) : key3, "servid3", accountId3,
-          containerId3, blobVersion > Blob_Version_V1 ? encryptionKey3 : null, usermetadata3, data3, blobVersion,
+          options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key5) : key5, "servid5", accountId5,
+          containerId5, blobVersion > Blob_Version_V1 ? encryptionKey5 : null, usermetadata5, data5, blobVersion,
           blobType);
     } else {
-      Assert.assertEquals(totalMessageStreamContent.length, sievedStream.getSize());
+      // even if there are no transformers, deleted and expired messages should be dropped by the MessageSievingInputStream.
+      byte[] expectedBytes = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
+          + (int) messageFormatStream5.getSize()];
+      System.arraycopy(totalMessageStreamContent, 0, expectedBytes, 0,
+          (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize());
+      System.arraycopy(totalMessageStreamContent,
+          totalMessageStreamContent.length - (int) messageFormatStream5.getSize(), expectedBytes,
+          (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
+          (int) messageFormatStream5.getSize());
+      Assert.assertEquals(expectedBytes.length, sievedStream.getSize());
       byte[] sievedBytes = Utils.readBytesFromStream(sievedStream, sievedStream.getSize());
-      Assert.assertArrayEquals(totalMessageStreamContent, sievedBytes);
+      Assert.assertArrayEquals(expectedBytes, sievedBytes);
     }
 
     Assert.assertEquals(-1, sievedStream.read());
   }
 
   /**
-   * Test the case where there are deleted messages.
+   * Test the case where there are delete records in messages.
    */
   @Test
-  public void testDeletedBlobsAgainstCorruption() throws Exception {
-    testDeletedBlobs(Blob_Version_V1, BlobType.DataBlob);
-    testDeletedBlobs(Blob_Version_V2, BlobType.DataBlob);
-    testDeletedBlobs(Blob_Version_V2, BlobType.MetadataBlob);
+  public void testDeletedRecordsAgainstCorruption() throws Exception {
+    testDeletedRecords(Blob_Version_V1, BlobType.DataBlob);
+    testDeletedRecords(Blob_Version_V2, BlobType.DataBlob);
+    testDeletedRecords(Blob_Version_V2, BlobType.MetadataBlob);
   }
 
-  private void testDeletedBlobs(short blobVersion, BlobType blobType) throws Exception {
-    // MessageSievingInputStream contains put records for 2 valid blobs and 1 deleted blob
+  private void testDeletedRecords(short blobVersion, BlobType blobType) throws Exception {
+    // MessageSievingInputStream contains put records for 2 valid blobs and 1 delete record
     // id1(put record for valid blob), id2(delete record) and id3(put record for valid blob)
     ArrayList<Short> versions = new ArrayList<>();
     versions.add(Message_Header_Version_V1);
