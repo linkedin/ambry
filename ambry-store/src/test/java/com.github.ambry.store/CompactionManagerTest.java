@@ -366,7 +366,7 @@ public class CompactionManagerTest {
    * Tests for cases where compaction is disabled or enabled on a given BlobStore
    */
   @Test
-  public void testControlCompactionForBlobStore() throws Exception {
+  public void testControlCompactionForBlobStore() {
     // without compaction enabled.
     compactionManager.enable();
     assertTrue("Disable compaction on BlobStore should be true when compaction executor is not instantiated",

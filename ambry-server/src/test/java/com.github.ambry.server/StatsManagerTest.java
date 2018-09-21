@@ -57,6 +57,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.After;
 import org.junit.Test;
@@ -142,12 +143,13 @@ public class StatsManagerTest {
   @Test
   public void testStatsManagerCollectAggregateAndPublish() throws IOException {
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
-    List<String> unreachableStores = Collections.emptyList();
+    List<PartitionId> unreachablePartitions = Collections.emptyList();
     for (PartitionId partitionId : storeMap.keySet()) {
-      statsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
+      statsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
     }
     assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
         preAggregatedSnapshot.equals(actualSnapshot));
+    List<String> unreachableStores = statsManager.examineUnreachablePartitions(unreachablePartitions);
     StatsHeader statsHeader =
         new StatsHeader(StatsHeader.StatsDescription.QUOTA, SystemTime.getInstance().milliseconds(),
             storeMap.keySet().size(), storeMap.keySet().size(), unreachableStores);
@@ -165,7 +167,7 @@ public class StatsManagerTest {
    * @throws StoreException
    */
   @Test
-  public void testStatsManagerWithProblematicStores() throws StoreException {
+  public void testStatsManagerWithProblematicStores() throws IOException, StoreException {
     DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
         Collections.singletonList("/tmp"), "DC1");
     Map<PartitionId, Store> problematicStoreMap = new HashMap<>();
@@ -181,16 +183,21 @@ public class StatsManagerTest {
     StatsManager testStatsManager = new StatsManager(new MockStorageManager(problematicStoreMap),
         Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)), new MetricRegistry(),
         config, new MockTime());
-    List<String> unreachableStores = new ArrayList<>();
+    List<PartitionId> unreachablePartitions = new ArrayList<>();
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
-      testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
+      testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
     }
     assertEquals("Aggregated StatsSnapshot should not contain any value", 0L, actualSnapshot.getValue());
-    assertEquals("Unreachable store count mismatch with expected value", 2, unreachableStores.size());
+    assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
+    String statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
+    StatsWrapper statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    List<String> unreachableStores = statsWrapper.getHeader().getUnreachableStores();
+    assertTrue("The unreachable store list should contain Partition1 and Partition2",
+        unreachableStores.containsAll(Arrays.asList(partitionId1.toPathString(), partitionId2.toPathString())));
     // test for the scenario where some stores are healthy and some are bad
     Map<PartitionId, Store> mixedStoreMap = new HashMap<>(storeMap);
-    unreachableStores.clear();
+    unreachablePartitions.clear();
     PartitionId partitionId3 = new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS,
         Collections.singletonList((MockDataNodeId) dataNodeId), 0);
     PartitionId partitionId4 = new MockPartitionId(4, MockClusterMap.DEFAULT_PARTITION_CLASS,
@@ -202,60 +209,155 @@ public class StatsManagerTest {
         config, new MockTime());
     actualSnapshot = new StatsSnapshot(0L, null);
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
-      testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
+      testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
     }
     assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
         preAggregatedSnapshot.equals(actualSnapshot));
-    assertEquals("Unreachable store count mismatch with expected value", 2, unreachableStores.size());
+    assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
     // test fetchSnapshot method in StatsManager
-    unreachableStores.clear();
+    unreachablePartitions.clear();
     // partition 0, 1, 2 are healthy stores, partition 3, 4 are bad ones.
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
       StatsSnapshot snapshot =
-          testStatsManager.fetchSnapshot(partitionId, unreachableStores, StatsReportType.ACCOUNT_REPORT);
+          testStatsManager.fetchSnapshot(partitionId, unreachablePartitions, StatsReportType.ACCOUNT_REPORT);
       if (Integer.valueOf(partitionId.toPathString()) < 3) {
         assertTrue("Actual StatsSnapshot does not match with expected snapshot",
             snapshot.equals(partitionToSnapshot.get(partitionId)));
       }
     }
-    assertEquals("Unreachable store count mismatch with expected value", 2, unreachableStores.size());
+    assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
   }
 
   /**
-   * Test to verify the {@link StatsManager} behaves correctly when dynamically adding/removing {@link com.github.ambry.store.BlobStore}.
+   * Test to verify the {@link StatsManager} behaves correctly when dynamically adding/removing {@link ReplicaId}.
    * @throws StoreException
    * @throws IOException
    */
   @Test
   public void testAddAndRemoveBlobStore() throws StoreException, IOException {
-    StatsManager testStatsManager =
-        new StatsManager(new MockStorageManager(storeMap), replicas, new MetricRegistry(), config, new MockTime());
-    // verify that adding an existing store to StatsManager should fail
-    assertFalse("Adding a store which already exists should fail", testStatsManager.addBlobStore(replicas.get(0)));
+    // setup testing environment
+    Map<PartitionId, Store> testStoreMap = new HashMap<>();
+    List<ReplicaId> testReplicas = new ArrayList<>();
     DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
         Collections.singletonList("/tmp"), "DC1");
-    PartitionId partitionId2 =
-        new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
-    // verify that partitionId2 is not in stats report before adding to statsManager
-    String statsWrapperJSON = testStatsManager.getNodeStatsInJSON();
-    StatsWrapper statsWrapper = mapper.readValue(statsWrapperJSON, StatsWrapper.class);
-    assertFalse("ParitionId2 should not present in stats report",
-        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId2.toPathString()));
-    // verify that after adding into statsManager, PartitionId2 is in stats report
-    testStatsManager.addBlobStore(partitionId2.getReplicaIds().get(0));
-    statsWrapperJSON = testStatsManager.getNodeStatsInJSON();
-    statsWrapper = mapper.readValue(statsWrapperJSON, StatsWrapper.class);
-    assertTrue("PartitionId2 should present in stats report",
-        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId2.toPathString()));
+    Map<StatsReportType, StatsSnapshot> snapshotsByType = new HashMap<>();
+    snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, preAggregatedSnapshot);
+    for (int i = 0; i < 3; i++) {
+      PartitionId partitionId = new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS,
+          Collections.singletonList((MockDataNodeId) dataNodeId), 0);
+      testStoreMap.put(partitionId, new MockStore(new MockStoreStats(snapshotsByType, false)));
+      testReplicas.add(partitionId.getReplicaIds().get(0));
+    }
+    StorageManager mockStorageManager = new MockStorageManager(testStoreMap);
+    StatsManager testStatsManager =
+        new StatsManager(mockStorageManager, testReplicas, new MetricRegistry(), config, new MockTime());
+
+    // verify that adding an existing store to StatsManager should fail
+    assertFalse("Adding a store which already exists should fail", testStatsManager.addReplica(testReplicas.get(0)));
+    PartitionId partitionId3 = new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        Collections.singletonList((MockDataNodeId) dataNodeId), 0);
+    testStoreMap.put(partitionId3, new MockStore(new MockStoreStats(snapshotsByType, false)));
+    // verify that partitionId3 is not in stats report before adding to statsManager
+    String statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
+    StatsWrapper statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    assertFalse("Partition3 should not present in stats report",
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId3.toPathString()));
+    // verify that after adding into statsManager, PartitionId3 is in stats report
+    testStatsManager.addReplica(partitionId3.getReplicaIds().get(0));
+    statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
+    statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    assertTrue("Partition3 should present in stats report",
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId3.toPathString()));
     // verify that after removing PartitionId0 (corresponding to the first replica in replicas list), PartitionId0 is not in the stats report
-    PartitionId partitionId0 = replicas.get(0).getPartitionId();
-    assertTrue("ParitionId0 should present in stats report before removal",
+    PartitionId partitionId0 = testReplicas.get(0).getPartitionId();
+    assertTrue("Partition0 should present in stats report before removal",
         statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toPathString()));
-    testStatsManager.removeBlobStore(replicas.get(0));
-    statsWrapperJSON = testStatsManager.getNodeStatsInJSON();
-    statsWrapper = mapper.readValue(statsWrapperJSON, StatsWrapper.class);
-    assertFalse("ParitionId0 should not present in stats report after removal",
+    testStoreMap.remove(testReplicas.get(0).getPartitionId());
+    testStatsManager.removeReplica(testReplicas.get(0));
+    statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
+    statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    assertFalse("Partition0 should not present in stats report after removal",
         statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toPathString()));
+
+    // concurrent remove test
+    CountDownLatch getStatsCountdown1 = new CountDownLatch(1);
+    CountDownLatch waitRemoveCountdown = new CountDownLatch(1);
+    ((MockStorageManager) mockStorageManager).waitOperationCountdown = waitRemoveCountdown;
+    ((MockStorageManager) mockStorageManager).firstCall = true;
+    ((MockStorageManager) mockStorageManager).unreachablePartitions.clear();
+    for (Store store : testStoreMap.values()) {
+      ((MockStore) store).getStatsCountdown = getStatsCountdown1;
+      ((MockStore) store).isCollected = false;
+    }
+    List<PartitionId> partitionRemoved = new ArrayList<>();
+    Utils.newThread(() -> {
+      // wait until at least one store has been collected (this ensures stats aggregation using old snapshot of map)
+      try {
+        getStatsCountdown1.await();
+      } catch (InterruptedException e) {
+        throw new IllegalStateException("CountDown await was interrupted", e);
+      }
+      // find one store which hasn't been collected
+      ReplicaId replicaToRemove = null;
+      for (Map.Entry<PartitionId, Store> partitionToStore : testStoreMap.entrySet()) {
+        MockStore store = (MockStore) partitionToStore.getValue();
+        if (!store.isCollected) {
+          replicaToRemove = partitionToStore.getKey().getReplicaIds().get(0);
+          break;
+        }
+      }
+      if (replicaToRemove != null) {
+        testStatsManager.removeReplica(replicaToRemove);
+        testStoreMap.remove(replicaToRemove.getPartitionId());
+        partitionRemoved.add(replicaToRemove.getPartitionId());
+        // count down to allow stats aggregation to proceed
+        waitRemoveCountdown.countDown();
+      }
+    }, false).start();
+    statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
+    statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    // verify that the removed store is indeed unreachable during stats aggregation
+    assertTrue("The removed partition should be unreachable during aggregation",
+        ((MockStorageManager) mockStorageManager).unreachablePartitions.contains(partitionRemoved.get(0)));
+    // verify unreachable store list doesn't contain the store which is removed.
+    List<String> unreachableStores = statsWrapper.getHeader().getUnreachableStores();
+    assertFalse("The removed partition should not present in unreachable list",
+        unreachableStores.contains(partitionRemoved.get(0).toPathString()));
+
+    // concurrent add test
+    CountDownLatch getStatsCountdown2 = new CountDownLatch(1);
+    CountDownLatch waitAddCountdown = new CountDownLatch(1);
+    ((MockStorageManager) mockStorageManager).waitOperationCountdown = waitAddCountdown;
+    ((MockStorageManager) mockStorageManager).firstCall = true;
+    ((MockStorageManager) mockStorageManager).unreachablePartitions.clear();
+    for (Store store : testStoreMap.values()) {
+      ((MockStore) store).getStatsCountdown = getStatsCountdown2;
+      ((MockStore) store).isCollected = false;
+    }
+    PartitionId partitionId4 = new MockPartitionId(4, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        Collections.singletonList((MockDataNodeId) dataNodeId), 0);
+    Utils.newThread(() -> {
+      // wait until at least one store has been collected (this ensures stats aggregation using old snapshot of map)
+      try {
+        getStatsCountdown2.await();
+      } catch (InterruptedException e) {
+        throw new IllegalStateException("CountDown await was interrupted", e);
+      }
+      testStatsManager.addReplica(partitionId4.getReplicaIds().get(0));
+      testStoreMap.put(partitionId4, new MockStore(new MockStoreStats(snapshotsByType, false)));
+      // count down to allow stats aggregation to proceed
+      waitAddCountdown.countDown();
+    }, false).start();
+    statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
+    statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    // verify that new added PartitionId4 is not in report for this round of aggregation
+    assertFalse("Partition4 should not present in stats report",
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId4.toPathString()));
+    // verify that new added PartitionId4 will be collected for next round of aggregation
+    statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
+    statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    assertTrue("Partition4 should present in stats report",
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId4.toPathString()));
   }
 
   /**
@@ -354,16 +456,34 @@ public class StatsManagerTest {
   static class MockStorageManager extends StorageManager {
     private static final VerifiableProperties VPROPS = new VerifiableProperties(new Properties());
     private final Map<PartitionId, Store> storeMap;
+    CountDownLatch waitOperationCountdown;
+    boolean firstCall;
+    List<PartitionId> unreachablePartitions;
 
     MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
       super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), null, new MetricRegistry(), new ArrayList<>(), null,
           null, null, null, SystemTime.getInstance());
       storeMap = map;
+      waitOperationCountdown = new CountDownLatch(0);
+      firstCall = true;
+      unreachablePartitions = new ArrayList<>();
     }
 
     @Override
     public Store getStore(PartitionId id) {
-      return storeMap.get(id);
+      if (!firstCall) {
+        try {
+          waitOperationCountdown.await();
+        } catch (InterruptedException e) {
+          throw new IllegalStateException("CountDown await was interrupted", e);
+        }
+      }
+      firstCall = false;
+      Store storeToReturn = storeMap.get(id);
+      if (storeToReturn == null) {
+        unreachablePartitions.add(id);
+      }
+      return storeToReturn;
     }
   }
 
@@ -372,9 +492,13 @@ public class StatsManagerTest {
    */
   private class MockStore implements Store {
     private final StoreStats storeStats;
+    CountDownLatch getStatsCountdown;
+    boolean isCollected;
 
     MockStore(StoreStats storeStats) {
       this.storeStats = storeStats;
+      getStatsCountdown = new CountDownLatch(0);
+      isCollected = false;
     }
 
     @Override
@@ -414,6 +538,8 @@ public class StatsManagerTest {
 
     @Override
     public StoreStats getStoreStats() {
+      isCollected = true;
+      getStatsCountdown.countDown();
       return storeStats;
     }
 

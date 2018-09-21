@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -127,12 +128,13 @@ class StatsManager {
    * Fetch and aggregate stats from a given {@link Store}
    * @param aggregatedSnapshot the {@link StatsSnapshot} to hold the aggregated result
    * @param partitionId specifies the {@link Store} to be fetched from
-   * @param unreachableStores a {@link List} containing partition Ids that were unable to successfully fetch from
+   * @param unreachablePartitions a {@link List} containing partition Ids that were unable to successfully fetch from
    */
-  void collectAndAggregate(StatsSnapshot aggregatedSnapshot, PartitionId partitionId, List<String> unreachableStores) {
+  void collectAndAggregate(StatsSnapshot aggregatedSnapshot, PartitionId partitionId,
+      List<PartitionId> unreachablePartitions) {
     Store store = storageManager.getStore(partitionId);
     if (store == null) {
-      unreachableStores.add(partitionId.toString());
+      unreachablePartitions.add(partitionId);
     } else {
       try {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
@@ -141,7 +143,7 @@ class StatsManager {
         StatsSnapshot.aggregate(aggregatedSnapshot, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {
-        unreachableStores.add(partitionId.toString());
+        unreachablePartitions.add(partitionId);
       }
     }
   }
@@ -149,14 +151,15 @@ class StatsManager {
   /**
    * Fetch the {@link StatsSnapshot} for the given {@link PartitionId}.
    * @param partitionId the {@link PartitionId} to try to fetch the {@link StatsSnapshot} from
-   * @param unreachableStores a list of partitionIds to keep track of the unreachable stores (partitions)
+   * @param unreachablePartitions a list of partitionIds to keep track of the unreachable partitions
    * @return the generated {@link StatsSnapshot}
    */
-  StatsSnapshot fetchSnapshot(PartitionId partitionId, List<String> unreachableStores, StatsReportType reportType) {
+  StatsSnapshot fetchSnapshot(PartitionId partitionId, List<PartitionId> unreachablePartitions,
+      StatsReportType reportType) {
     StatsSnapshot statsSnapshot = null;
     Store store = storageManager.getStore(partitionId);
     if (store == null) {
-      unreachableStores.add(partitionId.toString());
+      unreachablePartitions.add(partitionId);
     } else {
       try {
         Map<StatsReportType, StatsSnapshot> snapshotsByType =
@@ -166,32 +169,36 @@ class StatsManager {
         String reportTypeStr = reportType.toString();
         logger.error("StoreException on fetching {} stats snapshot for store {}",
             reportTypeStr.substring(0, reportTypeStr.lastIndexOf('_')), store, e);
-        unreachableStores.add(partitionId.toString());
+        unreachablePartitions.add(partitionId);
       }
     }
     return statsSnapshot;
   }
 
   /**
-   * Add new {@link com.github.ambry.store.BlobStore} to StatsManager and thus stats of this store will be collected during
-   * next round of aggregation.
+   * Add new {@link ReplicaId} to StatsManager and thus stats of this store will be collected during next round of aggregation.
    * @param id the {@link ReplicaId} associated with store to be added
    * @return {@code true} if adding store was successful. {@code false} if not.
    */
-  boolean addBlobStore(ReplicaId id) {
+  boolean addReplica(ReplicaId id) {
+    boolean addResult = true;
     if (partitionToReplicaMap.containsKey(id.getPartitionId())) {
-      return false;
+      addResult = false;
+      logger.error("Failed to add " + id.getPartitionId() + " because it is already in StatsManager");
+    } else {
+      partitionToReplicaMap.put(id.getPartitionId(), id);
+      logger.info(id.getPartitionId() + " is added into StatsManager");
     }
-    partitionToReplicaMap.put(id.getPartitionId(), id);
-    return true;
+    return addResult;
   }
 
   /**
-   * Remove {@link com.github.ambry.store.BlobStore} from StatsManager and thus it won't be checked during next round of aggregation.
+   * Remove {@link ReplicaId} from StatsManager and thus it won't be checked during next round of aggregation.
    * @param id the {@link ReplicaId} associated with store to be removed
    */
-  void removeBlobStore(ReplicaId id) {
+  void removeReplica(ReplicaId id) {
     partitionToReplicaMap.remove(id.getPartitionId());
+    logger.info(id.getPartitionId() + " is removed from StatsManager");
   }
 
   /**
@@ -206,12 +213,12 @@ class StatsManager {
       long totalFetchAndAggregateStartTimeMs = time.milliseconds();
       StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
       long totalValue = 0;
-      List<String> unreachableStores = new ArrayList<>();
-      Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
+      List<PartitionId> unreachablePartitions = new ArrayList<>();
+      Iterator<PartitionId> iterator = (new HashSet<>(partitionToReplicaMap.keySet())).iterator();
       while (iterator.hasNext()) {
         PartitionId partitionId = iterator.next();
         long fetchSnapshotStartTimeMs = time.milliseconds();
-        StatsSnapshot statsSnapshot = fetchSnapshot(partitionId, unreachableStores, statsReportType);
+        StatsSnapshot statsSnapshot = fetchSnapshot(partitionId, unreachablePartitions, statsReportType);
         if (statsSnapshot != null) {
           combinedSnapshot.getSubMap().put(partitionId.toString(), statsSnapshot);
           totalValue += statsSnapshot.getValue();
@@ -219,6 +226,7 @@ class StatsManager {
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchSnapshotStartTimeMs);
       }
       combinedSnapshot.setValue(totalValue);
+      List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
       metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
       StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(),
           partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
@@ -243,13 +251,14 @@ class StatsManager {
       try {
         long totalFetchAndAggregateStartTimeMs = time.milliseconds();
         StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
-        List<String> unreachableStores = new ArrayList<>();
-        Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
+        List<PartitionId> unreachablePartitions = new ArrayList<>();
+        Iterator<PartitionId> iterator = (new HashSet<>(partitionToReplicaMap.keySet())).iterator();
         while (!cancelled && iterator.hasNext()) {
           PartitionId partitionId = iterator.next();
           logger.info("Aggregating stats for local report started for store {}", partitionId);
-          collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
+          collectAndAggregate(aggregatedSnapshot, partitionId, unreachablePartitions);
         }
+        List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
           StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(),
@@ -268,5 +277,23 @@ class StatsManager {
     void cancel() {
       cancelled = true;
     }
+  }
+
+  /**
+   * Re-examine the unreachable partitions to preclude those already removed from StatsManager.
+   * @param unreachablePartitions a list of unreachable partitions generated during stats aggregation.
+   * @return a list of stores which are unreachable and still present in StatsManager.
+   */
+  List<String> examineUnreachablePartitions(List<PartitionId> unreachablePartitions) {
+    List<String> unreachableStores = new ArrayList<>();
+    for (PartitionId partition : unreachablePartitions) {
+      if (partitionToReplicaMap.containsKey(partition)) {
+        unreachableStores.add(partition.toPathString());
+      } else {
+        logger.info("Removing partition " + partition.toPathString()
+            + " from unreachable list because it is no longer in StatsManager");
+      }
+    }
+    return unreachableStores;
   }
 }
