@@ -14,6 +14,7 @@
 
 package com.github.ambry.store;
 
+import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -91,11 +92,11 @@ class BlobStoreStats implements StoreStats, Closeable {
 
   /**
    * Convert a given nested {@link Map} of accountId to containerId to valid size to its corresponding
-   * {@link StatsSnapshot} object.
+   * account {@link StatsSnapshot} object.
    * @param quotaMap the nested {@link Map} to be converted
    * @return the corresponding {@link StatsSnapshot} object.
    */
-  static StatsSnapshot convertQuotaToStatsSnapshot(Map<String, Map<String, Long>> quotaMap) {
+  static StatsSnapshot convertQuotaToAccountStatsSnapshot(Map<String, Map<String, Long>> quotaMap) {
     Map<String, StatsSnapshot> accountValidSizeMap = new HashMap<>();
     long totalSize = 0;
     for (Map.Entry<String, Map<String, Long>> accountEntry : quotaMap.entrySet()) {
@@ -109,6 +110,24 @@ class BlobStoreStats implements StoreStats, Closeable {
       accountValidSizeMap.put(accountEntry.getKey(), new StatsSnapshot(subTotalSize, containerValidSizeMap));
     }
     return new StatsSnapshot(totalSize, accountValidSizeMap);
+  }
+
+  /**
+   * Convert a given nested {@link Map} of accountId to containerId to valid size to its corresponding
+   * container {@link StatsSnapshot} object. The container snapshot does not have account level, each container is
+   * uniquely identified by "Account[]_Container[]" pair.
+   * @param quotaMap the nested {@link Map} to be converted
+   * @return the corresponding {@link StatsSnapshot} object.
+   */
+  static StatsSnapshot convertQuotaToContainerStatsSnapshot(Map<String, Map<String, Long>> quotaMap) {
+    Map<String, StatsSnapshot> containerValidSizeMap = new HashMap<>();
+    for (Map.Entry<String, Map<String, Long>> accountEntry : quotaMap.entrySet()) {
+      for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
+        containerValidSizeMap.put(accountEntry.getKey() + "_" + containerEntry.getKey(),
+            new StatsSnapshot(containerEntry.getValue(), null));
+      }
+    }
+    return new StatsSnapshot(0L, containerValidSizeMap);
   }
 
   BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
@@ -148,11 +167,76 @@ class BlobStoreStats implements StoreStats, Closeable {
   /**
    * {@inheritDoc}
    * Implementation in {@link BlobStoreStats} which returns the quota stats of a {@link BlobStore}. Size of delete
-   * records are not accounted as valid data size here.
+   * records are not accounted as valid data size here. The format of snapshot is presented as follows.
+   * {
+   *   value: 10000,
+   *   subMap: {
+   *     Account[1]:{
+   *       value: 200,
+   *       subMap: {
+   *         Container[1]:{
+   *           value: 200,
+   *           subMap: null
+   *         }
+   *       }
+   *     },
+   *     Account[2]:{
+   *       value: 800,
+   *       subMap:{
+   *         Container[3]:{
+   *           value: 800,
+   *           subMap: null
+   *         }
+   *       }
+   *     }
+   *   }
+   * }
    */
   @Override
   public StatsSnapshot getStatsSnapshot(long referenceTimeInMs) throws StoreException {
-    return convertQuotaToStatsSnapshot(getValidDataSizeByContainer(referenceTimeInMs));
+    return convertQuotaToAccountStatsSnapshot(getValidDataSizeByContainer(referenceTimeInMs));
+  }
+
+  /**
+   * {@inheritDoc}
+   * Implementation in {@link BlobStoreStats} which returns the all types of snapshots for a {@link BlobStore}. Size of
+   * delete records are not accounted as valid data size here. The formats of all snapshots are presented as follows.
+   *        AccountSnapshot             |             ContainerSnapshot
+   * --------------------------------------------------------------------------
+   * {                                  |      {
+   *   value: 1000,                     |        value: 1000,
+   *   subMap: {                        |        subMap: {
+   *     Account[1]:{                   |           Account[1]_Container[1]: {
+   *       value: 200,                  |               value: 200,
+   *       subMap: {                    |               subMap: null
+   *         Container[1]:{             |           },
+   *           value: 200,              |           Account[2]_Container[3]: {
+   *           subMap: null             |               value: 800,
+   *         }                          |               subMap: null
+   *       }                            |           }
+   *     },                             |        }
+   *     Account[2]:{                   |      }
+   *       value: 800,                  |
+   *       subMap:{                     |
+   *         Container[3]:{             |
+   *           value: 800,              |
+   *           subMap: null             |
+   *         }                          |
+   *       }                            |
+   *     }                              |
+   *   }                                |
+   * }                                  |
+   */
+  @Override
+  public Map<StatsReportType, StatsSnapshot> getAllStatsSnapshots(long referenceTimeInMs) throws StoreException {
+    Map<StatsReportType, StatsSnapshot> allTypesOfSnapshots = new HashMap<>();
+    Map<String, Map<String, Long>> quotaMap = getValidDataSizeByContainer(referenceTimeInMs);
+    StatsSnapshot accountSnapshot = convertQuotaToAccountStatsSnapshot(quotaMap);
+    StatsSnapshot containerSnapshot = convertQuotaToContainerStatsSnapshot(quotaMap);
+    containerSnapshot.setValue(accountSnapshot.getValue());
+    allTypesOfSnapshots.put(StatsReportType.ACCOUNT_REPORT, accountSnapshot);
+    allTypesOfSnapshots.put(StatsReportType.PARTITION_CLASS_REPORT, containerSnapshot);
+    return allTypesOfSnapshots;
   }
 
   /**
@@ -179,7 +263,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @return a {@link Pair} whose first element is the time at which stats was collected (in ms) and whose second
    * element is the valid data size for each segment in the form of a {@link NavigableMap} of segment names to
    * valid data sizes.
-   * @throws StoreException
+   * @throws StoreException if BlobStoreStats is not enabled or closed
    */
   Pair<Long, NavigableMap<String, Long>> getValidDataSizeByLogSegment(TimeRange timeRange) throws StoreException {
     if (!enabled.get()) {
@@ -372,8 +456,8 @@ class BlobStoreStats implements StoreStats, Closeable {
         if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !indexValue.isFlagSet(
             IndexValue.Flags.Delete_Index)) {
           // delete and TTL update records does not count towards valid data size for quota (containers)
-          updateNestedMapHelper(validDataSizePerContainer, String.valueOf(indexValue.getAccountId()),
-              String.valueOf(indexValue.getContainerId()), indexValue.getSize());
+          updateNestedMapHelper(validDataSizePerContainer, "Account[" + indexValue.getAccountId() + "]",
+              "Container[" + indexValue.getContainerId() + "]", indexValue.getSize());
         }
       }
       metrics.statsOnDemandScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTimeMs,
@@ -655,7 +739,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       int operator) {
     if (isWithinRange(results.containerForecastStartTimeMs, results.containerLastBucketTimeMs, expOrDelTimeInMs)) {
       results.updateContainerBucket(results.getContainerBucketKey(expOrDelTimeInMs),
-          String.valueOf(indexValue.getAccountId()), String.valueOf(indexValue.getContainerId()),
+          "Account[" + indexValue.getAccountId() + "]", "Container[" + indexValue.getContainerId() + "]",
           indexValue.getSize() * operator);
     }
   }
@@ -683,8 +767,8 @@ class BlobStoreStats implements StoreStats, Closeable {
   private void processNewPut(ScanResults results, IndexValue putValue) {
     long expiresAtMs = putValue.getExpiresAtMs();
     if (!isExpired(expiresAtMs, results.containerForecastStartTimeMs)) {
-      results.updateContainerBaseBucket(String.valueOf(putValue.getAccountId()),
-          String.valueOf(putValue.getContainerId()), putValue.getSize());
+      results.updateContainerBaseBucket("Account[" + putValue.getAccountId() + "]",
+          "Container[" + putValue.getContainerId() + "]", putValue.getSize());
       if (expiresAtMs != Utils.Infinite_Time) {
         handleContainerBucketUpdate(results, putValue, expiresAtMs, SUBTRACT);
       }
@@ -745,8 +829,8 @@ class BlobStoreStats implements StoreStats, Closeable {
       if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !indexValue.isFlagSet(
           IndexValue.Flags.Delete_Index)) {
         // delete and TTL update records does not count towards valid data size for quota (containers)
-        results.updateContainerBaseBucket(String.valueOf(indexValue.getAccountId()),
-            String.valueOf(indexValue.getContainerId()), indexValue.getSize());
+        results.updateContainerBaseBucket("Account[" + indexValue.getAccountId() + "]",
+            "Container[" + indexValue.getContainerId() + "]", indexValue.getSize());
         long expOrDelTimeInMs = indexValue.getExpiresAtMs();
         if (deletedKeys.containsKey(indexEntry.getKey())) {
           long deleteTimeInMs = deletedKeys.get(indexEntry.getKey());
