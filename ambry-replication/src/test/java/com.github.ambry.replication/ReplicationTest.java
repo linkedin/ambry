@@ -675,6 +675,11 @@ public class ReplicationTest {
     }
   }
 
+  /**
+   * Test the case where a blob gets deleted after a replication metadata exchange completes and identifies the blob as
+   * a candidate. The subsequent GetRequest should succeed as Replication makes a Include_All call, and
+   * fixMissingStoreKeys() should succeed without exceptions. The blob should not be put locally.
+   */
   @Test
   public void testDeletionAfterMetadataExchange() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
