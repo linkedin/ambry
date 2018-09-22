@@ -45,6 +45,7 @@ import static com.github.ambry.commons.BlobId.*;
 import static com.github.ambry.utils.Utils.*;
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 
 
 /**
@@ -139,7 +140,7 @@ public class BlobIdTest {
           BlobId blobIdSerDed =
               new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
           assertEquals("The type should match the original's type", type, blobIdSerDed.getType());
-          assertEquals("The isEncrypted should match the original", version == BLOB_ID_V3 ? false : isEncrypted,
+          assertEquals("The isEncrypted should match the original", version != BLOB_ID_V3 && isEncrypted,
               BlobId.isEncrypted(blobId.getID()));
         }
       }
@@ -211,37 +212,38 @@ public class BlobIdTest {
   @Test
   public void testComparisons() {
     // the version check is to do this inter-version test just once (since this is a parametrized test).
-    if (version == BLOB_ID_V1) {
-      for (int i = 0; i < 100; i++) {
-        Map<Short, Pair<BlobId, BlobId>> blobIds = Arrays.stream(BlobId.getAllValidVersions())
-            .collect(Collectors.toMap(Function.identity(), v -> new Pair<>(getRandomBlobId(v), getRandomBlobId(v))));
+    assumeTrue(version == BLOB_ID_V1);
+    for (int i = 0; i < 100; i++) {
+      Map<Short, Pair<BlobId, BlobId>> blobIds = Arrays.stream(BlobId.getAllValidVersions())
+          .collect(Collectors.toMap(Function.identity(), v -> new Pair<>(getRandomBlobId(v), getRandomBlobId(v))));
 
-        for (short version : BlobId.getAllValidVersions()) {
-          BlobId blobId = blobIds.get(version).getFirst();
-          BlobId altBlobId = blobIds.get(version).getSecond();
-          assertEquals("blobIdV" + version + " should be equal to itself", 0, blobId.compareTo(blobId));
-          assertEquals("blobIdV" + version + " should be equal to itself", blobId, blobId);
+      for (short version : BlobId.getAllValidVersions()) {
+        BlobId blobId = blobIds.get(version).getFirst();
+        BlobId altBlobId = blobIds.get(version).getSecond();
+        assertEquals("blobIdV" + version + " should be equal to itself", 0, blobId.compareTo(blobId));
+        assertEquals("blobIdV" + version + " should be equal to itself", blobId, blobId);
 
-          assertThat("Two randomly generated blobIdV" + version + "s should be unequal", blobId.compareTo(altBlobId),
-              not(0));
-          assertThat("Two randomly generated blobIdV" + version + "s should be unequal", blobId, not(altBlobId));
-          for (short otherVersion = 1; otherVersion < version; otherVersion++) {
-            BlobId otherBlobId = blobIds.get(otherVersion).getFirst();
-            assertThat("blobIdV" + otherVersion + " should not equal blobIdV" + version, otherBlobId, not(blobId));
-            assertThat("blobIdV" + version + " should not equal blobIdV" + otherVersion, blobId, not(otherBlobId));
-            if (otherVersion <= BLOB_ID_V2) {
-              assertTrue("blobIdV" + otherVersion + " should be less than blobIdV" + version,
-                  otherBlobId.compareTo(blobId) < 0);
-              assertTrue("blobIdV" + version + " should be greater than blobIdV" + otherVersion,
-                  blobId.compareTo(otherBlobId) > 0);
-            } else {
-              assertEquals(
-                  "Comparison between blobIdV" + version + " and blobIDV" + otherVersion + " are based on uuid only",
-                  blobId.compareTo(otherBlobId), blobId.getUuid().compareTo(otherBlobId.getUuid()));
-              assertEquals(
-                  "Comparison between blobIdV" + otherVersion + " and blobIDV" + version + " are based on uuid only",
-                  otherBlobId.compareTo(blobId), otherBlobId.getUuid().compareTo(blobId.getUuid()));
-            }
+        assertThat("Two randomly generated blobIdV" + version + "s should be unequal", blobId.compareTo(altBlobId),
+            not(0));
+        assertThat("Two randomly generated blobIdV" + version + "s should be unequal", blobId, not(altBlobId));
+        for (short otherVersion = 1; otherVersion < version; otherVersion++) {
+          BlobId otherBlobId = blobIds.get(otherVersion).getFirst();
+          assertThat("blobIdV" + otherVersion + " should not equal blobIdV" + version, otherBlobId, not(blobId));
+          assertThat("blobIdV" + version + " should not equal blobIdV" + otherVersion, blobId, not(otherBlobId));
+          boolean differentVersionGroup =
+              version < BLOB_ID_V3 || (version < BLOB_ID_V6 ? otherVersion < BLOB_ID_V3 : otherVersion < BLOB_ID_V6);
+          if (differentVersionGroup) {
+            assertTrue("blobIdV" + otherVersion + " should be less than blobIdV" + version,
+                otherBlobId.compareTo(blobId) < 0);
+            assertTrue("blobIdV" + version + " should be greater than blobIdV" + otherVersion,
+                blobId.compareTo(otherBlobId) > 0);
+          } else {
+            assertEquals(
+                "Comparison between blobIdV" + version + " and blobIDV" + otherVersion + " are based on uuid only",
+                blobId.getUuid().compareTo(otherBlobId.getUuid()), blobId.compareTo(otherBlobId));
+            assertEquals(
+                "Comparison between blobIdV" + otherVersion + " and blobIDV" + version + " are based on uuid only",
+                otherBlobId.getUuid().compareTo(blobId.getUuid()), otherBlobId.compareTo(blobId));
           }
         }
       }
@@ -378,27 +380,29 @@ public class BlobIdTest {
     // Partition ID not in cluster map
     invalidBlobIdLikeList.add(
         buildBadBlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-            badPartitionId, goodUUID.length(), goodUUID));
+            badPartitionId, goodUUID.length(), goodUUID, ""));
     // UUID length too long
     invalidBlobIdLikeList.add(
         buildBadBlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-            referencePartitionId, goodUUID.length() + 1, goodUUID));
+            referencePartitionId, goodUUID.length() + 1, goodUUID, ""));
     // UUID length too short
     invalidBlobIdLikeList.add(
         buildBadBlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-            referencePartitionId, goodUUID.length() - 1, goodUUID));
-    // UUID length is negative
-    invalidBlobIdLikeList.add(
-        buildBadBlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-            referencePartitionId, -1, goodUUID));
+            referencePartitionId, goodUUID.length() - 1, goodUUID, ""));
+    // UUID length is negative. Only matters for blob IDs with the older UUID serialization format
+    if (version < BLOB_ID_V6) {
+      invalidBlobIdLikeList.add(
+          buildBadBlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
+              referencePartitionId, -1, goodUUID, ""));
+    }
     // Extra characters after UUID
     invalidBlobIdLikeList.add(
         buildBadBlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-            referencePartitionId, goodUUID.length(), goodUUID + "EXTRA"));
+            referencePartitionId, goodUUID.length(), goodUUID, "EXTRA"));
     // Invalid version number
     invalidBlobIdLikeList.add(
         buildBadBlobId((short) (-1), referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-            referencePartitionId, goodUUID.length(), goodUUID));
+            referencePartitionId, goodUUID.length(), goodUUID, ""));
     // Empty blobId
     invalidBlobIdLikeList.add("");
     // short Blob ID
@@ -423,21 +427,22 @@ public class BlobIdTest {
    * @param containerId The container id to be embedded in the blobId.
    * @param partitionId The partition id to be embedded in the blobId.
    * @param uuidLength The length of the uuid.
-   * @param uuidLike The UUID to be embedded in the blobId.
+   * @param uuid The UUID to be embedded in the blobId.
+   * @param extraChars Extra characters to put at the end of the ID.
    * @return a base-64 encoded {@link String} representing the blobId.
    */
   private String buildBadBlobId(short version, BlobIdType type, Byte datacenterId, Short accountId, Short containerId,
-      PartitionId partitionId, int uuidLength, String uuidLike) {
+      PartitionId partitionId, int uuidLength, String uuid, String extraChars) {
     int idLength;
     ByteBuffer idBuf;
     switch (version) {
       case BLOB_ID_V1:
-        idLength = 2 + partitionId.getBytes().length + 4 + uuidLike.length();
+        idLength = 2 + partitionId.getBytes().length + 4 + uuid.length() + extraChars.length();
         idBuf = ByteBuffer.allocate(idLength);
         idBuf.putShort(version);
         break;
       case BLOB_ID_V2:
-        idLength = 2 + 1 + 1 + 2 + 2 + partitionId.getBytes().length + 4 + uuidLike.length();
+        idLength = 2 + 1 + 1 + 2 + 2 + partitionId.getBytes().length + 4 + uuid.length() + extraChars.length();
         idBuf = ByteBuffer.allocate(idLength);
         idBuf.putShort(version);
         idBuf.put((byte) 0);
@@ -448,7 +453,8 @@ public class BlobIdTest {
       case BLOB_ID_V3:
       case BLOB_ID_V4:
       case BLOB_ID_V5:
-        idLength = 2 + 1 + 1 + 2 + 2 + partitionId.getBytes().length + 4 + uuidLike.length();
+      case BLOB_ID_V6:
+        idLength = 2 + 1 + 1 + 2 + 2 + partitionId.getBytes().length + 4 + uuid.length() + extraChars.length();
         idBuf = ByteBuffer.allocate(idLength);
         idBuf.putShort(version);
         idBuf.put((byte) type.ordinal());
@@ -457,14 +463,23 @@ public class BlobIdTest {
         idBuf.putShort(containerId);
         break;
       default:
-        idLength = 2 + partitionId.getBytes().length + 4 + uuidLike.length();
+        idLength = 2 + partitionId.getBytes().length + 4 + uuid.length() + extraChars.length();
         idBuf = ByteBuffer.allocate(idLength);
         idBuf.putShort(version);
         break;
     }
     idBuf.put(partitionId.getBytes());
-    idBuf.putInt(uuidLength);
-    idBuf.put(uuidLike.getBytes());
+    switch (version) {
+      case BLOB_ID_V6:
+        UUID uuidObj = UUID.fromString(uuid);
+        idBuf.putLong(uuidObj.getMostSignificantBits());
+        idBuf.putLong(uuidObj.getLeastSignificantBits());
+        break;
+      default:
+        idBuf.putInt(uuidLength);
+        idBuf.put(uuid.getBytes());
+    }
+    idBuf.put(extraChars.getBytes());
     return Base64.encodeBase64URLSafeString(idBuf.array());
   }
 
@@ -564,9 +579,9 @@ public class BlobIdTest {
         assertEquals("Wrong blobDataType value in blobId: " + blobId, blobDataType, blobId.getBlobDataType());
         break;
       default:
-        fail("Unrecognized version");
+        fail("Unrecognized version: " + version);
     }
-    assertNotNull("getLongForm() should be supported for this version", blobId.getLongForm());
+    assertNotNull("getLongForm() should be supported for version: " + version, blobId.getLongForm());
     Pair<Short, Short> accountAndContainer = BlobId.getAccountAndContainerIds(blobId.getID());
     assertEquals("Account id from the id string should be the same as the associated account id", blobId.getAccountId(),
         (short) accountAndContainer.getFirst());

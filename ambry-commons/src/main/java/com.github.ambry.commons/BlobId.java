@@ -25,8 +25,11 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 import java.util.UUID;
 import org.apache.commons.codec.binary.Base64;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
@@ -136,6 +139,7 @@ public class BlobId extends StoreKey {
   private static final int IS_ENCRYPTED_MASK = 0x4;
   private static final int BLOB_DATA_TYPE_MASK = 0x18;
   private static final int BLOB_DATA_TYPE_SHIFT = 3;
+  private static final Logger LOGGER = LoggerFactory.getLogger(BlobId.class);
 
   private final short version;
   private final BlobIdType type;
@@ -144,11 +148,16 @@ public class BlobId extends StoreKey {
   private final short containerId;
   private final PartitionId partitionId;
   /**
-   * Ideally this could be a {@link UUID} object instead of a {@link String} to save some memory, but I am not sure if
-   * previous code versions allowed constructing blob IDs with custom strings in this field, as opposed to always
-   * calling {@link UUID#randomUUID()}.
+   * For blob IDs with valid UUIDs, we can use a {@link UUID} object to save a few bytes (32 bytes instead of 112 bytes
+   * for a {@link String}).
    */
-  private final String uuid;
+  private final UUID uuid;
+  /**
+   * Ideally we could always use a {@link UUID} object instead of a {@link String} to save some memory, but I am not
+   * sure if previous code versions allowed constructing blob IDs with custom strings in this field, as opposed to
+   * always calling {@link UUID#randomUUID()}.
+   */
+  private final String uuidStr;
   private final boolean isEncrypted;
   private final BlobDataType blobDataType;
 
@@ -184,10 +193,10 @@ public class BlobId extends StoreKey {
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
    * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
    * @param blobDataType The blob data type.
-   * @param uuid The uuid that is to be used to construct this id.
+   * @param uuidStr The uuid that is to be used to construct this id.
    */
   private BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
-      PartitionId partitionId, boolean isEncrypted, BlobDataType blobDataType, String uuid) {
+      PartitionId partitionId, boolean isEncrypted, BlobDataType blobDataType, String uuidStr) {
     if (partitionId == null) {
       throw new IllegalArgumentException("partitionId cannot be null");
     }
@@ -199,6 +208,8 @@ public class BlobId extends StoreKey {
         this.containerId = UNKNOWN_CONTAINER_ID;
         this.isEncrypted = false;
         this.blobDataType = null;
+        this.uuid = null;
+        this.uuidStr = uuidStr;
         break;
       case BLOB_ID_V2:
         this.type = BlobIdType.NATIVE;
@@ -207,6 +218,8 @@ public class BlobId extends StoreKey {
         this.containerId = containerId;
         this.isEncrypted = false;
         this.blobDataType = null;
+        this.uuid = null;
+        this.uuidStr = uuidStr;
         break;
       case BLOB_ID_V3:
         this.type = type;
@@ -215,6 +228,8 @@ public class BlobId extends StoreKey {
         this.containerId = containerId;
         this.isEncrypted = false;
         this.blobDataType = null;
+        this.uuid = null;
+        this.uuidStr = uuidStr;
         break;
       case BLOB_ID_V4:
         this.type = type;
@@ -223,25 +238,34 @@ public class BlobId extends StoreKey {
         this.containerId = containerId;
         this.isEncrypted = isEncrypted;
         this.blobDataType = null;
+        this.uuid = null;
+        this.uuidStr = uuidStr;
         break;
       case BLOB_ID_V5:
+        this.type = type;
+        this.datacenterId = datacenterId;
+        this.accountId = accountId;
+        this.containerId = containerId;
+        this.isEncrypted = isEncrypted;
+        this.blobDataType = Objects.requireNonNull(blobDataType, "blobDataType can't be null for id version 5");
+        this.uuid = null;
+        this.uuidStr = uuidStr;
+        break;
       case BLOB_ID_V6:
         this.type = type;
         this.datacenterId = datacenterId;
         this.accountId = accountId;
         this.containerId = containerId;
         this.isEncrypted = isEncrypted;
-        if (blobDataType == null) {
-          throw new IllegalArgumentException("blobDataType can't be null for id version " + version);
-        }
-        this.blobDataType = blobDataType;
+        this.blobDataType = Objects.requireNonNull(blobDataType, "blobDataType can't be null for id version 6");
+        this.uuid = UUID.fromString(uuidStr);
+        this.uuidStr = null;
         break;
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
     this.version = version;
     this.partitionId = partitionId;
-    this.uuid = uuid;
   }
 
   /**
@@ -269,10 +293,13 @@ public class BlobId extends StoreKey {
     }
     switch (version) {
       case BLOB_ID_V6:
-        uuid = UuidSerDe.deserialize(stream).toString();
+        uuid = UuidSerDe.deserialize(stream);
+        uuidStr = null;
         break;
       default:
-        uuid = Utils.readIntString(stream);
+        uuid = null;
+        uuidStr = Utils.readIntString(stream);
+        break;
     }
     if (ensureFullyRead && stream.read() != -1) {
       throw new IllegalArgumentException("Stream should have no more available bytes to read");
@@ -306,22 +333,21 @@ public class BlobId extends StoreKey {
    * @return The byte count of the serialized blobId.
    */
   public short sizeInBytes() {
-    short sizeForBlobIdV1 =
-        (short) (VERSION_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length + UUID_SIZE_FIELD_LENGTH_IN_BYTES
-            + uuid.getBytes().length);
     switch (version) {
       case BLOB_ID_V1:
-        return sizeForBlobIdV1;
+        return (short) (VERSION_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length + UUID_SIZE_FIELD_LENGTH_IN_BYTES
+            + getUuid().getBytes().length);
       case BLOB_ID_V2:
       case BLOB_ID_V3:
       case BLOB_ID_V4:
       case BLOB_ID_V5:
-        return (short) (FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
-            + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + sizeForBlobIdV1);
+        return (short) (VERSION_FIELD_LENGTH_IN_BYTES + FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
+            + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length
+            + UUID_SIZE_FIELD_LENGTH_IN_BYTES + getUuid().getBytes().length);
       case BLOB_ID_V6:
         return (short) (VERSION_FIELD_LENGTH_IN_BYTES + FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
             + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length
-            + 16);
+            + UuidSerDe.SIZE_IN_BYTES);
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
@@ -391,13 +417,6 @@ public class BlobId extends StoreKey {
   }
 
   /**
-   * @return {@code true} if the blob that this id represents is encrypted. {@code false} otherwise
-   */
-  private boolean isEncrypted() {
-    return isEncrypted;
-  }
-
-  /**
    * @return the {@link BlobDataType} for the blob.
    */
   public BlobDataType getBlobDataType() {
@@ -419,7 +438,7 @@ public class BlobId extends StoreKey {
    * @return the uuid string associated with this BlobId
    */
   protected String getUuid() {
-    return uuid;
+    return uuid != null ? uuid.toString() : uuidStr;
   }
 
   @Override
@@ -462,11 +481,12 @@ public class BlobId extends StoreKey {
     idBuf.put(partitionId.getBytes());
     switch (version) {
       case BLOB_ID_V6:
-        UuidSerDe.serialize(UUID.fromString(uuid), idBuf);
+        UuidSerDe.serialize(uuid, idBuf);
         break;
       default:
-        idBuf.putInt(uuid.getBytes().length);
-        idBuf.put(uuid.getBytes());
+        byte[] uuidBytes = getUuid().getBytes();
+        idBuf.putInt(uuidBytes.length);
+        idBuf.put(uuidBytes);
         break;
     }
     return idBuf.array();
@@ -499,7 +519,7 @@ public class BlobId extends StoreKey {
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
     sb.append(":").append(partitionId);
-    sb.append(":").append(uuid).append("]");
+    sb.append(":").append(getUuid()).append("]");
     return sb.toString();
   }
 
@@ -526,16 +546,13 @@ public class BlobId extends StoreKey {
       return 0;
     }
     BlobId other = (BlobId) o;
-    int result = 0;
-    if (version < BLOB_ID_V3 || other.version < BLOB_ID_V3) {
-      result = Short.compare(version, other.version);
-    }
+    int result = Short.compare(getVersionComparisonGroup(), other.getVersionComparisonGroup());
     if (result == 0) {
       switch (version) {
         case BLOB_ID_V1:
           result = partitionId.compareTo(other.partitionId);
           if (result == 0) {
-            result = uuid.compareTo(other.uuid);
+            result = uuidStr.compareTo(other.uuidStr);
           }
           break;
         case BLOB_ID_V2:
@@ -549,7 +566,7 @@ public class BlobId extends StoreKey {
                 if (result == 0) {
                   result = partitionId.compareTo(other.partitionId);
                   if (result == 0) {
-                    result = uuid.compareTo(other.uuid);
+                    result = uuidStr.compareTo(other.uuidStr);
                   }
                 }
               }
@@ -559,6 +576,8 @@ public class BlobId extends StoreKey {
         case BLOB_ID_V3:
         case BLOB_ID_V4:
         case BLOB_ID_V5:
+          result = uuidStr.compareTo(other.uuidStr);
+          break;
         case BLOB_ID_V6:
           result = uuid.compareTo(other.uuid);
           break;
@@ -567,6 +586,29 @@ public class BlobId extends StoreKey {
       }
     }
     return result;
+  }
+
+  /**
+   * This gets a "version comparison group" to be used in the {@link #compareTo} method. If two blob IDs are in
+   * different groups, they cannot be deemed equal to each other. This allows for comparison strategies that rely
+   * on version-specific features or fields.
+   * @return the "version comparison group" number.
+   */
+  private short getVersionComparisonGroup() {
+    switch (version) {
+      case BLOB_ID_V1:
+        return 1;
+      case BLOB_ID_V2:
+        return 2;
+      case BLOB_ID_V3:
+      case BLOB_ID_V4:
+      case BLOB_ID_V5:
+        return 3;
+      case BLOB_ID_V6:
+        return 4;
+      default:
+        throw new IllegalArgumentException("Unrecognized blobId version " + version);
+    }
   }
 
   @Override
@@ -583,7 +625,7 @@ public class BlobId extends StoreKey {
 
   @Override
   public int hashCode() {
-    return uuid.hashCode();
+    return (uuid != null ? uuid : uuidStr).hashCode();
   }
 
   /**
@@ -615,7 +657,7 @@ public class BlobId extends StoreKey {
       throw new IllegalArgumentException("Target version for crafting must be V3 or higher");
     }
     return new BlobId(targetVersion, BlobIdType.CRAFTED, inputId.getDatacenterId(), accountId, containerId,
-        inputId.partitionId, inputId.isEncrypted, inputId.blobDataType, inputId.uuid);
+        inputId.partitionId, inputId.isEncrypted, inputId.blobDataType, inputId.getUuid());
   }
 
   /**
@@ -708,6 +750,8 @@ public class BlobId extends StoreKey {
    * A serde to store UUIDs in a more compact byte representation than their canonical string representation.
    */
   private static class UuidSerDe {
+    static final int SIZE_IN_BYTES = 2 * Long.BYTES;
+
     /**
      * Write a compact representation of a {@link UUID} into a {@link ByteBuffer}. This will advance the buffer cursor.
      * @param uuid the {@link UUID} to serialize.
@@ -730,6 +774,7 @@ public class BlobId extends StoreKey {
       return new UUID(mostSigBits, leastSigBits);
     }
   }
+
   /**
    * A class that can hold all the information embedded in a BlobId up to and not including the {@link PartitionId}
    * The preamble can be parsed off a blob id string without a {@link ClusterMap}.
