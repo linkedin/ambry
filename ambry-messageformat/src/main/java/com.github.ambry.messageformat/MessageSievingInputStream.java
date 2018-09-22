@@ -99,20 +99,22 @@ public class MessageSievingInputStream extends InputStream {
     logger.trace("Starting to validate message stream ");
     for (MessageInfo msgInfo : messageInfoList) {
       int msgSize = (int) msgInfo.getSize();
-      // Read the entire message to create an InputStream for just this message. This is to isolate the message
-      // from the batched stream, as well as to ensure that subsequent messages can be correctly processed even if there
-      // was an error during the sieving for this message.
       // @todo: We can use a BoundedInputStream for each message and then empty it out in case all of it was not read
       // @todo: (say, due to corruption). This can help avoid a copy.
-      Message msg = new Message(msgInfo, new ByteArrayInputStream(Utils.readBytesFromStream(inStream, msgSize)));
-      logger.trace("Read stream for message info " + msgInfo + "  into memory");
-      if (msg.getMessageInfo().isDeleted()) {
+      if (msgInfo.isDeleted()) {
         messageSievingDeletedMessagesDiscardedCount.inc();
-        logger.trace("Skipping message with key {}, because it is deleted.", msg.getMessageInfo().getStoreKey());
-      } else if (msg.getMessageInfo().isExpired()) {
+        logger.trace("Skipping message with key {}, because it is deleted.", msgInfo.getStoreKey());
+        Utils.readBytesFromStream(inStream, msgSize);
+      } else if (msgInfo.isExpired()) {
         messageSievingExpiredMessagesDiscardedCount.inc();
-        logger.trace("Skipping message with key {}, because it has expired.", msg.getMessageInfo().getStoreKey());
+        logger.trace("Skipping message with key {}, because it has expired.", msgInfo.getStoreKey());
+        Utils.readBytesFromStream(inStream, msgSize);
       } else {
+        // Read the entire message to create an InputStream for just this message. This is to isolate the message
+        // from the batched stream, as well as to ensure that subsequent messages can be correctly processed even if there
+        // was an error during the sieving for this message.
+        Message msg = new Message(msgInfo, new ByteArrayInputStream(Utils.readBytesFromStream(inStream, msgSize)));
+        logger.trace("Read stream for message info " + msgInfo + "  into memory");
         validateAndTransform(msg, msgStreamList, bytesRead);
       }
       bytesRead += msgSize;
