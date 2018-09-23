@@ -43,6 +43,7 @@ import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.Send;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
@@ -2011,9 +2012,17 @@ public class ReplicationTest {
       } else {
         List<PartitionResponseInfo> responseInfoList = new ArrayList<>();
         for (PartitionRequestInfo requestInfo : getRequest.getPartitionInfoList()) {
-          PartitionResponseInfo partitionResponseInfo =
-              new PartitionResponseInfo(requestInfo.getPartition(), infosToReturn.get(requestInfo.getPartition()),
-                  messageMetadatasToReturn.get(requestInfo.getPartition()));
+          List<MessageInfo> infosForPartition = infosToReturn.get(requestInfo.getPartition());
+          PartitionResponseInfo partitionResponseInfo;
+          // To keep things simple, this mock class only checks for the Deleted case (and not the Expired case).
+          if (getRequest.getGetOption().equals(GetOption.None) && infosForPartition.stream()
+              .anyMatch(MessageInfo::isDeleted)) {
+            partitionResponseInfo = new PartitionResponseInfo(requestInfo.getPartition(), ServerErrorCode.Blob_Deleted);
+          } else {
+            partitionResponseInfo =
+                new PartitionResponseInfo(requestInfo.getPartition(), infosToReturn.get(requestInfo.getPartition()),
+                    messageMetadatasToReturn.get(requestInfo.getPartition()));
+          }
           responseInfoList.add(partitionResponseInfo);
         }
         response = new GetResponse(1, "replication", responseInfoList, new MockSend(buffersToReturn),
