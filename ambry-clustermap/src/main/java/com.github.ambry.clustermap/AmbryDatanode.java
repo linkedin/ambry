@@ -20,9 +20,12 @@ import com.github.ambry.utils.Utils;
 import java.util.Comparator;
 import java.util.List;
 import java.util.TreeSet;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
@@ -40,6 +43,8 @@ class AmbryDataNode implements DataNodeId {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ResourceStatePolicy resourceStatePolicy;
   private final ClusterMapConfig clusterMapConfig;
+  private final ClusterManagerCallback clusterManagerCallback;
+  
   private final static Comparator<AmbryDataNode> AMBRY_DATA_NODE_COMPARATOR =
       Comparator.comparingInt((AmbryDataNode k) -> k.plainTextPort.getPort()).
           thenComparing(k -> k.hostName);
@@ -53,10 +58,11 @@ class AmbryDataNode implements DataNodeId {
    * @param rackId the rack Id associated with this data node (may be null).
    * @param sslPortNum the ssl port associated with this data node (may be null).
    * @param xid the xid associated with this data node.
+   * @param clusterManagerCallback the {@link ClusterManagerCallback} to use
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
   AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int portNum, String rackId,
-      Integer sslPortNum, long xid) throws Exception {
+      Integer sslPortNum, long xid, ClusterManagerCallback clusterManagerCallback) throws Exception {
     this.hostName = hostName;
     this.plainTextPort = new Port(portNum, PortType.PLAINTEXT);
     this.sslPort = sslPortNum != null ? new Port(sslPortNum, PortType.SSL) : null;
@@ -69,6 +75,7 @@ class AmbryDataNode implements DataNodeId {
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
             clusterMapConfig);
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
+    this.clusterManagerCallback = clusterManagerCallback;
     validate();
   }
 
@@ -144,6 +151,34 @@ class AmbryDataNode implements DataNodeId {
   @Override
   public long getXid() {
     return xid;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(DATA_NODE_HOSTNAME, getHostname());
+    snapshot.put(DATA_NODE_DATACENTER, getDatacenterName());
+    snapshot.put(DATA_NODE_SSL_ENABLED_DATACENTERS, new JSONArray(sslEnabledDataCenters));
+    JSONObject portsJson = new JSONObject();
+    portsJson.put(PortType.PLAINTEXT.name(), getPort());
+    if (hasSSLPort()) {
+      portsJson.put(PortType.SSL.name(), getSSLPort());
+    }
+    portsJson.put(DATA_NODE_PORT_CONNECT_TO, getPortToConnectTo().getPort());
+    snapshot.put(DATA_NODE_PORTS, portsJson);
+    snapshot.put(DATA_NODE_RACK_ID, getRackId());
+    snapshot.put(DATA_NODE_XID, getXid());
+    String liveness = UP;
+    if (resourceStatePolicy.isHardDown()) {
+      liveness = NODE_DOWN;
+    } else if (resourceStatePolicy.isDown()) {
+      liveness = SOFT_DOWN;
+    }
+    snapshot.put(LIVENESS, liveness);
+    JSONArray disksJson = new JSONArray();
+    clusterManagerCallback.getDisks(this).forEach(disk -> disksJson.put(disk.getSnapshot()));
+    snapshot.put(DATA_NODE_DISKS, disksJson);
+    return snapshot;
   }
 
   @Override

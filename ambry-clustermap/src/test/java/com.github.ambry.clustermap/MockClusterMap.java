@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -26,6 +27,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
 
 /**
@@ -39,7 +44,8 @@ public class MockClusterMap implements ClusterMap {
   protected final Map<Long, PartitionId> partitions;
   protected final List<MockDataNodeId> dataNodes;
   protected final int numMountPointsPerNode;
-  protected final List<String> dataCentersInClusterMap = new ArrayList<>();
+  private final List<String> dataCentersInClusterMap = new ArrayList<>();
+  private final Map<String, List<MockDataNodeId>> dcToDataNodes = new HashMap<>();
   private final ClusterMapUtils.PartitionSelectionHelper partitionSelectionHelper;
   protected boolean partitionsUnavailable = false;
   private boolean createNewRegistry = true;
@@ -51,6 +57,8 @@ public class MockClusterMap implements ClusterMap {
   private String localDatacenterName;
 
   private final MockPartitionId specialPartition;
+
+  private RuntimeException exceptionOnSnapshot = null;
 
   /**
    * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 default partitions/replicas
@@ -103,7 +111,6 @@ public class MockClusterMap implements ClusterMap {
     String dcName = null;
     int currentPlainTextPort = 62000;
     int currentSSLPort = 63000;
-    Map<String, List<MockDataNodeId>> dcToDataNodes = new HashMap<>();
     for (int i = 0; i < numNodes; i++) {
       if (i % 3 == 0) {
         dcIndex++;
@@ -368,6 +375,32 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public JSONObject getSnapshot() {
+    if (exceptionOnSnapshot != null) {
+      throw exceptionOnSnapshot;
+    }
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(IMPLEMENTATION, MockClusterMap.class.getName());
+    snapshot.put(CLUSTER_NAME, MockClusterMap.class.getSimpleName());
+    snapshot.put(TIMESTAMP_MS, SystemTime.getInstance().milliseconds());
+    JSONArray datacentersJsonArray = new JSONArray();
+    dcToDataNodes.forEach((dc, mockDataNodeIds) -> {
+      JSONObject data = new JSONObject();
+      data.put(DATACENTER_NAME, dc);
+      data.put(DATACENTER_ID, dataCentersInClusterMap.indexOf(dc));
+      JSONArray datanodesInDc = new JSONArray();
+      mockDataNodeIds.forEach(mockDataNodeId -> datanodesInDc.put(mockDataNodeId.getSnapshot()));
+      data.put(DATACENTER_NODES, datanodesInDc);
+      datacentersJsonArray.put(data);
+    });
+    snapshot.put(DATACENTERS, datacentersJsonArray);
+    JSONArray partitionsJsonArray = new JSONArray();
+    partitions.values().forEach(partitionId -> partitionsJsonArray.put(partitionId.getSnapshot()));
+    snapshot.put(PARTITIONS, partitionsJsonArray);
+    return snapshot;
+  }
+
+  @Override
   public void close() {
     // No-op.
   }
@@ -397,6 +430,13 @@ public class MockClusterMap implements ClusterMap {
    */
   public void clearLastNRequestedPartitionClasses() {
     lastRequestedPartitionClasses.clear();
+  }
+
+  /**
+   * @param e the {@link RuntimeException} to throw when {@link #getSnapshot()} is invoked.
+   */
+  public void setExceptionOnSnapshot(RuntimeException e) {
+    exceptionOnSnapshot = e;
   }
 }
 

@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import java.util.List;
+import org.json.JSONObject;
 
 
 /**
@@ -65,4 +66,9 @@ public interface PartitionId extends Resource, Comparable<PartitionId> {
    * @return the partition class that this partition belongs to
    */
   String getPartitionClass();
+
+  /**
+   * @return a snapshot which includes information that the implementation considers relevant.
+   */
+  JSONObject getSnapshot();
 }

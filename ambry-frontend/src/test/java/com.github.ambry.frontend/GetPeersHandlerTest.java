@@ -374,6 +374,11 @@ class TailoredPeersClusterMap implements ClusterMap {
   }
 
   @Override
+  public JSONObject getSnapshot() {
+    return null;
+  }
+
+  @Override
   public void close() {
 
   }

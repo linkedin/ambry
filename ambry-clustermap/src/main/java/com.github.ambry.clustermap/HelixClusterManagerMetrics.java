@@ -75,8 +75,7 @@ class HelixClusterManagerMetrics {
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "getReplicaIdsMismatchCount"));
     getDataNodeIdsMismatchCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "getDataNodeIdsMismatchCount"));
-    ignoredUpdatesCount =
-        registry.counter(MetricRegistry.name(HelixClusterManager.class, "ignoredUpdatesCount"));
+    ignoredUpdatesCount = registry.counter(MetricRegistry.name(HelixClusterManager.class, "ignoredUpdatesCount"));
   }
 
   void initializeInstantiationMetric(final boolean instantiated) {
@@ -87,8 +86,7 @@ class HelixClusterManagerMetrics {
 
   void initializeXidMetric(final AtomicLong currentXid) {
     helixClusterManagerCurrentXid = currentXid::get;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "currentXid"),
-        helixClusterManagerCurrentXid);
+    registry.register(MetricRegistry.name(HelixClusterManager.class, "currentXid"), helixClusterManagerCurrentXid);
   }
 
   /**
@@ -126,7 +124,7 @@ class HelixClusterManagerMetrics {
     Gauge<Long> diskDownCount = clusterMapCallback::getDownDisksCount;
     registry.register(MetricRegistry.name(HelixClusterManager.class, "diskDownCount"), diskDownCount);
 
-    for (final AmbryDisk disk : clusterMapCallback.getDisks()) {
+    for (final AmbryDisk disk : clusterMapCallback.getDisks(null)) {
       final String metricName =
           disk.getDataNode().getHostname() + "-" + disk.getDataNode().getPort() + "-" + disk.getMountPath()
               + "-DiskResourceState";

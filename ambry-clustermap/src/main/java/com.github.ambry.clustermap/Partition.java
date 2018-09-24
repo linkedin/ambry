@@ -26,6 +26,7 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
@@ -136,6 +137,18 @@ class Partition implements PartitionId {
   @Override
   public String getPartitionClass() {
     return partitionClass;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(PARTITION_ID, toPathString());
+    snapshot.put(PARTITION_WRITE_STATE, getPartitionState().name());
+    snapshot.put(PARTITION_CLASS, getPartitionClass());
+    JSONArray replicasJsonArray = new JSONArray();
+    getReplicaIds().forEach(replica -> replicasJsonArray.put(replica.getSnapshot()));
+    snapshot.put(PARTITION_REPLICAS, replicasJsonArray);
+    return snapshot;
   }
 
   // For constructing new Partition

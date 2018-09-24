@@ -19,6 +19,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
 
 public class MockDataNodeId implements DataNodeId {
@@ -122,6 +126,24 @@ public class MockDataNodeId implements DataNodeId {
   @Override
   public long getXid() {
     return Long.MIN_VALUE;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(DATA_NODE_HOSTNAME, getHostname());
+    snapshot.put(DATA_NODE_DATACENTER, getDatacenterName());
+    snapshot.put(DATA_NODE_SSL_ENABLED_DATACENTERS, new JSONArray(sslEnabledDataCenters));
+    JSONObject portsJson = new JSONObject();
+    ports.forEach((portType, port) -> portsJson.put(port.getPortType().name(), port.getPort()));
+    portsJson.put(DATA_NODE_PORT_CONNECT_TO, getPortToConnectTo().getPort());
+    snapshot.put(DATA_NODE_PORTS, portsJson);
+    snapshot.put(DATA_NODE_XID, getXid());
+    snapshot.put(LIVENESS, getState() == HardwareState.UNAVAILABLE ? DOWN : UP);
+    JSONArray disksJson = new JSONArray();
+    mountPaths.forEach(mountPath -> disksJson.put(new MockDiskId(this, mountPath).getSnapshot()));
+    snapshot.put(DATA_NODE_DISKS, disksJson);
+    return snapshot;
   }
 
   public List<String> getMountPaths() {

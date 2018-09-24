@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
+import org.json.JSONObject;
 
 import static org.mockito.Mockito.*;
 
@@ -107,6 +108,11 @@ class StoreTestUtils {
     @Override
     public boolean isSealed() {
       return isSealed;
+    }
+
+    @Override
+    public JSONObject getSnapshot() {
+      return new JSONObject();
     }
 
     @Override

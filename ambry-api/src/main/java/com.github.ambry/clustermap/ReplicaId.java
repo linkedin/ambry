@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import java.util.List;
+import org.json.JSONObject;
 
 
 /**
@@ -89,4 +90,9 @@ public interface ReplicaId {
    * @return true if this replica is in sealed state.
    */
   boolean isSealed();
+
+  /**
+   * @return a snapshot which includes information that the implementation considers relevant.
+   */
+  JSONObject getSnapshot();
 }

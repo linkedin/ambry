@@ -16,6 +16,9 @@ package com.github.ambry.clustermap;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import org.json.JSONObject;
+
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
 
 public class MockReplicaId implements ReplicaId {
@@ -101,6 +104,26 @@ public class MockReplicaId implements ReplicaId {
   @Override
   public boolean isSealed() {
     return isSealed;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(REPLICA_NODE, dataNodeId.getHostname() + ":" + dataNodeId.getPort());
+    snapshot.put(REPLICA_PARTITION, partitionId.toPathString());
+    snapshot.put(REPLICA_DISK, diskId.getMountPath());
+    snapshot.put(REPLICA_PATH, replicaPath);
+    snapshot.put(REPLICA_WRITE_STATE, isSealed() ? PartitionState.READ_ONLY.name() : PartitionState.READ_WRITE.name());
+    String liveness = UP;
+    if (isMarkedDown) {
+      liveness = DOWN;
+    } else if (getDataNodeId().getState() == HardwareState.UNAVAILABLE) {
+      liveness = NODE_DOWN;
+    } else if (getDiskId().getState() == HardwareState.UNAVAILABLE) {
+      liveness = DISK_DOWN;
+    }
+    snapshot.put(LIVENESS, liveness);
+    return snapshot;
   }
 
   public void setSealedState(boolean isSealed) {
