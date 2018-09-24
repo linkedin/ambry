@@ -534,7 +534,7 @@ public class AccountContainerTest {
           assertEquals("Wrong media scan disabled setting", MEDIA_SCAN_DISABLED_DEFAULT_VALUE,
               updatedContainer.isMediaScanDisabled());
           assertNull("Wrong replication policy", updatedContainer.getReplicationPolicy());
-          assertFalse("Wrong ttl required setting", updatedContainer.isTtlRequired());
+          assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, updatedContainer.isTtlRequired());
           break;
         case Container.JSON_VERSION_2:
           assertEquals("Wrong encryption setting", updatedEncrypted, updatedContainer.isEncrypted());
@@ -785,7 +785,7 @@ public class AccountContainerTest {
         assertEquals("Wrong media scan disabled setting", MEDIA_SCAN_DISABLED_DEFAULT_VALUE,
             container.isMediaScanDisabled());
         assertNull("Wrong replication policy", container.getReplicationPolicy());
-        assertFalse("Wrong ttl required setting", container.isTtlRequired());
+        assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, container.isTtlRequired());
         break;
       case Container.JSON_VERSION_2:
         assertEquals("Wrong encryption setting", refContainerEncryptionValues.get(index), container.isEncrypted());

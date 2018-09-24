@@ -69,7 +69,7 @@ public class Container {
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
   static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
-  static final boolean TTL_REQUIRED_DEFAULT_VALUE = false;
+  static final boolean TTL_REQUIRED_DEFAULT_VALUE = true;
   static final boolean CACHEABLE_DEFAULT_VALUE = true;
   public static final short JSON_VERSION_1 = 1;
   public static final short JSON_VERSION_2 = 2;
@@ -322,7 +322,7 @@ public class Container {
         cacheable = !metadata.getBoolean(IS_PRIVATE_KEY);
         mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         replicationPolicy = null;
-        ttlRequired = false;
+        ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
         break;
       case JSON_VERSION_2:
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
@@ -334,7 +334,7 @@ public class Container {
         cacheable = metadata.optBoolean(CACHEABLE_KEY, CACHEABLE_DEFAULT_VALUE);
         mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED_KEY, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
         replicationPolicy = metadata.optString(REPLICATION_POLICY_KEY, null);
-        ttlRequired = metadata.optBoolean(TTL_REQUIRED_KEY, false);
+        ttlRequired = metadata.optBoolean(TTL_REQUIRED_KEY, TTL_REQUIRED_DEFAULT_VALUE);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
@@ -374,7 +374,7 @@ public class Container {
         this.previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         this.mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         this.replicationPolicy = null;
-        this.ttlRequired = false;
+        this.ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
         break;
       case JSON_VERSION_2:
         this.encrypted = encrypted;

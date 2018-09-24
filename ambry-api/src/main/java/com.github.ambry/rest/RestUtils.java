@@ -201,8 +201,9 @@ public class RestUtils {
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
 
     /**
-     * Response header for the name of the datacenter that the responding frontend belongs to.
+     * Response header indicating the reason a request is non compliant.
      */
+    public final static String NON_COMPLIANCE_WARNING = "x-ambry-non-compliance-warning";
   }
 
   public static final class TrackingHeaders {
@@ -320,15 +321,6 @@ public class RestUtils {
 
     long ttl = Utils.Infinite_Time;
     Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
-    if (container.isTtlRequired()) {
-      if (ttlFromHeader == null) {
-        throw new RestServiceException("TTL(a finite time) is required in container " + container.getName(),
-            RestServiceErrorCode.MissingArgs);
-      } else if (ttlFromHeader == Utils.Infinite_Time) {
-        throw new RestServiceException("TTL(a finite time) is required in container " + container.getName(),
-            RestServiceErrorCode.InvalidArgs);
-      }
-    }
     if (ttlFromHeader != null) {
       if (ttlFromHeader < -1) {
         throw new RestServiceException(Headers.TTL + "[" + ttlFromHeader + "] is not valid (has to be >= -1)",

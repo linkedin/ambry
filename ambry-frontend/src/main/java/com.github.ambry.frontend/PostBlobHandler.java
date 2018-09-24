@@ -13,6 +13,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Container;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -203,10 +204,26 @@ class PostBlobHandler {
       long propsBuildStartTime = System.currentTimeMillis();
       accountAndContainerInjector.injectAccountAndContainerForPostRequest(restRequest);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
+      Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
           blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
         LOGGER.debug("TTL set to very large value in POST request with BlobProperties {}", blobProperties);
         frontendMetrics.ttlTooLargeError.inc();
+      } else if (container.isTtlRequired() && (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time
+          || blobProperties.getTimeToLiveInSeconds() > frontendConfig.maxAcceptableTtlSecsIfTtlRequired)) {
+        String descriptor = RestUtils.getAccountFromArgs(restRequest.getArgs()).getName() + ":" + container.getName();
+        if (frontendConfig.failIfTtlRequiredButNotProvided) {
+          throw new RestServiceException(
+              "TTL < " + frontendConfig.maxAcceptableTtlSecsIfTtlRequired + " is required for upload to " + descriptor,
+              RestServiceErrorCode.InvalidArgs);
+        } else {
+          LOGGER.debug(
+              blobProperties.getServiceId() + " attempted an upload with ttl " + blobProperties.getTimeToLiveInSeconds()
+                  + " to " + descriptor);
+          frontendMetrics.ttlNotCompliantError.inc();
+          restResponseChannel.setHeader(RestUtils.Headers.NON_COMPLIANCE_WARNING,
+              "TTL < " + frontendConfig.maxAcceptableTtlSecsIfTtlRequired + " will be required for future uploads");
+        }
       }
       // inject encryption frontendMetrics if applicable
       if (blobProperties.isEncrypted()) {
