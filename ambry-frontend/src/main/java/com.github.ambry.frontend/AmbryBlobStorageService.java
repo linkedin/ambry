@@ -38,6 +38,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -505,10 +506,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     }
 
     /**
-     * Forwards request to the {@link Router} once ID conversion is complete.
-     * </p>
-     * In the case of some sub-resources (e.g., {@link RestUtils.SubResource#Replicas}), the request is not forwarded to
-     * the {@link Router}.
+     * Calls {@link SecurityService#postProcessRequest} once ID conversion is completed.
      * @param result The converted ID. This would be non null when the request executed successfully
      * @param exception The exception that was reported on execution of the request
      * @throws IllegalStateException if both {@code result} and {@code exception} are null.
@@ -516,7 +514,6 @@ class AmbryBlobStorageService implements BlobStorageService {
     @Override
     public void onCompletion(String result, Exception exception) {
       callbackTracker.markOperationEnd();
-      ReadableStreamChannel response = null;
       if (result == null && exception == null) {
         throw new IllegalStateException("Both result and exception cannot be null");
       } else if (exception == null) {
@@ -525,62 +522,16 @@ class AmbryBlobStorageService implements BlobStorageService {
           logger.trace("Handling {} of {}", restMethod, result);
           BlobId blobId = FrontendUtils.getBlobIdFromString(result, clusterMap);
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
-          // TODO use callback when AmbryBlobStorageService gets refactored into handlers.
-          securityService.postProcessRequest(restRequest).get();
-          switch (restMethod) {
-            case GET:
-              RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
-              // inject encryption metrics if need be
-              if (BlobId.isEncrypted(result)) {
-                restRequest.getMetricsTracker()
-                    .injectMetrics(
-                        getRestRequestMetricsForGet(frontendMetrics, subresource, restRequest.getSSLSession() != null,
-                            true));
-              }
-              if (subresource == null) {
-                getCallback.markStartTime();
-                router.getBlob(result, getCallback.options, getCallback);
-              } else {
-                switch (subresource) {
-                  case BlobInfo:
-                  case UserMetadata:
-                    getCallback.markStartTime();
-                    router.getBlob(result, getCallback.options, getCallback);
-                    break;
-                  case Replicas:
-                    response = getReplicasHandler.getReplicas(result, restResponseChannel);
-                    break;
-                }
-              }
-              break;
-            case HEAD:
-              GetOption getOption = RestUtils.getGetOption(restRequest, frontendConfig.frontendDefaultRouterGetOption);
-              // inject encryption metrics if need be
-              if (BlobId.isEncrypted(result)) {
-                RestRequestMetrics requestMetrics =
-                    frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null,
-                        true);
-                restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-              }
-              headCallback.markStartTime();
-              router.getBlob(result, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
-                  .getOption(getOption)
-                  .build(), headCallback);
-              break;
-            case DELETE:
-              deleteCallback.markStartTime();
-              router.deleteBlob(result, getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false), deleteCallback);
-              break;
-            default:
-              exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
-          }
+          securityService.postProcessRequest(restRequest,
+              securityPostProcessRequestCallback(result, restRequest, restResponseChannel, getCallback, headCallback,
+                  deleteCallback));
         } catch (Exception e) {
-          exception = extractExecutionExceptionCause(e);
+          exception = e;
         }
       }
 
-      if (response != null || exception != null) {
-        submitResponse(restRequest, restResponseChannel, response, exception);
+      if (exception != null) {
+        submitResponse(restRequest, restResponseChannel, null, exception);
       }
       callbackTracker.markCallbackProcessingEnd();
     }
@@ -700,13 +651,102 @@ class AmbryBlobStorageService implements BlobStorageService {
   }
 
   /**
+   * Build a callback to use for {@link SecurityService#postProcessRequest}. This callback forwards request to the
+   * {@link Router} once ID conversion is completed. In the case of some sub-resources
+   * (e.g., {@link RestUtils.SubResource#Replicas}), the request is completed and not forwarded to the {@link Router}.
+   * @param convertedId the converted blob ID to use in router requests.
+   * @param restRequest the {@link RestRequest}.
+   * @param restResponseChannel the {@link RestResponseChannel}.
+   * @param getCallback the {@link GetCallback} to use if this is a {@link RestMethod#GET} request, or null for other
+   *                    request types.
+   * @param headCallback the {@link HeadCallback} to use if this is a {@link RestMethod#HEAD} request, or null for other
+   *                    request types.
+   * @param deleteCallback the {@link DeleteCallback} to use if this is a {@link RestMethod#DELETE} request, or null for
+   *                       other request types.
+   * @return the {@link Callback} to use.
+   */
+  private Callback<Void> securityPostProcessRequestCallback(String convertedId, RestRequest restRequest,
+      RestResponseChannel restResponseChannel, GetCallback getCallback, HeadCallback headCallback,
+      DeleteCallback deleteCallback) {
+    Callback<ReadableStreamChannel> completionCallback =
+        (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception);
+    RestMethod restMethod = restRequest.getRestMethod();
+    AsyncOperationTracker.Metrics metrics;
+    switch (restMethod) {
+      case GET:
+        metrics = frontendMetrics.getSecurityPostProcessRequestMetrics;
+        break;
+      case HEAD:
+        metrics = frontendMetrics.headSecurityPostProcessRequestMetrics;
+        break;
+      case DELETE:
+        metrics = frontendMetrics.deleteSecurityPostProcessRequestMetrics;
+        break;
+      default:
+        throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);
+    }
+    return FrontendUtils.buildCallback(metrics, result -> {
+      ReadableStreamChannel response = null;
+      switch (restMethod) {
+        case GET:
+          RestUtils.SubResource subResource = RestUtils.getBlobSubResource(restRequest);
+          // inject encryption metrics if need be
+          if (BlobId.isEncrypted(convertedId)) {
+            restRequest.getMetricsTracker()
+                .injectMetrics(
+                    getRestRequestMetricsForGet(frontendMetrics, subResource, restRequest.getSSLSession() != null,
+                        true));
+          }
+          if (subResource == null) {
+            getCallback.markStartTime();
+            router.getBlob(convertedId, getCallback.options, getCallback);
+          } else {
+            switch (subResource) {
+              case BlobInfo:
+              case UserMetadata:
+                getCallback.markStartTime();
+                router.getBlob(convertedId, getCallback.options, getCallback);
+                break;
+              case Replicas:
+                response = getReplicasHandler.getReplicas(convertedId, restResponseChannel);
+                break;
+            }
+          }
+          break;
+        case HEAD:
+          GetOption getOption = RestUtils.getGetOption(restRequest, frontendConfig.frontendDefaultRouterGetOption);
+          // inject encryption metrics if need be
+          if (BlobId.isEncrypted(convertedId)) {
+            RestRequestMetrics requestMetrics =
+                frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null,
+                    true);
+            restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+          }
+          headCallback.markStartTime();
+          router.getBlob(convertedId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
+              .getOption(getOption)
+              .build(), headCallback);
+          break;
+        case DELETE:
+          deleteCallback.markStartTime();
+          router.deleteBlob(convertedId, getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false), deleteCallback);
+          break;
+        default:
+          throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);
+      }
+      if (response != null) {
+        completionCallback.onCompletion(response, null);
+      }
+    }, restRequest.getUri(), logger, completionCallback);
+  }
+
+  /**
    * Tracks metrics and logs progress of operations that accept callbacks.
    */
   private class CallbackTracker {
     private long operationStartTime = 0;
     private long processingStartTime = 0;
 
-    private final RestRequest restRequest;
     private final String operationType;
     private final Histogram operationTimeTracker;
     private final Histogram callbackProcessingTimeTracker;
@@ -721,7 +761,6 @@ class AmbryBlobStorageService implements BlobStorageService {
      */
     CallbackTracker(RestRequest restRequest, String operationType, Histogram operationTimeTracker,
         Histogram callbackProcessingTimeTracker) {
-      this.restRequest = restRequest;
       this.operationType = operationType;
       this.operationTimeTracker = operationTimeTracker;
       this.callbackProcessingTimeTracker = callbackProcessingTimeTracker;
