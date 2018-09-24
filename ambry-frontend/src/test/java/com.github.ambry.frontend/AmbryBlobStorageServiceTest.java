@@ -22,6 +22,7 @@ import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -293,8 +294,7 @@ public class AmbryBlobStorageServiceTest {
     // What the test is looking for -> No exceptions thrown when the handle is run and the original exception arrives
     // safely.
     responseHandler.shutdown();
-    for (String methodName : new String[]{"handleGet", "handlePost", "handleHead", "handleDelete", "handleOptions",
-        "handlePut"}) {
+    for (String methodName : new String[]{"handleGet", "handlePost", "handleHead", "handleDelete", "handleOptions", "handlePut"}) {
       Method method =
           AmbryBlobStorageService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
       responseHandler.reset();
@@ -819,6 +819,35 @@ public class AmbryBlobStorageServiceTest {
       assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
           originalReplicaStr, returnedReplicasStr);
     }
+  }
+
+  /**
+   * Tests the handling of {@link Operations#GET_CLUSTER_MAP_SNAPSHOT} requests.
+   * @throws Exception
+   */
+  @Test
+  public void getClusterMapSnapshotTest() throws Exception {
+    RestRequest restRequest = createRestRequest(RestMethod.GET, Operations.GET_CLUSTER_MAP_SNAPSHOT, null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    JSONObject expected = clusterMap.getSnapshot();
+    JSONObject actual = new JSONObject(new String(restResponseChannel.getResponseBody()));
+    // remove timestamps because they may differ
+    expected.remove(ClusterMapSnapshotConstants.TIMESTAMP_MS);
+    actual.remove(ClusterMapSnapshotConstants.TIMESTAMP_MS);
+    assertEquals("Snapshot does not match expected", expected.toString(), actual.toString());
+
+    // test a failure to ensure that it goes through the exception path
+    String msg = UtilsTest.getRandomString(10);
+    clusterMap.setExceptionOnSnapshot(new RuntimeException(msg));
+    restRequest = createRestRequest(RestMethod.GET, Operations.GET_CLUSTER_MAP_SNAPSHOT, null, null);
+    try {
+      doOperation(restRequest, new MockRestResponseChannel());
+      fail("Operation should have failed");
+    } catch (RuntimeException e) {
+      assertEquals("Exception not as expected", msg, e.getMessage());
+    }
+    clusterMap.setExceptionOnSnapshot(null);
   }
 
   /**

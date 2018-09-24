@@ -14,7 +14,6 @@
 package com.github.ambry.clustermap;
 
 import java.util.List;
-import org.json.JSONObject;
 
 
 /**
