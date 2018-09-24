@@ -212,7 +212,7 @@ class PostBlobHandler {
       } else if (container.isTtlRequired() && (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time
           || blobProperties.getTimeToLiveInSeconds() > frontendConfig.maxAcceptableTtlSecsIfTtlRequired)) {
         String descriptor = RestUtils.getAccountFromArgs(restRequest.getArgs()).getName() + ":" + container.getName();
-        if (frontendConfig.failTtlRequiredNotProvided) {
+        if (frontendConfig.failIfTtlRequiredButNotProvided) {
           throw new RestServiceException(
               "TTL < " + frontendConfig.maxAcceptableTtlSecsIfTtlRequired + " is required for upload to " + descriptor,
               RestServiceErrorCode.InvalidArgs);

@@ -125,7 +125,7 @@ public class PostBlobHandlerTest {
     Properties properties = new Properties();
 
     // ttl required in container, config asks not to fail. If TTL does not conform, look for non compliance warning
-    properties.setProperty(FrontendConfig.FAIL_TTL_REQUIRED_NOT_PROVIDED_KEY, "false");
+    properties.setProperty(FrontendConfig.FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY, "false");
     initPostBlobHandler(properties);
     // ok
     doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1);
@@ -135,7 +135,7 @@ public class PostBlobHandlerTest {
     doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1);
 
     // ttl required in container, config asks to fail. If TTL does not conform, look for failure
-    properties.setProperty(FrontendConfig.FAIL_TTL_REQUIRED_NOT_PROVIDED_KEY, "true");
+    properties.setProperty(FrontendConfig.FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY, "true");
     initPostBlobHandler(properties);
     // ok
     doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1);
@@ -216,7 +216,7 @@ public class PostBlobHandlerTest {
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (container.isTtlRequired() && (blobTtlSecs == Utils.Infinite_Time
         || blobTtlSecs > frontendConfig.maxAcceptableTtlSecsIfTtlRequired)) {
-      if (frontendConfig.failTtlRequiredNotProvided) {
+      if (frontendConfig.failIfTtlRequiredButNotProvided) {
         try {
           future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
           fail("Post should have failed");
