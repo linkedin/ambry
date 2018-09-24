@@ -747,13 +747,13 @@ public class ReplicationTest {
         replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
             replicasToReplicate.get(remoteHost.dataNodeId));
 
-    Assert.assertEquals(
+    Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
         idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
         responses.stream().map(k -> k.missingStoreKeys).flatMap(Collection::stream).collect(Collectors.toSet()));
 
     // Now delete a message in the remote before doing the Get requests (for every partition). Remove these keys from
     // expected key set. Even though they are requested, they should not go into the local store. However, this cycle
-    // of replication must be successful
+    // of replication must be successful.
     for (PartitionId partitionId : partitionIds) {
       Iterator<StoreKey> iter = idsToExpectByPartition.get(partitionId).iterator();
       iter.next();
@@ -766,7 +766,117 @@ public class ReplicationTest {
         replicasToReplicate.get(remoteHost.dataNodeId), responses);
 
     Assert.assertEquals(idsToExpectByPartition.keySet(), localHost.infosByPartition.keySet());
-    Assert.assertEquals(
+    Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
+        idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
+        localHost.infosByPartition.values()
+            .stream()
+            .flatMap(Collection::stream)
+            .map(MessageInfo::getStoreKey)
+            .collect(Collectors.toSet()));
+  }
+
+  /**
+   * Test the case where a blob expires after a replication metadata exchange completes and identifies the blob as
+   * a candidate. The subsequent GetRequest should succeed as Replication makes a Include_All call, and
+   * fixMissingStoreKeys() should succeed without exceptions. The blob should not be put locally.
+   */
+  @Test
+  public void testExpiryAfterMetadataExchange() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<Host, Host> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    Host localHost = localAndRemoteHosts.getFirst();
+    Host remoteHost = localAndRemoteHosts.getSecond();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+
+    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    Map<PartitionId, Set<StoreKey>> idsToExpectByPartition = new HashMap<>();
+    for (int i = 0; i < partitionIds.size(); i++) {
+      PartitionId partitionId = partitionIds.get(i);
+
+      // add 5 messages to remote host only.
+      Set<StoreKey> expectedIds =
+          new HashSet<>(addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 5));
+
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
+
+      // add an expired message to the remote host only
+      StoreKey id =
+          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
+              containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
+      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
+      remoteHost.addMessage(partitionId,
+          new MessageInfo(id, putMsgInfo.getFirst().remaining(), 1, accountId, containerId,
+              putMsgInfo.getSecond().getOperationTimeMs()), putMsgInfo.getFirst());
+
+      // add 3 messages to the remote host only
+      expectedIds.addAll(addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3));
+
+      // delete the very first blob in the remote host only (and delete it from expected list)
+      Iterator<StoreKey> iter = expectedIds.iterator();
+      addDeleteMessagesToReplicasOfPartition(partitionId, iter.next(), Collections.singletonList(remoteHost));
+      iter.remove();
+
+      // PUT and DELETE a blob in the remote host only
+      id = addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 1).get(0);
+      addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+
+      idsToExpectByPartition.put(partitionId, expectedIds);
+    }
+
+    // do the exchange metadata.
+
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+    int batchSize = 400;
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null);
+    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    // Do the replica metadata exchange.
+    List<ReplicaThread.ExchangeMetadataResponse> responses =
+        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+            replicasToReplicate.get(remoteHost.dataNodeId));
+
+    Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
+        idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
+        responses.stream().map(k -> k.missingStoreKeys).flatMap(Collection::stream).collect(Collectors.toSet()));
+
+    // Now expire a message in the remote before doing the Get requests (for every partition). Remove these keys from
+    // expected key set. Even though they are requested, they should not go into the local store. However, this cycle
+    // of replication must be successful.
+    PartitionId partitionId = idsToExpectByPartition.keySet().iterator().next();
+    Iterator<StoreKey> keySet = idsToExpectByPartition.get(partitionId).iterator();
+    StoreKey keyToExpire = keySet.next();
+    keySet.remove();
+    MessageInfo msgInfoToExpire = null;
+
+    for (MessageInfo info : remoteHost.infosByPartition.get(partitionId)) {
+      if (info.getStoreKey().equals(keyToExpire)) {
+        msgInfoToExpire = info;
+        break;
+      }
+    }
+
+    int i = remoteHost.infosByPartition.get(partitionId).indexOf(msgInfoToExpire);
+    remoteHost.infosByPartition.get(partitionId)
+        .set(i, new MessageInfo(msgInfoToExpire.getStoreKey(), msgInfoToExpire.getSize(), msgInfoToExpire.isDeleted(),
+            msgInfoToExpire.isTtlUpdated(), 1, msgInfoToExpire.getAccountId(), msgInfoToExpire.getContainerId(),
+            msgInfoToExpire.getOperationTimeMs()));
+
+    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize),
+        replicasToReplicate.get(remoteHost.dataNodeId), responses);
+
+    Assert.assertEquals(idsToExpectByPartition.keySet(), localHost.infosByPartition.keySet());
+    Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
         idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
         localHost.infosByPartition.values()
             .stream()
@@ -2014,10 +2124,12 @@ public class ReplicationTest {
         for (PartitionRequestInfo requestInfo : getRequest.getPartitionInfoList()) {
           List<MessageInfo> infosForPartition = infosToReturn.get(requestInfo.getPartition());
           PartitionResponseInfo partitionResponseInfo;
-          // To keep things simple, this mock class only checks for the Deleted case (and not the Expired case).
-          if (getRequest.getGetOption().equals(GetOption.None) && infosForPartition.stream()
-              .anyMatch(MessageInfo::isDeleted)) {
+          if (!getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest.getGetOption()
+              .equals(GetOption.Include_Deleted_Blobs) && infosForPartition.stream().anyMatch(MessageInfo::isDeleted)) {
             partitionResponseInfo = new PartitionResponseInfo(requestInfo.getPartition(), ServerErrorCode.Blob_Deleted);
+          } else if (!getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest.getGetOption()
+              .equals(GetOption.Include_Expired_Blobs) && infosForPartition.stream().anyMatch(MessageInfo::isExpired)) {
+            partitionResponseInfo = new PartitionResponseInfo(requestInfo.getPartition(), ServerErrorCode.Blob_Expired);
           } else {
             partitionResponseInfo =
                 new PartitionResponseInfo(requestInfo.getPartition(), infosToReturn.get(requestInfo.getPartition()),
