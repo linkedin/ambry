@@ -493,6 +493,14 @@ public class RequestResponseTest {
     int maxLength = 100 + numResponseInfos * 500;
     Assert.assertTrue("toString() representation longer than " + maxLength + " characters",
         response.toString().length() < maxLength);
+    // test toString() of a ReplicaMetadataResponseInfo without any messages
+    ReplicaMetadataResponseInfo responseInfo = new ReplicaMetadataResponseInfo(
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), new MockFindToken(0, 1000),
+        Collections.emptyList(), 1000);
+    Assert.assertTrue("Length of toString() should be > 0", responseInfo.toString().length() > 0);
+    // test toString() of a ReplicaMetadataResponse without any ReplicaMetadataResponseInfo
+    response = new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, Collections.emptyList());
+    Assert.assertTrue("Length of toString() should be > 0", response.toString().length() > 0);
   }
 
   /**
