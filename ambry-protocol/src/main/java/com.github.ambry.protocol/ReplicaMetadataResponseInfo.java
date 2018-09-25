@@ -141,12 +141,16 @@ public class ReplicaMetadataResponseInfo {
     sb.append(" ServerErrorCode=").append(errorCode);
     if (errorCode == ServerErrorCode.No_Error) {
       List<MessageInfo> messageInfos = messageInfoAndMetadataListSerde.getMessageInfoList();
-      int size = messageInfos.size();
       sb.append(" Token=").append(token);
-      sb.append(" MessageInfoListSize=").append(size);
       sb.append(" MessagesTotalSize=").append(totalSizeOfAllMessages);
-      sb.append(" MessageInfoListFirstId=").append(messageInfos.get(0).getStoreKey());
-      sb.append(" MessageInfoListLastId=").append(messageInfos.get(size - 1).getStoreKey());
+      if (messageInfos != null) {
+        int size = messageInfos.size();
+        sb.append(" MessageInfoListSize=").append(size);
+        if (size > 0) {
+          sb.append(" MessageInfoListFirstId=").append(messageInfos.get(0).getStoreKey());
+          sb.append(" MessageInfoListLastId=").append(messageInfos.get(size - 1).getStoreKey());
+        }
+      }
       sb.append(" RemoteReplicaLagInBytes=").append(remoteReplicaLagInBytes);
     }
     return sb.toString();
