@@ -208,5 +208,4 @@ class Journal {
   int getCurrentNumberOfEntries() {
     return currentNumberOfEntries.get();
   }
-
 }

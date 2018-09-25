@@ -54,6 +54,7 @@ class DiskManager {
   private final CompactionManager compactionManager;
   private final List<String> stoppedReplicas;
   private final ReplicaStatusDelegate replicaStatusDelegate;
+  private final Set<String> expectedDirs = new HashSet<>();
   private boolean running = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -83,11 +84,12 @@ class DiskManager {
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(storeConfig, time));
     longLivedTaskScheduler = Utils.newScheduler(1, true);
-    diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling,
-        new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
+    File reserveFileDir = new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName);
+    diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling, reserveFileDir,
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
     this.replicaStatusDelegate = replicaStatusDelegate;
     this.stoppedReplicas = stoppedReplicas;
+    expectedDirs.add(reserveFileDir.getAbsolutePath());
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         BlobStore store =
@@ -96,6 +98,7 @@ class DiskManager {
                 time);
         stores.put(replica.getPartitionId(), store);
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
+        expectedDirs.add(replica.getReplicaPath());
       }
     }
     compactionManager = new CompactionManager(disk.getMountPath(), storeConfig, stores.values(), metrics, time);
@@ -148,9 +151,8 @@ class DiskManager {
         }
       }
       diskSpaceAllocator.initializePool(requirementsList);
-
       compactionManager.enable();
-
+      reportUnrecognizedDirs();
       running = true;
     } catch (StoreException e) {
       logger.error("Error while starting the DiskManager for " + disk.getMountPath()
@@ -378,5 +380,28 @@ class DiskManager {
       }
     }
     return true;
+  }
+
+  /**
+   * Reports any unrecognized directories on disk
+   */
+  private void reportUnrecognizedDirs() {
+    File[] dirs = new File(disk.getMountPath()).listFiles(File::isDirectory);
+    if (dirs == null) {
+      metrics.diskMountPathFailures.inc();
+      logger.warn("Could not list the directories in {}", disk.getMountPath());
+    } else {
+      List<String> unexpectedDirs = new ArrayList<>();
+      for (File dir : dirs) {
+        String absPath = dir.getAbsolutePath();
+        if (!expectedDirs.contains(absPath)) {
+          unexpectedDirs.add(absPath);
+        }
+      }
+      if (unexpectedDirs.size() > 0) {
+        logger.warn("Encountered unexpected dirs in {} : {}", disk.getMountPath(), unexpectedDirs);
+        metrics.unexpectedDirsOnDisk.inc(unexpectedDirs.size());
+      }
+    }
   }
 }
