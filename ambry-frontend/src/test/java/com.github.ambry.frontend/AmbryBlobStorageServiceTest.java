@@ -1448,6 +1448,9 @@ public class AmbryBlobStorageServiceTest {
         restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
     assertEquals("Wrong container object in RestRequest's args", expectedContainer,
         restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
+    verifyBlobProperties(expectedHeaders, restResponseChannel);
+    verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
+    verifyAccountAndContainerHeaders(restResponseChannel, expectedAccount, expectedContainer);
     byte[] expectedContentArray = expectedContent.array();
     if (range != null) {
       long blobSize = expectedHeaders.getLong(RestUtils.Headers.BLOB_SIZE);
@@ -1548,7 +1551,7 @@ public class AmbryBlobStorageServiceTest {
     assertNull("Accept-Ranges should not be set", restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     assertNull("Content-Range header should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
-    verifyBlobProperties(expectedHeaders, !expectedContainer.isCacheable(), restResponseChannel);
+    verifyBlobProperties(expectedHeaders, restResponseChannel);
     verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
     verifyAccountAndContainerHeaders(restResponseChannel, expectedAccount, expectedContainer);
   }
@@ -1588,27 +1591,24 @@ public class AmbryBlobStorageServiceTest {
     }
     assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match expected", Long.toString(contentLength),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
-    verifyBlobProperties(expectedHeaders, !expectedContainer.isCacheable(), restResponseChannel);
+    verifyBlobProperties(expectedHeaders, restResponseChannel);
     verifyAccountAndContainerHeaders(restResponseChannel, expectedAccount, expectedContainer);
   }
 
   /**
    * Verifies blob properties from output, to that sent in during input
    * @param expectedHeaders the expected headers in the response.
-   * @param isPrivate {@code true} if the blob is expected to be private
    * @param restResponseChannel the {@link RestResponseChannel} which contains the response.
    * @throws JSONException
    */
-  private void verifyBlobProperties(JSONObject expectedHeaders, boolean isPrivate,
-      MockRestResponseChannel restResponseChannel) throws JSONException {
+  private void verifyBlobProperties(JSONObject expectedHeaders, MockRestResponseChannel restResponseChannel)
+      throws JSONException {
     assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
         expectedHeaders.get(RestUtils.Headers.BLOB_SIZE).toString(),
         restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertEquals(RestUtils.Headers.SERVICE_ID + " does not match",
         expectedHeaders.getString(RestUtils.Headers.SERVICE_ID),
         restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
-    assertEquals(RestUtils.Headers.PRIVATE + " does not match", isPrivate,
-        Boolean.valueOf(restResponseChannel.getHeader(RestUtils.Headers.PRIVATE)));
     assertEquals(RestUtils.Headers.AMBRY_CONTENT_TYPE + " does not match",
         expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
         restResponseChannel.getHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE));
@@ -1642,6 +1642,8 @@ public class AmbryBlobStorageServiceTest {
       Assert.assertEquals("Container name not as expected", expectedContainer.getName(),
           restResponseChannel.getHeader(RestUtils.Headers.TARGET_CONTAINER_NAME));
     }
+    assertEquals(RestUtils.Headers.PRIVATE + " does not match", !expectedContainer.isCacheable(),
+        Boolean.valueOf(restResponseChannel.getHeader(RestUtils.Headers.PRIVATE)));
   }
 
   /**

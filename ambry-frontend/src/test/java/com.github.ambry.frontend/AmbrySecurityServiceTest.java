@@ -38,6 +38,7 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
@@ -45,7 +46,9 @@ import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutionException;
@@ -70,6 +73,7 @@ public class AmbrySecurityServiceTest {
       new InMemAccountServiceFactory(false, true).getAccountService();
   private static final Account REF_ACCOUNT;
   private static final Container REF_CONTAINER;
+  private static final Map<String, Object> USER_METADATA = new HashMap<>();
   private static final BlobInfo DEFAULT_INFO;
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
@@ -85,13 +89,24 @@ public class AmbrySecurityServiceTest {
           URL_SIGNING_SERVICE_FACTORY.getUrlSigningService());
 
   static {
-    ACCOUNT_SERVICE.clear();
-    REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
-    REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
-    DEFAULT_INFO = new BlobInfo(
-        new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif", false,
-            Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false), null);
-    ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
+    try {
+      ACCOUNT_SERVICE.clear();
+      REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
+      REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + UtilsTest.getRandomString(9),
+          UtilsTest.getRandomString(9));
+      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + UtilsTest.getRandomString(10),
+          UtilsTest.getRandomString(10));
+      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + UtilsTest.getRandomString(11),
+          UtilsTest.getRandomString(11));
+      DEFAULT_INFO = new BlobInfo(
+          new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
+              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false),
+          RestUtils.buildUserMetadata(USER_METADATA));
+      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
   }
 
   /**
@@ -215,7 +230,7 @@ public class AmbrySecurityServiceTest {
     securityService.processResponse(createRestRequest(RestMethod.PUT, "/", null), new MockRestResponseChannel(), null)
         .get();
 
-    // GET signed URL (shoud be no errors)
+    // GET signed URL (should be no errors)
     securityService.processResponse(createRestRequest(RestMethod.GET, Operations.GET_SIGNED_URL, null),
         new MockRestResponseChannel(), null).get();
 
@@ -249,6 +264,9 @@ public class AmbrySecurityServiceTest {
     testGetSubResource(UNKNOWN_INFO_ENC, RestUtils.SubResource.BlobInfo);
     // GET UserMetadata
     testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.UserMetadata);
+    byte[] usermetadata = TestUtils.getRandomBytes(10);
+    testGetSubResource(new BlobInfo(DEFAULT_INFO.getBlobProperties(), usermetadata),
+        RestUtils.SubResource.UserMetadata);
 
     // POST
     testPostBlob();
@@ -348,6 +366,8 @@ public class AmbrySecurityServiceTest {
           restResponseChannel.getHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME));
       Assert.assertEquals("Container name not as expected", expectedContainer.getName(),
           restResponseChannel.getHeader(RestUtils.Headers.TARGET_CONTAINER_NAME));
+      Assert.assertEquals("Private value mismatch", !expectedContainer.isCacheable(),
+          Boolean.parseBoolean(restResponseChannel.getHeader(RestUtils.Headers.PRIVATE)));
     } else {
       verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.TARGET_ACCOUNT_NAME,
           RestUtils.Headers.TARGET_CONTAINER_NAME);
@@ -459,7 +479,7 @@ public class AmbrySecurityServiceTest {
     securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
     Assert.assertEquals("ProcessResponse status should have been set",
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
-    verifyHeadersForGetBlob(blobInfo.getBlobProperties(), range, restResponseChannel);
+    verifyHeadersForGetBlob(restRequest, blobInfo, accountAndContainer, range, restResponseChannel);
   }
 
   /**
@@ -488,7 +508,7 @@ public class AmbrySecurityServiceTest {
     } else {
       Assert.assertEquals("Not modified response should not be returned", ResponseStatus.Ok,
           restResponseChannel.getStatus());
-      verifyHeadersForGetBlob(blobInfo.getBlobProperties(), null, restResponseChannel);
+      verifyHeadersForGetBlob(restRequest, blobInfo, accountAndContainer, null, restResponseChannel);
     }
   }
 
@@ -567,6 +587,15 @@ public class AmbrySecurityServiceTest {
           RestUtils.Headers.SERVICE_ID, RestUtils.Headers.OWNER_ID, RestUtils.Headers.AMBRY_CONTENT_TYPE,
           RestUtils.Headers.CREATION_TIME, RestUtils.Headers.BLOB_SIZE, RestUtils.Headers.ACCEPT_RANGES,
           RestUtils.Headers.CONTENT_RANGE);
+    }
+    Map<String, String> userMetadata =
+        blobInfo.getUserMetadata() != null ? RestUtils.buildUserMetadata(blobInfo.getUserMetadata()) : null;
+    if (userMetadata == null) {
+      Assert.assertTrue("Internal key " + RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY + " should be set",
+          (Boolean) restRequest.getArgs().get(RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY));
+    } else {
+      USER_METADATA.forEach((key, value) -> Assert.assertEquals("Value of " + key + " not as expected", value,
+          restResponseChannel.getHeader(key)));
     }
   }
 
@@ -647,18 +676,19 @@ public class AmbrySecurityServiceTest {
 
   /**
    * Verify the headers from the response are as expected
-   * @param blobProperties the {@link BlobProperties} to refer to while getting headers.
+   * @param restRequest the original request received.
+   * @param blobInfo the {@link BlobInfo} to refer to while getting headers.
+   * @param accountAndContainer the {@link Account} and {@link Container} of the blob being requested.
    * @param range the {@link ByteRange} used for a range request, or {@code null} for non-ranged requests.
    * @param restResponseChannel {@link MockRestResponseChannel} from which headers are to be verified
    * @throws RestServiceException if there was any problem getting the headers.
    */
-  private void verifyHeadersForGetBlob(BlobProperties blobProperties, ByteRange range,
-      MockRestResponseChannel restResponseChannel) throws RestServiceException {
+  private void verifyHeadersForGetBlob(RestRequest restRequest, BlobInfo blobInfo,
+      Pair<Account, Container> accountAndContainer, ByteRange range, MockRestResponseChannel restResponseChannel)
+      throws RestServiceException {
+    BlobProperties blobProperties = blobInfo.getBlobProperties();
     Assert.assertEquals("Blob size mismatch ", blobProperties.getBlobSize(),
         Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE)));
-    verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.PRIVATE, RestUtils.Headers.TTL,
-        RestUtils.Headers.SERVICE_ID, RestUtils.Headers.OWNER_ID, RestUtils.Headers.AMBRY_CONTENT_TYPE,
-        RestUtils.Headers.CREATION_TIME);
     if (blobProperties.getContentType() != null) {
       Assert.assertEquals("Content Type mismatch", blobProperties.getContentType(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
@@ -690,6 +720,19 @@ public class AmbrySecurityServiceTest {
     } else {
       Assert.assertNull("Content length value should not be set",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    }
+    verifyBlobPropertiesHeaders(blobInfo.getBlobProperties(), restResponseChannel);
+    verifyAccountAndContainerHeaders(restResponseChannel, accountAndContainer.getFirst(),
+        accountAndContainer.getSecond());
+    Map<String, String> userMetadata =
+        blobInfo.getUserMetadata() != null ? RestUtils.buildUserMetadata(blobInfo.getUserMetadata()) : null;
+    if (userMetadata == null) {
+      Assert.assertNull(
+          "Internal key " + RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY + " should not be set",
+          restRequest.getArgs().get(RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY));
+    } else {
+      USER_METADATA.forEach((key, value) -> Assert.assertEquals("Value of " + key + " not as expected", value,
+          restResponseChannel.getHeader(key)));
     }
     verifyCacheHeaders(getAccountAndContainer(blobProperties).getSecond().isCacheable(), restResponseChannel);
   }
@@ -756,8 +799,6 @@ public class AmbrySecurityServiceTest {
     Assert.assertEquals("Creation time should have been set correctly",
         RestUtils.toSecondsPrecisionInMs(blobProperties.getCreationTimeInMs()),
         RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME)).longValue());
-    Assert.assertEquals("Private value mismatch", blobProperties.isPrivate(),
-        Boolean.parseBoolean(restResponseChannel.getHeader(RestUtils.Headers.PRIVATE)));
     Assert.assertEquals("IsEncrypted value mismatch", blobProperties.isEncrypted(),
         Boolean.parseBoolean(restResponseChannel.getHeader(RestUtils.Headers.ENCRYPTED_IN_STORAGE)));
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {

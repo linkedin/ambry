@@ -43,12 +43,12 @@ import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
-import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -856,13 +856,12 @@ class AmbryBlobStorageService implements BlobStorageService {
                   if (securityException == null) {
                     if (subResource != null) {
                       BlobInfo blobInfo = routerResult.getBlobInfo();
-                      Map<String, String> userMetadata = RestUtils.buildUserMetadata(blobInfo.getUserMetadata());
-                      if (userMetadata == null) {
+                      if (RestUtils.getBooleanHeader(restRequest.getArgs(), SEND_USER_METADATA_AS_RESPONSE_BODY,
+                          false)) {
                         restResponseChannel.setHeader(Headers.CONTENT_TYPE, "application/octet-stream");
                         restResponseChannel.setHeader(Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
                         response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
                       } else {
-                        setUserMetadataHeaders(userMetadata, restResponseChannel);
                         restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
                         response = new ByteBufferReadableStreamChannel(AmbryBlobStorageService.EMPTY_BUFFER);
                       }
@@ -900,19 +899,6 @@ class AmbryBlobStorageService implements BlobStorageService {
     void markStartTime() {
       callbackTracker.markOperationStart();
     }
-
-    /**
-     * Sets the user metadata in the headers of the response.
-     * @param userMetadata the user metadata that need to be set in the headers.
-     * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
-     * @throws RestServiceException if there are any problems setting the header.
-     */
-    private void setUserMetadataHeaders(Map<String, String> userMetadata, RestResponseChannel restResponseChannel)
-        throws RestServiceException {
-      for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
-        restResponseChannel.setHeader(entry.getKey(), entry.getValue());
-      }
-    }
   }
 
   /**
@@ -923,7 +909,6 @@ class AmbryBlobStorageService implements BlobStorageService {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final CallbackTracker callbackTracker;
-    private final Logger logger = LoggerFactory.getLogger(getClass());
 
     /**
      * Create a DELETE callback.

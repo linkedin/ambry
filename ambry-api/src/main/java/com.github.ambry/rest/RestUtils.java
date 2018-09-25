@@ -262,12 +262,18 @@ public class RestUtils {
      * To be set if the operation knows the keep-alive behavior it prefers on error. Valid values are boolean.
      * Not authoritative, only a hint
      */
-    public final static String KEEP_ALIVE_ON_ERROR_HINT = KEY_PREFIX + "keep-alive-on-error-hint";
+    public static final String KEEP_ALIVE_ON_ERROR_HINT = KEY_PREFIX + "keep-alive-on-error-hint";
 
     /**
      * To be set to {@code true} if tracking info should be attached to frontend responses.
      */
-    public final static String SEND_TRACKING_INFO = KEY_PREFIX + "ambry-internal-keys-send-tracking-info";
+    public static final String SEND_TRACKING_INFO = KEY_PREFIX + "send-tracking-info";
+
+    /**
+     * Set to {@code true} (assumed {@code false} if absent) if the user metadata needs to be sent as the body of the
+     * response.
+     */
+    public static final String SEND_USER_METADATA_AS_RESPONSE_BODY = KEY_PREFIX + "send-user-metadata-as-response-body";
   }
 
   /**

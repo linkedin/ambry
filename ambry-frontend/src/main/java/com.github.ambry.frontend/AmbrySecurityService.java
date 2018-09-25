@@ -33,6 +33,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.Map;
 
 import static com.github.ambry.rest.RestUtils.*;
 
@@ -169,12 +170,18 @@ class AmbrySecurityService implements SecurityService {
                     responseChannel.setStatus(ResponseStatus.PartialContent);
                   }
                   setGetBlobResponseHeaders(blobInfo, options, responseChannel);
+                  setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
+                  setAccountAndContainerHeaders(restRequest, responseChannel);
+                  setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel);
                 }
                 setCacheHeaders(restRequest, responseChannel);
               } else {
                 if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
+                }
+                if (!setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel)) {
+                  restRequest.setArg(InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY, true);
                 }
               }
             }
@@ -333,5 +340,25 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, container.getName());
     }
     restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, !container.isCacheable());
+  }
+
+  /**
+   * Sets the user metadata in the headers of the response.
+   * @param userMetadata the user metadata that needs to be sent.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   * @throws RestServiceException if there are any problems setting the header.
+   */
+  private boolean setUserMetadataHeaders(byte[] userMetadata, RestResponseChannel restResponseChannel)
+      throws RestServiceException {
+    if (userMetadata == null) {
+      return false;
+    }
+    Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadata);
+    if (userMetadataMap != null) {
+      for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
+        restResponseChannel.setHeader(entry.getKey(), entry.getValue());
+      }
+    }
+    return userMetadataMap != null;
   }
 }
