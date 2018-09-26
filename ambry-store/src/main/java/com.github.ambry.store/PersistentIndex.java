@@ -805,7 +805,7 @@ class PersistentIndex {
         Offset offset = new Offset(logSegmentName, value.getOriginalMessageOffset());
         // use the expiration time from the original value because it may have been updated
         readOptions = new BlobReadOptions(log, offset,
-            new MessageInfo(deletedBlobInfo.getStoreKey(), deletedBlobInfo.getSize(), false,
+            new MessageInfo(deletedBlobInfo.getStoreKey(), deletedBlobInfo.getSize(), true,
                 value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(),
                 deletedBlobInfo.getAccountId(), deletedBlobInfo.getContainerId(),
                 deletedBlobInfo.getOperationTimeMs()));
@@ -813,7 +813,7 @@ class PersistentIndex {
         // PUT record in a different log segment.
         // use the expiration time from the original value because it may have been updated
         readOptions = new BlobReadOptions(log, putValue.getOffset(),
-            new MessageInfo(key, putValue.getSize(), false, value.isFlagSet(IndexValue.Flags.Ttl_Update_Index),
+            new MessageInfo(key, putValue.getSize(), true, value.isFlagSet(IndexValue.Flags.Ttl_Update_Index),
                 value.getExpiresAtMs(), putValue.getAccountId(), putValue.getContainerId(),
                 putValue.getOperationTimeInMs()));
       } else {

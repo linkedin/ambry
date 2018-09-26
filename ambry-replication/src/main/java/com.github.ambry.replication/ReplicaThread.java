@@ -720,7 +720,7 @@ class ReplicaThread implements Runnable {
     if (!partitionRequestInfoList.isEmpty()) {
       GetRequest getRequest = new GetRequest(correlationIdGenerator.incrementAndGet(),
           GetRequest.Replication_Client_Id_Prefix + dataNodeId.getHostname(), MessageFormatFlags.All,
-          partitionRequestInfoList, GetOption.Include_All);
+          partitionRequestInfoList, replicationConfig.replicationIncludeAll ? GetOption.Include_All : GetOption.None);
       long startTime = SystemTime.getInstance().milliseconds();
       try {
         connectedChannel.send(getRequest);
