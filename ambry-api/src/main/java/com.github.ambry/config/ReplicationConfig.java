@@ -98,6 +98,14 @@ public class ReplicationConfig {
   @Default("1048576")
   public final long replicationFetchSizeInBytes;
 
+  /**
+   * If true, replication Get requests asks for deleted and expired blobs as well to succeed in scenarios where blobs
+   * get deleted or expired after replication metadata exchange.
+   */
+  @Config("replication.include.all")
+  @Default("true")
+  public final boolean replicationIncludeAll;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -124,5 +132,6 @@ public class ReplicationConfig {
         verifiableProperties.getLongInRange("replication.synced.replica.backoff.duration.ms", 0, 0, Long.MAX_VALUE);
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
+    replicationIncludeAll = verifiableProperties.getBoolean("replication.include.all", true);
   }
 }

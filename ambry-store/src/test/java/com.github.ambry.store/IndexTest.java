@@ -1298,8 +1298,8 @@ public class IndexTest {
         state.index.getIndexSegments().lastEntry().getValue().getNumberOfItems(), entriesInJournal);
     // add some entries to trigger rollover.
     state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    assertEquals("Number of entries in the journal should not have changed",
-        entriesInJournal, state.index.journal.getCurrentNumberOfEntries());
+    assertEquals("Number of entries in the journal should not have changed", entriesInJournal,
+        state.index.journal.getCurrentNumberOfEntries());
     // Reload the index and the journal size should now reflect the config change
     state.reloadIndex(true, false);
     assertEquals("Number of entries in the journal should be exactly 1", 1,
@@ -1333,6 +1333,10 @@ public class IndexTest {
       assertEquals("Size not as expected", putEntryValue.getSize(), options.getMessageInfo().getSize());
       assertEquals("ExpiresAtMs not as expected", putEntryValue.getExpiresAtMs(),
           options.getMessageInfo().getExpirationTimeInMs());
+      if (storeGetOptions.contains(StoreGetOptions.Store_Include_Deleted) && state.deletedKeys.contains(id)) {
+        assertTrue("MessageInfo for deleted messages should have deleted flag true",
+            options.getMessageInfo().isDeleted());
+      }
     } catch (StoreException e) {
       if (expectedErrorCode == null) {
         throw e;
