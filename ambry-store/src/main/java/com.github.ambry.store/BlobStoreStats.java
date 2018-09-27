@@ -71,7 +71,6 @@ class BlobStoreStats implements StoreStats, Closeable {
   private final PersistentIndex index;
   private final Time time;
   private final DiskIOScheduler diskIOScheduler;
-  private final boolean bucketingEnabled;
   private final int bucketCount;
   private final long bucketSpanTimeInMs;
   private final long logSegmentForecastOffsetMs;
@@ -124,9 +123,8 @@ class BlobStoreStats implements StoreStats, Closeable {
     this.logSegmentForecastOffsetMs = logSegmentForecastOffsetMs;
     this.waitTimeoutInSecs = waitTimeoutInSecs;
     this.metrics = metrics;
-    bucketingEnabled = bucketCount > 0;
 
-    if (bucketingEnabled) {
+    if (bucketCount > 0) {
       indexScanner = new IndexScanner();
       longLiveTaskScheduler.scheduleAtFixedRate(indexScanner, 0,
           TimeUnit.MILLISECONDS.toSeconds(bucketCount * bucketSpanTimeInMs), TimeUnit.SECONDS);

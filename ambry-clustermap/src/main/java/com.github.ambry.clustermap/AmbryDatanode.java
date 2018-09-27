@@ -40,6 +40,9 @@ class AmbryDataNode implements DataNodeId {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ResourceStatePolicy resourceStatePolicy;
   private final ClusterMapConfig clusterMapConfig;
+  private final static Comparator<AmbryDataNode> AMBRY_DATA_NODE_COMPARATOR =
+      Comparator.comparingInt((AmbryDataNode k) -> k.plainTextPort.getPort()).
+          thenComparing(k -> k.hostName);
 
   /**
    * Instantiate an AmbryDataNode object.
@@ -149,8 +152,7 @@ class AmbryDataNode implements DataNodeId {
       throw new IllegalStateException("Incompatible objects to compare");
     }
     AmbryDataNode other = (AmbryDataNode) o;
-    return Comparator.comparingInt((AmbryDataNode k) -> k.plainTextPort.getPort()).
-        thenComparing(k -> k.hostName).compare(this, other);
+    return AMBRY_DATA_NODE_COMPARATOR.compare(this, other);
   }
 
   @Override
