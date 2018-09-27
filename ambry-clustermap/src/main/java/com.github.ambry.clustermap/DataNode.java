@@ -54,6 +54,9 @@ class DataNode implements DataNodeId {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
+  private static final Comparator<DataNode> DATA_NODE_COMPARATOR = Comparator.comparingInt((DataNode k) -> k.portNum).
+      thenComparing(k -> k.hostname);
+
   DataNode(Datacenter datacenter, JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("DataNode " + jsonObject.toString());
@@ -300,7 +303,6 @@ class DataNode implements DataNodeId {
     }
 
     DataNode other = (DataNode) o;
-    return Comparator.comparingInt((DataNode k) -> k.portNum).
-        thenComparing(k -> k.hostname).compare(this, other);
+    return DATA_NODE_COMPARATOR.compare(this, other);
   }
 }
