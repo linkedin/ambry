@@ -77,10 +77,10 @@ public class AmbrySecurityServiceTest {
   private static final BlobInfo DEFAULT_INFO;
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, false), null);
+          Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
   private static final BlobInfo UNKNOWN_INFO_ENC = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, true), null);
+          Container.UNKNOWN_CONTAINER_ID, true), new byte[0]);
   private static final FrontendTestUrlSigningServiceFactory URL_SIGNING_SERVICE_FACTORY =
       new FrontendTestUrlSigningServiceFactory();
 
@@ -244,17 +244,17 @@ public class AmbrySecurityServiceTest {
     // with no owner id
     BlobInfo blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, null, "image/gif", false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
-            REF_CONTAINER.getId(), false), null);
+            REF_CONTAINER.getId(), false), new byte[0]);
     testHeadBlobWithVariousRanges(blobInfo);
     // with no content type
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, null, false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
-            REF_CONTAINER.getId(), false), null);
+            REF_CONTAINER.getId(), false), new byte[0]);
     testHeadBlobWithVariousRanges(blobInfo);
     // with a TTL
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, 10000, REF_ACCOUNT.getId(),
-            REF_CONTAINER.getId(), false), null);
+            REF_CONTAINER.getId(), false), new byte[0]);
     testHeadBlobWithVariousRanges(blobInfo);
 
     // GET BlobInfo
@@ -274,30 +274,30 @@ public class AmbrySecurityServiceTest {
     // GET Blob
     // less than chunk threshold size
     blobInfo = new BlobInfo(
-        new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID,
-            "image/gif", false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), null);
+        new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID, "image/gif",
+            false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // == chunk threshold size
     blobInfo = new BlobInfo(
-        new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, SERVICE_ID, OWNER_ID,
-            "image/gif", false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), null);
+        new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, SERVICE_ID, OWNER_ID, "image/gif", false,
+            10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // more than chunk threshold size
     blobInfo = new BlobInfo(
-        new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 2, SERVICE_ID, OWNER_ID,
-            "image/gif", false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), null);
+        new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 2, SERVICE_ID, OWNER_ID, "image/gif",
+            false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // Get blob with content type null
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, null, true, 10000, Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, false), null);
+        Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // Get blob in a non-cacheable container. AmbrySecurityService should not care about the isPrivate setting.
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time,
-        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PRIVATE_CONTAINER_ID, false), null);
+        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PRIVATE_CONTAINER_ID, false), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // Get blob in a cacheable container. AmbrySecurityService should not care about the isPrivate setting.
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", true, Utils.Infinite_Time,
-        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PUBLIC_CONTAINER_ID, false), null);
+        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PUBLIC_CONTAINER_ID, false), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // not modified response
     // > creation time (in secs).
@@ -310,7 +310,7 @@ public class AmbrySecurityServiceTest {
     // Get blob for a public blob with content type as "text/html"
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, "text/html", true, 10000, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID, false), null);
+            Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // not modified response
     // > creation time (in secs).
@@ -590,10 +590,10 @@ public class AmbrySecurityServiceTest {
     }
     Map<String, String> userMetadata =
         blobInfo.getUserMetadata() != null ? RestUtils.buildUserMetadata(blobInfo.getUserMetadata()) : null;
-    if (userMetadata == null) {
+    if (userMetadata == null && !(blobInfo.getUserMetadata().length == 0)) {
       Assert.assertTrue("Internal key " + RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY + " should be set",
           (Boolean) restRequest.getArgs().get(RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY));
-    } else {
+    } else if (!(blobInfo.getUserMetadata().length == 0)) {
       USER_METADATA.forEach((key, value) -> Assert.assertEquals("Value of " + key + " not as expected", value,
           restResponseChannel.getHeader(key)));
     }
@@ -726,7 +726,7 @@ public class AmbrySecurityServiceTest {
         accountAndContainer.getSecond());
     Map<String, String> userMetadata =
         blobInfo.getUserMetadata() != null ? RestUtils.buildUserMetadata(blobInfo.getUserMetadata()) : null;
-    if (userMetadata == null) {
+    if (blobInfo.getUserMetadata().length == 0 || userMetadata == null) {
       Assert.assertNull(
           "Internal key " + RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY + " should not be set",
           restRequest.getArgs().get(RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY));
@@ -766,8 +766,7 @@ public class AmbrySecurityServiceTest {
       Assert.assertTrue("Expires value should be in the future",
           RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES))
               > System.currentTimeMillis());
-      Assert.assertEquals("Cache-Control value not as expected",
-          "max-age=" + FRONTEND_CONFIG.cacheValiditySeconds,
+      Assert.assertEquals("Cache-Control value not as expected", "max-age=" + FRONTEND_CONFIG.cacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert.assertNull("Pragma value should not have been set",
           restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));

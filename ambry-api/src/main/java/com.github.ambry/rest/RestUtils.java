@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -434,46 +435,48 @@ public class RestUtils {
    * @return the user metadata that is read from the byte array, or {@code null} if the {@code userMetadata} cannot be
    * parsed in expected format
    */
-  public static Map<String, String> buildUserMetadata(byte[] userMetadata) throws RestServiceException {
+  public static Map<String, String> buildUserMetadata(byte[] userMetadata) {
+    if (userMetadata.length == 0) {
+      return Collections.emptyMap();
+    }
     Map<String, String> toReturn = null;
-    if (userMetadata.length > 0) {
-      try {
-        ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
-        short version = userMetadataBuffer.getShort();
-        switch (version) {
-          case USER_METADATA_VERSION_V1:
-            int sizeToRead = userMetadataBuffer.getInt();
-            if (sizeToRead != (userMetadataBuffer.remaining() - 8)) {
-              logger.trace("Size didn't match. Returning null");
-            } else {
-              int entryCount = userMetadataBuffer.getInt();
-              int counter = 0;
-              if (entryCount > 0) {
-                toReturn = new HashMap<>();
-              }
-              while (counter++ < entryCount) {
-                String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-                String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-                toReturn.put(Headers.USER_META_DATA_HEADER_PREFIX + key, value);
-              }
-              long actualCRC = userMetadataBuffer.getLong();
-              Crc32 crc32 = new Crc32();
-              crc32.update(userMetadata, 0, userMetadata.length - CRC_SIZE);
-              long expectedCRC = crc32.getValue();
-              if (actualCRC != expectedCRC) {
-                logger.trace("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC "
-                    + actualCRC);
-                toReturn = null;
-              }
+    try {
+      ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
+      short version = userMetadataBuffer.getShort();
+      switch (version) {
+        case USER_METADATA_VERSION_V1:
+          int sizeToRead = userMetadataBuffer.getInt();
+          if (sizeToRead != (userMetadataBuffer.remaining() - 8)) {
+            logger.trace("Size didn't match. Returning null");
+          } else {
+            int entryCount = userMetadataBuffer.getInt();
+            int counter = 0;
+            if (entryCount > 0) {
+              toReturn = new HashMap<>();
             }
-            break;
-          default:
-            logger.trace("Failed to parse version in new format. Returning null");
-        }
-      } catch (RuntimeException e) {
-        logger.trace("Runtime Exception on parsing user metadata. Returning null");
-        toReturn = null;
+            while (counter++ < entryCount) {
+              String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
+              String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
+              toReturn.put(Headers.USER_META_DATA_HEADER_PREFIX + key, value);
+            }
+            long actualCRC = userMetadataBuffer.getLong();
+            Crc32 crc32 = new Crc32();
+            crc32.update(userMetadata, 0, userMetadata.length - CRC_SIZE);
+            long expectedCRC = crc32.getValue();
+            if (actualCRC != expectedCRC) {
+              logger.error(
+                  "corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+              toReturn = null;
+            }
+          }
+          break;
+        default:
+          toReturn = null;
+          logger.trace("Failed to parse version in new format. Returning null");
       }
+    } catch (RuntimeException e) {
+      logger.trace("Runtime Exception on parsing user metadata. Returning null");
+      toReturn = null;
     }
     return toReturn;
   }
@@ -827,6 +830,25 @@ public class RestUtils {
           "Only container name is set in request with no corresponding account name is not allowed.",
           RestServiceErrorCode.BadRequest);
     }
+  }
+
+  /**
+   * Sets the user metadata in the headers of the response.
+   * @param userMetadata the user metadata that needs to be sent.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   * @return {@code true} if the user metadata was successfully deserialized into headers, {@code false} if not.
+   * @throws RestServiceException if there are any problems setting the header.
+   */
+  public static boolean setUserMetadataHeaders(byte[] userMetadata, RestResponseChannel restResponseChannel)
+      throws RestServiceException {
+    Map<String, String> userMetadataMap = buildUserMetadata(userMetadata);
+    boolean setHeaders = userMetadataMap != null;
+    if (setHeaders) {
+      for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
+        restResponseChannel.setHeader(entry.getKey(), entry.getValue());
+      }
+    }
+    return setHeaders;
   }
 
   /**
