@@ -1255,7 +1255,7 @@ public class IndexTest {
     mockScheduler.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
     mockScheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
     state.initIndex(mockScheduler);
-    Thread.sleep(1);
+    Thread.sleep(10);
     // verify that the persistor task is successfully scheduled
     assertEquals("The number of scheduled persistor task should be 1 after initialization", 1,
         ((ThreadPoolExecutor) state.scheduler).getQueue().size());
