@@ -45,7 +45,6 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -55,9 +54,13 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static com.github.ambry.store.CuratedLogIndexState.*;
 import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -1243,17 +1246,21 @@ public class IndexTest {
   /**
    * Tests {@link PersistentIndex#close()} can correctly cancel the scheduled persistor task and makes sure no persistor
    * is running background after index closed.
-   * @throws IOException
    * @throws StoreException
+   * @throws InterruptedException
    */
   @Test
   public void closeIndexToCancelPersistorTest() throws StoreException, InterruptedException {
     state.index.close();
     // re-initialize index by using mock scheduler (the intention is to speed up testing by using shorter period)
-    MockScheduledExecutorService mockScheduler =
-        new MockScheduledExecutorService(1, false, 0, 100, TimeUnit.MILLISECONDS);
-    mockScheduler.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
-    mockScheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+    ScheduledThreadPoolExecutor scheduler = (ScheduledThreadPoolExecutor) Utils.newScheduler(1, false);
+    ScheduledThreadPoolExecutor mockScheduler = Mockito.spy(scheduler);
+
+    doAnswer(invocation -> {
+      Object[] args = invocation.getArguments();
+      return mockScheduler.scheduleAtFixedRate((Runnable) args[0], 0, 100, TimeUnit.MILLISECONDS);
+    }).when(mockScheduler)
+        .scheduleAtFixedRate(any(Runnable.class), anyLong(), anyLong(), any(TimeUnit.SECONDS.getClass()));
     state.initIndex(mockScheduler);
     Thread.sleep(10);
     // verify that the persistor task is successfully scheduled
@@ -2695,28 +2702,6 @@ public class IndexTest {
       assertEquals("AccountId mismatch for " + entry.getKey(), expectedValue.getAccountId(), value.getAccountId());
       assertEquals("ContainerId mismatch for " + entry.getKey(), expectedValue.getContainerId(),
           value.getContainerId());
-    }
-  }
-
-  /**
-   * Mock implementation of {@link ScheduledThreadPoolExecutor} that overrides the {@code initialDelay}, {@code period}
-   * and {@code unit} to use shorter delay or period. The intention is to speed up testing for scheduled periodic task.
-   */
-  private class MockScheduledExecutorService extends ScheduledThreadPoolExecutor {
-    private long overrideDelay;
-    private long overridePeriod;
-
-    MockScheduledExecutorService(int numThreads, boolean isDaemon, long initialDelay, long period, TimeUnit unit) {
-      super(numThreads, new Utils.SchedulerThreadFactory("ambry-test-scheduler-", isDaemon));
-      overrideDelay = unit.toNanos(initialDelay);
-      overridePeriod = unit.toNanos(period);
-    }
-
-    @Override
-    public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
-      initialDelay = Math.min(unit.toNanos(initialDelay), overrideDelay);
-      period = Math.min(unit.toNanos(period), overridePeriod);
-      return super.scheduleAtFixedRate(command, initialDelay, period, TimeUnit.NANOSECONDS);
     }
   }
 }

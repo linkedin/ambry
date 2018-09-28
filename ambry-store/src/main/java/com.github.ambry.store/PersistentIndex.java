@@ -1331,10 +1331,10 @@ class PersistentIndex {
   void close() throws StoreException {
     long startTimeInMs = time.milliseconds();
     try {
-      persistor.write();
       if (persistorTask != null) {
         persistorTask.cancel(false);
       }
+      persistor.write();
       if (hardDeleter != null) {
         try {
           hardDeleter.shutdown();

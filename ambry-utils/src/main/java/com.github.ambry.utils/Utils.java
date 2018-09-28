@@ -910,7 +910,7 @@ public class Utils {
    * A thread factory to use for {@link ScheduledExecutorService}s instantiated using
    * {@link #newScheduler(int, String, boolean)}.
    */
-  public static class SchedulerThreadFactory implements ThreadFactory {
+  private static class SchedulerThreadFactory implements ThreadFactory {
     private final AtomicInteger schedulerThreadId = new AtomicInteger(0);
     private final String threadNamePrefix;
     private final boolean isDaemon;
@@ -920,7 +920,7 @@ public class Utils {
      * @param threadNamePrefix the prefix string for threads in this scheduler's thread pool.
      * @param isDaemon {@code true} if the created threads should be daemon threads.
      */
-    public SchedulerThreadFactory(String threadNamePrefix, boolean isDaemon) {
+    SchedulerThreadFactory(String threadNamePrefix, boolean isDaemon) {
       this.threadNamePrefix = threadNamePrefix;
       this.isDaemon = isDaemon;
     }
