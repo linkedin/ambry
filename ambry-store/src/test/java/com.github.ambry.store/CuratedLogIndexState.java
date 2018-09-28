@@ -180,7 +180,7 @@ class CuratedLogIndexState {
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
     // switch off time movement for the hard delete thread. Otherwise blobs expire too quickly
     time.suspend(Collections.singleton(HardDeleter.getThreadName(tempDirStr)));
-    initIndex();
+    initIndex(null);
     assertTrue("Expected empty index", index.isEmpty());
     if (initState) {
       setupTestState(isLogSegmented, segmentCapacity, addTtlUpdates);
@@ -817,15 +817,16 @@ class CuratedLogIndexState {
 
   /**
    * Creates the index instance with the provided {@code metricRegistry}.
+   * @param newScheduler the {@link ScheduledExecutorService} to use in testing. If null, a default scheduler will be created to use.
    * @throws StoreException
    */
-  void initIndex() throws StoreException {
+  void initIndex(ScheduledExecutorService newScheduler) throws StoreException {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     sessionId = UUID.randomUUID();
     metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
     shutDownExecutorService(scheduler, 1, TimeUnit.SECONDS);
-    scheduler = Utils.newScheduler(1, false);
+    scheduler = newScheduler == null ? Utils.newScheduler(1, false) : newScheduler;
     index = new PersistentIndex(tempDirStr, tempDirStr, scheduler, log, config, CuratedLogIndexState.STORE_KEY_FACTORY,
         recovery, hardDelete, DISK_IO_SCHEDULER, metrics, time, sessionId, incarnationId);
   }
@@ -847,13 +848,13 @@ class CuratedLogIndexState {
             new File(tempDir, PersistentIndex.CLEAN_SHUTDOWN_FILENAME).delete());
       }
     }
-    initIndex();
+    initIndex(null);
   }
 
   /**
    * Reloads the log and index by closing and recreating the class variables.
    * @param initIndex creates the index instance if {@code true}, if not, sets {@link #index} to {@code null} and it
-   *                  has to be initialized with a call to {@link #initIndex()}.
+   *                  has to be initialized with a call to {@link #initIndex(ScheduledExecutorService)}.
    * @throws IOException
    * @throws StoreException
    */
@@ -864,7 +865,7 @@ class CuratedLogIndexState {
     log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, metrics);
     index = null;
     if (initIndex) {
-      initIndex();
+      initIndex(null);
     }
   }
 
