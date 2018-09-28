@@ -239,6 +239,14 @@ public class StoreConfig {
   public final int storeTtlUpdateBufferTimeSeconds;
   public static final String storeTtlUpdateBufferTimeSecondsName = "store.ttl.update.buffer.time.seconds";
 
+  /**
+   * Specifies whether all index segments should be kept in memory (as opposed to a specific subset).
+   */
+  @Config(storeKeepIndexInMemoryName)
+  @Default("false")
+  public final boolean storeKeepIndexInMemory;
+  public static final String storeKeepIndexInMemoryName = "store.keep.index.in.memory";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -290,6 +298,7 @@ public class StoreConfig {
     storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", false);
     storeTtlUpdateBufferTimeSeconds =
         verifiableProperties.getIntInRange(storeTtlUpdateBufferTimeSecondsName, 60 * 60 * 24, 0, Integer.MAX_VALUE);
+    storeKeepIndexInMemory = verifiableProperties.getBoolean(storeKeepIndexInMemoryName, false);
   }
 }
 
