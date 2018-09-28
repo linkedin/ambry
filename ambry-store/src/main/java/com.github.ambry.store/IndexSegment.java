@@ -313,8 +313,8 @@ class IndexSegment {
    */
   NavigableSet<IndexValue> find(StoreKey keyToFind) throws StoreException {
     NavigableSet<IndexValue> toReturn = null;
+    rwLock.readLock().lock();
     try {
-      rwLock.readLock().lock();
       if (!mapped.get()) {
         ConcurrentSkipListSet<IndexValue> values = index.get(keyToFind);
         if (values != null) {
@@ -475,8 +475,8 @@ class IndexSegment {
    * @throws StoreException
    */
   void addEntry(IndexEntry entry, Offset fileEndOffset) throws StoreException {
+    rwLock.readLock().lock();
     try {
-      rwLock.readLock().lock();
       if (sealed.get()) {
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " cannot add to a sealed index ",
             StoreErrorCodes.Illegal_Index_Operation);
@@ -531,8 +531,8 @@ class IndexSegment {
    * @return The total size in bytes written to this segment so far
    */
   long getSizeWritten() {
+    rwLock.readLock().lock();
     try {
-      rwLock.readLock().lock();
       if (sealed.get()) {
         throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed");
       }
@@ -547,8 +547,8 @@ class IndexSegment {
    * @return The number of items contained in this segment
    */
   int getNumberOfItems() {
+    rwLock.readLock().lock();
     try {
-      rwLock.readLock().lock();
       if (sealed.get()) {
         throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed");
       }
@@ -640,9 +640,8 @@ class IndexSegment {
       File temp = new File(getFile().getAbsolutePath() + ".tmp");
       FileOutputStream fileStream = new FileOutputStream(temp);
       CrcOutputStream crc = new CrcOutputStream(fileStream);
+      rwLock.readLock().lock();
       try (DataOutputStream writer = new DataOutputStream(crc)) {
-        rwLock.readLock().lock();
-
         writer.writeShort(getVersion());
         if (getVersion() == PersistentIndex.VERSION_2) {
           writer.writeInt(getPersistedEntrySize());
