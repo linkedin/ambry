@@ -163,7 +163,7 @@ public class GetBlobOperationTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false}, {AdaptiveOperationTracker.class.getSimpleName(), false}});
+        new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false}, {AdaptiveOperationTracker.class.getSimpleName(), false}, {AdaptiveOperationTracker.class.getSimpleName(), true}});
   }
 
   /**

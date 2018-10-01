@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -101,7 +102,9 @@ class SimpleOperationTracker implements OperationTracker {
     // The priority here is local dc replicas, originating dc replicas, other dc replicas, down replicas.
     // To improve read-after-write performance across DC, we prefer to take local and originating replicas only,
     // which can be done by setting includeNonOriginatingDcReplicas False.
+    List<ReplicaId> examinedReplicas = new ArrayList<>();
     for (ReplicaId replicaId : replicas) {
+      examinedReplicas.add(replicaId);
       String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
       if (!replicaId.isDown()) {
         if (replicaDcName.equals(datacenterName)) {
@@ -119,6 +122,8 @@ class SimpleOperationTracker implements OperationTracker {
         }
       }
     }
+    List<ReplicaId> backupReplicasToCheck = new ArrayList<>(backupReplicas);
+    List<ReplicaId> downReplicasToCheck = new ArrayList<>(downReplicas);
     if (includeNonOriginatingDcReplicas || originatingDcName == null) {
       replicaPool.addAll(backupReplicas);
       replicaPool.addAll(downReplicas);
@@ -136,22 +141,10 @@ class SimpleOperationTracker implements OperationTracker {
     }
     totalReplicaCount = replicaPool.size();
     if (totalReplicaCount < successTarget) {
-      StringBuilder errMsg = new StringBuilder("Total Replica count ").append(totalReplicaCount)
-          .append(" is less than success target ")
-          .append(successTarget)
-          .append(". Partition is ")
-          .append(partitionId)
-          .append(" and partition class is ")
-          .append(partitionId.getPartitionClass())
-          .append(". Replicas selected are: ");
-      for (ReplicaId replicaId : replicaPool) {
-        errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
-      }
-      errMsg.append("Original replicas are: ");
-      for (ReplicaId replicaId : replicas) {
-        errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
-      }
-      throw new IllegalArgumentException(errMsg.toString());
+      // {@link MockPartitionId#getReplicaIds} is returning a shared reference which may cause race condition.
+      // Please report the test failure if you run into this exception.
+      throw new IllegalArgumentException(
+          generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck));
     }
     this.otIterator = new OpTrackerIterator();
   }
@@ -224,5 +217,41 @@ class SimpleOperationTracker implements OperationTracker {
 
   private boolean hasFailed() {
     return (totalReplicaCount - failedCount) < successTarget;
+  }
+
+  /**
+   * Helper function to catch a potential race condition in {@link SimpleOperationTracker#SimpleOperationTracker(String, PartitionId, boolean, String, boolean, int, int, int, boolean)}.
+   *
+   * @param partitionId The partition on which the operation is performed.
+   * @param examinedReplicas All replicas examined.
+   * @param replicaPool Replicas added to replicaPool.
+   * @param backupReplicas Replicas added to backupReplicas.
+   * @param downReplicas Replicas added to downReplicas.
+   */
+  static private String generateErrorMessage(PartitionId partitionId, List<ReplicaId> examinedReplicas,
+      List<ReplicaId> replicaPool, List<ReplicaId> backupReplicas, List<ReplicaId> downReplicas) {
+    StringBuilder errMsg = new StringBuilder("Total Replica count ").append(replicaPool.size())
+        .append(" is less than success target. ")
+        .append("Partition is ")
+        .append(partitionId)
+        .append(" and partition class is ")
+        .append(partitionId.getPartitionClass())
+        .append(". examinedReplicas: ");
+    for (ReplicaId replicaId : examinedReplicas) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+    }
+    errMsg.append("replicaPool: ");
+    for (ReplicaId replicaId : replicaPool) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+    }
+    errMsg.append("backupReplicas: ");
+    for (ReplicaId replicaId : backupReplicas) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+    }
+    errMsg.append("downReplicas: ");
+    for (ReplicaId replicaId : downReplicas) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+    }
+    return errMsg.toString();
   }
 }
