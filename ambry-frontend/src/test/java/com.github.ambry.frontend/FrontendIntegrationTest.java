@@ -194,7 +194,7 @@ public class FrontendIntegrationTest {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
     Container publicContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
     Container privateContainer = refAccount.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
-    int refContentSize = FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3;
+    int refContentSize = FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3;
 
     // with valid account and containers
     for (int i = 0; i < 2; i++) {
@@ -213,8 +213,8 @@ public class FrontendIntegrationTest {
     doPostGetHeadUpdateDeleteTest(refContentSize, null, null, "unknown_service_id", false, null, null, false);
     doPostGetHeadUpdateDeleteTest(refContentSize, null, null, "unknown_service_id", true, null, null, false);
     // different sizes
-    for (int contentSize : new int[]{0, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes
-        - 1, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, refContentSize}) {
+    for (int contentSize : new int[]{0, FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes
+        - 1, FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, refContentSize}) {
       doPostGetHeadUpdateDeleteTest(contentSize, refAccount, publicContainer, refAccount.getName(),
           !publicContainer.isCacheable(), refAccount.getName(), publicContainer.getName(), false);
     }
@@ -230,7 +230,7 @@ public class FrontendIntegrationTest {
     Container refContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
     doPostGetHeadUpdateDeleteTest(0, refAccount, refContainer, refAccount.getName(), !refContainer.isCacheable(),
         refAccount.getName(), refContainer.getName(), true);
-    doPostGetHeadUpdateDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3, refAccount,
+    doPostGetHeadUpdateDeleteTest(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3, refAccount,
         refContainer, refAccount.getName(), !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(),
         true);
 
@@ -433,10 +433,10 @@ public class FrontendIntegrationTest {
     assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
     assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
     assertEquals("Unexpected value for " + HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS,
-        FRONTEND_CONFIG.frontendOptionsAllowMethods,
+        FRONTEND_CONFIG.optionsAllowMethods,
         response.headers().get(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS));
     assertEquals("Unexpected value for " + HttpHeaderNames.ACCESS_CONTROL_MAX_AGE,
-        FRONTEND_CONFIG.frontendOptionsValiditySeconds,
+        FRONTEND_CONFIG.optionsValiditySeconds,
         Long.parseLong(response.headers().get(HttpHeaderNames.ACCESS_CONTROL_MAX_AGE)));
     verifyTrackingHeaders(response);
   }
@@ -751,7 +751,7 @@ public class FrontendIntegrationTest {
     } else {
       assertNull("Content-Range header should not be set", response.headers().get(RestUtils.Headers.CONTENT_RANGE));
     }
-    if (expectedContentArray.length < FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes) {
+    if (expectedContentArray.length < FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes) {
       assertEquals("Content-length not as expected", expectedContentArray.length, HttpUtil.getContentLength(response));
     }
     verifyCacheHeaders(isPrivate, response);
@@ -1115,7 +1115,7 @@ public class FrontendIntegrationTest {
       assertTrue("Expires value should be in future",
           RestUtils.getTimeFromDateString(expiresValue) > System.currentTimeMillis());
       Assert.assertEquals("Cache-Control value not as expected",
-          "max-age=" + FRONTEND_CONFIG.frontendCacheValiditySeconds,
+          "max-age=" + FRONTEND_CONFIG.cacheValiditySeconds,
           response.headers().get(RestUtils.Headers.CACHE_CONTROL));
       Assert.assertNull("Pragma value should not have been set", response.headers().get(RestUtils.Headers.PRAGMA));
     }

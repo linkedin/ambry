@@ -41,17 +41,17 @@ public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
   public UrlSigningService getUrlSigningService() {
 
     String uploadEndpoint, downloadEndpoint;
-    // Assume frontendUrlSignerEndpoints has only POST/GET, nothing nested
+    // Assume urlSignerEndpoints has only POST/GET, nothing nested
     try {
-      JSONObject root = new JSONObject(config.frontendUrlSignerEndpoints);
+      JSONObject root = new JSONObject(config.urlSignerEndpoints);
       uploadEndpoint = root.getString(RestMethod.POST.name());
       downloadEndpoint = root.getString(RestMethod.GET.name());
     } catch (JSONException ex) {
-      throw new IllegalStateException("Invalid config value: " + config.frontendUrlSignerEndpoints, ex);
+      throw new IllegalStateException("Invalid config value: " + config.urlSignerEndpoints, ex);
     }
 
-    return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint, config.frontendUrlSignerDefaultUrlTtlSecs,
-        config.frontendUrlSignerDefaultMaxUploadSizeBytes, config.frontendUrlSignerMaxUrlTtlSecs,
+    return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint, config.urlSignerDefaultUrlTtlSecs,
+        config.urlSignerDefaultMaxUploadSizeBytes, config.urlSignerMaxUrlTtlSecs,
         config.chunkUploadInitialChunkTtlSecs, chunkUploadMaxChunkSize, SystemTime.getInstance());
   }
 }

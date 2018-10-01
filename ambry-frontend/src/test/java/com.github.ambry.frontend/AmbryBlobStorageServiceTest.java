@@ -146,8 +146,8 @@ public class AmbryBlobStorageServiceTest {
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     String endpoint = "http://localhost:1174";
     urlSigningService =
-        new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.frontendUrlSignerDefaultUrlTtlSecs,
-            frontendConfig.frontendUrlSignerDefaultMaxUploadSizeBytes, frontendConfig.frontendUrlSignerMaxUrlTtlSecs,
+        new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.urlSignerDefaultUrlTtlSecs,
+            frontendConfig.urlSignerDefaultMaxUploadSizeBytes, frontendConfig.urlSignerMaxUrlTtlSecs,
             frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance());
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, new AmbryIdSigningService());
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService,
@@ -922,10 +922,10 @@ public class AmbryBlobStorageServiceTest {
     assertEquals("Unexpected content length", 0,
         Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
     assertEquals("Unexpected value for " + RestUtils.Headers.ACCESS_CONTROL_ALLOW_METHODS,
-        frontendConfig.frontendOptionsAllowMethods,
+        frontendConfig.optionsAllowMethods,
         restResponseChannel.getHeader(RestUtils.Headers.ACCESS_CONTROL_ALLOW_METHODS));
     assertEquals("Unexpected value for " + RestUtils.Headers.ACCESS_CONTROL_MAX_AGE,
-        frontendConfig.frontendOptionsValiditySeconds,
+        frontendConfig.optionsValiditySeconds,
         Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.ACCESS_CONTROL_MAX_AGE)));
   }
 

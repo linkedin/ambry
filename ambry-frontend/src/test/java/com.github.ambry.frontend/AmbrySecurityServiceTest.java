@@ -256,17 +256,17 @@ public class AmbrySecurityServiceTest {
     // GET Blob
     // less than chunk threshold size
     blobInfo = new BlobInfo(
-        new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID,
+        new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID,
             "image/gif", false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), null);
     testGetBlobWithVariousRanges(blobInfo);
     // == chunk threshold size
     blobInfo = new BlobInfo(
-        new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, SERVICE_ID, OWNER_ID,
+        new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, SERVICE_ID, OWNER_ID,
             "image/gif", false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), null);
     testGetBlobWithVariousRanges(blobInfo);
     // more than chunk threshold size
     blobInfo = new BlobInfo(
-        new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 2, SERVICE_ID, OWNER_ID,
+        new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 2, SERVICE_ID, OWNER_ID,
             "image/gif", false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), null);
     testGetBlobWithVariousRanges(blobInfo);
     // Get blob with content type null
@@ -684,7 +684,7 @@ public class AmbrySecurityServiceTest {
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
     }
 
-    if (contentLength < FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes) {
+    if (contentLength < FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes) {
       Assert.assertEquals("Content length value mismatch", contentLength,
           Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
     } else {
@@ -724,7 +724,7 @@ public class AmbrySecurityServiceTest {
           RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES))
               > System.currentTimeMillis());
       Assert.assertEquals("Cache-Control value not as expected",
-          "max-age=" + FRONTEND_CONFIG.frontendCacheValiditySeconds,
+          "max-age=" + FRONTEND_CONFIG.cacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert.assertNull("Pragma value should not have been set",
           restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));

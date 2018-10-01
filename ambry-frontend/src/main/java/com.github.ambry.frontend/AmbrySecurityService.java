@@ -75,7 +75,7 @@ class AmbrySecurityService implements SecurityService {
         exception = e;
       }
     }
-    restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, new Boolean(frontendConfig.frontendAttachTrackingInfo));
+    restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, new Boolean(frontendConfig.attachTrackingInfo));
     frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
   }
@@ -130,7 +130,7 @@ class AmbrySecurityService implements SecurityService {
       }
       String operationOrBlobId =
           RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
-              frontendConfig.frontendPathPrefixesToRemove);
+              frontendConfig.pathPrefixesToRemove);
       if (operationOrBlobId.startsWith("/")) {
         operationOrBlobId = operationOrBlobId.substring(1);
       }
@@ -261,7 +261,7 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_RANGE, rangeAndLength.getFirst());
       contentLength = rangeAndLength.getSecond();
     }
-    if (contentLength < frontendConfig.frontendChunkedGetResponseThresholdInBytes) {
+    if (contentLength < frontendConfig.chunkedGetResponseThresholdInBytes) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);
     }
     if (blobProperties.getContentType() != null) {
@@ -284,9 +284,9 @@ class AmbrySecurityService implements SecurityService {
     Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
     if (container.isCacheable()) {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
-          new Date(System.currentTimeMillis() + frontendConfig.frontendCacheValiditySeconds * Time.MsPerSec));
+          new Date(System.currentTimeMillis() + frontendConfig.cacheValiditySeconds * Time.MsPerSec));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL,
-          "max-age=" + frontendConfig.frontendCacheValiditySeconds);
+          "max-age=" + frontendConfig.cacheValiditySeconds);
     } else {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES, restResponseChannel.getHeader(RestUtils.Headers.DATE));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "private, no-cache, no-store, proxy-revalidate");
