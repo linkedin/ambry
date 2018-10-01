@@ -169,12 +169,18 @@ class AmbrySecurityService implements SecurityService {
                     responseChannel.setStatus(ResponseStatus.PartialContent);
                   }
                   setGetBlobResponseHeaders(blobInfo, options, responseChannel);
+                  setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
+                  setAccountAndContainerHeaders(restRequest, responseChannel);
+                  setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel);
                 }
                 setCacheHeaders(restRequest, responseChannel);
               } else {
                 if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
+                }
+                if (!setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel)) {
+                  restRequest.setArg(InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY, true);
                 }
               }
             }

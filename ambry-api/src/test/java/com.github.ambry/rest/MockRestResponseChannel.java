@@ -21,9 +21,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -270,6 +272,14 @@ public class MockRestResponseChannel implements RestResponseChannel {
    */
   public Exception getException() {
     return exception;
+  }
+
+  /**
+   * @return the response headers associated with this response channel
+   */
+  public Map<String, Object> getResponseHeaders() {
+    return responseMetadata.has(RESPONSE_HEADERS_KEY) ? responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).toMap()
+        : Collections.emptyMap();
   }
 
   /**

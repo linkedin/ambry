@@ -22,6 +22,7 @@ import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.UnsupportedEncodingException;
@@ -31,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -345,7 +347,7 @@ public class RestUtilsTest {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
     byte[] userMetadataByteArray = RestUtils.buildUserMetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
-    assertNull("UserMetadata should have been null ", userMetadataMap);
+    assertEquals("UserMetadata should have no entries ", 0, userMetadataMap.size());
   }
 
   /**
@@ -766,6 +768,47 @@ public class RestUtilsTest {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
     }
     assertNull("There should no value for HeaderD", RestUtils.getLongHeader(args, "HeaderD", false));
+  }
+
+  /**
+   * Tests for {@link RestUtils#setUserMetadataHeaders(byte[], RestResponseChannel)}
+   * @throws Exception
+   */
+  @Test
+  public void setUserMetadataHeadersTest() throws Exception {
+    // empty user metadata
+    MockRestResponseChannel responseChannel = new MockRestResponseChannel();
+    assertTrue("Should report that headers are set", RestUtils.setUserMetadataHeaders(new byte[0], responseChannel));
+    assertEquals("No headers should have been set", 0, responseChannel.getResponseHeaders().size());
+
+    JSONObject headers = new JSONObject();
+    setUserMetadataHeaders(headers, Collections.emptyMap());
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    byte[] userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
+    responseChannel = new MockRestResponseChannel();
+    assertTrue("Should report that headers are set", RestUtils.setUserMetadataHeaders(userMetadata, responseChannel));
+    assertEquals("No headers should have been set", 0, responseChannel.getResponseHeaders().size());
+
+    // user metadata that can be deserialized
+    Map<String, String> usermetadataMap = new HashMap<>();
+    for (int i = 0; i < 10; i++) {
+      usermetadataMap.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key" + i, "value" + i);
+    }
+    setUserMetadataHeaders(headers, usermetadataMap);
+    restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
+    responseChannel = new MockRestResponseChannel();
+    assertTrue("Should report that headers are set", RestUtils.setUserMetadataHeaders(userMetadata, responseChannel));
+    Map<String, Object> responseHeaders = responseChannel.getResponseHeaders();
+    assertEquals("There is a mismatch in the numebr of headers", usermetadataMap.size(), responseHeaders.size());
+    usermetadataMap.forEach((k, v) -> assertEquals("Value of " + k + " not as expected", v, responseHeaders.get(k)));
+
+    // user metadata that cannot be deserialized
+    responseChannel = new MockRestResponseChannel();
+    userMetadata = TestUtils.getRandomBytes(100);
+    assertFalse("Should report that headers are not set",
+        RestUtils.setUserMetadataHeaders(userMetadata, responseChannel));
+    assertEquals("No headers should have been set", 0, responseChannel.getResponseHeaders().size());
   }
 
   // helpers.
