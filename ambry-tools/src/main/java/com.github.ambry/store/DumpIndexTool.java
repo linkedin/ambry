@@ -264,11 +264,20 @@ public class DumpIndexTool {
 
     @Override
     public String toString() {
-      return throwable == null ? "Processed: " + processedCount + ", Active: " + activeCount + ", Put: " + putCount
-          + ", TTL update count: " + ttlUpdateCount + ", Delete: " + deleteCount + ", Crafted ID count: "
-          + craftedIdCount + ", Duplicate Puts: " + duplicatePuts + ", Put After Update: " + putAfterUpdates
-          + ", Duplicate Delete: " + duplicateDeletes + ", Duplicate Update: " + duplicateUpdates
-          + ", Update After Delete: " + updateAfterDeletes : "Exception Msg: " + throwable.getMessage();
+      // @formatter:off
+      return throwable == null ? "Processed: " + processedCount
+              + ", Active: " + activeCount
+              + ", Put: " + putCount
+              + ", TTL update count: " + ttlUpdateCount
+              + ", Delete: " + deleteCount
+              + ", Crafted ID count: " + craftedIdCount
+              + ", Duplicate Puts: " + duplicatePuts
+              + ", Put After Update: " + putAfterUpdates
+              + ", Duplicate Delete: " + duplicateDeletes
+              + ", Duplicate Update: " + duplicateUpdates
+              + ", Update After Delete: " + updateAfterDeletes
+          : "Exception Msg: " + throwable.getMessage();
+      // @formatter:on
     }
   }
 
@@ -276,7 +285,7 @@ public class DumpIndexTool {
    * The possible states of a blob.
    */
   public enum BlobState {
-    Valid, Deleted, Expired;
+    Valid, Deleted, Expired
   }
 
   /**
@@ -378,7 +387,7 @@ public class DumpIndexTool {
 
     /**
      * Used for {@link Operation#VerifyIndex} and {@link Operation#VerifyDataNode} if the presence of crafted IDs needs
-     * to be reported as a failure. This check takes precendence over index sanity.
+     * to be reported as a failure. This check takes precedence over index sanity.
      */
     @Config("fail.if.crafted.ids.present")
     @Default("false")
@@ -490,8 +499,8 @@ public class DumpIndexTool {
               logger.error("Results obtained missing {}", replicaDirs);
               exitCode.set(5);
             } else {
-              resultsByReplica.forEach((replicaDir, results1) -> exitCode.set(Math.max(exitCode.get(),
-                  reportVerificationResults(replicaDir, results1, config.failIfCraftedIdsPresent))));
+              resultsByReplica.forEach((replicaDir, result) -> exitCode.set(Math.max(exitCode.get(),
+                  reportVerificationResults(replicaDir, result, config.failIfCraftedIdsPresent))));
             }
           }
           break;
