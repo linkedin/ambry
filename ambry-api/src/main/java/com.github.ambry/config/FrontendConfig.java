@@ -27,7 +27,7 @@ public class FrontendConfig {
   private static final String PREFIX = "frontend.";
 
   // Property keys
-  public static final String URL_SIGNER_ENDPOINTS = "frontend.url.signer.endpoints";
+  public static final String URL_SIGNER_ENDPOINTS = PREFIX + "url.signer.endpoints";
 
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
 
@@ -39,42 +39,42 @@ public class FrontendConfig {
    */
   @Config("frontend.cache.validity.seconds")
   @Default("365 * 24 * 60 * 60")
-  public final long frontendCacheValiditySeconds;
+  public final long cacheValiditySeconds;
 
   /**
    * Value of "Access-Control-Max-Age" in response headers for OPTIONS requests.
    */
   @Config("frontend.options.validity.seconds")
   @Default("24 * 60 * 60")
-  public final long frontendOptionsValiditySeconds;
+  public final long optionsValiditySeconds;
 
   /**
    * Value of "Access-Control-Allow-Methods" in response headers for OPTIONS requests.
    */
   @Config("frontend.options.allow.methods")
   @Default("POST, GET, OPTIONS, HEAD, DELETE")
-  public final String frontendOptionsAllowMethods;
+  public final String optionsAllowMethods;
 
   /**
    * The IdConverterFactory that needs to be used by AmbryBlobStorageService to convert IDs.
    */
   @Config("frontend.id.converter.factory")
   @Default("com.github.ambry.frontend.AmbryIdConverterFactory")
-  public final String frontendIdConverterFactory;
+  public final String idConverterFactory;
 
   /**
    * The SecurityServiceFactory that needs to be used by AmbryBlobStorageService to validate requests.
    */
   @Config("frontend.security.service.factory")
   @Default("com.github.ambry.frontend.AmbrySecurityServiceFactory")
-  public final String frontendSecurityServiceFactory;
+  public final String securityServiceFactory;
 
   /**
    * The UrlSigningServiceFactory that needs to be used by AmbryBlobStorageService to sign and verify URLs.
    */
   @Config("frontend.url.signing.service.factory")
   @Default("com.github.ambry.frontend.AmbryUrlSigningServiceFactory")
-  public final String frontendUrlSigningServiceFactory;
+  public final String urlSigningServiceFactory;
 
   /**
    * The IdSigningService that needs to be used by AmbryBlobStorageService to sign and verify IDs.
@@ -82,21 +82,21 @@ public class FrontendConfig {
   private static final String ID_SIGNING_SERVICE_FACTORY_KEY = PREFIX + "id.signing.service.factory";
   @Config(ID_SIGNING_SERVICE_FACTORY_KEY)
   @Default("com.github.ambry.frontend.AmbryIdSigningServiceFactory")
-  public final String frontendIdSigningServiceFactory;
+  public final String idSigningServiceFactory;
 
   /**
    * The comma separated list of prefixes to remove from paths.
    */
   @Config("frontend.path.prefixes.to.remove")
   @Default("")
-  public final List<String> frontendPathPrefixesToRemove;
+  public final List<String> pathPrefixesToRemove;
 
   /**
    * Specifies the blob size in bytes beyond which chunked response will be sent for a getBlob() call
    */
   @Config("frontend.chunked.get.response.threshold.in.bytes")
   @Default("8192")
-  public final Integer frontendChunkedGetResponseThresholdInBytes;
+  public final Integer chunkedGetResponseThresholdInBytes;
 
   /**
    * Boolean indicator to specify if frontend should allow the post requests that carry serviceId used as target
@@ -104,21 +104,21 @@ public class FrontendConfig {
    */
   @Config("frontend.allow.service.id.based.post.request")
   @Default("true")
-  public final boolean frontendAllowServiceIdBasedPostRequest;
+  public final boolean allowServiceIdBasedPostRequest;
 
   /**
    * Boolean indicator to specify if tracking information should be attached to responses.
    */
   @Config("frontend.attach.tracking.info")
   @Default("true")
-  public final boolean frontendAttachTrackingInfo;
+  public final boolean attachTrackingInfo;
 
   /**
    * The various endpoints for signed URLs, in JSON string.
    */
   @Config(URL_SIGNER_ENDPOINTS)
   @Default(DEFAULT_ENDPOINTS_STRING)
-  public final String frontendUrlSignerEndpoints;
+  public final String urlSignerEndpoints;
 
   /**
    * The default maximum size (in bytes) that can be uploaded using a signed POST URL unless otherwise specified at
@@ -126,14 +126,14 @@ public class FrontendConfig {
    */
   @Config("frontend.url.signer.default.max.upload.size.bytes")
   @Default("100 * 1024 * 1024")
-  public final long frontendUrlSignerDefaultMaxUploadSizeBytes;
+  public final long urlSignerDefaultMaxUploadSizeBytes;
 
   /**
    * The maximum amount of time a signed URL is valid i.e. the highest TTL that requests for signed URLs can set.
    */
   @Config("frontend.url.signer.max.url.ttl.secs")
   @Default("60 * 60")
-  public final long frontendUrlSignerMaxUrlTtlSecs;
+  public final long urlSignerMaxUrlTtlSecs;
 
   /**
    * The default time (in seconds) for which a signed URL is valid unless otherwise specified at the time of URL
@@ -141,7 +141,7 @@ public class FrontendConfig {
    */
   @Config("frontend.url.signer.default.url.ttl.secs")
   @Default("5 * 60")
-  public final long frontendUrlSignerDefaultUrlTtlSecs;
+  public final long urlSignerDefaultUrlTtlSecs;
 
   /**
    * The default {@link GetOption} that the frontend has to use when constructing
@@ -150,7 +150,7 @@ public class FrontendConfig {
    */
   @Config("frontend.default.router.get.option")
   @Default("GetOption.None")
-  public final GetOption frontendDefaultRouterGetOption;
+  public final GetOption defaultRouterGetOption;
 
   /**
    * The blob TTL in seconds to use for data chunks uploaded in a stitched upload session.
@@ -173,35 +173,35 @@ public class FrontendConfig {
   public final int maxAcceptableTtlSecsIfTtlRequired;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
-    frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
-    frontendOptionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
-    frontendOptionsAllowMethods =
+    cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
+    optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
+    optionsAllowMethods =
         verifiableProperties.getString("frontend.options.allow.methods", "POST, GET, OPTIONS, HEAD, DELETE");
-    frontendIdConverterFactory = verifiableProperties.getString("frontend.id.converter.factory",
+    idConverterFactory = verifiableProperties.getString("frontend.id.converter.factory",
         "com.github.ambry.frontend.AmbryIdConverterFactory");
-    frontendSecurityServiceFactory = verifiableProperties.getString("frontend.security.service.factory",
+    securityServiceFactory = verifiableProperties.getString("frontend.security.service.factory",
         "com.github.ambry.frontend.AmbrySecurityServiceFactory");
-    frontendUrlSigningServiceFactory = verifiableProperties.getString("frontend.url.signing.service.factory",
+    urlSigningServiceFactory = verifiableProperties.getString("frontend.url.signing.service.factory",
         "com.github.ambry.frontend.AmbryUrlSigningServiceFactory");
-    frontendIdSigningServiceFactory = verifiableProperties.getString(ID_SIGNING_SERVICE_FACTORY_KEY,
+    idSigningServiceFactory = verifiableProperties.getString(ID_SIGNING_SERVICE_FACTORY_KEY,
         "com.github.ambry.frontend.AmbryIdSigningServiceFactory");
-    frontendPathPrefixesToRemove =
+    pathPrefixesToRemove =
         Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
-    frontendChunkedGetResponseThresholdInBytes =
+    chunkedGetResponseThresholdInBytes =
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
-    frontendAllowServiceIdBasedPostRequest =
+    allowServiceIdBasedPostRequest =
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
-    frontendAttachTrackingInfo = verifiableProperties.getBoolean("frontend.attach.tracking.info", true);
-    frontendUrlSignerEndpoints = verifiableProperties.getString(URL_SIGNER_ENDPOINTS, DEFAULT_ENDPOINTS_STRING);
-    frontendUrlSignerDefaultMaxUploadSizeBytes =
+    attachTrackingInfo = verifiableProperties.getBoolean("frontend.attach.tracking.info", true);
+    urlSignerEndpoints = verifiableProperties.getString(URL_SIGNER_ENDPOINTS, DEFAULT_ENDPOINTS_STRING);
+    urlSignerDefaultMaxUploadSizeBytes =
         verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,
             Long.MAX_VALUE);
-    frontendUrlSignerMaxUrlTtlSecs =
+    urlSignerMaxUrlTtlSecs =
         verifiableProperties.getLongInRange("frontend.url.signer.max.url.ttl.secs", 60 * 60, 0, Long.MAX_VALUE);
-    frontendUrlSignerDefaultUrlTtlSecs =
+    urlSignerDefaultUrlTtlSecs =
         verifiableProperties.getLongInRange("frontend.url.signer.default.url.ttl.secs", 5 * 60, 0,
-            frontendUrlSignerMaxUrlTtlSecs);
-    frontendDefaultRouterGetOption =
+            urlSignerMaxUrlTtlSecs);
+    defaultRouterGetOption =
         GetOption.valueOf(verifiableProperties.getString("frontend.default.router.get.option", GetOption.None.name()));
     chunkUploadInitialChunkTtlSecs =
         verifiableProperties.getLong(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY, TimeUnit.DAYS.toSeconds(28));

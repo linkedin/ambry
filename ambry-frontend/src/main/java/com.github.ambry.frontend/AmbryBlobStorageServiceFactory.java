@@ -76,18 +76,18 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
   public BlobStorageService getBlobStorageService() {
     try {
       IdSigningService idSigningService =
-          Utils.<IdSigningServiceFactory>getObj(frontendConfig.frontendIdSigningServiceFactory, verifiableProperties,
+          Utils.<IdSigningServiceFactory>getObj(frontendConfig.idSigningServiceFactory, verifiableProperties,
               clusterMap.getMetricRegistry()).getIdSigningService();
       IdConverterFactory idConverterFactory =
-          Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, clusterMap.getMetricRegistry(),
+          Utils.getObj(frontendConfig.idConverterFactory, verifiableProperties, clusterMap.getMetricRegistry(),
               idSigningService);
       UrlSigningService urlSigningService =
-          Utils.<UrlSigningServiceFactory>getObj(frontendConfig.frontendUrlSigningServiceFactory, verifiableProperties,
+          Utils.<UrlSigningServiceFactory>getObj(frontendConfig.urlSigningServiceFactory, verifiableProperties,
               clusterMap.getMetricRegistry()).getUrlSigningService();
       AccountAndContainerInjector accountAndContainerInjector =
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
       SecurityServiceFactory securityServiceFactory =
-          Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties, clusterMap, accountService,
+          Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, accountAndContainerInjector);
       return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
           idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector,

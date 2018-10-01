@@ -68,7 +68,7 @@ public class AccountAndContainerInjector {
       ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithAccountAndContainerName);
       frontendMetrics.putWithAccountAndContainerHeaderRate.mark();
       injectAccountAndContainerUsingAccountAndContainerHeaders(restRequest);
-    } else if (frontendConfig.frontendAllowServiceIdBasedPostRequest) {
+    } else if (frontendConfig.allowServiceIdBasedPostRequest) {
       ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithServiceId);
       frontendMetrics.putWithServiceIdForAccountNameRate.mark();
       String serviceId = getHeader(restRequest.getArgs(), Headers.SERVICE_ID, true);
