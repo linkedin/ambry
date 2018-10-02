@@ -502,7 +502,7 @@ public class AmbryRequestsTest {
    * @throws IOException
    */
   @Test
-  public void listOfOriginalStoreKeysGetTest() throws Exception {
+  public void listOfOriginalStoreKeysGetTest() throws InterruptedException, IOException {
     int numIds = 10;
     PartitionId partitionId = clusterMap.getAllPartitionIds(null).get(0);
     List<BlobId> blobIds = new ArrayList<>();

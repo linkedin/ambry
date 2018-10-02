@@ -330,7 +330,9 @@ public class AmbryRequests implements RequestAPI {
                   EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }
             List<StoreKey> convertedStoreKeys = getConvertedStoreKeys(partitionRequestInfo.getBlobIds());
-            List<StoreKey> dedupedStoreKeys = convertedStoreKeys.stream().distinct().collect(Collectors.toList());
+            List<StoreKey> dedupedStoreKeys =
+                convertedStoreKeys.size() > 1 ? convertedStoreKeys.stream().distinct().collect(Collectors.toList())
+                    : convertedStoreKeys;
             StoreInfo info = storeToGet.get(dedupedStoreKeys, storeGetOptions);
             MessageFormatSend blobsToSend =
                 new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,

@@ -240,7 +240,7 @@ class BlobStore implements Store {
     checkStarted();
     // allows concurrent gets
     final Timer.Context context = metrics.getResponse.time();
-    if (ids.size() != new HashSet<>(ids).size()) {
+    if (ids.size() > 1 && ids.size() != new HashSet<>(ids).size()) {
       throw new IllegalArgumentException("The list of IDs provided contains duplicates");
     }
     try {
