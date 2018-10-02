@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -239,6 +240,9 @@ class BlobStore implements Store {
     checkStarted();
     // allows concurrent gets
     final Timer.Context context = metrics.getResponse.time();
+    if (ids.size() != new HashSet<>(ids).size()) {
+      throw new IllegalArgumentException("The list of IDs provided contains duplicates");
+    }
     try {
       List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(ids.size());
       Map<StoreKey, MessageInfo> indexMessages = new HashMap<StoreKey, MessageInfo>(ids.size());

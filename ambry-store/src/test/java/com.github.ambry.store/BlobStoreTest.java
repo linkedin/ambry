@@ -629,6 +629,24 @@ public class BlobStoreTest {
   }
 
   /**
+   * Tests some error cases for {@link BlobStore#get(List, EnumSet)};
+   * @throws StoreException
+   */
+  @Test
+  public void getErrorCasesTest() throws StoreException {
+    // duplicate IDs
+    List<StoreKey> listWithDups = new ArrayList<>();
+    listWithDups.add(liveKeys.iterator().next());
+    listWithDups.add(listWithDups.get(0));
+    try {
+      store.get(listWithDups, EnumSet.noneOf(StoreGetOptions.class));
+      fail("GET of " + listWithDups + " should  have failed");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+  }
+
+  /**
    * Tests error cases for {@link BlobStore#put(MessageWriteSet)}.
    */
   @Test

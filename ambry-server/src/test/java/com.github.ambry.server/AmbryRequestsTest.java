@@ -503,9 +503,10 @@ public class AmbryRequestsTest {
    */
   @Test
   public void listOfOriginalStoreKeysGetTest() throws Exception {
+    int numIds = 10;
     PartitionId partitionId = clusterMap.getAllPartitionIds(null).get(0);
     List<BlobId> blobIds = new ArrayList<>();
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < numIds; i++) {
       BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), partitionId, false, BlobId.BlobDataType.DATACHUNK);
@@ -517,6 +518,22 @@ public class AmbryRequestsTest {
       blobIds.add(originalBlobId);
     }
     sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.No_Error);
+
+    // test with duplicates
+    List<BlobId> blobIdsWithDups = new ArrayList<>(blobIds);
+    // add the same blob ids
+    blobIdsWithDups.addAll(blobIds);
+    // add converted ids
+    conversionMap.values().forEach(id -> blobIdsWithDups.add((BlobId) id));
+    sendAndVerifyGetOriginalStoreKeys(blobIdsWithDups, ServerErrorCode.No_Error);
+    // store must not have received duplicates
+    assertEquals("Size is not as expected", blobIds.size(), MockStorageManager.idsReceived.size());
+    for (int i = 0; i < blobIds.size(); i++) {
+      BlobId key = blobIds.get(i);
+      StoreKey converted = conversionMap.get(key);
+      assertEquals(key + "/" + converted + " was not received at the store", converted,
+          MockStorageManager.idsReceived.get(i));
+    }
 
     // Check a valid key mapped to null
     BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
