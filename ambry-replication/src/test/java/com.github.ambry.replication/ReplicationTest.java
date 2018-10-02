@@ -602,14 +602,14 @@ public class ReplicationTest {
     for (int missingKeysCount : missingKeysCounts) {
       expectedIndex = Math.min(expectedIndex + batchSize, numMessagesInEachPart) - 1;
       List<ReplicaThread.ExchangeMetadataResponse> response =
-          replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize), remoteReplicaInfos);
+          replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize, null), remoteReplicaInfos);
       assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
       for (int i = 0; i < response.size(); i++) {
         assertEquals(missingKeysCount, response.get(i).missingStoreKeys.size());
         assertEquals(expectedIndex, ((MockFindToken) response.get(i).remoteToken).getIndex());
         remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
       }
-      replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize), remoteReplicaInfos, response);
+      replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize, null), remoteReplicaInfos, response);
       for (int i = 0; i < response.size(); i++) {
         assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
             remoteReplicaInfos.get(i).getToken());
@@ -624,7 +624,7 @@ public class ReplicationTest {
 
     // no more missing keys
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize), remoteReplicaInfos);
+        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize, null), remoteReplicaInfos);
     assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
     for (ReplicaThread.ExchangeMetadataResponse metadata : response) {
       assertEquals(0, metadata.missingStoreKeys.size());
@@ -744,7 +744,7 @@ public class ReplicationTest {
 
     // Do the replica metadata exchange.
     List<ReplicaThread.ExchangeMetadataResponse> responses =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize, null),
             replicasToReplicate.get(remoteHost.dataNodeId));
 
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
@@ -756,13 +756,13 @@ public class ReplicationTest {
     // of replication must be successful.
     for (PartitionId partitionId : partitionIds) {
       Iterator<StoreKey> iter = idsToExpectByPartition.get(partitionId).iterator();
-      iter.next();
+//      iter.next();
       StoreKey keyToDelete = iter.next();
       addDeleteMessagesToReplicasOfPartition(partitionId, keyToDelete, Collections.singletonList(remoteHost));
       iter.remove();
     }
 
-    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize),
+    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize, null),
         replicasToReplicate.get(remoteHost.dataNodeId), responses);
 
     Assert.assertEquals(idsToExpectByPartition.keySet(), localHost.infosByPartition.keySet());
@@ -828,6 +828,7 @@ public class ReplicationTest {
       addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
 
       idsToExpectByPartition.put(partitionId, expectedIds);
+      //System.out.println(expectedIds.size());
     }
 
     // do the exchange metadata.
@@ -843,7 +844,7 @@ public class ReplicationTest {
 
     // Do the replica metadata exchange.
     List<ReplicaThread.ExchangeMetadataResponse> responses =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize, null),
             replicasToReplicate.get(remoteHost.dataNodeId));
 
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
@@ -872,7 +873,7 @@ public class ReplicationTest {
             msgInfoToExpire.isTtlUpdated(), 1, msgInfoToExpire.getAccountId(), msgInfoToExpire.getContainerId(),
             msgInfoToExpire.getOperationTimeMs()));
 
-    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize),
+    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize, null),
         replicasToReplicate.get(remoteHost.dataNodeId), responses);
 
     Assert.assertEquals(idsToExpectByPartition.keySet(), localHost.infosByPartition.keySet());
@@ -883,6 +884,150 @@ public class ReplicationTest {
             .flatMap(Collection::stream)
             .map(MessageInfo::getStoreKey)
             .collect(Collectors.toSet()));
+  }
+
+  /**
+   * Test the case where 1.remote host has different versions of blobIds and local host is empty; 2. remote and local hosts
+   * have different conversion maps (StoreKeyConverter).
+   * The replication between remote and local hosts should honor conversion rules on each node and the final results on
+   * local hosts are as expected.
+   */
+  @Test
+  public void testReplicationWithCombinedVersionsOfBlobIds() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<Host, Host> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    Host localHost = localAndRemoteHosts.getFirst();
+    Host remoteHost = localAndRemoteHosts.getSecond();
+
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+
+    PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
+    // Only Version_2 and Version_5 blobIds are used in this tests.
+    // For simplicity, we use A1 to denote Version_2 blobId, A2 to denote Version_5 blobId.
+    // For example, A1P means Version_2 PUT message, A2D means Version_5 DELETE message, etc.
+    short VERSION_2 = 2;
+    short VERSION_5 = CommonTestUtils.getCurrentBlobIdVersion();
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
+
+    Map<String, String> testCasesAndResults = new HashMap<>();
+//    testCasesAndResults.put("A1P A1D A2P", "");
+//    testCasesAndResults.put("A1P A2D", "A2P");
+//    testCasesAndResults.put("A1P A2P A1D", "");
+//    testCasesAndResults.put("A1P A2P", "A2P A2P");
+//    testCasesAndResults.put("A1P A2P A1D A2D", "");
+    testCasesAndResults.put("A2P A2D A1P", "A2P");  // this case is not acceptable
+    StoreKey blobIdV2 =
+        new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+            partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
+    StoreKey blobIdV5 =
+        new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+            partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
+    System.out.println("blobIdV2 (A1) : " + blobIdV2);
+    System.out.println("blobIdV5 (A2) : " + blobIdV5);
+    System.out.println("=================================\n");
+    Map<StoreKey, StoreKey> localConversionMap = new HashMap<>();
+    Map<StoreKey, StoreKey> remoteConversionMap = new HashMap<>();
+    localConversionMap.put(blobIdV2, blobIdV5);
+    remoteConversionMap.put(blobIdV5, blobIdV2);
+    storeKeyConverter.setConversionMap(localConversionMap);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    // the transformer is on local host, which should convert any A1 to A2 (both id and message)
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(10, clusterMap, localHost, remoteHost, storeKeyConverter, transformer, null);
+    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    List<RemoteReplicaInfo> singleReplicaList = new ArrayList<>();
+    for (RemoteReplicaInfo replicaInfo : replicasToReplicate.get(remoteHost.dataNodeId)) {
+      if (replicaInfo.getReplicaId().getPartitionId() == partitionId) {
+        singleReplicaList.add(replicaInfo);
+        break;
+      }
+    }
+    int count = 0;
+    for (Map.Entry<String, String> caseAndResult : testCasesAndResults.entrySet()) {
+      // Set up different combinations of PUT, DELETE messages on remote host
+      ++count;
+      System.out.println("[Test #" + count + " case and expected result]: " + caseAndResult.getKey() + " : " + caseAndResult.getValue());
+      String[] messages = caseAndResult.getKey().split(" ");
+      for (String message : messages) {
+        switch (message) {
+          case "A1P":
+            addPutMessagesToReplicasOfPartition(Collections.singletonList(blobIdV2),
+                Collections.singletonList(remoteHost));
+            break;
+          case "A1D":
+            addDeleteMessagesToReplicasOfPartition(partitionId, blobIdV2, Collections.singletonList(remoteHost));
+            break;
+          case "A2P":
+            addPutMessagesToReplicasOfPartition(Collections.singletonList(blobIdV5),
+                Collections.singletonList(remoteHost));
+            break;
+          case "A2D":
+            addDeleteMessagesToReplicasOfPartition(partitionId, blobIdV5, Collections.singletonList(remoteHost));
+            break;
+        }
+      }
+      // Do the replica metadata exchange.
+      List<ReplicaThread.ExchangeMetadataResponse> responses =
+          replicaThread.exchangeMetadata(new MockConnection(remoteHost, 10, remoteConversionMap), singleReplicaList);
+      System.out.println("missing keys on local: " + responses.get(0).missingStoreKeys);
+      // Do Get request to fix missing keys
+      replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, 10, remoteConversionMap), singleReplicaList,
+          responses);
+
+      // Verify
+      System.out.println("--------- verify ---------");
+      String resultStr = caseAndResult.getValue();
+      String[] expectedResults = resultStr.equals("") ? new String[0] : resultStr.split(" ");
+      int size = localHost.infosByPartition.get(partitionId).size();
+      assertEquals("Mismatch in number of messages on local host after replication", expectedResults.length, size);
+      System.out.println("localhost info size = " + size);
+      for (int i = 0; i < size; ++i) {
+        System.out.println("BlobId = " + localHost.infosByPartition.get(partitionId).get(i).getStoreKey());
+        switch (expectedResults[i]) {
+          case "A1P":
+            assertEquals("Mismatch in blodId on local host after replication", blobIdV2.toString(),
+                localHost.infosByPartition.get(partitionId).get(i).getStoreKey().toString());
+            assertFalse("Mismatch in message type on local host after replication",
+                localHost.infosByPartition.get(partitionId).get(i).isDeleted());
+            break;
+          case "A1D":
+            assertEquals("Mismatch in blodId on local host after replication", blobIdV2.toString(),
+                localHost.infosByPartition.get(partitionId).get(i).getStoreKey().toString());
+            assertTrue("Mismatch in message type on local host after replication",
+                localHost.infosByPartition.get(partitionId).get(i).isDeleted());
+            break;
+          case "A2P":
+            assertEquals("Mismatch in blodId on local host after replication", blobIdV5.toString(),
+                localHost.infosByPartition.get(partitionId).get(i).getStoreKey().toString());
+            assertFalse("Mismatch in message type on local host after replication",
+                localHost.infosByPartition.get(partitionId).get(i).isDeleted());
+            break;
+          case "A2D":
+            assertEquals("Mismatch in blodId on local host after replication", blobIdV5.toString(),
+                localHost.infosByPartition.get(partitionId).get(i).getStoreKey().toString());
+            assertTrue("Mismatch in message type on local host after replication",
+                localHost.infosByPartition.get(partitionId).get(i).isDeleted());
+            break;
+        }
+      }
+
+      // Clean up partitions on both local and remote
+      localHost.clearAll();
+      remoteHost.clearAll();
+      // Reset token on local host
+      singleReplicaList.get(0).setToken(new MockFindToken(0, 0));
+      System.out.println("=================================\n");
+    }
   }
 
   /**
@@ -1015,7 +1160,7 @@ public class ReplicationTest {
 
     // Test the case where some partitions have missing keys, but not all.
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize, null),
             replicasToReplicate.get(remoteHost.dataNodeId));
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
@@ -1028,7 +1173,7 @@ public class ReplicationTest {
         assertEquals(expectedIndex + 1, ((MockFindToken) response.get(i).remoteToken).getIndex());
       }
     }
-    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize),
+    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize, null),
         replicasToReplicate.get(remoteHost.dataNodeId), response);
     for (int i = 0; i < response.size(); i++) {
       assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
@@ -1120,7 +1265,7 @@ public class ReplicationTest {
     Time time = new MockTime();
     MockFindToken token1 = new MockFindToken(0, 0);
     RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(new MockReplicaId(), new MockReplicaId(),
-        new MockStore(null, Collections.EMPTY_LIST, Collections.EMPTY_LIST, null), token1, tokenPersistInterval, time,
+        new MockStore(null, Collections.emptyList(), Collections.emptyList(), null), token1, tokenPersistInterval, time,
         new Port(5000, PortType.PLAINTEXT));
 
     // The equality check is for the reference, which is fine.
@@ -1236,7 +1381,7 @@ public class ReplicationTest {
     expectedIndex += expectedIndexInc;
     expectedIndexOdd += expectedIndexInc;
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize, null),
             replicasToReplicate.get(remoteHost.dataNodeId));
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
@@ -1246,7 +1391,7 @@ public class ReplicationTest {
           ((MockFindToken) response.get(i).remoteToken).getIndex());
       replicasToReplicate.get(remoteHost.dataNodeId).get(i).setToken(response.get(i).remoteToken);
     }
-    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize),
+    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize, null),
         replicasToReplicate.get(remoteHost.dataNodeId), response);
     for (int i = 0; i < response.size(); i++) {
       assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
@@ -1267,7 +1412,7 @@ public class ReplicationTest {
   private void assertMissingKeys(int[] expectedMissingKeysSum, int batchSize, ReplicaThread replicaThread,
       Host remoteHost, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize, null),
             replicasToReplicate.get(remoteHost.dataNodeId));
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
@@ -1296,7 +1441,7 @@ public class ReplicationTest {
       int expectedIndex, int expectedIndexOdd, int expectedMissingBuffers) throws Exception {
     // no more missing keys
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, 4),
+        replicaThread.exchangeMetadata(new MockConnection(remoteHost, 4, null),
             replicasToReplicate.get(remoteHost.dataNodeId));
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
@@ -1599,10 +1744,8 @@ public class ReplicationTest {
      * @param buffer the data accompanying the message.
      */
     void addMessage(PartitionId id, MessageInfo messageInfo, ByteBuffer buffer) {
-      List<MessageInfo> existingInfos = infosByPartition.computeIfAbsent(id, id1 -> new ArrayList<>());
-      existingInfos.add(messageInfo);
-      List<ByteBuffer> existingBuffers = buffersByPartition.computeIfAbsent(id, id1 -> new ArrayList<>());
-      existingBuffers.add(buffer.duplicate());
+      infosByPartition.computeIfAbsent(id, id1 -> new ArrayList<>()).add(messageInfo);
+      buffersByPartition.computeIfAbsent(id, id1 -> new ArrayList<>()).add(buffer.duplicate());
     }
 
     /**
@@ -1702,6 +1845,14 @@ public class ReplicationTest {
         }
       }
       return missingBuffers;
+    }
+
+    /**
+     * clear up all the partitions and their associated {@link MessageInfo} and {@link ByteBuffer}.
+     */
+    void clearAll() {
+      infosByPartition.forEach(((partitionId, messageInfos) -> messageInfos.clear()));
+      buffersByPartition.forEach(((partitionId, byteBuffers) -> byteBuffers.clear()));
     }
   }
 
@@ -2039,12 +2190,15 @@ public class ReplicationTest {
     private List<ByteBuffer> buffersToReturn;
     private Map<PartitionId, List<MessageInfo>> infosToReturn;
     private Map<PartitionId, List<MessageMetadata>> messageMetadatasToReturn;
+    private Map<StoreKey, StoreKey> conversionMap;
     private ReplicaMetadataRequest metadataRequest;
     private GetRequest getRequest;
+//    private boolean needConvert = true;
 
-    MockConnection(Host host, int maxSizeToReturn) {
+    MockConnection(Host host, int maxSizeToReturn, Map<StoreKey, StoreKey> conversionMap) {
       this.host = host;
       this.maxSizeToReturn = maxSizeToReturn;
+      this.conversionMap = conversionMap == null ? new HashMap<>() : conversionMap;
     }
 
     @Override
@@ -2067,6 +2221,7 @@ public class ReplicationTest {
             requestIsEmpty = false;
             int index = 0;
             MessageInfo infoFound = null;
+            key = conversionMap.get(key) == null ? key : conversionMap.get(key);
             for (MessageInfo info : messageInfoList) {
               if (key.equals(info.getStoreKey())) {
                 infoFound = getMergedMessageInfo(info.getStoreKey(), messageInfoList);
@@ -2107,11 +2262,13 @@ public class ReplicationTest {
           Set<StoreKey> processedKeys = new HashSet<>();
           for (int i = startIndex; i < endIndex; i++) {
             StoreKey key = partitionInfos.get(i).getStoreKey();
+//            System.out.println("key = " + key);
             if (processedKeys.add(key)) {
               messageInfosToReturn.add(getMergedMessageInfo(key, partitionInfos));
             }
             indexRequested = i;
           }
+//          System.out.println(processedKeys);
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
               new ReplicaMetadataResponseInfo(requestInfo.getPartitionId(),
                   new MockFindToken(indexRequested, requestInfo.getToken().getBytesRead()), messageInfosToReturn, 0);
@@ -2122,7 +2279,21 @@ public class ReplicationTest {
       } else {
         List<PartitionResponseInfo> responseInfoList = new ArrayList<>();
         for (PartitionRequestInfo requestInfo : getRequest.getPartitionInfoList()) {
+          //List<? extends StoreKey> blobIds = requestInfo.getBlobIds();
           List<MessageInfo> infosForPartition = infosToReturn.get(requestInfo.getPartition());
+          //List<MessageInfo> filteredInfosForPartition = new ArrayList<>();
+//          if (false) {
+//            Set<StoreKey> convertedKeys = new HashSet<>(getConvertedBlobIds(blobIds));
+//            System.out.println("convertedKeys on remote: " + convertedKeys);
+//            for (MessageInfo msgInfo : infosToReturn.get(requestInfo.getPartition())) {
+//              System.out.println("msgInfo key: " + msgInfo.getStoreKey());
+//              if (convertedKeys.contains(msgInfo.getStoreKey())) {
+//                filteredInfosForPartition.add(msgInfo);
+//              }
+//            }
+//            infosForPartition = filteredInfosForPartition;
+//          }
+          //System.out.println("receive: " + infosForPartition.size());
           PartitionResponseInfo partitionResponseInfo;
           if (!getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest.getGetOption()
               .equals(GetOption.Include_Deleted_Blobs) && infosForPartition.stream().anyMatch(MessageInfo::isDeleted)) {
@@ -2190,7 +2361,7 @@ public class ReplicationTest {
         throws IOException, InterruptedException, ConnectionPoolTimeoutException {
       DataNodeId dataNodeId = clusterMap.getDataNodeId(host, port.getPort());
       Host hostObj = hosts.get(dataNodeId);
-      return new MockConnection(hostObj, maxEntriesToReturn);
+      return new MockConnection(hostObj, maxEntriesToReturn, null);
     }
 
     @Override
