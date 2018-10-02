@@ -168,7 +168,8 @@ public class InMemAccountService implements AccountService {
    * @return returns a random {@link Container} for {@code accountId}
    */
   private Container getRandomContainer(short accountId) {
-    short refContainerId = Utils.getRandomShort(TestUtils.RANDOM);
+    // adding +2 so that the ID is not 0 or 1
+    short refContainerId = (short) (TestUtils.RANDOM.nextInt(Short.MAX_VALUE - 1) + 2);
     String refContainerName = UtilsTest.getRandomString(10);
     Container.ContainerStatus refContainerStatus = Container.ContainerStatus.ACTIVE;
     String refContainerDescription = UtilsTest.getRandomString(10);
