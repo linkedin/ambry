@@ -629,10 +629,29 @@ public class BlobStoreTest {
   }
 
   /**
-   * Tests error cases for {@link BlobStore#put(MessageWriteSet)}.
+   * Tests some error cases for {@link BlobStore#get(List, EnumSet)};
+   * @throws StoreException
    */
   @Test
-  public void putErrorCasesTest() {
+  public void getErrorCasesTest() throws StoreException {
+    // duplicate IDs
+    List<StoreKey> listWithDups = new ArrayList<>();
+    listWithDups.add(liveKeys.iterator().next());
+    listWithDups.add(listWithDups.get(0));
+    try {
+      store.get(listWithDups, EnumSet.noneOf(StoreGetOptions.class));
+      fail("GET of " + listWithDups + " should  have failed");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+  }
+
+  /**
+   * Tests error cases for {@link BlobStore#put(MessageWriteSet)}.
+   * @throws StoreException
+   */
+  @Test
+  public void putErrorCasesTest() throws StoreException {
     // ID that exists
     // live
     verifyPutFailure(liveKeys.iterator().next(), StoreErrorCodes.Already_Exist);
@@ -640,17 +659,41 @@ public class BlobStoreTest {
     verifyPutFailure(expiredKeys.iterator().next(), StoreErrorCodes.Already_Exist);
     // deleted
     verifyPutFailure(deletedKeys.iterator().next(), StoreErrorCodes.Already_Exist);
+    // duplicates
+    MockId id = getUniqueId();
+    MessageInfo info =
+        new MessageInfo(id, PUT_RECORD_SIZE, id.getAccountId(), id.getContainerId(), Utils.Infinite_Time);
+    MessageWriteSet writeSet = new MockMessageWriteSet(Arrays.asList(info, info),
+        Arrays.asList(ByteBuffer.allocate(1), ByteBuffer.allocate(1)));
+    try {
+      store.put(writeSet);
+      fail("Store PUT should have failed");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
   }
 
   /**
    * Tests error cases for {@link BlobStore#delete(MessageWriteSet)}.
+   * @throws StoreException
    */
   @Test
-  public void deleteErrorCasesTest() {
+  public void deleteErrorCasesTest() throws StoreException {
     // ID that is already deleted
     verifyDeleteFailure(deletedKeys.iterator().next(), StoreErrorCodes.ID_Deleted);
     // ID that does not exist
     verifyDeleteFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
+    MockId id = getUniqueId();
+    MessageInfo info =
+        new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds());
+    MessageWriteSet writeSet = new MockMessageWriteSet(Arrays.asList(info, info),
+        Arrays.asList(ByteBuffer.allocate(1), ByteBuffer.allocate(1)));
+    try {
+      store.delete(writeSet);
+      fail("Store DELETE should have failed");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
   }
 
   /**
@@ -744,6 +787,18 @@ public class BlobStoreTest {
     verifyTtlUpdateFailure(id, time.milliseconds() + 5, StoreErrorCodes.Update_Not_Allowed);
     // authorization failure
     ttlUpdateAuthorizationFailureTest();
+    // duplicates
+    id = getUniqueId();
+    MessageInfo info = new MessageInfo(id, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, id.getAccountId(),
+        id.getContainerId(), time.milliseconds());
+    MessageWriteSet writeSet = new MockMessageWriteSet(Arrays.asList(info, info),
+        Arrays.asList(ByteBuffer.allocate(1), ByteBuffer.allocate(1)));
+    try {
+      store.updateTtl(writeSet);
+      fail("Store TTL UPDATE should have failed");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do
+    }
   }
 
   /**

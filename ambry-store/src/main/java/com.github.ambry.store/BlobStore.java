@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -239,6 +240,10 @@ class BlobStore implements Store {
     checkStarted();
     // allows concurrent gets
     final Timer.Context context = metrics.getResponse.time();
+    if (ids.size() > 1 && ids.size() != new HashSet<>(ids).size()) {
+      metrics.duplicateKeysInBatch.inc();
+      throw new IllegalArgumentException("The list of IDs provided contains duplicates");
+    }
     try {
       List<BlobReadOptions> readOptions = new ArrayList<BlobReadOptions>(ids.size());
       Map<StoreKey, MessageInfo> indexMessages = new HashMap<StoreKey, MessageInfo>(ids.size());
@@ -350,11 +355,12 @@ class BlobStore implements Store {
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     checkStarted();
+    if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
+      throw new IllegalArgumentException("Message write set cannot be empty");
+    }
+    checkDuplicates(messageSetToWrite);
     final Timer.Context context = metrics.putResponse.time();
     try {
-      if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
-        throw new IllegalArgumentException("Message write set cannot be empty");
-      }
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       MessageWriteSetStateInStore state = checkWriteSetStateInStore(messageSetToWrite, null);
       if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
@@ -423,6 +429,7 @@ class BlobStore implements Store {
   @Override
   public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
     checkStarted();
+    checkDuplicates(messageSetToDelete);
     final Timer.Context context = metrics.deleteResponse.time();
     try {
       List<IndexValue> indexValuesToDelete = new ArrayList<>();
@@ -498,6 +505,7 @@ class BlobStore implements Store {
   @Override
   public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
     checkStarted();
+    checkDuplicates(messageSetToUpdate);
     final Timer.Context context = metrics.ttlUpdateResponse.time();
     try {
       List<IndexValue> indexValuesToUpdate = new ArrayList<>();
@@ -729,6 +737,24 @@ class BlobStore implements Store {
   private void checkStarted() throws StoreException {
     if (!started) {
       throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
+    }
+  }
+
+  /**
+   * Detects duplicates in {@code writeSet}
+   * @param writeSet the {@link MessageWriteSet} to detect duplicates in
+   * @throws StoreException if a duplicate is detected
+   */
+  private void checkDuplicates(MessageWriteSet writeSet) throws StoreException {
+    List<MessageInfo> infos = writeSet.getMessageSetInfo();
+    if (infos.size() > 1) {
+      Set<StoreKey> seenKeys = new HashSet<>();
+      for (MessageInfo info : infos) {
+        if (!seenKeys.add(info.getStoreKey())) {
+          metrics.duplicateKeysInBatch.inc();
+          throw new IllegalArgumentException("WriteSet contains duplicates. Duplicate detected: " + info.getStoreKey());
+        }
+      }
     }
   }
 

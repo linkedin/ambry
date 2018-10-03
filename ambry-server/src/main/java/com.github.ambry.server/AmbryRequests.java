@@ -92,6 +92,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -328,7 +329,11 @@ public class AmbryRequests implements RequestAPI {
               storeGetOptions =
                   EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }
-            StoreInfo info = storeToGet.get(getConvertedStoreKeys(partitionRequestInfo.getBlobIds()), storeGetOptions);
+            List<StoreKey> convertedStoreKeys = getConvertedStoreKeys(partitionRequestInfo.getBlobIds());
+            List<StoreKey> dedupedStoreKeys =
+                convertedStoreKeys.size() > 1 ? convertedStoreKeys.stream().distinct().collect(Collectors.toList())
+                    : convertedStoreKeys;
+            StoreInfo info = storeToGet.get(dedupedStoreKeys, storeGetOptions);
             MessageFormatSend blobsToSend =
                 new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
                     storeKeyFactory, enableDataPrefetch);
