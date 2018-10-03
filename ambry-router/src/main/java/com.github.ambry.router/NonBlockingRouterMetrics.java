@@ -37,12 +37,14 @@ public class NonBlockingRouterMetrics {
 
   // Operation rate.
   public final Meter putBlobOperationRate;
+  public final Meter stitchBlobOperationRate;
   public final Meter getBlobInfoOperationRate;
   public final Meter getBlobOperationRate;
   public final Meter getBlobWithRangeOperationRate;
   public final Meter deleteBlobOperationRate;
   public final Meter updateBlobTtlOperationRate;
   public final Meter putEncryptedBlobOperationRate;
+  public final Meter stitchEncryptedBlobOperationRate;
   public final Meter getEncryptedBlobInfoOperationRate;
   public final Meter getEncryptedBlobOperationRate;
   public final Meter getEncryptedBlobWithRangeOperationRate;
@@ -54,11 +56,13 @@ public class NonBlockingRouterMetrics {
 
   // Latency.
   public final Histogram putBlobOperationLatencyMs;
+  public final Histogram stitchBlobOperationLatencyMs;
   public final Histogram putChunkOperationLatencyMs;
   public final Histogram getBlobInfoOperationLatencyMs;
   public final Histogram getBlobOperationLatencyMs;
   public final Histogram getBlobOperationTotalTimeMs;
   public final Histogram putEncryptedBlobOperationLatencyMs;
+  public final Histogram stitchEncryptedBlobOperationLatencyMs;
   public final Histogram putEncryptedChunkOperationLatencyMs;
   public final Histogram getEncryptedBlobInfoOperationLatencyMs;
   public final Histogram getEncryptedBlobOperationLatencyMs;
@@ -69,10 +73,12 @@ public class NonBlockingRouterMetrics {
 
   // Operation error count.
   public final Counter putBlobErrorCount;
+  public final Counter stitchBlobErrorCount;
   public final Counter getBlobInfoErrorCount;
   public final Counter getBlobErrorCount;
   public final Counter getBlobWithRangeErrorCount;
   public final Counter putEncryptedBlobErrorCount;
+  public final Counter stitchEncryptedBlobErrorCount;
   public final Counter getEncryptedBlobInfoErrorCount;
   public final Counter getEncryptedBlobErrorCount;
   public final Counter getEncryptedBlobWithRangeErrorCount;
@@ -176,6 +182,7 @@ public class NonBlockingRouterMetrics {
 
     // Operation Rate.
     putBlobOperationRate = metricRegistry.meter(MetricRegistry.name(PutOperation.class, "PutBlobOperationRate"));
+    stitchBlobOperationRate = metricRegistry.meter(MetricRegistry.name(PutOperation.class, "StitchBlobOperationRate"));
     getBlobInfoOperationRate =
         metricRegistry.meter(MetricRegistry.name(GetBlobInfoOperation.class, "GetBlobInfoOperationRate"));
     getBlobOperationRate = metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationRate"));
@@ -183,6 +190,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeOperationRate"));
     putEncryptedBlobOperationRate =
         metricRegistry.meter(MetricRegistry.name(PutOperation.class, "PutEncryptedBlobOperationRate"));
+    stitchEncryptedBlobOperationRate =
+        metricRegistry.meter(MetricRegistry.name(PutOperation.class, "StitchEncryptedBlobOperationRate"));
     getEncryptedBlobInfoOperationRate =
         metricRegistry.meter(MetricRegistry.name(GetBlobInfoOperation.class, "GetEncryptedBlobInfoOperationRate"));
     getEncryptedBlobOperationRate =
@@ -206,6 +215,8 @@ public class NonBlockingRouterMetrics {
     // Latency.
     putBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "PutBlobOperationLatencyMs"));
+    stitchBlobOperationLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "StitchBlobOperationLatencyMs"));
     putChunkOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "PutChunkOperationLatencyMs"));
     getBlobInfoOperationLatencyMs =
@@ -216,6 +227,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationTotalTimeMs"));
     putEncryptedBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "PutEncryptedBlobOperationLatencyMs"));
+    stitchEncryptedBlobOperationLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "StitchEncryptedBlobOperationLatencyMs"));
     putEncryptedChunkOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "PutEncryptedChunkOperationLatencyMs"));
     getEncryptedBlobInfoOperationLatencyMs = metricRegistry.histogram(
@@ -233,6 +246,7 @@ public class NonBlockingRouterMetrics {
 
     // Operation error count.
     putBlobErrorCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "PutBlobErrorCount"));
+    stitchBlobErrorCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "StitchBlobErrorCount"));
     getBlobInfoErrorCount =
         metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "GetBlobInfoErrorCount"));
     getBlobErrorCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobErrorCount"));
@@ -240,6 +254,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeErrorCount"));
     putEncryptedBlobErrorCount =
         metricRegistry.counter(MetricRegistry.name(PutOperation.class, "PutEncryptedBlobErrorCount"));
+    stitchEncryptedBlobErrorCount =
+        metricRegistry.counter(MetricRegistry.name(PutOperation.class, "StitchEncryptedBlobErrorCount"));
     getEncryptedBlobInfoErrorCount =
         metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "GetEncryptedBlobInfoErrorCount"));
     getEncryptedBlobErrorCount =
@@ -500,17 +516,17 @@ public class NonBlockingRouterMetrics {
    * Update appropriate metrics on a putBlob operation related error.
    * @param e the {@link Exception} associated with the error.
    * @param encryptionEnabled {@code true} if encrpytion was enabled for this operation. {@code false} otherwise
+   * @param stitchOperation {@code true} if this is a stitch operation.
    */
-  void onPutBlobError(Exception e, boolean encryptionEnabled) {
+  void onPutBlobError(Exception e, boolean encryptionEnabled, boolean stitchOperation) {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
-      if (encryptionEnabled) {
-        putEncryptedBlobErrorCount.inc();
-        encryptedOperationErrorRate.mark();
+      if (stitchOperation) {
+        (encryptionEnabled ? stitchEncryptedBlobErrorCount : stitchBlobErrorCount).inc();
       } else {
-        putBlobErrorCount.inc();
-        operationErrorRate.mark();
+        (encryptionEnabled ? putEncryptedBlobErrorCount : putBlobErrorCount).inc();
       }
+      (encryptionEnabled ? encryptedOperationErrorRate : operationErrorRate).mark();
     }
   }
 

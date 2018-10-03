@@ -815,7 +815,7 @@ class PutOperation {
   /**
    * @return {@code true} if this is a blob stitching operation instead of a standard upload.
    */
-  private boolean isStitchOperation() {
+  boolean isStitchOperation() {
     return chunksToStitch != null;
   }
 

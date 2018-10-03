@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Histogram;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -294,18 +295,22 @@ class PutManager {
     }
     if (e != null) {
       blobId = null;
-      routerMetrics.onPutBlobError(e, op.isEncryptionEnabled());
+      routerMetrics.onPutBlobError(e, op.isEncryptionEnabled(), op.isStitchOperation());
       routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfCompositeDirectUpload(), op.getServiceId());
     } else {
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }
     routerMetrics.operationDequeuingRate.mark();
     long operationLatencyMs = time.milliseconds() - op.getSubmissionTimeMs();
-    if (op.isEncryptionEnabled()) {
-      routerMetrics.putEncryptedBlobOperationLatencyMs.update(operationLatencyMs);
+    Histogram latencyMetric;
+    if (op.isStitchOperation()) {
+      latencyMetric = op.isEncryptionEnabled() ? routerMetrics.stitchEncryptedBlobOperationLatencyMs
+          : routerMetrics.stitchBlobOperationLatencyMs;
     } else {
-      routerMetrics.putBlobOperationLatencyMs.update(operationLatencyMs);
+      latencyMetric = op.isEncryptionEnabled() ? routerMetrics.putEncryptedBlobOperationLatencyMs
+          : routerMetrics.putBlobOperationLatencyMs;
     }
+    latencyMetric.update(operationLatencyMs);
     NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }
 
@@ -367,7 +372,7 @@ class PutManager {
         Exception e = new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
-        routerMetrics.onPutBlobError(e, op.isEncryptionEnabled());
+        routerMetrics.onPutBlobError(e, op.isEncryptionEnabled(), op.isStitchOperation());
         NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null, e);
       }
     }
