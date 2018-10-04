@@ -59,21 +59,8 @@ class Replica implements ReplicaId, Resource {
   }
 
   Replica(HardwareLayout hardwareLayout, Partition partition, JSONObject jsonObject) throws JSONException {
-    this.partition = partition;
-    this.disk = hardwareLayout.findDisk(jsonObject.getString("hostname"), jsonObject.getInt("port"),
-        jsonObject.getString("mountPath"));
-    ClusterMapConfig clusterMapConfig = hardwareLayout.getClusterMapConfig();
-    try {
-      ResourceStatePolicyFactory resourceStatePolicyFactory =
-          Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
-              clusterMapConfig);
-      resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
-    } catch (Exception e) {
-      logger.error("Error creating resource state policy when instantiating a replica " + e);
-      throw new IllegalStateException("Error creating resource state policy when instantiating a replica " + partition,
-          e);
-    }
-    validate();
+    this(partition, hardwareLayout.findDisk(jsonObject.getString("hostname"), jsonObject.getInt("port"),
+        jsonObject.getString("mountPath")), hardwareLayout.getClusterMapConfig());
   }
 
   @Override

@@ -13,7 +13,6 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -219,8 +218,7 @@ class PartitionLayout {
   }
 
   // Creates a Partition and corresponding Replicas for each specified disk
-  public Partition addNewPartition(List<Disk> disks, long replicaCapacityInBytes, String partitionClass,
-      ClusterMapConfig clusterMapConfig) {
+  public Partition addNewPartition(List<Disk> disks, long replicaCapacityInBytes, String partitionClass) {
     if (disks == null || disks.size() == 0) {
       throw new IllegalArgumentException("Disks either null or of zero length.");
     }
@@ -228,7 +226,7 @@ class PartitionLayout {
     Partition partition =
         new Partition(getNewPartitionId(), partitionClass, PartitionState.READ_WRITE, replicaCapacityInBytes);
     for (Disk disk : disks) {
-      partition.addReplica(new Replica(partition, disk, clusterMapConfig));
+      partition.addReplica(new Replica(partition, disk, hardwareLayout.getClusterMapConfig()));
     }
     addPartition(partition);
     validate();
@@ -238,12 +236,12 @@ class PartitionLayout {
   }
 
   // Adds replicas to the partition for each specified disk
-  public void addNewReplicas(Partition partition, List<Disk> disks, ClusterMapConfig clusterMapConfig) {
+  public void addNewReplicas(Partition partition, List<Disk> disks) {
     if (partition == null || disks == null || disks.size() == 0) {
       throw new IllegalArgumentException("Partition or disks is null or disks is of zero length");
     }
     for (Disk disk : disks) {
-      partition.addReplica(new Replica(partition, disk, clusterMapConfig));
+      partition.addReplica(new Replica(partition, disk, hardwareLayout.getClusterMapConfig()));
     }
     validate();
     partitionSelectionHelper.updatePartitions(partitionMap.values(), localDatacenterName);

@@ -14,7 +14,6 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -239,9 +238,8 @@ class StaticClusterManager implements ClusterMap {
     return maxCapacityDisk;
   }
 
-  PartitionId addNewPartition(List<Disk> disks, long replicaCapacityInBytes, ClusterMapConfig clusterMapConfig) {
-    return partitionLayout.addNewPartition(disks, replicaCapacityInBytes,
-        clusterMapConfig.clusterMapDefaultPartitionClass, clusterMapConfig);
+  PartitionId addNewPartition(List<Disk> disks, long replicaCapacityInBytes, String partitionClass) {
+    return partitionLayout.addNewPartition(disks, replicaCapacityInBytes, partitionClass);
   }
 
   // Determine if there is enough capacity to allocate a PartitionId.
@@ -387,15 +385,15 @@ class StaticClusterManager implements ClusterMap {
    * Allocate partitions for {@code numPartitions} new partitions on all datacenters.
    *
    * @param numPartitions How many partitions to allocate.
-   * @param clusterMapConfig the {@link ClusterMapConfig} used for partitions and replicas instantiation.
+   * @param partitionClass the partition class that the created partitions must be tagged with
    * @param replicaCountPerDatacenter The number of replicas per partition on each datacenter
    * @param replicaCapacityInBytes How large each replica (of a partition) should be
    * @param attemptNonRackAwareOnFailure {@code true} if we should attempt a non rack-aware allocation if a rack-aware
    *                                     one is not possible.
    * @return A list of the new {@link PartitionId}s.
    */
-  List<PartitionId> allocatePartitions(int numPartitions, ClusterMapConfig clusterMapConfig,
-      int replicaCountPerDatacenter, long replicaCapacityInBytes, boolean attemptNonRackAwareOnFailure) {
+  List<PartitionId> allocatePartitions(int numPartitions, String partitionClass, int replicaCountPerDatacenter,
+      long replicaCapacityInBytes, boolean attemptNonRackAwareOnFailure) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
     int partitionsAllocated = 0;
     while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes)
@@ -406,8 +404,7 @@ class StaticClusterManager implements ClusterMap {
             attemptNonRackAwareOnFailure);
         disksToAllocate.addAll(disks);
       }
-      partitions.add(partitionLayout.addNewPartition(disksToAllocate, replicaCapacityInBytes,
-          clusterMapConfig.clusterMapDefaultPartitionClass, clusterMapConfig));
+      partitions.add(partitionLayout.addNewPartition(disksToAllocate, replicaCapacityInBytes, partitionClass));
       partitionsAllocated++;
       System.out.println("Allocated " + partitionsAllocated + " new partitions so far.");
     }
@@ -422,8 +419,7 @@ class StaticClusterManager implements ClusterMap {
    * @param attemptNonRackAwareOnFailure {@code true} if a non rack-aware allocation should be attempted if a rack-aware one
    *                            is not possible.
    */
-  void addReplicas(PartitionId partitionId, String dataCenterName, boolean attemptNonRackAwareOnFailure,
-      ClusterMapConfig clusterMapConfig) {
+  void addReplicas(PartitionId partitionId, String dataCenterName, boolean attemptNonRackAwareOnFailure) {
     List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
     Map<String, Integer> replicaCountByDatacenter = new HashMap<String, Integer>();
     long capacityOfReplicasInBytes = 0;
@@ -460,7 +456,7 @@ class StaticClusterManager implements ClusterMap {
     List<Disk> disksForReplicas =
         allocateDisksForPartition(numberOfReplicasPerDatacenter, capacityOfReplicasInBytes, datacenterToAdd,
             attemptNonRackAwareOnFailure);
-    partitionLayout.addNewReplicas((Partition) partitionId, disksForReplicas, clusterMapConfig);
+    partitionLayout.addNewReplicas((Partition) partitionId, disksForReplicas);
     System.out.println("Added partition " + partitionId + " to datacenter " + dataCenterName);
   }
 

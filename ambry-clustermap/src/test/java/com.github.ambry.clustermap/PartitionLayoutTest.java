@@ -122,7 +122,7 @@ public class PartitionLayoutTest {
     DataNode dataNode = hardwareLayout.getRandomDataNodeFromDc(dc);
     Partition partition =
         partitionLayout.addNewPartition(dataNode.getDisks().subList(0, 1), testPartitionLayout.replicaCapacityInBytes,
-            specialPartitionClass, hardwareLayout.clusterMapConfig);
+            specialPartitionClass);
     PartitionRangeCheckParams extraPartCheckParams =
         new PartitionRangeCheckParams(specialRo.rangeEnd + 1, 1, specialPartitionClass, PartitionState.READ_WRITE);
     // getPartitions(), class special

@@ -907,7 +907,7 @@ public class TestUtils {
     StaticClusterManager clusterMapManager = new StaticClusterManager(partitionLayout, null, new MetricRegistry());
     List<PartitionId> allocatedPartitions;
 
-    allocatedPartitions = clusterMapManager.allocatePartitions(partitionCount, testHardwareLayout.clusterMapConfig,
+    allocatedPartitions = clusterMapManager.allocatePartitions(partitionCount, MockClusterMap.DEFAULT_PARTITION_CLASS,
         replicaCountPerDatacenter, replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size(), 5);
 

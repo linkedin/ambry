@@ -168,7 +168,7 @@ public class StaticClusterManagerTest {
     List<PartitionId> partitionIds = clusterMapManager.getWritablePartitionIds(null);
     assertEquals(partitionIds.size(), 0);
     clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(3), 100 * 1024 * 1024 * 1024L,
-        testHardwareLayout.clusterMapConfig);
+        MockClusterMap.DEFAULT_PARTITION_CLASS);
     partitionIds = clusterMapManager.getWritablePartitionIds(null);
     assertEquals(partitionIds.size(), 1);
     PartitionId partitionId = partitionIds.get(0);
@@ -189,7 +189,7 @@ public class StaticClusterManagerTest {
 
     try {
       // Test with retryIfNotRackAware set to false, this should throw an exception
-      clusterMapManager.allocatePartitions(5, testHardwareLayout.clusterMapConfig, replicaCountPerDataCenter,
+      clusterMapManager.allocatePartitions(5, MockClusterMap.DEFAULT_PARTITION_CLASS, replicaCountPerDataCenter,
           replicaCapacityInBytes, false);
       Assert.fail("allocatePartitions should not succeed when datacenters are missing rack info "
           + "and retryIfNotRackAware is false");
@@ -198,21 +198,21 @@ public class StaticClusterManagerTest {
     }
     // Allocate five partitions that fit within cluster's capacity
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, testHardwareLayout.clusterMapConfig, replicaCountPerDataCenter,
+        clusterMapManager.allocatePartitions(5, MockClusterMap.DEFAULT_PARTITION_CLASS, replicaCountPerDataCenter,
             replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size(), 5);
     assertEquals(clusterMapManager.getWritablePartitionIds(null).size(), 5);
 
     // Allocate "too many" partitions (1M) to exhaust capacity. Capacity is not exhausted evenly across nodes so some
     // "free" but unusable capacity may be left after trying to allocate these partitions.
-    allocatedPartitions = clusterMapManager.allocatePartitions(1000 * 1000, testHardwareLayout.clusterMapConfig,
+    allocatedPartitions = clusterMapManager.allocatePartitions(1000 * 1000, MockClusterMap.DEFAULT_PARTITION_CLASS,
         replicaCountPerDataCenter, replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size() + 5, clusterMapManager.getWritablePartitionIds(null).size());
     System.out.println(freeCapacityDump(clusterMapManager, testHardwareLayout.getHardwareLayout()));
 
     // Capacity is already exhausted...
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, testHardwareLayout.clusterMapConfig, replicaCountPerDataCenter,
+        clusterMapManager.allocatePartitions(5, MockClusterMap.DEFAULT_PARTITION_CLASS, replicaCountPerDataCenter,
             replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size(), 0);
   }
@@ -231,7 +231,7 @@ public class StaticClusterManagerTest {
 
     // Allocate five partitions that fit within cluster's capacity
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, testHardwareLayout.clusterMapConfig, replicaCountPerDataCenter,
+        clusterMapManager.allocatePartitions(5, MockClusterMap.DEFAULT_PARTITION_CLASS, replicaCountPerDataCenter,
             replicaCapacityInBytes, false);
     assertEquals(allocatedPartitions.size(), 5);
     assertEquals(clusterMapManager.getWritablePartitionIds(null).size(), 5);
@@ -240,7 +240,7 @@ public class StaticClusterManagerTest {
 
     // Allocate "too many" partitions (1M) to exhaust capacity. Capacity is not exhausted evenly across nodes so some
     // "free" but unusable capacity may be left after trying to allocate these partitions.
-    allocatedPartitions = clusterMapManager.allocatePartitions(1000 * 1000, testHardwareLayout.clusterMapConfig,
+    allocatedPartitions = clusterMapManager.allocatePartitions(1000 * 1000, MockClusterMap.DEFAULT_PARTITION_CLASS,
         replicaCountPerDataCenter, replicaCapacityInBytes, false);
     assertEquals(allocatedPartitions.size() + 5, clusterMapManager.getWritablePartitionIds(null).size());
     System.out.println(freeCapacityDump(clusterMapManager, testHardwareLayout.getHardwareLayout()));
@@ -248,7 +248,7 @@ public class StaticClusterManagerTest {
 
     // Capacity is already exhausted...
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, testHardwareLayout.clusterMapConfig, replicaCountPerDataCenter,
+        clusterMapManager.allocatePartitions(5, MockClusterMap.DEFAULT_PARTITION_CLASS, replicaCountPerDataCenter,
             replicaCapacityInBytes, false);
     assertEquals(allocatedPartitions.size(), 0);
   }
@@ -266,7 +266,7 @@ public class StaticClusterManagerTest {
     List<PartitionId> allocatedPartitions;
     // Require more replicas than there are racks
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, testHardwareLayout.clusterMapConfig, replicaCountPerDataCenter,
+        clusterMapManager.allocatePartitions(5, MockClusterMap.DEFAULT_PARTITION_CLASS, replicaCountPerDataCenter,
             replicaCapacityInBytes, false);
     assertEquals(allocatedPartitions.size(), 5);
     checkNumReplicasPerDatacenter(allocatedPartitions, 3);
@@ -275,7 +275,7 @@ public class StaticClusterManagerTest {
     // Test with retryIfNotRackAware enabled.  We should be able to allocate 4 replicas per datacenter b/c we no
     // longer require unique racks
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, testHardwareLayout.clusterMapConfig, replicaCountPerDataCenter,
+        clusterMapManager.allocatePartitions(5, MockClusterMap.DEFAULT_PARTITION_CLASS, replicaCountPerDataCenter,
             replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size(), 5);
     checkNumReplicasPerDatacenter(allocatedPartitions, 4);
@@ -309,7 +309,7 @@ public class StaticClusterManagerTest {
     }
 
     clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(3), 100 * 1024 * 1024 * 1024L,
-        testHardwareLayout.clusterMapConfig);
+        MockClusterMap.DEFAULT_PARTITION_CLASS);
     int dcCount = testHardwareLayout.getDatacenterCount();
 
     // Confirm 100GB has been used on 3 distinct DataNodes / Disks in each datacenter.
@@ -458,7 +458,7 @@ public class StaticClusterManagerTest {
     DataNode dataNode = hardwareLayout.getRandomDataNodeFromDc(dc);
     Partition partition =
         partitionLayout.addNewPartition(dataNode.getDisks().subList(0, 1), testPartitionLayout.replicaCapacityInBytes,
-            specialPartitionClass, hardwareLayout.clusterMapConfig);
+            specialPartitionClass);
     Utils.writeJsonObjectToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
     clusterMapManager =
         (new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
