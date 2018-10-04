@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -63,8 +64,7 @@ class PartitionLayout {
     this.localDatacenterName = localDatacenterName;
     this.clusterName = jsonObject.getString("clusterName");
     this.version = jsonObject.getLong("version");
-    this.partitionMap = new HashMap<ByteBuffer, Partition>();
-
+    this.partitionMap = new HashMap<>();
     for (int i = 0; i < jsonObject.getJSONArray("partitions").length(); ++i) {
       addPartition(new Partition(this, jsonObject.getJSONArray("partitions").getJSONObject(i)));
     }
@@ -87,8 +87,7 @@ class PartitionLayout {
     this.clusterName = hardwareLayout.getClusterName();
     this.version = 1;
     this.maxPartitionId = MinPartitionId;
-    this.partitionMap = new HashMap<ByteBuffer, Partition>();
-
+    this.partitionMap = new HashMap<>();
     validate();
     partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitionMap.values(), localDatacenterName);
   }
@@ -220,7 +219,8 @@ class PartitionLayout {
   }
 
   // Creates a Partition and corresponding Replicas for each specified disk
-  public Partition addNewPartition(List<Disk> disks, long replicaCapacityInBytes, String partitionClass) {
+  public Partition addNewPartition(List<Disk> disks, long replicaCapacityInBytes, String partitionClass,
+      ClusterMapConfig clusterMapConfig) {
     if (disks == null || disks.size() == 0) {
       throw new IllegalArgumentException("Disks either null or of zero length.");
     }
@@ -228,7 +228,7 @@ class PartitionLayout {
     Partition partition =
         new Partition(getNewPartitionId(), partitionClass, PartitionState.READ_WRITE, replicaCapacityInBytes);
     for (Disk disk : disks) {
-      partition.addReplica(new Replica(partition, disk));
+      partition.addReplica(new Replica(partition, disk, clusterMapConfig));
     }
     addPartition(partition);
     validate();
@@ -238,12 +238,12 @@ class PartitionLayout {
   }
 
   // Adds replicas to the partition for each specified disk
-  public void addNewReplicas(Partition partition, List<Disk> disks) {
+  public void addNewReplicas(Partition partition, List<Disk> disks, ClusterMapConfig clusterMapConfig) {
     if (partition == null || disks == null || disks.size() == 0) {
       throw new IllegalArgumentException("Partition or disks is null or disks is of zero length");
     }
     for (Disk disk : disks) {
-      partition.addReplica(new Replica(partition, disk));
+      partition.addReplica(new Replica(partition, disk, clusterMapConfig));
     }
     validate();
     partitionSelectionHelper.updatePartitions(partitionMap.values(), localDatacenterName);

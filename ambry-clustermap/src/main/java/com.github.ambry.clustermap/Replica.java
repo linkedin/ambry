@@ -13,6 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,20 +31,30 @@ import org.slf4j.LoggerFactory;
  * its {@link Disk}. Note that this induces a constraint that a Partition can never have more than one Replica on a
  * given Disk. This ensures that a Partition does not have Replicas that share fates.
  */
-class Replica implements ReplicaId {
+class Replica implements ReplicaId, Resource {
   private final Partition partition;
   private Disk disk;
   private volatile boolean isStopped = false;
+  private final ResourceStatePolicy resourceStatePolicy;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  Replica(Partition partition, Disk disk) {
+  Replica(Partition partition, Disk disk, ClusterMapConfig clusterMapConfig) {
     if (logger.isTraceEnabled()) {
       logger.trace("Replica " + partition + ", " + disk);
     }
     this.partition = partition;
     this.disk = disk;
-
+    try {
+      ResourceStatePolicyFactory resourceStatePolicyFactory =
+          Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
+              clusterMapConfig);
+      resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
+    } catch (Exception e) {
+      logger.error("Error creating resource state policy when instantiating a replica " + e);
+      throw new IllegalStateException("Error creating resource state policy when instantiating a replica " + partition,
+          e);
+    }
     validate();
   }
 
@@ -50,6 +62,17 @@ class Replica implements ReplicaId {
     this.partition = partition;
     this.disk = hardwareLayout.findDisk(jsonObject.getString("hostname"), jsonObject.getInt("port"),
         jsonObject.getString("mountPath"));
+    ClusterMapConfig clusterMapConfig = hardwareLayout.getClusterMapConfig();
+    try {
+      ResourceStatePolicyFactory resourceStatePolicyFactory =
+          Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
+              clusterMapConfig);
+      resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
+    } catch (Exception e) {
+      logger.error("Error creating resource state policy when instantiating a replica " + e);
+      throw new IllegalStateException("Error creating resource state policy when instantiating a replica " + partition,
+          e);
+    }
     validate();
   }
 
@@ -76,7 +99,7 @@ class Replica implements ReplicaId {
   @Override
   public List<ReplicaId> getPeerReplicaIds() {
     List<Replica> peerReplicas = getPeerReplicas();
-    return new ArrayList<ReplicaId>(peerReplicas);
+    return new ArrayList<>(peerReplicas);
   }
 
   @Override
@@ -92,7 +115,7 @@ class Replica implements ReplicaId {
   @Override
   public boolean isDown() {
     return getDataNodeId().getState() == HardwareState.UNAVAILABLE
-        || getDiskId().getState() == HardwareState.UNAVAILABLE || isStopped;
+        || getDiskId().getState() == HardwareState.UNAVAILABLE || resourceStatePolicy.isDown() || isStopped;
   }
 
   @Override
@@ -153,5 +176,19 @@ class Replica implements ReplicaId {
   @Override
   public String toString() {
     return "Replica[" + getDataNodeId().getHostname() + ":" + getDataNodeId().getPort() + ":" + getReplicaPath() + "]";
+  }
+
+  /**
+   * Take actions, if any, when this replica is unavailable.
+   */
+  void onReplicaUnavailable() {
+    resourceStatePolicy.onError();
+  }
+
+  /**
+   * Take actions, if any, when this replica is back in a good state.
+   */
+  void onReplicaResponse() {
+    resourceStatePolicy.onSuccess();
   }
 }

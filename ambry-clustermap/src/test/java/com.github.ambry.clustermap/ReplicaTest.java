@@ -17,6 +17,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -26,8 +27,8 @@ class TestReplica extends Replica {
     super(hardwareLayout, null, jsonObject);
   }
 
-  public TestReplica(Disk disk) throws JSONException {
-    super(null, disk);
+  public TestReplica(TestHardwareLayout hardwareLayout, Disk disk) throws JSONException {
+    super(null, disk, hardwareLayout.clusterMapConfig);
   }
 
   @Override
@@ -44,23 +45,34 @@ public class ReplicaTest {
   @Test
   public void basics() throws JSONException {
     // Much of Replica depends on Partition. With a null Partition, only nominal testing can be done.
-    TestUtils.TestHardwareLayout thl = new TestUtils.TestHardwareLayout("Alpha");
+    TestHardwareLayout thl = new TestHardwareLayout("Alpha");
     Disk disk = thl.getRandomDisk();
 
-    TestReplica replicaA = new TestReplica(disk);
+    TestReplica replicaA = new TestReplica(thl, disk);
     assertEquals(replicaA.getDiskId(), disk);
 
-    TestReplica replicaB = new TestReplica(thl.getHardwareLayout(), TestUtils.getJsonReplica(disk));
+    TestReplica replicaB = new TestReplica(thl.getHardwareLayout(), getJsonReplica(disk));
     assertEquals(replicaB.getDiskId(), disk);
   }
 
   @Test
   public void validation() throws JSONException {
+    TestHardwareLayout thl = new TestHardwareLayout("Alpha");
+    Partition partition =
+        new Partition(1, thl.clusterMapConfig.clusterMapDefaultPartitionClass, PartitionState.READ_WRITE,
+            100 * 1024 * 1024 * 1024L);
     try {
-      TestUtils.TestHardwareLayout thl = new TestUtils.TestHardwareLayout("Alpha");
       // Null Partition
-      new Replica(null, thl.getRandomDisk());
+      new Replica(null, thl.getRandomDisk(), thl.clusterMapConfig);
       fail("Should have failed validation.");
+    } catch (IllegalStateException e) {
+      // Expected.
+    }
+
+    try {
+      // Null clusterMapConfig
+      new Replica(partition, thl.getRandomDisk(), null);
+      fail("Should have failed during instantiation");
     } catch (IllegalStateException e) {
       // Expected.
     }
