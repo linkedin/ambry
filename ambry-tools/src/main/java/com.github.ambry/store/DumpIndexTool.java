@@ -72,9 +72,9 @@ public class DumpIndexTool {
     private final EnumSet<BlobState> states;
     private final boolean isInRecentIndexSegment;
     private boolean seenTtlUpdate = false;
-    private boolean isPermanent = false;
+    private boolean isPermanent;
 
-    public Info(EnumSet<BlobState> states, boolean isInRecentIndexSegment, boolean isPermanent) {
+    Info(EnumSet<BlobState> states, boolean isInRecentIndexSegment, boolean isPermanent) {
       this.states = states;
       this.isInRecentIndexSegment = isInRecentIndexSegment;
       this.isPermanent = isPermanent;
@@ -134,12 +134,14 @@ public class DumpIndexTool {
     private final Set<StoreKey> duplicateDeletes;
     private final Set<StoreKey> duplicateUpdates;
     private final Set<StoreKey> updateAfterDeletes;
+    private final Set<StoreKey> duplicateKeys;
     private final long activeCount;
     private final Throwable throwable;
 
     IndexProcessingResults(Map<StoreKey, Info> keyToState, long processedCount, long putCount, long ttlUpdateCount,
         long deleteCount, long craftedIdCount, Set<StoreKey> duplicatePuts, Set<StoreKey> putAfterUpdates,
-        Set<StoreKey> duplicateDeletes, Set<StoreKey> duplicateUpdates, Set<StoreKey> updateAfterDeletes) {
+        Set<StoreKey> duplicateDeletes, Set<StoreKey> duplicateUpdates, Set<StoreKey> updateAfterDeletes,
+        Set<StoreKey> duplicateKeys) {
       this.keyToState = keyToState;
       this.processedCount = processedCount;
       this.putCount = putCount;
@@ -151,6 +153,7 @@ public class DumpIndexTool {
       this.duplicateDeletes = duplicateDeletes;
       this.duplicateUpdates = duplicateUpdates;
       this.updateAfterDeletes = updateAfterDeletes;
+      this.duplicateKeys = duplicateKeys;
       activeCount = keyToState.values().stream().filter(value -> value.getStates().contains(BlobState.Valid)).count();
       throwable = null;
     }
@@ -159,7 +162,7 @@ public class DumpIndexTool {
       this.throwable = throwable;
       keyToState = null;
       processedCount = putCount = ttlUpdateCount = deleteCount = craftedIdCount = activeCount = INVALID_VALUE;
-      duplicatePuts = putAfterUpdates = duplicateDeletes = duplicateUpdates = updateAfterDeletes = null;
+      duplicatePuts = putAfterUpdates = duplicateDeletes = duplicateUpdates = updateAfterDeletes = duplicateKeys = null;
     }
 
     /**
@@ -247,6 +250,13 @@ public class DumpIndexTool {
     }
 
     /**
+     * @return the keys marked as duplicates because another version of the key exists in the index
+     */
+    public Set<StoreKey> getDuplicateKeys() {
+      return duplicateKeys;
+    }
+
+    /**
      * @return the throwable set (if any)
      */
     public Throwable getThrowable() {
@@ -259,7 +269,8 @@ public class DumpIndexTool {
      */
     public boolean isIndexSane() {
       return throwable == null && duplicatePuts.size() == 0 && putAfterUpdates.size() == 0
-          && duplicateDeletes.size() == 0 && duplicateUpdates.size() == 0 && updateAfterDeletes.size() == 0;
+          && duplicateDeletes.size() == 0 && duplicateUpdates.size() == 0 && updateAfterDeletes.size() == 0
+          && duplicateKeys.size() == 0;
     }
 
     @Override
@@ -276,6 +287,7 @@ public class DumpIndexTool {
               + ", Duplicate Delete: " + duplicateDeletes
               + ", Duplicate Update: " + duplicateUpdates
               + ", Update After Delete: " + updateAfterDeletes
+              + ", Duplicate Keys: " + duplicateKeys
           : "Exception Msg: " + throwable.getMessage();
       // @formatter:on
     }
@@ -402,6 +414,13 @@ public class DumpIndexTool {
     final int parallelism;
 
     /**
+     * If {@code true}, uses {@link StoreKeyConverter} to detect duplicates across keys
+     */
+    @Config("detect.duplicates.across.keys")
+    @Default("true")
+    final boolean detectDuplicatesAcrossKeys;
+
+    /**
      * Constructs the configs associated with the tool.
      * @param verifiableProperties the props to use to load the config.
      */
@@ -422,6 +441,7 @@ public class DumpIndexTool {
           verifiableProperties.getLongInRange("index.entries.to.process.per.sec", Long.MAX_VALUE, 1, Long.MAX_VALUE);
       failIfCraftedIdsPresent = verifiableProperties.getBoolean("fail.if.crafted.ids.present", false);
       parallelism = verifiableProperties.getIntInRange("parallelism", 1, 1, Integer.MAX_VALUE);
+      detectDuplicatesAcrossKeys = verifiableProperties.getBoolean("detect.duplicates.across.keys", true);
     }
   }
 
@@ -480,7 +500,8 @@ public class DumpIndexTool {
           break;
         case VerifyIndex:
           IndexProcessingResults results =
-              dumpIndexTool.processIndex(config.pathOfInput, filterKeySet, time.milliseconds());
+              dumpIndexTool.processIndex(config.pathOfInput, filterKeySet, time.milliseconds(),
+                  config.detectDuplicatesAcrossKeys);
           exitCode.set(reportVerificationResults(config.pathOfInput, results, config.failIfCraftedIdsPresent));
           break;
         case VerifyDataNode:
@@ -493,7 +514,8 @@ public class DumpIndexTool {
                 .map(replicaId -> new File(replicaId.getMountPath()))
                 .collect(Collectors.toSet());
             Map<File, IndexProcessingResults> resultsByReplica =
-                dumpIndexTool.processIndex(replicaDirs, filterKeySet, config.parallelism);
+                dumpIndexTool.processIndex(replicaDirs, filterKeySet, config.parallelism,
+                    config.detectDuplicatesAcrossKeys);
             replicaDirs.removeAll(resultsByReplica.keySet());
             if (replicaDirs.size() != 0) {
               logger.error("Results obtained missing {}", replicaDirs);
@@ -567,11 +589,15 @@ public class DumpIndexTool {
    * @param filterSet the filter set of keys to examine. Can be {@code null}
    * @param parallelism the desired parallelism. The minimum of this and the size of {@code replicaDirs} is the actual
    *                    chosen parallelism.
-   *
+   * @param detectDuplicatesAcrossKeys if {@code true}, uses the {@link StoreKeyConverter} to detect duplicates across
+   *                                   keys. If set to {@code true}, parallelism has to be 1.
    * @return @link IndexProcessingResults} for each replicaDir in {@code replicaDirs}
    */
-  public Map<File, IndexProcessingResults> processIndex(Set<File> replicaDirs, Set<StoreKey> filterSet,
-      int parallelism) {
+  public Map<File, IndexProcessingResults> processIndex(Set<File> replicaDirs, Set<StoreKey> filterSet, int parallelism,
+      boolean detectDuplicatesAcrossKeys) {
+    if (detectDuplicatesAcrossKeys && parallelism != 1) {
+      throw new IllegalArgumentException("Parallelism cannot be > 1 because StoreKeyConverter is not thread safe");
+    }
     if (replicaDirs == null || replicaDirs.size() == 0) {
       return Collections.emptyMap();
     }
@@ -583,7 +609,7 @@ public class DumpIndexTool {
         logger.info("Processing segment files for replica {} ", replicaDir);
         IndexProcessingResults results = null;
         try {
-          results = processIndex(replicaDir, filterSet, currentTimeMs);
+          results = processIndex(replicaDir, filterSet, currentTimeMs, detectDuplicatesAcrossKeys);
         } catch (Throwable e) {
           results = new IndexProcessingResults(e);
         } finally {
@@ -594,8 +620,8 @@ public class DumpIndexTool {
     return resultsByReplica;
   }
 
-  public IndexProcessingResults processIndex(File replicaDir, Set<StoreKey> filterSet, long currentTimeMs)
-      throws InterruptedException, IOException, StoreException {
+  public IndexProcessingResults processIndex(File replicaDir, Set<StoreKey> filterSet, long currentTimeMs,
+      boolean detectDuplicatesAcrossKeys) throws Exception {
     verifyPath(replicaDir, true);
     final Timer.Context context = metrics.dumpReplicaIndexesTimeMs.time();
     try {
@@ -679,8 +705,22 @@ public class DumpIndexTool {
           }
         }
       }
+      Set<StoreKey> duplicateKeys = new HashSet<>();
+      if (detectDuplicatesAcrossKeys) {
+        logger.info("Converting {} store keys...", keyToState.size());
+        Map<StoreKey, StoreKey> conversions = storeKeyConverter.convert(keyToState.keySet());
+        logger.info("Store keys converted!");
+        conversions.forEach((k, v) -> {
+          if (!k.equals(v) && keyToState.containsKey(v)) {
+            // if k == v, the processing above should have caught it
+            // if v exists in keyToState, it means both k and v exist in the store and this is a problem
+            duplicateKeys.add(v);
+          }
+        });
+      }
       return new IndexProcessingResults(keyToState, processedCount, putCount, ttlUpdateCount, deleteCount,
-          craftedIdCount, duplicatePuts, putAfterUpdates, duplicateDeletes, duplicateUpdates, updatesAfterDeletes);
+          craftedIdCount, duplicatePuts, putAfterUpdates, duplicateDeletes, duplicateUpdates, updatesAfterDeletes,
+          duplicateKeys);
     } finally {
       context.stop();
     }
@@ -721,7 +761,7 @@ public class DumpIndexTool {
    * @throws Exception
    */
   public Map<StoreKey, StoreKey> retrieveAndMaybeConvertStoreKeys(File[] replicas) throws Exception {
-    Map<File, IndexProcessingResults> results = processIndex(new HashSet<>(Arrays.asList(replicas)), null, 1);
+    Map<File, IndexProcessingResults> results = processIndex(new HashSet<>(Arrays.asList(replicas)), null, 1, false);
     boolean success = true;
     for (DumpIndexTool.IndexProcessingResults result : results.values()) {
       if (!result.isIndexSane()) {

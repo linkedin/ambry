@@ -188,7 +188,7 @@ public class ConsistencyCheckerTool {
   public Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> checkConsistency(File[] replicas)
       throws Exception {
     Map<File, DumpIndexTool.IndexProcessingResults> results =
-        dumpIndexTool.processIndex(new HashSet<>(Arrays.asList(replicas)), filterSet, 1);
+        dumpIndexTool.processIndex(new HashSet<>(Arrays.asList(replicas)), filterSet, 1, true);
     boolean success = true;
     for (DumpIndexTool.IndexProcessingResults result : results.values()) {
       if (!result.isIndexSane()) {
