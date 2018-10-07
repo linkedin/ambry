@@ -711,10 +711,10 @@ public class ReplicationTest {
       StoreKey id =
           new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
               containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
-      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
+      PutMsgInfoAndBuffer msgInfoAndBuffer = getPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
-          new MessageInfo(id, putMsgInfo.getFirst().remaining(), 1, accountId, containerId,
-              putMsgInfo.getSecond().getOperationTimeMs()), putMsgInfo.getFirst());
+          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), 1, accountId, containerId,
+              msgInfoAndBuffer.messageInfo.getOperationTimeMs()), msgInfoAndBuffer.byteBuffer);
 
       // add 3 messages to the remote host only
       expectedIds.addAll(addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3));
@@ -756,7 +756,7 @@ public class ReplicationTest {
     // of replication must be successful.
     for (PartitionId partitionId : partitionIds) {
       Iterator<StoreKey> iter = idsToExpectByPartition.get(partitionId).iterator();
-//      iter.next();
+      iter.next();
       StoreKey keyToDelete = iter.next();
       addDeleteMessagesToReplicasOfPartition(partitionId, keyToDelete, Collections.singletonList(remoteHost));
       iter.remove();
@@ -810,10 +810,10 @@ public class ReplicationTest {
       StoreKey id =
           new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
               containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
-      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
+      PutMsgInfoAndBuffer msgInfoAndBuffer = getPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
-          new MessageInfo(id, putMsgInfo.getFirst().remaining(), 1, accountId, containerId,
-              putMsgInfo.getSecond().getOperationTimeMs()), putMsgInfo.getFirst());
+          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), 1, accountId, containerId,
+              msgInfoAndBuffer.messageInfo.getOperationTimeMs()), msgInfoAndBuffer.byteBuffer);
 
       // add 3 messages to the remote host only
       expectedIds.addAll(addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3));
@@ -828,7 +828,6 @@ public class ReplicationTest {
       addDeleteMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
 
       idsToExpectByPartition.put(partitionId, expectedIds);
-      //System.out.println(expectedIds.size());
     }
 
     // do the exchange metadata.
@@ -916,21 +915,19 @@ public class ReplicationTest {
     boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
 
     Map<String, String> testCasesAndResults = new HashMap<>();
-//    testCasesAndResults.put("A1P A1D A2P", "");
-//    testCasesAndResults.put("A1P A2D", "A2P");
-//    testCasesAndResults.put("A1P A2P A1D", "");
-//    testCasesAndResults.put("A1P A2P", "A2P A2P");
-//    testCasesAndResults.put("A1P A2P A1D A2D", "");
-    testCasesAndResults.put("A2P A2D A1P", "A2P");  // this case is not acceptable
+    testCasesAndResults.put("A1P A1D A2P", "");
+    testCasesAndResults.put("A1P A2D", "A2P");
+    testCasesAndResults.put("A1P A2P A1D", "");
+    testCasesAndResults.put("A1P A2P", "A2P");
+    testCasesAndResults.put("A1P A2P A1D A2D", "");
+    testCasesAndResults.put("A2P A2D A1P", "A2P");  // this case should not happen in practice
     StoreKey blobIdV2 =
         new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
             partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
     StoreKey blobIdV5 =
         new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
             partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
-    System.out.println("blobIdV2 (A1) : " + blobIdV2);
-    System.out.println("blobIdV5 (A2) : " + blobIdV5);
-    System.out.println("=================================\n");
+
     Map<StoreKey, StoreKey> localConversionMap = new HashMap<>();
     Map<StoreKey, StoreKey> remoteConversionMap = new HashMap<>();
     localConversionMap.put(blobIdV2, blobIdV5);
@@ -952,11 +949,9 @@ public class ReplicationTest {
         break;
       }
     }
-    int count = 0;
+
     for (Map.Entry<String, String> caseAndResult : testCasesAndResults.entrySet()) {
       // Set up different combinations of PUT, DELETE messages on remote host
-      ++count;
-      System.out.println("[Test #" + count + " case and expected result]: " + caseAndResult.getKey() + " : " + caseAndResult.getValue());
       String[] messages = caseAndResult.getKey().split(" ");
       for (String message : messages) {
         switch (message) {
@@ -979,20 +974,16 @@ public class ReplicationTest {
       // Do the replica metadata exchange.
       List<ReplicaThread.ExchangeMetadataResponse> responses =
           replicaThread.exchangeMetadata(new MockConnection(remoteHost, 10, remoteConversionMap), singleReplicaList);
-      System.out.println("missing keys on local: " + responses.get(0).missingStoreKeys);
       // Do Get request to fix missing keys
       replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, 10, remoteConversionMap), singleReplicaList,
           responses);
 
       // Verify
-      System.out.println("--------- verify ---------");
       String resultStr = caseAndResult.getValue();
       String[] expectedResults = resultStr.equals("") ? new String[0] : resultStr.split(" ");
       int size = localHost.infosByPartition.get(partitionId).size();
       assertEquals("Mismatch in number of messages on local host after replication", expectedResults.length, size);
-      System.out.println("localhost info size = " + size);
       for (int i = 0; i < size; ++i) {
-        System.out.println("BlobId = " + localHost.infosByPartition.get(partitionId).get(i).getStoreKey());
         switch (expectedResults[i]) {
           case "A1P":
             assertEquals("Mismatch in blodId on local host after replication", blobIdV2.toString(),
@@ -1026,7 +1017,6 @@ public class ReplicationTest {
       remoteHost.clearAll();
       // Reset token on local host
       singleReplicaList.get(0).setToken(new MockFindToken(0, 0));
-      System.out.println("=================================\n");
     }
   }
 
@@ -1069,10 +1059,10 @@ public class ReplicationTest {
       StoreKey id =
           new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
               containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
-      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
+      PutMsgInfoAndBuffer msgInfoAndBuffer = getPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
-          new MessageInfo(id, putMsgInfo.getFirst().remaining(), 1, accountId, containerId,
-              putMsgInfo.getSecond().getOperationTimeMs()), putMsgInfo.getFirst());
+          new MessageInfo(id, msgInfoAndBuffer.byteBuffer.remaining(), 1, accountId, containerId,
+              msgInfoAndBuffer.messageInfo.getOperationTimeMs()), msgInfoAndBuffer.byteBuffer);
       idsToBeIgnored.add(id);
 
       // add 3 messages to the remote host only
@@ -1084,13 +1074,13 @@ public class ReplicationTest {
       // add a corrupt message to the remote host only
       id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
           containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
-      putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
-      byte[] data = putMsgInfo.getFirst().array();
+      msgInfoAndBuffer = getPutMessage(id, accountId, containerId, toEncrypt);
+      byte[] data = msgInfoAndBuffer.byteBuffer.array();
       // flip every bit in the array
       for (int j = 0; j < data.length; j++) {
         data[j] ^= 0xFF;
       }
-      remoteHost.addMessage(partitionId, putMsgInfo.getSecond(), putMsgInfo.getFirst());
+      remoteHost.addMessage(partitionId, msgInfoAndBuffer.messageInfo, msgInfoAndBuffer.byteBuffer);
       idsToBeIgnored.add(id);
 
       // add 3 messages to the remote host only
@@ -1321,7 +1311,7 @@ public class ReplicationTest {
    * @param remoteHost the remote {@link Host} (the target of replication)
    * @param storeKeyConverter the {@link StoreKeyConverter} to be used in {@link ReplicaThread}
    * @param transformer the {@link Transformer} to be used in {@link ReplicaThread}
-   *  param listener the {@link StoreEventListener} to use.
+   * @param listener the {@link StoreEventListener} to use.
    * @return a pair whose first element is the set of remote replicas and the second element is the {@link ReplicaThread}
    */
   private Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> getRemoteReplicasAndReplicaThread(int batchSize,
@@ -1513,9 +1503,9 @@ public class ReplicationTest {
       BlobId id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
           containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       ids.add(id);
-      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
+      PutMsgInfoAndBuffer msgInfoAndBuffer = getPutMessage(id, accountId, containerId, toEncrypt);
       for (Host host : hosts) {
-        host.addMessage(partitionId, putMsgInfo.getSecond(), putMsgInfo.getFirst().duplicate());
+        host.addMessage(partitionId, msgInfoAndBuffer.messageInfo, msgInfoAndBuffer.byteBuffer.duplicate());
       }
     }
     return ids;
@@ -1545,19 +1535,21 @@ public class ReplicationTest {
     for (StoreKey storeKey : ids) {
       Transformer transformer = transformerIterator.next();
       BlobId id = (BlobId) storeKey;
-      Pair<ByteBuffer, MessageInfo> putMsgInfo =
+      PutMsgInfoAndBuffer msgInfoAndBuffer =
           getPutMessage(id, id.getAccountId(), id.getContainerId(), BlobId.isEncrypted(id.toString()));
+      MessageInfo msgInfo = msgInfoAndBuffer.messageInfo;
+      ByteBuffer byteBuffer = msgInfoAndBuffer.byteBuffer;
       if (transformer != null) {
-        Message message = new Message(putMsgInfo.getSecond(), new ByteBufferInputStream(putMsgInfo.getFirst()));
+        Message message = new Message(msgInfo, new ByteBufferInputStream(byteBuffer));
         TransformationOutput output = transformer.transform(message);
         assertNull(output.getException());
         message = output.getMsg();
-        putMsgInfo = new Pair<>(
-            ByteBuffer.wrap(Utils.readBytesFromStream(message.getStream(), (int) message.getMessageInfo().getSize())),
-            message.getMessageInfo());
+        byteBuffer =
+            ByteBuffer.wrap(Utils.readBytesFromStream(message.getStream(), (int) message.getMessageInfo().getSize()));
+        msgInfo = message.getMessageInfo();
       }
       for (Host host : hosts) {
-        host.addMessage(id.getPartition(), putMsgInfo.getSecond(), putMsgInfo.getFirst().duplicate());
+        host.addMessage(id.getPartition(), msgInfo, byteBuffer.duplicate());
       }
     }
   }
@@ -1631,8 +1623,8 @@ public class ReplicationTest {
    * @throws MessageFormatException
    * @throws IOException
    */
-  private Pair<ByteBuffer, MessageInfo> getPutMessage(StoreKey id, short accountId, short containerId,
-      boolean enableEncryption) throws MessageFormatException, IOException {
+  private PutMsgInfoAndBuffer getPutMessage(StoreKey id, short accountId, short containerId, boolean enableEncryption)
+      throws MessageFormatException, IOException {
     Random blobIdRandom = new Random(id.getID().hashCode());
     int blobSize = blobIdRandom.nextInt(500) + 501;
     int userMetadataSize = blobIdRandom.nextInt(blobSize / 2);
@@ -1649,7 +1641,7 @@ public class ReplicationTest {
         new PutMessageFormatInputStream(id, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey),
             blobProperties, ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
-    return new Pair<>(ByteBuffer.wrap(message),
+    return new PutMsgInfoAndBuffer(ByteBuffer.wrap(message),
         new MessageInfo(id, message.length, EXPIRY_TIME_MS, accountId, containerId, CONSTANT_TIME_MS));
   }
 
@@ -1715,10 +1707,43 @@ public class ReplicationTest {
   }
 
   /**
+   * Returns a merged {@link MessageInfo} for {@code key}
+   * @param key the {@link StoreKey} to look for
+   * @param partitionInfos the {@link MessageInfo}s for the partition
+   * @return a merged {@link MessageInfo} for {@code key}
+   */
+  private static MessageInfo getMergedMessageInfo(StoreKey key, List<MessageInfo> partitionInfos) {
+    MessageInfo info = getMessageInfo(key, partitionInfos, true, false);
+    if (info == null) {
+      info = getMessageInfo(key, partitionInfos, false, false);
+    }
+    MessageInfo ttlUpdateInfo = getMessageInfo(key, partitionInfos, false, true);
+    if (ttlUpdateInfo != null) {
+      info = new MessageInfo(info.getStoreKey(), info.getSize(), info.isDeleted(), true,
+          ttlUpdateInfo.getExpirationTimeInMs(), info.getCrc(), info.getAccountId(), info.getContainerId(),
+          info.getOperationTimeMs());
+    }
+    return info;
+  }
+
+  /**
    * Interface to help perform actions on store events.
    */
   interface StoreEventListener {
     void onPut(MockStore store, List<MessageInfo> messageInfos);
+  }
+
+  /**
+   * A class holds the results generated by {@link ReplicationTest#getPutMessage(StoreKey, short, short, boolean)}.
+   */
+  private class PutMsgInfoAndBuffer {
+    ByteBuffer byteBuffer;
+    MessageInfo messageInfo;
+
+    PutMsgInfoAndBuffer(ByteBuffer bytebuffer, MessageInfo messageInfo) {
+      this.byteBuffer = bytebuffer;
+      this.messageInfo = messageInfo;
+    }
   }
 
   /**
@@ -1857,26 +1882,6 @@ public class ReplicationTest {
   }
 
   /**
-   * Returns a merged {@link MessageInfo} for {@code key}
-   * @param key the {@link StoreKey} to look for
-   * @param partitionInfos the {@link MessageInfo}s for the partition
-   * @return a merged {@link MessageInfo} for {@code key}
-   */
-  private static MessageInfo getMergedMessageInfo(StoreKey key, List<MessageInfo> partitionInfos) {
-    MessageInfo info = getMessageInfo(key, partitionInfos, true, false);
-    if (info == null) {
-      info = getMessageInfo(key, partitionInfos, false, false);
-    }
-    MessageInfo ttlUpdateInfo = getMessageInfo(key, partitionInfos, false, true);
-    if (ttlUpdateInfo != null) {
-      info = new MessageInfo(info.getStoreKey(), info.getSize(), info.isDeleted(), true,
-          ttlUpdateInfo.getExpirationTimeInMs(), info.getCrc(), info.getAccountId(), info.getContainerId(),
-          info.getOperationTimeMs());
-    }
-    return info;
-  }
-
-  /**
    * A mock implementation of {@link Store} that store all details in memory.
    */
   class MockStore implements Store {
@@ -1927,7 +1932,7 @@ public class ReplicationTest {
 
       @Override
       public void doPrefetch(int index, long relativeOffset, long size) {
-        return;
+
       }
     }
 
@@ -2193,7 +2198,6 @@ public class ReplicationTest {
     private Map<StoreKey, StoreKey> conversionMap;
     private ReplicaMetadataRequest metadataRequest;
     private GetRequest getRequest;
-//    private boolean needConvert = true;
 
     MockConnection(Host host, int maxSizeToReturn, Map<StoreKey, StoreKey> conversionMap) {
       this.host = host;
@@ -2217,11 +2221,15 @@ public class ReplicationTest {
           List<MessageInfo> messageInfoList = host.infosByPartition.get(partitionId);
           infosToReturn.put(partitionId, new ArrayList<>());
           messageMetadatasToReturn.put(partitionId, new ArrayList<>());
-          for (StoreKey key : partitionRequestInfo.getBlobIds()) {
+          List<StoreKey> convertedKeys = partitionRequestInfo.getBlobIds()
+              .stream()
+              .map(k -> conversionMap.getOrDefault(k, k))
+              .collect(Collectors.toList());
+          List<StoreKey> dedupKeys = convertedKeys.stream().distinct().collect(Collectors.toList());
+          for (StoreKey key : dedupKeys) {
             requestIsEmpty = false;
             int index = 0;
             MessageInfo infoFound = null;
-            key = conversionMap.get(key) == null ? key : conversionMap.get(key);
             for (MessageInfo info : messageInfoList) {
               if (key.equals(info.getStoreKey())) {
                 infoFound = getMergedMessageInfo(info.getStoreKey(), messageInfoList);
@@ -2262,13 +2270,11 @@ public class ReplicationTest {
           Set<StoreKey> processedKeys = new HashSet<>();
           for (int i = startIndex; i < endIndex; i++) {
             StoreKey key = partitionInfos.get(i).getStoreKey();
-//            System.out.println("key = " + key);
             if (processedKeys.add(key)) {
               messageInfosToReturn.add(getMergedMessageInfo(key, partitionInfos));
             }
             indexRequested = i;
           }
-//          System.out.println(processedKeys);
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
               new ReplicaMetadataResponseInfo(requestInfo.getPartitionId(),
                   new MockFindToken(indexRequested, requestInfo.getToken().getBytesRead()), messageInfosToReturn, 0);
@@ -2279,21 +2285,7 @@ public class ReplicationTest {
       } else {
         List<PartitionResponseInfo> responseInfoList = new ArrayList<>();
         for (PartitionRequestInfo requestInfo : getRequest.getPartitionInfoList()) {
-          //List<? extends StoreKey> blobIds = requestInfo.getBlobIds();
           List<MessageInfo> infosForPartition = infosToReturn.get(requestInfo.getPartition());
-          //List<MessageInfo> filteredInfosForPartition = new ArrayList<>();
-//          if (false) {
-//            Set<StoreKey> convertedKeys = new HashSet<>(getConvertedBlobIds(blobIds));
-//            System.out.println("convertedKeys on remote: " + convertedKeys);
-//            for (MessageInfo msgInfo : infosToReturn.get(requestInfo.getPartition())) {
-//              System.out.println("msgInfo key: " + msgInfo.getStoreKey());
-//              if (convertedKeys.contains(msgInfo.getStoreKey())) {
-//                filteredInfosForPartition.add(msgInfo);
-//              }
-//            }
-//            infosForPartition = filteredInfosForPartition;
-//          }
-          //System.out.println("receive: " + infosForPartition.size());
           PartitionResponseInfo partitionResponseInfo;
           if (!getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest.getGetOption()
               .equals(GetOption.Include_Deleted_Blobs) && infosForPartition.stream().anyMatch(MessageInfo::isDeleted)) {
