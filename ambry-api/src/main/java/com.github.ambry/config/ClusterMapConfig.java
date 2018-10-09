@@ -170,6 +170,14 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clusterMapEnablePartitionOverride;
 
+  /**
+   * If set to false, the Helix based cluster manager will only listen to changes to the cluster in the local colo. It
+   * will only connect to the remote ZK servers during initialization.
+   */
+  @Config("clustermap.listen.cross.colo")
+  @Default("true")
+  public final boolean clustermapListenCrossColo;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -201,5 +209,6 @@ public class ClusterMapConfig {
         verifiableProperties.getString("clustermap.default.partition.class", MAX_REPLICAS_ALL_DATACENTERS);
     clustermapCurrentXid = verifiableProperties.getLong("clustermap.current.xid", Long.MAX_VALUE);
     clusterMapEnablePartitionOverride = verifiableProperties.getBoolean("clustermap.enable.partition.override", false);
+    clustermapListenCrossColo = verifiableProperties.getBoolean("clustermap.listen.cross.colo", true);
   }
 }

@@ -76,6 +76,7 @@ public class HelixClusterManagerTest {
   private Map<String, Counter> counters;
   private final boolean useComposite;
   private final boolean overrideEnabled;
+  private final boolean listenCrossColo;
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
   private static final long CURRENT_XID = 64;
@@ -98,20 +99,27 @@ public class HelixClusterManagerTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, false}, {false, true}, {true, false}});
+    return Arrays.asList(
+        // @formatter:off
+        new Object[][]{{false, false, true}, {false, true, true}, {true, false, true}, {false, false, false},
+                       {false, true, false}, {true, false, false}});
+        // @formatter:on
   }
 
   /**
    * Construct the static layout files and use that to instantiate a {@link MockHelixCluster}.
    * Instantiate a {@link MockHelixManagerFactory} for use by the cluster manager.
    * @param useComposite whether or not the test are to be done for the {@link CompositeClusterManager}
-   * @param overrideEnabled whether or not the {@link ClusterMapConfig#clusterMapEnablePartitionOverride} is enabled. This config
-   *                        is only applicable for {@link HelixClusterManager}
+   * @param overrideEnabled whether or not the {@link ClusterMapConfig#clusterMapEnablePartitionOverride} is enabled.
+   *                        This config is only applicable for {@link HelixClusterManager}
+   * @param listenCrossColo whether or not listenCrossColo config in {@link ClusterMapConfig} should be set to true.
    * @throws Exception
    */
-  public HelixClusterManagerTest(boolean useComposite, boolean overrideEnabled) throws Exception {
+  public HelixClusterManagerTest(boolean useComposite, boolean overrideEnabled, boolean listenCrossColo)
+      throws Exception {
     this.useComposite = useComposite;
     this.overrideEnabled = overrideEnabled;
+    this.listenCrossColo = listenCrossColo;
     MockitoAnnotations.initMocks(this);
     String localDc = dcs[0];
     Random random = new Random();
@@ -186,6 +194,7 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
     props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
+    props.setProperty("clustermap.listen.cross.colo", Boolean.toString(listenCrossColo));
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
     if (useComposite) {
@@ -460,7 +469,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void sealedReplicaChangeTest() throws Exception {
-    assumeTrue(!useComposite && !overrideEnabled);
+    assumeTrue(!useComposite && !overrideEnabled && listenCrossColo);
 
     // all instances are up initially.
     assertStateEquivalency();
@@ -499,7 +508,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void clusterMapOverrideEnabledAndDisabledTest() throws Exception {
-    assumeTrue(!useComposite);
+    assumeTrue(!useComposite && listenCrossColo);
 
     // Get the writable partitions in OverrideMap
     Set<String> writableInOverrideMap = new HashSet<>();
@@ -593,7 +602,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void stoppedReplicaChangeTest() {
-    assumeTrue(!useComposite && !overrideEnabled);
+    assumeTrue(!useComposite && !overrideEnabled && listenCrossColo);
 
     // all instances are up initially.
     assertStateEquivalency();
@@ -645,7 +654,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void xidTest() throws Exception {
-    assumeTrue(!useComposite);
+    assumeTrue(!useComposite && listenCrossColo);
 
     // Close the one initialized in the constructor, as this test needs to test initialization flow as well.
     clusterManager.close();
@@ -697,6 +706,17 @@ public class HelixClusterManagerTest {
     helixCluster.triggerInstanceConfigChangeNotification();
     // Now the change should get absorbed.
     assertTrue(ignoreInstanceReplica.isDown());
+  }
+
+  @Test
+  public void listenCrossColoTest() throws Exception {
+    assumeTrue(!useComposite && listenCrossColo);
+    Counter instanceTriggerCounter =
+        ((HelixClusterManager) clusterManager).helixClusterManagerMetrics.instanceConfigChangeTriggerCount;
+    long instanceConfigChangeTriggerCount = instanceTriggerCounter.getCount();
+    helixCluster.triggerInstanceConfigChangeNotification();
+    assertEquals("Number of trigger count should be in accordance to listenCrossColo value",
+        instanceConfigChangeTriggerCount + (listenCrossColo ? dcs.length : 1), instanceTriggerCounter.getCount());
   }
 
   /**
