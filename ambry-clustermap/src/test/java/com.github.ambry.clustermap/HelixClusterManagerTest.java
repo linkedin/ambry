@@ -70,6 +70,8 @@ public class HelixClusterManagerTest {
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
   private final String hostname;
+  private final String localDc;
+  private final String remoteDc;
   private ClusterMap clusterManager;
   private MetricRegistry metricRegistry;
   private Map<String, Gauge> gauges;
@@ -121,7 +123,8 @@ public class HelixClusterManagerTest {
     this.overrideEnabled = overrideEnabled;
     this.listenCrossColo = listenCrossColo;
     MockitoAnnotations.initMocks(this);
-    String localDc = dcs[0];
+    localDc = dcs[0];
+    remoteDc = dcs[1];
     Random random = new Random();
     File tempDir = Files.createTempDirectory("helixClusterManager-" + random.nextInt(1000)).toFile();
     String tempDirPath = tempDir.getAbsolutePath();
@@ -708,15 +711,51 @@ public class HelixClusterManagerTest {
     assertTrue(ignoreInstanceReplica.isDown());
   }
 
+  /**
+   * Ensure that effects of the listenCrossColo config is as expected. When it is set to false, the Helix cluster manager
+   * initializes fine, but listens to subsequent InstanceConfig changes in the local colo only.
+   */
   @Test
-  public void listenCrossColoTest() throws Exception {
-    assumeTrue(!useComposite && listenCrossColo);
-    Counter instanceTriggerCounter =
-        ((HelixClusterManager) clusterManager).helixClusterManagerMetrics.instanceConfigChangeTriggerCount;
+  public void listenCrossColoTest() {
+    assumeTrue(!useComposite);
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
+    Counter instanceTriggerCounter = helixClusterManager.helixClusterManagerMetrics.instanceConfigChangeTriggerCount;
+    Map<String, HelixManager> helixManagerMap = helixClusterManager.getHelixManagerMap();
+    for (Map.Entry<String, HelixManager> entry : helixManagerMap.entrySet()) {
+      if (entry.getKey().equals(localDc)) {
+        assertTrue("Helix cluster manager should always be connected to the local Helix manager",
+            entry.getValue().isConnected());
+      } else {
+        assertEquals(
+            "Helix cluster manager should be connected to the remote Helix managers if and only if listenCrossColo is"
+                + "set to false", listenCrossColo, entry.getValue().isConnected());
+      }
+    }
     long instanceConfigChangeTriggerCount = instanceTriggerCounter.getCount();
     helixCluster.triggerInstanceConfigChangeNotification();
     assertEquals("Number of trigger count should be in accordance to listenCrossColo value",
         instanceConfigChangeTriggerCount + (listenCrossColo ? dcs.length : 1), instanceTriggerCounter.getCount());
+
+    InstanceConfig remoteInstanceConfig = helixCluster.getAllInstanceConfigs()
+        .stream()
+        .filter(e -> ClusterMapUtils.getDcName(e).equals(remoteDc))
+        .findAny()
+        .get();
+    DataNodeId remote = helixClusterManager.getDataNodeId(remoteInstanceConfig.getHostName(),
+        Integer.valueOf(remoteInstanceConfig.getPort()));
+    Set<PartitionId> writablePartitions = new HashSet<>(helixClusterManager.getWritablePartitionIds(null));
+    PartitionId partitionIdToSealInRemote = helixClusterManager.getReplicaIds(remote)
+        .stream()
+        .filter(e -> writablePartitions.contains(e.getPartitionId()))
+        .findAny()
+        .get()
+        .getPartitionId();
+    remoteInstanceConfig.getRecord()
+        .setListField(SEALED_STR, Collections.singletonList(partitionIdToSealInRemote.toPathString()));
+    helixCluster.triggerInstanceConfigChangeNotification();
+    assertEquals("If replica in remote is sealed, partition should be sealed if and only if listenCrossColo is true "
+            + "and override is disabled", !listenCrossColo || overrideEnabled,
+        helixClusterManager.getWritablePartitionIds(null).contains(partitionIdToSealInRemote));
   }
 
   /**

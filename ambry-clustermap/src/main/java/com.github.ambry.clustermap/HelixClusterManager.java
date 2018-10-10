@@ -33,6 +33,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
@@ -364,6 +365,15 @@ class HelixClusterManager implements ClusterMap {
       }
     }
     return null;
+  }
+
+  /**
+   * @return a map of datacenter names to {@link HelixManager}
+   */
+  Map<String, HelixManager> getHelixManagerMap() {
+    return dcToDcZkInfo.entrySet()
+        .stream()
+        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().helixManager));
   }
 
   /**
