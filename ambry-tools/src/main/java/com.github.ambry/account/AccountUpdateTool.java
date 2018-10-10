@@ -103,6 +103,7 @@ import static com.github.ambry.account.AccountUtils.*;
 public class AccountUpdateTool {
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 5000;
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
+  private static final String DEFAULT_LOCAL_BACKUP_DIR = "/tmp/account-update-tool-backups";
 
   /**
    * @param args takes in three mandatory arguments: the path of the json file for the accounts to create/update,
@@ -159,12 +160,12 @@ public class AccountUpdateTool {
         .ofType(Short.class)
         .defaultsTo(Container.getCurrentJsonVersion());
 
-    ArgumentAcceptingOptionSpec<String> backupDirOpt = parser.accepts("containerSchemaVersion",
-        "Optional local backup directory path. Defaults to /tmp/account-update-tool-backups.")
+    ArgumentAcceptingOptionSpec<String> backupDirOpt = parser.accepts("backupDir",
+        "Optional local backup directory path. Defaults to " + DEFAULT_LOCAL_BACKUP_DIR)
         .withRequiredArg()
         .describedAs("backup_dir")
         .ofType(String.class)
-        .defaultsTo("/tmp/account-update-tool-backups");
+        .defaultsTo(DEFAULT_LOCAL_BACKUP_DIR);
 
     parser.accepts("help", "print this help message.");
 
