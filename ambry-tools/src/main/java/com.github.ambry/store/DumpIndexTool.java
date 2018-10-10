@@ -626,7 +626,7 @@ public class DumpIndexTool {
     final Timer.Context context = metrics.dumpReplicaIndexesTimeMs.time();
     try {
       File[] segmentFiles = getSegmentFilesFromDir(replicaDir);
-      SortedMap<File, List<IndexEntry>> segmentFileToIndexEntries = getAllEntriesFromIndex(segmentFiles, throttler);
+      SortedMap<File, List<IndexEntry>> segmentFileToIndexEntries = getAllEntriesFromIndex(segmentFiles);
       Map<StoreKey, Info> keyToState = new HashMap<>();
       long processedCount = 0;
       long putCount = 0;
@@ -726,7 +726,7 @@ public class DumpIndexTool {
     }
   }
 
-  public SortedMap<File, List<IndexEntry>> getAllEntriesFromIndex(File[] segmentFiles, Throttler throttler)
+  public SortedMap<File, List<IndexEntry>> getAllEntriesFromIndex(File[] segmentFiles)
       throws InterruptedException, IOException, StoreException {
     SortedMap<File, List<IndexEntry>> fileToIndexEntries = new TreeMap<>(PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
     for (File segmentFile : segmentFiles) {
