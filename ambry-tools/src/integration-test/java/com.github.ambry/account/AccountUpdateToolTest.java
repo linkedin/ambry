@@ -60,6 +60,7 @@ public class AccountUpdateToolTest {
   private static final byte DC_ID = (byte) 1;
   private static final String ZK_SERVER_ADDRESS = "localhost:" + ZK_SERVER_PORT;
   private static final String HELIX_STORE_ROOT_PATH = "/ambry/defaultCluster/helixPropertyStore";
+  private static final String BACKUP_DIR;
   private static final int LATCH_TIMEOUT_MS = 1000;
   private static final Properties helixConfigProps = new Properties();
   private static final VerifiableProperties vHelixConfigProps;
@@ -78,15 +79,16 @@ public class AccountUpdateToolTest {
    * Initialization for all the tests.
    */
   static {
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path",
-        HELIX_STORE_ROOT_PATH);
-    helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, ZK_SERVER_ADDRESS);
-    vHelixConfigProps = new VerifiableProperties(helixConfigProps);
-    storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     try {
+      BACKUP_DIR = TestUtils.getTempDir("account-update-tool-backups");
+      helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path",
+          HELIX_STORE_ROOT_PATH);
+      helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, ZK_SERVER_ADDRESS);
+      vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+      storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
       zkInfo = new ZkInfo(tempDirPath, DC_NAME, DC_ID, ZK_SERVER_PORT, true);
     } catch (IOException e) {
-      fail("Failed to instantiate a ZooKeeper server.");
+      throw new RuntimeException(e);
     }
   }
 
@@ -209,7 +211,7 @@ public class AccountUpdateToolTest {
     String badJsonFile = tempDirPath + File.separator + "badJsonFile.json";
     writeStringToFile("Invalid json string", badJsonFile);
     try {
-      AccountUpdateTool.updateAccount(badJsonFile, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, 2000, 2000,
+      AccountUpdateTool.updateAccount(badJsonFile, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000,
           Container.getCurrentJsonVersion());
       fail("Should have thrown.");
     } catch (Exception e) {
@@ -228,7 +230,7 @@ public class AccountUpdateToolTest {
     String jsonFilePath = tempDirPath + File.separator + UUID.randomUUID().toString() + ".json";
     writeAccountsToFile(accounts, jsonFilePath);
     accountUpdateConsumer.reset();
-    AccountUpdateTool.updateAccount(jsonFilePath, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, 2000, 2000,
+    AccountUpdateTool.updateAccount(jsonFilePath, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000,
         containerJsonVersion);
     accountUpdateConsumer.awaitUpdate();
   }

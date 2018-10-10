@@ -159,6 +159,13 @@ public class AccountUpdateTool {
         .ofType(Short.class)
         .defaultsTo(Container.getCurrentJsonVersion());
 
+    ArgumentAcceptingOptionSpec<String> backupDirOpt = parser.accepts("containerSchemaVersion",
+        "Optional local backup directory path. Defaults to /tmp/account-update-tool-backups.")
+        .withRequiredArg()
+        .describedAs("backup_dir")
+        .ofType(String.class)
+        .defaultsTo("/tmp/account-update-tool-backups");
+
     parser.accepts("help", "print this help message.");
 
     parser.accepts("h", "print this help message.");
@@ -171,6 +178,7 @@ public class AccountUpdateTool {
     String accountJsonFilePath = options.valueOf(accountJsonFilePathOpt);
     String storePath = options.valueOf(storePathOpt);
     String zkServer = options.valueOf(zkServerOpt);
+    String backupDir = options.valueOf(backupDirOpt);
     Integer zkConnectionTimeoutMs = options.valueOf(zkConnectionTimeoutMsOpt);
     Integer zkSessionTimeoutMs = options.valueOf(zkSessionTimeoutMsOpt);
     Short containerJsonVersion = options.valueOf(containerJsonVersionOpt);
@@ -179,7 +187,7 @@ public class AccountUpdateTool {
     listOpt.add(zkServerOpt);
     ToolUtils.ensureOrExit(listOpt, options, parser);
     try {
-      updateAccount(accountJsonFilePath, zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs,
+      updateAccount(accountJsonFilePath, zkServer, storePath, backupDir, zkConnectionTimeoutMs, zkSessionTimeoutMs,
           containerJsonVersion);
     } catch (Exception e) {
       System.err.println("Updating accounts failed with exception: " + e);
@@ -192,18 +200,19 @@ public class AccountUpdateTool {
    * @param accountJsonFilePath The path to the json file.
    * @param zkServer The {@code ZooKeeper} server address to connect.
    * @param storePath The root path on the {@code ZooKeeper} for account data.
+   * @param backupDir The path to the local backup directory.
    * @param zkConnectionTimeoutMs The connection timeout in millisecond for connecting {@code ZooKeeper} server.
    * @param zkSessionTimeoutMs The session timeout in millisecond for connecting {@code ZooKeeper} server.
    * @param containerJsonVersion The {@link Container} JSON version to write in.
    * @throws Exception
    */
-  static void updateAccount(String accountJsonFilePath, String zkServer, String storePath, int zkConnectionTimeoutMs,
-      int zkSessionTimeoutMs, short containerJsonVersion) throws Exception {
+  static void updateAccount(String accountJsonFilePath, String zkServer, String storePath, String backupDir,
+      int zkConnectionTimeoutMs, int zkSessionTimeoutMs, short containerJsonVersion) throws Exception {
     Container.setCurrentJsonVersion(containerJsonVersion);
     long startTime = System.currentTimeMillis();
     Collection<Account> accountsToUpdate = getAccountsFromJson(accountJsonFilePath);
     if (!hasDuplicateAccountIdOrName(accountsToUpdate)) {
-      try (AccountService accountService = getHelixAccountService(zkServer, storePath, zkConnectionTimeoutMs,
+      try (AccountService accountService = getHelixAccountService(zkServer, storePath, backupDir, zkConnectionTimeoutMs,
           zkSessionTimeoutMs)) {
         if (accountService.updateAccounts(accountsToUpdate)) {
           System.out.println(accountsToUpdate.size() + " accounts have been successfully created or updated, took " + (
@@ -222,11 +231,12 @@ public class AccountUpdateTool {
    * @param zkServer The {@code ZooKeeper} server address to connect.
    * @param storePath The path for {@link org.apache.helix.store.HelixPropertyStore}, which will be used as the
    *                  root path for both {@link HelixAccountService} and {@link HelixNotifier}.
+   * @param backupDir The path to the local backup directory.
    * @param zkConnectionTimeoutMs The timeout in millisecond to connect to the {@code ZooKeeper} server.
    * @param zkSessionTimeoutMs The timeout in millisecond for a session to the {@code ZooKeeper} server.
    */
-  private static AccountService getHelixAccountService(String zkServer, String storePath, int zkConnectionTimeoutMs,
-      int zkSessionTimeoutMs) {
+  private static AccountService getHelixAccountService(String zkServer, String storePath, String backupDir,
+      int zkConnectionTimeoutMs, int zkSessionTimeoutMs) {
     Properties helixConfigProps = new Properties();
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
@@ -235,6 +245,7 @@ public class AccountUpdateTool {
         String.valueOf(zkSessionTimeoutMs));
     helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, zkServer);
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", storePath);
+    helixConfigProps.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, backupDir);
     VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     return new HelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry()).getAccountService();
   }
