@@ -914,13 +914,13 @@ public class ReplicationTest {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
 
-    Map<String, String> testCasesAndResults = new HashMap<>();
-    testCasesAndResults.put("A1P A1D A2P", "");
-    testCasesAndResults.put("A1P A2D", "A2P");
-    testCasesAndResults.put("A1P A2P A1D", "");
-    testCasesAndResults.put("A1P A2P", "A2P");
-    testCasesAndResults.put("A1P A2P A1D A2D", "");
-    testCasesAndResults.put("A2P A2D A1P", "A2P");  // this case should not happen in practice
+    Map<String, String> testCasesAndExpectedResults = new HashMap<>();
+    testCasesAndExpectedResults.put("A1P A1D A2P", "");
+    testCasesAndExpectedResults.put("A1P A2D", "A2P");
+    testCasesAndExpectedResults.put("A1P A2P A1D", "");
+    testCasesAndExpectedResults.put("A1P A2P", "A2P");
+    testCasesAndExpectedResults.put("A1P A2P A1D A2D", "");
+    testCasesAndExpectedResults.put("A2P A2D A1P", "A2P");
     StoreKey blobIdV2 =
         new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
             partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
@@ -950,7 +950,7 @@ public class ReplicationTest {
       }
     }
 
-    for (Map.Entry<String, String> caseAndResult : testCasesAndResults.entrySet()) {
+    for (Map.Entry<String, String> caseAndResult : testCasesAndExpectedResults.entrySet()) {
       // Set up different combinations of PUT, DELETE messages on remote host
       String[] messages = caseAndResult.getKey().split(" ");
       for (String message : messages) {
