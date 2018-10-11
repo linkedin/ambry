@@ -89,11 +89,10 @@ class PutOperation {
   private final byte[] userMetadata;
   private final String partitionClass;
   private final PutBlobOptions options;
-  // optional ?
+  // provided for direct uploads only
   private final ReadableStreamChannel channel;
-  // optional ?
+  // provided for stitched uploads
   private final List<ChunkInfo> chunksToStitch;
-  // optional ?
   private final ByteBufferAsyncWritableChannel chunkFillerChannel;
   private final FutureResult<String> futureResult;
   private final Callback<String> callback;
@@ -702,19 +701,22 @@ class PutOperation {
   }
 
   /**
-   * Return the number of data chunks that this operation resulted in. This method should only be called once the
-   * chunk filling has completed (which is when the final size is determined).
+   * Return the number of data chunks that this operation should result in. For composite direct uploads, this method
+   * calculates the expected number of chunks using the blob size and the configured max put chunk size. For stitched
+   * uploads, this returns the number of chunks provided in the {@code chunksToStitch} list. This method should only be
+   * called once the chunk filling has completed (which is when the final size is determined).
    * @return the number of data chunks that this operation resulted in.
    * @throws IllegalStateException if the chunk filling has not yet completed.
    */
   int getNumDataChunks() {
-    return chunksToStitch != null ? chunksToStitch.size()
+    return isStitchOperation() ? chunksToStitch.size()
         : RouterUtils.getNumChunksForBlobAndChunkSize(getBlobSize(), routerConfig.routerMaxPutChunkSizeBytes);
   }
 
   /**
    * @return the size of the blob in this operation. This method should only be called once the chunk filling has
    * completed (which is when the final size is determined).
+   * @throws IllegalStateException if the chunk filling has not yet completed.
    */
   long getBlobSize() {
     if (!chunkFillingCompletedSuccessfully) {

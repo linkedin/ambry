@@ -104,7 +104,7 @@ class PerfRouter implements Router {
    * @param blobProperties The properties of the blob.
    * @param usermetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
-   * @param options
+   * @param options the {@link PutBlobOptions} for the blob.
    * @param callback the {@link Callback} to invoke on operation completion.
    * @return a {@link Future} that will contain a (dummy) blob id.
    */
@@ -137,7 +137,7 @@ class PerfRouter implements Router {
   }
 
   @Override
-  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] usermetadata, List<ChunkInfo> chunksToStitch,
+  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       Callback<String> callback) {
     logger.trace("Received stitchBlob call");
     final FutureResult<String> futureResult = new FutureResult<>();

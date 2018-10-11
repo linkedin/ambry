@@ -137,7 +137,6 @@ class RouterUtils {
    */
   static void replaceOperationException(AtomicReference<Exception> operationExceptionRef, RouterException exception,
       ToIntFunction<RouterErrorCode> precedenceLevelFn) {
-    RouterErrorCode routerErrorCode = exception.getErrorCode();
     Exception currentException;
     Exception newException;
     do {
@@ -148,7 +147,8 @@ class RouterUtils {
         int currentPrecedence = precedenceLevelFn.applyAsInt(
             currentException instanceof RouterException ? ((RouterException) currentException).getErrorCode()
                 : RouterErrorCode.UnexpectedInternalError);
-        newException = precedenceLevelFn.applyAsInt(routerErrorCode) < currentPrecedence ? exception : currentException;
+        newException =
+            precedenceLevelFn.applyAsInt(exception.getErrorCode()) < currentPrecedence ? exception : currentException;
       }
     } while (!operationExceptionRef.compareAndSet(currentException, newException));
   }

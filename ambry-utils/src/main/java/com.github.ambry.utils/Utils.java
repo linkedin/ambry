@@ -36,7 +36,6 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;

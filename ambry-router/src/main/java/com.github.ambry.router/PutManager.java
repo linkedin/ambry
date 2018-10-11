@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.codahale.metrics.Histogram;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -302,15 +301,13 @@ class PutManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     long operationLatencyMs = time.milliseconds() - op.getSubmissionTimeMs();
-    Histogram latencyMetric;
     if (op.isStitchOperation()) {
-      latencyMetric = op.isEncryptionEnabled() ? routerMetrics.stitchEncryptedBlobOperationLatencyMs
-          : routerMetrics.stitchBlobOperationLatencyMs;
+      (op.isEncryptionEnabled() ? routerMetrics.stitchEncryptedBlobOperationLatencyMs
+          : routerMetrics.stitchBlobOperationLatencyMs).update(operationLatencyMs);
     } else {
-      latencyMetric = op.isEncryptionEnabled() ? routerMetrics.putEncryptedBlobOperationLatencyMs
-          : routerMetrics.putBlobOperationLatencyMs;
+      (op.isEncryptionEnabled() ? routerMetrics.putEncryptedBlobOperationLatencyMs
+          : routerMetrics.putBlobOperationLatencyMs).update(operationLatencyMs);
     }
-    latencyMetric.update(operationLatencyMs);
     NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }
 

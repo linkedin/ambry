@@ -134,14 +134,14 @@ public interface Router extends Closeable {
    * the new blob on a successful response.
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param usermetadata Optional user metadata about the blob. This can be null.
+   * @param userMetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @return A future that would contain the BlobId eventually.
    */
-  default Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+  default Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       PutBlobOptions options) {
-    return putBlob(blobProperties, usermetadata, channel, options, null);
+    return putBlob(blobProperties, userMetadata, channel, options, null);
   }
 
   /**

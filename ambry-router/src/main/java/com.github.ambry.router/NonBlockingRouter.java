@@ -216,7 +216,7 @@ class NonBlockingRouter implements Router {
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
       Callback<String> callback) {
     if (blobProperties == null || chunksToStitch == null) {
-      throw new IllegalArgumentException("blobProperties or channel must not be null");
+      throw new IllegalArgumentException("blobProperties or chunksToStitch must not be null");
     }
     if (userMetadata == null) {
       userMetadata = new byte[0];
@@ -747,8 +747,7 @@ class NonBlockingRouter implements Router {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted(),
-          stitchOperation);
+      routerMetrics.onPutBlobError(routerException, blobProperties.isEncrypted(), stitchOperation);
       completeOperation(futureResult, callback, null, routerException);
       // Close so that any existing operations are also disposed off.
       close();

@@ -515,7 +515,7 @@ public class NonBlockingRouterMetrics {
   /**
    * Update appropriate metrics on a putBlob operation related error.
    * @param e the {@link Exception} associated with the error.
-   * @param encryptionEnabled {@code true} if encrpytion was enabled for this operation. {@code false} otherwise
+   * @param encryptionEnabled {@code true} if encryption was enabled for this operation. {@code false} otherwise
    * @param stitchOperation {@code true} if this is a stitch operation.
    */
   void onPutBlobError(Exception e, boolean encryptionEnabled, boolean stitchOperation) {
