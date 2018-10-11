@@ -58,14 +58,16 @@ public class CopyingAsyncWritableChannel implements AsyncWritableChannel {
     if (!isOpen()) {
       exception = new ClosedChannelException();
     } else if (totalBytesWritten.get() > sizeLimitInBytes) {
-      exception = getRequestTooLargeException();
+      exception = new RestServiceException("Request is larger than allowed size: " + sizeLimitInBytes,
+          RestServiceErrorCode.RequestTooLarge);
     } else {
       byte[] chunkCopy = new byte[src.remaining()];
       src.get(chunkCopy);
       outputBuffers.add(chunkCopy);
       bytesWritten = chunkCopy.length;
       if (totalBytesWritten.addAndGet(bytesWritten) > sizeLimitInBytes) {
-        exception = getRequestTooLargeException();
+        exception = new RestServiceException("Request is larger than allowed size: " + sizeLimitInBytes,
+            RestServiceErrorCode.RequestTooLarge);
       }
     }
     future.done(bytesWritten, exception);
@@ -98,14 +100,6 @@ public class CopyingAsyncWritableChannel implements AsyncWritableChannel {
    */
   public long getBytesWritten() {
     return totalBytesWritten.get();
-  }
-
-  /**
-   * @return a {@link RestServiceException} with the error code, {@link RestServiceErrorCode#RequestTooLarge}.
-   */
-  private RestServiceException getRequestTooLargeException() {
-    return new RestServiceException("Request is larger than allowed size: " + sizeLimitInBytes,
-        RestServiceErrorCode.RequestTooLarge);
   }
 
   /**
