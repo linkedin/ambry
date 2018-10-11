@@ -105,8 +105,10 @@ public class InMemoryRouter implements Router {
     private BlobProperties blobProperties;
     private final byte[] userMetadata;
     private final ByteBuffer blob;
+    private final List<ChunkInfo> stitchedChunks;
 
-    public InMemoryBlob(BlobProperties blobProperties, byte[] userMetadata, ByteBuffer blob) {
+    public InMemoryBlob(BlobProperties blobProperties, byte[] userMetadata, ByteBuffer blob,
+        List<ChunkInfo> stitchedChunks) {
       this.blobProperties =
           new BlobProperties(blob.remaining(), blobProperties.getServiceId(), blobProperties.getOwnerId(),
               blobProperties.getContentType(), blobProperties.isPrivate(), blobProperties.getTimeToLiveInSeconds(),
@@ -114,6 +116,7 @@ public class InMemoryRouter implements Router {
               blobProperties.isEncrypted());
       this.userMetadata = userMetadata;
       this.blob = blob;
+      this.stitchedChunks = stitchedChunks;
     }
 
     public BlobProperties getBlobProperties() {
@@ -122,6 +125,13 @@ public class InMemoryRouter implements Router {
 
     public byte[] getUserMetadata() {
       return userMetadata;
+    }
+
+    /**
+     * @return a list of the stitched chunks in this blob, or {@code null} if this was a direct upload.
+     */
+    public List<ChunkInfo> getStitchedChunks() {
+      return stitchedChunks;
     }
 
     /**
@@ -208,7 +218,22 @@ public class InMemoryRouter implements Router {
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;
     }
-    PostData postData = new PostData(blobProperties, usermetadata, channel, options, callback, futureResult);
+    PostData postData = new PostData(blobProperties, usermetadata, channel, null, options, callback, futureResult);
+    operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
+        CommonTestUtils.getCurrentBlobIdVersion()));
+    return futureResult;
+  }
+
+  @Override
+  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+      Callback<String> callback) {
+    FutureResult<String> futureResult = new FutureResult<>();
+    if (!handlePrechecks(futureResult, callback)) {
+      return futureResult;
+    }
+    PostData postData =
+        new PostData(blobProperties, userMetadata, null, chunksToStitch, PutBlobOptions.DEFAULT, callback,
+            futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
     return futureResult;
@@ -294,7 +319,8 @@ public class InMemoryRouter implements Router {
       ReadableStreamChannel channel, Short blobIdVersion) {
     FutureResult<String> futureResult = new FutureResult<>();
     PostData postData =
-        new PostData(blobProperties, usermetadata, channel, new PutBlobOptionsBuilder().build(), null, futureResult);
+        new PostData(blobProperties, usermetadata, channel, null, new PutBlobOptionsBuilder().build(), null,
+            futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap, blobIdVersion));
     return futureResult;
   }
@@ -402,9 +428,19 @@ class InMemoryBlobPoster implements Runnable {
       if (blobs.containsKey(blobId)) {
         exception = new RouterException("Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
       }
-      ByteBuffer blobData = readBlob(postData.getReadableStreamChannel(), postData.getOptions().getMaxUploadSize());
+      ByteBuffer blobData;
+      if (postData.getChunksToStitch() != null) {
+        ByteArrayOutputStream stitchedContentStream = new ByteArrayOutputStream();
+        for (ChunkInfo chunkInfo : postData.getChunksToStitch()) {
+          stitchedContentStream.write(blobs.get(chunkInfo.getBlobId()).getBlob().array());
+        }
+        blobData = ByteBuffer.wrap(stitchedContentStream.toByteArray());
+      } else {
+        blobData = readBlob(postData.getReadableStreamChannel(), postData.getOptions().getMaxUploadSize());
+      }
       InMemoryRouter.InMemoryBlob blob =
-          new InMemoryRouter.InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData);
+          new InMemoryRouter.InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData,
+              postData.getChunksToStitch());
       blobs.put(blobId, blob);
       if (notificationSystem != null) {
         notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), null, null,
@@ -476,6 +512,7 @@ class PostData {
   private final BlobProperties blobProperties;
   private final byte[] usermetadata;
   private final ReadableStreamChannel readableStreamChannel;
+  private final List<ChunkInfo> chunksToStitch;
   private final PutBlobOptions options;
   private final FutureResult<String> future;
   private final Callback<String> callback;
@@ -492,6 +529,13 @@ class PostData {
     return readableStreamChannel;
   }
 
+  /**
+   * @return the list of chunks to stitch, or null if this is a direct upload request.
+   */
+  public List<ChunkInfo> getChunksToStitch() {
+    return chunksToStitch;
+  }
+
   public PutBlobOptions getOptions() {
     return options;
   }
@@ -505,10 +549,11 @@ class PostData {
   }
 
   PostData(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel readableStreamChannel,
-      PutBlobOptions options, Callback<String> callback, FutureResult<String> future) {
+      List<ChunkInfo> chunksToStitch, PutBlobOptions options, Callback<String> callback, FutureResult<String> future) {
     this.blobProperties = blobProperties;
     this.usermetadata = usermetadata;
     this.readableStreamChannel = readableStreamChannel;
+    this.chunksToStitch = chunksToStitch;
     this.options = options;
     this.future = future;
     this.callback = callback;
@@ -534,3 +579,4 @@ class CloseWriteChannelCallback implements Callback<Long> {
     channel.close();
   }
 }
+

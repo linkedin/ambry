@@ -18,6 +18,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.Future;
 
 
@@ -41,14 +42,30 @@ public interface Router extends Closeable {
    * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param usermetadata Optional user metadata about the blob. This can be null.
+   * @param userMetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
    * @return A future that would contain the BlobId eventually.
    */
-  Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+  Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback);
+
+  /**
+   * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
+   * completes. This metadata blob will contain references to the chunks provided as an argument. The blob ID returned
+   * by this operation can be used to fetch the chunks as if they were a single blob.
+   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
+   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
+   * @param userMetadata Optional user metadata about the blob. This can be null.
+   * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
+   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
+   *                       fields are set accurately.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request .
+   * @return A future that would contain the BlobId eventually.
+   */
+  Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+      Callback<String> callback);
 
   /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
@@ -93,6 +110,23 @@ public interface Router extends Closeable {
    */
   default Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
     return getBlob(blobId, options, null);
+  }
+
+  /**
+   * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
+   * completes. This metadata blob will contain references to the chunks provided as an argument. The blob ID returned
+   * by this operation can be used to fetch the chunks as if they were a single blob.
+   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
+   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
+   * @param userMetadata Optional user metadata about the blob. This can be null.
+   * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
+   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
+   *                       fields are set accurately.
+   * @return A future that would contain the BlobId eventually.
+   */
+  default Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata,
+      List<ChunkInfo> chunksToStitch) {
+    return stitchBlob(blobProperties, userMetadata, chunksToStitch, null);
   }
 
   /**
