@@ -30,6 +30,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
@@ -67,7 +68,6 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.router.Callback;
-import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.NonBlockingRouterFactory;
@@ -1216,8 +1216,8 @@ final class ServerTestUtil {
     sslProps.setProperty("connectionpool.read.timeout.ms", "15000");
     VerifiableProperties vProps = new VerifiableProperties(sslProps);
     ConnectionPool connectionPool =
-        new BlockingChannelConnectionPool(new ConnectionPoolConfig(vProps),
-            new SSLConfig(vProps), new ClusterMapConfig(vProps), new MetricRegistry());
+        new BlockingChannelConnectionPool(new ConnectionPoolConfig(vProps), new SSLConfig(vProps),
+            new ClusterMapConfig(vProps), new MetricRegistry());
     CountDownLatch verifierLatch = new CountDownLatch(numberOfVerifierThreads);
     AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSend);
     AtomicInteger verifiedRequests = new AtomicInteger(0);
@@ -1970,9 +1970,10 @@ final class ServerTestUtil {
     ReadableStreamChannel blob = result.getBlobDataChannel();
     assertEquals("Size does not match that of data", data.length,
         result.getBlobInfo().getBlobProperties().getBlobSize());
-    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel();
+    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel(Integer.MAX_VALUE);
     blob.readInto(channel, null).get(1, TimeUnit.SECONDS);
-    Assert.assertArrayEquals(data, channel.getData());
+    Assert.assertArrayEquals(data,
+        Utils.readBytesFromStream(channel.getContentAsInputStream(), (int) channel.getBytesWritten()));
   }
 
   private static void checkBlobContent(MockClusterMap clusterMap, BlobId blobId, BlockingChannel channel,

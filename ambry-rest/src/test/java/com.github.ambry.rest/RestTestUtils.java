@@ -13,12 +13,13 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.router.ByteRange;
-import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
@@ -123,6 +124,7 @@ public class RestTestUtils {
   public static JSONObject getJsonizedResponseBody(ReadableStreamChannel channel) throws Exception {
     CopyingAsyncWritableChannel asyncWritableChannel = new CopyingAsyncWritableChannel((int) channel.getSize());
     channel.readInto(asyncWritableChannel, null).get();
-    return new JSONObject(new String(asyncWritableChannel.getData()));
+    return new JSONObject(new String(Utils.readBytesFromStream(asyncWritableChannel.getContentAsInputStream(),
+        (int) asyncWritableChannel.getBytesWritten())));
   }
 }

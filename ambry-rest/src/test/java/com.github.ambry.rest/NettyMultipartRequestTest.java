@@ -15,11 +15,11 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
+import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
-import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -509,7 +509,8 @@ public class NettyMultipartRequestTest {
     }
     asyncWritableChannel = new CopyingAsyncWritableChannel(expectedRequestSize);
     request.readInto(asyncWritableChannel, null).get();
-    readOutput = asyncWritableChannel.getData();
+    readOutput = Utils.readBytesFromStream(asyncWritableChannel.getContentAsInputStream(),
+        (int) asyncWritableChannel.getBytesWritten());
     assertArrayEquals(RestUtils.MultipartPost.BLOB_PART + " content does not match", blobData.array(), readOutput);
     assertArrayEquals("Part by part digest should match digest of whole", wholeDigest, request.getDigest());
     closeRequestAndValidate(request);
