@@ -728,7 +728,7 @@ public class HelixClusterManagerTest {
       } else {
         assertEquals(
             "Helix cluster manager should be connected to the remote Helix managers if and only if listenCrossColo is"
-                + "set to false", listenCrossColo, entry.getValue().isConnected());
+                + "set to true", listenCrossColo, entry.getValue().isConnected());
       }
     }
     long instanceConfigChangeTriggerCount = instanceTriggerCounter.getCount();
