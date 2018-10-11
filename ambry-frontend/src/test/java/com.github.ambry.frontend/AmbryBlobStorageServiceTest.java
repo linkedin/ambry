@@ -49,6 +49,7 @@ import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
@@ -2634,7 +2635,7 @@ class FrontendTestRouter implements Router {
    * Enumerates the different operation types in the router.
    */
   enum OpType {
-    DeleteBlob, GetBlob, PutBlob, UpdateBlobTtl
+    DeleteBlob, GetBlob, PutBlob, StitchBlob, UpdateBlobTtl
   }
 
   OpType exceptionOpType = null;
@@ -2668,6 +2669,12 @@ class FrontendTestRouter implements Router {
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback) {
     return completeOperation(UtilsTest.getRandomString(10), callback, OpType.PutBlob);
+  }
+
+  @Override
+  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+      Callback<String> callback) {
+    return completeOperation(UtilsTest.getRandomString(10), callback, OpType.StitchBlob);
   }
 
   @Override

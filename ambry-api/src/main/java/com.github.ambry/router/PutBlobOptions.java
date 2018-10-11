@@ -20,6 +20,7 @@ package com.github.ambry.router;
  * @todo honor these options within the router impl
  */
 public class PutBlobOptions {
+  public static final PutBlobOptions DEFAULT = new PutBlobOptionsBuilder().build();
   private final boolean chunkUpload;
   private final long maxUploadSize;
 

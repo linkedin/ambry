@@ -186,8 +186,8 @@ class NonBlockingRouter implements Router {
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback) {
-    if (blobProperties == null || channel == null) {
-      throw new IllegalArgumentException("blobProperties or channel must not be null");
+    if (blobProperties == null || channel == null || options == null) {
+      throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }
     if (userMetadata == null) {
       userMetadata = new byte[0];
@@ -199,17 +199,23 @@ class NonBlockingRouter implements Router {
       routerMetrics.putBlobOperationRate.mark();
     }
     routerMetrics.operationQueuingRate.mark();
-    FutureResult<String> futureResult = new FutureResult<String>();
+    FutureResult<String> futureResult = new FutureResult<>();
     if (isOpen.get()) {
       getOperationController().putBlob(blobProperties, userMetadata, channel, futureResult, callback);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted());
+      routerMetrics.onPutBlobError(routerException, blobProperties.isEncrypted());
       completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
+  }
+
+  @Override
+  public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+      Callback<String> callback) {
+    throw new UnsupportedOperationException("Implemented in full router PR");
   }
 
   /**
