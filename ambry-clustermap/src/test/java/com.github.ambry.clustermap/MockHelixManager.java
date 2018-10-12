@@ -171,6 +171,9 @@ class MockHelixManager implements HelixManager {
   }
 
   void triggerConfigChangeNotification(boolean init) {
+    if (!isConnected) {
+      return;
+    }
     NotificationContext notificationContext = new NotificationContext(this);
     if (init) {
       notificationContext.setType(NotificationContext.Type.INIT);

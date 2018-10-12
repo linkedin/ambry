@@ -33,6 +33,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
@@ -116,41 +117,42 @@ class HelixClusterManager implements ClusterMap {
         String dcName = entry.getKey();
         String zkConnectStr = entry.getValue().getZkConnectStr();
         ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName);
-        // Initialize from every datacenter in a separate thread to speed things up.
-        Utils.newThread(new Runnable() {
-          @Override
-          public void run() {
-            try {
-              HelixManager manager;
-              if (dcName.equals(clusterMapConfig.clusterMapDatacenterName)) {
-                manager = localManager;
-              } else {
-                manager =
-                    helixFactory.getZKHelixManager(clusterName, selfInstanceName, InstanceType.SPECTATOR, zkConnectStr);
-                logger.info("Connecting to Helix manager at {}", zkConnectStr);
-                manager.connect();
-                logger.info("Established connection to Helix manager at {}", zkConnectStr);
-              }
-              DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler);
-              dcToDcZkInfo.put(dcName, dcInfo);
-              dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcName);
-
-              // The initial instance config change notification is required to populate the static cluster
-              // information, and only after that is complete do we want the live instance change notification to
-              // come in. We do not need to do anything extra to ensure this, however, since Helix provides the initial
-              // notification for a change from within the same thread that adds the listener, in the context of the add
-              // call. Therefore, when the call to add a listener returns, the initial notification will have been
-              // received and handled.
-              manager.addInstanceConfigChangeListener(clusterChangeHandler);
-              logger.info("Registered instance config change listeners for Helix manager at {}", zkConnectStr);
-              // Now register listeners to get notified on live instance change in every datacenter.
-              manager.addLiveInstanceChangeListener(clusterChangeHandler);
-              logger.info("Registered live instance change listeners for Helix manager at {}", zkConnectStr);
-            } catch (Exception e) {
-              initializationException.compareAndSet(null, e);
-            } finally {
-              initializationAttemptComplete.countDown();
+        // Initialize from every remote datacenter in a separate thread to speed things up.
+        Utils.newThread(() -> {
+          try {
+            HelixManager manager;
+            if (dcName.equals(clusterMapConfig.clusterMapDatacenterName)) {
+              manager = localManager;
+            } else {
+              manager =
+                  helixFactory.getZKHelixManager(clusterName, selfInstanceName, InstanceType.SPECTATOR, zkConnectStr);
+              logger.info("Connecting to Helix manager at {}", zkConnectStr);
+              manager.connect();
+              logger.info("Established connection to Helix manager at {}", zkConnectStr);
             }
+            DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler);
+            dcToDcZkInfo.put(dcName, dcInfo);
+            dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcName);
+
+            // The initial instance config change notification is required to populate the static cluster
+            // information, and only after that is complete do we want the live instance change notification to
+            // come in. We do not need to do anything extra to ensure this, however, since Helix provides the initial
+            // notification for a change from within the same thread that adds the listener, in the context of the add
+            // call. Therefore, when the call to add a listener returns, the initial notification will have been
+            // received and handled.
+            manager.addInstanceConfigChangeListener(clusterChangeHandler);
+            logger.info("Registered instance config change listeners for Helix manager at {}", zkConnectStr);
+            // Now register listeners to get notified on live instance change in every datacenter.
+            manager.addLiveInstanceChangeListener(clusterChangeHandler);
+            logger.info("Registered live instance change listeners for Helix manager at {}", zkConnectStr);
+            if (!clusterMapConfig.clustermapListenCrossColo && manager != localManager) {
+              manager.disconnect();
+              logger.info("Stopped listening to cross colo ZK server {}", zkConnectStr);
+            }
+          } catch (Exception e) {
+            initializationException.compareAndSet(null, e);
+          } finally {
+            initializationAttemptComplete.countDown();
           }
         }, false).start();
       }
@@ -342,7 +344,9 @@ class HelixClusterManager implements ClusterMap {
   @Override
   public void close() {
     for (DcInfo dcInfo : dcToDcZkInfo.values()) {
-      dcInfo.helixManager.disconnect();
+      if (dcInfo.helixManager.isConnected()) {
+        dcInfo.helixManager.disconnect();
+      }
     }
     dcToDcZkInfo.clear();
   }
@@ -361,6 +365,15 @@ class HelixClusterManager implements ClusterMap {
       }
     }
     return null;
+  }
+
+  /**
+   * @return a map of datacenter names to {@link HelixManager}
+   */
+  Map<String, HelixManager> getHelixManagerMap() {
+    return dcToDcZkInfo.entrySet()
+        .stream()
+        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().helixManager));
   }
 
   /**
