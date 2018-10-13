@@ -1604,7 +1604,7 @@ class PersistentIndex {
     }
   }
 
-  private class IndexPersistor implements Runnable {
+  class IndexPersistor implements Runnable {
 
     /**
      * Writes all the individual index segments to disk. It flushes the log before starting the

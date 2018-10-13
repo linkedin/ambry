@@ -1256,14 +1256,22 @@ public class IndexTest {
     ScheduledThreadPoolExecutor scheduler = (ScheduledThreadPoolExecutor) Utils.newScheduler(1, false);
     ScheduledThreadPoolExecutor mockScheduler = Mockito.spy(scheduler);
     AtomicReference<ScheduledFuture> persistorTask = new AtomicReference<>();
-    MockIndexPersistor mockPersistor = new MockIndexPersistor();
+    class MockPersistor implements Runnable {
+      private CountDownLatch invokeCountDown;
+
+      @Override
+      public void run() {
+        invokeCountDown.countDown();
+      }
+    }
+    MockPersistor mockPersistor = new MockPersistor();
     mockPersistor.invokeCountDown = new CountDownLatch(1);
     doAnswer(invocation -> {
-      Object[] args = invocation.getArguments();
       persistorTask.set(mockScheduler.scheduleAtFixedRate(mockPersistor, 0, 50, TimeUnit.MILLISECONDS));
       return persistorTask.get();
     }).when(mockScheduler)
-        .scheduleAtFixedRate(any(Runnable.class), anyLong(), anyLong(), any(TimeUnit.SECONDS.getClass()));
+        .scheduleAtFixedRate(any(PersistentIndex.IndexPersistor.class), anyLong(), anyLong(),
+            any(TimeUnit.SECONDS.getClass()));
     state.initIndex(mockScheduler);
     // verify that the persistor task is successfully scheduled
     assertTrue("The persistor task wasn't invoked within the expected time",
@@ -2705,18 +2713,6 @@ public class IndexTest {
       assertEquals("AccountId mismatch for " + entry.getKey(), expectedValue.getAccountId(), value.getAccountId());
       assertEquals("ContainerId mismatch for " + entry.getKey(), expectedValue.getContainerId(),
           value.getContainerId());
-    }
-  }
-
-  /**
-   * An implementation of mock persistor to help with tests.
-   */
-  private class MockIndexPersistor implements Runnable {
-    CountDownLatch invokeCountDown;
-
-    @Override
-    public void run() {
-      invokeCountDown.countDown();
     }
   }
 }
