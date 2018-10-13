@@ -1970,7 +1970,7 @@ final class ServerTestUtil {
     ReadableStreamChannel blob = result.getBlobDataChannel();
     assertEquals("Size does not match that of data", data.length,
         result.getBlobInfo().getBlobProperties().getBlobSize());
-    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel(Integer.MAX_VALUE);
+    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel();
     blob.readInto(channel, null).get(1, TimeUnit.SECONDS);
     Assert.assertArrayEquals(data,
         Utils.readBytesFromStream(channel.getContentAsInputStream(), (int) channel.getBytesWritten()));

@@ -118,7 +118,7 @@ public class InputStreamReadableStreamChannelTest {
     // Read after close.
     channel = new InputStreamReadableStreamChannel(stream, EXECUTOR_SERVICE);
     channel.close();
-    CopyingAsyncWritableChannel writeChannel = new CopyingAsyncWritableChannel(Integer.MAX_VALUE);
+    CopyingAsyncWritableChannel writeChannel = new CopyingAsyncWritableChannel();
     callback = new ReadIntoCallback();
     try {
       channel.readInto(writeChannel, callback).get();
@@ -132,7 +132,7 @@ public class InputStreamReadableStreamChannelTest {
 
     // Reading more than once.
     channel = new InputStreamReadableStreamChannel(stream, EXECUTOR_SERVICE);
-    writeChannel = new CopyingAsyncWritableChannel(Integer.MAX_VALUE);
+    writeChannel = new CopyingAsyncWritableChannel();
     channel.readInto(writeChannel, null);
     try {
       channel.readInto(writeChannel, null);

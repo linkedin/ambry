@@ -46,7 +46,7 @@ public class CopyingAsyncWritableChannelTest {
   @Test
   public void basicsTest() throws Exception {
     List<byte[]> inputBuffers = getBuffers(1000, 20, 201, 0, 79, 1005);
-    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel(Long.MAX_VALUE);
+    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel();
     for (int i = 0; i < inputBuffers.size(); i++) {
       ByteBuffer buf = ByteBuffer.wrap(inputBuffers.get(i));
       writeAndCheckCallback(buf, channel, buf.remaining(), null, null);
@@ -63,7 +63,7 @@ public class CopyingAsyncWritableChannelTest {
   @Test
   public void bufferModificationTest() throws Exception {
     byte[] inputBuffer = TestUtils.getRandomBytes(100);
-    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel(Long.MAX_VALUE);
+    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel();
     writeAndCheckCallback(ByteBuffer.wrap(inputBuffer), channel, inputBuffer.length, null, null);
     checkStream(Collections.singletonList(inputBuffer), channel);
     // mutate the input array and check that stream still matches the original content.

@@ -43,6 +43,12 @@ public class CopyingAsyncWritableChannel implements AsyncWritableChannel {
   private volatile boolean open = true;
 
   /**
+   * Construct a {@link CopyingAsyncWritableChannel} with the size limit set to {@link Long#MAX_VALUE}.
+   */
+  public CopyingAsyncWritableChannel() {
+    this(Long.MAX_VALUE);
+  }
+  /**
    * @param sizeLimitInBytes the maximum number of bytes that can be written to this channel. If this limit is exceeded,
    *                         a {@link RestServiceException} will be provided to the write callback.
    */
