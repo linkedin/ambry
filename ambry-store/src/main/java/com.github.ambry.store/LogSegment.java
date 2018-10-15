@@ -214,8 +214,10 @@ class LogSegment implements Read, Write {
    * Free {@link LogSegment#byteBufferForAppend}.
    */
   void dropBufferForAppend() {
-    byteBufferForAppend = null;
-    byteBufferForAppendTotalCount.decrementAndGet();
+    if (byteBufferForAppend != null) {
+      byteBufferForAppend = null;
+      byteBufferForAppendTotalCount.decrementAndGet();
+    }
   }
 
   /**

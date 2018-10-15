@@ -475,6 +475,7 @@ class Log implements Write {
           "Cannot add segments past the current active segment. Active segment is [" + activeSegment.getName()
               + "]. Tried to add [" + segment.getName() + "]");
     }
+    segment.dropBufferForAppend();
     if (increaseUsedSegmentCount) {
       remainingUnallocatedSegments.decrementAndGet();
     }
