@@ -14,7 +14,6 @@
 package com.github.ambry.commons;
 
 import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -202,7 +201,8 @@ public class InputStreamReadableStreamChannelTest {
     }
     assertEquals("Total bytes written does not match (callback)", src.length, callback.bytesRead);
     assertEquals("Total bytes written does not match (future)", src.length, bytesRead);
-    assertArrayEquals("Data does not match", src, writableChannel.getData());
+    assertArrayEquals("Data does not match", src,
+        Utils.readBytesFromStream(writableChannel.getContentAsInputStream(), (int) writableChannel.getBytesWritten()));
     channel.close();
     assertFalse("Channel should be closed", channel.isOpen());
     writableChannel.close();
