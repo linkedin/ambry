@@ -43,7 +43,8 @@ public class AmbryIdSigningService implements IdSigningService {
 
   @Override
   public boolean isIdSigned(String id) {
-    return id.startsWith(SIGNED_ID_PREFIX);
+    int searchStart = id.startsWith("/") ? 1 : 0;
+    return id.startsWith(SIGNED_ID_PREFIX, searchStart);
   }
 
   @Override
@@ -52,7 +53,8 @@ public class AmbryIdSigningService implements IdSigningService {
       throw new RestServiceException("Expected ID to be signed: " + signedId, RestServiceErrorCode.InternalServerError);
     }
     try {
-      String base64String = signedId.substring(SIGNED_ID_PREFIX.length());
+      int startIndex = SIGNED_ID_PREFIX.length() + (signedId.startsWith("/") ? 1 : 0);
+      String base64String = signedId.substring(startIndex);
       String jsonString = new String(Base64.decodeBase64(base64String), StandardCharsets.UTF_8);
       return SignedIdSerDe.fromJson(jsonString);
     } catch (Exception e) {

@@ -52,9 +52,12 @@ public class AmbryIdSigningServiceTest {
     Map<String, String> metadata = Stream.of("a", "b", "c").collect(Collectors.toMap(s -> "key-" + s, s -> "val-" + s));
     assertFalse("Original blob should not be considered signed", idSigningService.isIdSigned(blobId));
     String signedId = idSigningService.getSignedId(blobId, metadata);
-    Pair<String, Map<String, String>> idAndMetadata = idSigningService.parseSignedId(signedId);
-    assertEquals("Unexpected blob ID from parseSignedId()", blobId, idAndMetadata.getFirst());
-    assertEquals("Unexpected metadata from parseSignedId()", metadata, idAndMetadata.getSecond());
+    for (String id : new String[]{signedId, "/" + signedId}) {
+      assertTrue("ID should be considered signed", idSigningService.isIdSigned(id));
+      Pair<String, Map<String, String>> idAndMetadata = idSigningService.parseSignedId(id);
+      assertEquals("Unexpected blob ID from parseSignedId()", blobId, idAndMetadata.getFirst());
+      assertEquals("Unexpected metadata from parseSignedId()", metadata, idAndMetadata.getSecond());
+    }
 
     TestUtils.assertException(RestServiceException.class, () -> idSigningService.getSignedId(null, null),
         errorCodeChecker(RestServiceErrorCode.InternalServerError));

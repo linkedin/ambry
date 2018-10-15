@@ -662,7 +662,7 @@ public class RestUtils {
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
   public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {
-    return getHeader(args, Headers.CHUNK_UPLOAD, false) != null;
+    return getBooleanHeader(args, Headers.CHUNK_UPLOAD, false);
   }
 
   /**
@@ -691,7 +691,7 @@ public class RestUtils {
    *                                    {@code args} or if there is more than one value for {@code header} in
    *                                    {@code args}.
    */
-  public static String getHeader(Map<String, Object> args, String header, boolean required)
+  public static String getHeader(Map<String, ?> args, String header, boolean required)
       throws RestServiceException {
     String value = null;
     if (args.containsKey(header)) {
@@ -719,7 +719,7 @@ public class RestUtils {
    * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
    *                              converted to a {@link Long}.
    */
-  public static Long getLongHeader(Map<String, Object> args, String header, boolean required)
+  public static Long getLongHeader(Map<String, ?> args, String header, boolean required)
       throws RestServiceException {
     // if getHeader() is no longer called, tests for this function have to be changed.
     String value = getHeader(args, header, required);

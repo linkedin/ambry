@@ -23,8 +23,10 @@ import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -32,8 +34,10 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
+import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
@@ -41,18 +45,24 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -102,6 +112,7 @@ public class PostBlobHandlerTest {
   private final FrontendTestIdConverterFactory idConverterFactory;
   private final FrontendTestSecurityServiceFactory securityServiceFactory;
   private final AccountAndContainerInjector injector;
+  private final IdSigningService idSigningService;
   private FrontendConfig frontendConfig;
   private PostBlobHandler postBlobHandler;
 
@@ -111,7 +122,8 @@ public class PostBlobHandlerTest {
     Properties props = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
-    injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
+    injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, new FrontendConfig(verifiableProperties));
+    idSigningService = new AmbryIdSigningService();
     initPostBlobHandler(props);
   }
 
@@ -180,6 +192,69 @@ public class PostBlobHandlerTest {
     doChunkUploadTest(1024, false, null, null, Utils.Infinite_Time, null);
   }
 
+  /**
+   * Test flows related to the {@link Operations#STITCH} operation.
+   * @throws Exception
+   */
+  @Test
+  public void stitchedUploadTest() throws Exception {
+    idConverterFactory.translation = CONVERTED_ID;
+    String uploadSession = UUID.randomUUID().toString();
+    long creationTimeMs = System.currentTimeMillis();
+    time.setCurrentMilliseconds(creationTimeMs);
+
+    // success cases
+    // multiple chunks
+    List<ChunkInfo> chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45, 10, 200, 19, 0, 50);
+    List<String> signedChunkIds =
+        chunksToStitch.stream().map(chunkInfo -> getSignedId(chunkInfo, uploadSession)).collect(Collectors.toList());
+    stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), chunksToStitch, null);
+    // one chunk
+    chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45);
+    signedChunkIds =
+        chunksToStitch.stream().map(chunkInfo -> getSignedId(chunkInfo, uploadSession)).collect(Collectors.toList());
+    stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), chunksToStitch, null);
+
+    // failure cases
+    // invalid json input
+    stitchBlobAndVerify("badjsonbadjson".getBytes(StandardCharsets.UTF_8), null,
+        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+    // no chunk ids in request
+    stitchBlobAndVerify(getStitchRequestBody(Collections.emptyList()), null,
+        restServiceExceptionChecker(RestServiceErrorCode.MissingArgs));
+    stitchBlobAndVerify(new JSONObject().toString().getBytes(StandardCharsets.UTF_8), null,
+        restServiceExceptionChecker(RestServiceErrorCode.MissingArgs));
+    // differing session IDs
+    signedChunkIds = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45, 22).stream()
+        .map(chunkInfo -> getSignedId(chunkInfo, UUID.randomUUID().toString()))
+        .collect(Collectors.toList());
+    stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
+        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+    // differing containers
+    signedChunkIds = Stream.concat(uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 50, 50).stream(),
+        uploadChunksViaRouter(creationTimeMs, REF_CONTAINER_WITH_TTL_REQUIRED, 50).stream())
+        .map(chunkInfo -> getSignedId(chunkInfo, uploadSession))
+        .collect(Collectors.toList());
+    stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
+        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+    // differing accounts
+    Container altAccountContainer =
+        ACCOUNT_SERVICE.createAndAddRandomAccount().getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
+    signedChunkIds = Stream.concat(uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 50, 50).stream(),
+        uploadChunksViaRouter(creationTimeMs, altAccountContainer, 50).stream())
+        .map(chunkInfo -> getSignedId(chunkInfo, uploadSession))
+        .collect(Collectors.toList());
+    stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
+        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+    // invalid blob ID
+    stitchBlobAndVerify(
+        getStitchRequestBody(Collections.singletonList(getSignedId(new ChunkInfo("abcd", 200, -1), uploadSession))),
+        null, restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+    // unsigned ID
+    stitchBlobAndVerify(getStitchRequestBody(Collections.singletonList("/notASignedId")), null,
+        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+  }
+
   // helpers
   // general
 
@@ -191,8 +266,8 @@ public class PostBlobHandlerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
     postBlobHandler =
-        new PostBlobHandler(securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(), router,
-            injector, time, frontendConfig, metrics);
+        new PostBlobHandler(securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
+            idSigningService, router, injector, time, frontendConfig, metrics);
   }
 
   // ttlRequiredEnforcementTest() helpers
@@ -200,7 +275,7 @@ public class PostBlobHandlerTest {
   /**
    * Does the TTL required enforcement test by selecting the right verification methods based on container and frontend
    * config
-   * @param container the {@link Container} to uplaod to
+   * @param container the {@link Container} to upload to
    * @param blobTtlSecs the TTL to set for the blob
    * @throws Exception
    */
@@ -296,6 +371,7 @@ public class PostBlobHandlerTest {
     time.setCurrentMilliseconds(creationTimeMs);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> future = new FutureResult<>();
+    idConverterFactory.lastInput = null;
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
       ReadableStreamChannel channel = future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
@@ -303,7 +379,7 @@ public class PostBlobHandlerTest {
       assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
       Object metadata = request.getArgs().get(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY);
       if (chunkUpload) {
-        Map<String, String> expectedMetadata = new HashMap<>(2);
+        Map<String, String> expectedMetadata = new HashMap<>(3);
         expectedMetadata.put(RestUtils.Headers.BLOB_SIZE, Integer.toString(contentLength));
         expectedMetadata.put(RestUtils.Headers.SESSION, uploadSession);
         expectedMetadata.put(PostBlobHandler.EXPIRATION_TIME_MS_KEY,
@@ -312,12 +388,7 @@ public class PostBlobHandlerTest {
       } else {
         assertNull("Signed id metadata should not be set on non-chunk uploads", metadata);
       }
-      InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs()
-          .entrySet()
-          .stream()
-          .max(Comparator.comparingLong(entry -> entry.getValue().getBlobProperties().getCreationTimeInMs()))
-          .map(Map.Entry::getValue)
-          .orElseThrow(() -> new IllegalStateException("No blobs uploaded"));
+      InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
       assertEquals("Unexpected blob content stored", content.flip(), blob.getBlob());
       assertEquals("Unexpected ttl stored", blobTtlSecs, blob.getBlobProperties().getTimeToLiveInSeconds());
     } else {
@@ -344,5 +415,96 @@ public class PostBlobHandlerTest {
   private static ThrowingConsumer<ExecutionException> routerExceptionChecker(RouterErrorCode errorCode) {
     return executionException -> assertEquals("Unexpected error code", errorCode,
         ((RouterException) executionException.getCause()).getErrorCode());
+  }
+
+  // stitchedUploadTest() helpers
+
+  /**
+   * Upload chunks using the router directly.
+   * @param creationTimeMs the creation time to set for the chunks.
+   * @param container the {@link Container} to create the chunks in.
+   * @param chunkSizes the sizes for each chunk to upload.
+   * @return a list of {@link ChunkInfo} objects that contains metadata about each chunk uploaded.
+   */
+  private List<ChunkInfo> uploadChunksViaRouter(long creationTimeMs, Container container, int... chunkSizes)
+      throws Exception {
+    long blobTtlSecs = TimeUnit.DAYS.toSeconds(1);
+    List<ChunkInfo> chunks = new ArrayList<>();
+    for (int chunkSize : chunkSizes) {
+      byte[] content = TestUtils.getRandomBytes(chunkSize);
+      BlobProperties blobProperties =
+          new BlobProperties(-1, SERVICE_ID, OWNER_ID, CONTENT_TYPE, !container.isCacheable(), blobTtlSecs,
+              creationTimeMs, container.getParentAccountId(), container.getId(), container.isEncrypted());
+      String blobId =
+          router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
+              new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);
+
+      chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs)));
+    }
+    return chunks;
+  }
+
+  /**
+   * Generate a signed ID for a data chunk based on the provided arguments.
+   * @param chunkInfo the {@link ChunkInfo} containing the blob ID and additional metadata.
+   * @param uploadSession the session ID to include in the metadata.
+   * @return the signed ID.
+   */
+  private String getSignedId(ChunkInfo chunkInfo, String uploadSession) {
+    Map<String, String> metadata = new HashMap<>(3);
+    metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(chunkInfo.getChunkSizeInBytes()));
+    metadata.put(RestUtils.Headers.SESSION, uploadSession);
+    metadata.put(PostBlobHandler.EXPIRATION_TIME_MS_KEY, Long.toString(chunkInfo.getExpirationTimeInMs()));
+    try {
+      return "/" + idSigningService.getSignedId(chunkInfo.getBlobId(), metadata);
+    } catch (RestServiceException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * @param signedChunkIds the list of signed chunk IDs to include in the JSON body.
+   * @return a valid JSON body for a stitch request, encoded as UTF-8.
+   */
+  private byte[] getStitchRequestBody(List<String> signedChunkIds) {
+    return new JSONObject().put(PostBlobHandler.SIGNED_CHUNK_IDS_KEY, new JSONArray(signedChunkIds))
+        .toString()
+        .getBytes(StandardCharsets.UTF_8);
+  }
+
+  /**
+   * Make a stitch blob call using {@link PostBlobHandler} and verify the result of the operation.
+   * @param requestBody the body of the stitch request to supply.
+   * @param expectedStitchedChunks the expected chunks stitched together.
+   * @param errorChecker if non-null, expect an exception to be thrown by the post flow and verify it using this
+   *                     {@link ThrowingConsumer}.
+   * @throws Exception
+   */
+  private void stitchBlobAndVerify(byte[] requestBody, List<ChunkInfo> expectedStitchedChunks,
+      ThrowingConsumer<ExecutionException> errorChecker) throws Exception {
+    JSONObject headers = new JSONObject();
+    AmbryBlobStorageServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(),
+        SERVICE_ID, CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), REF_CONTAINER.getName());
+    RestRequest request =
+        AmbryBlobStorageServiceTest.createRestRequest(RestMethod.POST, "/" + Operations.STITCH, headers,
+            new LinkedList<>(Arrays.asList(ByteBuffer.wrap(requestBody), null)));
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<ReadableStreamChannel> future = new FutureResult<>();
+    idConverterFactory.lastInput = null;
+    postBlobHandler.handle(request, restResponseChannel, future::done);
+    if (errorChecker == null) {
+      future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+      assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
+      InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
+      assertEquals("List of chunks stitched does not match expected", expectedStitchedChunks, blob.getStitchedChunks());
+      ByteArrayOutputStream expectedContent = new ByteArrayOutputStream();
+      expectedStitchedChunks.stream()
+          .map(chunkInfo -> router.getActiveBlobs().get(chunkInfo.getBlobId()).getBlob().array())
+          .forEach(buf -> expectedContent.write(buf, 0, buf.length));
+      assertEquals("Unexpected blob content stored", ByteBuffer.wrap(expectedContent.toByteArray()), blob.getBlob());
+    } else {
+      TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
+          errorChecker);
+    }
   }
 }
