@@ -98,6 +98,11 @@ public abstract class MessageFormatInputStream extends InputStream {
     return totalRead > 0 ? totalRead : -1;
   }
 
+  @Override
+  public int available() {
+    return (buffer == null ? 0 : buffer.remaining()) + (int) (streamLength - streamRead) + crc.remaining();
+  }
+
   public long getSize() {
     return messageLength;
   }

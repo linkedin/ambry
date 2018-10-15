@@ -41,6 +41,7 @@ import static org.junit.Assert.*;
  */
 public class LogSegmentTest {
   private static final int STANDARD_SEGMENT_SIZE = 1024;
+  private static final int BIG_SEGMENT_SIZE = 3 * LogSegment.BYTE_BUFFER_SIZE_FOR_APPEND;
 
   private final File tempDir;
   private final StoreMetrics metrics;
@@ -78,6 +79,7 @@ public class LogSegmentTest {
   public void basicWriteAndReadTest() throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
+    segment.initBufferForAppend();
     try {
       assertEquals("Name of segment is inconsistent with what was provided", segmentName, segment.getName());
       assertEquals("Capacity of segment is inconsistent with what was provided", STANDARD_SEGMENT_SIZE,
@@ -97,6 +99,14 @@ public class LogSegmentTest {
           writeSize);
       assertEquals("End offset is not as expected", writeStartOffset + 2 * writeSize, segment.getEndOffset());
       readAndEnsureMatch(segment, writeStartOffset + writeSize, Arrays.copyOfRange(buf, writeSize, 2 * writeSize));
+
+      // should throw exception if channel's available data less than requested.
+      try {
+        segment.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.allocate(writeSize))),
+            writeSize + 1);
+        fail("Should throw exception.");
+      } catch (IOException e) {
+      }
 
       // use writeFrom
       segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(buf, 2 * writeSize, writeSize))),
@@ -561,11 +571,13 @@ public class LogSegmentTest {
    */
   private void doAppendTest(Appender appender) throws IOException {
     String currSegmentName = "log_current";
-    LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE, true);
+    LogSegment segment = getSegment(currSegmentName, BIG_SEGMENT_SIZE, true);
+    segment.initBufferForAppend();
     try {
       long writeStartOffset = segment.getStartOffset();
-      byte[] bufOne = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 2);
-      byte[] bufTwo = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 3);
+      byte[] bufOne = TestUtils.getRandomBytes(BIG_SEGMENT_SIZE / 6);
+      byte[] bufTwo = TestUtils.getRandomBytes(BIG_SEGMENT_SIZE / 9);
+      byte[] bufThree = TestUtils.getRandomBytes(LogSegment.BYTE_BUFFER_SIZE_FOR_APPEND * 2 + 3);
 
       appender.append(segment, ByteBuffer.wrap(bufOne));
       assertEquals("End offset is not as expected", writeStartOffset + bufOne.length, segment.getEndOffset());
@@ -574,9 +586,12 @@ public class LogSegmentTest {
       assertEquals("End offset is not as expected", writeStartOffset + bufOne.length + bufTwo.length,
           segment.getEndOffset());
 
+      appender.append(segment, ByteBuffer.wrap(bufThree));
+      assertEquals("End offset is not as expected", writeStartOffset + bufOne.length + bufTwo.length + bufThree.length,
+          segment.getEndOffset());
+
       // try to do a write that won't fit
-      ByteBuffer failBuf =
-          ByteBuffer.wrap(TestUtils.getRandomBytes((int) (STANDARD_SEGMENT_SIZE - writeStartOffset + 1)));
+      ByteBuffer failBuf = ByteBuffer.wrap(TestUtils.getRandomBytes((int) (BIG_SEGMENT_SIZE - writeStartOffset + 1)));
       long writeOverFlowCount = metrics.overflowWriteError.getCount();
       try {
         appender.append(segment, failBuf);
@@ -590,6 +605,7 @@ public class LogSegmentTest {
       // read and ensure data matches
       readAndEnsureMatch(segment, writeStartOffset, bufOne);
       readAndEnsureMatch(segment, writeStartOffset + bufOne.length, bufTwo);
+      readAndEnsureMatch(segment, writeStartOffset + bufOne.length + bufTwo.length, bufThree);
 
       segment.close();
       // ensure that append fails.

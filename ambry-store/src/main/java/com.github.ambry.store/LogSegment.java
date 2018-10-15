@@ -13,7 +13,6 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Pair;
@@ -23,10 +22,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -53,6 +53,9 @@ class LogSegment implements Read, Write {
   private final AtomicLong endOffset;
   private final AtomicLong refCount = new AtomicLong(0);
   private final AtomicBoolean open = new AtomicBoolean(true);
+  static final int BYTE_BUFFER_SIZE_FOR_APPEND = 1024 * 1024;
+  private ByteBuffer byteBufferForAppend = null;
+  static final AtomicInteger byteBufferForAppendTotalCount = new AtomicInteger(0);
 
   /**
    * Creates a LogSegment abstraction with the given capacity.
@@ -172,11 +175,48 @@ class LogSegment implements Read, Write {
           "Channel cannot be written to segment [" + file.getAbsolutePath() + "] because" + " it exceeds the capacity ["
               + capacityInBytes + "]");
     } else {
-      long bytesWritten = 0;
+      if (!fileChannel.isOpen()) {
+        throw new ClosedChannelException();
+      }
+      int bytesWritten = 0;
       while (bytesWritten < size) {
-        bytesWritten += fileChannel.transferFrom(channel, endOffset.get() + bytesWritten, size - bytesWritten);
+        byteBufferForAppend.position(0);
+        if (byteBufferForAppend.capacity() > size - bytesWritten) {
+          byteBufferForAppend.limit((int) size - bytesWritten);
+        } else {
+          byteBufferForAppend.limit(byteBufferForAppend.capacity());
+        }
+        if (channel.read(byteBufferForAppend) < 0) {
+          throw new IOException("ReadableByteChannel length less than requested size!");
+        }
+        byteBufferForAppend.flip();
+        while (byteBufferForAppend.hasRemaining()) {
+          bytesWritten += fileChannel.write(byteBufferForAppend, endOffset.get() + bytesWritten);
+        }
       }
       endOffset.addAndGet(bytesWritten);
+    }
+  }
+
+  /**
+   * Initialize a {@link java.nio.DirectByteBuffer} for {@link LogSegment#appendFrom(ReadableByteChannel, long)}.
+   * The buffer is to optimize JDK 8KB small IO write.
+   */
+  void initBufferForAppend() throws IOException{
+    if (byteBufferForAppend != null) {
+      throw new IOException("ByteBufferForAppend has been initialized.");
+    }
+    byteBufferForAppend = ByteBuffer.allocateDirect(BYTE_BUFFER_SIZE_FOR_APPEND);
+    byteBufferForAppendTotalCount.incrementAndGet();
+  }
+
+  /**
+   * Free {@link LogSegment#byteBufferForAppend}.
+   */
+  void dropBufferForAppend() {
+    if (byteBufferForAppend != null) {
+      byteBufferForAppend = null;
+      byteBufferForAppendTotalCount.decrementAndGet();
     }
   }
 
@@ -338,6 +378,7 @@ class LogSegment implements Read, Write {
     if (open.compareAndSet(true, false)) {
       flush();
       fileChannel.close();
+      dropBufferForAppend();
     }
   }
 
@@ -354,7 +395,7 @@ class LogSegment implements Read, Write {
     crc.update(buffer.array(), 0, HEADER_SIZE - CRC_SIZE);
     buffer.putLong(crc.getValue());
     buffer.flip();
-    appendFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), buffer.remaining());
+    appendFrom(buffer);
   }
 
   @Override

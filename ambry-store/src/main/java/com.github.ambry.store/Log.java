@@ -167,7 +167,13 @@ class Log implements Write {
       iterator.remove();
     }
     logger.info("Setting active segment to [{}]", name);
-    activeSegment = segmentsByName.get(name);
+    LogSegment newActiveSegment = segmentsByName.get(name);
+    if (newActiveSegment != activeSegment) {
+      // If activeSegment needs to be changed, then drop buffer for old activeSegment and init buffer for new activeSegment.
+      activeSegment.dropBufferForAppend();
+      activeSegment = newActiveSegment;
+      activeSegment.initBufferForAppend();
+    }
   }
 
   /**
@@ -357,6 +363,7 @@ class Log implements Write {
     }
     remainingUnallocatedSegments.set(totalSegments - segmentsByName.size());
     activeSegment = segmentsByName.lastEntry().getValue();
+    activeSegment.initBufferForAppend();
   }
 
   /**
@@ -401,6 +408,8 @@ class Log implements Write {
       logger.info("Rolling over writes to {} from {} on write of data of size {}. End offset was {} and capacity is {}",
           nextActiveSegment.getName(), activeSegment.getName(), writeSize, activeSegment.getEndOffset(),
           activeSegment.getCapacityInBytes());
+      activeSegment.dropBufferForAppend();
+      nextActiveSegment.initBufferForAppend();
       activeSegment = nextActiveSegment;
     }
   }
@@ -466,6 +475,7 @@ class Log implements Write {
           "Cannot add segments past the current active segment. Active segment is [" + activeSegment.getName()
               + "]. Tried to add [" + segment.getName() + "]");
     }
+    segment.dropBufferForAppend();
     if (increaseUsedSegmentCount) {
       remainingUnallocatedSegments.decrementAndGet();
     }

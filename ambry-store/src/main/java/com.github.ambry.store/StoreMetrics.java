@@ -192,6 +192,9 @@ public class StoreMetrics {
         registry.histogram(MetricRegistry.name(BlobStoreStats.class, name + "StatsRecentEntryQueueSize"));
     statsForwardScanEntryCount =
         registry.histogram(MetricRegistry.name(BlobStoreStats.class, name + "StatsForwardScanEntryCount"));
+    Gauge<Integer> byteBufferForAppendTotalCountGauge = LogSegment.byteBufferForAppendTotalCount::get;
+    registry.register(MetricRegistry.name(Log.class, name + "ByteBufferForAppendTotalCount"),
+        byteBufferForAppendTotalCountGauge);
   }
 
   void initializeIndexGauges(String storeId, final PersistentIndex index, final long capacityInBytes) {
