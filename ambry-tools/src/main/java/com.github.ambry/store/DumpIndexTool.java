@@ -47,6 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -604,8 +605,9 @@ public class DumpIndexTool {
     long currentTimeMs = time.milliseconds();
     ConcurrentMap<File, IndexProcessingResults> resultsByReplica = new ConcurrentHashMap<>();
     ExecutorService executorService = Executors.newFixedThreadPool(Math.min(parallelism, replicaDirs.size()));
+    List<Future<?>> taskFutures = new ArrayList<>(replicaDirs.size());
     for (File replicaDir : replicaDirs) {
-      executorService.submit(() -> {
+      Future<?> taskFuture = executorService.submit(() -> {
         logger.info("Processing segment files for replica {} ", replicaDir);
         IndexProcessingResults results = null;
         try {
@@ -616,6 +618,14 @@ public class DumpIndexTool {
           resultsByReplica.put(replicaDir, results);
         }
       });
+      taskFutures.add(taskFuture);
+    }
+    for (Future<?> taskFuture : taskFutures) {
+      try {
+        taskFuture.get();
+      } catch (Exception e) {
+        throw new IllegalStateException("Future encountered error while waiting", e);
+      }
     }
     return resultsByReplica;
   }
