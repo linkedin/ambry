@@ -592,7 +592,7 @@ public class StorageManagerTest {
   }
 
   /**
-   * Test that tests that unrecognized directories are reported correctly
+   * Tests that unrecognized directories are reported correctly
    * @throws Exception
    */
   @Test
@@ -750,10 +750,7 @@ public class StorageManagerTest {
     List<File> createdDirs = new ArrayList<>();
     for (int i = 0; i < dirCount; i++) {
       File createdDir = new File(dir, "created-dir-" + i);
-      assertTrue(createdDir + " exists and is not a directory", !createdDir.exists() || createdDir.isDirectory());
-      if (!createdDir.exists()) {
-        assertTrue("Could not create " + createdDir, createdDir.mkdir());
-      }
+      assertTrue("Could not create " + createdDir + " now", createdDir.mkdir());
       createdDir.deleteOnExit();
       createdDirs.add(createdDir);
     }
