@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
@@ -39,16 +40,19 @@ import org.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.clustermap.HelixBootstrapUpgradeTool.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 
 
+@RunWith(Parameterized.class)
 public class HelixBootstrapUpgradeToolTest {
-
   private static String tempDirPath;
   private static final Map<String, ZkInfo> dcsToZkInfo = new HashMap<>();
   private static final Map<String, HelixPropertyStore<ZNRecord>> dcsToPropertyStore = new HashMap<>();
@@ -58,6 +62,8 @@ public class HelixBootstrapUpgradeToolTest {
   private final String partitionLayoutPath;
   private final String zkLayoutPath;
   private final JSONObject zkJson;
+  private final String dcStr;
+  private Set<String> activeDcSet;
   private TestHardwareLayout testHardwareLayout;
   private TestPartitionLayout testPartitionLayout;
   private static final String CLUSTER_NAME_IN_STATIC_CLUSTER_MAP = "ToolTestStatic";
@@ -87,10 +93,15 @@ public class HelixBootstrapUpgradeToolTest {
     }
   }
 
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{"DC1"}, {"DC1, DC0"}, {"all"}});
+  }
+
   /**
    * Initialize ZKInfos for all dcs and start the ZK server.
    */
-  public HelixBootstrapUpgradeToolTest() throws Exception {
+  public HelixBootstrapUpgradeToolTest(String dcStr) {
     hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
     partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
     zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
@@ -98,6 +109,12 @@ public class HelixBootstrapUpgradeToolTest {
     testHardwareLayout = constructInitialHardwareLayoutJSON(CLUSTER_NAME_IN_STATIC_CLUSTER_MAP);
     testPartitionLayout =
         constructInitialPartitionLayoutJSON(testHardwareLayout, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, null);
+    this.dcStr = dcStr;
+    if (!dcStr.equalsIgnoreCase("all")) {
+      activeDcSet = Arrays.stream(dcStr.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
+    } else {
+      activeDcSet = new HashSet<>(Arrays.asList(dcs));
+    }
   }
 
   /**
@@ -105,6 +122,7 @@ public class HelixBootstrapUpgradeToolTest {
    */
   @Test
   public void testIncompleteZKHostInfo() throws Exception {
+    assumeTrue(dcStr.equalsIgnoreCase("all") || dcStr.replaceAll("\\p{Space}", "").split(",").length == dcs.length);
     if (testHardwareLayout.getDatacenterCount() > 1) {
       JSONObject partialZkJson =
           constructZkLayoutJSON(Collections.singleton(dcsToZkInfo.entrySet().iterator().next().getValue()));
@@ -113,7 +131,7 @@ public class HelixBootstrapUpgradeToolTest {
       Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-            CLUSTER_NAME_PREFIX, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory());
+            CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory());
         fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -276,7 +294,7 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, new HelixAdminFactory());
+        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, new HelixAdminFactory());
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 
@@ -294,9 +312,12 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     HelixBootstrapUpgradeUtil.uploadClusterConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
+        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
     // Check writable partitions in each datacenter
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+      if (!activeDcSet.contains(zkInfo.getDcName())) {
+        continue;
+      }
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
@@ -323,6 +344,9 @@ public class HelixBootstrapUpgradeToolTest {
    */
   private void verifyResourceCount(HardwareLayout hardwareLayout, long expectedResourceCount) {
     for (Datacenter dc : hardwareLayout.getDatacenters()) {
+      if (!activeDcSet.contains(dc.getName())) {
+        continue;
+      }
       ZkInfo zkInfo = dcsToZkInfo.get(dc.getName());
       ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
       assertEquals("Resource count mismatch", expectedResourceCount,
