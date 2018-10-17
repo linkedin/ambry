@@ -90,6 +90,14 @@ public class StoreConfig {
   public final int storeCompactionOperationsBytesPerSec;
 
   /**
+   * Whether direct IO are to be enable or not for compaction.
+   * This is only supported on > Linux 2.6
+   */
+  @Config("store.compaction.enable.direct.io")
+  @Default("false")
+  public final boolean storeCompactionEnableDirectIO;
+
+  /**
    * The minimum buffer size for compaction copy phase.
    */
   @Config("store.compaction.min.buffer.size")
@@ -265,6 +273,7 @@ public class StoreConfig {
     storeCompactionOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.compaction.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
+    storeCompactionEnableDirectIO = verifiableProperties.getBoolean("store.compaction.enable.direct.io", false);
     storeCompactionMinBufferSize =
         verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 0, Integer.MAX_VALUE);
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);

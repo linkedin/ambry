@@ -40,7 +40,10 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -48,6 +51,7 @@ import static org.junit.Assert.*;
 /**
  * Tests for {@link BlobStoreCompactor}.
  */
+@RunWith(Parameterized.class)
 public class BlobStoreCompactorTest {
 
   private static final String STORE_ID = "compactor_example_store";
@@ -56,6 +60,7 @@ public class BlobStoreCompactorTest {
 
   private final File tempDir;
   private final String tempDirStr;
+  private final boolean doDirectIO;
 
   private CuratedLogIndexState state = null;
   private BlobStoreCompactor compactor = null;
@@ -71,15 +76,27 @@ public class BlobStoreCompactorTest {
 
   private MetricRegistry metricRegistry;
 
-  private ByteBuffer bundleReadBuffer = ByteBuffer.allocateDirect((int) CuratedLogIndexState.PUT_RECORD_SIZE * 2 + 1);
+  private byte[] bundleReadBuffer = new byte[((int) CuratedLogIndexState.PUT_RECORD_SIZE * 2 + 1)];
+
+  /**
+   * Running for both direct IO compactor and general IO compactor.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{true}, {false}});
+  }
 
   /**
    * Creates a temporary directory for the store.
    * @throws Exception
    */
-  public BlobStoreCompactorTest() throws Exception {
+  public BlobStoreCompactorTest(boolean doDirectIO) throws Exception {
     tempDir = StoreTestUtils.createTempDirectory("compactorDir-" + UtilsTest.getRandomString(10));
     tempDirStr = tempDir.getAbsolutePath();
+    this.doDirectIO = doDirectIO;
+    if (doDirectIO) {
+      Assume.assumeTrue(Utils.isLinux());
+    }
   }
 
   /**
@@ -172,8 +189,8 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests to make sure that {@link BlobStoreCompactor#compact(CompactionDetails, ByteBuffer)} fails when a compaction
-   * is already in progress.
+   * Tests to make sure that {@link BlobStoreCompactor#compact(CompactionDetails, byte[])} fails when a compaction is
+   * already in progress.
    * @throws Exception
    */
   @Test
@@ -198,8 +215,8 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests the case where {@link BlobStoreCompactor#resumeCompaction(ByteBuffer)} is called without any compaction being
-   * in progress.
+   * Tests the case where {@link BlobStoreCompactor#resumeCompaction(byte[])} is called without any compaction being in
+   * progress.
    * @throws Exception
    */
   @Test
@@ -1046,6 +1063,9 @@ public class BlobStoreCompactorTest {
    */
   private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler) throws IOException, StoreException {
     closeOrExceptionInduced = false;
+    if (doDirectIO) {
+      state.properties.put("store.compaction.enable.direct.io", "true");
+    }
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
@@ -1655,7 +1675,7 @@ public class BlobStoreCompactorTest {
   // badInputTest() helpers
 
   /**
-   * Ensures that {@link BlobStoreCompactor#compact(CompactionDetails, ByteBuffer)} fails because {@code details} is invalid.
+   * Ensures that {@link BlobStoreCompactor#compact(CompactionDetails, byte[])} fails because {@code details} is invalid.
    * @param details the invalid {@link CompactionDetails}
    * @param msg the message to print on failure if no exception is thrown.
    * @throws Exception

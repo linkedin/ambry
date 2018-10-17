@@ -28,6 +28,7 @@ import java.nio.channels.ReadableByteChannel;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import net.smacke.jaydio.DirectRandomAccessFile;
 
 
 /**
@@ -141,17 +142,11 @@ class LogSegment implements Read, Write {
   @Override
   public int appendFrom(ByteBuffer buffer) throws IOException {
     int bytesWritten = 0;
-    if (endOffset.get() + buffer.remaining() > capacityInBytes) {
-      metrics.overflowWriteError.inc();
-      throw new IllegalArgumentException(
-          "Buffer cannot be written to segment [" + file.getAbsolutePath() + "] because " + "it exceeds the capacity ["
-              + capacityInBytes + "]");
-    } else {
-      while (buffer.hasRemaining()) {
-        bytesWritten += fileChannel.write(buffer, endOffset.get() + bytesWritten);
-      }
-      endOffset.addAndGet(bytesWritten);
+    validateAppendSize(buffer.remaining());
+    while (buffer.hasRemaining()) {
+      bytesWritten += fileChannel.write(buffer, endOffset.get() + bytesWritten);
     }
+    endOffset.addAndGet(bytesWritten);
     return bytesWritten;
   }
 
@@ -169,32 +164,64 @@ class LogSegment implements Read, Write {
    */
   @Override
   public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
+    validateAppendSize(size);
+    if (!fileChannel.isOpen()) {
+      throw new ClosedChannelException();
+    }
+    int bytesWritten = 0;
+    while (bytesWritten < size) {
+      byteBufferForAppend.position(0);
+      if (byteBufferForAppend.capacity() > size - bytesWritten) {
+        byteBufferForAppend.limit((int) size - bytesWritten);
+      } else {
+        byteBufferForAppend.limit(byteBufferForAppend.capacity());
+      }
+      if (channel.read(byteBufferForAppend) < 0) {
+        throw new IOException("ReadableByteChannel length less than requested size!");
+      }
+      byteBufferForAppend.flip();
+      while (byteBufferForAppend.hasRemaining()) {
+        bytesWritten += fileChannel.write(byteBufferForAppend, endOffset.get() + bytesWritten);
+      }
+    }
+    endOffset.addAndGet(bytesWritten);
+  }
+
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * Attempts to write the {@code byteArray} to this segment in direct IO manner.
+   * <p/>
+   * The write is not started if it cannot be completed.
+   * @param byteArray The bytes from which data needs to be written from.
+   * @param offset The offset in the byteArray to start with.
+   * @param length The amount of data in bytes to use from the byteArray.
+   * @throws IllegalArgumentException if there is not enough space for data of size {@code length}.
+   * @throws IOException if data could not be written to the file because of I/O errors
+   */
+  int appendFromDirectly(byte[] byteArray, int offset, int length) throws IOException {
+    if (!fileChannel.isOpen()) {
+      throw new ClosedChannelException();
+    }
+    validateAppendSize(length);
+    try (DirectRandomAccessFile directFile = new DirectRandomAccessFile(file, "rw", 2 * 1024 * 1024)) {
+      directFile.seek(endOffset.get());
+      directFile.write(byteArray, offset, length);
+      endOffset.addAndGet(length);
+    }
+    return length;
+  }
+
+  /**
+   * Make sure the size for append is legal.
+   * @param size The amount of data in bytes to append.
+   */
+  private void validateAppendSize(long size) {
     if (endOffset.get() + size > capacityInBytes) {
       metrics.overflowWriteError.inc();
       throw new IllegalArgumentException(
-          "Channel cannot be written to segment [" + file.getAbsolutePath() + "] because" + " it exceeds the capacity ["
+          "Cannot append to segment [" + file.getAbsolutePath() + "] because size requested exceeds the capacity ["
               + capacityInBytes + "]");
-    } else {
-      if (!fileChannel.isOpen()) {
-        throw new ClosedChannelException();
-      }
-      int bytesWritten = 0;
-      while (bytesWritten < size) {
-        byteBufferForAppend.position(0);
-        if (byteBufferForAppend.capacity() > size - bytesWritten) {
-          byteBufferForAppend.limit((int) size - bytesWritten);
-        } else {
-          byteBufferForAppend.limit(byteBufferForAppend.capacity());
-        }
-        if (channel.read(byteBufferForAppend) < 0) {
-          throw new IOException("ReadableByteChannel length less than requested size!");
-        }
-        byteBufferForAppend.flip();
-        while (byteBufferForAppend.hasRemaining()) {
-          bytesWritten += fileChannel.write(byteBufferForAppend, endOffset.get() + bytesWritten);
-        }
-      }
-      endOffset.addAndGet(bytesWritten);
     }
   }
 
@@ -202,7 +229,7 @@ class LogSegment implements Read, Write {
    * Initialize a {@link java.nio.DirectByteBuffer} for {@link LogSegment#appendFrom(ReadableByteChannel, long)}.
    * The buffer is to optimize JDK 8KB small IO write.
    */
-  void initBufferForAppend() throws IOException{
+  void initBufferForAppend() throws IOException {
     if (byteBufferForAppend != null) {
       throw new IOException("ByteBufferForAppend has been initialized.");
     }
@@ -232,22 +259,53 @@ class LogSegment implements Read, Write {
    */
   @Override
   public void readInto(ByteBuffer buffer, long position) throws IOException {
+    int size = buffer.remaining();
+    validateReadRange(position, size);
+    long bytesRead = 0;
+    while (bytesRead < size) {
+      bytesRead += fileChannel.read(buffer, position + bytesRead);
+    }
+  }
+
+  /**
+   * @param byteArray The buffer into which the data needs to be written.
+   * @param position The source's position to start the read.
+   * @param length The length of data in bytes to read.
+   * @throws IOException if data could not be written to the file because of I/O errors.
+   * @throws IndexOutOfBoundsException if {@code position} < header size or >= {@link #sizeInBytes()} or if
+   * {@code buffer} size is greater than the data available for read.
+   */
+  void readIntoDirectly(byte[] byteArray, long position, int length) throws IOException {
+    validateReadRange(position, length);
+    if (file.length() < position + length) {
+      throw new IOException(
+          "Requested range exceed file length. position = " + position + " length = " + length + "fileLength = "
+              + file.length());
+    }
+    // TODO: Try to avoid opening file on every opeartion.
+    try (DirectRandomAccessFile directFile = new DirectRandomAccessFile(file, "r", 2 * 1024 * 1024)) {
+      directFile.seek(position);
+      directFile.read(byteArray, 0, length);
+    }
+  }
+
+  /**
+   * Verify read is in a valid range of {@link LogSegment#fileChannel}.
+   * @param position The position to start the read.
+   * @param length The length of data in bytes to read.
+   */
+  private void validateReadRange(long position, int length) throws IOException {
     long sizeInBytes = sizeInBytes();
     if (position < startOffset || position >= sizeInBytes) {
       throw new IndexOutOfBoundsException(
           "Provided position [" + position + "] is out of bounds for the segment [" + file.getAbsolutePath()
               + "] with size [" + sizeInBytes + "]");
     }
-    if (position + buffer.remaining() > sizeInBytes) {
+    if (position + length > sizeInBytes) {
       metrics.overflowReadError.inc();
       throw new IndexOutOfBoundsException(
           "Cannot read from segment [" + file.getAbsolutePath() + "] from position [" + position + "] for size ["
-              + buffer.remaining() + "] because it exceeds the size [" + sizeInBytes + "]");
-    }
-    long bytesRead = 0;
-    int size = buffer.remaining();
-    while (bytesRead < size) {
-      bytesRead += fileChannel.read(buffer, position + bytesRead);
+              + length + "] because it exceeds the size [" + sizeInBytes + "]");
     }
   }
 

@@ -128,8 +128,20 @@ class Log implements Write {
   }
 
   /**
-   * {@inheritDoc}
-   * <p/>
+   * Appends the given {@code byteArray} to the active log segment in direct IO manner.
+   * The {@code byteArray} will be written to a single log segment i.e. its data will not exist across segments.
+   * @param byteArray The buffer from which data needs to be written from
+   * @return the number of bytes written.
+   * @throws IllegalArgumentException if the {@code byteArray.length} is greater than a single segment's size.
+   * @throws IllegalStateException if there no more capacity in the log.
+   * @throws IOException if there was an I/O error while writing.
+   */
+  int appendFromDirectly(byte[] byteArray, int offset, int length) throws IOException {
+    rollOverIfRequired(length);
+    return activeSegment.appendFromDirectly(byteArray, offset, length);
+  }
+
+  /**
    * Appends the given data to the active log segment. The data will be written to a single log segment i.e. the data
    * will not exist across segments.
    * @param channel The channel from which data needs to be written from
