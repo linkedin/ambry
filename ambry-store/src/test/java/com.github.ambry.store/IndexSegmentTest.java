@@ -83,8 +83,9 @@ public class IndexSegmentTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{PersistentIndex.VERSION_0, true}, {PersistentIndex.VERSION_0, false}, {PersistentIndex.VERSION_1, true}, {PersistentIndex.VERSION_1, false}, {PersistentIndex.VERSION_2, true}, {PersistentIndex.VERSION_2, false}});
+    return Arrays.asList(new Object[][]{{PersistentIndex.VERSION_0, true}, {PersistentIndex.VERSION_0, false},
+        {PersistentIndex.VERSION_1, true}, {PersistentIndex.VERSION_1, false}, {PersistentIndex.VERSION_2, true},
+        {PersistentIndex.VERSION_2, false}});
   }
 
   /**
@@ -961,20 +962,18 @@ public class IndexSegmentTest {
     // journal should not contain any entries
     assertNull("Journal should not have any entries", journal.getFirstOffset());
 
-    if (!config.storeKeepIndexInMemory) {
-      // test bloom file recreation
-      // delete the bloom file
-      assertTrue("File could not be deleted", bloomFile.delete());
+    // test bloom file recreation
+    // delete the bloom file
+    assertTrue("File could not be deleted", bloomFile.delete());
 
-      // read from file (sealed) again and verify that everything is ok
-      journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
-      fromDisk = createIndexSegmentFromFile(file, true, journal);
-      assertTrue("Bloom file does not exist", bloomFile.exists());
-      verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
-          endOffset, lastModifiedTimeInMs, resetKey);
-      // journal should not contain any entries
-      assertNull("Journal should not have any entries", journal.getFirstOffset());
-    }
+    // read from file (sealed) again and verify that everything is ok
+    journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
+    fromDisk = createIndexSegmentFromFile(file, true, journal);
+    assertTrue("Bloom file does not exist", bloomFile.exists());
+    verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
+        endOffset, lastModifiedTimeInMs, resetKey);
+    // journal should not contain any entries
+    assertNull("Journal should not have any entries", journal.getFirstOffset());
   }
 
   /**
