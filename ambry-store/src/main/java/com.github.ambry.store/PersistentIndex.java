@@ -115,7 +115,7 @@ class PersistentIndex {
   private volatile ConcurrentSkipListMap<Offset, IndexSegment> inFluxIndexSegments = validIndexSegments;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final IndexPersistor persistor = new IndexPersistor();
-  private ScheduledFuture<?> persistorTask = null;
+  private final ScheduledFuture<?> persistorTask;
 
   /**
    * Creates a new persistent index
@@ -232,6 +232,8 @@ class PersistentIndex {
         persistorTask = scheduler.scheduleAtFixedRate(persistor,
             config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
             config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+      } else {
+        persistorTask = null;
       }
       if (hardDelete != null && config.storeEnableHardDelete) {
         logger.info("Index : " + datadir + " Starting hard delete thread ");

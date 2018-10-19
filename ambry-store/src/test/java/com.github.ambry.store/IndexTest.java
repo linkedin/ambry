@@ -1251,6 +1251,7 @@ public class IndexTest {
    */
   @Test
   public void closeIndexToCancelPersistorTest() throws StoreException, InterruptedException {
+    long SCHEDULER_PERIOD_MS = 10;
     state.index.close();
     // re-initialize index by using mock scheduler (the intention is to speed up testing by using shorter period)
     ScheduledThreadPoolExecutor scheduler = (ScheduledThreadPoolExecutor) Utils.newScheduler(1, false);
@@ -1267,7 +1268,8 @@ public class IndexTest {
     MockPersistor mockPersistor = new MockPersistor();
     mockPersistor.invokeCountDown = new CountDownLatch(1);
     doAnswer(invocation -> {
-      persistorTask.set(mockScheduler.scheduleAtFixedRate(mockPersistor, 0, 50, TimeUnit.MILLISECONDS));
+      persistorTask.set(
+          mockScheduler.scheduleAtFixedRate(mockPersistor, 0, SCHEDULER_PERIOD_MS, TimeUnit.MILLISECONDS));
       return persistorTask.get();
     }).when(mockScheduler)
         .scheduleAtFixedRate(any(PersistentIndex.IndexPersistor.class), anyLong(), anyLong(),
@@ -1275,13 +1277,13 @@ public class IndexTest {
     state.initIndex(mockScheduler);
     // verify that the persistor task is successfully scheduled
     assertTrue("The persistor task wasn't invoked within the expected time",
-        mockPersistor.invokeCountDown.await(10, TimeUnit.MILLISECONDS));
+        mockPersistor.invokeCountDown.await(SCHEDULER_PERIOD_MS, TimeUnit.MILLISECONDS));
     state.index.close();
     mockPersistor.invokeCountDown = new CountDownLatch(1);
     // verify that the persisitor task is canceled after index closed and is never invoked again.
     assertTrue("The persistor task should be canceled after index closed", persistorTask.get().isCancelled());
     assertFalse("The persistor task should not be invoked again",
-        mockPersistor.invokeCountDown.await(60, TimeUnit.MILLISECONDS));
+        mockPersistor.invokeCountDown.await(2 * SCHEDULER_PERIOD_MS, TimeUnit.MILLISECONDS));
   }
 
   /**
