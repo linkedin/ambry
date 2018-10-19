@@ -909,7 +909,7 @@ public class ReplicationTest {
     // For simplicity, we use A1 to denote Version_2 blobId, A2 to denote Version_5 blobId.
     // For example, A1P means Version_2 PUT message, A2D means Version_5 DELETE message, etc.
     short VERSION_2 = 2;
-    short VERSION_5 = CommonTestUtils.getCurrentBlobIdVersion();
+    short VERSION_5 = 5;
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
