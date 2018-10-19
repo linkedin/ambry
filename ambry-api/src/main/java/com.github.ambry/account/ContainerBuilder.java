@@ -13,6 +13,8 @@
  */
 package com.github.ambry.account;
 
+import java.util.Set;
+
 import static com.github.ambry.account.Container.*;
 
 
@@ -37,6 +39,8 @@ public class ContainerBuilder {
   private boolean mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
   private String replicationPolicy = null;
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
+  private Set<String> contentTypeWhitelistForFilenamesOnDownload =
+      CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -59,6 +63,7 @@ public class ContainerBuilder {
     replicationPolicy = origin.getReplicationPolicy();
     ttlRequired = origin.isTtlRequired();
     parentAccountId = origin.getParentAccountId();
+    contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
   }
 
   /**
@@ -180,10 +185,22 @@ public class ContainerBuilder {
   /**
    * Sets the replication policy desired by the {@link Container}.
    * @param replicationPolicy the replication policy desired by the container
-   * @return
+   * @return This builder.
    */
   public ContainerBuilder setReplicationPolicy(String replicationPolicy) {
     this.replicationPolicy = replicationPolicy;
+    return this;
+  }
+
+  /**
+   * Sets the whitelist for the content types for which filenames can be sent on download
+   * @param contentTypeWhitelistForFilenamesOnDownload the whitelist for the content types for which filenames can be
+   *                                                   sent on download
+   * @return This builder.
+   */
+  public ContainerBuilder setContentTypeWhitelistForFilenamesOnDownload(
+      Set<String> contentTypeWhitelistForFilenamesOnDownload) {
+    this.contentTypeWhitelistForFilenamesOnDownload = contentTypeWhitelistForFilenamesOnDownload;
     return this;
   }
 
@@ -195,6 +212,6 @@ public class ContainerBuilder {
    */
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, replicationPolicy, ttlRequired, parentAccountId);
+        mediaScanDisabled, replicationPolicy, ttlRequired, contentTypeWhitelistForFilenamesOnDownload, parentAccountId);
   }
 }

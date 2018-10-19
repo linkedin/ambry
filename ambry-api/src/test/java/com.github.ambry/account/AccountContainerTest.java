@@ -19,11 +19,14 @@ import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -62,6 +65,7 @@ public class AccountContainerTest {
   private List<Boolean> refContainerMediaScanDisabledValues;
   private List<String> refContainerReplicationPolicyValues;
   private List<Boolean> refContainerTtlRequiredValues;
+  private List<Set<String>> refContainerContentTypeWhitelistForFilenamesOnDownloadValues;
   private List<JSONObject> containerJsonList;
   private List<Container> refContainers;
 
@@ -97,10 +101,9 @@ public class AccountContainerTest {
 
   /**
    * Tests constructing an {@link Account} from Json metadata.
-   * @throws Exception Any unexpected exceptions.
    */
   @Test
-  public void testConstructAccountFromJson() throws Exception {
+  public void testConstructAccountFromJson() {
     assertAccountAgainstReference(Account.fromJson(refAccountJson), true, true);
   }
 
@@ -129,6 +132,8 @@ public class AccountContainerTest {
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
+            .setContentTypeWhitelistForFilenamesOnDownload(
+                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
             .build());
     // second container with (id=1, name="0")
     containers.add(
@@ -139,6 +144,8 @@ public class AccountContainerTest {
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
+            .setContentTypeWhitelistForFilenamesOnDownload(
+                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
             .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -158,6 +165,8 @@ public class AccountContainerTest {
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
+            .setContentTypeWhitelistForFilenamesOnDownload(
+                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
             .build());
     // second container with (id=0, name="1")
     containers.add(
@@ -168,6 +177,8 @@ public class AccountContainerTest {
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
+            .setContentTypeWhitelistForFilenamesOnDownload(
+                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
             .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -187,6 +198,8 @@ public class AccountContainerTest {
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
+            .setContentTypeWhitelistForFilenamesOnDownload(
+                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
             .build());
     // second container with (id=1, name="0")
     containers.add(
@@ -197,6 +210,8 @@ public class AccountContainerTest {
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
+            .setContentTypeWhitelistForFilenamesOnDownload(
+                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
             .build());
     // third container with (id=10, name="10")
     containers.add(new ContainerBuilder((short) 10, "10", refContainerStatuses.get(0), refContainerDescriptions.get(0),
@@ -206,6 +221,8 @@ public class AccountContainerTest {
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
+        .setContentTypeWhitelistForFilenamesOnDownload(
+            refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
         .build());
     // second container with (id=10, name="11")
     containers.add(new ContainerBuilder((short) 10, "11", refContainerStatuses.get(0), refContainerDescriptions.get(0),
@@ -215,6 +232,8 @@ public class AccountContainerTest {
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
+        .setContentTypeWhitelistForFilenamesOnDownload(
+            refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
         .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -244,6 +263,8 @@ public class AccountContainerTest {
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
+        .setContentTypeWhitelistForFilenamesOnDownload(
+            refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
         .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -357,7 +378,9 @@ public class AccountContainerTest {
               .setCacheable(refContainerCachingValues.get(i))
               .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(i))
               .setReplicationPolicy(refContainerReplicationPolicyValues.get(i))
-              .setTtlRequired(refContainerTtlRequiredValues.get(i));
+              .setTtlRequired(refContainerTtlRequiredValues.get(i))
+              .setContentTypeWhitelistForFilenamesOnDownload(
+                  refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i));
       Container containerFromBuilder = containerBuilder.build();
       assertContainer(containerFromBuilder, i);
 
@@ -505,6 +528,11 @@ public class AccountContainerTest {
       boolean updatedMediaScanDisabled = !container.isMediaScanDisabled();
       String updatedReplicationPolicy = container.getReplicationPolicy() + "---updated";
       boolean updatedTtlRequired = !container.isTtlRequired();
+      Set<String> updatedContentTypeWhitelistForFilenamesOnDownloadValues =
+          container.getContentTypeWhitelistForFilenamesOnDownload()
+              .stream()
+              .map(contentType -> contentType + "--updated")
+              .collect(Collectors.toSet());
 
       containerBuilder.setId(updatedContainerId)
           .setName(updatedContainerName)
@@ -514,7 +542,8 @@ public class AccountContainerTest {
           .setCacheable(updatedCacheable)
           .setMediaScanDisabled(updatedMediaScanDisabled)
           .setReplicationPolicy(updatedReplicationPolicy)
-          .setTtlRequired(updatedTtlRequired);
+          .setTtlRequired(updatedTtlRequired)
+          .setContentTypeWhitelistForFilenamesOnDownload(updatedContentTypeWhitelistForFilenamesOnDownloadValues);
       accountBuilder.addOrUpdateContainer(containerBuilder.build());
 
       // build account and assert
@@ -535,6 +564,9 @@ public class AccountContainerTest {
               updatedContainer.isMediaScanDisabled());
           assertNull("Wrong replication policy", updatedContainer.getReplicationPolicy());
           assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, updatedContainer.isTtlRequired());
+          assertEquals("Wrong content type whitelist for filenames on download value",
+              CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
+              updatedContainer.getContentTypeWhitelistForFilenamesOnDownload());
           break;
         case Container.JSON_VERSION_2:
           assertEquals("Wrong encryption setting", updatedEncrypted, updatedContainer.isEncrypted());
@@ -544,6 +576,9 @@ public class AccountContainerTest {
               updatedContainer.isMediaScanDisabled());
           assertEquals("Wrong replication policy", updatedReplicationPolicy, updatedContainer.getReplicationPolicy());
           assertEquals("Wrong ttl required setting", updatedTtlRequired, updatedContainer.isTtlRequired());
+          assertEquals("Wrong content type whitelist for filenames on download value",
+              updatedContentTypeWhitelistForFilenamesOnDownloadValues,
+              updatedContainer.getContentTypeWhitelistForFilenamesOnDownload());
           break;
         default:
           throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
@@ -580,7 +615,9 @@ public class AccountContainerTest {
             .setCacheable(refContainerCachingValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
-            .setTtlRequired(refContainerTtlRequiredValues.get(0));
+            .setTtlRequired(refContainerTtlRequiredValues.get(0))
+            .setContentTypeWhitelistForFilenamesOnDownload(
+                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0));
     Container container = containerBuilder.build();
     accountBuilder.removeContainer(container);
     accountBuilder.removeContainer(null);
@@ -670,10 +707,9 @@ public class AccountContainerTest {
 
   /**
    * Tests {@link Account#equals(Object)} that checks equality of {@link Container}s.
-   * @throws Exception
    */
   @Test
-  public void testAccountEqual() throws Exception {
+  public void testAccountEqual() {
     // Check two accounts with same fields but no containers.
     Account accountNoContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
     Account accountNoContainerDuplicate = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
@@ -697,6 +733,8 @@ public class AccountContainerTest {
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
+            .setContentTypeWhitelistForFilenamesOnDownload(
+                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
             .build();
     refContainers.remove(0);
     refContainers.add(updatedContainer);
@@ -796,6 +834,12 @@ public class AccountContainerTest {
         assertEquals("Wrong replication policy", refContainerReplicationPolicyValues.get(index),
             container.getReplicationPolicy());
         assertEquals("Wrong ttl required setting", refContainerTtlRequiredValues.get(index), container.isTtlRequired());
+        Set<String> expectedContentTypeWhitelistForFilenamesOnDownloadValue =
+            refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(index) == null ? Collections.emptySet()
+                : refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(index);
+        assertEquals("Wrong content types whitelisted for filename on download",
+            expectedContentTypeWhitelistForFilenamesOnDownloadValue,
+            container.getContentTypeWhitelistForFilenamesOnDownload());
         break;
       default:
         throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
@@ -863,7 +907,7 @@ public class AccountContainerTest {
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
-          (short) 0);
+          Collections.emptySet(), (short) 0);
     }, null);
   }
 
@@ -882,6 +926,7 @@ public class AccountContainerTest {
     refContainerMediaScanDisabledValues = new ArrayList<>();
     refContainerReplicationPolicyValues = new ArrayList<>();
     refContainerTtlRequiredValues = new ArrayList<>();
+    refContainerContentTypeWhitelistForFilenamesOnDownloadValues = new ArrayList<>();
     containerJsonList = new ArrayList<>();
     refContainers = new ArrayList<>();
     Set<Short> containerIdSet = new HashSet<>();
@@ -909,13 +954,31 @@ public class AccountContainerTest {
         refContainerReplicationPolicyValues.add(null);
       }
       refContainerTtlRequiredValues.add(random.nextBoolean());
+      if (i == 0) {
+        refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(null);
+      } else if (i == 1) {
+        refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(Collections.emptySet());
+      } else {
+        refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(
+            getRandomContentTypeWhitelistForFilenamesOnDownload());
+      }
       refContainers.add(new Container(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
           refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
-          refContainerTtlRequiredValues.get(i), refAccountId));
+          refContainerTtlRequiredValues.get(i), refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i),
+          refAccountId));
       containerJsonList.add(buildContainerJson(refContainers.get(i)));
     }
+  }
+
+  /**
+   * @return a random set of strings
+   */
+  private Set<String> getRandomContentTypeWhitelistForFilenamesOnDownload() {
+    Set<String> toRet = new HashSet<>();
+    IntStream.range(0, random.nextInt(10) + 1).boxed().forEach(i -> toRet.add(UtilsTest.getRandomString(10)));
+    return toRet;
   }
 
   /**
@@ -947,6 +1010,8 @@ public class AccountContainerTest {
         containerJson.put(MEDIA_SCAN_DISABLED_KEY, container.isMediaScanDisabled());
         containerJson.putOpt(REPLICATION_POLICY_KEY, container.getReplicationPolicy());
         containerJson.put(TTL_REQUIRED_KEY, container.isTtlRequired());
+        containerJson.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD,
+            container.getContentTypeWhitelistForFilenamesOnDownload());
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + Container.getCurrentJsonVersion());
