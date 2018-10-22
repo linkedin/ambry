@@ -91,6 +91,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import javax.net.ssl.SSLSession;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -492,7 +493,10 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void injectionAccountAndContainerForGetHeadDeleteBlobIdTest() throws Exception {
-    for (short version : new Short[]{BlobId.BLOB_ID_V2, BlobId.BLOB_ID_V3, BlobId.BLOB_ID_V4, BlobId.BLOB_ID_V5}) {
+    List<Short> blobIdVersions = Arrays.stream(BlobId.getAllValidVersions())
+        .filter(version -> version >= BlobId.BLOB_ID_V2)
+        .collect(Collectors.toList());
+    for (short version : blobIdVersions) {
       populateAccountService();
 
       // aid=refAId, cid=refCId

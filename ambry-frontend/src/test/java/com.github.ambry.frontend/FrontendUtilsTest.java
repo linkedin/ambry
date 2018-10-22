@@ -23,6 +23,9 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.junit.Test;
 
 import static com.github.ambry.utils.Utils.*;
@@ -54,7 +57,9 @@ public class FrontendUtilsTest {
     PartitionId referencePartitionId =
         referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     boolean referenceIsEncrypted = TestUtils.RANDOM.nextBoolean();
-    short[] versions = {BlobId.BLOB_ID_V3, BlobId.BLOB_ID_V4, BlobId.BLOB_ID_V5};
+    List<Short> versions = Arrays.stream(BlobId.getAllValidVersions())
+        .filter(version -> version >= BlobId.BLOB_ID_V3)
+        .collect(Collectors.toList());
     for (short version : versions) {
       BlobId blobId =
           new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
@@ -62,7 +67,7 @@ public class FrontendUtilsTest {
       BlobId regeneratedBlobId = FrontendUtils.getBlobIdFromString(blobId.getID(), referenceClusterMap);
       assertEquals("BlobId mismatch", blobId, regeneratedBlobId);
       assertBlobIdFieldValues(regeneratedBlobId, referenceType, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId, version >= BlobId.BLOB_ID_V4 ? referenceIsEncrypted : false);
+          referenceContainerId, referencePartitionId, version >= BlobId.BLOB_ID_V4 && referenceIsEncrypted);
 
       // bad path
       try {
