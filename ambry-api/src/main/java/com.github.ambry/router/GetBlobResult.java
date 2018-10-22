@@ -15,6 +15,8 @@
 package com.github.ambry.router;
 
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.store.StoreKey;
+import java.util.List;
 
 
 /**
@@ -23,15 +25,19 @@ import com.github.ambry.messageformat.BlobInfo;
 public class GetBlobResult {
   private final BlobInfo blobInfo;
   private final ReadableStreamChannel blobDataChannel;
+  private final List<StoreKey> blobChunkIds;
+
 
   /**
    * Construct a {@link GetBlobResult}.
    * @param blobInfo the {@link BlobInfo} for the blob, or {@code null}.
    * @param blobDataChannel the {@link ReadableStreamChannel} containing the blob data, or {@code null}.
+   * @param blobChunkIds
    */
-  public GetBlobResult(BlobInfo blobInfo, ReadableStreamChannel blobDataChannel) {
+  public GetBlobResult(BlobInfo blobInfo, ReadableStreamChannel blobDataChannel, List<StoreKey> blobChunkIds) {
     this.blobInfo = blobInfo;
     this.blobDataChannel = blobDataChannel;
+    this.blobChunkIds = blobChunkIds;
   }
 
   /**
@@ -46,5 +52,9 @@ public class GetBlobResult {
    */
   public ReadableStreamChannel getBlobDataChannel() {
     return blobDataChannel;
+  }
+
+  public List<StoreKey> getBlobChunkIds() {
+    return blobChunkIds;
   }
 }

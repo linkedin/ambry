@@ -195,7 +195,7 @@ public class InMemoryRouter implements Router {
     } catch (Exception e) {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
-      GetBlobResult operationResult = exception == null ? new GetBlobResult(blobInfo, blobDataChannel) : null;
+      GetBlobResult operationResult = exception == null ? new GetBlobResult(blobInfo, blobDataChannel, null) : null;
       completeOperation(futureResult, callback, operationResult, exception);
     }
     return futureResult;

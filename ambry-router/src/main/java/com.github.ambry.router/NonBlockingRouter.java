@@ -142,7 +142,9 @@ class NonBlockingRouter implements Router {
     }
     currentOperationsCount.incrementAndGet();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
+    GetBlobOptionsInternal internalOptions =
+        new GetBlobOptionsInternal(options, options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds,
+            routerMetrics.ageAtGet);
     routerMetrics.operationQueuingRate.mark();
     try {
       if (isOpen.get()) {
@@ -157,6 +159,7 @@ class NonBlockingRouter implements Router {
           }
         });
       } else {
+        System.out.println("[NBR] not open");
         boolean isEncrypted = false;
         try {
           isEncrypted = BlobId.isEncrypted(blobIdStr);
@@ -306,7 +309,7 @@ class NonBlockingRouter implements Router {
         // blob could have been garbage collected and not found at all and so on.
         logger.trace("Encountered exception when attempting to get chunks of a possibly composite deleted blob {} ",
             blobIdStr, exception);
-      } else if (result.getBlobResult != null) {
+      } else if (!routerConfig.routerGetChunkIdEnabled && result.getBlobResult != null) {
         logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
       } else if (result.storeKeys != null) {
         List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(result.storeKeys.size());
@@ -637,7 +640,7 @@ class NonBlockingRouter implements Router {
         Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
           if (exception != null) {
             completeOperation(futureResult, callback, null, exception, false);
-          } else if (result.getBlobResult != null) {
+          } else if (!routerConfig.routerGetChunkIdEnabled && result.getBlobResult != null) {
             exception = new RouterException(
                 "GET blob call returned the blob instead of just the store keys (before TTL update)",
                 RouterErrorCode.UnexpectedInternalError);

@@ -219,6 +219,10 @@ public class RouterConfig {
   @Default("2")
   public final int routerTtlUpdateSuccessTarget;
 
+  @Config("router.get.chunkId.enabled")
+  @Default("false")
+  public final boolean routerGetChunkIdEnabled;
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -274,5 +278,6 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.ttl.update.request.parallelism", 3, 1, Integer.MAX_VALUE);
     routerTtlUpdateSuccessTarget =
         verifiableProperties.getIntInRange("router.ttl.update.success.target", 2, 1, Integer.MAX_VALUE);
+    routerGetChunkIdEnabled = verifiableProperties.getBoolean("router.get.chunkId.enabled", false);
   }
 }

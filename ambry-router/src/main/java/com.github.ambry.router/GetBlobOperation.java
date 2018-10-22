@@ -181,7 +181,8 @@ class GetBlobOperation extends GetOperation {
           // GetManager remove this operation.
           operationCompleted = true;
           List<StoreKey> chunkIds = e == null && compositeBlobInfo != null ? compositeBlobInfo.getKeys() : null;
-          operationResult = new GetBlobResultInternal(null, chunkIds);
+          operationResult = new GetBlobResultInternal(
+              routerConfig.routerGetChunkIdEnabled ? new GetBlobResult(blobInfo, null, chunkIds) : null, chunkIds);
         } else {
           // Complete the operation from the caller's perspective, so that the caller can start reading from the
           // channel if there is no exception. The operation will not be marked as complete internally as subsequent
@@ -196,7 +197,7 @@ class GetBlobOperation extends GetOperation {
           }
           if (e == null) {
             blobDataChannel = new BlobDataReadableStreamChannel();
-            operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
+            operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel, null), null);
           } else {
             blobDataChannel = null;
             operationResult = null;
@@ -1167,6 +1168,8 @@ class GetBlobOperation extends GetOperation {
     private void handleSimpleBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
       totalSize = blobData.getSize();
       chunkSize = totalSize;
+      System.out.println("[GetBlobOperation] handleSimpleBlob");
+      System.out.println("[GetBlobOperation] totalSize = " + totalSize);
       boolean rangeResolutionFailure = false;
       if (encryptionKey == null) {
         rangeResolutionFailure = resolveRange(totalSize);
