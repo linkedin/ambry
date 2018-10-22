@@ -35,7 +35,6 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.RejectThrottlerTest;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
@@ -60,6 +59,9 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
+
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -207,22 +209,23 @@ public class AmbrySecurityServiceTest {
     props.setProperty(FrontendConfig.REST_REQUEST_QUOTA_STRING,
         "{\"PUT\": \"20\",\"GET\": \"20\",\"POST\": \"20\",\"HEAD\": \"20\",\"OPTIONS\": \"20\",\"UNKNOWN\": \"20\",\"DELETE\": \"20\"}");
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(props));
-    RejectThrottlerTest.MockClock clock = new RejectThrottlerTest.MockClock();
+    QuotaManager quotaManager = Mockito.mock(QuotaManager.class);
+
     AmbrySecurityService ambrySecurityService =
         new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry()),
-            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(),
-            new QuotaManagerTest.MockQuotaManager(frontendConfig, clock));
-    // Issue new requests. Since MockClock tick doesn't change, rate is 0.
+            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager);
+    // Everything should be good.
+    Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(false);
     for (int i = 0; i < 100; i++) {
-      for (RestMethod resetMethod : RestMethod.values()) {
-        RestRequest restRequest = createRestRequest(resetMethod, "/", null);
+      for (RestMethod restMethod : RestMethod.values()) {
+        RestRequest restRequest = createRestRequest(restMethod, "/", null);
         ambrySecurityService.postProcessRequest(restRequest).get();
       }
     }
-    // Move MockClock ahead to 5 seconds later. Rate = 20. New requests should be denied.
-    clock.tick(5);
-    for (RestMethod resetMethod : RestMethod.values()) {
-      RestRequest restRequest = createRestRequest(resetMethod, "/", null);
+    // Requests should be denied.
+    Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(true);
+    for (RestMethod restMethod : RestMethod.values()) {
+      RestRequest restRequest = createRestRequest(restMethod, "/", null);
       try {
         ambrySecurityService.postProcessRequest(restRequest).get();
         Assert.fail("Should have failed.");
@@ -230,12 +233,6 @@ public class AmbrySecurityServiceTest {
         Assert.assertEquals("Exception should be TooManyRequests", RestServiceErrorCode.TooManyRequests,
             ((RestServiceException) e.getCause()).getErrorCode());
       }
-    }
-    // Clock tick to another 5 seconds later, rate < 20. Accept new requests.
-    clock.tick(5);
-    for (RestMethod resetMethod : RestMethod.values()) {
-      RestRequest restRequest = createRestRequest(resetMethod, "/", null);
-      ambrySecurityService.postProcessRequest(restRequest).get();
     }
   }
 

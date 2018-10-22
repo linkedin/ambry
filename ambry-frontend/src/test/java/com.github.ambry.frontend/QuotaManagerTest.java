@@ -21,7 +21,10 @@ import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.RejectThrottler;
 import com.github.ambry.utils.RejectThrottlerTest;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
+import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -42,38 +45,38 @@ public class QuotaManagerTest {
         "{\"PUT\": \"20\",\"GET\": \"20\",\"POST\": \"20\",\"HEAD\": \"20\",\"OPTIONS\": \"20\",\"UNKNOWN\": \"20\",\"DELETE\": \"20\"}");
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(props));
     RejectThrottlerTest.MockClock clock = new RejectThrottlerTest.MockClock();
-    QuotaManager quotaManager = new MockQuotaManager(frontendConfig, clock);
+    QuotaManager quotaManager = new QuotaManager(frontendConfig, createQuotaMock(frontendConfig, clock));
     // Issue new requests. Since MockClock tick doesn't change, rate is 0.
     for (int i = 0; i < 100; i++) {
-      for (RestMethod resetMethod : RestMethod.values()) {
-        RestRequest restRequest = createRestRequest(resetMethod, "http://www.linkedin.com/", null, null);
+      for (RestMethod restMethod : RestMethod.values()) {
+        RestRequest restRequest = createRestRequest(restMethod, "http://www.linkedin.com/", null, null);
         Assert.assertFalse("Should not throttle", quotaManager.shouldThrottle(restRequest));
       }
     }
     // Move MockClock ahead to 5 seconds later. Rate = 20. New requests should be denied.
     clock.tick(5);
-    for (RestMethod resetMethod : RestMethod.values()) {
-      RestRequest restRequest = createRestRequest(resetMethod, "http://www.linkedin.com/", null, null);
+    for (RestMethod restMethod : RestMethod.values()) {
+      RestRequest restRequest = createRestRequest(restMethod, "http://www.linkedin.com/", null, null);
       Assert.assertTrue("Should throttle", quotaManager.shouldThrottle(restRequest));
     }
     // Clock tick to another 5 seconds later, rate < 20. Accept new requests.
     clock.tick(5);
-    for (RestMethod resetMethod : RestMethod.values()) {
-      RestRequest restRequest = createRestRequest(resetMethod, "http://www.linkedin.com/", null, null);
+    for (RestMethod restMethod : RestMethod.values()) {
+      RestRequest restRequest = createRestRequest(restMethod, "http://www.linkedin.com/", null, null);
       Assert.assertFalse("Should not throttle", quotaManager.shouldThrottle(restRequest));
     }
   }
 
   /**
-   * A mock class of {@link QuotaManager} with a controllable clock.
+   * A helper function to create quotaMap with controllable clock.
    */
-  static class MockQuotaManager extends QuotaManager {
-    public MockQuotaManager(FrontendConfig frontendConfig, Clock clock) {
-      super(frontendConfig);
-      for (RestMethod restMethod : RestMethod.values()) {
-        int restMethodQuota = quota.getInt(restMethod.name());
-        quotaMap.put(restMethod, new RejectThrottler(restMethodQuota, new Meter(clock)));
-      }
+  private Map<RestMethod, RejectThrottler> createQuotaMock(FrontendConfig frontendConfig, Clock clock) {
+    JSONObject quota = new JSONObject(frontendConfig.restRequestQuota);
+    Map<RestMethod, RejectThrottler> quotaMap = new HashMap<>();
+    for (RestMethod restMethod : RestMethod.values()) {
+      int restMethodQuota = quota.getInt(restMethod.name());
+      quotaMap.put(restMethod, new RejectThrottler(restMethodQuota, new Meter(clock)));
     }
+    return quotaMap;
   }
 }

@@ -19,7 +19,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.RejectThrottler;
 import java.util.HashMap;
 import java.util.Map;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 
@@ -27,18 +26,21 @@ import org.json.JSONObject;
  * A class to manage requests based on request context.
  */
 public class QuotaManager {
-  protected final Map<RestMethod, RejectThrottler> quotaMap = new HashMap<>();
-  protected final JSONObject quota;
+  private final Map<RestMethod, RejectThrottler> quotaMap;
 
   public QuotaManager(FrontendConfig frontendConfig) {
-    try {
-      quota = new JSONObject(frontendConfig.restRequestQuota);
-    } catch (JSONException ex) {
-      throw new IllegalStateException("Invalid config value: " + frontendConfig.restRequestQuota, ex);
+    this(frontendConfig, null);
+  }
+
+  public QuotaManager(FrontendConfig frontendConfig, Map<RestMethod, RejectThrottler> quotaMap) {
+    JSONObject quota = new JSONObject(frontendConfig.restRequestQuota);
+    if (quotaMap == null) {
+      quotaMap = new HashMap<>();
+      for (RestMethod restMethod : RestMethod.values()) {
+        quotaMap.put(restMethod, new RejectThrottler(quota.optInt(restMethod.name(), -1)));
+      }
     }
-    for (RestMethod restMethod : RestMethod.values()) {
-      quotaMap.put(restMethod, new RejectThrottler(quota.getInt(restMethod.name())));
-    }
+    this.quotaMap = quotaMap;
   }
 
   /**
