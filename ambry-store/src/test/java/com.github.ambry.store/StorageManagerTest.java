@@ -28,6 +28,7 @@ import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -104,6 +105,7 @@ public class StorageManagerTest {
     Utils.deleteFileOrDirectory(new File(mountPathToDelete));
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
+    assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals("DiskSpaceAllocator should not have failed to start.", 0,
         getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
@@ -111,6 +113,7 @@ public class StorageManagerTest {
         getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals("Expected 1 disk mount path failure", 1,
         getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
+    assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     checkStoreAccessibility(replicas, mountPathToDelete, storageManager);
 
     assertEquals("Compaction thread count is incorrect", mountPaths.size() - 1,
@@ -135,6 +138,7 @@ public class StorageManagerTest {
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
+    assertEquals("There should be 1 unexpected partition reported", 1, getNumUnrecognizedPartitionsReported());
     // add invalid replica id
     replicas.add(invalidPartitionReplicas.get(0));
     for (int i = 0; i < replicas.size(); i++) {
@@ -178,6 +182,7 @@ public class StorageManagerTest {
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     PartitionId id = null;
     storageManager.start();
+    assertEquals("There should be 1 unexpected partition reported", 1, getNumUnrecognizedPartitionsReported());
     // shutdown all the replicas first
     for (ReplicaId replica : replicas) {
       id = replica.getPartitionId();
@@ -216,6 +221,7 @@ public class StorageManagerTest {
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     PartitionId id = null;
     storageManager.start();
+    assertEquals("There should be 1 unexpected partition reported", 1, getNumUnrecognizedPartitionsReported());
     for (ReplicaId replica : replicas) {
       id = replica.getPartitionId();
       assertNotNull("DiskManager should not be null for valid partition", storageManager.getDiskManager(id));
@@ -241,6 +247,7 @@ public class StorageManagerTest {
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
+    assertEquals("There should be 1 unexpected partition reported", 1, getNumUnrecognizedPartitionsReported());
     for (int i = 1; i < replicas.size() - 1; i++) {
       ReplicaId replica = replicas.get(i);
       PartitionId id = replica.getPartitionId();
@@ -279,6 +286,7 @@ public class StorageManagerTest {
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
+    assertEquals("There should be 1 unexpected partition reported", 1, getNumUnrecognizedPartitionsReported());
     // test set the state of store whose replicaStatusDelegate is null
     ReplicaId replica = replicas.get(0);
     PartitionId id = replica.getPartitionId();
@@ -308,6 +316,7 @@ public class StorageManagerTest {
     ReplicaStatusDelegate replicaStatusDelegateSpy = Mockito.spy(replicaStatusDelegate);
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, replicaStatusDelegateSpy);
     storageManager.start();
+    assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     for (ReplicaId replica : replicas) {
       partitionIds.add(replica.getPartitionId());
       diskToReplicas.computeIfAbsent(replica.getDiskId(), disk -> new ArrayList<>()).add(replica);
@@ -355,6 +364,7 @@ public class StorageManagerTest {
     Map<DiskId, List<ReplicaId>> diskToReplicas = new HashMap<>();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
+    assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     for (ReplicaId replica : replicas) {
       diskToReplicas.computeIfAbsent(replica.getDiskId(), disk -> new ArrayList<>()).add(replica);
     }
@@ -407,6 +417,7 @@ public class StorageManagerTest {
     }
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
+    assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals(0,
         getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
@@ -452,6 +463,7 @@ public class StorageManagerTest {
     }
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
+    assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals(0,
         getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
@@ -485,6 +497,7 @@ public class StorageManagerTest {
       metricRegistry = new MetricRegistry();
       StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
       storageManager.start();
+      assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
       checkStoreAccessibility(replicas, null, storageManager);
       Map<String, Counter> counters = metricRegistry.getCounters();
       assertEquals(0,
@@ -515,6 +528,7 @@ public class StorageManagerTest {
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     assertTrue("File creation should have succeeded", fileSizeDir.createNewFile());
     storageManager.start();
+    assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     checkStoreAccessibility(replicas, diskToFail, storageManager);
     Map<String, Counter> counters = metricRegistry.getCounters();
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
@@ -532,6 +546,7 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
+    assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     checkStoreAccessibility(replicas, null, storageManager);
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals(0,
@@ -560,6 +575,7 @@ public class StorageManagerTest {
     replicaStatusDelegate.stoppedReplicas.add(replicas.get(0).getPartitionId().toPathString());
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, replicaStatusDelegate);
     storageManager.start();
+    assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     for (int i = 0; i < replicas.size(); ++i) {
       PartitionId id = replicas.get(i).getPartitionId();
       if (i == 0) {
@@ -576,6 +592,34 @@ public class StorageManagerTest {
   }
 
   /**
+   * Tests that unrecognized directories are reported correctly
+   * @throws Exception
+   */
+  @Test
+  public void unrecognizedDirsOnDiskTest() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    int extraDirsCount = 0;
+    Set<String> createdMountPaths = new HashSet<>();
+    for (ReplicaId replicaId : replicas) {
+      if (createdMountPaths.add(replicaId.getMountPath())) {
+        int count = TestUtils.RANDOM.nextInt(6) + 5;
+        createFilesAndDirsAtPath(new File(replicaId.getDiskId().getMountPath()), count - 1, count);
+        //  the extra files should not get reported
+        extraDirsCount += count;
+      }
+    }
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    storageManager.start();
+    assertEquals("There should be some unexpected partitions reported", extraDirsCount,
+        getNumUnrecognizedPartitionsReported());
+    checkStoreAccessibility(replicas, null, storageManager);
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
+  }
+
+  // helpers
+
+  /**
    * Construct a {@link StorageManager} for the passed in set of replicas.
    * @param replicas the list of replicas for the {@link StorageManager} to use.
    * @param metricRegistry the {@link MetricRegistry} instance to use to instantiate {@link StorageManager}
@@ -583,27 +627,31 @@ public class StorageManagerTest {
    * @throws StoreException
    */
   private StorageManager createStorageManager(List<ReplicaId> replicas, MetricRegistry metricRegistry,
-      ReplicaStatusDelegate replicaStatusDelegate) throws StoreException, InterruptedException {
-    StorageManager storageManager =
-        new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, replicas,
-            new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
-            replicaStatusDelegate, SystemTime.getInstance());
-    return storageManager;
+      ReplicaStatusDelegate replicaStatusDelegate) throws StoreException {
+    return new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, replicas,
+        new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), replicaStatusDelegate,
+        SystemTime.getInstance());
   }
 
   /**
    * Shutdown a {@link StorageManager} and assert that the stores cannot be accessed for the provided replicas.
    * @param storageManager the {@link StorageManager} to shutdown.
    * @param replicas the {@link ReplicaId}s to check for store inaccessibility.
-   * @throws StoreException
    * @throws InterruptedException
    */
   private static void shutdownAndAssertStoresInaccessible(StorageManager storageManager, List<ReplicaId> replicas)
-      throws StoreException, InterruptedException {
+      throws InterruptedException {
     storageManager.shutdown();
     for (ReplicaId replica : replicas) {
       assertNull(storageManager.getStore(replica.getPartitionId()));
     }
+  }
+
+  /**
+   * @return the value of {@link StorageManagerMetrics#unexpectedDirsOnDisk}.
+   */
+  private long getNumUnrecognizedPartitionsReported() {
+    return getCounterValue(metricRegistry.getCounters(), DiskManager.class.getName(), "UnexpectedDirsOnDisk");
   }
 
   /**
@@ -676,6 +724,37 @@ public class StorageManagerTest {
     VerifiableProperties vProps = new VerifiableProperties(properties);
     diskManagerConfig = new DiskManagerConfig(vProps);
     storeConfig = new StoreConfig(vProps);
+  }
+
+  // unrecognizedDirsOnDiskTest() helpers
+
+  /**
+   * Creates {@code fileCount} files and {@code dirCount} directories at {@code dir}.
+   * @param dir the directory to create the files and dirs at
+   * @param fileCount the number of files to be created
+   * @param dirCount the number of directories to be created
+   * @return the list of files,dirs created as a pair.
+   * @throws IOException
+   */
+  private Pair<List<File>, List<File>> createFilesAndDirsAtPath(File dir, int fileCount, int dirCount)
+      throws IOException {
+    List<File> createdFiles = new ArrayList<>();
+    for (int i = 0; i < fileCount; i++) {
+      File createdFile = new File(dir, "created-file-" + i);
+      if (!createdFile.exists()) {
+        assertTrue("Could not create " + createdFile, createdFile.createNewFile());
+      }
+      createdFile.deleteOnExit();
+      createdFiles.add(createdFile);
+    }
+    List<File> createdDirs = new ArrayList<>();
+    for (int i = 0; i < dirCount; i++) {
+      File createdDir = new File(dir, "created-dir-" + i);
+      assertTrue("Could not create " + createdDir + " now", createdDir.mkdir());
+      createdDir.deleteOnExit();
+      createdDirs.add(createdDir);
+    }
+    return new Pair<>(createdFiles, createdDirs);
   }
 
   /**

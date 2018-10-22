@@ -14,8 +14,6 @@
 
 package com.github.ambry.store;
 
-import com.github.ambry.store.StoreKey;
-import com.github.ambry.store.StoreKeyConverter;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
