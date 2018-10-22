@@ -1277,7 +1277,7 @@ public class IndexTest {
     state.initIndex(mockScheduler);
     // verify that the persistor task is successfully scheduled
     assertTrue("The persistor task wasn't invoked within the expected time",
-        mockPersistor.invokeCountDown.await(SCHEDULER_PERIOD_MS, TimeUnit.MILLISECONDS));
+        mockPersistor.invokeCountDown.await(2 * SCHEDULER_PERIOD_MS, TimeUnit.MILLISECONDS));
     state.index.close();
     mockPersistor.invokeCountDown = new CountDownLatch(1);
     // verify that the persisitor task is canceled after index closed and is never invoked again.
