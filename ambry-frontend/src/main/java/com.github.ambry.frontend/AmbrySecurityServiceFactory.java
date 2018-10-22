@@ -40,6 +40,7 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
 
   @Override
   public SecurityService getSecurityService() throws InstantiationException {
-    return new AmbrySecurityService(frontendConfig, frontendMetrics, urlSigningService);
+    return new AmbrySecurityService(frontendConfig, frontendMetrics, urlSigningService,
+        new QuotaManager(frontendConfig));
   }
 }

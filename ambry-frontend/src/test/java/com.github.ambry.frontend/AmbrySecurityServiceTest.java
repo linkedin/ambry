@@ -35,6 +35,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.RejectThrottlerTest;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
@@ -71,6 +72,7 @@ public class AmbrySecurityServiceTest {
   private static final String OWNER_ID = SERVICE_ID;
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
+  private static final QuotaManager quotaManager = new QuotaManager(FRONTEND_CONFIG);
   private static final Account REF_ACCOUNT;
   private static final Container REF_CONTAINER;
   private static final Map<String, Object> USER_METADATA = new HashMap<>();
@@ -86,7 +88,7 @@ public class AmbrySecurityServiceTest {
 
   private final SecurityService securityService =
       new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
-          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService());
+          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager);
 
   static {
     try {
@@ -110,7 +112,7 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * Tests for {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)}
+   * Tests for {@link AmbrySecurityService#preProcessRequest(RestRequest, Callback)}
    * @throws Exception
    */
   @Test
@@ -141,7 +143,7 @@ public class AmbrySecurityServiceTest {
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(properties));
     SecurityService securityServiceWithTrackingDisabled =
         new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry()),
-            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService());
+            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager);
     restRequest = createRestRequest(RestMethod.GET, "/", null);
     securityServiceWithTrackingDisabled.preProcessRequest(restRequest);
     Assert.assertFalse("The arg with key: ambry-internal-keys-send-tracking-info should be set to false",
@@ -192,6 +194,48 @@ public class AmbrySecurityServiceTest {
     for (RestMethod restMethod : methods) {
       testExceptionCasesProcessRequest(createRestRequest(restMethod, "/", null),
           RestServiceErrorCode.ServiceUnavailable, true);
+    }
+  }
+
+  /**
+   * {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)})} should throw RestServiceException if rate
+   * is more than expected. RestServiceErrorCode.TooManyRequests is expected in this case.
+   */
+  @Test
+  public void postProcessQuotaManagerTest() throws Exception {
+    Properties props = new Properties();
+    props.setProperty(FrontendConfig.REST_REQUEST_QUOTA_STRING,
+        "{\"PUT\": \"20\",\"GET\": \"20\",\"POST\": \"20\",\"HEAD\": \"20\",\"OPTIONS\": \"20\",\"UNKNOWN\": \"20\",\"DELETE\": \"20\"}");
+    FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(props));
+    RejectThrottlerTest.MockClock clock = new RejectThrottlerTest.MockClock();
+    AmbrySecurityService ambrySecurityService =
+        new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry()),
+            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(),
+            new QuotaManagerTest.MockQuotaManager(frontendConfig, clock));
+    // Issue new requests. Since MockClock tick doesn't change, rate is 0.
+    for (int i = 0; i < 100; i++) {
+      for (RestMethod resetMethod : RestMethod.values()) {
+        RestRequest restRequest = createRestRequest(resetMethod, "/", null);
+        ambrySecurityService.postProcessRequest(restRequest).get();
+      }
+    }
+    // Move MockClock ahead to 5 seconds later. Rate = 20. New requests should be denied.
+    clock.tick(5);
+    for (RestMethod resetMethod : RestMethod.values()) {
+      RestRequest restRequest = createRestRequest(resetMethod, "/", null);
+      try {
+        ambrySecurityService.postProcessRequest(restRequest).get();
+        Assert.fail("Should have failed.");
+      } catch (Exception e) {
+        Assert.assertEquals("Exception should be TooManyRequests", RestServiceErrorCode.TooManyRequests,
+            ((RestServiceException) e.getCause()).getErrorCode());
+      }
+    }
+    // Clock tick to another 5 seconds later, rate < 20. Accept new requests.
+    clock.tick(5);
+    for (RestMethod resetMethod : RestMethod.values()) {
+      RestRequest restRequest = createRestRequest(resetMethod, "/", null);
+      ambrySecurityService.postProcessRequest(restRequest).get();
     }
   }
 
