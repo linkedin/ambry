@@ -33,6 +33,7 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -69,9 +70,11 @@ public class GetChunkIdTool {
     logger.info("RouterFactory is created!");
     Router router = routerFactory.getRouter();
     logger.info("Router is created!");
-    FileWriter outFileWriter = new FileWriter(options.outPutFile);
+    FileWriter chunkFileWriter = new FileWriter(options.chunkBlobFile);
+    FileWriter simpleFileWriter = new FileWriter(options.simpleBlobFile);
     FileWriter errorFileWriter = new FileWriter(options.errorFile);
-    try (PrintWriter printWriter = new PrintWriter(outFileWriter);
+    try (PrintWriter chunkWriter = new PrintWriter(chunkFileWriter);
+        PrintWriter simpleWriter = new PrintWriter(simpleFileWriter);
         PrintWriter errorWriter = new PrintWriter(errorFileWriter)) {
       for (String entry : blobIdEntries) {
         String[] fields = entry.split("\\t");
@@ -80,32 +83,34 @@ public class GetChunkIdTool {
             new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds)
                 .getOption(GetOption.Include_All)
                 .build(), null);
-        GetBlobResult getBlobResult = getBlobResultFuture.get();//.getBlobChunkIds();
-        if (getBlobResult != null && getBlobResult.getBlobChunkIds() != null) {
-          int cnt = 1;
-          List<StoreKey> chunkIds = getBlobResult.getBlobChunkIds();
+        try {
+          GetBlobResult getBlobResult = getBlobResultFuture.get();
+          if (getBlobResult != null && getBlobResult.getBlobChunkIds() != null) {
+            int cnt = 1;
+            List<StoreKey> chunkIds = getBlobResult.getBlobChunkIds();
 
-          StringBuilder stringBuilder = new StringBuilder();
-          stringBuilder.append(blobId).append("\t");
-          for (StoreKey id : chunkIds) {
-            stringBuilder.append(id).append(cnt < chunkIds.size() ? "," : "");
-            ++cnt;
+            StringBuilder stringBuilder = new StringBuilder();
+            stringBuilder.append(blobId).append("\t");
+            for (StoreKey id : chunkIds) {
+              stringBuilder.append(id).append(cnt < chunkIds.size() ? "," : "");
+              ++cnt;
+            }
+            stringBuilder.append("\n");
+            chunkWriter.print(stringBuilder.toString());
+          } else {
+            simpleWriter.print(blobId);
           }
-          stringBuilder.append("\n");
-          printWriter.print(stringBuilder.toString());
-        } else {
-          errorWriter.print(blobId);
+        } catch (ExecutionException e) {
+          errorWriter.print(blobId + ": " + e.getCause().getMessage());
+          errorWriter.print("\n\n");
         }
       }
-      //boolean succeed = countDownLatch.await(blobIdEntries.length, TimeUnit.SECONDS);
       router.close();
     }
-//    printWriter.close();
-//    if (succeed) {
-//      logger.info("ChunckIds are written into file: " + options.outPutFile);
-//    } else {
-//      logger.error("Get chunkIds times out");
-//    }
+
+    logger.info(
+        "Composite blob and ChunkIds are written into file: {} ; Simple BlobIds are written into file: {} ; BlobIds encountered errors are kept in file: {}",
+        options.chunkBlobFile, options.simpleBlobFile, options.errorFile);
   }
 
   private static class InvocationOptions {
@@ -113,7 +118,8 @@ public class GetChunkIdTool {
     public final String partitionLayoutFilePath;
     public final String routerPropsFilePath;
     public final String blobIdsFilePath;
-    public final String outPutFile;
+    public final String chunkBlobFile;
+    public final String simpleBlobFile;
     public final String errorFile;
     public final String hostName;
     public final int port;
@@ -149,14 +155,21 @@ public class GetChunkIdTool {
               .withRequiredArg()
               .describedAs("blobIdsFilePath")
               .ofType(String.class);
-      ArgumentAcceptingOptionSpec<String> outPutFile = parser.accepts("outPutFile", "The blob Id used to get chunk Ids")
-          .withRequiredArg()
-          .describedAs("outPutFile")
-          .ofType(String.class);
-      ArgumentAcceptingOptionSpec<String> errorFile = parser.accepts("errorFile", "The blob Id failed to get chunk Ids")
-          .withRequiredArg()
-          .describedAs("errorFile")
-          .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> chunkBlobFile =
+          parser.accepts("chunkBlobFile", "The file to record composite blob Ids and its chunk Ids")
+              .withRequiredArg()
+              .describedAs("chunkBlobFile")
+              .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> simpleBlobFile =
+          parser.accepts("simpleBlobFile", "The file to record simple blobs")
+              .withRequiredArg()
+              .describedAs("simpleBlobFile")
+              .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> errorFile =
+          parser.accepts("errorFile", "The file to record blob Ids which encountered errors when fetching chunkIds")
+              .withRequiredArg()
+              .describedAs("errorFile")
+              .ofType(String.class);
       ArgumentAcceptingOptionSpec<String> hostNameOpt =
           parser.accepts("hostName", "The hostname against which requests are to be made")
               .withOptionalArg()
@@ -181,7 +194,8 @@ public class GetChunkIdTool {
       requiredArgs.add(partitionLayoutFilePath);
       requiredArgs.add(routerPropsFilePathOpt);
       requiredArgs.add(blobIdsFilePath);
-      requiredArgs.add(outPutFile);
+      requiredArgs.add(chunkBlobFile);
+      requiredArgs.add(simpleBlobFile);
       requiredArgs.add(errorFile);
 
       OptionSet options = parser.parse(args);
@@ -194,8 +208,10 @@ public class GetChunkIdTool {
         logger.trace("Router/ClusterMap config file path: {}", this.routerPropsFilePath);
         this.blobIdsFilePath = options.valueOf(blobIdsFilePath);
         logger.trace("Blob Ids file path: {}", this.blobIdsFilePath);
-        this.outPutFile = options.valueOf(outPutFile);
-        logger.trace("Output file name: {}", this.outPutFile);
+        this.chunkBlobFile = options.valueOf(chunkBlobFile);
+        logger.trace("Output composite blob file name: {}", this.chunkBlobFile);
+        this.simpleBlobFile = options.valueOf(simpleBlobFile);
+        logger.trace("Output simple blob file name: {}", this.simpleBlobFile);
         this.errorFile = options.valueOf(errorFile);
         logger.trace("Error file name: {}", this.errorFile);
       } else {
