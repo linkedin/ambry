@@ -14,6 +14,9 @@
 
 package com.github.ambry.router;
 
+import java.util.Objects;
+
+
 /**
  * Represents a data chunk to be stitched by a {@link Router#stitchBlob} call.
  */
@@ -28,7 +31,7 @@ public class ChunkInfo {
    * @param expirationTimeInMs the expiration time of the chunk in milliseconds.
    */
   public ChunkInfo(String blobId, long chunkSizeInBytes, long expirationTimeInMs) {
-    this.blobId = blobId;
+    this.blobId = Objects.requireNonNull(blobId, "blobId cannot be null");
     this.chunkSizeInBytes = chunkSizeInBytes;
     this.expirationTimeInMs = expirationTimeInMs;
   }
@@ -58,5 +61,23 @@ public class ChunkInfo {
   public String toString() {
     return "ChunkInfo{" + "blobId='" + blobId + '\'' + ", chunkSizeInBytes=" + chunkSizeInBytes
         + ", expirationTimeInMs=" + expirationTimeInMs + '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ChunkInfo chunkInfo = (ChunkInfo) o;
+    return chunkSizeInBytes == chunkInfo.chunkSizeInBytes && expirationTimeInMs == chunkInfo.expirationTimeInMs
+        && Objects.equals(blobId, chunkInfo.blobId);
+  }
+
+  @Override
+  public int hashCode() {
+    return blobId.hashCode();
   }
 }

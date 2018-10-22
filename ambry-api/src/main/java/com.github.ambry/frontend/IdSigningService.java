@@ -37,6 +37,8 @@ public interface IdSigningService {
   String getSignedId(String blobId, Map<String, String> metadata) throws RestServiceException;
 
   /**
+   * Implementations of this method should transparently handle any valid ID prefixes or suffixes
+   * (leading slashes, etc.) that may be added by an {@link IdConverter}.
    * @param id the input ID to check.
    * @return {@code true} if the ID is signed. {@code false} otherwise
    */
@@ -44,7 +46,8 @@ public interface IdSigningService {
 
   /**
    * Verify that the signed ID has not been tampered with and extract the blob ID and additional metadata from the
-   * signed ID.
+   * signed ID. Implementations of this method should transparently handle any valid ID prefixes or suffixes
+   * (leading slashes, etc.) that may be added by an {@link IdConverter}.
    * @return a {@link Pair} that contains the blob ID and additional metadata parsed from the signed ID.
    * @throws RestServiceException if there are problems verifying or parsing the ID.
    */

@@ -28,12 +28,17 @@ public class FrontendConfig {
 
   // Property keys
   public static final String URL_SIGNER_ENDPOINTS = PREFIX + "url.signer.endpoints";
+  public static final String CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY = PREFIX + "chunk.upload.initial.chunk.ttl.secs";
+  public static final String FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY =
+      PREFIX + "fail.if.ttl.required.but.not.provided";
+  public static final String MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY =
+      PREFIX + "max.acceptable.ttl.secs.if.ttl.required";
+  public static final String MAX_STITCH_REQUEST_SIZE_BYTES_KEY = PREFIX + "max.stitch.request.size.bytes";
 
+  // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
-
   private static final String DEFAULT_ENDPOINTS_STRING =
       "{\"POST\": \"" + DEFAULT_ENDPOINT + "\", \"GET\": \"" + DEFAULT_ENDPOINT + "\"}";
-
   /**
    * Cache validity in seconds for non-private blobs for GET.
    */
@@ -155,22 +160,24 @@ public class FrontendConfig {
   /**
    * The blob TTL in seconds to use for data chunks uploaded in a stitched upload session.
    */
-  public static final String CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY = PREFIX + "chunk.upload.initial.chunk.ttl.secs";
   @Config(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY)
   @Default("28 * 24 * 60 * 60")
   public final long chunkUploadInitialChunkTtlSecs;
 
-  public static final String FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY =
-      PREFIX + "fail.if.ttl.required.but.not.provided";
   @Config(FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY)
   @Default("false")
   public final boolean failIfTtlRequiredButNotProvided;
 
-  public static final String MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY =
-      PREFIX + "max.acceptable.ttl.secs.if.ttl.required";
   @Config(MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY)
   @Default("30 * 24 * 60 * 60")
   public final int maxAcceptableTtlSecsIfTtlRequired;
+
+  /**
+   * The maximum size in bytes for the JSON body of a "POST /stitch" request.
+   */
+  @Config(MAX_STITCH_REQUEST_SIZE_BYTES_KEY)
+  @Default("20 * 1024 * 1024")
+  public final long maxStitchRequestSizeBytes;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -208,5 +215,7 @@ public class FrontendConfig {
     failIfTtlRequiredButNotProvided = verifiableProperties.getBoolean(FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY, false);
     maxAcceptableTtlSecsIfTtlRequired = verifiableProperties.getIntInRange(MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY,
         (int) TimeUnit.DAYS.toSeconds(30), 0, Integer.MAX_VALUE);
+    maxStitchRequestSizeBytes =
+        verifiableProperties.getLongInRange(MAX_STITCH_REQUEST_SIZE_BYTES_KEY, 20 * 1024 * 1024, 0, Long.MAX_VALUE);
   }
 }

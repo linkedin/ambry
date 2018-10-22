@@ -76,6 +76,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final FrontendMetrics frontendMetrics;
   private final GetReplicasHandler getReplicasHandler;
   private final UrlSigningService urlSigningService;
+  private final IdSigningService idSigningService;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
   private final String datacenterName;
@@ -99,11 +100,16 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter} instance.
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService} instance.
    * @param urlSigningService the {@link UrlSigningService} used to sign URLs.
+   * @param idSigningService the {@link IdSigningService} used to sign and verify IDs.
+   * @param accountAndContainerInjector the {@link AccountAndContainerInjector} to use.
+   * @param datacenterName the local datacenter name for this frontend.
+   * @param hostname the hostname for this frontend.
    */
   AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
       SecurityServiceFactory securityServiceFactory, UrlSigningService urlSigningService,
-      AccountAndContainerInjector accountAndContainerInjector, String datacenterName, String hostname) {
+      IdSigningService idSigningService, AccountAndContainerInjector accountAndContainerInjector, String datacenterName,
+      String hostname) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
@@ -112,6 +118,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.idConverterFactory = idConverterFactory;
     this.securityServiceFactory = securityServiceFactory;
     this.urlSigningService = urlSigningService;
+    this.idSigningService = idSigningService;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.datacenterName = datacenterName;
     this.hostname = hostname;
@@ -129,8 +136,8 @@ class AmbryBlobStorageService implements BlobStorageService {
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap);
     postBlobHandler =
-        new PostBlobHandler(securityService, idConverter, router, accountAndContainerInjector, SystemTime.getInstance(),
-            frontendConfig, frontendMetrics);
+        new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
+            SystemTime.getInstance(), frontendConfig, frontendMetrics);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap);

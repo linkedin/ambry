@@ -63,6 +63,8 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics postSecurityPreProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics postSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics postSecurityPostProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics postReadStitchRequestMetrics;
+  public final AsyncOperationTracker.Metrics postRouterStitchBlobMetrics;
   public final AsyncOperationTracker.Metrics postRouterPutBlobMetrics;
   public final AsyncOperationTracker.Metrics postIdConversionMetrics;
   public final AsyncOperationTracker.Metrics postSecurityProcessResponseMetrics;
@@ -223,6 +225,10 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityProcessRequest", metricRegistry);
     postSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityPostProcessRequest", metricRegistry);
+    postReadStitchRequestMetrics =
+        new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postReadStitchRequest", metricRegistry);
+    postRouterStitchBlobMetrics =
+        new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postRouterStitchBlob", metricRegistry);
     postRouterPutBlobMetrics =
         new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postRouterPutBlob", metricRegistry);
     postIdConversionMetrics =

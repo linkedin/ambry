@@ -90,7 +90,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, accountAndContainerInjector);
       return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-          idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector,
+          idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountAndContainerInjector,
           clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate AmbryBlobStorageService", e);

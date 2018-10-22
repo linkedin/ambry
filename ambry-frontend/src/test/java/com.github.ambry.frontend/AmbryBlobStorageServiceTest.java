@@ -119,6 +119,7 @@ public class AmbryBlobStorageServiceTest {
   private final String referenceBlobIdStr;
   private final short blobIdVersion;
   private final UrlSigningService urlSigningService;
+  private final IdSigningService idSigningService;
   private final String datacenterName = "Data-Center";
   private final String hostname = "localhost";
   private FrontendConfig frontendConfig;
@@ -146,11 +147,11 @@ public class AmbryBlobStorageServiceTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     String endpoint = "http://localhost:1174";
-    urlSigningService =
-        new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.urlSignerDefaultUrlTtlSecs,
-            frontendConfig.urlSignerDefaultMaxUploadSizeBytes, frontendConfig.urlSignerMaxUrlTtlSecs,
-            frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance());
-    idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, new AmbryIdSigningService());
+    urlSigningService = new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.urlSignerDefaultUrlTtlSecs,
+        frontendConfig.urlSignerDefaultMaxUploadSizeBytes, frontendConfig.urlSignerMaxUrlTtlSecs,
+        frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance());
+    idSigningService = new AmbryIdSigningService();
+    idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService);
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService,
         accountAndContainerInjector);
     accountService.clear();
@@ -291,7 +292,8 @@ public class AmbryBlobStorageServiceTest {
     // What the test is looking for -> No exceptions thrown when the handle is run and the original exception arrives
     // safely.
     responseHandler.shutdown();
-    for (String methodName : new String[]{"handleGet", "handlePost", "handleHead", "handleDelete", "handleOptions", "handlePut"}) {
+    for (String methodName : new String[]{"handleGet", "handlePost", "handleHead", "handleDelete", "handleOptions",
+        "handlePut"}) {
       Method method =
           AmbryBlobStorageService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
       responseHandler.reset();
@@ -742,8 +744,8 @@ public class AmbryBlobStorageServiceTest {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
-            hostname);
+            idConverterFactory, securityServiceFactory, urlSigningService, idSigningService,
+            accountAndContainerInjector, datacenterName, hostname);
     ambryBlobStorageService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
@@ -764,8 +766,8 @@ public class AmbryBlobStorageServiceTest {
     TailoredPeersClusterMap clusterMap = new TailoredPeersClusterMap();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
-            hostname);
+            idConverterFactory, securityServiceFactory, urlSigningService, idSigningService,
+            accountAndContainerInjector, datacenterName, hostname);
     ambryBlobStorageService.start();
     // test good requests
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
@@ -942,8 +944,8 @@ public class AmbryBlobStorageServiceTest {
     testRouter.exceptionOpType = FrontendTestRouter.OpType.UpdateBlobTtl;
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
-            hostname);
+            idConverterFactory, securityServiceFactory, urlSigningService, idSigningService,
+            accountAndContainerInjector, datacenterName, hostname);
     ambryBlobStorageService.start();
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getAllPartitionIds(null).get(0), false,
@@ -1183,8 +1185,8 @@ public class AmbryBlobStorageServiceTest {
    */
   private AmbryBlobStorageService getAmbryBlobStorageService() {
     return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-        idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
-        hostname);
+        idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountAndContainerInjector,
+        datacenterName, hostname);
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -1810,8 +1812,8 @@ public class AmbryBlobStorageServiceTest {
       throws InstantiationException, JSONException {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            converterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
-            hostname);
+            converterFactory, securityServiceFactory, urlSigningService, idSigningService, accountAndContainerInjector,
+            datacenterName, hostname);
     ambryBlobStorageService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     doExternalServicesBadInputTest(restMethods, expectedExceptionMsg, false);
@@ -1841,8 +1843,8 @@ public class AmbryBlobStorageServiceTest {
       }
       ambryBlobStorageService =
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
-              clusterMap, idConverterFactory, securityFactory, urlSigningService, accountAndContainerInjector,
-              datacenterName, hostname);
+              clusterMap, idConverterFactory, securityFactory, urlSigningService, idSigningService,
+              accountAndContainerInjector, datacenterName, hostname);
       ambryBlobStorageService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg,
           mode == FrontendTestSecurityServiceFactory.Mode.ProcessResponse);
@@ -1898,8 +1900,8 @@ public class AmbryBlobStorageServiceTest {
   private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, accountAndContainerInjector, datacenterName,
-            hostname);
+            idConverterFactory, securityServiceFactory, urlSigningService, idSigningService,
+            accountAndContainerInjector, datacenterName, hostname);
     ambryBlobStorageService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {
@@ -2492,6 +2494,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
   RuntimeException exceptionToThrow = null;
   String translation = null;
   boolean returnInputIfTranslationNull = false;
+  volatile String lastInput = null;
 
   @Override
   public IdConverter getIdConverter() {
@@ -2521,6 +2524,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
      * @return the created {@link Future}.
      */
     private Future<String> completeOperation(String input, Callback<String> callback) {
+      lastInput = input;
       if (exceptionToThrow != null) {
         throw exceptionToThrow;
       }
