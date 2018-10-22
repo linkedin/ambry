@@ -256,7 +256,6 @@ public class BlobId extends StoreKey {
     containerId = preamble.containerId;
     isEncrypted = preamble.isEncrypted;
     blobDataType = preamble.blobDataType;
-    // System.out.println("Blob data type = " + blobDataType);
     partitionId = clusterMap.getPartitionIdFromStream(stream);
     if (partitionId == null) {
       throw new IllegalArgumentException("Partition ID cannot be null");

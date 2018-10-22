@@ -159,7 +159,6 @@ class NonBlockingRouter implements Router {
           }
         });
       } else {
-        System.out.println("[NBR] not open");
         boolean isEncrypted = false;
         try {
           isEncrypted = BlobId.isEncrypted(blobIdStr);

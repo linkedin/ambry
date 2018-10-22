@@ -109,8 +109,9 @@ public class GetBlobOptions {
     Data, /**
      * Return just the blob info in the response.
      */
-    BlobInfo,
-
+    BlobInfo, /**
+     *  Return all chunk IDs of a composite blob ID.
+     */
     BlobChunkIds
   }
 }

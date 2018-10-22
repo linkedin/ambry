@@ -21,6 +21,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
+import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
 import com.github.ambry.store.StoreKey;
@@ -32,8 +33,7 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Future;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -69,40 +69,43 @@ public class GetChunkIdTool {
     logger.info("RouterFactory is created!");
     Router router = routerFactory.getRouter();
     logger.info("Router is created!");
-    CountDownLatch countDownLatch = new CountDownLatch(blobIdEntries.length);
-    FileWriter fileWriter = new FileWriter(options.outPutFile);
-    PrintWriter printWriter = new PrintWriter(fileWriter);
-    for (String entry : blobIdEntries) {
-      String[] fields = entry.split("\\t");
-      String blobId = fields[0];
-      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds)
-          .getOption(GetOption.Include_All)
-          .build(), (result, exception) -> {
-        if (result != null) {
-          List<StoreKey> chunkIds = result.getBlobChunkIds();
+    FileWriter outFileWriter = new FileWriter(options.outPutFile);
+    FileWriter errorFileWriter = new FileWriter(options.errorFile);
+    try (PrintWriter printWriter = new PrintWriter(outFileWriter);
+        PrintWriter errorWriter = new PrintWriter(errorFileWriter)) {
+      for (String entry : blobIdEntries) {
+        String[] fields = entry.split("\\t");
+        String blobId = fields[0];
+        Future<GetBlobResult> getBlobResultFuture = router.getBlob(blobId,
+            new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds)
+                .getOption(GetOption.Include_All)
+                .build(), null);
+        GetBlobResult getBlobResult = getBlobResultFuture.get();//.getBlobChunkIds();
+        if (getBlobResult != null && getBlobResult.getBlobChunkIds() != null) {
           int cnt = 1;
-          if (chunkIds != null) {
-            StringBuilder stringBuilder = new StringBuilder();
-            stringBuilder.append(blobId).append("\t");
-            for (StoreKey id : chunkIds) {
-              stringBuilder.append(id).append(cnt < chunkIds.size() ? "," : "");
-              ++cnt;
-            }
-            stringBuilder.append("\n");
-            printWriter.print(stringBuilder.toString());
+          List<StoreKey> chunkIds = getBlobResult.getBlobChunkIds();
+
+          StringBuilder stringBuilder = new StringBuilder();
+          stringBuilder.append(blobId).append("\t");
+          for (StoreKey id : chunkIds) {
+            stringBuilder.append(id).append(cnt < chunkIds.size() ? "," : "");
+            ++cnt;
           }
+          stringBuilder.append("\n");
+          printWriter.print(stringBuilder.toString());
+        } else {
+          errorWriter.print(blobId);
         }
-        countDownLatch.countDown();
-      });
+      }
+      //boolean succeed = countDownLatch.await(blobIdEntries.length, TimeUnit.SECONDS);
+      router.close();
     }
-    boolean succeed = countDownLatch.await(blobIdEntries.length, TimeUnit.SECONDS);
-    router.close();
-    printWriter.close();
-    if (succeed) {
-      logger.info("ChunckIds are written into file: " + options.outPutFile);
-    } else {
-      logger.error("Get chunkIds times out");
-    }
+//    printWriter.close();
+//    if (succeed) {
+//      logger.info("ChunckIds are written into file: " + options.outPutFile);
+//    } else {
+//      logger.error("Get chunkIds times out");
+//    }
   }
 
   private static class InvocationOptions {
@@ -111,6 +114,7 @@ public class GetChunkIdTool {
     public final String routerPropsFilePath;
     public final String blobIdsFilePath;
     public final String outPutFile;
+    public final String errorFile;
     public final String hostName;
     public final int port;
     public final boolean enabledVerboseLogging;
@@ -149,6 +153,10 @@ public class GetChunkIdTool {
           .withRequiredArg()
           .describedAs("outPutFile")
           .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> errorFile = parser.accepts("errorFile", "The blob Id failed to get chunk Ids")
+          .withRequiredArg()
+          .describedAs("errorFile")
+          .ofType(String.class);
       ArgumentAcceptingOptionSpec<String> hostNameOpt =
           parser.accepts("hostName", "The hostname against which requests are to be made")
               .withOptionalArg()
@@ -173,6 +181,8 @@ public class GetChunkIdTool {
       requiredArgs.add(partitionLayoutFilePath);
       requiredArgs.add(routerPropsFilePathOpt);
       requiredArgs.add(blobIdsFilePath);
+      requiredArgs.add(outPutFile);
+      requiredArgs.add(errorFile);
 
       OptionSet options = parser.parse(args);
       if (hasRequiredOptions(requiredArgs, options)) {
@@ -186,6 +196,8 @@ public class GetChunkIdTool {
         logger.trace("Blob Ids file path: {}", this.blobIdsFilePath);
         this.outPutFile = options.valueOf(outPutFile);
         logger.trace("Output file name: {}", this.outPutFile);
+        this.errorFile = options.valueOf(errorFile);
+        logger.trace("Error file name: {}", this.errorFile);
       } else {
         parser.printHelpOn(System.err);
         throw new InstantiationException("Did not receive all required arguments for starting RestServer");
