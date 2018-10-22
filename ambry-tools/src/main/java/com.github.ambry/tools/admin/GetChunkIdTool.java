@@ -98,7 +98,7 @@ public class GetChunkIdTool {
             stringBuilder.append("\n");
             chunkWriter.print(stringBuilder.toString());
           } else {
-            simpleWriter.print(blobId);
+            simpleWriter.println(blobId);
           }
         } catch (ExecutionException e) {
           errorWriter.print(blobId + ": " + e.getCause().getMessage());

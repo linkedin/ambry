@@ -1168,8 +1168,6 @@ class GetBlobOperation extends GetOperation {
     private void handleSimpleBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
       totalSize = blobData.getSize();
       chunkSize = totalSize;
-      System.out.println("[GetBlobOperation] handleSimpleBlob");
-      System.out.println("[GetBlobOperation] totalSize = " + totalSize);
       boolean rangeResolutionFailure = false;
       if (encryptionKey == null) {
         rangeResolutionFailure = resolveRange(totalSize);
