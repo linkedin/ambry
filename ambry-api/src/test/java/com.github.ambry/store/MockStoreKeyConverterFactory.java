@@ -105,7 +105,12 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
           }
         }
       }
-      lastConverted = output;
+      //conversion gets added to cache
+      if (lastConverted == null) {
+        lastConverted = output;
+      } else {
+        lastConverted.putAll(output);
+      }
       return output;
     }
 
