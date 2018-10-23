@@ -677,6 +677,7 @@ class ReplicaThread implements Runnable {
           }
         }
       }
+      storeKeyConverter.dropCache();
       return storeKeyConverter.convert(storeKeysToConvert);
     } catch (Exception e) {
       throw new IOException("Problem with store key conversion", e);

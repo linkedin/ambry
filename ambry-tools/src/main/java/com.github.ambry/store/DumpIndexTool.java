@@ -578,6 +578,7 @@ public class DumpIndexTool {
       }
     }
     logger.info("Converting {} store keys...", storeKeys.size());
+    storeKeyConverter.dropCache();
     Map<StoreKey, StoreKey> ans = storeKeyConverter.convert(storeKeys);
     logger.info("Store keys converted!");
     return ans;

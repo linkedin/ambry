@@ -1004,6 +1004,11 @@ class RandomKeyConverter implements StoreKeyConverter {
   public StoreKey getConverted(StoreKey storeKey) {
     return onceConverted.get(storeKey);
   }
+
+  @Override
+  public void dropCache() {
+    onceConverted = null;
+  }
 }
 
 /**
