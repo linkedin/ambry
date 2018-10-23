@@ -45,4 +45,9 @@ public interface StoreKeyConverter {
    * @return the previously converted storeKey
    */
   StoreKey getConverted(StoreKey storeKey);
+
+  /**
+   * Drops the cache reference used by {@link StoreKeyConverter}
+   */
+  void dropCache();
 }

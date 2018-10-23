@@ -37,4 +37,9 @@ class StoreKeyConverterImplNoOp implements StoreKeyConverter {
   public StoreKey getConverted(StoreKey storeKey) {
     return storeKey;
   }
+
+  @Override
+  public void dropCache() {
+    //no-op
+  }
 }

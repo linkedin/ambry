@@ -118,5 +118,10 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
       }
       return lastConverted.get(storeKey);
     }
+
+    @Override
+    public void dropCache() {
+      lastConverted = null;
+    }
   }
 }
