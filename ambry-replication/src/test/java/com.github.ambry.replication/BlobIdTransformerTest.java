@@ -134,15 +134,29 @@ public class BlobIdTransformerTest {
 
   /**
    * Tests that correct exception is made when transformation is attempted
-   * on a deprecated data chunk
+   * on a metadata chunk with a deprecated data chunk
    * @throws IOException
    * @throws MessageFormatException
    */
   @Test
-  public void testBrokenMetaDataBlobOperation() throws IOException, MessageFormatException {
+  public void testBrokenDeprecatedMetaDataBlobOperation() throws IOException, MessageFormatException {
     InputAndExpected inputAndExpected =
         new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
-            ChunkTypes.IS_BROKEN_METADATA);
+            ChunkTypes.IS_BROKEN_METADATA_NULL);
+    assertException(transformer.transform(inputAndExpected.getInput()), IllegalStateException.class);
+  }
+
+  /**
+   * Tests that correct exception is made when transformation is attempted
+   * on a changed metadata chunk with an unchanged data chunk
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  @Test
+  public void testBrokenSameMetaDataBlobOperation() throws IOException, MessageFormatException {
+    InputAndExpected inputAndExpected =
+        new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
+            ChunkTypes.IS_BROKEN_METADATA_SAME);
     assertException(transformer.transform(inputAndExpected.getInput()), IllegalStateException.class);
   }
 
@@ -307,7 +321,7 @@ public class BlobIdTransformerTest {
   }
 
   public enum ChunkTypes {
-    IS_METADATA, IS_DATA, IS_BROKEN_METADATA, IS_METADATA_EXPECTED;
+    IS_METADATA, IS_DATA, IS_BROKEN_METADATA_NULL, IS_BROKEN_METADATA_SAME, IS_METADATA_EXPECTED;
   }
 
   /**
@@ -387,8 +401,14 @@ public class BlobIdTransformerTest {
           blobStream = new ByteBufferInputStream(byteBuffer);
           blobType = BlobType.MetadataBlob;
           break;
-        case IS_BROKEN_METADATA:
-          byteBuffer = createBrokenMetadataByteBuffer();
+        case IS_BROKEN_METADATA_NULL:
+          byteBuffer = createBrokenDeprecatedMetadataByteBuffer();
+          blobStreamSize = byteBuffer.remaining();
+          blobStream = new ByteBufferInputStream(byteBuffer);
+          blobType = BlobType.MetadataBlob;
+          break;
+        case IS_BROKEN_METADATA_SAME:
+          byteBuffer = createBrokenSameMetadataByteBuffer();
           blobStreamSize = byteBuffer.remaining();
           blobStream = new ByteBufferInputStream(byteBuffer);
           blobType = BlobType.MetadataBlob;
@@ -471,9 +491,13 @@ public class BlobIdTransformerTest {
           BLOB_ID_PAIR_VERSION_2_CONVERTED.getFirst());
     }
 
-    private ByteBuffer createBrokenMetadataByteBuffer() throws IOException {
+    private ByteBuffer createBrokenDeprecatedMetadataByteBuffer() throws IOException {
       return createMetadataByteBuffer(BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst(),
           BLOB_ID_PAIR_VERSION_3_NULL.getFirst());
+    }
+
+    private ByteBuffer createBrokenSameMetadataByteBuffer() throws IOException {
+      return createMetadataByteBuffer(BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst(), VERSION_3_UNCONVERTED);
     }
 
     private ByteBuffer createExpectedMetadataByteBuffer() throws IOException {
