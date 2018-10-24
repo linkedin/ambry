@@ -171,7 +171,16 @@ public class BlobIdTransformer implements Transformer {
         for (StoreKey oldKey : compositeBlobInfo.getKeys()) {
           StoreKey newDataChunkKey = convertedKeys.get(oldKey);
           if (newDataChunkKey == null) {
-            throw new IllegalStateException("Found metadata chunk with a deprecated data chunk");
+            throw new IllegalStateException("Found metadata chunk with a deprecated data chunk. "
+                + " Old MetadataID: "+oldMessageInfo.getStoreKey().getID()
+                + " New MetadataID: "+newKey.getID()
+                + " Old Datachunk ID: "+oldKey.getID());
+          }
+          if (newDataChunkKey.getID().equals(oldKey.getID())) {
+            throw new IllegalStateException("Found changed metadata chunk with an unchanged data chunk"
+                + " Old MetadataID: "+oldMessageInfo.getStoreKey().getID()
+                + " New MetadataID: "+newKey.getID()
+                + " Old Datachunk ID: "+oldKey.getID());
           }
           newKeys.add(newDataChunkKey);
         }
