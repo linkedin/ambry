@@ -364,9 +364,10 @@ class PutOperation {
     long chunkSize = chunkInfo.getChunkSizeInBytes();
     long chunkExpirationTimeInMs = chunkInfo.getExpirationTimeInMs();
 
-    if (chunkSize == 0 || (lastChunk ? chunkSize > intermediateChunkSize : chunkSize != intermediateChunkSize)) {
-      throw new RouterException("Invalid chunkSize: " + chunkSize + "; intermediateChunkSize: " + intermediateChunkSize,
-          RouterErrorCode.InvalidPutArgument);
+    if (chunkSize == 0 || chunkSize > intermediateChunkSize || (!lastChunk && chunkSize < intermediateChunkSize)) {
+      throw new RouterException(
+          "Invalid chunkSize for " + (lastChunk ? "last" : "intermediate") + " chunk: " + chunkSize
+              + "; intermediateChunkSize: " + intermediateChunkSize, RouterErrorCode.InvalidPutArgument);
     }
 
     long metadataExpirationTimeInMs = Utils.addSecondsToEpochTime(passedInBlobProperties.getCreationTimeInMs(),
@@ -812,7 +813,6 @@ class PutOperation {
     boolean operationFailed = blobId == null || getOperationException() != null;
     return operationFailed || metadataPutChunk.indexToChunkIds.size() > 1 || isStitchOperation();
   }
-
 
   /**
    * @return {@code true} if this is a blob stitching operation instead of a standard upload.

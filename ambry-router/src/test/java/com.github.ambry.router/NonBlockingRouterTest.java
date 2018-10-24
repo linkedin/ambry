@@ -721,6 +721,8 @@ public class NonBlockingRouterTest {
             .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         assertTrue("Blob properties must be the same",
             RouterTestHelpers.haveEquivalentFields(putBlobProperties, getBlobResult.getBlobInfo().getBlobProperties()));
+        assertEquals("Unexpected blob size", expectedContent.length,
+            getBlobResult.getBlobInfo().getBlobProperties().getBlobSize());
         assertArrayEquals("User metadata must be the same", putUserMetadata,
             getBlobResult.getBlobInfo().getUserMetadata());
         RouterTestHelpers.compareContent(expectedContent, null, getBlobResult.getBlobDataChannel());

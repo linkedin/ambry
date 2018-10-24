@@ -164,7 +164,7 @@ class PutManager {
   }
 
   /**
-   * Submit a put blob operation to be processed asynchronously.
+   * Submit a stitch blob operation to be processed asynchronously.
    * @param blobProperties the blobProperties associated with the blob being put.
    * @param userMetaData the userMetaData associated with the blob being put.
    * @param chunksToStitch the list of chunks to stitch together.

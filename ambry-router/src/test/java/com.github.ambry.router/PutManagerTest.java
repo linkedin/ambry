@@ -146,7 +146,7 @@ public class PutManagerTest {
     if (router != null) {
       if (router.isOpen()) {
         try {
-          Assert.fail("Router should be closed at the end of each test");
+//          Assert.fail("Router should be closed at the end of each test");
         } finally {
           router.close();
         }
@@ -206,6 +206,57 @@ public class PutManagerTest {
     }
   }
 
+  /**
+   * Test success cases with various {@link PutBlobOptions} set.
+   */
+  @Test
+  public void testOptionsSuccess() throws Exception {
+    ThrowingConsumer<RequestAndResult> runTest = requestAndResult -> {
+      requestAndResultsList.clear();
+      requestAndResultsList.add(requestAndResult);
+      mockClusterMap.clearLastNRequestedPartitionClasses();
+      submitPutsAndAssertSuccess(true);
+    };
+    runTest.accept(new RequestAndResult(chunkSize, null,
+        new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(chunkSize).build(), null));
+    runTest.accept(new RequestAndResult(chunkSize - 1, null,
+        new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(chunkSize - 1).build(), null));
+    runTest.accept(
+        new RequestAndResult(chunkSize + 1, null, new PutBlobOptionsBuilder().maxUploadSize(2 * chunkSize - 1).build(),
+            null));
+    runTest.accept(new RequestAndResult(0, null, new PutBlobOptionsBuilder().maxUploadSize(0).build(), null));
+  }
+
+  /**
+   * Test failure cases with various {@link PutBlobOptions} set.
+   */
+  @Test
+  public void testOptionsFailures() throws Exception {
+    ThrowingConsumer<Pair<RequestAndResult, RouterErrorCode>> runTest = requestAndErrorCode -> {
+      requestAndResultsList.clear();
+      requestAndResultsList.add(requestAndErrorCode.getFirst());
+      mockClusterMap.clearLastNRequestedPartitionClasses();
+      submitPutsAndAssertFailure(new RouterException("", requestAndErrorCode.getSecond()), true, false, false);
+    };
+    runTest.accept(new Pair<>(new RequestAndResult(chunkSize, null,
+        new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(chunkSize + 1).build(), null),
+        RouterErrorCode.InvalidPutArgument));
+    runTest.accept(new Pair<>(new RequestAndResult(chunkSize + 1, null,
+        new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(chunkSize).build(), null),
+        RouterErrorCode.BlobTooLarge));
+    runTest.accept(new Pair<>(new RequestAndResult(2, null, new PutBlobOptionsBuilder().maxUploadSize(1).build(), null),
+        RouterErrorCode.BlobTooLarge));
+    runTest.accept(new Pair<>(
+        new RequestAndResult(2 * chunkSize, null, new PutBlobOptionsBuilder().maxUploadSize(2 * chunkSize - 1).build(),
+            null), RouterErrorCode.BlobTooLarge));
+    runTest.accept(
+        new Pair<>(new RequestAndResult(0, null, new PutBlobOptionsBuilder().maxUploadSize(-1).build(), null),
+            RouterErrorCode.BlobTooLarge));
+  }
+
+  /**
+   * Test different cases where a stitch operation should succeed.
+   */
   @Test
   public void testStitchBlobSuccess() throws Exception {
     ThrowingConsumer<List<ChunkInfo>> runTest = chunksToStitch -> {
@@ -308,11 +359,10 @@ public class PutManagerTest {
     instantiateNewRouterForPuts = false;
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(req.putContent));
     Future future =
-        router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-            (result, exception) -> {
-              callbackCalled.countDown();
-              throw new RuntimeException("Throwing an exception in the user callback");
-            });
+        router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, req.options, (result, exception) -> {
+          callbackCalled.countDown();
+          throw new RuntimeException("Throwing an exception in the user callback");
+        });
     submitPutsAndAssertSuccess(false);
     //future.get() for operation with bad callback should still succeed
     future.get();
@@ -619,7 +669,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, sendZeroSizedBuffers);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, new PutBlobOptionsBuilder().build(), null);
+            putChannel, requestAndResult.options, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     pushWithDelay(src, putChannel, blobSize, future);
     future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
@@ -639,7 +689,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, new PutBlobOptionsBuilder().build(), null);
+            putChannel, requestAndResult.options, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
 
     //Make the channel act bad.
@@ -695,7 +745,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, new PutBlobOptionsBuilder().build(), null);
+            putChannel, requestAndResult.options, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     // There will be two chunks written to the underlying writable channel, and so two events will be fired.
     int writeSize = blobSize / 2;
@@ -756,7 +806,9 @@ public class PutManagerTest {
     for (Map.Entry<Integer, Integer> sizeAndChunkCount : sizeToChunkCount.entrySet()) {
       for (Map.Entry<Container, String> containerAndPartClass : containerToPartClass.entrySet()) {
         requestAndResultsList.clear();
-        requestAndResultsList.add(new RequestAndResult(sizeAndChunkCount.getKey(), containerAndPartClass.getKey()));
+        requestAndResultsList.add(
+            new RequestAndResult(sizeAndChunkCount.getKey(), containerAndPartClass.getKey(), PutBlobOptions.DEFAULT,
+                null));
         mockClusterMap.clearLastNRequestedPartitionClasses();
         submitPutsAndAssertSuccess(true);
         // since the puts are processed one at a time, it is fair to check the last partition class set
@@ -768,7 +820,7 @@ public class PutManagerTest {
     String nonExistentClass = UtilsTest.getRandomString(3);
     accountService.addReplicationPolicyToContainer(container, nonExistentClass);
     requestAndResultsList.clear();
-    requestAndResultsList.add(new RequestAndResult(chunkSize, container));
+    requestAndResultsList.add(new RequestAndResult(chunkSize, container, PutBlobOptions.DEFAULT, null));
     mockClusterMap.clearLastNRequestedPartitionClasses();
     submitPutsAndAssertFailure(new RouterException("", RouterErrorCode.UnexpectedInternalError), true, false, false);
     // because of how the non-encrypted flow is, prepareForSending() may be called twice. So not checking for count
@@ -909,7 +961,7 @@ public class PutManagerTest {
               new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
           if (requestAndResult.chunksToStitch == null) {
             requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null);
+                requestAndResult.putUserMetadata, putChannel, requestAndResult.options, null);
           } else {
             requestAndResult.result = (FutureResult<String>) router.stitchBlob(requestAndResult.putBlobProperties,
                 requestAndResult.putUserMetadata, requestAndResult.chunksToStitch, null);
@@ -1023,7 +1075,8 @@ public class PutManagerTest {
             requestAndResult.putUserMetadata, dataBlobIds, request, serializedRequests);
       }
     } else {
-      notificationBlobType = NotificationBlobType.Simple;
+      notificationBlobType =
+          requestAndResult.options.isChunkUpload() ? NotificationBlobType.DataChunk : NotificationBlobType.Simple;
       // TODO: Currently, we don't have the logic to distinguish Simple vs DataChunk for the first chunk
       // Once the logic is fixed we should assert Simple.
       BlobDataType dataType = origBlobId.getBlobDataType();
@@ -1208,19 +1261,19 @@ public class PutManagerTest {
     BlobProperties putBlobProperties;
     byte[] putUserMetadata;
     byte[] putContent;
+    PutBlobOptions options;
     List<ChunkInfo> chunksToStitch;
     FutureResult<String> result;
 
     RequestAndResult(int blobSize) {
-      this(blobSize, null);
+      this(blobSize, null, PutBlobOptions.DEFAULT, null);
     }
 
     RequestAndResult(List<ChunkInfo> chunksToStitch) {
-      this(0, null);
-      this.chunksToStitch = chunksToStitch;
+      this(0, null, PutBlobOptions.DEFAULT, chunksToStitch);
     }
 
-    RequestAndResult(int blobSize, Container container) {
+    RequestAndResult(int blobSize, Container container, PutBlobOptions options, List<ChunkInfo> chunksToStitch) {
       putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
           container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getParentAccountId(),
           container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getId(), testEncryption);
@@ -1228,6 +1281,8 @@ public class PutManagerTest {
       random.nextBytes(putUserMetadata);
       putContent = new byte[blobSize];
       random.nextBytes(putContent);
+      this.options = options;
+      this.chunksToStitch = chunksToStitch;
       // future result set after the operation is complete.
     }
   }
@@ -1254,7 +1309,7 @@ public class PutManagerTest {
     private void verifyNotification(String blobId, NotificationBlobType expectedNotificationBlobType,
         BlobProperties expectedBlobProperties) {
       List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
-      Assert.assertTrue("Wrong number of events for blobId", events != null && events.size() == 1);
+      Assert.assertTrue("Wrong number of events for blobId: " + events, events != null && events.size() == 1);
       BlobCreatedEvent event = events.get(0);
       assertEquals("NotificationBlobType does not match data in notification event.", expectedNotificationBlobType,
           event.notificationBlobType);
