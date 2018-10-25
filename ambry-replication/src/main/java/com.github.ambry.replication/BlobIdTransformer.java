@@ -176,8 +176,7 @@ public class BlobIdTransformer implements Transformer {
                 + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID() + " Old Datachunk ID: "
                 + oldKey.getID());
           }
-          if (isOldMetadataKeyDifferentFromNew && newDataChunkKey.getID()
-              .equals(oldKey.getID())) {
+          if (isOldMetadataKeyDifferentFromNew && newDataChunkKey.getID().equals(oldKey.getID())) {
             throw new IllegalStateException(
                 "Found changed metadata chunk with an unchanged data chunk" + " Old MetadataID: "
                     + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID()
