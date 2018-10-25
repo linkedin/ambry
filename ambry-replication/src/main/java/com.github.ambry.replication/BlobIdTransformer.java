@@ -168,6 +168,7 @@ public class BlobIdTransformer implements Transformer {
             MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, storeKeyFactory);
         Map<StoreKey, StoreKey> convertedKeys = storeKeyConverter.convert(compositeBlobInfo.getKeys());
         List<StoreKey> newKeys = new ArrayList<>();
+        boolean isOldMetadataKeyDifferentFromNew = !oldMessageInfo.getStoreKey().getID().equals(newKey.getID());
         for (StoreKey oldKey : compositeBlobInfo.getKeys()) {
           StoreKey newDataChunkKey = convertedKeys.get(oldKey);
           if (newDataChunkKey == null) {
@@ -175,7 +176,7 @@ public class BlobIdTransformer implements Transformer {
                 + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID() + " Old Datachunk ID: "
                 + oldKey.getID());
           }
-          if (!oldMessageInfo.getStoreKey().getID().equals(newKey.getID()) && newDataChunkKey.getID()
+          if (isOldMetadataKeyDifferentFromNew && newDataChunkKey.getID()
               .equals(oldKey.getID())) {
             throw new IllegalStateException(
                 "Found changed metadata chunk with an unchanged data chunk" + " Old MetadataID: "
