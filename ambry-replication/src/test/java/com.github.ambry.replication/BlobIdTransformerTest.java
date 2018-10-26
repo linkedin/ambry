@@ -80,6 +80,18 @@ public class BlobIdTransformerTest {
   public static final String VERSION_3_UNCONVERTED =
       "AAMAAAAAAAAAAAAAAAAAAAAAAAAAJDUyYTk2OWIyLTA3YWMtNDBhMC05ZmY2LTUxY2ZkZjY4NWM4OQ";
 
+  //All these Metadata related pairs have the same
+  //account ID: 313 and the same container ID: 2
+  public static final Pair<String, String> BLOB_ID_VERSION_1_METADATA_CONVERTED =
+      new Pair<>("AAEAAQAAAAAAAABSAAAAJGQ2YjM0YzI2LWU0MjMtNGNkNC1iMGZhLTU5Yzc2YmVhZjk2ZA",
+          "AAMB_wE5AAIAAQAAAAAAAABSAAAAJGQ2YjM0YzI2LWU0MjMtNGNkNC1iMGZhLTU5Yzc2YmVhZjk2ZA");
+  public static final Pair<String, String> BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED =
+      new Pair<>("AAEAAQAAAAAAAABlAAAAJDJjNzhmYTYxLTlhZDQtNDg2YS1iZTZkLWFlMGE0ODNjNTI2YQ",
+          "AAMB_wE5AAIAAQAAAAAAAABlAAAAJDJjNzhmYTYxLTlhZDQtNDg2YS1iZTZkLWFlMGE0ODNjNTI2YQ");
+  public static final Pair<String, String> BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED =
+      new Pair<>("AAEAAQAAAAAAAAAkAAAAJGQyZmYxMDE5LTBmMDQtNDEwNi05NDBjLWY5ZTgwYTU2ZmY1YQ",
+          "AAMB_wE5AAIAAQAAAAAAAAAkAAAAJGQyZmYxMDE5LTBmMDQtNDEwNi05NDBjLWY5ZTgwYTU2ZmY1YQ");
+
   private static final Class[] VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS =
       new Class[]{PutMessageFormatInputStream.class, PutMessageFormatBlobV1InputStream.class};
 
@@ -89,7 +101,7 @@ public class BlobIdTransformerTest {
    */
   public BlobIdTransformerTest() throws Exception {
     Pair<String, String>[] pairs =
-        new Pair[]{BLOB_ID_PAIR_VERSION_1_CONVERTED, BLOB_ID_PAIR_VERSION_2_CONVERTED, BLOB_ID_PAIR_VERSION_3_CONVERTED, BLOB_ID_PAIR_VERSION_3_NULL};
+        new Pair[]{BLOB_ID_PAIR_VERSION_1_CONVERTED, BLOB_ID_PAIR_VERSION_2_CONVERTED, BLOB_ID_PAIR_VERSION_3_CONVERTED, BLOB_ID_PAIR_VERSION_3_NULL, BLOB_ID_VERSION_1_METADATA_CONVERTED, BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED, BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED};
     factory = new MockStoreKeyConverterFactory(null, null);
     factory.setReturnInputIfAbsent(true);
     StoreKeyConverter storeKeyConverter = createAndSetupMockStoreKeyConverter(factory, pairs);
@@ -125,8 +137,9 @@ public class BlobIdTransformerTest {
   @Test
   public void testMetaDataBlobOperation() throws IOException, MessageFormatException {
     InputAndExpected inputAndExpected =
-        new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
-            ChunkTypes.IS_METADATA);
+        new InputAndExpected(pairList.get(4), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
+            new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getFirst(), BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getFirst()},
+            new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getSecond(), BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getSecond()});
     TransformationOutput output = transformer.transform(inputAndExpected.getInput());
     assertNull("output exception should be null", output.getException());
     verifyOutput(output.getMsg(), inputAndExpected.getExpected());
@@ -142,7 +155,7 @@ public class BlobIdTransformerTest {
   public void testBrokenDeprecatedMetaDataBlobOperation() throws IOException, MessageFormatException {
     InputAndExpected inputAndExpected =
         new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
-            ChunkTypes.IS_BROKEN_METADATA_NULL);
+            new String[]{BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst(), BLOB_ID_PAIR_VERSION_3_NULL.getFirst()}, null);
     assertException(transformer.transform(inputAndExpected.getInput()), IllegalStateException.class);
   }
 
@@ -156,7 +169,7 @@ public class BlobIdTransformerTest {
   public void testBrokenSameMetaDataBlobOperation() throws IOException, MessageFormatException {
     InputAndExpected inputAndExpected =
         new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
-            ChunkTypes.IS_BROKEN_METADATA_SAME);
+            new String[]{BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst(), VERSION_3_UNCONVERTED}, null);
     assertException(transformer.transform(inputAndExpected.getInput()), IllegalStateException.class);
   }
 
@@ -320,10 +333,6 @@ public class BlobIdTransformerTest {
         exceptionClass.isInstance(transformationOutput.getException()));
   }
 
-  public enum ChunkTypes {
-    IS_METADATA, IS_DATA, IS_BROKEN_METADATA_NULL, IS_BROKEN_METADATA_SAME, IS_METADATA_EXPECTED;
-  }
-
   /**
    * Creates a random Message input and a related expected Message output
    */
@@ -346,25 +355,22 @@ public class BlobIdTransformerTest {
      */
     InputAndExpected(Pair<String, String> pair, Class clazz, boolean divergeInfoFromData)
         throws IOException, MessageFormatException {
-      this(pair, clazz, divergeInfoFromData, ChunkTypes.IS_DATA);
+      this(pair, clazz, divergeInfoFromData, null, null);
     }
 
-    InputAndExpected(Pair<String, String> pair, Class clazz, boolean divergeInfoFromData, ChunkTypes chunkType)
-        throws IOException, MessageFormatException {
+    InputAndExpected(Pair<String, String> pair, Class clazz, boolean divergeInfoFromData, String[] dataChunkIdsInput,
+        String[] dataChunkIdsExpected) throws IOException, MessageFormatException {
       boolean hasEncryption = clazz == PutMessageFormatInputStream.class;
       Long crcInput = buildRandom.nextLong();
-      input = buildMessage(pair.getFirst(), clazz, hasEncryption, crcInput, divergeInfoFromData, chunkType);
+      input = buildMessage(pair.getFirst(), clazz, hasEncryption, crcInput, divergeInfoFromData, dataChunkIdsInput);
       if (pair.getSecond() == null) {
         //can't just assign 'input' since Message has an
         //InputStream that is modified when read
         expected = null;//buildMessage(pair.getFirst(), PutMessageFormatInputStream.class, hasEncryption);
       } else {
         Long crcExpected = pair.getSecond().equals(pair.getFirst()) ? crcInput : null;
-        if (chunkType == ChunkTypes.IS_METADATA) {
-          chunkType = ChunkTypes.IS_METADATA_EXPECTED;
-        }
         expected = buildMessage(pair.getSecond(), PutMessageFormatInputStream.class, hasEncryption, crcExpected,
-            divergeInfoFromData, chunkType);
+            divergeInfoFromData, dataChunkIdsExpected);
       }
     }
 
@@ -387,43 +393,24 @@ public class BlobIdTransformerTest {
     }
 
     private Message buildMessage(String blobIdString, Class clazz, boolean hasEncryption, Long crcInMsgInfo,
-        boolean divergeInfoFromData, ChunkTypes chunkType) throws IOException, MessageFormatException {
+        boolean divergeInfoFromData, String... dataChunkIds) throws IOException, MessageFormatException {
       buildRandom = new Random(randomStaticSeed);
 
+      //If there are datachunks, it's a metadata blob.
+      //If not, its a data blob
       InputStream blobStream;
       long blobStreamSize;
       ByteBuffer byteBuffer;
       BlobType blobType;
-      switch (chunkType) {
-        case IS_METADATA:
-          byteBuffer = createInputMetadataByteBuffer();
-          blobStreamSize = byteBuffer.remaining();
-          blobStream = new ByteBufferInputStream(byteBuffer);
-          blobType = BlobType.MetadataBlob;
-          break;
-        case IS_BROKEN_METADATA_NULL:
-          byteBuffer = createBrokenDeprecatedMetadataByteBuffer();
-          blobStreamSize = byteBuffer.remaining();
-          blobStream = new ByteBufferInputStream(byteBuffer);
-          blobType = BlobType.MetadataBlob;
-          break;
-        case IS_BROKEN_METADATA_SAME:
-          byteBuffer = createBrokenSameMetadataByteBuffer();
-          blobStreamSize = byteBuffer.remaining();
-          blobStream = new ByteBufferInputStream(byteBuffer);
-          blobType = BlobType.MetadataBlob;
-          break;
-        case IS_METADATA_EXPECTED:
-          byteBuffer = createExpectedMetadataByteBuffer();
-          blobStreamSize = byteBuffer.remaining();
-          blobStream = new ByteBufferInputStream(byteBuffer);
-          blobType = BlobType.MetadataBlob;
-          break;
-        default: //IS_DATA
-          blobStreamSize = BLOB_STREAM_SIZE;
-          blobStream = createBlobStream();
-          blobType = BlobType.DataBlob;
-          break;
+      if (dataChunkIds == null) {
+        blobStreamSize = BLOB_STREAM_SIZE;
+        blobStream = createBlobStream();
+        blobType = BlobType.DataBlob;
+      } else {
+        byteBuffer = createMetadataByteBuffer(dataChunkIds);
+        blobStreamSize = byteBuffer.remaining();
+        blobStream = new ByteBufferInputStream(byteBuffer);
+        blobType = BlobType.MetadataBlob;
       }
 
       BlobId blobId = createBlobId(blobIdString);
@@ -476,6 +463,12 @@ public class BlobIdTransformerTest {
       return new ByteArrayInputStream(randomByteArray(BLOB_STREAM_SIZE));
     }
 
+    /**
+     * Creates metadata blob data buffer from supplied datachunkIds
+     * @param datachunkIds
+     * @return
+     * @throws IOException
+     */
     private ByteBuffer createMetadataByteBuffer(String... datachunkIds) throws IOException {
       List<StoreKey> storeKeys = new ArrayList<>();
       for (String datachunkId : datachunkIds) {
@@ -484,25 +477,6 @@ public class BlobIdTransformerTest {
       ByteBuffer output = MetadataContentSerDe.serializeMetadataContent(4000000, 8000000, storeKeys);
       output.flip();
       return output;
-    }
-
-    private ByteBuffer createInputMetadataByteBuffer() throws IOException {
-      return createMetadataByteBuffer(BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst(),
-          BLOB_ID_PAIR_VERSION_2_CONVERTED.getFirst());
-    }
-
-    private ByteBuffer createBrokenDeprecatedMetadataByteBuffer() throws IOException {
-      return createMetadataByteBuffer(BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst(),
-          BLOB_ID_PAIR_VERSION_3_NULL.getFirst());
-    }
-
-    private ByteBuffer createBrokenSameMetadataByteBuffer() throws IOException {
-      return createMetadataByteBuffer(BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst(), VERSION_3_UNCONVERTED);
-    }
-
-    private ByteBuffer createExpectedMetadataByteBuffer() throws IOException {
-      return createMetadataByteBuffer(BLOB_ID_PAIR_VERSION_3_CONVERTED.getSecond(),
-          BLOB_ID_PAIR_VERSION_2_CONVERTED.getSecond());
     }
   }
 

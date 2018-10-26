@@ -151,11 +151,6 @@ public class BlobIdTransformer implements Transformer {
         blobEncryptionKey = deserializeBlobEncryptionKey(inputStream);
       }
       BlobProperties oldProperties = deserializeBlobProperties(inputStream);
-      BlobProperties newProperties =
-          new BlobProperties(oldProperties.getBlobSize(), oldProperties.getServiceId(), oldProperties.getOwnerId(),
-              oldProperties.getContentType(), oldProperties.isPrivate(), oldProperties.getTimeToLiveInSeconds(),
-              oldProperties.getCreationTimeInMs(), newBlobId.getAccountId(), newBlobId.getContainerId(),
-              oldProperties.isEncrypted());
       ByteBuffer userMetaData = deserializeUserMetadata(inputStream);
       BlobData blobData = deserializeBlob(inputStream);
       ByteBufferInputStream blobDataBytes = blobData.getStream();
@@ -169,6 +164,8 @@ public class BlobIdTransformer implements Transformer {
         Map<StoreKey, StoreKey> convertedKeys = storeKeyConverter.convert(compositeBlobInfo.getKeys());
         List<StoreKey> newKeys = new ArrayList<>();
         boolean isOldMetadataKeyDifferentFromNew = !oldMessageInfo.getStoreKey().getID().equals(newKey.getID());
+        short metadataAccountId = newBlobId.getAccountId();
+        short metadataContainerId = newBlobId.getContainerId();
         for (StoreKey oldKey : compositeBlobInfo.getKeys()) {
           StoreKey newDataChunkKey = convertedKeys.get(oldKey);
           if (newDataChunkKey == null) {
@@ -182,13 +179,31 @@ public class BlobIdTransformer implements Transformer {
                     + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID()
                     + " Old Datachunk ID: " + oldKey.getID());
           }
+          BlobId newDataChunkBlobId = (BlobId) newDataChunkKey;
+          if (newDataChunkBlobId.getAccountId() != metadataAccountId
+              || newDataChunkBlobId.getContainerId() != metadataContainerId) {
+            throw new IllegalStateException(
+                "Found changed metadata chunk with a datachunk with a different account/container" + " Old MetadataID: "
+                    + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID()
+                    + " Old Datachunk ID: " + oldKey.getID() + " New Datachunk ID: " + newDataChunkBlobId.getID()
+                    + " Metadata AccountId: " + metadataAccountId + " Metadata ContainerId: " + metadataContainerId
+                    + " Datachunk AccountId: " + newDataChunkBlobId.getAccountId() + " Datachunk ContainerId: "
+                    + newDataChunkBlobId.getContainerId());
+          }
           newKeys.add(newDataChunkKey);
         }
         ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContent(compositeBlobInfo.getChunkSize(),
             compositeBlobInfo.getTotalSize(), newKeys);
         metadataContent.flip();
         blobDataBytes = new ByteBufferInputStream(metadataContent);
+        blobData = new BlobData(blobData.getBlobType(), metadataContent.remaining(), blobDataBytes);
       }
+
+      BlobProperties newProperties =
+          new BlobProperties(blobData.getSize(), oldProperties.getServiceId(), oldProperties.getOwnerId(),
+              oldProperties.getContentType(), oldProperties.isPrivate(), oldProperties.getTimeToLiveInSeconds(),
+              oldProperties.getCreationTimeInMs(), newBlobId.getAccountId(), newBlobId.getContainerId(),
+              oldProperties.isEncrypted());
 
       PutMessageFormatInputStream putMessageFormatInputStream =
           new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData, blobDataBytes,
