@@ -166,24 +166,25 @@ public class BlobIdTransformer implements Transformer {
         boolean isOldMetadataKeyDifferentFromNew = !oldMessageInfo.getStoreKey().getID().equals(newKey.getID());
         short metadataAccountId = newBlobId.getAccountId();
         short metadataContainerId = newBlobId.getContainerId();
-        for (StoreKey oldKey : compositeBlobInfo.getKeys()) {
-          StoreKey newDataChunkKey = convertedKeys.get(oldKey);
+        for (StoreKey oldDataChunkKey : compositeBlobInfo.getKeys()) {
+          StoreKey newDataChunkKey = convertedKeys.get(oldDataChunkKey);
           if (newDataChunkKey == null) {
             throw new IllegalStateException("Found metadata chunk with a deprecated data chunk. " + " Old MetadataID: "
                 + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID() + " Old Datachunk ID: "
-                + oldKey.getID());
+                + oldDataChunkKey.getID());
           }
-          if (isOldMetadataKeyDifferentFromNew && newDataChunkKey.getID().equals(oldKey.getID())) {
+          if (isOldMetadataKeyDifferentFromNew && newDataChunkKey.getID().equals(oldDataChunkKey.getID())) {
             throw new IllegalStateException(
                 "Found changed metadata chunk with an unchanged data chunk" + " Old MetadataID: "
                     + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID()
-                    + " Old Datachunk ID: " + oldKey.getID());
+                    + " Old Datachunk ID: " + oldDataChunkKey.getID());
           }
-          if (!isOldMetadataKeyDifferentFromNew && !newDataChunkKey.getID().equals(oldKey.getID())) {
+          if (!isOldMetadataKeyDifferentFromNew && !newDataChunkKey.getID().equals(oldDataChunkKey.getID())) {
             throw new IllegalStateException(
                 "Found unchanged metadata chunk with a changed data chunk" + " Old MetadataID: "
                     + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID()
-                    + " Old Datachunk ID: " + oldKey.getID() + " New Datachunk ID: " + newDataChunkKey.getID());
+                    + " Old Datachunk ID: " + oldDataChunkKey.getID() + " New Datachunk ID: "
+                    + newDataChunkKey.getID());
           }
           BlobId newDataChunkBlobId = (BlobId) newDataChunkKey;
           if (newDataChunkBlobId.getAccountId() != metadataAccountId
@@ -191,9 +192,10 @@ public class BlobIdTransformer implements Transformer {
             throw new IllegalStateException(
                 "Found changed metadata chunk with a datachunk with a different account/container" + " Old MetadataID: "
                     + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID()
-                    + " Old Datachunk ID: " + oldKey.getID() + " New Datachunk ID: " + newDataChunkBlobId.getID()
-                    + " Metadata AccountId: " + metadataAccountId + " Metadata ContainerId: " + metadataContainerId
-                    + " Datachunk AccountId: " + newDataChunkBlobId.getAccountId() + " Datachunk ContainerId: "
+                    + " Old Datachunk ID: " + oldDataChunkKey.getID() + " New Datachunk ID: "
+                    + newDataChunkBlobId.getID() + " Metadata AccountId: " + metadataAccountId
+                    + " Metadata ContainerId: " + metadataContainerId + " Datachunk AccountId: "
+                    + newDataChunkBlobId.getAccountId() + " Datachunk ContainerId: "
                     + newDataChunkBlobId.getContainerId());
           }
           newKeys.add(newDataChunkKey);
