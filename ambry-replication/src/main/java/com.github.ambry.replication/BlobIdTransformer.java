@@ -16,9 +16,12 @@ package com.github.ambry.replication;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
+import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
@@ -27,12 +30,14 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
@@ -83,6 +88,7 @@ public class BlobIdTransformer implements Transformer {
         storeKeys.add(messageInfo.getStoreKey());
       }
     }
+    storeKeyConverter.dropCache();
     storeKeyConverter.convert(storeKeys);
   }
 
@@ -132,11 +138,9 @@ public class BlobIdTransformer implements Transformer {
    * @param newKey the new StoreKey
    * @param oldMessageInfo the {@link MessageInfo} of the message being transformed
    * @return new Message message
-   * @throws IOException
-   * @throws MessageFormatException
+   * @throws Exception
    */
-  private Message newMessage(InputStream inputStream, StoreKey newKey, MessageInfo oldMessageInfo)
-      throws IOException, MessageFormatException {
+  private Message newMessage(InputStream inputStream, StoreKey newKey, MessageInfo oldMessageInfo) throws Exception {
     MessageHeader_Format headerFormat = getMessageHeader(inputStream);
     storeKeyFactory.getStoreKey(new DataInputStream(inputStream));
     BlobId newBlobId = (BlobId) newKey;
@@ -147,16 +151,70 @@ public class BlobIdTransformer implements Transformer {
         blobEncryptionKey = deserializeBlobEncryptionKey(inputStream);
       }
       BlobProperties oldProperties = deserializeBlobProperties(inputStream);
+      ByteBuffer userMetaData = deserializeUserMetadata(inputStream);
+      BlobData blobData = deserializeBlob(inputStream);
+      ByteBufferInputStream blobDataBytes = blobData.getStream();
+
+      //If the blob is a metadata blob its data chunk id list
+      //will be rewritten with transformed IDs
+      if (blobData.getBlobType().equals(BlobType.MetadataBlob)) {
+        ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
+        CompositeBlobInfo compositeBlobInfo =
+            MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, storeKeyFactory);
+        Map<StoreKey, StoreKey> convertedKeys = storeKeyConverter.convert(compositeBlobInfo.getKeys());
+        List<StoreKey> newKeys = new ArrayList<>();
+        boolean isOldMetadataKeyDifferentFromNew = !oldMessageInfo.getStoreKey().getID().equals(newKey.getID());
+        short metadataAccountId = newBlobId.getAccountId();
+        short metadataContainerId = newBlobId.getContainerId();
+        for (StoreKey oldDataChunkKey : compositeBlobInfo.getKeys()) {
+          StoreKey newDataChunkKey = convertedKeys.get(oldDataChunkKey);
+          if (newDataChunkKey == null) {
+            throw new IllegalStateException("Found metadata chunk with a deprecated data chunk. " + " Old MetadataID: "
+                + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID() + " Old Datachunk ID: "
+                + oldDataChunkKey.getID());
+          }
+          if (isOldMetadataKeyDifferentFromNew && newDataChunkKey.getID().equals(oldDataChunkKey.getID())) {
+            throw new IllegalStateException(
+                "Found changed metadata chunk with an unchanged data chunk" + " Old MetadataID: "
+                    + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID()
+                    + " Old Datachunk ID: " + oldDataChunkKey.getID());
+          }
+          if (!isOldMetadataKeyDifferentFromNew && !newDataChunkKey.getID().equals(oldDataChunkKey.getID())) {
+            throw new IllegalStateException(
+                "Found unchanged metadata chunk with a changed data chunk" + " Old MetadataID: "
+                    + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID()
+                    + " Old Datachunk ID: " + oldDataChunkKey.getID() + " New Datachunk ID: "
+                    + newDataChunkKey.getID());
+          }
+          BlobId newDataChunkBlobId = (BlobId) newDataChunkKey;
+          if (newDataChunkBlobId.getAccountId() != metadataAccountId
+              || newDataChunkBlobId.getContainerId() != metadataContainerId) {
+            throw new IllegalStateException(
+                "Found changed metadata chunk with a datachunk with a different account/container" + " Old MetadataID: "
+                    + oldMessageInfo.getStoreKey().getID() + " New MetadataID: " + newKey.getID()
+                    + " Old Datachunk ID: " + oldDataChunkKey.getID() + " New Datachunk ID: "
+                    + newDataChunkBlobId.getID() + " Metadata AccountId: " + metadataAccountId
+                    + " Metadata ContainerId: " + metadataContainerId + " Datachunk AccountId: "
+                    + newDataChunkBlobId.getAccountId() + " Datachunk ContainerId: "
+                    + newDataChunkBlobId.getContainerId());
+          }
+          newKeys.add(newDataChunkKey);
+        }
+        ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContent(compositeBlobInfo.getChunkSize(),
+            compositeBlobInfo.getTotalSize(), newKeys);
+        metadataContent.flip();
+        blobDataBytes = new ByteBufferInputStream(metadataContent);
+        blobData = new BlobData(blobData.getBlobType(), metadataContent.remaining(), blobDataBytes);
+      }
+
       BlobProperties newProperties =
-          new BlobProperties(oldProperties.getBlobSize(), oldProperties.getServiceId(), oldProperties.getOwnerId(),
+          new BlobProperties(blobData.getSize(), oldProperties.getServiceId(), oldProperties.getOwnerId(),
               oldProperties.getContentType(), oldProperties.isPrivate(), oldProperties.getTimeToLiveInSeconds(),
               oldProperties.getCreationTimeInMs(), newBlobId.getAccountId(), newBlobId.getContainerId(),
               oldProperties.isEncrypted());
-      ByteBuffer userMetaData = deserializeUserMetadata(inputStream);
-      BlobData blobData = deserializeBlob(inputStream);
 
       PutMessageFormatInputStream putMessageFormatInputStream =
-          new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData, blobData.getStream(),
+          new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData, blobDataBytes,
               blobData.getSize(), blobData.getBlobType());
       // Reuse the original CRC if present in the oldMessageInfo. This is important to ensure that messages that are
       // received via replication are sent to the store with proper CRCs (which the store needs to detect duplicate

@@ -1191,6 +1191,7 @@ public class AmbryRequests implements RequestAPI {
    * @return A list of converted storeKeys.
    */
   private List<StoreKey> getConvertedStoreKeys(List<? extends StoreKey> storeKeys) throws Exception {
+    storeKeyConverterFactory.getStoreKeyConverter().dropCache();
     Map<StoreKey, StoreKey> conversionMap = storeKeyConverterFactory.getStoreKeyConverter().convert(storeKeys);
     List<StoreKey> convertedStoreKeys = new ArrayList<>();
     for (StoreKey key : storeKeys) {

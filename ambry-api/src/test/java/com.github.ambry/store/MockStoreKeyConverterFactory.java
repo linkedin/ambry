@@ -105,7 +105,12 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
           }
         }
       }
-      lastConverted = output;
+      //conversion gets added to cache
+      if (lastConverted == null) {
+        lastConverted = output;
+      } else {
+        lastConverted.putAll(output);
+      }
       return output;
     }
 
@@ -117,6 +122,11 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
         throw new IllegalStateException(storeKey + " has not been converted");
       }
       return lastConverted.get(storeKey);
+    }
+
+    @Override
+    public void dropCache() {
+      lastConverted = null;
     }
   }
 }
