@@ -85,12 +85,18 @@ public class BlobIdTransformerTest {
   public static final Pair<String, String> BLOB_ID_VERSION_1_METADATA_CONVERTED =
       new Pair<>("AAEAAQAAAAAAAABSAAAAJGQ2YjM0YzI2LWU0MjMtNGNkNC1iMGZhLTU5Yzc2YmVhZjk2ZA",
           "AAMB_wE5AAIAAQAAAAAAAABSAAAAJGQ2YjM0YzI2LWU0MjMtNGNkNC1iMGZhLTU5Yzc2YmVhZjk2ZA");
+  public static final Pair<String, String> BLOB_ID_VERSION_1_METADATA_UNCONVERTED =
+      new Pair<>("AAEAAQAAAAAAAABiAAAAJGVlM2YzYjFkLTA4NDEtNGZmMS04MGVmLTU4MWM4ZWIwNjkzOQ",
+          "AAEAAQAAAAAAAABiAAAAJGVlM2YzYjFkLTA4NDEtNGZmMS04MGVmLTU4MWM4ZWIwNjkzOQ");
   public static final Pair<String, String> BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED =
       new Pair<>("AAEAAQAAAAAAAABlAAAAJDJjNzhmYTYxLTlhZDQtNDg2YS1iZTZkLWFlMGE0ODNjNTI2YQ",
           "AAMB_wE5AAIAAQAAAAAAAABlAAAAJDJjNzhmYTYxLTlhZDQtNDg2YS1iZTZkLWFlMGE0ODNjNTI2YQ");
   public static final Pair<String, String> BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED =
       new Pair<>("AAEAAQAAAAAAAAAkAAAAJGQyZmYxMDE5LTBmMDQtNDEwNi05NDBjLWY5ZTgwYTU2ZmY1YQ",
           "AAMB_wE5AAIAAQAAAAAAAAAkAAAAJGQyZmYxMDE5LTBmMDQtNDEwNi05NDBjLWY5ZTgwYTU2ZmY1YQ");
+  public static final Pair<String, String> BLOB_ID_VERSION_1_DATACHUNK_1_UNCONVERTED =
+      new Pair<>("AAEAAQAAAAAAAAAHAAAAJGIxZmYwYmE5LTMwYTAtNDY0OC05MzUyLWZjYWViY2M4YTgzMQ",
+          "AAEAAQAAAAAAAAAHAAAAJGIxZmYwYmE5LTMwYTAtNDY0OC05MzUyLWZjYWViY2M4YTgzMQ");
 
   private static final Class[] VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS =
       new Class[]{PutMessageFormatInputStream.class, PutMessageFormatBlobV1InputStream.class};
@@ -101,7 +107,7 @@ public class BlobIdTransformerTest {
    */
   public BlobIdTransformerTest() throws Exception {
     Pair<String, String>[] pairs =
-        new Pair[]{BLOB_ID_PAIR_VERSION_1_CONVERTED, BLOB_ID_PAIR_VERSION_2_CONVERTED, BLOB_ID_PAIR_VERSION_3_CONVERTED, BLOB_ID_PAIR_VERSION_3_NULL, BLOB_ID_VERSION_1_METADATA_CONVERTED, BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED, BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED};
+        new Pair[]{BLOB_ID_PAIR_VERSION_1_CONVERTED, BLOB_ID_PAIR_VERSION_2_CONVERTED, BLOB_ID_PAIR_VERSION_3_CONVERTED, BLOB_ID_PAIR_VERSION_3_NULL, BLOB_ID_VERSION_1_METADATA_CONVERTED, BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED, BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED, BLOB_ID_VERSION_1_DATACHUNK_1_UNCONVERTED, BLOB_ID_VERSION_1_METADATA_UNCONVERTED};
     factory = new MockStoreKeyConverterFactory(null, null);
     factory.setReturnInputIfAbsent(true);
     StoreKeyConverter storeKeyConverter = createAndSetupMockStoreKeyConverter(factory, pairs);
@@ -137,7 +143,7 @@ public class BlobIdTransformerTest {
   @Test
   public void testMetaDataBlobOperation() throws IOException, MessageFormatException {
     InputAndExpected inputAndExpected =
-        new InputAndExpected(pairList.get(4), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
+        new InputAndExpected(BLOB_ID_VERSION_1_METADATA_CONVERTED, VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
             new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getFirst(), BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getFirst()},
             new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getSecond(), BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getSecond()});
     TransformationOutput output = transformer.transform(inputAndExpected.getInput());
@@ -155,7 +161,7 @@ public class BlobIdTransformerTest {
   public void testBrokenDeprecatedMetaDataBlobOperation() throws IOException, MessageFormatException {
     InputAndExpected inputAndExpected =
         new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
-            new String[]{BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst(), BLOB_ID_PAIR_VERSION_3_NULL.getFirst()}, null);
+            new String[]{BLOB_ID_PAIR_VERSION_3_NULL.getFirst(), BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst()}, null);
     assertException(transformer.transform(inputAndExpected.getInput()), IllegalStateException.class);
   }
 
@@ -166,10 +172,42 @@ public class BlobIdTransformerTest {
    * @throws MessageFormatException
    */
   @Test
-  public void testBrokenSameMetaDataBlobOperation() throws IOException, MessageFormatException {
+  public void testBrokenUnchangedMetaDataBlobOperation() throws IOException, MessageFormatException {
+    InputAndExpected inputAndExpected =
+        new InputAndExpected(BLOB_ID_VERSION_1_METADATA_CONVERTED, VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
+            new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getFirst(), BLOB_ID_VERSION_1_DATACHUNK_1_UNCONVERTED.getFirst()},
+            null);
+    assertException(transformer.transform(inputAndExpected.getInput()), IllegalStateException.class);
+  }
+
+  /**
+   * Tests that correct exception is made when transformation is attempted
+   * on a unchanged metadata chunk with an changed data chunk
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  @Test
+  public void testBrokenChangedMetaDataBlobOperation() throws IOException, MessageFormatException {
+    InputAndExpected inputAndExpected =
+        new InputAndExpected(BLOB_ID_VERSION_1_METADATA_UNCONVERTED, VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
+            new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getFirst(), BLOB_ID_VERSION_1_DATACHUNK_1_UNCONVERTED.getFirst()},
+            null);
+    assertException(transformer.transform(inputAndExpected.getInput()), IllegalStateException.class);
+  }
+
+  /**
+   * Tests that correct exception is made when transformation is attempted
+   * on a changed metadata chunk with an datachunks with a different account ID / container ID
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  @Test
+  public void testBrokenDifferentAccountIdContainerIdMetaDataBlobOperation()
+      throws IOException, MessageFormatException {
     InputAndExpected inputAndExpected =
         new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
-            new String[]{BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst(), VERSION_3_UNCONVERTED}, null);
+            new String[]{BLOB_ID_PAIR_VERSION_2_CONVERTED.getFirst(), BLOB_ID_PAIR_VERSION_3_CONVERTED.getFirst()},
+            null);
     assertException(transformer.transform(inputAndExpected.getInput()), IllegalStateException.class);
   }
 
