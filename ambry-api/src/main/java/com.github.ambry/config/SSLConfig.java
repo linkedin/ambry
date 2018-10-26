@@ -17,10 +17,8 @@ package com.github.ambry.config;
  * The configs for SSL
  */
 public class SSLConfig {
-  private static final String PREFIX = "ssl.";
-  public static final String SECURE_RANDOM_ALGORITHM_KEY = PREFIX + "secure.random.algorithm";
 
- /**
+  /**
    * The SSL protocol for SSLContext
    */
   @Config("ssl.context.protocol")
@@ -52,7 +50,7 @@ public class SSLConfig {
    * The {@code SecureRandom} PRNG algorithm to use for SSL cryptography operations. This is only honored by
    * {@code JdkSslFactory}. {@code NettySslFactory} uses a native SSL impl and does not rely on {@code SecureRandom}.
    */
-  @Config(SECURE_RANDOM_ALGORITHM_KEY)
+  @Config("ssl.secure.random.algorithm")
   @Default("")
   public final String sslSecureRandomAlgorithm;
 
@@ -152,7 +150,7 @@ public class SSLConfig {
     sslContextProvider = verifiableProperties.getString("ssl.context.provider", "");
     sslEnabledProtocols = verifiableProperties.getString("ssl.enabled.protocols", "TLSv1.2");
     sslEndpointIdentificationAlgorithm = verifiableProperties.getString("ssl.endpoint.identification.algorithm", "");
-    sslSecureRandomAlgorithm = verifiableProperties.getString(SECURE_RANDOM_ALGORITHM_KEY, "");
+    sslSecureRandomAlgorithm = verifiableProperties.getString("ssl.secure.random.algorithm", "");
     sslClientAuthentication = verifiableProperties.getString("ssl.client.authentication", "required");
     sslKeymanagerAlgorithm = verifiableProperties.getString("ssl.keymanager.algorithm", "");
     sslTrustmanagerAlgorithm = verifiableProperties.getString("ssl.trustmanager.algorithm", "");

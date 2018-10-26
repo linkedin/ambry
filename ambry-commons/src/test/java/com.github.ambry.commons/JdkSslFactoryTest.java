@@ -20,7 +20,6 @@ import java.io.File;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Properties;
-import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -51,7 +50,7 @@ public class JdkSslFactoryTest {
       } catch (NoSuchAlgorithmException e) {
         valid = false;
       }
-      props.put(SSLConfig.SECURE_RANDOM_ALGORITHM_KEY, prngAlgorithm);
+      props.put("ssl.secure.random.algorithm", prngAlgorithm);
       SSLConfig config = new SSLConfig(new VerifiableProperties(props));
       if (valid) {
         JdkSslFactory jdkSslFactory = new JdkSslFactory(config);
@@ -60,5 +59,10 @@ public class JdkSslFactoryTest {
         TestUtils.assertException(NoSuchAlgorithmException.class, () -> new JdkSslFactory(config), null);
       }
     }
+    // leaving this prop empty should use the default impl.
+    props.put("ssl.secure.random.algorithm", "");
+    SSLConfig config = new SSLConfig(new VerifiableProperties(props));
+    JdkSslFactory jdkSslFactory = new JdkSslFactory(config);
+    assertNotNull("Invalid SSLContext", jdkSslFactory.getSSLContext());
   }
 }
