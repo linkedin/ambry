@@ -402,16 +402,15 @@ class PutOperation {
    */
   void maybeNotifyForBlobCreation() {
     if (isOperationComplete()) {
-      boolean composite = isComposite();
       // only notify for data chunk creation on direct uploads.
-      if (composite && !isStitchOperation()) {
+      if (isComposite() && !isStitchOperation()) {
         metadataPutChunk.maybeNotifyForFirstChunkCreation();
       }
       if (blobId != null) {
         Pair<Account, Container> accountContainer =
             RouterUtils.getAccountContainer(accountService, getBlobProperties().getAccountId(),
                 getBlobProperties().getContainerId());
-        NotificationBlobType blobType = composite ? NotificationBlobType.Composite
+        NotificationBlobType blobType = isComposite() ? NotificationBlobType.Composite
             : options.isChunkUpload() ? NotificationBlobType.DataChunk : NotificationBlobType.Simple;
         notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), accountContainer.getFirst(),
             accountContainer.getSecond(), blobType);
