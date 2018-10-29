@@ -20,6 +20,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -42,6 +43,7 @@ public class NetworkMetrics {
   public final Counter selectorCloseKeyErrorCount;
   public final Counter selectorCloseSocketErrorCount;
   private final List<AtomicLong> selectorActiveConnectionsList;
+  private final List<Set> selectorUnreadyConnectionsList;
 
   // Plaintext metrics
   // the bytes rate to receive the entire request
@@ -147,6 +149,7 @@ public class NetworkMetrics {
     networkClientException = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientException"));
 
     selectorActiveConnectionsList = new ArrayList<>();
+    selectorUnreadyConnectionsList = new ArrayList<>();
     networkClientPendingRequestList = new ArrayList<>();
 
     final Gauge<Long> selectorActiveConnectionsCount = new Gauge<Long>() {
@@ -161,6 +164,19 @@ public class NetworkMetrics {
     };
     registry.register(MetricRegistry.name(Selector.class, "SelectorActiveConnectionsCount"),
         selectorActiveConnectionsCount);
+
+    final Gauge<Long> selectorUnreadyConnectionsCount = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        long unreadyConnectionCount = 0;
+        for (Set<String> unreadyConnection : selectorUnreadyConnectionsList) {
+          unreadyConnectionCount += unreadyConnection.size();
+        }
+        return unreadyConnectionCount;
+      }
+    };
+    registry.register(MetricRegistry.name(Selector.class, "SelectorUnreadyConnectionsCount"),
+        selectorUnreadyConnectionsCount);
 
     final Gauge<Long> networkClientPendingRequestsCount = new Gauge<Long>() {
       @Override
@@ -182,6 +198,14 @@ public class NetworkMetrics {
    */
   void registerSelectorActiveConnections(final AtomicLong numActiveConnections) {
     selectorActiveConnectionsList.add(numActiveConnections);
+  }
+
+  /**
+   * Registers the number of unready connections(SSL handshaking) for a selector
+   * @param unreadyConnections count of unready connections.
+   */
+  void registerSelectorUnreadyConnections(final Set<String> unreadyConnections) {
+    selectorUnreadyConnectionsList.add(unreadyConnections);
   }
 
   /**
