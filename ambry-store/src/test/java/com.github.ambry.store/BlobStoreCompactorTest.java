@@ -481,7 +481,7 @@ public class BlobStoreCompactorTest {
   public void interspersedDeletedAndExpiredBlobsTest() throws Exception {
     refreshState(false, false);
     state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
-    state.initIndex();
+    state.initIndex(null);
 
     int numFinalSegmentsCount = 3;
     long expiryTimeMs = getInvalidationTime(numFinalSegmentsCount + 1);
@@ -1263,7 +1263,7 @@ public class BlobStoreCompactorTest {
     state.reloadLog(false);
     // use the "real" log, index and disk IO schedulers this time.
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-    state.initIndex();
+    state.initIndex(null);
     compactor.initialize(state.index);
     assertEquals("Wrong number of swap segments in use",
         tempDir.list(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length, compactor.getSwapSegmentsInUse());

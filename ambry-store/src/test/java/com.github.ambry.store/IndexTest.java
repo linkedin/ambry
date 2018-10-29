@@ -45,6 +45,8 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -52,9 +54,13 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static com.github.ambry.store.CuratedLogIndexState.*;
 import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -1235,6 +1241,49 @@ public class IndexTest {
       }
       logSegment = nextSegment;
     }
+  }
+
+  /**
+   * Tests {@link PersistentIndex#close()} can correctly cancel the scheduled persistor task and makes sure no persistor
+   * is running background after index closed.
+   * @throws StoreException
+   * @throws InterruptedException
+   */
+  @Test
+  public void closeIndexToCancelPersistorTest() throws StoreException, InterruptedException {
+    long SCHEDULER_PERIOD_MS = 10;
+    state.index.close();
+    // re-initialize index by using mock scheduler (the intention is to speed up testing by using shorter period)
+    ScheduledThreadPoolExecutor scheduler = (ScheduledThreadPoolExecutor) Utils.newScheduler(1, false);
+    ScheduledThreadPoolExecutor mockScheduler = Mockito.spy(scheduler);
+    AtomicReference<ScheduledFuture> persistorTask = new AtomicReference<>();
+    class MockPersistor implements Runnable {
+      private CountDownLatch invokeCountDown;
+
+      @Override
+      public void run() {
+        invokeCountDown.countDown();
+      }
+    }
+    MockPersistor mockPersistor = new MockPersistor();
+    mockPersistor.invokeCountDown = new CountDownLatch(1);
+    doAnswer(invocation -> {
+      persistorTask.set(
+          mockScheduler.scheduleAtFixedRate(mockPersistor, 0, SCHEDULER_PERIOD_MS, TimeUnit.MILLISECONDS));
+      return persistorTask.get();
+    }).when(mockScheduler)
+        .scheduleAtFixedRate(any(PersistentIndex.IndexPersistor.class), anyLong(), anyLong(),
+            any(TimeUnit.SECONDS.getClass()));
+    state.initIndex(mockScheduler);
+    // verify that the persistor task is successfully scheduled
+    assertTrue("The persistor task wasn't invoked within the expected time",
+        mockPersistor.invokeCountDown.await(2 * SCHEDULER_PERIOD_MS, TimeUnit.MILLISECONDS));
+    state.index.close();
+    mockPersistor.invokeCountDown = new CountDownLatch(1);
+    // verify that the persisitor task is canceled after index closed and is never invoked again.
+    assertTrue("The persistor task should be canceled after index closed", persistorTask.get().isCancelled());
+    assertFalse("The persistor task should not be invoked again",
+        mockPersistor.invokeCountDown.await(2 * SCHEDULER_PERIOD_MS, TimeUnit.MILLISECONDS));
   }
 
   /**

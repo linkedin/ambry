@@ -38,6 +38,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -114,6 +115,7 @@ class PersistentIndex {
   private volatile ConcurrentSkipListMap<Offset, IndexSegment> inFluxIndexSegments = validIndexSegments;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final IndexPersistor persistor = new IndexPersistor();
+  private final ScheduledFuture<?> persistorTask;
 
   /**
    * Creates a new persistent index
@@ -227,9 +229,11 @@ class PersistentIndex {
 
       if (scheduler != null) {
         // start scheduler thread to persist index in the background
-        scheduler.scheduleAtFixedRate(persistor,
+        persistorTask = scheduler.scheduleAtFixedRate(persistor,
             config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
             config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+      } else {
+        persistorTask = null;
       }
       if (hardDelete != null && config.storeEnableHardDelete) {
         logger.info("Index : " + datadir + " Starting hard delete thread ");
@@ -1329,6 +1333,9 @@ class PersistentIndex {
   void close() throws StoreException {
     long startTimeInMs = time.milliseconds();
     try {
+      if (persistorTask != null) {
+        persistorTask.cancel(false);
+      }
       persistor.write();
       if (hardDeleter != null) {
         try {
@@ -1599,7 +1606,7 @@ class PersistentIndex {
     }
   }
 
-  private class IndexPersistor implements Runnable {
+  class IndexPersistor implements Runnable {
 
     /**
      * Writes all the individual index segments to disk. It flushes the log before starting the
