@@ -143,8 +143,9 @@ public class HelixBootstrapUpgradeToolTest {
     // Assert that xid field does get set if not the default.
     jsonObject.put("xid", "10");
     dataNode = new DataNode(dataNode.getDatacenter(), jsonObject, clusterMapConfig);
-    InstanceConfig instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
-        Collections.emptyMap(), null);
+    InstanceConfig instanceConfig =
+        HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
+            Collections.emptyMap(), null);
     assertEquals("10", instanceConfig.getRecord().getSimpleField(ClusterMapUtils.XID_STR));
     assertThat(referenceInstanceConfig.getRecord(), not(equalTo(instanceConfig.getRecord())));
 
@@ -244,7 +245,7 @@ public class HelixBootstrapUpgradeToolTest {
       diskForNewReplica = testHardwareLayout.getRandomDisk();
     } while (partition1Nodes.contains(diskForNewReplica.getDataNode()));
 
-    partition1.addReplica(new Replica(partition1, diskForNewReplica));
+    partition1.addReplica(new Replica(partition1, diskForNewReplica, testHardwareLayout.clusterMapConfig));
     // Remove a replica from partition2.
     partition2.getReplicas().remove(0);
     writeBootstrapOrUpgrade(expectedResourceCount, false);

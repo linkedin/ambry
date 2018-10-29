@@ -63,8 +63,7 @@ class PartitionLayout {
     this.localDatacenterName = localDatacenterName;
     this.clusterName = jsonObject.getString("clusterName");
     this.version = jsonObject.getLong("version");
-    this.partitionMap = new HashMap<ByteBuffer, Partition>();
-
+    this.partitionMap = new HashMap<>();
     for (int i = 0; i < jsonObject.getJSONArray("partitions").length(); ++i) {
       addPartition(new Partition(this, jsonObject.getJSONArray("partitions").getJSONObject(i)));
     }
@@ -87,8 +86,7 @@ class PartitionLayout {
     this.clusterName = hardwareLayout.getClusterName();
     this.version = 1;
     this.maxPartitionId = MinPartitionId;
-    this.partitionMap = new HashMap<ByteBuffer, Partition>();
-
+    this.partitionMap = new HashMap<>();
     validate();
     partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitionMap.values(), localDatacenterName);
   }
@@ -228,7 +226,7 @@ class PartitionLayout {
     Partition partition =
         new Partition(getNewPartitionId(), partitionClass, PartitionState.READ_WRITE, replicaCapacityInBytes);
     for (Disk disk : disks) {
-      partition.addReplica(new Replica(partition, disk));
+      partition.addReplica(new Replica(partition, disk, hardwareLayout.getClusterMapConfig()));
     }
     addPartition(partition);
     validate();
@@ -243,7 +241,7 @@ class PartitionLayout {
       throw new IllegalArgumentException("Partition or disks is null or disks is of zero length");
     }
     for (Disk disk : disks) {
-      partition.addReplica(new Replica(partition, disk));
+      partition.addReplica(new Replica(partition, disk, hardwareLayout.getClusterMapConfig()));
     }
     validate();
     partitionSelectionHelper.updatePartitions(partitionMap.values(), localDatacenterName);

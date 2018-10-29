@@ -495,6 +495,12 @@ class StaticClusterManager implements ClusterMap {
       case Partition_ReadOnly:
         ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
         break;
+      case Replica_Unavailable:
+        ((Replica) replicaId).onReplicaUnavailable();
+        break;
+      case Replica_Available:
+        ((Replica) replicaId).onReplicaResponse();
+        break;
     }
   }
 
