@@ -43,7 +43,7 @@ public class NetworkMetrics {
   public final Counter selectorCloseKeyErrorCount;
   public final Counter selectorCloseSocketErrorCount;
   private final List<AtomicLong> selectorActiveConnectionsList;
-  private final List<Set> selectorUnreadyConnectionsList;
+  private final List<Set<String>> selectorUnreadyConnectionsList;
 
   // Plaintext metrics
   // the bytes rate to receive the entire request
@@ -89,6 +89,8 @@ public class NetworkMetrics {
   public final Histogram requestResponseTotalTime;
 
   public final Counter connectionTimeOutError;
+  public final Counter connectionNotAvailable;
+  public final Counter connectionReachLimit;
   public final Counter networkClientIOError;
   public final Counter networkClientException;
   private List<AtomicLong> networkClientPendingRequestList;
@@ -145,6 +147,8 @@ public class NetworkMetrics {
         registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestResponseRoundTripTime"));
     requestResponseTotalTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestResponseTotalTime"));
     connectionTimeOutError = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionTimeOutError"));
+    connectionNotAvailable = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionNotAvailable"));
+    connectionReachLimit = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionReachLimit"));
     networkClientIOError = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientIOError"));
     networkClientException = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientException"));
 

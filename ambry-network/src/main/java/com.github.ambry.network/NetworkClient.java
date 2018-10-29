@@ -159,13 +159,19 @@ public class NetworkClient implements Closeable {
         Port port = requestMetadata.requestInfo.getPort();
         String connId = connectionTracker.checkOutConnection(host, port);
         if (connId == null) {
-          if (requestMetadata.pendingConnectionId == null && connectionTracker.mayCreateNewConnection(host, port)) {
-            connId = selector.connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
-                networkConfig.socketReceiveBufferBytes, port.getPortType());
-            connectionTracker.startTrackingInitiatedConnection(host, port, connId);
-            requestMetadata.pendingConnectionId = connId;
-            pendingConnectionsToAssociatedRequests.put(connId, requestMetadata);
-            logger.trace("Initiated a connection to host {} port {} ", host, port);
+          networkMetrics.connectionNotAvailable.inc();
+          if (requestMetadata.pendingConnectionId == null) {
+            if (connectionTracker.mayCreateNewConnection(host, port)) {
+              connId =
+                  selector.connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
+                      networkConfig.socketReceiveBufferBytes, port.getPortType());
+              connectionTracker.startTrackingInitiatedConnection(host, port, connId);
+              requestMetadata.pendingConnectionId = connId;
+              pendingConnectionsToAssociatedRequests.put(connId, requestMetadata);
+              logger.trace("Initiated a connection to host {} port {} ", host, port);
+            } else {
+              networkMetrics.connectionReachLimit.inc();
+            }
           }
         } else {
           if (requestMetadata.pendingConnectionId != null) {
