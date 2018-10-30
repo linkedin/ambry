@@ -319,8 +319,7 @@ public class InMemoryRouter implements Router {
       ReadableStreamChannel channel, Short blobIdVersion) {
     FutureResult<String> futureResult = new FutureResult<>();
     PostData postData =
-        new PostData(blobProperties, usermetadata, channel, null, new PutBlobOptionsBuilder().build(), null,
-            futureResult);
+        new PostData(blobProperties, usermetadata, channel, null, PutBlobOptions.DEFAULT, null, futureResult);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap, blobIdVersion));
     return futureResult;
   }

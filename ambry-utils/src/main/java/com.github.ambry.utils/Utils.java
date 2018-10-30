@@ -876,6 +876,25 @@ public class Utils {
   }
 
   /**
+   * Compare two times or durations, accounting for the {@link Utils#Infinite_Time} constant.
+   * @param time1 the first time.
+   * @param time2 the second time.
+   * @return -1 if {@code time1} is earlier than {@code time2}, 0 if the times are equal, and 1 if {@code time1} is
+   *         later than {@code time2}. {@link Utils#Infinite_Time} is considered greater than any other time.
+   */
+  public static int compareTimes(long time1, long time2) {
+    if (time1 == time2) {
+      return 0;
+    } else if (time1 == Utils.Infinite_Time) {
+      return 1;
+    } else if (time2 == Utils.Infinite_Time) {
+      return -1;
+    } else {
+      return Long.compare(time1, time2);
+    }
+  }
+
+  /**
    * Delete a directory recursively or delete a single file.
    * @param file the file or directory to delete.
    * @throws IOException if all files could not be deleted.

@@ -522,6 +522,22 @@ public class UtilsTest {
     assertFalse("String should not be declared empty", Utils.isNullOrEmpty(getRandomString(10)));
   }
 
+  /**
+   * Tests for {@link Utils#compareTimes(long, long)}.
+   */
+  @Test
+  public void compareTimesTest() {
+    assertEquals("Infinite_Time should be equal to Infinite_Time", 0,
+        Utils.compareTimes(Utils.Infinite_Time, Utils.Infinite_Time));
+    assertEquals("Infinite_Time should be greater than any finite time.", 1,
+        Utils.compareTimes(Utils.Infinite_Time, Long.MAX_VALUE));
+    assertEquals("Any finite time should be less than any Infinite_Time.", -1,
+        Utils.compareTimes(Long.MAX_VALUE, Utils.Infinite_Time));
+    assertEquals("Wrong comparison result for finite times", 0, Utils.compareTimes(25, 25));
+    assertEquals("Wrong comparison result for finite times", -1, Utils.compareTimes(24, 25));
+    assertEquals("Wrong comparison result for finite times", 1, Utils.compareTimes(25, 24));
+  }
+
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   static Random random = new Random();
 

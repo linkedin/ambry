@@ -15,7 +15,6 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.CryptoServiceConfig;
@@ -394,30 +393,7 @@ public class GetManagerTest {
    * @param readableStreamChannel the {@link ReadableStreamChannel} that is the candidate for comparison.
    */
   private void compareContent(ReadableStreamChannel readableStreamChannel) throws Exception {
-    ByteBuffer putContentBuf = ByteBuffer.wrap(putContent);
-    // If a range is set, compare the result against the specified byte range.
-    if (options.getRange() != null) {
-      ByteRange range = options.getRange().toResolvedByteRange(putContent.length);
-      putContentBuf = ByteBuffer.wrap(putContent, (int) range.getStartOffset(), (int) range.getRangeSize());
-    }
-    ByteBufferAsyncWritableChannel getChannel = new ByteBufferAsyncWritableChannel();
-    Future<Long> readIntoFuture = readableStreamChannel.readInto(getChannel, null);
-    final int bytesToRead = putContentBuf.remaining();
-    int readBytes = 0;
-    do {
-      ByteBuffer buf = getChannel.getNextChunk();
-      int bufLength = buf.remaining();
-      Assert.assertTrue("total content read should not be greater than length of put content",
-          readBytes + bufLength <= bytesToRead);
-      while (buf.hasRemaining()) {
-        Assert.assertEquals("Get and Put blob content should match", putContentBuf.get(), buf.get());
-        readBytes++;
-      }
-      getChannel.resolveOldestChunk(null);
-    } while (readBytes < bytesToRead);
-    Assert.assertEquals("the returned length in the future should be the length of data written", (long) readBytes,
-        (long) readIntoFuture.get());
-    Assert.assertNull("There should be no more data in the channel", getChannel.getNextChunk(0));
+    RouterTestHelpers.compareContent(putContent, options.getRange(), readableStreamChannel);
   }
 
   /**
