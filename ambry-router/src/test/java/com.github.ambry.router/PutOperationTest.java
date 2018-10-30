@@ -103,9 +103,9 @@ public class PutOperationTest {
     MockNetworkClient mockNetworkClient = new MockNetworkClient();
     PutOperation op =
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
-            new InMemAccountService(true, false), userMetadata, channel, new PutBlobOptionsBuilder().build(), future,
-            null, new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time,
-            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, future, null,
+            new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time, blobProperties,
+            MockClusterMap.DEFAULT_PARTITION_CLASS);
     op.startOperation();
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestInfos;
@@ -211,9 +211,9 @@ public class PutOperationTest {
     MockNetworkClient mockNetworkClient = new MockNetworkClient();
     PutOperation op =
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
-            new InMemAccountService(true, false), userMetadata, channel, new PutBlobOptionsBuilder().build(), future,
-            null, new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time,
-            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, future, null,
+            new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time, blobProperties,
+            MockClusterMap.DEFAULT_PARTITION_CLASS);
     RouterErrorCode[] routerErrorCodes = new RouterErrorCode[5];
     routerErrorCodes[0] = RouterErrorCode.OperationTimedOut;
     routerErrorCodes[1] = RouterErrorCode.UnexpectedInternalError;

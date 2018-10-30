@@ -150,9 +150,9 @@ public class ChunkFillTest {
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     PutOperation op =
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
-            new InMemAccountService(true, false), putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-            futureResult, null, new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<>()), null,
-            null, null, null, new MockTime(), putBlobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
+            new InMemAccountService(true, false), putUserMetadata, putChannel, PutBlobOptions.DEFAULT, futureResult,
+            null, new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<>()), null, null, null,
+            null, new MockTime(), putBlobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
     op.startOperation();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     // largeBlobSize is not a multiple of chunkSize
@@ -260,8 +260,8 @@ public class ChunkFillTest {
         new MockRouterCallback(networkClientFactory.getNetworkClient(), Collections.EMPTY_LIST);
     PutOperation op =
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
-            new InMemAccountService(true, false), putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-            futureResult, null, routerCallback, null, kms, cryptoService, cryptoJobHandler, time, putBlobProperties,
+            new InMemAccountService(true, false), putUserMetadata, putChannel, PutBlobOptions.DEFAULT, futureResult,
+            null, routerCallback, null, kms, cryptoService, cryptoJobHandler, time, putBlobProperties,
             MockClusterMap.DEFAULT_PARTITION_CLASS);
     op.startOperation();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);

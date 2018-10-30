@@ -91,6 +91,7 @@ public class NonBlockingRouterTest {
   private static final int DELETE_REQUEST_PARALLELISM = 3;
   private static final int DELETE_SUCCESS_TARGET = 2;
   private static final int PUT_CONTENT_SIZE = 1000;
+  private static final int USER_METADATA_SIZE = 10;
   private int maxPutChunkSize = PUT_CONTENT_SIZE;
   private final Random random = new Random();
   private NonBlockingRouter router;
@@ -211,7 +212,7 @@ public class NonBlockingRouterTest {
   private void setOperationParams(int putContentSize, long ttlSecs) {
     putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, ttlSecs,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
-    putUserMetadata = new byte[10];
+    putUserMetadata = new byte[USER_METADATA_SIZE];
     random.nextBytes(putUserMetadata);
     putContent = new byte[putContentSize];
     random.nextBytes(putContent);
@@ -254,8 +255,7 @@ public class NonBlockingRouterTest {
     List<String> blobIds = new ArrayList<>();
     for (int i = 0; i < 2; i++) {
       setOperationParams();
-      String blobId =
-          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
       blobIds.add(blobId);
     }
     setOperationParams();
@@ -1203,8 +1203,8 @@ public class NonBlockingRouterTest {
         case PUT:
           futureResult = new FutureResult<String>();
           ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
-          putManager.submitPutBlobOperation(putBlobProperties, putUserMetadata, putChannel,
-              new PutBlobOptionsBuilder().build(), futureResult, null);
+          putManager.submitPutBlobOperation(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT,
+              futureResult, null);
           break;
         case GET:
           final FutureResult<GetBlobResultInternal> getFutureResult = new FutureResult<>();

@@ -242,7 +242,7 @@ class RouterTestHelpers {
 
   /**
    * @param totalSize the total size of the composite blob.
-   * @param maxChunkSize the size to use for intermediate data chunks.j
+   * @param maxChunkSize the size to use for intermediate data chunks.
    * @return a {@link LongStream} that returns valid chunk sizes that conform to {@code totalSize} and
    *         {@code maxChunkSize}
    */
