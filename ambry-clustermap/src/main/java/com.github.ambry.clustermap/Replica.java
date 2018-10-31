@@ -33,7 +33,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
  * its {@link Disk}. Note that this induces a constraint that a Partition can never have more than one Replica on a
  * given Disk. This ensures that a Partition does not have Replicas that share fates.
  */
-class Replica implements ReplicaId, Resource {
+class Replica implements ReplicaId {
   private final Partition partition;
   private Disk disk;
   private volatile boolean isStopped = false;
@@ -127,6 +127,8 @@ class Replica implements ReplicaId, Resource {
       replicaLiveness = NODE_DOWN;
     } else if (disk.getState() == HardwareState.UNAVAILABLE) {
       replicaLiveness = DISK_DOWN;
+    } else if (resourceStatePolicy.isDown()) {
+      replicaLiveness = SOFT_DOWN;
     } else if (isStopped) {
       replicaLiveness = REPLICA_STOPPED;
     }

@@ -14,7 +14,6 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.network.Port;
-import org.json.JSONObject;
 
 
 /**
@@ -84,9 +83,4 @@ public interface DataNodeId extends Resource, Comparable<DataNodeId> {
    * @return the xid associated with this node.
    */
   long getXid();
-
-  /**
-   * @return a snapshot which includes information that the implementation considers relevant.
-   */
-  JSONObject getSnapshot();
 }

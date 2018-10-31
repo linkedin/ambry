@@ -520,7 +520,7 @@ class StaticClusterManager implements ClusterMap {
       data.put(DATACENTER_NAME, dc.getName());
       data.put(DATACENTER_ID, dc.getId());
       JSONArray datanodesInDc = new JSONArray();
-      dc.getDataNodes().forEach(mockDataNodeId -> datanodesInDc.put(mockDataNodeId.getSnapshot()));
+      dc.getDataNodes().forEach(node -> datanodesInDc.put(node.getSnapshot()));
       data.put(DATACENTER_NODES, datanodesInDc);
       datacentersJsonArray.put(data);
     });

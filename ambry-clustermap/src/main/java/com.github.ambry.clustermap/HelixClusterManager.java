@@ -335,7 +335,7 @@ class HelixClusterManager implements ClusterMap {
       data.put(DATACENTER_NAME, dcName);
       data.put(DATACENTER_ID, dcId);
       JSONArray datanodesInDc = new JSONArray();
-      dcToNodes.get(dcName).forEach(mockDataNodeId -> datanodesInDc.put(mockDataNodeId.getSnapshot()));
+      dcToNodes.get(dcName).forEach(node -> datanodesInDc.put(node.getSnapshot()));
       data.put(DATACENTER_NODES, datanodesInDc);
       datacentersJsonArray.put(data);
     });

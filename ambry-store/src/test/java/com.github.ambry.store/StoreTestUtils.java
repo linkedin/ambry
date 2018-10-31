@@ -112,7 +112,7 @@ class StoreTestUtils {
 
     @Override
     public JSONObject getSnapshot() {
-      return new JSONObject();
+      return null;
     }
 
     @Override

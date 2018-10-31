@@ -13,9 +13,6 @@
  */
 package com.github.ambry.clustermap;
 
-import org.json.JSONObject;
-
-
 /**
  * A DiskId stores {@link ReplicaId}s. Each DiskId is hosted on one specific {@link DataNodeId}. Each DiskId is uniquely
  * identified by its DataNodeId and mount path (the path to this Disk's device on its DataNode).
@@ -42,9 +39,4 @@ public interface DiskId extends Resource {
    * @return the raw capacity in bytes
    */
   long getRawCapacityInBytes();
-
-  /**
-   * @return a snapshot which includes information that the implementation considers relevant.
-   */
-  JSONObject getSnapshot();
 }

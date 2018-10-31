@@ -13,9 +13,16 @@
  */
 package com.github.ambry.clustermap;
 
+import org.json.JSONObject;
+
+
 /**
- * A Resource represents a {@link DiskId}, {@link DataNodeId} or a {@link PartitionId}
+ * A Resource represents a {@link DiskId}, {@link DataNodeId}, a {@link PartitionId} or a {@link ReplicaId}
  */
 
 public interface Resource {
+  /**
+   * @return a snapshot which includes information that the implementation considers relevant.
+   */
+  JSONObject getSnapshot();
 }

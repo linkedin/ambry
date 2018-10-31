@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.MockTime;
+import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -34,8 +35,7 @@ public class FixedBackoffResourceStatePolicyTest {
     assertTrue("Test initialization error, FAILURE_COUNT_THRESHOLD is too low", FAILURE_COUNT_THRESHOLD >= 2);
     assertTrue("Test initialization error, RETRY_BACKOFF_MS is too low", RETRY_BACKOFF_MS >= 2);
     time = new MockTime();
-    resource = new Resource() {
-    };
+    resource = () -> null;
     policy = new FixedBackoffResourceStatePolicy(resource, false, FAILURE_COUNT_THRESHOLD, RETRY_BACKOFF_MS, time);
   }
 

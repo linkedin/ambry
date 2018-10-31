@@ -27,7 +27,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 /**
  * {@link ReplicaId} implementation to use within dynamic cluster managers.
  */
-class AmbryReplica implements ReplicaId, Resource {
+class AmbryReplica implements ReplicaId {
   private final AmbryPartition partition;
   private final AmbryDisk disk;
   private final long capacityBytes;

@@ -21,7 +21,7 @@ import org.json.JSONObject;
  * A ReplicaId is part of some {@link PartitionId}. The durable state of a ReplicaId is stored in a specific path
  * ("replica path") on a specific device (identified by its "mount path") on a {@link DataNodeId}.
  */
-public interface ReplicaId {
+public interface ReplicaId extends Resource {
   /**
    * Gets the PartitionId of which this ReplicaId is a member.
    *
@@ -90,9 +90,4 @@ public interface ReplicaId {
    * @return true if this replica is in sealed state.
    */
   boolean isSealed();
-
-  /**
-   * @return a snapshot which includes information that the implementation considers relevant.
-   */
-  JSONObject getSnapshot();
 }
