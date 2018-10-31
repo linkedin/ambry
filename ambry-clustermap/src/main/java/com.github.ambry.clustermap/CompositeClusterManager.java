@@ -22,6 +22,7 @@ import java.io.InputStream;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.json.JSONObject;
 
 
 /**
@@ -233,6 +234,13 @@ class CompositeClusterManager implements ClusterMap {
               replicaId.getDataNodeId().getPort(), replicaId.getPartitionId().toString());
       helixClusterManager.onReplicaEvent(ambryReplica, event);
     }
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    // returns the snapshot of the clustermap that will actually be used i.e. static. It is not required or correct to
+    // expect the snapshots from static and helix to match
+    return staticClusterManager.getSnapshot();
   }
 
   @Override

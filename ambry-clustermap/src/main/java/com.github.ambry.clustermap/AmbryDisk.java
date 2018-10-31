@@ -16,6 +16,9 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
 import java.io.File;
+import org.json.JSONObject;
+
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
 
 /**
@@ -78,6 +81,24 @@ class AmbryDisk implements DiskId, Resource {
   @Override
   public long getRawCapacityInBytes() {
     return rawCapacityBytes;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(DISK_NODE, datanode.getHostname() + ":" + datanode.getPort());
+    snapshot.put(DISK_MOUNT_PATH, getMountPath());
+    snapshot.put(CAPACITY_BYTES, getRawCapacityInBytes());
+    String liveness = UP;
+    if (datanode.getState() == HardwareState.UNAVAILABLE) {
+      liveness = NODE_DOWN;
+    } else if (resourceStatePolicy.isHardDown()) {
+      liveness = DISK_DOWN;
+    } else if (resourceStatePolicy.isDown()) {
+      liveness = SOFT_DOWN;
+    }
+    snapshot.put(LIVENESS, liveness);
+    return snapshot;
   }
 
   @Override

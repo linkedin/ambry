@@ -21,6 +21,8 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
+
 
 /**
  * An implementation of {@link DiskId} to be used within the {@link StaticClusterManager}.
@@ -75,6 +77,24 @@ class Disk implements DiskId {
   @Override
   public long getRawCapacityInBytes() {
     return capacityInBytes;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(DISK_NODE, dataNode.getHostname() + ":" + dataNode.getPort());
+    snapshot.put(DISK_MOUNT_PATH, getMountPath());
+    snapshot.put(CAPACITY_BYTES, getRawCapacityInBytes());
+    String liveness = UP;
+    if (dataNode.getState() == HardwareState.UNAVAILABLE) {
+      liveness = NODE_DOWN;
+    } else if (diskStatePolicy.isHardDown()) {
+      liveness = DISK_DOWN;
+    } else if (diskStatePolicy.isDown()) {
+      liveness = SOFT_DOWN;
+    }
+    snapshot.put(LIVENESS, liveness);
+    return snapshot;
   }
 
   DataNode getDataNode() {

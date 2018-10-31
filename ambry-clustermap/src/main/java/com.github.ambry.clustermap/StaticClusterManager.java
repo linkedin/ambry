@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -24,10 +25,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -502,6 +506,29 @@ class StaticClusterManager implements ClusterMap {
         ((Replica) replicaId).onReplicaResponse();
         break;
     }
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(IMPLEMENTATION, StaticClusterManager.class.getName());
+    snapshot.put(CLUSTER_NAME, partitionLayout.getClusterName());
+    snapshot.put(TIMESTAMP_MS, SystemTime.getInstance().milliseconds());
+    JSONArray datacentersJsonArray = new JSONArray();
+    hardwareLayout.getDatacenters().forEach(dc -> {
+      JSONObject data = new JSONObject();
+      data.put(DATACENTER_NAME, dc.getName());
+      data.put(DATACENTER_ID, dc.getId());
+      JSONArray datanodesInDc = new JSONArray();
+      dc.getDataNodes().forEach(node -> datanodesInDc.put(node.getSnapshot()));
+      data.put(DATACENTER_NODES, datanodesInDc);
+      datacentersJsonArray.put(data);
+    });
+    snapshot.put(DATACENTERS, datacentersJsonArray);
+    JSONArray partitionsJsonArray = new JSONArray();
+    getAllPartitionIds(null).forEach(partitionId -> partitionsJsonArray.put(partitionId.getSnapshot()));
+    snapshot.put(PARTITIONS, partitionsJsonArray);
+    return snapshot;
   }
 
   @Override

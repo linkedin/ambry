@@ -13,6 +13,11 @@
  */
 package com.github.ambry.clustermap;
 
+import org.json.JSONObject;
+
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
+
+
 public class MockDiskId implements DiskId {
   String mountPath;
   MockDataNodeId dataNode;
@@ -37,6 +42,16 @@ public class MockDiskId implements DiskId {
   @Override
   public long getRawCapacityInBytes() {
     return 100000;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(DISK_NODE, dataNode.getHostname() + ":" + dataNode.getPort());
+    snapshot.put(DISK_MOUNT_PATH, mountPath);
+    snapshot.put(LIVENESS, dataNode.getState() == HardwareState.UNAVAILABLE ? NODE_DOWN
+        : state == HardwareState.UNAVAILABLE ? DISK_DOWN : UP);
+    return snapshot;
   }
 
   public synchronized void onDiskError() {

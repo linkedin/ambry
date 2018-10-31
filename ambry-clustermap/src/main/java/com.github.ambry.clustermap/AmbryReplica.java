@@ -18,14 +18,16 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import org.json.JSONObject;
 
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
  * {@link ReplicaId} implementation to use within dynamic cluster managers.
  */
-class AmbryReplica implements ReplicaId, Resource {
+class AmbryReplica implements ReplicaId {
   private final AmbryPartition partition;
   private final AmbryDisk disk;
   private final long capacityBytes;
@@ -101,6 +103,32 @@ class AmbryReplica implements ReplicaId, Resource {
   @Override
   public boolean isSealed() {
     return isSealed;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    DataNodeId dataNodeId = getDataNodeId();
+    snapshot.put(REPLICA_NODE, dataNodeId.getHostname() + ":" + dataNodeId.getPort());
+    snapshot.put(REPLICA_PARTITION, getPartitionId().toPathString());
+    snapshot.put(REPLICA_DISK, getDiskId().getMountPath());
+    snapshot.put(REPLICA_PATH, getReplicaPath());
+    snapshot.put(CAPACITY_BYTES, getCapacityInBytes());
+    snapshot.put(REPLICA_WRITE_STATE, isSealed() ? PartitionState.READ_ONLY.name() : PartitionState.READ_WRITE.name());
+    String replicaLiveness = UP;
+    if (dataNodeId.getState() == HardwareState.UNAVAILABLE) {
+      replicaLiveness = NODE_DOWN;
+    } else if (disk.getState() == HardwareState.UNAVAILABLE) {
+      replicaLiveness = DISK_DOWN;
+    } else if (isStopped) {
+      replicaLiveness = REPLICA_STOPPED;
+    } else if (resourceStatePolicy.isHardDown()) {
+      replicaLiveness = DOWN;
+    } else if (resourceStatePolicy.isDown()) {
+      replicaLiveness = SOFT_DOWN;
+    }
+    snapshot.put(LIVENESS, replicaLiveness);
+    return snapshot;
   }
 
   void setSealedState(boolean isSealed) {

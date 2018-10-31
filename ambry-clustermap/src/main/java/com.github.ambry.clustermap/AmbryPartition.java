@@ -21,6 +21,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
 
 /**
@@ -108,6 +112,18 @@ class AmbryPartition implements PartitionId {
   @Override
   public String getPartitionClass() {
     return partitionClass;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(PARTITION_ID, toPathString());
+    snapshot.put(PARTITION_WRITE_STATE, getPartitionState().name());
+    snapshot.put(PARTITION_CLASS, getPartitionClass());
+    JSONArray replicas = new JSONArray();
+    getReplicaIds().forEach(replica -> replicas.put(replica.getSnapshot()));
+    snapshot.put(PARTITION_REPLICAS, replicas);
+    return snapshot;
   }
 
   /**

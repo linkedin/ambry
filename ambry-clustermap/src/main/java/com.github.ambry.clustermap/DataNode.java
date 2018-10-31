@@ -30,6 +30,7 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
@@ -200,6 +201,31 @@ class DataNode implements DataNodeId {
   @Override
   public long getXid() {
     return xid;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(DATA_NODE_HOSTNAME, getHostname());
+    snapshot.put(DATA_NODE_DATACENTER, getDatacenterName());
+    snapshot.put(DATA_NODE_SSL_ENABLED_DATACENTERS, new JSONArray(sslEnabledDataCenters));
+    JSONObject portsJson = new JSONObject();
+    ports.forEach((portType, port) -> portsJson.put(port.getPortType().name(), port.getPort()));
+    portsJson.put(DATA_NODE_PORT_CONNECT_TO, getPortToConnectTo().getPort());
+    snapshot.put(DATA_NODE_PORTS, portsJson);
+    snapshot.put(DATA_NODE_RACK_ID, getRackId());
+    snapshot.put(DATA_NODE_XID, getXid());
+    String liveness = UP;
+    if (dataNodeStatePolicy.isHardDown()) {
+      liveness = NODE_DOWN;
+    } else if (dataNodeStatePolicy.isDown()) {
+      liveness = SOFT_DOWN;
+    }
+    snapshot.put(LIVENESS, liveness);
+    JSONArray disksJson = new JSONArray();
+    disks.forEach(disk -> disksJson.put(disk.getSnapshot()));
+    snapshot.put(DATA_NODE_DISKS, disksJson);
+    return snapshot;
   }
 
   protected void validateDatacenter() {

@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
+import org.json.JSONObject;
 
 
 /**
@@ -105,6 +106,12 @@ public interface ClusterMap extends AutoCloseable {
    * Performs the required action for a replica related event.
    */
   void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event);
+
+  /**
+   * @return a snapshot which includes information that the implementation considers relevant. Must necessarily contain
+   * information about nodes, partitions and replicas from each datacenter
+   */
+  JSONObject getSnapshot();
 
   /**
    * Close the cluster map. Any cleanups should be done in this call.

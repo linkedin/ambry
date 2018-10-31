@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
+import org.json.JSONObject;
 
 
 /**
@@ -90,6 +91,11 @@ public class MockReadingClusterMap implements ClusterMap {
   }
 
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType replicaEventType) {
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    return null;
   }
 
   public void close() {

@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,9 +46,12 @@ import org.apache.helix.ZNRecord;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
@@ -63,6 +67,7 @@ class HelixClusterManager implements ClusterMap {
   private final MetricRegistry metricRegistry;
   private final ClusterMapConfig clusterMapConfig;
   private final ConcurrentHashMap<String, DcInfo> dcToDcZkInfo = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Set<AmbryDataNode>> dcToNodes = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<Byte, String> dcIdToDcName = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
@@ -319,6 +324,29 @@ class HelixClusterManager implements ClusterMap {
   }
 
   @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(IMPLEMENTATION, HelixClusterManager.class.getName());
+    snapshot.put(CLUSTER_NAME, clusterName);
+    snapshot.put(TIMESTAMP_MS, SystemTime.getInstance().milliseconds());
+    JSONArray datacentersJsonArray = new JSONArray();
+    dcIdToDcName.forEach((dcId, dcName) -> {
+      JSONObject data = new JSONObject();
+      data.put(DATACENTER_NAME, dcName);
+      data.put(DATACENTER_ID, dcId);
+      JSONArray datanodesInDc = new JSONArray();
+      dcToNodes.get(dcName).forEach(node -> datanodesInDc.put(node.getSnapshot()));
+      data.put(DATACENTER_NODES, datanodesInDc);
+      datacentersJsonArray.put(data);
+    });
+    snapshot.put(DATACENTERS, datacentersJsonArray);
+    JSONArray partitionsJsonArray = new JSONArray();
+    getAllPartitionIds(null).forEach(partitionId -> partitionsJsonArray.put(partitionId.getSnapshot()));
+    snapshot.put(PARTITIONS, partitionsJsonArray);
+    return snapshot;
+  }
+
+  @Override
   public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
     byte[] partitionBytes = AmbryPartition.readPartitionBytesFromStream(stream);
     AmbryPartition partition = partitionMap.get(ByteBuffer.wrap(partitionBytes));
@@ -434,9 +462,10 @@ class HelixClusterManager implements ClusterMap {
               AmbryDataNode datanode =
                   new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
                       Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig),
-                      getSslPortStr(instanceConfig), instanceXid);
+                      getSslPortStr(instanceConfig), instanceXid, helixClusterManagerCallback);
               initializeDisksAndReplicasOnNode(datanode, instanceConfig);
               instanceNameToAmbryDataNode.put(instanceName, datanode);
+              dcToNodes.computeIfAbsent(datanode.getDatacenterName(), s -> new HashSet<>()).add(datanode);
               allInstances.add(instanceName);
             } else {
               logger.info(
@@ -711,10 +740,11 @@ class HelixClusterManager implements ClusterMap {
       return count;
     }
 
-    /**
-     * @return a collection of all the disks in this datacenter.
-     */
-    Collection<AmbryDisk> getDisks() {
+    @Override
+    public Collection<AmbryDisk> getDisks(AmbryDataNode dataNode) {
+      if (dataNode != null) {
+        return ambryDataNodeToAmbryDisks.get(dataNode);
+      }
       List<AmbryDisk> disksToReturn = new ArrayList<>();
       for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
         disksToReturn.addAll(disks);

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import java.util.Collection;
 import java.util.List;
 
 
@@ -34,4 +35,11 @@ interface ClusterManagerCallback {
    * @return the counter for the sealed state change for partitions.
    */
   long getSealedStateChangeCounter();
+
+  /**
+   * Get the list of {@link AmbryDisk}s (all or assoicated with a particular {@link AmbryDataNode}.
+   * @param dataNode if disks of a particular data node is required, {@code null} for all disks.
+   * @return a collection of all the disks in this datacenter.
+   */
+  Collection<AmbryDisk> getDisks(AmbryDataNode dataNode);
 }

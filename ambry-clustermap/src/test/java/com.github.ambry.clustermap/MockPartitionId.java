@@ -16,6 +16,10 @@ package com.github.ambry.clustermap;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
 
 /**
@@ -131,6 +135,20 @@ public class MockPartitionId implements PartitionId {
   @Override
   public String getPartitionClass() {
     return partitionClass;
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    JSONObject snapshot = new JSONObject();
+    snapshot.put(PARTITION_ID, partition);
+    snapshot.put(PARTITION_WRITE_STATE, partitionState.name());
+    snapshot.put(PARTITION_CLASS, partitionClass);
+    JSONArray replicas = new JSONArray();
+    for (ReplicaId replicaId : replicaIds) {
+      replicas.put(replicaId.getSnapshot());
+    }
+    snapshot.put(PARTITION_REPLICAS, replicas);
+    return snapshot;
   }
 
   public void cleanUp() {

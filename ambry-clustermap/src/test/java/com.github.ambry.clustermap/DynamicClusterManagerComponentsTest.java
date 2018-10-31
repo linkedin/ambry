@@ -18,10 +18,12 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
 
@@ -64,23 +66,27 @@ public class DynamicClusterManagerComponentsTest {
    */
   @Test
   public void helixClusterManagerComponentsTest() throws Exception {
+    MockClusterManagerCallback mockClusterManagerCallback = new MockClusterManagerCallback();
     // AmbryDataNode test
     try {
-      new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM1, RACK_ID, null, XID);
+      new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM1, RACK_ID, null, XID, mockClusterManagerCallback);
       fail("Datanode construction should have failed when SSL is enabled and SSL port is null");
     } catch (IllegalArgumentException e) {
       // OK
     }
     try {
-      new AmbryDataNode("DC1", clusterMapConfig1, HOST_NAME, MAX_PORT + 1, RACK_ID, null, XID);
+      new AmbryDataNode("DC1", clusterMapConfig1, HOST_NAME, MAX_PORT + 1, RACK_ID, null, XID,
+          mockClusterManagerCallback);
       fail("Datanode construction should have failed when port num is outside the valid range");
     } catch (IllegalArgumentException e) {
       // OK
     }
     AmbryDataNode datanode1 =
-        new AmbryDataNode("DC0", clusterMapConfig1, HOST_NAME, PORT_NUM1, RACK_ID, SSL_PORT_NUM, XID);
+        new AmbryDataNode("DC0", clusterMapConfig1, HOST_NAME, PORT_NUM1, RACK_ID, SSL_PORT_NUM, XID,
+            mockClusterManagerCallback);
     AmbryDataNode datanode2 =
-        new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM2, RACK_ID, SSL_PORT_NUM, XID);
+        new AmbryDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM2, RACK_ID, SSL_PORT_NUM, XID,
+            mockClusterManagerCallback);
     assertEquals(datanode1.getDatacenterName(), "DC0");
     assertEquals(datanode1.getHostname(), HOST_NAME);
     assertEquals(datanode1.getPort(), PORT_NUM1);
@@ -152,7 +158,6 @@ public class DynamicClusterManagerComponentsTest {
     // AmbryPartition tests
     // All partitions are READ_WRITE initially.
     sealedStateChangeCounter = new AtomicLong(0);
-    MockClusterManagerCallback mockClusterManagerCallback = new MockClusterManagerCallback();
     String partition1Class = UtilsTest.getRandomString(10);
     String partition2Class = UtilsTest.getRandomString(10);
     AmbryPartition partition1 = new AmbryPartition(1, partition1Class, mockClusterManagerCallback);
@@ -248,10 +253,23 @@ public class DynamicClusterManagerComponentsTest {
    */
   private class MockClusterManagerCallback implements ClusterManagerCallback {
     Map<AmbryPartition, List<AmbryReplica>> partitionToReplicas = new HashMap<>();
+    Map<AmbryDataNode, Set<AmbryDisk>> dataNodeToDisks = new HashMap<>();
 
     @Override
     public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
       return new ArrayList<AmbryReplica>(partitionToReplicas.get(partition));
+    }
+
+    @Override
+    public Collection<AmbryDisk> getDisks(AmbryDataNode dataNode) {
+      if (dataNode != null) {
+        return dataNodeToDisks.get(dataNode);
+      }
+      List<AmbryDisk> disksToReturn = new ArrayList<>();
+      for (Set<AmbryDisk> disks : dataNodeToDisks.values()) {
+        disksToReturn.addAll(disks);
+      }
+      return disksToReturn;
     }
 
     @Override
