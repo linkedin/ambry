@@ -47,12 +47,14 @@ class AmbrySecurityService implements SecurityService {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
+  private final QuotaManager quotaManager;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      UrlSigningService urlSigningService) {
+      UrlSigningService urlSigningService, QuotaManager quotaManager) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.urlSigningService = urlSigningService;
+    this.quotaManager = quotaManager;
     isOpen = true;
   }
 
@@ -103,9 +105,9 @@ class AmbrySecurityService implements SecurityService {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else if (restRequest == null || callback == null) {
       throw new IllegalArgumentException("RestRequest or Callback is null");
-    }
-    // check preconditions for request
-    if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
+    } else if (quotaManager.shouldThrottle(restRequest)) {
+      exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+    } else if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
       try {
         accountAndContainerNamePreconditionCheck(restRequest);
       } catch (Exception e) {
@@ -291,8 +293,7 @@ class AmbrySecurityService implements SecurityService {
     if (container.isCacheable()) {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
           new Date(System.currentTimeMillis() + frontendConfig.cacheValiditySeconds * Time.MsPerSec));
-      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL,
-          "max-age=" + frontendConfig.cacheValiditySeconds);
+      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + frontendConfig.cacheValiditySeconds);
     } else {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES, restResponseChannel.getHeader(RestUtils.Headers.DATE));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "private, no-cache, no-store, proxy-revalidate");

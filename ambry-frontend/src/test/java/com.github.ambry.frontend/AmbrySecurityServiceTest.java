@@ -59,6 +59,9 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
+
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -71,6 +74,7 @@ public class AmbrySecurityServiceTest {
   private static final String OWNER_ID = SERVICE_ID;
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
+  private static final QuotaManager quotaManager = new QuotaManager(FRONTEND_CONFIG);
   private static final Account REF_ACCOUNT;
   private static final Container REF_CONTAINER;
   private static final Map<String, Object> USER_METADATA = new HashMap<>();
@@ -86,7 +90,7 @@ public class AmbrySecurityServiceTest {
 
   private final SecurityService securityService =
       new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
-          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService());
+          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager);
 
   static {
     try {
@@ -110,7 +114,7 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * Tests for {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)}
+   * Tests for {@link AmbrySecurityService#preProcessRequest(RestRequest, Callback)}
    * @throws Exception
    */
   @Test
@@ -141,7 +145,7 @@ public class AmbrySecurityServiceTest {
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(properties));
     SecurityService securityServiceWithTrackingDisabled =
         new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry()),
-            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService());
+            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager);
     restRequest = createRestRequest(RestMethod.GET, "/", null);
     securityServiceWithTrackingDisabled.preProcessRequest(restRequest);
     Assert.assertFalse("The arg with key: ambry-internal-keys-send-tracking-info should be set to false",
@@ -192,6 +196,39 @@ public class AmbrySecurityServiceTest {
     for (RestMethod restMethod : methods) {
       testExceptionCasesProcessRequest(createRestRequest(restMethod, "/", null),
           RestServiceErrorCode.ServiceUnavailable, true);
+    }
+  }
+
+  /**
+   * {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)})} should throw RestServiceException if rate
+   * is more than expected. RestServiceErrorCode.TooManyRequests is expected in this case.
+   */
+  @Test
+  public void postProcessQuotaManagerTest() throws Exception {
+    QuotaManager quotaManager = Mockito.mock(QuotaManager.class);
+    AmbrySecurityService ambrySecurityService =
+        new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
+            new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(),
+            quotaManager);
+    // Everything should be good.
+    Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(false);
+    for (int i = 0; i < 100; i++) {
+      for (RestMethod restMethod : RestMethod.values()) {
+        RestRequest restRequest = createRestRequest(restMethod, "/", null);
+        ambrySecurityService.postProcessRequest(restRequest).get();
+      }
+    }
+    // Requests should be denied.
+    Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(true);
+    for (RestMethod restMethod : RestMethod.values()) {
+      RestRequest restRequest = createRestRequest(restMethod, "/", null);
+      try {
+        ambrySecurityService.postProcessRequest(restRequest).get();
+        Assert.fail("Should have failed.");
+      } catch (Exception e) {
+        Assert.assertEquals("Exception should be TooManyRequests", RestServiceErrorCode.TooManyRequests,
+            ((RestServiceException) e.getCause()).getErrorCode());
+      }
     }
   }
 

@@ -145,6 +145,11 @@ public enum RestServiceErrorCode {
   ServiceUnavailable,
 
   /**
+   * Application rate limit exceeded/Application quota limit exceeded.
+   */
+  TooManyRequests,
+
+  /**
    * Indicates a {@link RestMethod} is not supported (May also indicate a bug where behaviour for a new
    * {@link RestMethod} has not been defined in the implementation).
    */

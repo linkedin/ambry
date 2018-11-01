@@ -94,6 +94,11 @@ public enum ResponseStatus {
    */
   RangeNotSatisfiable,
 
+  /**
+   * 429 Application rate limit exceeded/Application quota limit exceeded.
+   */
+  TooManyRequests,
+
   // 5xx
   /**
    * 500 - Internal server failure resulted in request not being honored.
@@ -145,6 +150,8 @@ public enum ResponseStatus {
         return RangeNotSatisfiable;
       case ServiceUnavailable:
         return ServiceUnavailable;
+      case TooManyRequests:
+        return TooManyRequests;
       case InsufficientCapacity:
         return InsufficientCapacity;
       case PreconditionFailed:

@@ -641,6 +641,8 @@ public class NettyResponseChannelTest {
         return HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE;
       case ServiceUnavailable:
         return HttpResponseStatus.SERVICE_UNAVAILABLE;
+      case TooManyRequests:
+        return HttpResponseStatus.TOO_MANY_REQUESTS;
       case InsufficientCapacity:
         return HttpResponseStatus.INSUFFICIENT_STORAGE;
       case IdConverterServiceError:

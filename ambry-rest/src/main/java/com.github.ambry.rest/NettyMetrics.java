@@ -130,6 +130,7 @@ public class NettyMetrics {
   public final Counter forbiddenCount;
   public final Counter proxyAuthRequiredCount;
   public final Counter rangeNotSatisfiableCount;
+  public final Counter tooManyRequests;
   public final Counter requestTooLargeCount;
   public final Counter throwableCount;
   public final Counter unknownResponseStatusCount;
@@ -311,6 +312,7 @@ public class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ProxyAuthenticationRequiredCount"));
     rangeNotSatisfiableCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "RangeNotSatisfiableCount"));
+    tooManyRequests = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "TooManyRequests"));
     requestTooLargeCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "RequestTooLargeCount"));
     throwableCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ThrowableCount"));
