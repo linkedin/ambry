@@ -205,15 +205,11 @@ public class AmbrySecurityServiceTest {
    */
   @Test
   public void postProcessQuotaManagerTest() throws Exception {
-    Properties props = new Properties();
-    props.setProperty(FrontendConfig.REST_REQUEST_QUOTA_STRING,
-        "{\"PUT\": \"20\",\"GET\": \"20\",\"POST\": \"20\",\"HEAD\": \"20\",\"OPTIONS\": \"20\",\"UNKNOWN\": \"20\",\"DELETE\": \"20\"}");
-    FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(props));
     QuotaManager quotaManager = Mockito.mock(QuotaManager.class);
-
     AmbrySecurityService ambrySecurityService =
-        new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry()),
-            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager);
+        new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
+            new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(),
+            quotaManager);
     // Everything should be good.
     Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(false);
     for (int i = 0; i < 100; i++) {

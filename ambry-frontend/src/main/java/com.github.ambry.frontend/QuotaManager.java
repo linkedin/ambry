@@ -41,10 +41,12 @@ public class QuotaManager {
   }
 
   /**
-   * Return {@code true} if throttling is required.
+   * Return {@code true} if throttling is required. Return {@code false} if no throttler for this rest method or quota
+   * is not reached.
    * @param restRequest provides the information.
    */
   public boolean shouldThrottle(RestRequest restRequest) {
-    return quotaMap.get(restRequest.getRestMethod()).shouldThrottle(1);
+    RejectThrottler throttler = quotaMap.get(restRequest.getRestMethod());
+    return throttler != null && throttler.shouldThrottle(1);
   }
 }

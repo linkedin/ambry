@@ -42,7 +42,7 @@ public class QuotaManagerTest {
   public void quotaTest() throws Exception {
     Properties props = new Properties();
     props.setProperty(FrontendConfig.REST_REQUEST_QUOTA_STRING,
-        "{\"PUT\": \"20\",\"GET\": \"20\",\"POST\": \"20\",\"HEAD\": \"20\",\"OPTIONS\": \"20\",\"UNKNOWN\": \"20\",\"DELETE\": \"20\"}");
+        "{\"PUT\": \"20\",\"GET\": \"20\",\"POST\": \"20\",\"HEAD\": \"20\",\"OPTIONS\": \"20\",\"DELETE\": \"20\"}");
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(props));
     RejectThrottlerTest.MockClock clock = new RejectThrottlerTest.MockClock();
     QuotaManager quotaManager = new QuotaManager(createQuotaMock(frontendConfig, clock));
@@ -53,11 +53,15 @@ public class QuotaManagerTest {
         Assert.assertFalse("Should not throttle", quotaManager.shouldThrottle(restRequest));
       }
     }
-    // Move MockClock ahead to 5 seconds later. Rate = 20. New requests should be denied.
+    // Move MockClock ahead to 5 seconds later. Rate = 20. New requests should be denied unless its quota is not defined.
     clock.tick(5);
     for (RestMethod restMethod : RestMethod.values()) {
       RestRequest restRequest = createRestRequest(restMethod, "http://www.linkedin.com/", null, null);
-      Assert.assertTrue("Should throttle", quotaManager.shouldThrottle(restRequest));
+      if (restMethod == RestMethod.UNKNOWN) {
+        Assert.assertFalse("Should not throttle.", quotaManager.shouldThrottle(restRequest));
+      } else {
+        Assert.assertTrue("Should throttle", quotaManager.shouldThrottle(restRequest));
+      }
     }
     // Clock tick to another 5 seconds later, rate < 20. Accept new requests.
     clock.tick(5);
@@ -74,7 +78,7 @@ public class QuotaManagerTest {
     JSONObject quota = new JSONObject(frontendConfig.restRequestQuota);
     Map<RestMethod, RejectThrottler> quotaMap = new HashMap<>();
     for (RestMethod restMethod : RestMethod.values()) {
-      int restMethodQuota = quota.getInt(restMethod.name());
+      int restMethodQuota = quota.optInt(restMethod.name(), -1);
       quotaMap.put(restMethod, new RejectThrottler(restMethodQuota, new Meter(clock)));
     }
     return quotaMap;
