@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -104,7 +105,7 @@ public class FrontendIntegrationTest {
   private static final int PLAINTEXT_SERVER_PORT = 1174;
   private static final int SSL_SERVER_PORT = 1175;
   private static final int MAX_MULTIPART_POST_SIZE_BYTES = 10 * 10 * 1024;
-  private static final ClusterMap CLUSTER_MAP;
+  private static final MockClusterMap CLUSTER_MAP;
   private static final VerifiableProperties FRONTEND_VERIFIABLE_PROPS;
   private static final VerifiableProperties SSL_CLIENT_VERIFIABLE_PROPS;
   private static final FrontendConfig FRONTEND_CONFIG;
@@ -299,6 +300,40 @@ public class FrontendIntegrationTest {
   }
 
   /**
+   * Tests the handling of {@link Operations#GET_CLUSTER_MAP_SNAPSHOT} requests.
+   * @throws Exception
+   */
+  @Test
+  public void getClusterMapSnapshotTest() throws Exception {
+    FullHttpRequest httpRequest =
+        new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, Operations.GET_CLUSTER_MAP_SNAPSHOT,
+            Unpooled.buffer(0));
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
+    ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
+    JSONObject expected = CLUSTER_MAP.getSnapshot();
+    JSONObject actual = new JSONObject(new String(content.array()));
+    // remove timestamps because they may differ
+    expected.remove(ClusterMapSnapshotConstants.TIMESTAMP_MS);
+    actual.remove(ClusterMapSnapshotConstants.TIMESTAMP_MS);
+    assertEquals("Snapshot does not match expected", expected.toString(), actual.toString());
+
+    // test a failure to ensure that it goes through the exception path
+    String msg = UtilsTest.getRandomString(10);
+    CLUSTER_MAP.setExceptionOnSnapshot(new RuntimeException(msg));
+    httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, Operations.GET_CLUSTER_MAP_SNAPSHOT,
+        Unpooled.buffer(0));
+    responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.INTERNAL_SERVER_ERROR, response.status());
+    verifyTrackingHeaders(response);
+    assertNoContent(responseParts.queue, 1);
+    CLUSTER_MAP.setExceptionOnSnapshot(null);
+  }
+
+  /**
    * Tests the handling of {@link Operations#GET_SIGNED_URL} requests.
    * @throws Exception
    */
@@ -328,7 +363,7 @@ public class FrontendIntegrationTest {
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed POST URL", signedPostUrl);
-    discardContent(responseParts.queue, 1);
+    assertNoContent(responseParts.queue, 1);
 
     // Use signed URL to POST
     URI uri = new URI(signedPostUrl);
@@ -356,7 +391,7 @@ public class FrontendIntegrationTest {
     verifyTrackingHeaders(response);
     String signedGetUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed GET URL", signedGetUrl);
-    discardContent(responseParts.queue, 1);
+    assertNoContent(responseParts.queue, 1);
 
     // Use URL to GET blob
     uri = new URI(signedGetUrl);
@@ -453,31 +488,17 @@ public class FrontendIntegrationTest {
   }
 
   /**
-   * Verifies that no content has been sent as part of the response or readable bytes is equivalent to 0
-   * @param contents the content of the response.
+   * Discards all the content in {@code contents} and checks none of the chunks have actual content
+   * @param contents the content to discard.
+   * @param expectedDiscardCount the number of {@link HttpObject}s that are expected to discarded.
    */
-  private void assertNoContent(Queue<HttpObject> contents) {
+  private void assertNoContent(Queue<HttpObject> contents, int expectedDiscardCount) {
+    assertEquals("Objects that will be discarded differ from expected", expectedDiscardCount, contents.size());
     boolean endMarkerFound = false;
     for (HttpObject object : contents) {
       assertFalse("There should have been no more data after the end marker was found", endMarkerFound);
       HttpContent content = (HttpContent) object;
       assertEquals("No content expected ", 0, content.content().readableBytes());
-      endMarkerFound = object instanceof LastHttpContent;
-      ReferenceCountUtil.release(content);
-    }
-    assertTrue("There should have been an end marker", endMarkerFound);
-  }
-
-  /**
-   * Discards all the content in {@code contents}.
-   * @param contents the content to discard.
-   * @param expectedDiscardCount the number of {@link HttpObject}s that are expected to discarded.
-   */
-  private void discardContent(Queue<HttpObject> contents, int expectedDiscardCount) {
-    assertEquals("Objects that will be discarded differ from expected", expectedDiscardCount, contents.size());
-    boolean endMarkerFound = false;
-    for (HttpObject object : contents) {
-      assertFalse("There should have been no more data after the end marker was found", endMarkerFound);
       endMarkerFound = object instanceof LastHttpContent;
       ReferenceCountUtil.release(object);
     }
@@ -649,7 +670,7 @@ public class FrontendIntegrationTest {
     assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
     String blobId = response.headers().get(HttpHeaderNames.LOCATION, null);
     assertNotNull("Blob ID from POST should not be null", blobId);
-    discardContent(responseParts.queue, 1);
+    assertNoContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
     verifyTrackingHeaders(response);
     return blobId;
@@ -759,7 +780,7 @@ public class FrontendIntegrationTest {
     assertNull("Content-Type should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
     verifyTrackingHeaders(response);
     verifyCacheHeaders(isPrivate, response);
-    assertNoContent(responseParts.queue);
+    assertNoContent(responseParts.queue, 1);
   }
 
   /**
@@ -787,7 +808,7 @@ public class FrontendIntegrationTest {
     verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts.queue);
     if (usermetadata == null) {
       assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
-      discardContent(responseParts.queue, 1);
+      assertNoContent(responseParts.queue, 1);
     }
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
   }
@@ -822,7 +843,7 @@ public class FrontendIntegrationTest {
     verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts.queue);
     if (usermetadata == null) {
       assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
-      discardContent(responseParts.queue, 1);
+      assertNoContent(responseParts.queue, 1);
     }
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
   }
@@ -872,7 +893,7 @@ public class FrontendIntegrationTest {
         response.headers().get(HttpHeaderNames.CONTENT_TYPE));
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
-    discardContent(responseParts.queue, 1);
+    assertNoContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
     verifyTrackingHeaders(response);
   }
@@ -991,7 +1012,7 @@ public class FrontendIntegrationTest {
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
     assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
-    discardContent(responseParts.queue, 1);
+    assertNoContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
     verifyTrackingHeaders(response);
   }
@@ -1062,7 +1083,7 @@ public class FrontendIntegrationTest {
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", expectedStatusCode, response.status());
     assertTrue("No Date header", response.headers().get(HttpHeaderNames.DATE, null) != null);
-    discardContent(responseParts.queue, 1);
+    assertNoContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
     verifyTrackingHeaders(response);
   }
@@ -1192,7 +1213,7 @@ public class FrontendIntegrationTest {
     verifyTrackingHeaders(response);
     String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed POST URL", signedPostUrl);
-    discardContent(responseParts.queue, 1);
+    assertNoContent(responseParts.queue, 1);
 
     List<String> signedChunkIds = new ArrayList<>();
     ByteArrayOutputStream fullContentStream = new ByteArrayOutputStream();

@@ -45,6 +45,8 @@ public class FrontendMetrics {
   public final RestRequestMetrics getReplicasSSLMetrics;
   public final RestRequestMetrics getSignedUrlMetrics;
   public final RestRequestMetrics getSignedUrlSSLMetrics;
+  public final RestRequestMetrics getClusterMapSnapshotMetrics;
+  public final RestRequestMetrics getClusterMapSnapshotSSLMetrics;
   // OPTIONS
   public final RestRequestMetrics optionsMetrics;
   public final RestRequestMetrics optionsSSLMetrics;
@@ -78,6 +80,11 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics getSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics headSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics deleteSecurityPostProcessRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityPreProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityPostProcessRequestMetrics;
+
   // Rates
   // AmbrySecurityService
   public final Meter securityServicePreProcessRequestRate;
@@ -150,6 +157,8 @@ public class FrontendMetrics {
   // GetSignedUrlHandler
   public final Histogram getSignedUrlProcessingTimeInMs;
   public final Histogram getSignedUrlIdConverterCallbackProcessingTimeInMs;
+  // GetClusterMapSnapshotHandler
+  public final Histogram getClusterMapSnapshotProcessingTimeInMs;
 
   // Errors
   // AmbryBlobStorageService
@@ -203,6 +212,19 @@ public class FrontendMetrics {
     getSignedUrlMetrics = new RestRequestMetrics(GetSignedUrlHandler.class, "GetSignedUrl", metricRegistry);
     getSignedUrlSSLMetrics =
         new RestRequestMetrics(GetSignedUrlHandler.class, "GetSignedUrl" + SSL_SUFFIX, metricRegistry);
+    getClusterMapSnapshotMetrics =
+        new RestRequestMetrics(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot", metricRegistry);
+    getClusterMapSnapshotSSLMetrics =
+        new RestRequestMetrics(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot" + SSL_SUFFIX,
+            metricRegistry);
+    getClusterMapSnapshotSecurityPreProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityPreProcessRequest",
+            metricRegistry);
+    getClusterMapSnapshotSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityProcessRequest", metricRegistry);
+    getClusterMapSnapshotSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityPostProcessRequest",
+            metricRegistry);
     // OPTIONS
     optionsMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options", metricRegistry);
     optionsSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options" + SSL_SUFFIX, metricRegistry);
@@ -375,6 +397,9 @@ public class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetSignedUrlHandler.class, "ProcessingTimeInMs"));
     getSignedUrlIdConverterCallbackProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetSignedUrlHandler.class, "IdConverterProcessingTimeInMs"));
+    // GetClusterMapSnapshotHandler
+    getClusterMapSnapshotProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetClusterMapSnapshotHandler.class, "ProcessingTimeInMs"));
 
     // Errors
     // AmbryBlobStorageService

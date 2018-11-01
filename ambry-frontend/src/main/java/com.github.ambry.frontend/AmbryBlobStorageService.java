@@ -87,6 +87,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private GetSignedUrlHandler getSignedUrlHandler;
   private PostBlobHandler postBlobHandler;
   private TtlUpdateHandler ttlUpdateHandler;
+  private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
   private boolean isUp = false;
 
   /**
@@ -141,6 +142,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap);
+    getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     isUp = true;
     logger.info("AmbryBlobStorageService has started");
     frontendMetrics.blobStorageServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
@@ -185,6 +187,9 @@ class AmbryBlobStorageService implements BlobStorageService {
       }
       if (operationOrBlobId.equalsIgnoreCase(Operations.GET_PEERS)) {
         getPeersHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (operationOrBlobId.equalsIgnoreCase(Operations.GET_CLUSTER_MAP_SNAPSHOT)) {
+        getClusterMapSnapshotHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (operationOrBlobId.endsWith(Operations.GET_SIGNED_URL)) {
         getSignedUrlHandler.handle(restRequest, restResponseChannel,

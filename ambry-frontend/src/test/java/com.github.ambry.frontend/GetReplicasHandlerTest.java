@@ -86,10 +86,9 @@ public class GetReplicasHandlerTest {
   /**
    * Tests reactions of the {@link GetReplicasHandler#getReplicas(String, RestResponseChannel)} operation to bad input -
    * specifically if we do not include required parameters.
-   * @throws Exception
    */
   @Test
-  public void getReplicasWithBadInputTest() throws Exception {
+  public void getReplicasWithBadInputTest() {
     // bad input - invalid blob id.
     try {
       getReplicasHandler.getReplicas("12345", new MockRestResponseChannel());
