@@ -45,7 +45,7 @@ public class QuotaManagerTest {
         "{\"PUT\": \"20\",\"GET\": \"20\",\"POST\": \"20\",\"HEAD\": \"20\",\"OPTIONS\": \"20\",\"UNKNOWN\": \"20\",\"DELETE\": \"20\"}");
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(props));
     RejectThrottlerTest.MockClock clock = new RejectThrottlerTest.MockClock();
-    QuotaManager quotaManager = new QuotaManager(frontendConfig, createQuotaMock(frontendConfig, clock));
+    QuotaManager quotaManager = new QuotaManager(createQuotaMock(frontendConfig, clock));
     // Issue new requests. Since MockClock tick doesn't change, rate is 0.
     for (int i = 0; i < 100; i++) {
       for (RestMethod restMethod : RestMethod.values()) {

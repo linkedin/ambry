@@ -29,17 +29,14 @@ public class QuotaManager {
   private final Map<RestMethod, RejectThrottler> quotaMap;
 
   public QuotaManager(FrontendConfig frontendConfig) {
-    this(frontendConfig, null);
+    JSONObject quota = new JSONObject(frontendConfig.restRequestQuota);
+    quotaMap = new HashMap<>();
+    for (RestMethod restMethod : RestMethod.values()) {
+      quotaMap.put(restMethod, new RejectThrottler(quota.optInt(restMethod.name(), -1)));
+    }
   }
 
-  public QuotaManager(FrontendConfig frontendConfig, Map<RestMethod, RejectThrottler> quotaMap) {
-    JSONObject quota = new JSONObject(frontendConfig.restRequestQuota);
-    if (quotaMap == null) {
-      quotaMap = new HashMap<>();
-      for (RestMethod restMethod : RestMethod.values()) {
-        quotaMap.put(restMethod, new RejectThrottler(quota.optInt(restMethod.name(), -1)));
-      }
-    }
+  public QuotaManager(Map<RestMethod, RejectThrottler> quotaMap) {
     this.quotaMap = quotaMap;
   }
 
