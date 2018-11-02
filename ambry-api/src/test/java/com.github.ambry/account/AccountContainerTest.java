@@ -1010,8 +1010,11 @@ public class AccountContainerTest {
         containerJson.put(MEDIA_SCAN_DISABLED_KEY, container.isMediaScanDisabled());
         containerJson.putOpt(REPLICATION_POLICY_KEY, container.getReplicationPolicy());
         containerJson.put(TTL_REQUIRED_KEY, container.isTtlRequired());
-        containerJson.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD,
-            container.getContentTypeWhitelistForFilenamesOnDownload());
+        if (container.getContentTypeWhitelistForFilenamesOnDownload() != null
+            && !container.getContentTypeWhitelistForFilenamesOnDownload().isEmpty()) {
+          containerJson.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD,
+              container.getContentTypeWhitelistForFilenamesOnDownload());
+        }
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + Container.getCurrentJsonVersion());

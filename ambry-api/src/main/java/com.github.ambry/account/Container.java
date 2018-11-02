@@ -264,7 +264,7 @@ public class Container {
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
           UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, UNKNOWN_CONTAINER_CACHEABLE_SETTING,
           UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING,
-          Collections.emptySet(), UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -278,7 +278,7 @@ public class Container {
           DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING,
-          Collections.emptySet(), DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -292,7 +292,7 @@ public class Container {
           DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING,
-          Collections.emptySet(), DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
 
   // container field variables
   private final short id;
@@ -348,10 +348,8 @@ public class Container {
             metadata.optJSONArray(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD);
         if (contentTypeWhitelistForFilenamesOnDownloadJson != null) {
           contentTypeWhitelistForFilenamesOnDownload = new HashSet<>();
-          for (int i = 0; i < contentTypeWhitelistForFilenamesOnDownloadJson.length(); i++) {
-            contentTypeWhitelistForFilenamesOnDownload.add(
-                contentTypeWhitelistForFilenamesOnDownloadJson.get(i).toString());
-          }
+          contentTypeWhitelistForFilenamesOnDownloadJson.forEach(
+              contentType -> contentTypeWhitelistForFilenamesOnDownload.add(contentType.toString()));
         } else {
           contentTypeWhitelistForFilenamesOnDownload = CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
         }
@@ -472,9 +470,13 @@ public class Container {
         metadata.put(MEDIA_SCAN_DISABLED_KEY, mediaScanDisabled);
         metadata.putOpt(REPLICATION_POLICY_KEY, replicationPolicy);
         metadata.put(TTL_REQUIRED_KEY, ttlRequired);
-        JSONArray contentTypeWhitelistForFilenamesOnDownloadJson = new JSONArray();
-        contentTypeWhitelistForFilenamesOnDownload.forEach(contentTypeWhitelistForFilenamesOnDownloadJson::put);
-        metadata.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD, contentTypeWhitelistForFilenamesOnDownloadJson);
+        if (contentTypeWhitelistForFilenamesOnDownload != null
+            && !contentTypeWhitelistForFilenamesOnDownload.isEmpty()) {
+          JSONArray contentTypeWhitelistForFilenamesOnDownloadJson = new JSONArray();
+          contentTypeWhitelistForFilenamesOnDownload.forEach(contentTypeWhitelistForFilenamesOnDownloadJson::put);
+          metadata.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD,
+              contentTypeWhitelistForFilenamesOnDownloadJson);
+        }
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
