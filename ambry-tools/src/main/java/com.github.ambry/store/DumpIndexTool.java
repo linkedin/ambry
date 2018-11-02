@@ -135,14 +135,14 @@ public class DumpIndexTool {
     private final Set<StoreKey> duplicateDeletes;
     private final Set<StoreKey> duplicateUpdates;
     private final Set<StoreKey> updateAfterDeletes;
-    private final Set<StoreKey> duplicateKeys;
+    private final Map<StoreKey, StoreKey> duplicateKeys;
     private final long activeCount;
     private final Throwable throwable;
 
     IndexProcessingResults(Map<StoreKey, Info> keyToState, long processedCount, long putCount, long ttlUpdateCount,
         long deleteCount, long craftedIdCount, Set<StoreKey> duplicatePuts, Set<StoreKey> putAfterUpdates,
         Set<StoreKey> duplicateDeletes, Set<StoreKey> duplicateUpdates, Set<StoreKey> updateAfterDeletes,
-        Set<StoreKey> duplicateKeys) {
+        Map<StoreKey, StoreKey> duplicateKeys) {
       this.keyToState = keyToState;
       this.processedCount = processedCount;
       this.putCount = putCount;
@@ -163,7 +163,8 @@ public class DumpIndexTool {
       this.throwable = throwable;
       keyToState = null;
       processedCount = putCount = ttlUpdateCount = deleteCount = craftedIdCount = activeCount = INVALID_VALUE;
-      duplicatePuts = putAfterUpdates = duplicateDeletes = duplicateUpdates = updateAfterDeletes = duplicateKeys = null;
+      duplicatePuts = putAfterUpdates = duplicateDeletes = duplicateUpdates = updateAfterDeletes = null;
+      duplicateKeys = null;
     }
 
     /**
@@ -253,7 +254,7 @@ public class DumpIndexTool {
     /**
      * @return the keys marked as duplicates because another version of the key exists in the index
      */
-    public Set<StoreKey> getDuplicateKeys() {
+    public Map<StoreKey, StoreKey> getDuplicateKeys() {
       return duplicateKeys;
     }
 
@@ -715,7 +716,7 @@ public class DumpIndexTool {
           }
         }
       }
-      Set<StoreKey> duplicateKeys = new HashSet<>();
+      Map<StoreKey, StoreKey> duplicateKeys = new HashMap<>();
       if (detectDuplicatesAcrossKeys) {
         logger.info("Converting {} store keys...", keyToState.size());
         Map<StoreKey, StoreKey> conversions = storeKeyConverter.convert(keyToState.keySet());
@@ -724,7 +725,7 @@ public class DumpIndexTool {
           if (!k.equals(v) && keyToState.containsKey(v)) {
             // if k == v, the processing above should have caught it
             // if v exists in keyToState, it means both k and v exist in the store and this is a problem
-            duplicateKeys.add(v);
+            duplicateKeys.put(k, v);
           }
         });
       }
