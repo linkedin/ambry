@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
@@ -25,7 +26,6 @@ import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
@@ -43,7 +43,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,9 +73,9 @@ public class DumpIndexTool {
     private final EnumSet<BlobState> states;
     private final boolean isInRecentIndexSegment;
     private boolean seenTtlUpdate = false;
-    private boolean isPermanent = false;
+    private boolean isPermanent;
 
-    public Info(EnumSet<BlobState> states, boolean isInRecentIndexSegment, boolean isPermanent) {
+    Info(EnumSet<BlobState> states, boolean isInRecentIndexSegment, boolean isPermanent) {
       this.states = states;
       this.isInRecentIndexSegment = isInRecentIndexSegment;
       this.isPermanent = isPermanent;
@@ -115,32 +122,49 @@ public class DumpIndexTool {
    * Contains all the results obtained from processing the index.
    */
   public class IndexProcessingResults {
+    public static final long INVALID_VALUE = -1;
+
     private final Map<StoreKey, Info> keyToState;
     private final long processedCount;
     private final long putCount;
     private final long ttlUpdateCount;
     private final long deleteCount;
+    private final long craftedIdCount;
     private final Set<StoreKey> duplicatePuts;
     private final Set<StoreKey> putAfterUpdates;
     private final Set<StoreKey> duplicateDeletes;
     private final Set<StoreKey> duplicateUpdates;
     private final Set<StoreKey> updateAfterDeletes;
+    private final Map<StoreKey, StoreKey> duplicateKeys;
     private final long activeCount;
+    private final Throwable throwable;
 
     IndexProcessingResults(Map<StoreKey, Info> keyToState, long processedCount, long putCount, long ttlUpdateCount,
-        long deleteCount, Set<StoreKey> duplicatePuts, Set<StoreKey> putAfterUpdates, Set<StoreKey> duplicateDeletes,
-        Set<StoreKey> duplicateUpdates, Set<StoreKey> updateAfterDeletes) {
+        long deleteCount, long craftedIdCount, Set<StoreKey> duplicatePuts, Set<StoreKey> putAfterUpdates,
+        Set<StoreKey> duplicateDeletes, Set<StoreKey> duplicateUpdates, Set<StoreKey> updateAfterDeletes,
+        Map<StoreKey, StoreKey> duplicateKeys) {
       this.keyToState = keyToState;
       this.processedCount = processedCount;
       this.putCount = putCount;
       this.ttlUpdateCount = ttlUpdateCount;
       this.deleteCount = deleteCount;
+      this.craftedIdCount = craftedIdCount;
       this.duplicatePuts = duplicatePuts;
       this.putAfterUpdates = putAfterUpdates;
       this.duplicateDeletes = duplicateDeletes;
       this.duplicateUpdates = duplicateUpdates;
       this.updateAfterDeletes = updateAfterDeletes;
+      this.duplicateKeys = duplicateKeys;
       activeCount = keyToState.values().stream().filter(value -> value.getStates().contains(BlobState.Valid)).count();
+      throwable = null;
+    }
+
+    IndexProcessingResults(Throwable throwable) {
+      this.throwable = throwable;
+      keyToState = null;
+      processedCount = putCount = ttlUpdateCount = deleteCount = craftedIdCount = activeCount = INVALID_VALUE;
+      duplicatePuts = putAfterUpdates = duplicateDeletes = duplicateUpdates = updateAfterDeletes = null;
+      duplicateKeys = null;
     }
 
     /**
@@ -186,6 +210,13 @@ public class DumpIndexTool {
     }
 
     /**
+     * @return number of entries where the {@link StoreKey} was a crafted {@link BlobId}
+     */
+    public long getCraftedIdCount() {
+      return craftedIdCount;
+    }
+
+    /**
      * @return the number of duplicate put entries found.
      */
     public Set<StoreKey> getDuplicatePuts() {
@@ -221,20 +252,46 @@ public class DumpIndexTool {
     }
 
     /**
+     * @return the keys marked as duplicates because another version of the key exists in the index
+     */
+    public Map<StoreKey, StoreKey> getDuplicateKeys() {
+      return duplicateKeys;
+    }
+
+    /**
+     * @return the throwable set (if any)
+     */
+    public Throwable getThrowable() {
+      return throwable;
+    }
+
+    /**
      * @return {@code true} if there are no duplicate puts or deletes or updates and no puts after updates or updates
      * after deletes. {@code false} otherwise
      */
     public boolean isIndexSane() {
-      return duplicatePuts.size() == 0 && putAfterUpdates.size() == 0 && duplicateDeletes.size() == 0
-          && duplicateUpdates.size() == 0 && updateAfterDeletes.size() == 0;
+      return throwable == null && duplicatePuts.size() == 0 && putAfterUpdates.size() == 0
+          && duplicateDeletes.size() == 0 && duplicateUpdates.size() == 0 && updateAfterDeletes.size() == 0
+          && duplicateKeys.size() == 0;
     }
 
     @Override
     public String toString() {
-      return "Processed: " + processedCount + ", Active: " + activeCount + ", Put: " + putCount + ", TTL update count: "
-          + ttlUpdateCount + ", Delete: " + deleteCount + ", Duplicate Puts: " + duplicatePuts + ", Put After Update: "
-          + putAfterUpdates + ", Duplicate Delete: " + duplicateDeletes + ", Duplicate Update: " + duplicateUpdates
-          + ", Update After Delete: " + updateAfterDeletes;
+      // @formatter:off
+      return throwable == null ? "Processed: " + processedCount
+              + ", Active: " + activeCount
+              + ", Put: " + putCount
+              + ", TTL update count: " + ttlUpdateCount
+              + ", Delete: " + deleteCount
+              + ", Crafted ID count: " + craftedIdCount
+              + ", Duplicate Puts: " + duplicatePuts
+              + ", Put After Update: " + putAfterUpdates
+              + ", Duplicate Delete: " + duplicateDeletes
+              + ", Duplicate Update: " + duplicateUpdates
+              + ", Update After Delete: " + updateAfterDeletes
+              + ", Duplicate Keys: " + duplicateKeys
+          : "Exception Msg: " + throwable.getMessage();
+      // @formatter:on
     }
   }
 
@@ -242,7 +299,7 @@ public class DumpIndexTool {
    * The possible states of a blob.
    */
   public enum BlobState {
-    Valid, Deleted, Expired;
+    Valid, Deleted, Expired
   }
 
   /**
@@ -252,14 +309,24 @@ public class DumpIndexTool {
     /**
      * Processes all the index segments and dumps all or the filtered entries.
      */
-    DumpIndex, /**
+    DumpIndex,
+
+    /**
      * Processes the given index segment and dumps all or the filtered entries.
      */
-    DumpIndexSegment, /**
-     * Processes all the index segments (deserialization check) and makes sure that there are no duplicate records
-     * and no put after delete records.
+    DumpIndexSegment,
+
+    /**
+     * Processes all the index segments and makes sure that the index is "sane". Optionally, can also check that there
+     * are no crafted IDs in the store
      */
-    VerifyIndex
+    VerifyIndex,
+
+    /**
+     * Processes all the indexes on a node and ensures that they are "sane". Optionally, can also check that there are
+     * no crafted IDs in the store
+     */
+    VerifyDataNode
   }
 
   /**
@@ -269,7 +336,7 @@ public class DumpIndexTool {
 
     /**
      * The type of operation.
-     * Operations are: DumpIndex, DumpIndexSegment, VerifyIndex
+     * Operations are as listed in {@link Operation}
      */
     @Config("type.of.operation")
     final Operation typeOfOperation;
@@ -277,10 +344,26 @@ public class DumpIndexTool {
     /**
      * The path where the input is. This may differ for different operations. For e.g., this is a file for
      * {@link Operation#DumpIndexSegment} but is a directory for {@link Operation#DumpIndex} and
-     * {@link Operation#VerifyIndex}.
+     * {@link Operation#VerifyIndex}. This is not required for {@link Operation#VerifyDataNode}
      */
     @Config("path.of.input")
     final File pathOfInput;
+
+    /**
+     * The hostname of the target datanode as it appears in the partition layout. Required only for
+     * {@link Operation#VerifyDataNode}
+     */
+    @Config("hostname")
+    @Default("localhost")
+    final String hostname;
+
+    /**
+     * The port of the target datanode in the partition layout (need not be the actual port to connect to). Required
+     * only for {@link Operation#VerifyDataNode}
+     */
+    @Config("port")
+    @Default("6667")
+    final int port;
 
     /**
      * The path to the hardware layout file. Needed if using
@@ -309,11 +392,35 @@ public class DumpIndexTool {
     final Set<String> filterSet;
 
     /**
-     * The number of index entries to process every second.
+     * The number of index entries to process every second. In case of {@link Operation#VerifyDataNode}, this is across
+     * all partitions being processed.
      */
     @Config("index.entries.to.process.per.sec")
     @Default("Long.MAX_VALUE")
     final long indexEntriesToProcessPerSec;
+
+    /**
+     * Used for {@link Operation#VerifyIndex} and {@link Operation#VerifyDataNode} if the presence of crafted IDs needs
+     * to be reported as a failure. This check takes precedence over index sanity.
+     */
+    @Config("fail.if.crafted.ids.present")
+    @Default("false")
+    final boolean failIfCraftedIdsPresent;
+
+    /**
+     * The number of partitions to verify in parallel for {@link Operation#VerifyDataNode}. The maximum is capped at the
+     * number of partitions on the node.
+     */
+    @Config("parallelism")
+    @Default("1")
+    final int parallelism;
+
+    /**
+     * If {@code true}, uses {@link StoreKeyConverter} to detect duplicates across keys
+     */
+    @Config("detect.duplicates.across.keys")
+    @Default("true")
+    final boolean detectDuplicatesAcrossKeys;
 
     /**
      * Constructs the configs associated with the tool.
@@ -322,16 +429,21 @@ public class DumpIndexTool {
     DumpIndexToolConfig(VerifiableProperties verifiableProperties) {
       typeOfOperation = Operation.valueOf(verifiableProperties.getString("type.of.operation"));
       pathOfInput = new File(verifiableProperties.getString("path.of.input"));
+      hostname = verifiableProperties.getString("hostname", "localhost");
+      port = verifiableProperties.getIntInRange("port", 6667, 1, 65535);
       hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path", "");
       partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path", "");
       String filterSetStr = verifiableProperties.getString("filter.set", "");
       if (!filterSetStr.isEmpty()) {
         filterSet = new HashSet<>(Arrays.asList(filterSetStr.split(",")));
       } else {
-        filterSet = Collections.EMPTY_SET;
+        filterSet = Collections.emptySet();
       }
       indexEntriesToProcessPerSec =
           verifiableProperties.getLongInRange("index.entries.to.process.per.sec", Long.MAX_VALUE, 1, Long.MAX_VALUE);
+      failIfCraftedIdsPresent = verifiableProperties.getBoolean("fail.if.crafted.ids.present", false);
+      parallelism = verifiableProperties.getIntInRange("parallelism", 1, 1, Integer.MAX_VALUE);
+      detectDuplicatesAcrossKeys = verifiableProperties.getBoolean("detect.duplicates.across.keys", true);
     }
   }
 
@@ -357,6 +469,7 @@ public class DumpIndexTool {
   }
 
   public static void main(String args[]) throws Exception {
+    final AtomicInteger exitCode = new AtomicInteger(0);
     VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
     DumpIndexToolConfig config = new DumpIndexToolConfig(verifiableProperties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
@@ -389,18 +502,37 @@ public class DumpIndexTool {
           break;
         case VerifyIndex:
           IndexProcessingResults results =
-              dumpIndexTool.processIndex(config.pathOfInput, filterKeySet, time.milliseconds());
-          if (results.isIndexSane()) {
-            logger.info("Index of {} is well formed and without errors", config.pathOfInput);
+              dumpIndexTool.processIndex(config.pathOfInput, filterKeySet, time.milliseconds(),
+                  config.detectDuplicatesAcrossKeys);
+          exitCode.set(reportVerificationResults(config.pathOfInput, results, config.failIfCraftedIdsPresent));
+          break;
+        case VerifyDataNode:
+          DataNodeId dataNodeId = clusterMap.getDataNodeId(config.hostname, config.port);
+          if (dataNodeId == null) {
+            logger.error("No data node corresponding to {}:{}", config.hostname, config.port);
           } else {
-            logger.error("Index of {} has errors", config.pathOfInput);
+            Set<File> replicaDirs = clusterMap.getReplicaIds(dataNodeId)
+                .stream()
+                .map(replicaId -> new File(replicaId.getMountPath()))
+                .collect(Collectors.toSet());
+            Map<File, IndexProcessingResults> resultsByReplica =
+                dumpIndexTool.processIndex(replicaDirs, filterKeySet, config.parallelism,
+                    config.detectDuplicatesAcrossKeys);
+            replicaDirs.removeAll(resultsByReplica.keySet());
+            if (replicaDirs.size() != 0) {
+              logger.error("Results obtained missing {}", replicaDirs);
+              exitCode.set(5);
+            } else {
+              resultsByReplica.forEach((replicaDir, result) -> exitCode.set(Math.max(exitCode.get(),
+                  reportVerificationResults(replicaDir, result, config.failIfCraftedIdsPresent))));
+            }
           }
-          logger.info("Processing results: {}", results);
           break;
         default:
           throw new IllegalArgumentException("Unrecognized operation: " + config.typeOfOperation);
       }
     }
+    System.exit(exitCode.get());
   }
 
   private static void dumpIndex(DumpIndexTool dumpIndexTool, File replicaDir, Set<StoreKey> filterSet)
@@ -425,18 +557,93 @@ public class DumpIndexTool {
     }
   }
 
-  public IndexProcessingResults processIndex(File replicaDir, Set<StoreKey> filterSet, long currentTimeMs)
-      throws InterruptedException, IOException, StoreException {
+  /**
+   * Reports verification results and returns possible exit code
+   * @param replicaDir the directory that contains the indexes for which {@code results} was generated
+   * @param results the processing results for index in {@code replicaDir}
+   * @param failIfCraftedIdsPresent if {@code true}, reports the presence of crafted IDs as a failure
+   * @return the suggested exit code
+   */
+  public static int reportVerificationResults(File replicaDir, IndexProcessingResults results,
+      boolean failIfCraftedIdsPresent) {
+    int exitCode = 0;
+    if (results == null) {
+      logger.error("Index of {} has no results", replicaDir);
+      exitCode = 1;
+    } else if (results.getThrowable() != null) {
+      logger.error("Processing of index of {} failed", replicaDir, results.getThrowable());
+      exitCode = 2;
+    } else if (failIfCraftedIdsPresent && results.getCraftedIdCount() != 0) {
+      logger.error("Index of {} has {} crafted IDs", replicaDir, results.getCraftedIdCount());
+      exitCode = 3;
+    } else if (!results.isIndexSane()) {
+      logger.error("Index of {} has errors. Results are {}", replicaDir, results);
+      exitCode = 4;
+    } else {
+      logger.info("Index of {} is well formed and without errors", replicaDir);
+    }
+    return exitCode;
+  }
+
+  /**
+   * Returns {@link IndexProcessingResults} for each replicaDir in {@code replicaDirs}
+   * @param replicaDirs the directories to examine
+   * @param filterSet the filter set of keys to examine. Can be {@code null}
+   * @param parallelism the desired parallelism. The minimum of this and the size of {@code replicaDirs} is the actual
+   *                    chosen parallelism.
+   * @param detectDuplicatesAcrossKeys if {@code true}, uses the {@link StoreKeyConverter} to detect duplicates across
+   *                                   keys. If set to {@code true}, parallelism has to be 1.
+   * @return @link IndexProcessingResults} for each replicaDir in {@code replicaDirs}
+   */
+  public Map<File, IndexProcessingResults> processIndex(Set<File> replicaDirs, Set<StoreKey> filterSet, int parallelism,
+      boolean detectDuplicatesAcrossKeys) {
+    if (detectDuplicatesAcrossKeys && parallelism != 1) {
+      throw new IllegalArgumentException("Parallelism cannot be > 1 because StoreKeyConverter is not thread safe");
+    }
+    if (replicaDirs == null || replicaDirs.size() == 0) {
+      return Collections.emptyMap();
+    }
+    long currentTimeMs = time.milliseconds();
+    ConcurrentMap<File, IndexProcessingResults> resultsByReplica = new ConcurrentHashMap<>();
+    ExecutorService executorService = Executors.newFixedThreadPool(Math.min(parallelism, replicaDirs.size()));
+    List<Future<?>> taskFutures = new ArrayList<>(replicaDirs.size());
+    for (File replicaDir : replicaDirs) {
+      Future<?> taskFuture = executorService.submit(() -> {
+        logger.info("Processing segment files for replica {} ", replicaDir);
+        IndexProcessingResults results = null;
+        try {
+          results = processIndex(replicaDir, filterSet, currentTimeMs, detectDuplicatesAcrossKeys);
+        } catch (Throwable e) {
+          results = new IndexProcessingResults(e);
+        } finally {
+          resultsByReplica.put(replicaDir, results);
+        }
+      });
+      taskFutures.add(taskFuture);
+    }
+    for (Future<?> taskFuture : taskFutures) {
+      try {
+        taskFuture.get();
+      } catch (Exception e) {
+        throw new IllegalStateException("Future encountered error while waiting", e);
+      }
+    }
+    return resultsByReplica;
+  }
+
+  public IndexProcessingResults processIndex(File replicaDir, Set<StoreKey> filterSet, long currentTimeMs,
+      boolean detectDuplicatesAcrossKeys) throws Exception {
     verifyPath(replicaDir, true);
     final Timer.Context context = metrics.dumpReplicaIndexesTimeMs.time();
     try {
       File[] segmentFiles = getSegmentFilesFromDir(replicaDir);
-      SortedMap<File, List<IndexEntry>> segmentFileToIndexEntries = getAllEntriesFromIndex(segmentFiles, throttler);
+      SortedMap<File, List<IndexEntry>> segmentFileToIndexEntries = getAllEntriesFromIndex(segmentFiles);
       Map<StoreKey, Info> keyToState = new HashMap<>();
       long processedCount = 0;
       long putCount = 0;
       long deleteCount = 0;
       long ttlUpdateCount = 0;
+      long craftedIdCount = 0;
       Set<StoreKey> duplicatePuts = new HashSet<>();
       Set<StoreKey> putAfterUpdates = new HashSet<>();
       Set<StoreKey> duplicateDeletes = new HashSet<>();
@@ -450,6 +657,9 @@ public class DumpIndexTool {
         for (IndexEntry entry : entries) {
           StoreKey key = entry.getKey();
           if (filterSet == null || filterSet.isEmpty() || filterSet.contains(key)) {
+            if (key instanceof BlobId && BlobId.isCrafted(key.getID())) {
+              craftedIdCount++;
+            }
             boolean isDelete = entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index);
             boolean isTtlUpdate = !isDelete && entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index);
             boolean isExpired = DumpDataHelper.isExpired(entry.getValue().getExpiresAtMs(), currentTimeMs);
@@ -506,14 +716,28 @@ public class DumpIndexTool {
           }
         }
       }
+      Map<StoreKey, StoreKey> duplicateKeys = new HashMap<>();
+      if (detectDuplicatesAcrossKeys) {
+        logger.info("Converting {} store keys...", keyToState.size());
+        Map<StoreKey, StoreKey> conversions = storeKeyConverter.convert(keyToState.keySet());
+        logger.info("Store keys converted!");
+        conversions.forEach((k, v) -> {
+          if (!k.equals(v) && keyToState.containsKey(v)) {
+            // if k == v, the processing above should have caught it
+            // if v exists in keyToState, it means both k and v exist in the store and this is a problem
+            duplicateKeys.put(k, v);
+          }
+        });
+      }
       return new IndexProcessingResults(keyToState, processedCount, putCount, ttlUpdateCount, deleteCount,
-          duplicatePuts, putAfterUpdates, duplicateDeletes, duplicateUpdates, updatesAfterDeletes);
+          craftedIdCount, duplicatePuts, putAfterUpdates, duplicateDeletes, duplicateUpdates, updatesAfterDeletes,
+          duplicateKeys);
     } finally {
       context.stop();
     }
   }
 
-  public SortedMap<File, List<IndexEntry>> getAllEntriesFromIndex(File[] segmentFiles, Throttler throttler)
+  public SortedMap<File, List<IndexEntry>> getAllEntriesFromIndex(File[] segmentFiles)
       throws InterruptedException, IOException, StoreException {
     SortedMap<File, List<IndexEntry>> fileToIndexEntries = new TreeMap<>(PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
     for (File segmentFile : segmentFiles) {
@@ -541,20 +765,23 @@ public class DumpIndexTool {
   }
 
   /**
-   * Will examine the index files in the File replicas for store keys
-   * and will then convert these store keys and return the
-   * conversion map
-   * @param replicas replicas that should contain index files that will be
-   *                 parsed
+   * Will examine the index files in the File replicas for store keys and will then convert these store keys and return
+   * the conversion map
+   * @param replicas replicas that should contain index files that will be parsed
    * @return conversion map of old store keys and new store keys
    * @throws Exception
    */
-  public Map<StoreKey, StoreKey> retrieveAndMaybeConvertBlobIds(File[] replicas) throws Exception {
-    Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> resultsByReplica =
-        getIndexProcessingResults(replicas, null);
-    boolean success = resultsByReplica.getFirst();
+  public Map<StoreKey, StoreKey> retrieveAndMaybeConvertStoreKeys(File[] replicas) throws Exception {
+    Map<File, IndexProcessingResults> results = processIndex(new HashSet<>(Arrays.asList(replicas)), null, 1, false);
+    boolean success = true;
+    for (DumpIndexTool.IndexProcessingResults result : results.values()) {
+      if (!result.isIndexSane()) {
+        success = false;
+        break;
+      }
+    }
     if (success) {
-      return createConversionKeyMap(replicas, resultsByReplica.getSecond());
+      return createConversionKeyMap(replicas, results);
     }
     return null;
   }
@@ -582,27 +809,6 @@ public class DumpIndexTool {
     Map<StoreKey, StoreKey> ans = storeKeyConverter.convert(storeKeys);
     logger.info("Store keys converted!");
     return ans;
-  }
-
-  /**
-   * Processes the indexes of each of the replicas and returns the results.
-   * @param replicas the replicas to process indexes for.
-   * @return a {@link Pair} whose first indicates whether all results were sane and whose second contains the map of
-   * individual results by replica.
-   * @throws Exception if there is any error in processing the indexes.
-   */
-  Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> getIndexProcessingResults(File[] replicas,
-      Set<StoreKey> filterSet) throws Exception {
-    long currentTimeMs = time.milliseconds();
-    Map<File, DumpIndexTool.IndexProcessingResults> results = new HashMap<>();
-    boolean sane = true;
-    for (File replica : replicas) {
-      logger.info("Processing segment files for replica {} ", replica);
-      DumpIndexTool.IndexProcessingResults result = processIndex(replica, filterSet, currentTimeMs);
-      sane = sane && result.isIndexSane();
-      results.put(replica, result);
-    }
-    return new Pair<>(sane, results);
   }
 
   private static File[] getSegmentFilesFromDir(File dir) {

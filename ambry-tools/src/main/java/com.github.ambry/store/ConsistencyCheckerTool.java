@@ -187,15 +187,20 @@ public class ConsistencyCheckerTool {
    */
   public Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> checkConsistency(File[] replicas)
       throws Exception {
-    Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> resultsByReplica =
-        dumpIndexTool.getIndexProcessingResults(replicas, filterSet);
-    boolean success = resultsByReplica.getFirst();
+    Map<File, DumpIndexTool.IndexProcessingResults> results =
+        dumpIndexTool.processIndex(new HashSet<>(Arrays.asList(replicas)), filterSet, 1, true);
+    boolean success = true;
+    for (DumpIndexTool.IndexProcessingResults result : results.values()) {
+      if (!result.isIndexSane()) {
+        success = false;
+        break;
+      }
+    }
     if (success) {
-      Map<StoreKey, ReplicationStatus> blobIdToStatusMap =
-          getBlobStatusByReplica(replicas, resultsByReplica.getSecond());
+      Map<StoreKey, ReplicationStatus> blobIdToStatusMap = getBlobStatusByReplica(replicas, results);
       success = checkConsistency(blobIdToStatusMap, replicas.length).size() == 0;
     }
-    return new Pair<>(success, resultsByReplica.getSecond());
+    return new Pair<>(success, results);
   }
 
   /**
