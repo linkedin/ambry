@@ -38,6 +38,7 @@ import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -115,6 +116,38 @@ public class HelixBootstrapUpgradeToolTest {
     } else {
       activeDcSet = new HashSet<>(Arrays.asList(dcs));
     }
+  }
+
+  /**
+   * Test {@link HelixBootstrapUpgradeUtil#parseAndUpdateDcInfoFromArg(String, String)} method.
+   */
+  @Test
+  public void testParseDcSet() throws Exception {
+    assumeTrue(dcStr.equals("all"));
+    Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    try {
+      HelixBootstrapUpgradeUtil.parseAndUpdateDcInfoFromArg(null, zkLayoutPath);
+      fail("Null dc string should fail");
+    } catch (IllegalArgumentException e) {
+    }
+    try {
+      HelixBootstrapUpgradeUtil.parseAndUpdateDcInfoFromArg("", zkLayoutPath);
+      fail("Empty dc string should fail");
+    } catch (IllegalArgumentException e) {
+    }
+    try {
+      HelixBootstrapUpgradeUtil.parseAndUpdateDcInfoFromArg("inv, inv1", zkLayoutPath);
+      fail("Invalid dc strings should fail");
+    } catch (IllegalArgumentException e) {
+    }
+    Set<String> expected = new HashSet<>(Collections.singletonList("DC1"));
+    Assert.assertEquals(expected, HelixBootstrapUpgradeUtil.parseAndUpdateDcInfoFromArg("DC1", zkLayoutPath).keySet());
+    expected.add("DC0");
+    Assert.assertEquals(expected,
+        HelixBootstrapUpgradeUtil.parseAndUpdateDcInfoFromArg("DC0, DC1", zkLayoutPath).keySet());
+    Assert.assertEquals(expected, HelixBootstrapUpgradeUtil.parseAndUpdateDcInfoFromArg("all", zkLayoutPath).keySet());
   }
 
   /**
@@ -315,25 +348,26 @@ public class HelixBootstrapUpgradeToolTest {
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
     // Check writable partitions in each datacenter
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
-      if (!activeDcSet.contains(zkInfo.getDcName())) {
-        continue;
-      }
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
       String getPath = ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;
       ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
-      assertNotNull(zNRecord);
-      Map<String, Map<String, String>> overridePartition = zNRecord.getMapFields();
-      Set<String> writableInDC = new HashSet<>();
-      for (Map.Entry<String, Map<String, String>> entry : overridePartition.entrySet()) {
-        if (entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(ClusterMapUtils.READ_WRITE_STR)) {
-          writableInDC.add(entry.getKey());
+      if (!activeDcSet.contains(zkInfo.getDcName())) {
+        assertNull(zNRecord);
+      } else {
+        assertNotNull(zNRecord);
+        Map<String, Map<String, String>> overridePartition = zNRecord.getMapFields();
+        Set<String> writableInDC = new HashSet<>();
+        for (Map.Entry<String, Map<String, String>> entry : overridePartition.entrySet()) {
+          if (entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(ClusterMapUtils.READ_WRITE_STR)) {
+            writableInDC.add(entry.getKey());
+          }
         }
+        // Verify writable partitions in DC match writable partitions in Partition Layout
+        assertEquals("Mismatch in writable partitions for partitionLayout and propertyStore", writableInPartitionLayout,
+            writableInDC);
       }
-      // Verify writable partitions in DC match writable partitions in Partition Layout
-      assertEquals("Mismatch in writable partitions for partitionLayout and propertyStore", writableInPartitionLayout,
-          writableInDC);
     }
   }
 
@@ -344,13 +378,15 @@ public class HelixBootstrapUpgradeToolTest {
    */
   private void verifyResourceCount(HardwareLayout hardwareLayout, long expectedResourceCount) {
     for (Datacenter dc : hardwareLayout.getDatacenters()) {
-      if (!activeDcSet.contains(dc.getName())) {
-        continue;
-      }
       ZkInfo zkInfo = dcsToZkInfo.get(dc.getName());
       ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
-      assertEquals("Resource count mismatch", expectedResourceCount,
-          admin.getResourcesInCluster(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP).size());
+      if (!activeDcSet.contains(dc.getName())) {
+        Assert.assertFalse("Cluster should not be present, as dc " + dc.getName() + " is not enabled",
+            admin.getClusters().contains(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP));
+      } else {
+        assertEquals("Resource count mismatch", expectedResourceCount,
+            admin.getResourcesInCluster(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP).size());
+      }
     }
   }
 }

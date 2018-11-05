@@ -98,7 +98,6 @@ class HelixBootstrapUpgradeUtil {
   private final boolean forceRemove;
   private int maxResource = -1;
   private final String clusterName;
-  private final boolean allDcs;
   private boolean expectMoreInHelixDuringValidate = false;
   private Map<String, Set<String>> instancesNotForceRemovedByDc = new HashMap<>();
   private Map<String, Set<String>> partitionsNotForceRemovedByDc = new HashMap<>();
@@ -110,6 +109,36 @@ class HelixBootstrapUpgradeUtil {
   private int resourcesDropped = 0;
   private Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
+  private static final String ALL = "all";
+
+  /**
+   * Parse the dc string argument and return a map of dc -> DcZkInfo for every datacenter that is enabled.
+   * @param dcs the string argument for dcs.
+   * @param zkLayoutPath the path to the zkLayout file.
+   * @return a map of dc -> {@link com.github.ambry.clustermap.ClusterMapUtils.DcZkInfo} for every enabled dc.
+   * @throws IOException if there is an IO error reading the zkLayout file.
+   */
+  static Map<String, ClusterMapUtils.DcZkInfo> parseAndUpdateDcInfoFromArg(String dcs, String zkLayoutPath)
+      throws IOException {
+    Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress =
+        ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
+    Set<String> parsedDcSet;
+    if (Utils.isNullOrEmpty(dcs)) {
+      throw new IllegalArgumentException("dcs string cannot be null or empty.");
+    }
+    if (dcs.equalsIgnoreCase(ALL)) {
+      parsedDcSet = new HashSet<>(dataCenterToZkAddress.keySet());
+    } else {
+      parsedDcSet = Arrays.stream(dcs.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
+      HashSet<String> diff = new HashSet<>(parsedDcSet);
+      diff.removeAll(dataCenterToZkAddress.keySet());
+      if (!diff.isEmpty()) {
+        throw new IllegalArgumentException("Unknown datacenter(s) supplied" + diff);
+      }
+    }
+    dataCenterToZkAddress.entrySet().removeIf(e -> !parsedDcSet.contains(e.getKey()));
+    return dataCenterToZkAddress;
+  }
 
   /**
    * Takes in the path to the files that make up the static cluster map and adds or updates the cluster map information
@@ -207,15 +236,7 @@ class HelixBootstrapUpgradeUtil {
    */
   static void dropCluster(String zkLayoutPath, String clusterName, String dcs, HelixAdminFactory helixAdminFactory)
       throws Exception {
-    Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress =
-        ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
-    if (dcs != null && !dcs.isEmpty() && !dcs.equalsIgnoreCase("all")) {
-      Set<String> dcsSet = Arrays.stream(dcs.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
-      dataCenterToZkAddress = dataCenterToZkAddress.entrySet()
-          .stream()
-          .filter(e -> dcsSet.contains(e.getKey()))
-          .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-    }
+    Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     info("Dropping cluster {} from Helix", clusterName);
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
       HelixAdmin admin = helixAdminFactory.getHelixAdmin(entry.getValue().getZkConnectStr());
@@ -244,20 +265,7 @@ class HelixBootstrapUpgradeUtil {
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     this.dryRun = dryRun;
     this.forceRemove = forceRemove;
-    this.dataCenterToZkAddress = ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
-    Set<String> dcsSetIfNotAll;
-    if (dcs != null && !dcs.isEmpty() && !dcs.equalsIgnoreCase("all")) {
-      dcsSetIfNotAll = Arrays.stream(dcs.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
-      dataCenterToZkAddress = dataCenterToZkAddress.entrySet()
-          .stream()
-          .filter(e -> dcsSetIfNotAll.contains(e.getKey()))
-          .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-      allDcs = false;
-    } else {
-      dcsSetIfNotAll = null;
-      allDcs = true;
-    }
-
+    dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     Properties props = new Properties();
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
     props.setProperty("clustermap.host.name", "localhost");
@@ -277,8 +285,7 @@ class HelixBootstrapUpgradeUtil {
     info("Associating static Ambry cluster \"" + clusterNameInStaticClusterMap + "\" with cluster\"" + clusterName
         + "\" in Helix");
     for (Datacenter datacenter : staticClusterMap.hardwareLayout.getDatacenters()) {
-      if (!dataCenterToZkAddress.keySet().contains(datacenter.getName()) && (allDcs || dcsSetIfNotAll.contains(
-          datacenter.getName()))) {
+      if (dcs.equalsIgnoreCase(ALL) && !dataCenterToZkAddress.keySet().contains(datacenter.getName())) {
         throw new IllegalArgumentException(
             "There is no ZK host for datacenter " + datacenter.getName() + " in the static clustermap");
       }

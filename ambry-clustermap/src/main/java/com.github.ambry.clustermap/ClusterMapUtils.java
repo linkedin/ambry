@@ -117,7 +117,7 @@ public class ClusterMapUtils {
    * @return a map of dcName -> DcInfo.
    * @throws JSONException if there is an error parsing the JSON.
    */
-  public static Map<String, DcZkInfo> parseDcJsonAndPopulateDcInfo(String dcInfoJsonString) throws JSONException {
+  static Map<String, DcZkInfo> parseDcJsonAndPopulateDcInfo(String dcInfoJsonString) throws JSONException {
     Map<String, DcZkInfo> dataCenterToZkAddress = new HashMap<>();
     JSONObject root = new JSONObject(dcInfoJsonString);
     JSONArray all = root.getJSONArray(ZKINFO_STR);

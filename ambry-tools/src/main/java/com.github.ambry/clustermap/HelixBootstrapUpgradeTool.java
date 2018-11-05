@@ -146,6 +146,7 @@ public class HelixBootstrapUpgradeTool {
         "The comma-separated datacenters (colos) to update. If updates to every datacenter is intended, use '--dcs all'")
         .withRequiredArg()
         .describedAs("datacenters")
+        .required()
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> maxPartitionsInOneResourceOpt = parser.accepts("maxPartitionsInOneResource",
