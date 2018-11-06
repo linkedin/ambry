@@ -188,7 +188,6 @@ class LogSegment implements Read, Write {
   }
 
   /**
-   * {@inheritDoc}
    * <p/>
    * Attempts to write the {@code byteArray} to this segment in direct IO manner.
    * <p/>
