@@ -1264,9 +1264,8 @@ public class FrontendIntegrationTest {
     HttpHeaders stitchHeaders = new DefaultHttpHeaders();
     setAmbryHeadersForPut(stitchHeaders, TTL_SECS, !container.isCacheable(), "stitcher", "video/mp4",
         "stitchedUploadTest", account.getName(), container.getName());
-    JSONObject stitchRequestBody = new JSONObject().put(PostBlobHandler.SIGNED_CHUNK_IDS_KEY, signedChunkIds);
     HttpRequest httpRequest = buildRequest(HttpMethod.POST, Operations.STITCH, stitchHeaders,
-        ByteBuffer.wrap(stitchRequestBody.toString().getBytes(StandardCharsets.UTF_8)));
+        ByteBuffer.wrap(StitchRequestSerDe.toJson(signedChunkIds).toString().getBytes(StandardCharsets.UTF_8)));
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     String stitchedBlobId = verifyPostAndReturnBlobId(responseParts);
     HttpHeaders expectedGetHeaders = new DefaultHttpHeaders().add(stitchHeaders);

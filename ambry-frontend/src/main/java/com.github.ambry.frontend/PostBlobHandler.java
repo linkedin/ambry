@@ -64,15 +64,7 @@ import static com.github.ambry.frontend.FrontendUtils.*;
  * upload requests for supplying the blob properties and user metadata of the stitched blob, but, instead of the actual
  * blob content, accepts a UTF-8 JSON object that includes the signed IDs for the chunks to stitch.
  * <h3>Request body format</h3>
- * The body of the request should be a JSON object that contains an array field with the key,
- * {@link #SIGNED_CHUNK_IDS_KEY}. Each element of the array should be a signed ID produced by an
- * {@link IdSigningService} implementation representing a data chunk to be stitched together. The order of the IDs in
- * the array will be the order in which the data chunks are stitched. For example:
- * <pre><code>
- * {
- *   "signedChunkIds": ["/signedId/id1", "/signedId/id2", "..."]
- * }
- * </code></pre>
+ * The body of the request should be a JSON object that conforms to the format described in {@link StitchRequestSerDe}.
  */
 class PostBlobHandler {
   private static final Logger LOGGER = LoggerFactory.getLogger(PostBlobHandler.class);
@@ -80,7 +72,6 @@ class PostBlobHandler {
    * Key to represent the time at which a blob will expire in ms. Used within the metadata map in signed IDs.
    */
   static final String EXPIRATION_TIME_MS_KEY = "et";
-  static final String SIGNED_CHUNK_IDS_KEY = "signedChunkIds";
 
   private final SecurityService securityService;
   private final IdConverter idConverter;
@@ -379,15 +370,14 @@ class PostBlobHandler {
      */
     List<ChunkInfo> getChunksToStitch(BlobProperties stitchedBlobProperties, JSONObject stitchRequestJson)
         throws RestServiceException {
-      JSONArray signedChunkIds = stitchRequestJson.optJSONArray(SIGNED_CHUNK_IDS_KEY);
-      if (signedChunkIds == null || signedChunkIds.length() < 1) {
+      List<String> signedChunkIds = StitchRequestSerDe.fromJson(stitchRequestJson);
+      if (signedChunkIds.isEmpty()) {
         throw new RestServiceException("Must provide at least one ID in stitch request",
             RestServiceErrorCode.MissingArgs);
       }
-      List<ChunkInfo> chunksToStitch = new ArrayList<>(signedChunkIds.length());
+      List<ChunkInfo> chunksToStitch = new ArrayList<>(signedChunkIds.size());
       String expectedSession = null;
-      for (Object signedChunkIdObj : signedChunkIds) {
-        String signedChunkId = signedChunkIdObj.toString();
+      for (String signedChunkId : signedChunkIds) {
         if (!idSigningService.isIdSigned(signedChunkId)) {
           throw new RestServiceException("All chunks IDs must be signed: " + signedChunkId,
               RestServiceErrorCode.BadRequest);

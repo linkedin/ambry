@@ -62,7 +62,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -467,9 +466,7 @@ public class PostBlobHandlerTest {
    * @return a valid JSON body for a stitch request, encoded as UTF-8.
    */
   private byte[] getStitchRequestBody(List<String> signedChunkIds) {
-    return new JSONObject().put(PostBlobHandler.SIGNED_CHUNK_IDS_KEY, new JSONArray(signedChunkIds))
-        .toString()
-        .getBytes(StandardCharsets.UTF_8);
+    return StitchRequestSerDe.toJson(signedChunkIds).toString().getBytes(StandardCharsets.UTF_8);
   }
 
   /**
