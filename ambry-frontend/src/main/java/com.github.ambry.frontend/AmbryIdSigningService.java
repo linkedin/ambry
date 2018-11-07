@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -29,13 +30,11 @@ import org.apache.commons.codec.binary.Base64;
  * is passed. A secure implementation would either need to use an authenticated encryption scheme or attach a signature.
  */
 public class AmbryIdSigningService implements IdSigningService {
-  private static final String SIGNED_ID_PREFIX = "signedId/";
-
   @Override
   public String getSignedId(String blobId, Map<String, String> metadata) throws RestServiceException {
     try {
       String jsonString = SignedIdSerDe.toJson(blobId, metadata);
-      return SIGNED_ID_PREFIX + Base64.encodeBase64URLSafeString(jsonString.getBytes(StandardCharsets.UTF_8));
+      return RestUtils.SIGNED_ID_PREFIX + Base64.encodeBase64URLSafeString(jsonString.getBytes(StandardCharsets.UTF_8));
     } catch (Exception e) {
       throw new RestServiceException("Error serializing signed ID", e, RestServiceErrorCode.InternalServerError);
     }
@@ -44,7 +43,7 @@ public class AmbryIdSigningService implements IdSigningService {
   @Override
   public boolean isIdSigned(String id) {
     int searchStart = id.startsWith("/") ? 1 : 0;
-    return id.startsWith(SIGNED_ID_PREFIX, searchStart);
+    return id.startsWith(RestUtils.SIGNED_ID_PREFIX, searchStart);
   }
 
   @Override
@@ -53,7 +52,7 @@ public class AmbryIdSigningService implements IdSigningService {
       throw new RestServiceException("Expected ID to be signed: " + signedId, RestServiceErrorCode.InternalServerError);
     }
     try {
-      int startIndex = SIGNED_ID_PREFIX.length() + (signedId.startsWith("/") ? 1 : 0);
+      int startIndex = RestUtils.SIGNED_ID_PREFIX.length() + (signedId.startsWith("/") ? 1 : 0);
       String base64String = signedId.substring(startIndex);
       String jsonString = new String(Base64.decodeBase64(base64String), StandardCharsets.UTF_8);
       return SignedIdSerDe.fromJson(jsonString);
