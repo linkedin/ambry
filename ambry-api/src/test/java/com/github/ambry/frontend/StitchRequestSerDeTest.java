@@ -34,6 +34,7 @@ public class StitchRequestSerDeTest {
    */
   @Test
   public void serDeTest() {
+    doSerDeTest(null);
     doSerDeTest(Collections.emptyList());
     doSerDeTest(Arrays.asList("a", "b", "/signedId/abcdef"));
   }
@@ -44,7 +45,8 @@ public class StitchRequestSerDeTest {
    */
   private void doSerDeTest(List<String> signedChunkIds) {
     JSONObject stitchRequestJson = StitchRequestSerDe.toJson(signedChunkIds);
-    assertEquals("Unexpected deserialized signed chunk IDs", signedChunkIds,
+    assertEquals("Unexpected deserialized signed chunk IDs",
+        signedChunkIds == null ? Collections.emptyList() : signedChunkIds,
         StitchRequestSerDe.fromJson(stitchRequestJson));
   }
 }
