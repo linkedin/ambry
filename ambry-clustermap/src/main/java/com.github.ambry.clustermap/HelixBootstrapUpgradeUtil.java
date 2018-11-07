@@ -342,8 +342,9 @@ class HelixBootstrapUpgradeUtil {
     Properties storeProps = new Properties();
     storeProps.setProperty("helix.property.store.root.path", "/" + clusterName);
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
-    info("Setting partition override for all datacenters.");
+    info("Setting partition override for specified datacenters.");
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
+      info("Setting partition override for {}.", entry.getKey());
       HelixPropertyStore<ZNRecord> helixPropertyStore =
           CommonUtils.createHelixPropertyStore(entry.getValue().getZkConnectStr(), propertyStoreConfig, null);
       ZNRecord znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);

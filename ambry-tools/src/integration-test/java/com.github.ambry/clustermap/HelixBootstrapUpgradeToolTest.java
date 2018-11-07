@@ -37,6 +37,7 @@ import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -56,7 +57,6 @@ import static org.junit.Assume.*;
 public class HelixBootstrapUpgradeToolTest {
   private static String tempDirPath;
   private static final Map<String, ZkInfo> dcsToZkInfo = new HashMap<>();
-  private static final Map<String, HelixPropertyStore<ZNRecord>> dcsToPropertyStore = new HashMap<>();
   private static final String dcs[] = new String[]{"DC0", "DC1"};
   private static final byte ids[] = new byte[]{(byte) 0, (byte) 1};
   private final String hardwareLayoutPath;
@@ -91,6 +91,14 @@ public class HelixBootstrapUpgradeToolTest {
     int port = 2200;
     for (int i = 0; i < dcs.length; i++) {
       dcsToZkInfo.put(dcs[i], new ZkInfo(tempDirPath, dcs[i], ids[i], port++, true));
+    }
+  }
+
+  @After
+  public void clear() {
+    for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+      ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+      admin.dropCluster(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP);
     }
   }
 
