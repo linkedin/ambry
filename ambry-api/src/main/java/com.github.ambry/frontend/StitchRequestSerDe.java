@@ -36,6 +36,10 @@ import org.json.JSONObject;
 public class StitchRequestSerDe {
   private static final String SIGNED_CHUNK_IDS_KEY = "signedChunkIds";
 
+  private StitchRequestSerDe() {
+    // empty private constructor for a class that contains only static functions
+  }
+
   /**
    * @param signedChunkIds the list of signed chunk IDs to stitch together.
    * @return a {@link JSONObject} representing the request.

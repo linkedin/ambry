@@ -307,6 +307,8 @@ public class RestUtils {
 
   public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
   public static final String BYTE_RANGE_UNITS = "bytes";
+  public static final String SIGNED_ID_PREFIX = "signedId/";
+
   private static final int CRC_SIZE = 8;
   private static final short USER_METADATA_VERSION_V1 = 1;
   private static final String BYTE_RANGE_PREFIX = BYTE_RANGE_UNITS + "=";
