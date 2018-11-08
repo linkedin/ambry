@@ -195,6 +195,11 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
           }
           if (e == null) {
+            // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
+            // we will replace the field with the size from inside of the metadata content.
+            if (blobInfo != null) {
+              blobInfo.getBlobProperties().setBlobSize(totalSize);
+            }
             blobDataChannel = new BlobDataReadableStreamChannel();
             operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
           } else {
@@ -989,8 +994,9 @@ class GetBlobOperation extends GetOperation {
               blobInfo = new BlobInfo(serverBlobProperties,
                   decryptCallbackResultInfo.result.getDecryptedUserMetadata().array());
             }
-            int contentSize = decryptCallbackResultInfo.result.getDecryptedBlobContent().remaining();
-            if (!resolveRange(contentSize)) {
+            totalSize = decryptCallbackResultInfo.result.getDecryptedBlobContent().remaining();
+            chunkSize = totalSize;
+            if (!resolveRange(totalSize)) {
               chunkIndexToBuffer.put(0, filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
               numChunksRetrieved = 1;
               progressTracker.setDecryptionSuccess();
@@ -1101,27 +1107,6 @@ class GetBlobOperation extends GetOperation {
       chunkSize = compositeBlobInfo.getChunkSize();
       totalSize = compositeBlobInfo.getTotalSize();
 
-      // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly, we will
-      // replace the field with the size from inside of the metadata content.
-      BlobProperties oldBlobProperties = null;
-      if (blobInfo != null) {
-        oldBlobProperties = blobInfo.getBlobProperties();
-      } else if (serverBlobProperties != null) {
-        oldBlobProperties = serverBlobProperties;
-      }
-      if (oldBlobProperties != null) {
-        BlobProperties newBlobProperties =
-            new BlobProperties(totalSize, oldBlobProperties.getServiceId(), oldBlobProperties.getOwnerId(),
-                oldBlobProperties.getContentType(), oldBlobProperties.isPrivate(),
-                oldBlobProperties.getTimeToLiveInSeconds(), oldBlobProperties.getCreationTimeInMs(),
-                oldBlobProperties.getAccountId(), oldBlobProperties.getContainerId(), oldBlobProperties.isEncrypted());
-        if (blobInfo != null) {
-          blobInfo = new BlobInfo(newBlobProperties, blobInfo.getUserMetadata());
-        } else if (serverBlobProperties != null) {
-          serverBlobProperties = newBlobProperties;
-        }
-      }
-
       keys = compositeBlobInfo.getKeys();
       boolean rangeResolutionFailure = false;
       try {
@@ -1187,10 +1172,10 @@ class GetBlobOperation extends GetOperation {
      * @param encryptionKey encryption key for the blob. Could be null for non encrypted blob.
      */
     private void handleSimpleBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
-      totalSize = blobData.getSize();
-      chunkSize = totalSize;
       boolean rangeResolutionFailure = false;
       if (encryptionKey == null) {
+        totalSize = blobData.getSize();
+        chunkSize = totalSize;
         rangeResolutionFailure = resolveRange(totalSize);
       } else {
         // for encrypted blobs, Blob data will not have the right size. Will have to wait until decryption is complete

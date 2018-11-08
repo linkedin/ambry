@@ -48,8 +48,8 @@ public class BlobPropertiesTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{BlobPropertiesSerDe.VERSION_1}, {BlobPropertiesSerDe.VERSION_2}, {BlobPropertiesSerDe.VERSION_3}});
+    return Arrays.asList(new Object[][]{{BlobPropertiesSerDe.VERSION_1}, {BlobPropertiesSerDe.VERSION_2},
+        {BlobPropertiesSerDe.VERSION_3}});
   }
 
   public BlobPropertiesTest(short version) {
@@ -118,13 +118,13 @@ public class BlobPropertiesTest {
 
     long creationTimeInSecs = TimeUnit.MILLISECONDS.toSeconds(creationTimeMs);
     // valid TTLs
-    long[] validTTLs = new long[]{TimeUnit.HOURS.toSeconds(1), TimeUnit.HOURS.toSeconds(10), TimeUnit.HOURS.toSeconds(
-        100), TimeUnit.DAYS.toSeconds(1), TimeUnit.DAYS.toSeconds(10), TimeUnit.DAYS.toSeconds(
-        100), TimeUnit.DAYS.toSeconds(30 * 12), TimeUnit.DAYS.toSeconds(30 * 12 * 10),
-        Integer.MAX_VALUE - creationTimeInSecs - 1,
-        Integer.MAX_VALUE - creationTimeInSecs,
-        Integer.MAX_VALUE - creationTimeInSecs + 1,
-        Integer.MAX_VALUE - creationTimeInSecs + 100, Integer.MAX_VALUE - creationTimeInSecs + 10000};
+    long[] validTTLs =
+        new long[]{TimeUnit.HOURS.toSeconds(1), TimeUnit.HOURS.toSeconds(10), TimeUnit.HOURS.toSeconds(100),
+            TimeUnit.DAYS.toSeconds(1), TimeUnit.DAYS.toSeconds(10), TimeUnit.DAYS.toSeconds(100),
+            TimeUnit.DAYS.toSeconds(30 * 12), TimeUnit.DAYS.toSeconds(30 * 12 * 10),
+            Integer.MAX_VALUE - creationTimeInSecs - 1, Integer.MAX_VALUE - creationTimeInSecs,
+            Integer.MAX_VALUE - creationTimeInSecs + 1, Integer.MAX_VALUE - creationTimeInSecs + 100,
+            Integer.MAX_VALUE - creationTimeInSecs + 10000};
     for (long ttl : validTTLs) {
       blobProperties =
           new BlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs, accountId,
@@ -149,6 +149,15 @@ public class BlobPropertiesTest {
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, timeToLiveInSeconds + 1, accountIdToExpect,
         containerIdToExpect, encryptFlagToExpect);
+
+    blobProperties.setBlobSize(blobSize + 1);
+    verifyBlobProperties(blobProperties, blobSize + 1, serviceId, "", "", false, timeToLiveInSeconds + 1,
+        accountIdToExpect, containerIdToExpect, encryptFlagToExpect);
+    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
+    blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
+        new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
+    verifyBlobProperties(blobProperties, blobSize + 1, serviceId, "", "", false, timeToLiveInSeconds + 1,
+        accountIdToExpect, containerIdToExpect, encryptFlagToExpect);
   }
 
   /**
