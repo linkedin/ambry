@@ -155,6 +155,8 @@ public class BlobIdTransformer implements Transformer {
       BlobData blobData = deserializeBlob(inputStream);
       ByteBufferInputStream blobDataBytes = blobData.getStream();
 
+      long blobPropertiesSize = oldProperties.getBlobSize();
+
       //If the blob is a metadata blob its data chunk id list
       //will be rewritten with transformed IDs
       if (blobData.getBlobType().equals(BlobType.MetadataBlob)) {
@@ -202,13 +204,14 @@ public class BlobIdTransformer implements Transformer {
         }
         ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContent(compositeBlobInfo.getChunkSize(),
             compositeBlobInfo.getTotalSize(), newKeys);
+        blobPropertiesSize = compositeBlobInfo.getTotalSize();
         metadataContent.flip();
         blobDataBytes = new ByteBufferInputStream(metadataContent);
         blobData = new BlobData(blobData.getBlobType(), metadataContent.remaining(), blobDataBytes);
       }
 
       BlobProperties newProperties =
-          new BlobProperties(blobData.getSize(), oldProperties.getServiceId(), oldProperties.getOwnerId(),
+          new BlobProperties(blobPropertiesSize, oldProperties.getServiceId(), oldProperties.getOwnerId(),
               oldProperties.getContentType(), oldProperties.isPrivate(), oldProperties.getTimeToLiveInSeconds(),
               oldProperties.getCreationTimeInMs(), newBlobId.getAccountId(), newBlobId.getContainerId(),
               oldProperties.isEncrypted());

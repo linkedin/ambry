@@ -438,15 +438,18 @@ public class BlobIdTransformerTest {
       //If not, its a data blob
       InputStream blobStream;
       long blobStreamSize;
+      long blobPropertiesSize;
       ByteBuffer byteBuffer;
       BlobType blobType;
       if (dataChunkIds == null) {
         blobStreamSize = BLOB_STREAM_SIZE;
+        blobPropertiesSize = blobStreamSize;
         blobStream = createBlobStream();
         blobType = BlobType.DataBlob;
       } else {
         byteBuffer = createMetadataByteBuffer(dataChunkIds);
         blobStreamSize = byteBuffer.remaining();
+        blobPropertiesSize = 8000000;
         blobStream = new ByteBufferInputStream(byteBuffer);
         blobType = BlobType.MetadataBlob;
       }
@@ -461,7 +464,7 @@ public class BlobIdTransformerTest {
       int inputStreamSize;
       MessageInfo messageInfo;
       BlobProperties blobProperties =
-          new BlobProperties(blobStreamSize, "serviceId", "ownerId", "contentType", false, 0, 0, blobId.getAccountId(),
+          new BlobProperties(blobPropertiesSize, "serviceId", "ownerId", "contentType", false, 0, 0, blobId.getAccountId(),
               blobId.getContainerId(), hasEncryption);
       if (clazz != null) {
         MessageFormatInputStream messageFormatInputStream;
