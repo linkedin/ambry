@@ -64,6 +64,9 @@ public class BlobIdTransformerTest {
   private static final int BLOB_STREAM_SIZE = 128;
   private static final int BLOB_ENCRYPTION_KEY_SIZE = 32;
   private static final int USER_META_DATA_SIZE = 64;
+  private static final int COMPOSITE_BLOB_SIZE = 8000000;
+  private static final int COMPOSITE_BLOB_DATA_CHUNK_SIZE = 4000000;
+
   public static final Pair<String, String> BLOB_ID_PAIR_VERSION_1_CONVERTED =
       new Pair<>("AAEAAQAAAAAAAAAhAAAAJDkwNTUwOTJhLTc3ZTAtNDI4NC1iY2IxLTc2MDZlYTAzNWM4OQ",
           "AAMB_wE5AAIAAQAAAAAAAAAhAAAAJDkwNTUwOTJhLTc3ZTAtNDI4NC1iY2IxLTc2MDZlYTAzNWM4OQ");
@@ -449,7 +452,7 @@ public class BlobIdTransformerTest {
       } else {
         byteBuffer = createMetadataByteBuffer(dataChunkIds);
         blobStreamSize = byteBuffer.remaining();
-        blobPropertiesSize = 8000000;
+        blobPropertiesSize = COMPOSITE_BLOB_SIZE;
         blobStream = new ByteBufferInputStream(byteBuffer);
         blobType = BlobType.MetadataBlob;
       }
@@ -515,7 +518,7 @@ public class BlobIdTransformerTest {
       for (String datachunkId : datachunkIds) {
         storeKeys.add(blobIdFactory.getStoreKey(datachunkId));
       }
-      ByteBuffer output = MetadataContentSerDe.serializeMetadataContent(4000000, 8000000, storeKeys);
+      ByteBuffer output = MetadataContentSerDe.serializeMetadataContent(COMPOSITE_BLOB_DATA_CHUNK_SIZE, COMPOSITE_BLOB_SIZE, storeKeys);
       output.flip();
       return output;
     }
