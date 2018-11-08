@@ -1100,6 +1100,28 @@ class GetBlobOperation extends GetOperation {
           MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
       chunkSize = compositeBlobInfo.getChunkSize();
       totalSize = compositeBlobInfo.getTotalSize();
+
+      // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly, we will
+      // replace the field with the size from inside of the metadata content.
+      BlobProperties oldBlobProperties = null;
+      if (blobInfo != null) {
+        oldBlobProperties = blobInfo.getBlobProperties();
+      } else if (serverBlobProperties != null) {
+        oldBlobProperties = serverBlobProperties;
+      }
+      if (oldBlobProperties != null) {
+        BlobProperties newBlobProperties =
+            new BlobProperties(totalSize, oldBlobProperties.getServiceId(), oldBlobProperties.getOwnerId(),
+                oldBlobProperties.getContentType(), oldBlobProperties.isPrivate(),
+                oldBlobProperties.getTimeToLiveInSeconds(), oldBlobProperties.getCreationTimeInMs(),
+                oldBlobProperties.getAccountId(), oldBlobProperties.getContainerId(), oldBlobProperties.isEncrypted());
+        if (blobInfo != null) {
+          blobInfo = new BlobInfo(newBlobProperties, blobInfo.getUserMetadata());
+        } else if (serverBlobProperties != null) {
+          serverBlobProperties = newBlobProperties;
+        }
+      }
+
       keys = compositeBlobInfo.getKeys();
       boolean rangeResolutionFailure = false;
       try {
