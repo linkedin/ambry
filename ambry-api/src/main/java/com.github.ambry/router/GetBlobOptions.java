@@ -103,12 +103,21 @@ public class GetBlobOptions {
     /**
      * Return blob info and blob data in the response.
      */
-    All, /**
+    All,
+
+    /**
      * Return just the blob data in the response.
      */
-    Data, /**
+    Data,
+
+    /**
      * Return just the blob info in the response.
      */
-    BlobInfo;
+    BlobInfo,
+
+    /**
+     * Return BlobInfo, but use information in the blob data to ensure that the fields are all populated correctly.
+     */
+    BlobInfoAll;
   }
 }

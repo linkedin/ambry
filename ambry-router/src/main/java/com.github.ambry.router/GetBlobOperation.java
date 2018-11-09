@@ -102,7 +102,7 @@ class GetBlobOperation extends GetOperation {
   private Map<Integer, ByteBuffer> chunkIndexToBuffer;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
-  // the blob info that is populated on OperationType.BlobInfo or OperationType.All
+  // the blob info that is populated on OperationType.BlobInfoAll or OperationType.All
   private BlobInfo blobInfo;
   // the ReadableStreamChannel that is populated on OperationType.Blob or OperationType.All requests.
   private BlobDataReadableStreamChannel blobDataChannel;
@@ -200,7 +200,11 @@ class GetBlobOperation extends GetOperation {
             if (blobInfo != null) {
               blobInfo.getBlobProperties().setBlobSize(totalSize);
             }
-            blobDataChannel = new BlobDataReadableStreamChannel();
+            if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfoAll) {
+              blobDataChannel = new BlobDataReadableStreamChannel();
+            } else {
+              operationCompleted = true;
+            }
             operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
           } else {
             blobDataChannel = null;
@@ -874,7 +878,7 @@ class GetBlobOperation extends GetOperation {
      * @return A {@link ByteBuffer} that only includes bytes within the operation's specified byte range.
      */
     protected ByteBuffer filterChunkToRange(ByteBuffer buf) {
-      if (options == null || options.getBlobOptions.getRange() == null) {
+      if (options.getBlobOptions.getRange() == null) {
         return buf;
       }
       if (resolvedByteRange.getRangeSize() == 0) {
@@ -956,8 +960,8 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Return the {@link MessageFormatFlags} to associate with the first getBlob chunk operation.
-     * @return {@link MessageFormatFlags#Blob} for {@link GetBlobOptions.OperationType#Data}, or {@link MessageFormatFlags#All} by
-     *         default.
+     * @return {@link MessageFormatFlags#Blob} for {@link GetBlobOptions.OperationType#Data}, or
+     *         {@link MessageFormatFlags#All} by default.
      */
     @Override
     MessageFormatFlags getOperationFlag() {
@@ -1110,7 +1114,7 @@ class GetBlobOperation extends GetOperation {
       keys = compositeBlobInfo.getKeys();
       boolean rangeResolutionFailure = false;
       try {
-        if (options != null && options.getBlobOptions.getRange() != null) {
+        if (options.getBlobOptions.getRange() != null) {
           resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
           // Get only the chunks within the range.
           int firstChunkIndexInRange = (int) (resolvedByteRange.getStartOffset() / chunkSize);
@@ -1122,33 +1126,27 @@ class GetBlobOperation extends GetOperation {
         rangeResolutionFailure = true;
       }
       if (!rangeResolutionFailure) {
-        if (options.getChunkIdsOnly) {
-          chunkIdIterator = null;
-          numChunksTotal = 0;
-          dataChunks = null;
+        if (options.getChunkIdsOnly || getOperationFlag() == MessageFormatFlags.Blob || encryptionKey == null) {
+          initializeDataChunks();
         } else {
           // if blob is encrypted, then decryption is required only in case of GetBlobInfo and GetBlobAll (since user-metadata
           // is expected to be encrypted). Incase of GetBlob, Metadata blob does not need any decryption even if BlobProperties says so
-          if (getOperationFlag() != MessageFormatFlags.Blob && encryptionKey != null) {
-            decryptCallbackResultInfo = new DecryptCallBackResultInfo();
-            progressTracker.initializeDecryptionTracker();
-            decryptJobMetricsTracker.onJobSubmission();
-            logger.trace("Submitting decrypt job for Metadaata chunk {}", blobId);
-            long startTimeMs = System.currentTimeMillis();
-            cryptoJobHandler.submitJob(
-                new DecryptJob(blobId, encryptionKey, null, ByteBuffer.wrap(userMetadata), cryptoService, kms,
-                    decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
-                  routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
-                  decryptJobMetricsTracker.onJobCallbackProcessingStart();
-                  logger.trace("Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
-                      blobId);
-                  decryptCallbackResultInfo.setResultAndException(result, exception);
-                  routerCallback.onPollReady();
-                  decryptJobMetricsTracker.onJobCallbackProcessingComplete();
-                }));
-          } else {
-            initializeDataChunks();
-          }
+          decryptCallbackResultInfo = new DecryptCallBackResultInfo();
+          progressTracker.initializeDecryptionTracker();
+          decryptJobMetricsTracker.onJobSubmission();
+          logger.trace("Submitting decrypt job for Metadaata chunk {}", blobId);
+          long startTimeMs = System.currentTimeMillis();
+          cryptoJobHandler.submitJob(
+              new DecryptJob(blobId, encryptionKey, null, ByteBuffer.wrap(userMetadata), cryptoService, kms,
+                  decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
+                routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                decryptJobMetricsTracker.onJobCallbackProcessingStart();
+                logger.trace("Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
+                    blobId);
+                decryptCallbackResultInfo.setResultAndException(result, exception);
+                routerCallback.onPollReady();
+                decryptJobMetricsTracker.onJobCallbackProcessingComplete();
+              }));
         }
       }
     }
@@ -1157,11 +1155,18 @@ class GetBlobOperation extends GetOperation {
      * Initialize data chunks and few other cast for metadata chunk
      */
     private void initializeDataChunks() {
-      chunkIdIterator = keys.listIterator();
-      numChunksTotal = keys.size();
-      dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
-      for (int i = 0; i < dataChunks.length; i++) {
-        dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
+      if (options.getChunkIdsOnly
+          || options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfoAll) {
+        chunkIdIterator = null;
+        numChunksTotal = 0;
+        dataChunks = null;
+      } else {
+        chunkIdIterator = keys.listIterator();
+        numChunksTotal = keys.size();
+        dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
+        for (int i = 0; i < dataChunks.length; i++) {
+          dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
+        }
       }
     }
 

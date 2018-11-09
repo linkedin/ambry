@@ -16,21 +16,15 @@ package com.github.ambry.router;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.messageformat.BlobAll;
-import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.BlobType;
-import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageMetadata;
-import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -60,11 +54,11 @@ class GetBlobInfoOperation extends GetOperation {
   private final AtomicBoolean operationCallbackInvoked = new AtomicBoolean(false);
   // the callback to use to notify the router about events and state changes
   private final RouterCallback routerCallback;
-  // the factory to use to deserialize keys in a metadata chunk.
-  private final BlobIdFactory blobIdFactory;
   private final OperationTracker operationTracker;
   // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
   private final ProgressTracker progressTracker;
+  // refers to blob properties received from the server
+  private BlobProperties serverBlobProperties;
   // metrics tracker to track decrypt jobs
   private final CryptoJobMetricsTracker decryptJobMetricsTracker =
       new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
@@ -88,18 +82,15 @@ class GetBlobInfoOperation extends GetOperation {
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @param isEncrypted if encrypted bit set based on original string of a {@link BlobId}
-   * @param blobIdFactory
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted,
-      BlobIdFactory blobIdFactory) {
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
         routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,
         routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
-    this.blobIdFactory = blobIdFactory;
     operationTracker = getOperationTracker(blobId.getPartition(), blobId.getDatacenterId());
     progressTracker = new ProgressTracker(operationTracker);
   }
@@ -117,7 +108,7 @@ class GetBlobInfoOperation extends GetOperation {
    * @return {@link MessageFormatFlags#BlobInfo}
    */
   MessageFormatFlags getOperationFlag() {
-    return MessageFormatFlags.All;
+    return MessageFormatFlags.BlobInfo;
   }
 
   /**
@@ -347,39 +338,28 @@ class GetBlobInfoOperation extends GetOperation {
   private void handleBody(InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
       throws IOException, MessageFormatException {
     ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
-    BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(payload, blobIdFactory);
-    BlobProperties serverBlobProperties = blobAll.getBlobInfo().getBlobProperties();
+    serverBlobProperties = MessageFormatRecord.deserializeBlobProperties(payload);
     updateTtlIfRequired(serverBlobProperties, messageInfo);
-    byte[] userMetadata = blobAll.getBlobInfo().getUserMetadata();
-
-    BlobData blobData = blobAll.getBlobData();
-    if (blobData.getBlobType() == BlobType.MetadataBlob) {
-      CompositeBlobInfo compositeBlobInfo =
-          MetadataContentSerDe.deserializeMetadataContentRecord(blobData.getStream().getByteBuffer(), blobIdFactory);
-      serverBlobProperties.setBlobSize(compositeBlobInfo.getTotalSize());
-    }
+    ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(payload);
     if (encryptionKey == null) {
       // if blob is not encrypted, move the state to Complete
       operationResult =
-          new GetBlobResultInternal(new GetBlobResult(new BlobInfo(serverBlobProperties, userMetadata), null), null);
+          new GetBlobResultInternal(new GetBlobResult(new BlobInfo(serverBlobProperties, userMetadata.array()), null),
+              null);
     } else {
       // submit decrypt job
       progressTracker.initializeDecryptionTracker();
       logger.trace("Submitting decrypt job for {}", blobId);
       decryptJobMetricsTracker.onJobSubmission();
       long startTimeMs = System.currentTimeMillis();
-      cryptoJobHandler.submitJob(new DecryptJob(blobId, encryptionKey.duplicate(),
-          blobData.getBlobType() == BlobType.DataBlob ? blobData.getStream().getByteBuffer() : null,
-          ByteBuffer.wrap(userMetadata), cryptoService, kms, decryptJobMetricsTracker,
-          (DecryptJob.DecryptJobResult result, Exception exception) -> {
+      cryptoJobHandler.submitJob(
+          new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms,
+              decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
             decryptJobMetricsTracker.onJobResultProcessingStart();
             logger.trace("Handling decrypt job callback results for {}", blobId);
             routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
             if (exception == null) {
               logger.trace("Successfully updating decrypt job callback results for {}", blobId);
-              if (result.getDecryptedBlobContent() != null) {
-                serverBlobProperties.setBlobSize(result.getDecryptedBlobContent().remaining());
-              }
               operationResult = new GetBlobResultInternal(
                   new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array()),
                       null), null);
