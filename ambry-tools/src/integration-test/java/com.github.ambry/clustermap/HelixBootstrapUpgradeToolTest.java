@@ -163,6 +163,7 @@ public class HelixBootstrapUpgradeToolTest {
    */
   @Test
   public void testIncompleteZKHostInfo() throws Exception {
+    assumeTrue(dcStr.equalsIgnoreCase("all"));
     if (testHardwareLayout.getDatacenterCount() > 1) {
       JSONObject partialZkJson =
           constructZkLayoutJSON(Collections.singleton(dcsToZkInfo.entrySet().iterator().next().getValue()));
