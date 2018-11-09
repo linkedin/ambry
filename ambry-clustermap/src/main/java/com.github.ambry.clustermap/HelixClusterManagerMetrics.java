@@ -41,6 +41,7 @@ class HelixClusterManagerMetrics {
   public final Counter ignoredUpdatesCount;
 
   public Gauge<Long> helixClusterManagerInstantiationFailed;
+  public Gauge<Long> helixClusterManagerRemoteInstantiationFailed;
   public Gauge<Long> helixClusterManagerCurrentXid;
 
   /**
@@ -78,10 +79,14 @@ class HelixClusterManagerMetrics {
     ignoredUpdatesCount = registry.counter(MetricRegistry.name(HelixClusterManager.class, "ignoredUpdatesCount"));
   }
 
-  void initializeInstantiationMetric(final boolean instantiated) {
+  void initializeInstantiationMetric(final boolean instantiated, final long remoteInstantiated) {
     helixClusterManagerInstantiationFailed = () -> instantiated ? 0L : 1L;
     registry.register(MetricRegistry.name(HelixClusterManager.class, "instantiationFailed"),
         helixClusterManagerInstantiationFailed);
+
+    helixClusterManagerRemoteInstantiationFailed = () -> remoteInstantiated;
+    registry.register(MetricRegistry.name(HelixClusterManager.class, "remoteInstantiationFailed"),
+        helixClusterManagerRemoteInstantiationFailed);
   }
 
   void initializeXidMetric(final AtomicLong currentXid) {

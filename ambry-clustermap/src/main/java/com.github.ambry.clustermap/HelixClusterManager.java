@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -83,6 +84,8 @@ class HelixClusterManager implements ClusterMap {
   private final HelixClusterManagerCallback helixClusterManagerCallback;
   private final byte localDatacenterId;
   private final AtomicReference<Exception> initializationException = new AtomicReference<>();
+  private final AtomicReference<Exception> remoteInitializationException = new AtomicReference<>();
+  private final AtomicInteger remoteInitializationFailedCount = new AtomicInteger();
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final PartitionSelectionHelper partitionSelectionHelper;
@@ -110,23 +113,31 @@ class HelixClusterManager implements ClusterMap {
     selfInstanceName = instanceName;
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
+    Map<String, DcZkInfo> dataCenterToZkAddress_ = null;
+    HelixManager localManager_ = null;
     try {
-      final Map<String, DcZkInfo> dataCenterToZkAddress =
-          parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
+      dataCenterToZkAddress_ = parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
       // Make sure the HelixManager of local datacenter gets connected first and partitionOverrideInfoMap use PropertyStore
       // in local DC for initialization.
-      HelixManager localManager =
-          initializeHelixManagerAndPropertyStoreInLocalDC(dataCenterToZkAddress, instanceName, helixFactory);
+      localManager_ =
+          initializeHelixManagerAndPropertyStoreInLocalDC(dataCenterToZkAddress_, instanceName, helixFactory);
+    } catch (Exception e) {
+      initializationException.set(e);
+    }
+    Map<String, DcZkInfo> dataCenterToZkAddress = dataCenterToZkAddress_;
+    HelixManager localManager = localManager_;
+    if (initializationException.get() == null) {
       final CountDownLatch initializationAttemptComplete = new CountDownLatch(dataCenterToZkAddress.size());
       for (Map.Entry<String, DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
         String dcName = entry.getKey();
+        boolean isLocalDc = dcName.equals(clusterMapConfig.clusterMapDatacenterName);
         String zkConnectStr = entry.getValue().getZkConnectStr();
-        ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName);
+        ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName, isLocalDc);
         // Initialize from every remote datacenter in a separate thread to speed things up.
         Utils.newThread(() -> {
           try {
             HelixManager manager;
-            if (dcName.equals(clusterMapConfig.clusterMapDatacenterName)) {
+            if (isLocalDc) {
               manager = localManager;
             } else {
               manager =
@@ -155,38 +166,49 @@ class HelixClusterManager implements ClusterMap {
               logger.info("Stopped listening to cross colo ZK server {}", zkConnectStr);
             }
           } catch (Exception e) {
-            initializationException.compareAndSet(null, e);
+            setException(isLocalDc, e);
           } finally {
             initializationAttemptComplete.countDown();
           }
         }, false).start();
       }
-      initializationAttemptComplete.await();
-    } catch (Exception e) {
-      initializationException.compareAndSet(null, e);
+      try {
+        initializationAttemptComplete.await();
+      } catch (InterruptedException e) {
+        initializationException.compareAndSet(null, e);
+      }
     }
-    if (initializationException.get() == null) {
+    if (initializationException.get() != null) {
+      helixClusterManagerMetrics.initializeInstantiationMetric(false, remoteInitializationFailedCount.get());
+      close();
+      throw new IOException("Encountered exception while parsing json, connecting or initializing in the local DC",
+          initializationException.get());
+    } else {
       // resolve the status of all partitions before completing initialization
       for (AmbryPartition partition : partitionMap.values()) {
         partition.resolvePartitionState();
       }
       initializeCapacityStats();
-      helixClusterManagerMetrics.initializeInstantiationMetric(true);
+      helixClusterManagerMetrics.initializeInstantiationMetric(true, remoteInitializationFailedCount.get());
       helixClusterManagerMetrics.initializeXidMetric(currentXid);
       helixClusterManagerMetrics.initializeDatacenterMetrics();
       helixClusterManagerMetrics.initializeDataNodeMetrics();
       helixClusterManagerMetrics.initializeDiskMetrics();
       helixClusterManagerMetrics.initializePartitionMetrics();
       helixClusterManagerMetrics.initializeCapacityMetrics();
-    } else {
-      helixClusterManagerMetrics.initializeInstantiationMetric(false);
-      close();
-      throw new IOException("Encountered exception while parsing json, connecting to Helix or initializing",
-          initializationException.get());
     }
     localDatacenterId = dcToDcZkInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
     partitionSelectionHelper =
         new PartitionSelectionHelper(partitionMap.values(), clusterMapConfig.clusterMapDatacenterName);
+  }
+
+  private void setException(boolean isLocalDc, Exception e) {
+    if (isLocalDc) {
+      initializationException.compareAndSet(null, e);
+    } else {
+      remoteInitializationException.compareAndSet(null, e);
+      remoteInitializationFailedCount.incrementAndGet();
+    }
   }
 
   /**
@@ -196,46 +218,42 @@ class HelixClusterManager implements ClusterMap {
    * @param instanceName the String representation of the instance associated with this manager.
    * @param helixFactory the factory class to construct and get a reference to a {@link HelixManager}.
    * @return the HelixManager of local datacenter
-   * @throws IllegalStateException
+   * @throws Exception
    */
   private HelixManager initializeHelixManagerAndPropertyStoreInLocalDC(Map<String, DcZkInfo> dataCenterToZkAddress,
-      String instanceName, HelixFactory helixFactory) throws IllegalStateException {
+      String instanceName, HelixFactory helixFactory) throws Exception {
     DcZkInfo dcZkInfo = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName);
     String zkConnectStr = dcZkInfo.getZkConnectStr();
-    HelixManager manager = null;
-    ZkHelixPropertyStore<ZNRecord> helixPropertyStore = null;
-    try {
-      manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
-      logger.info("Connecting to Helix manager in local zookeeper at {}", zkConnectStr);
-      manager.connect();
-      logger.info("Established connection to Helix manager in local zookeeper at {}", zkConnectStr);
-      helixPropertyStore = manager.getHelixPropertyStore();
-      logger.info("HelixPropertyStore from local datacenter {} is: {}", dcZkInfo.getDcName(), helixPropertyStore);
-      IZkDataListener dataListener = new IZkDataListener() {
-        @Override
-        public void handleDataChange(String dataPath, Object data) throws Exception {
-          logger.info("Received data change notification for: {}", dataPath);
-        }
-
-        @Override
-        public void handleDataDeleted(String dataPath) throws Exception {
-          logger.info("Received data delete notification for: {}", dataPath);
-        }
-      };
-      logger.info("Subscribing data listener to HelixPropertyStore.");
-      helixPropertyStore.subscribeDataChanges(ClusterMapUtils.ZNODE_PATH, dataListener);
-      logger.info("Getting ZNRecord from HelixPropertyStore");
-      ZNRecord zNRecord = helixPropertyStore.get(ClusterMapUtils.ZNODE_PATH, null, AccessOption.PERSISTENT);
-      if (clusterMapConfig.clusterMapEnablePartitionOverride) {
-        if (zNRecord != null) {
-          partitionOverrideInfoMap.putAll(zNRecord.getMapFields());
-          logger.info("partitionOverrideInfoMap is initialized!");
-        } else {
-          logger.warn("ZNRecord from HelixPropertyStore is NULL, the partitionOverrideInfoMap is empty.");
-        }
+    HelixManager manager;
+    ZkHelixPropertyStore<ZNRecord> helixPropertyStore;
+    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+    logger.info("Connecting to Helix manager in local zookeeper at {}", zkConnectStr);
+    manager.connect();
+    logger.info("Established connection to Helix manager in local zookeeper at {}", zkConnectStr);
+    helixPropertyStore = manager.getHelixPropertyStore();
+    logger.info("HelixPropertyStore from local datacenter {} is: {}", dcZkInfo.getDcName(), helixPropertyStore);
+    IZkDataListener dataListener = new IZkDataListener() {
+      @Override
+      public void handleDataChange(String dataPath, Object data) {
+        logger.info("Received data change notification for: {}", dataPath);
       }
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
+
+      @Override
+      public void handleDataDeleted(String dataPath) {
+        logger.info("Received data delete notification for: {}", dataPath);
+      }
+    };
+    logger.info("Subscribing data listener to HelixPropertyStore.");
+    helixPropertyStore.subscribeDataChanges(ClusterMapUtils.ZNODE_PATH, dataListener);
+    logger.info("Getting ZNRecord from HelixPropertyStore");
+    ZNRecord zNRecord = helixPropertyStore.get(ClusterMapUtils.ZNODE_PATH, null, AccessOption.PERSISTENT);
+    if (clusterMapConfig.clusterMapEnablePartitionOverride) {
+      if (zNRecord != null) {
+        partitionOverrideInfoMap.putAll(zNRecord.getMapFields());
+        logger.info("partitionOverrideInfoMap is initialized!");
+      } else {
+        logger.warn("ZNRecord from HelixPropertyStore is NULL, the partitionOverrideInfoMap is empty.");
+      }
     }
     return manager;
   }
@@ -410,6 +428,7 @@ class HelixClusterManager implements ClusterMap {
    */
   private class ClusterChangeHandler implements InstanceConfigChangeListener, LiveInstanceChangeListener {
     private final String dcName;
+    private final boolean isLocalDc;
     final Set<String> allInstances = new HashSet<>();
     private final Object notificationLock = new Object();
     private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
@@ -418,9 +437,11 @@ class HelixClusterManager implements ClusterMap {
     /**
      * Initialize a ClusterChangeHandler in the given datacenter.
      * @param dcName the datacenter associated with this ClusterChangeHandler.
+     * @param isLocalDc if this datacenter is the local datacenter.
      */
-    ClusterChangeHandler(String dcName) {
+    ClusterChangeHandler(String dcName, boolean isLocalDc) {
       this.dcName = dcName;
+      this.isLocalDc = isLocalDc;
     }
 
     @Override
@@ -432,7 +453,7 @@ class HelixClusterManager implements ClusterMap {
           try {
             initializeInstances(configs);
           } catch (Exception e) {
-            initializationException.compareAndSet(null, e);
+            setException(isLocalDc, e);
           }
           instanceConfigInitialized.set(true);
         } else {

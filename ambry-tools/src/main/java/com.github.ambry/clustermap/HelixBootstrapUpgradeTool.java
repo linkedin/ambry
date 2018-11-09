@@ -143,7 +143,7 @@ public class HelixBootstrapUpgradeTool {
             .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> dcsNameOpt = parser.accepts("dcs",
-        "The comma-separated datacenters (colos) to update. If updates to every datacenter is intended, use '--dcs all'")
+        "The comma-separated datacenters (colos) to update. Use '--dcs all' if updates to every datacenter is intended")
         .withRequiredArg()
         .describedAs("datacenters")
         .required()
