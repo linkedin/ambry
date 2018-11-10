@@ -142,6 +142,13 @@ public class HelixBootstrapUpgradeTool {
             .describedAs("cluster_name")
             .ofType(String.class);
 
+    ArgumentAcceptingOptionSpec<String> dcsNameOpt = parser.accepts("dcs",
+        "The comma-separated datacenters (colos) to update. If updates to every datacenter is intended, use '--dcs all'")
+        .withRequiredArg()
+        .describedAs("datacenters")
+        .required()
+        .ofType(String.class);
+
     ArgumentAcceptingOptionSpec<String> maxPartitionsInOneResourceOpt = parser.accepts("maxPartitionsInOneResource",
         "(Optional argument) The maximum number of partitions that should be grouped under a Helix resource")
         .withRequiredArg()
@@ -157,18 +164,21 @@ public class HelixBootstrapUpgradeTool {
     String zkLayoutPath = options.valueOf(zkLayoutPathOpt);
     String clusterNamePrefix = options.valueOf(clusterNamePrefixOpt);
     String clusterName = options.valueOf(clusterNameOpt);
+    String dcs = options.valueOf(dcsNameOpt);
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
     listOpt.add(hardwareLayoutPathOpt);
     listOpt.add(partitionLayoutPathOpt);
     listOpt.add(zkLayoutPathOpt);
     listOpt.add(clusterNamePrefixOpt);
+    listOpt.add(dcsNameOpt);
     if (options.has(dropClusterOpt)) {
       ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
       expectedOpts.add(dropClusterOpt);
       expectedOpts.add(clusterNameOpt);
       expectedOpts.add(zkLayoutPathOpt);
+      expectedOpts.add(dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
-      HelixBootstrapUpgradeUtil.dropCluster(zkLayoutPath, clusterName, new HelixAdminFactory());
+      HelixBootstrapUpgradeUtil.dropCluster(zkLayoutPath, clusterName, dcs, new HelixAdminFactory());
     } else if (options.has(validateOnly)) {
       ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
       expectedOpts.add(validateOnly);
@@ -176,8 +186,9 @@ public class HelixBootstrapUpgradeTool {
       expectedOpts.add(zkLayoutPathOpt);
       expectedOpts.add(hardwareLayoutPathOpt);
       expectedOpts.add(partitionLayoutPathOpt);
+      expectedOpts.add(dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
-      HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
+      HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
           new HelixAdminFactory());
     } else if (options.has(uploadConfig)) {
       ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
@@ -186,13 +197,14 @@ public class HelixBootstrapUpgradeTool {
       expectedOpts.add(hardwareLayoutPathOpt);
       expectedOpts.add(partitionLayoutPathOpt);
       expectedOpts.add(clusterNamePrefixOpt);
+      expectedOpts.add(dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.uploadClusterConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
+          clusterNamePrefix, dcs, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
     } else {
       ToolUtils.ensureOrExit(listOpt, options, parser);
       HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix,
+          clusterNamePrefix, dcs,
           options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
               : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt)), options.has(dryRun),
           options.has(forceRemove), new HelixAdminFactory());

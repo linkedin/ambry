@@ -109,6 +109,36 @@ class HelixBootstrapUpgradeUtil {
   private int resourcesDropped = 0;
   private Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
+  private static final String ALL = "all";
+
+  /**
+   * Parse the dc string argument and return a map of dc -> DcZkInfo for every datacenter that is enabled.
+   * @param dcs the string argument for dcs.
+   * @param zkLayoutPath the path to the zkLayout file.
+   * @return a map of dc -> {@link com.github.ambry.clustermap.ClusterMapUtils.DcZkInfo} for every enabled dc.
+   * @throws IOException if there is an IO error reading the zkLayout file.
+   */
+  static Map<String, ClusterMapUtils.DcZkInfo> parseAndUpdateDcInfoFromArg(String dcs, String zkLayoutPath)
+      throws IOException {
+    Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress =
+        ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
+    Set<String> parsedDcSet;
+    if (Utils.isNullOrEmpty(dcs)) {
+      throw new IllegalArgumentException("dcs string cannot be null or empty.");
+    }
+    if (dcs.equalsIgnoreCase(ALL)) {
+      parsedDcSet = new HashSet<>(dataCenterToZkAddress.keySet());
+    } else {
+      parsedDcSet = Arrays.stream(dcs.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
+      HashSet<String> diff = new HashSet<>(parsedDcSet);
+      diff.removeAll(dataCenterToZkAddress.keySet());
+      if (!diff.isEmpty()) {
+        throw new IllegalArgumentException("Unknown datacenter(s) supplied" + diff);
+      }
+    }
+    dataCenterToZkAddress.entrySet().removeIf(e -> !parsedDcSet.contains(e.getKey()));
+    return dataCenterToZkAddress;
+  }
 
   /**
    * Takes in the path to the files that make up the static cluster map and adds or updates the cluster map information
@@ -118,6 +148,7 @@ class HelixBootstrapUpgradeUtil {
    * @param zkLayoutPath the path to the zookeeper layout file.
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param dcs the comma-separated list of datacenters that should be updated in this run.
    * @param maxPartitionsInOneResource the maximum number of Ambry partitions to group under a single Helix resource.
    * @param dryRun if true, perform a dry run; do not update anything in Helix.
    * @param forceRemove if true, removes any hosts from Helix not present in the json files.
@@ -126,14 +157,14 @@ class HelixBootstrapUpgradeUtil {
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
+      String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
       HelixAdminFactory helixAdminFactory) throws Exception {
     if (dryRun) {
       info("==== This is a dry run ====");
       info("No changes will be made to the information in Helix (except adding the cluster if it does not exist.");
     }
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
-        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             maxPartitionsInOneResource, dryRun, forceRemove, helixAdminFactory);
     if (dryRun) {
       info("To drop the cluster, run this tool again with the '--dropCluster {}' argument.",
@@ -154,15 +185,17 @@ class HelixBootstrapUpgradeUtil {
    * @param zkLayoutPath the path to the zookeeper layout file.
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param dcs the comma-separated list of datacenters that needs to be upgraded/bootstrapped.
    * @param maxPartitionsInOneResource the maximum number of Ambry partitions to group under a single Helix resource.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void uploadClusterConfigs(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory) throws Exception {
+      String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory)
+      throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
-        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             maxPartitionsInOneResource, false, false, helixAdminFactory);
     Map<String, Map<String, String>> partitionOverrideInfos =
         clusterMapToHelixMapper.generatePartitionOverrideFromAllDCs();
@@ -179,14 +212,15 @@ class HelixBootstrapUpgradeUtil {
    * @param zkLayoutPath the path to the zookeeper layout file.
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param dcs the comma-separated list of datacenters that needs to be upgraded/bootstrapped.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void validate(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, HelixAdminFactory helixAdminFactory) throws Exception {
+      String clusterNamePrefix, String dcs, HelixAdminFactory helixAdminFactory) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
-        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, 0,
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs, 0,
             false, false, helixAdminFactory);
     clusterMapToHelixMapper.validateAndClose();
     clusterMapToHelixMapper.logSummary();
@@ -196,13 +230,13 @@ class HelixBootstrapUpgradeUtil {
    * Drop a cluster from Helix.
    * @param zkLayoutPath the path to the zookeeper layout file.
    * @param clusterName the name of the cluster in Helix.
+   * @param dcs the comma-separated list of datacenters that needs to be upgraded/bootstrapped.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @throws Exception if there is an error reading a file or in parsing json.
    */
-  static void dropCluster(String zkLayoutPath, String clusterName, HelixAdminFactory helixAdminFactory)
+  static void dropCluster(String zkLayoutPath, String clusterName, String dcs, HelixAdminFactory helixAdminFactory)
       throws Exception {
-    Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress =
-        ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
+    Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     info("Dropping cluster {} from Helix", clusterName);
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
       HelixAdmin admin = helixAdminFactory.getHelixAdmin(entry.getValue().getZkConnectStr());
@@ -218,6 +252,7 @@ class HelixBootstrapUpgradeUtil {
    * @param zkLayoutPath the path to the zookeeper layout file.
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param dcs the comma-separated list of datacenters that needs to be upgraded/bootstrapped.
    * @param dryRun if true, perform a dry run; do not update anything in Helix.
    * @param forceRemove if true, removes any hosts from Helix not present in the json files.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
@@ -225,13 +260,12 @@ class HelixBootstrapUpgradeUtil {
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   private HelixBootstrapUpgradeUtil(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
+      String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
       HelixAdminFactory helixAdminFactory) throws Exception {
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     this.dryRun = dryRun;
     this.forceRemove = forceRemove;
-    this.dataCenterToZkAddress = ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
-
+    dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     Properties props = new Properties();
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
     props.setProperty("clustermap.host.name", "localhost");
@@ -251,7 +285,7 @@ class HelixBootstrapUpgradeUtil {
     info("Associating static Ambry cluster \"" + clusterNameInStaticClusterMap + "\" with cluster\"" + clusterName
         + "\" in Helix");
     for (Datacenter datacenter : staticClusterMap.hardwareLayout.getDatacenters()) {
-      if (!dataCenterToZkAddress.keySet().contains(datacenter.getName())) {
+      if (dcs.equalsIgnoreCase(ALL) && !dataCenterToZkAddress.keySet().contains(datacenter.getName())) {
         throw new IllegalArgumentException(
             "There is no ZK host for datacenter " + datacenter.getName() + " in the static clustermap");
       }
@@ -308,8 +342,9 @@ class HelixBootstrapUpgradeUtil {
     Properties storeProps = new Properties();
     storeProps.setProperty("helix.property.store.root.path", "/" + clusterName);
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
-    info("Setting partition override for all datacenters.");
+    info("Setting partition override for specified datacenters.");
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
+      info("Setting partition override for {}.", entry.getKey());
       HelixPropertyStore<ZNRecord> helixPropertyStore =
           CommonUtils.createHelixPropertyStore(entry.getValue().getZkConnectStr(), propertyStoreConfig, null);
       ZNRecord znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);
@@ -385,14 +420,18 @@ class HelixBootstrapUpgradeUtil {
     populateInstancesAndPartitionsMap();
     info("Populated resources and partitions set");
     for (Datacenter dc : staticClusterMap.hardwareLayout.getDatacenters()) {
-      info("\n=======Starting datacenter: {}=========\n", dc.getName());
-      Map<String, Set<String>> partitionsToInstancesInDc = new HashMap<>();
-      addUpdateInstances(dc.getName(), partitionsToInstancesInDc);
-      // Process those partitions that are already under resources. Just update their instance sets if that has changed.
-      info(
-          "Done adding all instances in {}, now scanning resources in Helix and ensuring instance set for partitions are the same.",
-          dc.getName());
-      addUpdateResources(dc.getName(), partitionsToInstancesInDc);
+      if (adminForDc.containsKey(dc.getName())) {
+        info("\n=======Starting datacenter: {}=========\n", dc.getName());
+        Map<String, Set<String>> partitionsToInstancesInDc = new HashMap<>();
+        addUpdateInstances(dc.getName(), partitionsToInstancesInDc);
+        // Process those partitions that are already under resources. Just update their instance sets if that has changed.
+        info(
+            "Done adding all instances in {}, now scanning resources in Helix and ensuring instance set for partitions are the same.",
+            dc.getName());
+        addUpdateResources(dc.getName(), partitionsToInstancesInDc);
+      } else {
+        info("\n========Skipping datacenter: {}==========\n", dc.getName());
+      }
     }
   }
 
@@ -698,7 +737,10 @@ class HelixBootstrapUpgradeUtil {
         + "corresponding cluster in Helix: " + clusterName);
     for (Datacenter dc : hardwareLayout.getDatacenters()) {
       HelixAdmin admin = adminForDc.get(dc.getName());
-      ensureOrThrow(admin != null, "No ZkInfo for datacenter " + dc.getName());
+      if (admin == null) {
+        info("Skipping {}", dc.getName());
+        continue;
+      }
       ensureOrThrow(admin.getClusters().contains(clusterName),
           "Cluster not found in ZK " + dataCenterToZkAddress.get(dc.getName()));
       verifyResourcesAndPartitionEquivalencyInDc(dc, clusterName, partitionLayout);
