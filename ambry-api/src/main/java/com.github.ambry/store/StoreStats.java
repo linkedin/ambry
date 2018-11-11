@@ -17,6 +17,7 @@ package com.github.ambry.store;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
+import java.util.EnumSet;
 import java.util.Map;
 
 
@@ -42,19 +43,12 @@ public interface StoreStats {
   Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException;
 
   /**
-   * Fetches stats for the corresponding {@link Store} as a single {@link StatsSnapshot}.
-   * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
-   * @return a {@link StatsSnapshot} with relevant stats
-   * @throws StoreException
-   */
-  StatsSnapshot getStatsSnapshot(long referenceTimeInMs) throws StoreException;
-
-  /**
-   * Fetches all types of stats for the corresponding {@link Store} as a map whose key is {@link StatsReportType} and
+   * Fetches specified types of stats for corresponding {@link Store} as a map whose key is {@link StatsReportType} and
    * value is {@link StatsSnapshot}.
+   * @param statsReportTypes the specified {@link StatsReportType} to fetch
    * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
-   * @return a map of all types of {@link StatsSnapshot} associated with relevant stats reports
+   * @return a map of {@link StatsReportType} to {@link StatsSnapshot}
    * @throws StoreException
    */
-  Map<StatsReportType, StatsSnapshot> getAllStatsSnapshots(long referenceTimeInMs) throws StoreException;
+  Map<StatsReportType, StatsSnapshot> getStatsSnapshots(EnumSet<StatsReportType> statsReportTypes, long referenceTimeInMs) throws StoreException;
 }

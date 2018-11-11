@@ -30,6 +30,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -788,78 +789,90 @@ public class BlobStoreStatsTest {
     assertTrue("Mismatch between the converted Account StatsSnapshot and expected StatsSnapshot",
         expectAccountSnapshot.equals(convertedAccountStatsSnapshot));
     StatsSnapshot convertedContainerStatsSnapshot = BlobStoreStats.convertQuotaToContainerStatsSnapshot(quotaMap);
-    StatsSnapshot expectContainerSnapshot = new StatsSnapshot(0L, accountContainerPairSubMap);
+    StatsSnapshot expectContainerSnapshot = new StatsSnapshot(total, accountContainerPairSubMap);
     assertTrue("Mismatch between the converted Container StatsSnapshot and expected StatsSnapshot",
         expectContainerSnapshot.equals(convertedContainerStatsSnapshot));
   }
 
   /**
-   * Test the getStatsSnapshot method by verifying the returned {@link StatsSnapshot} against the original {@link Map}.
+   * Test the getStatsSnapshots method by verifying the returned {@link StatsSnapshot} against the original quota {@link Map}.
    */
   @Test
-  public void testGetStatsSnapshot() throws StoreException {
+  public void testGetStatsSnapshots() throws StoreException {
     BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
     long deleteAndExpirationRefTimeInMs = state.time.milliseconds();
     Map<String, Map<String, Long>> quotaMap =
         blobStoreStats.getValidDataSizeByContainer(deleteAndExpirationRefTimeInMs);
-    StatsSnapshot statsSnapshot = blobStoreStats.getStatsSnapshot(deleteAndExpirationRefTimeInMs);
-    Map<String, StatsSnapshot> accountValidSizeMap = statsSnapshot.getSubMap();
-    assertEquals("Mismatch on number of accounts", quotaMap.size(), accountValidSizeMap.size());
-    for (Map.Entry<String, Map<String, Long>> entry : quotaMap.entrySet()) {
-      Map<String, StatsSnapshot> containerValidSizeMap = accountValidSizeMap.get(entry.getKey()).getSubMap();
-      Map<String, Long> innerQuotaMap = entry.getValue();
-      assertEquals("Mismatch on number of containers", innerQuotaMap.size(), containerValidSizeMap.size());
-      for (Map.Entry<String, Long> innerEntry : innerQuotaMap.entrySet()) {
-        assertEquals("Mismatch on leaf node value", innerEntry.getValue().longValue(),
-            containerValidSizeMap.get(innerEntry.getKey()).getValue());
-        assertTrue("Final snapshot omits container name" + innerEntry.getKey(),
-            containerValidSizeMap.containsKey(innerEntry.getKey()));
-      }
-    }
+    // Verify account stats snapshot
+    Map<StatsReportType, StatsSnapshot> snapshotsByType =
+        blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), deleteAndExpirationRefTimeInMs);
+    verifyStatsSnapshots(quotaMap, snapshotsByType, EnumSet.of(StatsReportType.ACCOUNT_REPORT));
+    // Verify partition class stats snapshot
+    snapshotsByType = blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT),
+        deleteAndExpirationRefTimeInMs);
+    verifyStatsSnapshots(quotaMap, snapshotsByType, EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT));
+    // Verify all types of stats snapshots
+    Map<StatsReportType, StatsSnapshot> allStatsSnapshots =
+        blobStoreStats.getStatsSnapshots(EnumSet.allOf(StatsReportType.class), deleteAndExpirationRefTimeInMs);
+    verifyStatsSnapshots(quotaMap, allStatsSnapshots, EnumSet.allOf(StatsReportType.class));
   }
 
   /**
-   * Test the getAllStatsSnapshots method by verifying the returned map against the original {@link Map}.
+   * Verify the correctness of specified stats snapshots fetched from {@link BlobStoreStats}
+   * @param accountContainerQuotaMap the map of account to each container quota map. The container quota map presents
+   *                                 each container name to its valid data size
+   * @param snapshotsByType the map of {@link StatsReportType} to {@link StatsSnapshot} to be verified
+   * @param typesToVerify the {@link StatsReportType} to be verified
    */
-  @Test
-  public void testGetAllStatsSnapshots() throws StoreException {
-    BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
-    long deleteAndExpirationRefTimeInMs = state.time.milliseconds();
-    Map<String, Map<String, Long>> quotaMap =
-        blobStoreStats.getValidDataSizeByContainer(deleteAndExpirationRefTimeInMs);
-    Map<StatsReportType, StatsSnapshot> allStatsSnapshots =
-        blobStoreStats.getAllStatsSnapshots(deleteAndExpirationRefTimeInMs);
-    Map<String, StatsSnapshot> accountValidSizeMap = allStatsSnapshots.get(StatsReportType.ACCOUNT_REPORT).getSubMap();
-    assertEquals("Mismatch on number of accounts for " + StatsReportType.ACCOUNT_REPORT, quotaMap.size(),
-        accountValidSizeMap.size());
-    Map<String, StatsSnapshot> accountContainerPairMap =
-        allStatsSnapshots.get(StatsReportType.PARTITION_CLASS_REPORT).getSubMap();
-    int numOfContainerInQuotaMap = 0;
-    for (Map.Entry<String, Map<String, Long>> entry : quotaMap.entrySet()) {
-      Map<String, StatsSnapshot> containerValidSizeMap = accountValidSizeMap.get(entry.getKey()).getSubMap();
-      Map<String, Long> innerQuotaMap = entry.getValue();
-      assertEquals("Mismatch on number of containers", innerQuotaMap.size(), containerValidSizeMap.size());
-      for (Map.Entry<String, Long> innerEntry : innerQuotaMap.entrySet()) {
-        // Ensure container value and name in ACCOUNT_SNAPSHOT match that in QuotaMap
-        assertEquals("Mismatch on value of container in account snapshot", innerEntry.getValue().longValue(),
-            containerValidSizeMap.get(innerEntry.getKey()).getValue());
-        assertTrue("Mismatch on name of container: " + innerEntry.getKey(),
-            containerValidSizeMap.containsKey(innerEntry.getKey()));
-        // Ensure account_container value and name in CONTAINER_SNAPSHOT match that in QuotaMap
-        String account_container_name = entry.getKey() + "_" + innerEntry.getKey();
-        assertEquals("Mismatch on value of container in container snapshot", innerEntry.getValue().longValue(),
-            accountContainerPairMap.get(account_container_name).getValue());
-        assertTrue("Mismatch on name of account_container pair: " + account_container_name,
-            accountContainerPairMap.containsKey(account_container_name));
-        numOfContainerInQuotaMap++;
+  private void verifyStatsSnapshots(Map<String, Map<String, Long>> accountContainerQuotaMap,
+      Map<StatsReportType, StatsSnapshot> snapshotsByType, EnumSet<StatsReportType> typesToVerify) {
+    for (StatsReportType type : typesToVerify) {
+      switch (type) {
+        case ACCOUNT_REPORT:
+          Map<String, StatsSnapshot> accountToSnapshot =
+              snapshotsByType.get(StatsReportType.ACCOUNT_REPORT).getSubMap();
+          assertEquals("Mismatch on number of accounts for " + StatsReportType.ACCOUNT_REPORT,
+              accountContainerQuotaMap.size(), accountToSnapshot.size());
+          for (Map.Entry<String, Map<String, Long>> accountToContainerEntry : accountContainerQuotaMap.entrySet()) {
+            Map<String, Long> containerQuotaMap = accountToContainerEntry.getValue();
+            Map<String, StatsSnapshot> containerToSnapshot =
+                accountToSnapshot.get(accountToContainerEntry.getKey()).getSubMap();
+            assertEquals("Mismatch on number of containers", containerQuotaMap.size(), containerToSnapshot.size());
+            for (Map.Entry<String, Long> containerEntry : containerQuotaMap.entrySet()) {
+
+              // Ensure container value and name in ACCOUNT_SNAPSHOT match that in QuotaMap
+              assertNotNull("Expected container: " + containerEntry.getKey() + " doesn't exist",
+                  containerToSnapshot.get(containerEntry.getKey()));
+              assertEquals("Mismatch on value of container in account snapshot", containerEntry.getValue().longValue(),
+                  containerToSnapshot.get(containerEntry.getKey()).getValue());
+            }
+          }
+          break;
+        case PARTITION_CLASS_REPORT:
+          Map<String, StatsSnapshot> acctContPairToSnapshot =
+              snapshotsByType.get(StatsReportType.PARTITION_CLASS_REPORT).getSubMap();
+          for (Map.Entry<String, Map<String, Long>> accountToContainerEntry : accountContainerQuotaMap.entrySet()) {
+            Map<String, Long> containerQuotaMap = accountToContainerEntry.getValue();
+            for (Map.Entry<String, Long> containerEntry : containerQuotaMap.entrySet()) {
+              // Ensure account_container value and name in CONTAINER_SNAPSHOT match that in QuotaMap
+              String accountContainerName = accountToContainerEntry.getKey() + "_" + containerEntry.getKey();
+              assertNotNull("Expected account_container pair: " + accountContainerName + " doesn't exist",
+                  acctContPairToSnapshot.get(accountContainerName));
+              assertEquals("Mismatch on value of container in container snapshot",
+                  containerEntry.getValue().longValue(), acctContPairToSnapshot.get(accountContainerName).getValue());
+            }
+          }
+          break;
+        default:
+          fail("Unsupported stats report type!");
       }
     }
-    assertEquals("Mismatch on number of entries for " + StatsReportType.PARTITION_CLASS_REPORT,
-        numOfContainerInQuotaMap, allStatsSnapshots.get(StatsReportType.PARTITION_CLASS_REPORT).getSubMap().size());
-    // Ensure two snapshots have same aggregated value
-    assertEquals("Mismatch on total aggregated value for two snapshots",
-        allStatsSnapshots.get(StatsReportType.PARTITION_CLASS_REPORT).getValue(),
-        allStatsSnapshots.get(StatsReportType.ACCOUNT_REPORT).getValue());
+    if (typesToVerify.equals(EnumSet.allOf(StatsReportType.class))) {
+      // Ensure two snapshots have same aggregated value
+      assertEquals("Mismatch on total aggregated value for two snapshots",
+          snapshotsByType.get(StatsReportType.PARTITION_CLASS_REPORT).getValue(),
+          snapshotsByType.get(StatsReportType.ACCOUNT_REPORT).getValue());
+    }
   }
 
   /**

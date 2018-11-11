@@ -109,11 +109,16 @@ public class StatsManagerTest {
       partitionId = new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS,
           Collections.singletonList((MockDataNodeId) dataNodeId), 0);
       baseSliceAndNewSlice = decomposeSnapshot(baseSliceAndNewSlice.getFirst());
-      storeMap.put(partitionId, new MockStore(new MockStoreStats(baseSliceAndNewSlice.getSecond(), false)));
+      Map<StatsReportType, StatsSnapshot> snapshotsByType = new HashMap<>();
+      snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, baseSliceAndNewSlice.getSecond());
+      StoreStats storeStats = new MockStoreStats(snapshotsByType, false);
+      storeMap.put(partitionId, new MockStore(storeStats));
       replicaIds.add(partitionId.getReplicaIds().get(0));
     }
+    Map<StatsReportType, StatsSnapshot> snapshotsByType = new HashMap<>();
+    snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, baseSliceAndNewSlice.getFirst());
     storeMap.put(new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS),
-        new MockStore(new MockStoreStats(baseSliceAndNewSlice.getFirst(), false)));
+        new MockStore(new MockStoreStats(snapshotsByType, false)));
     StorageManager storageManager = new MockStorageManager(storeMap);
     Properties properties = new Properties();
     properties.put("stats.output.file.path", outputFileString);
@@ -162,7 +167,9 @@ public class StatsManagerTest {
     PartitionId partitionId2 =
         new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
     problematicStoreMap.put(partitionId1, null);
-    Store exceptionStore = new MockStore(new MockStoreStats(new StatsSnapshot(0L, null), true));
+    Map<StatsReportType, StatsSnapshot> snapshotsByType = new HashMap<>();
+    snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, new StatsSnapshot(0L, null));
+    Store exceptionStore = new MockStore(new MockStoreStats(snapshotsByType, true));
     problematicStoreMap.put(partitionId2, exceptionStore);
     StatsManager testStatsManager = new StatsManager(new MockStorageManager(problematicStoreMap),
         Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)), new MetricRegistry(),
@@ -380,19 +387,11 @@ public class StatsManagerTest {
    * Mocked {@link StoreStats} to return predefined {@link StatsSnapshot} when getStatsSnapshot is called.
    */
   private class MockStoreStats implements StoreStats {
-    private final StatsSnapshot statsSnapshot;
-    private final Map<StatsReportType, StatsSnapshot> allSnapshots;
+    private final Map<StatsReportType, StatsSnapshot> snapshotsByType;
     private final boolean throwStoreException;
 
-    MockStoreStats(StatsSnapshot statsSnapshot, boolean throwStoreException) {
-      this.statsSnapshot = statsSnapshot;
-      this.allSnapshots = null;
-      this.throwStoreException = throwStoreException;
-    }
-
-    MockStoreStats(Map<StatsReportType, StatsSnapshot> allSnapshots, boolean throwStoreException) {
-      this.statsSnapshot = allSnapshots.get(StatsReportType.ACCOUNT_REPORT);
-      this.allSnapshots = allSnapshots;
+    MockStoreStats(Map<StatsReportType, StatsSnapshot> snapshotsByType, boolean throwStoreException) {
+      this.snapshotsByType = snapshotsByType;
       this.throwStoreException = throwStoreException;
     }
 
@@ -402,19 +401,12 @@ public class StatsManagerTest {
     }
 
     @Override
-    public StatsSnapshot getStatsSnapshot(long referenceTimeInMs) throws StoreException {
+    public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(EnumSet<StatsReportType> statsReportTypes,
+        long referenceTimeInMs) throws StoreException {
       if (throwStoreException) {
         throw new StoreException("Test", StoreErrorCodes.Unknown_Error);
       }
-      return statsSnapshot;
-    }
-
-    @Override
-    public Map<StatsReportType, StatsSnapshot> getAllStatsSnapshots(long referenceTimeInMs) throws StoreException {
-      if (throwStoreException) {
-        throw new StoreException("Test", StoreErrorCodes.Unknown_Error);
-      }
-      return allSnapshots;
+      return snapshotsByType;
     }
   }
 }

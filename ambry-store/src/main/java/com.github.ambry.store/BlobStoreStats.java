@@ -121,13 +121,15 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   static StatsSnapshot convertQuotaToContainerStatsSnapshot(Map<String, Map<String, Long>> quotaMap) {
     Map<String, StatsSnapshot> containerValidSizeMap = new HashMap<>();
+    long totalSize = 0;
     for (Map.Entry<String, Map<String, Long>> accountEntry : quotaMap.entrySet()) {
       for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
+        totalSize += containerEntry.getValue();
         containerValidSizeMap.put(accountEntry.getKey() + "_" + containerEntry.getKey(),
             new StatsSnapshot(containerEntry.getValue(), null));
       }
     }
-    return new StatsSnapshot(0L, containerValidSizeMap);
+    return new StatsSnapshot(totalSize, containerValidSizeMap);
   }
 
   BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
@@ -166,41 +168,9 @@ class BlobStoreStats implements StoreStats, Closeable {
 
   /**
    * {@inheritDoc}
-   * Implementation in {@link BlobStoreStats} which returns the quota stats of a {@link BlobStore}. Size of delete
-   * records are not accounted as valid data size here. The format of snapshot is presented as follows.
-   * {
-   *   value: 10000,
-   *   subMap: {
-   *     Account[1]:{
-   *       value: 200,
-   *       subMap: {
-   *         Container[1]:{
-   *           value: 200,
-   *           subMap: null
-   *         }
-   *       }
-   *     },
-   *     Account[2]:{
-   *       value: 800,
-   *       subMap:{
-   *         Container[3]:{
-   *           value: 800,
-   *           subMap: null
-   *         }
-   *       }
-   *     }
-   *   }
-   * }
-   */
-  @Override
-  public StatsSnapshot getStatsSnapshot(long referenceTimeInMs) throws StoreException {
-    return convertQuotaToAccountStatsSnapshot(getValidDataSizeByContainer(referenceTimeInMs));
-  }
-
-  /**
-   * {@inheritDoc}
    * Implementation in {@link BlobStoreStats} which returns the all types of snapshots for a {@link BlobStore}. Size of
    * delete records are not accounted as valid data size here. The formats of all snapshots are presented as follows.
+   * <pre>
    *        AccountSnapshot             |             ContainerSnapshot
    * --------------------------------------------------------------------------
    * {                                  |      {
@@ -226,17 +196,27 @@ class BlobStoreStats implements StoreStats, Closeable {
    *     }                              |
    *   }                                |
    * }                                  |
+   * </pre>
    */
   @Override
-  public Map<StatsReportType, StatsSnapshot> getAllStatsSnapshots(long referenceTimeInMs) throws StoreException {
-    Map<StatsReportType, StatsSnapshot> allTypesOfSnapshots = new HashMap<>();
+  public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(EnumSet<StatsReportType> statsReportTypes,
+      long referenceTimeInMs) throws StoreException {
+    Map<StatsReportType, StatsSnapshot> statsSnapshotsByType = new HashMap<>();
     Map<String, Map<String, Long>> quotaMap = getValidDataSizeByContainer(referenceTimeInMs);
-    StatsSnapshot accountSnapshot = convertQuotaToAccountStatsSnapshot(quotaMap);
-    StatsSnapshot containerSnapshot = convertQuotaToContainerStatsSnapshot(quotaMap);
-    containerSnapshot.setValue(accountSnapshot.getValue());
-    allTypesOfSnapshots.put(StatsReportType.ACCOUNT_REPORT, accountSnapshot);
-    allTypesOfSnapshots.put(StatsReportType.PARTITION_CLASS_REPORT, containerSnapshot);
-    return allTypesOfSnapshots;
+    for (StatsReportType reportType : statsReportTypes) {
+      switch (reportType) {
+        case ACCOUNT_REPORT:
+          statsSnapshotsByType.put(StatsReportType.ACCOUNT_REPORT, convertQuotaToAccountStatsSnapshot(quotaMap));
+          break;
+        case PARTITION_CLASS_REPORT:
+          statsSnapshotsByType.put(StatsReportType.PARTITION_CLASS_REPORT,
+              convertQuotaToContainerStatsSnapshot(quotaMap));
+          break;
+        default:
+          logger.error("Unrecognized stats report type: {}", reportType);
+      }
+    }
+    return statsSnapshotsByType;
   }
 
   /**
