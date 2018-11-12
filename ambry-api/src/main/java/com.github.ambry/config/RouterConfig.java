@@ -228,7 +228,7 @@ public class RouterConfig {
     routerHostname = verifiableProperties.getString("router.hostname");
     routerDatacenterName = verifiableProperties.getString("router.datacenter.name");
     routerScalingUnitMaxConnectionsPerPortPlainText =
-        verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.plain.text", 5, 1, 20);
+        verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.plain.text", 5, 1, 100);
     routerScalingUnitMaxConnectionsPerPortSsl =
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.ssl", 2, 1, 100);
     routerConnectionsWarmUpPercentagePerPort =
