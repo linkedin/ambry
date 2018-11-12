@@ -50,5 +50,6 @@ public interface StoreStats {
    * @return a map of {@link StatsReportType} to {@link StatsSnapshot}
    * @throws StoreException
    */
-  Map<StatsReportType, StatsSnapshot> getStatsSnapshots(EnumSet<StatsReportType> statsReportTypes, long referenceTimeInMs) throws StoreException;
+  Map<StatsReportType, StatsSnapshot> getStatsSnapshots(EnumSet<StatsReportType> statsReportTypes,
+      long referenceTimeInMs) throws StoreException;
 }
