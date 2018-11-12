@@ -66,7 +66,7 @@ public class MockPartitionId implements PartitionId {
 
   @Override
   public List<ReplicaId> getReplicaIds() {
-    return replicaIds;
+    return new ArrayList<>(replicaIds);
   }
 
   @Override
