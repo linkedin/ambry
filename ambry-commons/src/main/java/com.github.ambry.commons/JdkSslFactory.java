@@ -38,19 +38,11 @@ public class JdkSslFactory implements SSLFactory {
 
   protected static final Logger logger = LoggerFactory.getLogger(JdkSslFactory.class);
 
-  private String protocol;
-  private String provider;
-  private String kmfAlgorithm;
-  private String tmfAlgorithm;
-  private SecurityStore keystore;
-  private String keyPassword;
-  private SecurityStore truststore;
-  private String[] cipherSuites;
-  private String[] enabledProtocols;
-  private String endpointIdentification;
-  private SSLContext sslContext;
-  private boolean needClientAuth;
-  private boolean wantClientAuth;
+  private final SSLContext sslContext;
+  private final String[] cipherSuites;
+  private final String[] enabledProtocols;
+  private final String endpointIdentification;
+  private final ClientAuth clientAuth;
 
   /**
    * Construct an {@link JdkSslFactory}.
@@ -59,78 +51,74 @@ public class JdkSslFactory implements SSLFactory {
    * @throws IOException
    */
   public JdkSslFactory(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
-
-    this.protocol = sslConfig.sslContextProtocol;
-    if (!sslConfig.sslContextProvider.isEmpty()) {
-      this.provider = sslConfig.sslContextProvider;
-    }
+    sslContext = createSSLContext(sslConfig);
 
     ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
     if (cipherSuitesList.size() > 0 && !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).isEmpty())) {
-      this.cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
+      cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
+    } else {
+      cipherSuites = null;
     }
 
     ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
     if (protocolsList.size() > 0 && !(protocolsList.size() == 1 && protocolsList.get(0).isEmpty())) {
-      this.enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
+      enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
+    } else {
+      enabledProtocols = null;
     }
 
-    if (!sslConfig.sslEndpointIdentificationAlgorithm.isEmpty()) {
-      this.endpointIdentification = sslConfig.sslEndpointIdentificationAlgorithm;
+    this.endpointIdentification =
+        !sslConfig.sslEndpointIdentificationAlgorithm.isEmpty() ? sslConfig.sslEndpointIdentificationAlgorithm : null;
+
+    switch (sslConfig.sslClientAuthentication) {
+      case "required":
+        clientAuth = ClientAuth.REQUIRED;
+        break;
+      case "requested":
+        clientAuth = ClientAuth.REQUESTED;
+        break;
+      default:
+        clientAuth = ClientAuth.NONE;
+        break;
     }
-
-    if (sslConfig.sslClientAuthentication.equals("required")) {
-      this.needClientAuth = true;
-    } else if (sslConfig.sslClientAuthentication.equals("requested")) {
-      this.wantClientAuth = true;
-    }
-
-    if (!sslConfig.sslKeymanagerAlgorithm.isEmpty()) {
-      this.kmfAlgorithm = sslConfig.sslKeymanagerAlgorithm;
-    }
-
-    if (!sslConfig.sslTrustmanagerAlgorithm.isEmpty()) {
-      this.tmfAlgorithm = sslConfig.sslTrustmanagerAlgorithm;
-    }
-
-    createKeyStore(sslConfig.sslKeystoreType, sslConfig.sslKeystorePath, sslConfig.sslKeystorePassword,
-        sslConfig.sslKeyPassword);
-    createTrustStore(sslConfig.sslTruststoreType, sslConfig.sslTruststorePath, sslConfig.sslTruststorePassword);
-
-    this.sslContext = createSSLContext();
   }
 
   /**
    * Create {@link SSLContext} by loading keystore and trustsotre
    * One factory only has one SSLContext
+   * @param sslConfig the config for setting up the {@link SSLContext}
    * @return SSLContext
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private SSLContext createSSLContext() throws GeneralSecurityException, IOException {
+  private SSLContext createSSLContext(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
     SSLContext sslContext;
-    if (provider != null) {
-      sslContext = SSLContext.getInstance(protocol, provider);
+    if (!sslConfig.sslContextProvider.isEmpty()) {
+      sslContext = SSLContext.getInstance(sslConfig.sslContextProtocol, sslConfig.sslContextProvider);
     } else {
-      sslContext = SSLContext.getInstance(protocol);
+      sslContext = SSLContext.getInstance(sslConfig.sslContextProtocol);
     }
 
-    KeyManager[] keyManagers = null;
-    if (keystore != null) {
-      String kmfAlgorithm = this.kmfAlgorithm != null ? this.kmfAlgorithm : KeyManagerFactory.getDefaultAlgorithm();
-      KeyManagerFactory kmf = KeyManagerFactory.getInstance(kmfAlgorithm);
-      KeyStore ks = keystore.load();
-      String keyPassword = this.keyPassword != null ? this.keyPassword : keystore.password;
-      kmf.init(ks, keyPassword.toCharArray());
-      keyManagers = kmf.getKeyManagers();
-    }
+    SecurityStore keystore =
+        new SecurityStore(sslConfig.sslKeystoreType, sslConfig.sslKeystorePath, sslConfig.sslKeystorePassword);
+    String kmfAlgorithm = sslConfig.sslKeymanagerAlgorithm.isEmpty() ? KeyManagerFactory.getDefaultAlgorithm()
+        : sslConfig.sslKeymanagerAlgorithm;
+    KeyManagerFactory kmf = KeyManagerFactory.getInstance(kmfAlgorithm);
+    KeyStore ks = keystore.load();
+    String keyPassword = sslConfig.sslKeyPassword.isEmpty() ? keystore.password : sslConfig.sslKeyPassword;
+    kmf.init(ks, keyPassword.toCharArray());
+    KeyManager[] keyManagers = kmf.getKeyManagers();
 
-    String tmfAlgorithm = this.tmfAlgorithm != null ? this.tmfAlgorithm : TrustManagerFactory.getDefaultAlgorithm();
+    String tmfAlgorithm = sslConfig.sslTrustmanagerAlgorithm.isEmpty() ? TrustManagerFactory.getDefaultAlgorithm()
+        : sslConfig.sslTrustmanagerAlgorithm;
     TrustManagerFactory tmf = TrustManagerFactory.getInstance(tmfAlgorithm);
-    KeyStore ts = truststore == null ? null : truststore.load();
+    KeyStore ts = new SecurityStore(sslConfig.sslTruststoreType, sslConfig.sslTruststorePath,
+        sslConfig.sslTruststorePassword).load();
     tmf.init(ts);
 
-    sslContext.init(keyManagers, tmf.getTrustManagers(), new SecureRandom());
+    sslContext.init(keyManagers, tmf.getTrustManagers(),
+        sslConfig.sslSecureRandomAlgorithm.isEmpty() ? new SecureRandom()
+            : SecureRandom.getInstance(sslConfig.sslSecureRandomAlgorithm));
     return sslContext;
   }
 
@@ -154,10 +142,13 @@ public class JdkSslFactory implements SSLFactory {
 
     if (mode == Mode.SERVER) {
       sslEngine.setUseClientMode(false);
-      if (needClientAuth) {
-        sslEngine.setNeedClientAuth(needClientAuth);
-      } else {
-        sslEngine.setWantClientAuth(wantClientAuth);
+      switch (clientAuth) {
+        case REQUIRED:
+          sslEngine.setNeedClientAuth(true);
+          break;
+        case REQUESTED:
+          sslEngine.setWantClientAuth(true);
+          break;
       }
     } else {
       sslEngine.setUseClientMode(true);
@@ -178,15 +169,6 @@ public class JdkSslFactory implements SSLFactory {
     return sslContext;
   }
 
-  private void createKeyStore(String type, String path, String password, String keyPassword) {
-    this.keystore = new SecurityStore(type, path, password);
-    this.keyPassword = keyPassword;
-  }
-
-  private void createTrustStore(String type, String path, String password) {
-    this.truststore = new SecurityStore(type, path, password);
-  }
-
   private class SecurityStore {
     private final String type;
     private final String path;
@@ -199,17 +181,18 @@ public class JdkSslFactory implements SSLFactory {
     }
 
     private KeyStore load() throws GeneralSecurityException, IOException {
-      FileInputStream in = null;
-      try {
+      try (FileInputStream in = new FileInputStream(path)) {
         KeyStore ks = KeyStore.getInstance(type);
-        in = new FileInputStream(path);
         ks.load(in, password.toCharArray());
         return ks;
-      } finally {
-        if (in != null) {
-          in.close();
-        }
       }
     }
+  }
+
+  /**
+   * The client authentication setting for server SSL engines.
+   */
+  private enum ClientAuth {
+    REQUIRED, REQUESTED, NONE
   }
 }
