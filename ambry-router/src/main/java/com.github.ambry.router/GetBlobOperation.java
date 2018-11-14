@@ -198,7 +198,14 @@ class GetBlobOperation extends GetOperation {
             // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
             // we will replace the field with the size from inside of the metadata content.
             if (blobInfo != null) {
-              blobInfo.getBlobProperties().setBlobSize(totalSize);
+              if (blobInfo.getBlobProperties().getBlobSize() != totalSize) {
+                if (compositeBlobInfo == null) {
+                  routerMetrics.simpleBlobSizeMismatchCount.inc();
+                } else {
+                  routerMetrics.compositeBlobSizeMismatchCount.inc();
+                }
+                blobInfo.getBlobProperties().setBlobSize(totalSize);
+              }
             }
             if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfoAll) {
               blobDataChannel = new BlobDataReadableStreamChannel();
