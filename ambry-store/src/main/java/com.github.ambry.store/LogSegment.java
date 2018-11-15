@@ -276,11 +276,6 @@ class LogSegment implements Read, Write {
    */
   void readIntoDirectly(byte[] byteArray, long position, int length) throws IOException {
     validateReadRange(position, length);
-    if (file.length() < position + length) {
-      throw new IOException(
-          "Requested range exceed file length. position = " + position + " length = " + length + "fileLength = "
-              + file.length());
-    }
     // TODO: Try to avoid opening file on every opeartion.
     try (DirectRandomAccessFile directFile = new DirectRandomAccessFile(file, "r", 2 * 1024 * 1024)) {
       directFile.seek(position);
