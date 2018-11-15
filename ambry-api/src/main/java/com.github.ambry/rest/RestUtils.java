@@ -499,7 +499,7 @@ public class RestUtils {
       throw new RestServiceException("Ranges not supported for sub-resources.", RestServiceErrorCode.InvalidArgs);
     }
     return new GetBlobOptionsBuilder().operationType(
-        subResource == null ? GetBlobOptions.OperationType.All : GetBlobOptions.OperationType.BlobInfoAll)
+        subResource == null ? GetBlobOptions.OperationType.All : GetBlobOptions.OperationType.BlobInfo)
         .getOption(getOption)
         .range(rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null)
         .build();
@@ -693,8 +693,7 @@ public class RestUtils {
    *                                    {@code args} or if there is more than one value for {@code header} in
    *                                    {@code args}.
    */
-  public static String getHeader(Map<String, ?> args, String header, boolean required)
-      throws RestServiceException {
+  public static String getHeader(Map<String, ?> args, String header, boolean required) throws RestServiceException {
     String value = null;
     if (args.containsKey(header)) {
       Object valueObj = args.get(header);
@@ -721,8 +720,7 @@ public class RestUtils {
    * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
    *                              converted to a {@link Long}.
    */
-  public static Long getLongHeader(Map<String, ?> args, String header, boolean required)
-      throws RestServiceException {
+  public static Long getLongHeader(Map<String, ?> args, String header, boolean required) throws RestServiceException {
     // if getHeader() is no longer called, tests for this function have to be changed.
     String value = getHeader(args, header, required);
     if (value != null) {

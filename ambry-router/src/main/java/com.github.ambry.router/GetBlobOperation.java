@@ -201,13 +201,15 @@ class GetBlobOperation extends GetOperation {
               if (blobInfo.getBlobProperties().getBlobSize() != totalSize) {
                 if (compositeBlobInfo == null) {
                   routerMetrics.simpleBlobSizeMismatchCount.inc();
+                  logger.debug("Blob size mismatch for simple blob: {}", getBlobIdStr());
                 } else {
                   routerMetrics.compositeBlobSizeMismatchCount.inc();
+                  logger.debug("Blob size mismatch for composite blob: {}", getBlobIdStr());
                 }
                 blobInfo.getBlobProperties().setBlobSize(totalSize);
               }
             }
-            if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfoAll) {
+            if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
               blobDataChannel = new BlobDataReadableStreamChannel();
             } else {
               operationCompleted = true;
@@ -1163,7 +1165,7 @@ class GetBlobOperation extends GetOperation {
      */
     private void initializeDataChunks() {
       if (options.getChunkIdsOnly
-          || options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfoAll) {
+          || options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
         chunkIdIterator = null;
         numChunksTotal = 0;
         dataChunks = null;

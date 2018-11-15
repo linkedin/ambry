@@ -736,7 +736,7 @@ class AmbryBlobStorageService implements BlobStorageService {
           }
           headCallback.markStartTime();
           router.getBlob(convertedId,
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfoAll)
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
                   .getOption(getOption)
                   .build(), headCallback);
           break;

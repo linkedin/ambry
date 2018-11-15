@@ -189,7 +189,6 @@ public class InMemoryRouter implements Router {
               blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
               break;
             case BlobInfo:
-            case BlobInfoAll:
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
               break;
             case All:

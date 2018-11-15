@@ -334,7 +334,7 @@ public class GetBlobOperationTest {
           operationType = GetBlobOptions.OperationType.Data;
           break;
         default:
-          operationType = GetBlobOptions.OperationType.BlobInfoAll;
+          operationType = GetBlobOptions.OperationType.BlobInfo;
           break;
       }
       options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(operationType).build(), false,
@@ -383,7 +383,7 @@ public class GetBlobOperationTest {
           operationType = GetBlobOptions.OperationType.Data;
           break;
         default:
-          operationType = GetBlobOptions.OperationType.BlobInfoAll;
+          operationType = GetBlobOptions.OperationType.BlobInfo;
           break;
       }
       options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(operationType).build(), false,
@@ -679,7 +679,7 @@ public class GetBlobOperationTest {
     userMetadata = new byte[10];
     random.nextBytes(userMetadata);
     options = new GetBlobOptionsInternal(
-        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfoAll).build(), false,
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
         routerMetrics.ageAtGet);
 
     // test simple blob case
@@ -1107,7 +1107,7 @@ public class GetBlobOperationTest {
             case Data:
               Assert.assertNull("Unexpected blob info in operation result", result.getBlobResult.getBlobInfo());
               break;
-            case BlobInfoAll:
+            case BlobInfo:
               blobInfo = result.getBlobResult.getBlobInfo();
               Assert.assertTrue("Blob properties must be the same",
                   RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
@@ -1119,7 +1119,7 @@ public class GetBlobOperationTest {
           readCompleteException.set(e);
         }
 
-        if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfoAll) {
+        if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
           final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
           final Future<Long> preSetReadIntoFuture =
               initiateReadBeforeChunkGet ? result.getBlobResult.getBlobDataChannel()
@@ -1156,7 +1156,7 @@ public class GetBlobOperationTest {
     }
     // Ensure that a ChannelClosed exception is not set when the ReadableStreamChannel is closed correctly.
     Assert.assertNull("Callback operation exception should be null", op.getOperationException());
-    if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfoAll) {
+    if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
       int sizeWritten = blobSize;
       if (options.getBlobOptions.getRange() != null) {
         ByteRange range = options.getBlobOptions.getRange().toResolvedByteRange(blobSize);
