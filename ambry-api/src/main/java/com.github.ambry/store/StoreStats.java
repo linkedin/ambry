@@ -17,8 +17,8 @@ package com.github.ambry.store;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
-import java.util.EnumSet;
 import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -50,6 +50,6 @@ public interface StoreStats {
    * @return a map of {@link StatsReportType} to {@link StatsSnapshot}
    * @throws StoreException
    */
-  Map<StatsReportType, StatsSnapshot> getStatsSnapshots(EnumSet<StatsReportType> statsReportTypes,
-      long referenceTimeInMs) throws StoreException;
+  Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes, long referenceTimeInMs)
+      throws StoreException;
 }

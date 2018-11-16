@@ -416,7 +416,7 @@ public class StatsManagerTest {
     }
 
     @Override
-    public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(EnumSet<StatsReportType> statsReportTypes,
+    public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes,
         long referenceTimeInMs) throws StoreException {
       if (throwStoreException) {
         throw new StoreException("Test", StoreErrorCodes.Unknown_Error);

@@ -15,8 +15,7 @@
 package com.github.ambry.server;
 
 /**
- * Type of stats reports which are used by StatsManager and would be transmitted to Helix. Do not change this order. Add
- * new entries to the end of the list.
+ * Type of stats reports which are used by StatsManager and would be transmitted to Helix.
  */
 public enum StatsReportType {
   PARTITION_CLASS_REPORT, ACCOUNT_REPORT

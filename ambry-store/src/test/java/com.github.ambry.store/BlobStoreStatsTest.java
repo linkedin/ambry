@@ -758,37 +758,39 @@ public class BlobStoreStatsTest {
 
   /**
    * Test the static method that converts the quota stats stored in a nested Map to an {@link StatsSnapshot} object.
-   * This test verifies both {@link com.github.ambry.store.BlobStoreStats#convertQuotaToAccountStatsSnapshot(Map)} and
-   * {@link com.github.ambry.store.BlobStoreStats#convertQuotaToContainerStatsSnapshot(Map)}
+   * This test verifies both {@link com.github.ambry.store.BlobStoreStats#convertStoreUsageToAccountStatsSnapshot(Map)} and
+   * {@link com.github.ambry.store.BlobStoreStats#convertStoreUsageToContainerStatsSnapshot(Map)}
    */
   @Test
-  public void testConvertQuotaMapToStatsSnapshot() {
+  public void testConvertStoreUsageToStatsSnapshot() {
     Random random = new Random();
-    Map<String, Map<String, Long>> quotaMap = new HashMap<>();
+    Map<String, Map<String, Long>> utilizationMap = new HashMap<>();
     Map<String, StatsSnapshot> accountSubMap = new HashMap<>();
     Map<String, StatsSnapshot> accountContainerPairSubMap = new HashMap<>();
 
     long total = 0;
     for (int i = 0; i < 10; i++) {
       Map<String, StatsSnapshot> containerSubMap = new HashMap<>();
-      Map<String, Long> innerQuotaMap = new HashMap<>();
+      Map<String, Long> innerUtilizationMap = new HashMap<>();
       long subTotal = 0;
       for (int j = 0; j < 3; j++) {
         long randValue = random.nextInt(10000);
         subTotal += randValue;
-        innerQuotaMap.put(String.valueOf(j), randValue);
+        innerUtilizationMap.put(String.valueOf(j), randValue);
         containerSubMap.put(String.valueOf(j), new StatsSnapshot(randValue, null));
         accountContainerPairSubMap.put(String.valueOf(i) + "_" + String.valueOf(j), new StatsSnapshot(randValue, null));
       }
       total += subTotal;
-      quotaMap.put(String.valueOf(i), innerQuotaMap);
+      utilizationMap.put(String.valueOf(i), innerUtilizationMap);
       accountSubMap.put(String.valueOf(i), new StatsSnapshot(subTotal, containerSubMap));
     }
     StatsSnapshot expectAccountSnapshot = new StatsSnapshot(total, accountSubMap);
-    StatsSnapshot convertedAccountStatsSnapshot = BlobStoreStats.convertQuotaToAccountStatsSnapshot(quotaMap);
+    StatsSnapshot convertedAccountStatsSnapshot =
+        BlobStoreStats.convertStoreUsageToAccountStatsSnapshot(utilizationMap);
     assertTrue("Mismatch between the converted Account StatsSnapshot and expected StatsSnapshot",
         expectAccountSnapshot.equals(convertedAccountStatsSnapshot));
-    StatsSnapshot convertedContainerStatsSnapshot = BlobStoreStats.convertQuotaToContainerStatsSnapshot(quotaMap);
+    StatsSnapshot convertedContainerStatsSnapshot =
+        BlobStoreStats.convertStoreUsageToContainerStatsSnapshot(utilizationMap);
     StatsSnapshot expectContainerSnapshot = new StatsSnapshot(total, accountContainerPairSubMap);
     assertTrue("Mismatch between the converted Container StatsSnapshot and expected StatsSnapshot",
         expectContainerSnapshot.equals(convertedContainerStatsSnapshot));
@@ -801,30 +803,30 @@ public class BlobStoreStatsTest {
   public void testGetStatsSnapshots() throws StoreException {
     BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
     long deleteAndExpirationRefTimeInMs = state.time.milliseconds();
-    Map<String, Map<String, Long>> quotaMap =
+    Map<String, Map<String, Long>> utilizationMap =
         blobStoreStats.getValidDataSizeByContainer(deleteAndExpirationRefTimeInMs);
     // Verify account stats snapshot
     Map<StatsReportType, StatsSnapshot> snapshotsByType =
         blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), deleteAndExpirationRefTimeInMs);
-    verifyStatsSnapshots(quotaMap, snapshotsByType, EnumSet.of(StatsReportType.ACCOUNT_REPORT));
+    verifyStatsSnapshots(utilizationMap, snapshotsByType, EnumSet.of(StatsReportType.ACCOUNT_REPORT));
     // Verify partition class stats snapshot
     snapshotsByType = blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT),
         deleteAndExpirationRefTimeInMs);
-    verifyStatsSnapshots(quotaMap, snapshotsByType, EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT));
+    verifyStatsSnapshots(utilizationMap, snapshotsByType, EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT));
     // Verify all types of stats snapshots
     Map<StatsReportType, StatsSnapshot> allStatsSnapshots =
         blobStoreStats.getStatsSnapshots(EnumSet.allOf(StatsReportType.class), deleteAndExpirationRefTimeInMs);
-    verifyStatsSnapshots(quotaMap, allStatsSnapshots, EnumSet.allOf(StatsReportType.class));
+    verifyStatsSnapshots(utilizationMap, allStatsSnapshots, EnumSet.allOf(StatsReportType.class));
   }
 
   /**
    * Verify the correctness of specified stats snapshots fetched from {@link BlobStoreStats}
-   * @param accountContainerQuotaMap the map of account to each container quota map. The container quota map presents
+   * @param accountContainerUtilizationMap the map of account to each container quota map. The container quota map presents
    *                                 each container name to its valid data size
    * @param snapshotsByType the map of {@link StatsReportType} to {@link StatsSnapshot} to be verified
    * @param typesToVerify the {@link StatsReportType} to be verified
    */
-  private void verifyStatsSnapshots(Map<String, Map<String, Long>> accountContainerQuotaMap,
+  private void verifyStatsSnapshots(Map<String, Map<String, Long>> accountContainerUtilizationMap,
       Map<StatsReportType, StatsSnapshot> snapshotsByType, EnumSet<StatsReportType> typesToVerify) {
     for (StatsReportType type : typesToVerify) {
       switch (type) {
@@ -832,15 +834,16 @@ public class BlobStoreStatsTest {
           Map<String, StatsSnapshot> accountToSnapshot =
               snapshotsByType.get(StatsReportType.ACCOUNT_REPORT).getSubMap();
           assertEquals("Mismatch on number of accounts for " + StatsReportType.ACCOUNT_REPORT,
-              accountContainerQuotaMap.size(), accountToSnapshot.size());
-          for (Map.Entry<String, Map<String, Long>> accountToContainerEntry : accountContainerQuotaMap.entrySet()) {
-            Map<String, Long> containerQuotaMap = accountToContainerEntry.getValue();
+              accountContainerUtilizationMap.size(), accountToSnapshot.size());
+          for (Map.Entry<String, Map<String, Long>> accountToContainerEntry : accountContainerUtilizationMap.entrySet()) {
+            Map<String, Long> containerUtilizationMap = accountToContainerEntry.getValue();
             Map<String, StatsSnapshot> containerToSnapshot =
                 accountToSnapshot.get(accountToContainerEntry.getKey()).getSubMap();
-            assertEquals("Mismatch on number of containers", containerQuotaMap.size(), containerToSnapshot.size());
-            for (Map.Entry<String, Long> containerEntry : containerQuotaMap.entrySet()) {
+            assertEquals("Mismatch on number of containers", containerUtilizationMap.size(),
+                containerToSnapshot.size());
+            for (Map.Entry<String, Long> containerEntry : containerUtilizationMap.entrySet()) {
 
-              // Ensure container value and name in ACCOUNT_SNAPSHOT match that in QuotaMap
+              // Ensure container value and name in ACCOUNT_SNAPSHOT match that in UtilizationMap
               assertNotNull("Expected container: " + containerEntry.getKey() + " doesn't exist",
                   containerToSnapshot.get(containerEntry.getKey()));
               assertEquals("Mismatch on value of container in account snapshot", containerEntry.getValue().longValue(),
@@ -851,10 +854,10 @@ public class BlobStoreStatsTest {
         case PARTITION_CLASS_REPORT:
           Map<String, StatsSnapshot> acctContPairToSnapshot =
               snapshotsByType.get(StatsReportType.PARTITION_CLASS_REPORT).getSubMap();
-          for (Map.Entry<String, Map<String, Long>> accountToContainerEntry : accountContainerQuotaMap.entrySet()) {
-            Map<String, Long> containerQuotaMap = accountToContainerEntry.getValue();
-            for (Map.Entry<String, Long> containerEntry : containerQuotaMap.entrySet()) {
-              // Ensure account_container value and name in CONTAINER_SNAPSHOT match that in QuotaMap
+          for (Map.Entry<String, Map<String, Long>> accountToContainerEntry : accountContainerUtilizationMap.entrySet()) {
+            Map<String, Long> containerUtilizationMap = accountToContainerEntry.getValue();
+            for (Map.Entry<String, Long> containerEntry : containerUtilizationMap.entrySet()) {
+              // Ensure account_container value and name in CONTAINER_SNAPSHOT match that in UtilizationMap
               String accountContainerName = accountToContainerEntry.getKey() + "_" + containerEntry.getKey();
               assertNotNull("Expected account_container pair: " + accountContainerName + " doesn't exist",
                   acctContPairToSnapshot.get(accountContainerName));

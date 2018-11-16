@@ -93,13 +93,13 @@ class BlobStoreStats implements StoreStats, Closeable {
   /**
    * Convert a given nested {@link Map} of accountId to containerId to valid size to its corresponding
    * account {@link StatsSnapshot} object.
-   * @param quotaMap the nested {@link Map} to be converted
+   * @param utilizationMap the nested {@link Map} to be converted
    * @return the corresponding {@link StatsSnapshot} object.
    */
-  static StatsSnapshot convertQuotaToAccountStatsSnapshot(Map<String, Map<String, Long>> quotaMap) {
+  static StatsSnapshot convertStoreUsageToAccountStatsSnapshot(Map<String, Map<String, Long>> utilizationMap) {
     Map<String, StatsSnapshot> accountValidSizeMap = new HashMap<>();
     long totalSize = 0;
-    for (Map.Entry<String, Map<String, Long>> accountEntry : quotaMap.entrySet()) {
+    for (Map.Entry<String, Map<String, Long>> accountEntry : utilizationMap.entrySet()) {
       long subTotalSize = 0;
       Map<String, StatsSnapshot> containerValidSizeMap = new HashMap<>();
       for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
@@ -116,13 +116,13 @@ class BlobStoreStats implements StoreStats, Closeable {
    * Convert a given nested {@link Map} of accountId to containerId to valid size to its corresponding
    * container {@link StatsSnapshot} object. The container snapshot does not have account level, each container is
    * uniquely identified by "Account[]_Container[]" pair.
-   * @param quotaMap the nested {@link Map} to be converted
+   * @param utilizationMap the nested {@link Map} to be converted
    * @return the corresponding {@link StatsSnapshot} object.
    */
-  static StatsSnapshot convertQuotaToContainerStatsSnapshot(Map<String, Map<String, Long>> quotaMap) {
+  static StatsSnapshot convertStoreUsageToContainerStatsSnapshot(Map<String, Map<String, Long>> utilizationMap) {
     Map<String, StatsSnapshot> containerValidSizeMap = new HashMap<>();
     long totalSize = 0;
-    for (Map.Entry<String, Map<String, Long>> accountEntry : quotaMap.entrySet()) {
+    for (Map.Entry<String, Map<String, Long>> accountEntry : utilizationMap.entrySet()) {
       for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
         totalSize += containerEntry.getValue();
         containerValidSizeMap.put(accountEntry.getKey() + "_" + containerEntry.getKey(),
@@ -171,46 +171,47 @@ class BlobStoreStats implements StoreStats, Closeable {
    * Implementation in {@link BlobStoreStats} which returns the all types of snapshots for a {@link BlobStore}. Size of
    * delete records are not accounted as valid data size here. The formats of all snapshots are presented as follows.
    * <pre>
-   *        AccountSnapshot             |             ContainerSnapshot
-   * --------------------------------------------------------------------------
-   * {                                  |      {
-   *   value: 1000,                     |        value: 1000,
-   *   subMap: {                        |        subMap: {
-   *     Account[1]:{                   |           Account[1]_Container[1]: {
-   *       value: 200,                  |               value: 200,
-   *       subMap: {                    |               subMap: null
-   *         Container[1]:{             |           },
-   *           value: 200,              |           Account[2]_Container[3]: {
-   *           subMap: null             |               value: 800,
-   *         }                          |               subMap: null
-   *       }                            |           }
-   *     },                             |        }
-   *     Account[2]:{                   |      }
-   *       value: 800,                  |
-   *       subMap:{                     |
-   *         Container[3]:{             |
-   *           value: 800,              |
-   *           subMap: null             |
-   *         }                          |
-   *       }                            |
-   *     }                              |
-   *   }                                |
-   * }                                  |
+   *  AccountSnapshot (used for ACCOUNT_REPORT)   | ContainerSnapshot (used for PARTITION_CLASS_REPORT)
+   * ---------------------------------------------------------------------------------------------------
+   * {                                            |    {
+   *   value: 1000,                               |      value: 1000,
+   *   subMap: {                                  |      subMap: {
+   *     Account[1]:{                             |         Account[1]_Container[1]: {
+   *       value: 200,                            |             value: 200,
+   *       subMap: {                              |             subMap: null
+   *         Container[1]:{                       |         },
+   *           value: 200,                        |         Account[2]_Container[3]: {
+   *           subMap: null                       |             value: 800,
+   *         }                                    |             subMap: null
+   *       }                                      |         }
+   *     },                                       |      }
+   *     Account[2]:{                             |    }
+   *       value: 800,                            |
+   *       subMap:{                               |
+   *         Container[3]:{                       |
+   *           value: 800,                        |
+   *           subMap: null                       |
+   *         }                                    |
+   *       }                                      |
+   *     }                                        |
+   *   }                                          |
+   * }                                            |
    * </pre>
    */
   @Override
-  public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(EnumSet<StatsReportType> statsReportTypes,
+  public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes,
       long referenceTimeInMs) throws StoreException {
     Map<StatsReportType, StatsSnapshot> statsSnapshotsByType = new HashMap<>();
-    Map<String, Map<String, Long>> quotaMap = getValidDataSizeByContainer(referenceTimeInMs);
+    Map<String, Map<String, Long>> utilizationMap = getValidDataSizeByContainer(referenceTimeInMs);
     for (StatsReportType reportType : statsReportTypes) {
       switch (reportType) {
         case ACCOUNT_REPORT:
-          statsSnapshotsByType.put(StatsReportType.ACCOUNT_REPORT, convertQuotaToAccountStatsSnapshot(quotaMap));
+          statsSnapshotsByType.put(StatsReportType.ACCOUNT_REPORT,
+              convertStoreUsageToAccountStatsSnapshot(utilizationMap));
           break;
         case PARTITION_CLASS_REPORT:
           statsSnapshotsByType.put(StatsReportType.PARTITION_CLASS_REPORT,
-              convertQuotaToContainerStatsSnapshot(quotaMap));
+              convertStoreUsageToContainerStatsSnapshot(utilizationMap));
           break;
         default:
           logger.error("Unrecognized stats report type: {}", reportType);
@@ -435,7 +436,7 @@ class BlobStoreStats implements StoreStats, Closeable {
         IndexValue indexValue = indexEntry.getValue();
         if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !indexValue.isFlagSet(
             IndexValue.Flags.Delete_Index)) {
-          // delete and TTL update records does not count towards valid data size for quota (containers)
+          // delete and TTL update records does not count towards valid data size for usage (containers)
           updateNestedMapHelper(validDataSizePerContainer, "Account[" + indexValue.getAccountId() + "]",
               "Container[" + indexValue.getContainerId() + "]", indexValue.getSize());
         }
@@ -808,7 +809,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       IndexValue indexValue = indexEntry.getValue();
       if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !indexValue.isFlagSet(
           IndexValue.Flags.Delete_Index)) {
-        // delete and TTL update records does not count towards valid data size for quota (containers)
+        // delete and TTL update records does not count towards valid data size for usage (containers)
         results.updateContainerBaseBucket("Account[" + indexValue.getAccountId() + "]",
             "Container[" + indexValue.getContainerId() + "]", indexValue.getSize());
         long expOrDelTimeInMs = indexValue.getExpiresAtMs();
