@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Counter;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -690,9 +691,11 @@ public class GetBlobOperationTest {
         new BlobProperties(blobSize + 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption);
     doDirectPut(BlobType.DataBlob, ByteBuffer.wrap(putContent));
-    long startCount = routerMetrics.simpleBlobSizeMismatchCount.getCount();
+    Counter sizeMismatchCounter = (testEncryption ? routerMetrics.simpleEncryptedBlobSizeMismatchCount
+        : routerMetrics.simpleUnencryptedBlobSizeMismatchCount);
+    long startCount = sizeMismatchCounter.getCount();
     getAndAssertSuccess();
-    long endCount = routerMetrics.simpleBlobSizeMismatchCount.getCount();
+    long endCount = sizeMismatchCounter.getCount();
     Assert.assertEquals("Wrong number of blob size mismatches", 1, endCount - startCount);
 
     // test composite blob case
@@ -706,12 +709,13 @@ public class GetBlobOperationTest {
     blobSize = maxChunkSize * numChunks;
     ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContent(maxChunkSize, blobSize, storeKeys);
     metadataContent.flip();
-    blobProperties = new BlobProperties(blobSize - 20, "serviceId", "memberId", "contentType", false,
-        Utils.Infinite_Time, Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption);
+    blobProperties =
+        new BlobProperties(blobSize - 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption);
     doDirectPut(BlobType.MetadataBlob, metadataContent);
     startCount = routerMetrics.compositeBlobSizeMismatchCount.getCount();
     getAndAssertSuccess();
-    endCount = routerMetrics.simpleBlobSizeMismatchCount.getCount();
+    endCount = routerMetrics.compositeBlobSizeMismatchCount.getCount();
     Assert.assertEquals("Wrong number of blob size mismatches", 1, endCount - startCount);
   }
 

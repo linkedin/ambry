@@ -199,12 +199,15 @@ class GetBlobOperation extends GetOperation {
             // we will replace the field with the size from inside of the metadata content.
             if (blobInfo != null) {
               if (blobInfo.getBlobProperties().getBlobSize() != totalSize) {
-                if (compositeBlobInfo == null) {
-                  routerMetrics.simpleBlobSizeMismatchCount.inc();
-                  logger.debug("Blob size mismatch for simple blob: {}", getBlobIdStr());
-                } else {
+                if (compositeBlobInfo != null) {
                   routerMetrics.compositeBlobSizeMismatchCount.inc();
                   logger.debug("Blob size mismatch for composite blob: {}", getBlobIdStr());
+                } else if (blobInfo.getBlobProperties().isEncrypted()) {
+                  routerMetrics.simpleEncryptedBlobSizeMismatchCount.inc();
+                  logger.debug("Blob size mismatch for simple encrypted blob: {}", getBlobIdStr());
+                } else {
+                  routerMetrics.simpleUnencryptedBlobSizeMismatchCount.inc();
+                  logger.warn("Blob size mismatch for simple unencrypted blob (should not happen): {}", getBlobIdStr());
                 }
                 blobInfo.getBlobProperties().setBlobSize(totalSize);
               }

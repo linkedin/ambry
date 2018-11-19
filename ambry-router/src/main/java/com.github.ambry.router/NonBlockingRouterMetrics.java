@@ -139,7 +139,8 @@ public class NonBlockingRouterMetrics {
   public final Counter ignoredResponseCount;
   public final Counter crossColoRequestCount;
   public final Counter crossColoSuccessCount;
-  public final Counter simpleBlobSizeMismatchCount;
+  public final Counter simpleEncryptedBlobSizeMismatchCount;
+  public final Counter simpleUnencryptedBlobSizeMismatchCount;
   public final Counter compositeBlobSizeMismatchCount;
   // Number of unnecessary blob gets avoided via use of BlobDataType
   public final Counter skippedGetBlobCount;
@@ -351,8 +352,10 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoRequestCount"));
     crossColoSuccessCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoSuccessCount"));
-    simpleBlobSizeMismatchCount =
-        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "CompositeBlobSizeMismatchCount"));
+    simpleEncryptedBlobSizeMismatchCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "SimpleEncryptedBlobSizeMismatchCount"));
+    simpleUnencryptedBlobSizeMismatchCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "SimpleUnencryptedBlobSizeMismatchCount"));
     compositeBlobSizeMismatchCount =
         metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "CompositeBlobSizeMismatchCount"));
 
