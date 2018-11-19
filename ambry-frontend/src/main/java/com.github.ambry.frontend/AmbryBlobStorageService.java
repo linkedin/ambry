@@ -735,10 +735,9 @@ class AmbryBlobStorageService implements BlobStorageService {
             restRequest.getMetricsTracker().injectMetrics(requestMetrics);
           }
           headCallback.markStartTime();
-          router.getBlob(convertedId,
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
-                  .getOption(getOption)
-                  .build(), headCallback);
+          router.getBlob(convertedId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
+              .getOption(getOption)
+              .build(), headCallback);
           break;
         case DELETE:
           deleteCallback.markStartTime();

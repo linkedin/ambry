@@ -102,7 +102,7 @@ class GetBlobOperation extends GetOperation {
   private Map<Integer, ByteBuffer> chunkIndexToBuffer;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
-  // the blob info that is populated on OperationType.BlobInfoAll or OperationType.All
+  // the blob info that is populated on OperationType.BlobInfo or OperationType.All
   private BlobInfo blobInfo;
   // the ReadableStreamChannel that is populated on OperationType.Blob or OperationType.All requests.
   private BlobDataReadableStreamChannel blobDataChannel;
