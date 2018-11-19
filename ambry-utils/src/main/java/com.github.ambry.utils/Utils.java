@@ -654,6 +654,13 @@ public class Utils {
   }
 
   /**
+   * @return true if current operating system is Linux.
+   */
+  public static boolean isLinux() {
+    return System.getProperty("os.name").toLowerCase().startsWith("linux");
+  }
+
+  /**
    * Ensures that a given File is present. The file is pre-allocated with a given capacity using fallocate on linux
    * @param file file path to create and allocate
    * @param capacityBytes the number of bytes to pre-allocate
@@ -663,7 +670,7 @@ public class Utils {
     if (!file.exists()) {
       file.createNewFile();
     }
-    if (System.getProperty("os.name").toLowerCase().startsWith("linux")) {
+    if (isLinux()) {
       Runtime runtime = Runtime.getRuntime();
       Process process = runtime.exec("fallocate --keep-size -l " + capacityBytes + " " + file.getAbsolutePath());
       try {

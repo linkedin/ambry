@@ -89,7 +89,8 @@ class BlobStoreCompactor {
   private StoreFindToken recoveryStartToken = null;
   private CompactionLog compactionLog;
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
-  private ByteBuffer bundleReadBuffer;
+  private byte[] bundleReadBuffer;
+  private final boolean useDirectIO;
 
   /**
    * Constructs the compactor component.
@@ -123,6 +124,7 @@ class BlobStoreCompactor {
     this.time = time;
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
+    this.useDirectIO = Utils.isLinux() && config.storeCompactionEnableDirectIO;
     fixStateIfRequired();
     logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
   }
@@ -139,6 +141,8 @@ class BlobStoreCompactor {
       srcIndex.hardDeleter.resume();
     }
     isActive = true;
+    logger.info("Direct IO config: {}, OS: {}, availability: {}", config.storeCompactionEnableDirectIO,
+        System.getProperty("os.name"), useDirectIO);
     srcMetrics.initializeCompactorGauges(storeId, compactionInProgress);
     logger.trace("Initialized BlobStoreCompactor for {}", storeId);
   }
@@ -167,7 +171,7 @@ class BlobStoreCompactor {
    * @throws IOException if there were I/O errors creating the {@link CompactionLog}
    * @throws StoreException if there were exceptions reading to writing to store components.
    */
-  void compact(CompactionDetails details, ByteBuffer bundleReadBuffer) throws IOException, StoreException {
+  void compact(CompactionDetails details, byte[] bundleReadBuffer) throws IOException, StoreException {
     if (srcIndex == null) {
       throw new IllegalStateException("Compactor has not been initialized");
     } else if (compactionLog != null) {
@@ -185,7 +189,7 @@ class BlobStoreCompactor {
    * @throws StoreException if there were exceptions reading to writing to store components.
    * @param bundleReadBuffer the preAllocated buffer for bundle read in compaction copy phase.
    */
-  void resumeCompaction(ByteBuffer bundleReadBuffer) throws StoreException {
+  void resumeCompaction(byte[] bundleReadBuffer) throws StoreException {
     this.bundleReadBuffer = bundleReadBuffer;
     if (srcIndex == null) {
       throw new IllegalStateException("Compactor has not been initialized");
@@ -262,7 +266,7 @@ class BlobStoreCompactor {
 
   /**
    * If a compaction was in progress during a crash/shutdown, fixes the state so that the store is loaded correctly
-   * and compaction can resume smoothly on a call to {@link #resumeCompaction(ByteBuffer)}. Expected to be called before the
+   * and compaction can resume smoothly on a call to {@link #resumeCompaction(byte[])}. Expected to be called before the
    * {@link PersistentIndex} is instantiated in the {@link BlobStore}.
    * @throws IOException if the {@link CompactionLog} could not be created or if commit or cleanup failed.
    * @throws StoreException if the commit failed.
@@ -938,7 +942,7 @@ class BlobStoreCompactor {
           sortedSrcIndexEntries.get(end).getValue().getOffset().getOffset() + sortedSrcIndexEntries.get(end)
               .getValue()
               .getSize() - startOffset;
-      if (currentSize > bundleReadBuffer.capacity()) {
+      if (currentSize > bundleReadBuffer.length) {
         break;
       }
     }
@@ -961,32 +965,43 @@ class BlobStoreCompactor {
     long totalCapacity = tgtLog.getCapacityInBytes();
     long writtenLastTime = 0;
     try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
-      // the index number of the list to start with.
-      int start = 0;
+      // byte[] for both general IO and direct IO.
+      byte[] byteArrayToUse;
+      // ByteBuffer for general IO
+      ByteBuffer bufferToUse = null;
+      // the index number of the list to start/end with.
+      int start = 0, end;
+      // the size (in bytes) from start to end for read.
+      int readSize;
       while (start < srcIndexEntries.size()) {
         // try to do a bundle of read to reduce disk IO
-        ByteBuffer bufferToUse;
         long startOffset = srcIndexEntries.get(start).getValue().getOffset().getOffset();
-        int end;
-        if (bundleReadBuffer == null || srcIndexEntries.get(start).getValue().getSize() > bundleReadBuffer.capacity()) {
+        if (bundleReadBuffer == null || srcIndexEntries.get(start).getValue().getSize() > bundleReadBuffer.length) {
           end = start;
-          bufferToUse = ByteBuffer.allocate((int) srcIndexEntries.get(start).getValue().getSize());
+          readSize = (int) srcIndexEntries.get(start).getValue().getSize();
+          byteArrayToUse = new byte[readSize];
           srcMetrics.compactionBundleReadBufferNotFitIn.inc();
           logger.trace("Record size greater than bundleReadBuffer capacity, key: {} size: {}",
               srcIndexEntries.get(start).getKey(), srcIndexEntries.get(start).getValue().getSize());
         } else {
           end = getBundleReadEndIndex(srcIndexEntries, start);
-          bufferToUse = bundleReadBuffer;
-          bufferToUse.position(0);
-          bufferToUse.limit((int) (
-              srcIndexEntries.get(end).getValue().getOffset().getOffset() + srcIndexEntries.get(end)
-                  .getValue()
-                  .getSize() - startOffset));
+          readSize = (int) (srcIndexEntries.get(end).getValue().getOffset().getOffset() + srcIndexEntries.get(end)
+              .getValue()
+              .getSize() - startOffset);
+          byteArrayToUse = bundleReadBuffer;
           srcMetrics.compactionBundleReadBufferUsed.inc();
         }
-        // do IO read
-        int ioCount = Utils.readFileToByteBuffer(fileChannel, startOffset, bufferToUse);
-        srcMetrics.compactionBundleReadBufferIoCount.inc(ioCount);
+        if (useDirectIO) {
+          // do direct IO read
+          logSegmentToCopy.readIntoDirectly(byteArrayToUse, startOffset, readSize);
+        } else {
+          // do general IO read
+          bufferToUse = ByteBuffer.wrap(byteArrayToUse);
+          bufferToUse.position(0);
+          bufferToUse.limit(readSize);
+          int ioCount = Utils.readFileToByteBuffer(fileChannel, startOffset, bufferToUse);
+          srcMetrics.compactionBundleReadBufferIoCount.inc(ioCount);
+        }
 
         // copy from buffer to tgtLog
         for (int i = start; i <= end; i++) {
@@ -997,10 +1012,17 @@ class BlobStoreCompactor {
             Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
             // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
             diskIOScheduler.getSlice(COMPACTION_CLEANUP_JOB_NAME, COMPACTION_CLEANUP_JOB_NAME, writtenLastTime);
-            long bufferPosition = srcValue.getOffset().getOffset() - startOffset;
-            bufferToUse.limit((int) (bufferPosition + srcIndexEntry.getValue().getSize()));
-            bufferToUse.position((int) (bufferPosition));
-            tgtLog.appendFrom(bufferToUse);
+            if (useDirectIO) {
+              // do direct IO write
+              tgtLog.appendFromDirectly(byteArrayToUse, (int) (srcValue.getOffset().getOffset() - startOffset),
+                  (int) srcIndexEntry.getValue().getSize());
+            } else {
+              // do general write
+              long bufferPosition = srcValue.getOffset().getOffset() - startOffset;
+              bufferToUse.limit((int) (bufferPosition + srcIndexEntry.getValue().getSize()));
+              bufferToUse.position((int) (bufferPosition));
+              tgtLog.appendFrom(bufferToUse);
+            }
             FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
             IndexValue valueFromTgtIdx = tgtIndex.findKey(srcIndexEntry.getKey());
             if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
