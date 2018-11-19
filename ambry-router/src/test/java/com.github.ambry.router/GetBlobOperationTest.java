@@ -13,8 +13,11 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Counter;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
@@ -28,14 +31,18 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.router.RouterTestHelpers.*;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
@@ -48,6 +55,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -162,8 +170,9 @@ public class GetBlobOperationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false}, {AdaptiveOperationTracker.class.getSimpleName(), false}, {AdaptiveOperationTracker.class.getSimpleName(), true}});
+    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false},
+        {AdaptiveOperationTracker.class.getSimpleName(), false},
+        {AdaptiveOperationTracker.class.getSimpleName(), true}});
   }
 
   /**
@@ -225,6 +234,49 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Do a put directly to the mock servers. This allows for blobs with malformed properties to be constructed.
+   * @param blobType the {@link BlobType} for the blob to upload.
+   * @param blobContent the raw content for the blob to upload (i.e. this can be serialized composite blob metadata or
+   *                    an encrypted blob).
+   */
+  private void doDirectPut(BlobType blobType, ByteBuffer blobContent) throws Exception {
+    List<PartitionId> writablePartitionIds = mockClusterMap.getWritablePartitionIds(null);
+    PartitionId partitionId = writablePartitionIds.get(random.nextInt(writablePartitionIds.size()));
+    blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        mockClusterMap.getLocalDatacenterId(), blobProperties.getAccountId(), blobProperties.getContainerId(),
+        partitionId, blobProperties.isEncrypted(),
+        blobType == BlobType.MetadataBlob ? BlobId.BlobDataType.METADATA : BlobId.BlobDataType.DATACHUNK);
+    blobIdStr = blobId.getID();
+    Iterator<MockServer> servers = partitionId.getReplicaIds()
+        .stream()
+        .map(ReplicaId::getDataNodeId)
+        .map(dataNodeId -> mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort()))
+        .iterator();
+
+    ByteBuffer blobEncryptionKey = null;
+    ByteBuffer userMetadataBuf = ByteBuffer.wrap(userMetadata);
+    if (blobProperties.isEncrypted()) {
+      FutureResult<EncryptJob.EncryptJobResult> futureResult = new FutureResult<>();
+      cryptoJobHandler.submitJob(new EncryptJob(blobProperties.getAccountId(), blobProperties.getContainerId(),
+          blobType == BlobType.MetadataBlob ? null : blobContent.duplicate(), userMetadataBuf.duplicate(),
+          kms.getRandomKey(), cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
+          futureResult::done));
+      EncryptJob.EncryptJobResult result = futureResult.get(5, TimeUnit.SECONDS);
+      blobEncryptionKey = result.getEncryptedKey();
+      blobContent = blobType == BlobType.MetadataBlob ? blobContent : result.getEncryptedBlobContent();
+      userMetadataBuf = result.getEncryptedUserMetadata();
+    }
+    while (servers.hasNext()) {
+      MockServer server = servers.next();
+      PutRequest request =
+          new PutRequest(random.nextInt(), "clientId", blobId, blobProperties, userMetadataBuf.duplicate(),
+              blobContent.duplicate(), blobContent.remaining(), blobType,
+              blobEncryptionKey == null ? null : blobEncryptionKey.duplicate());
+      server.send(request);
+    }
+  }
+
+  /**
    * Test {@link GetBlobOperation} instantiation and validate the get methods.
    * @throws Exception
    */
@@ -274,18 +326,20 @@ public class GetBlobOperationTest {
       // blobSize in the range [1, maxChunkSize]
       blobSize = random.nextInt(maxChunkSize) + 1;
       doPut();
-      switch (i % 2) {
+      GetBlobOptions.OperationType operationType;
+      switch (i % 3) {
         case 0:
-          options = new GetBlobOptionsInternal(
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(), false,
-              routerMetrics.ageAtGet);
+          operationType = GetBlobOptions.OperationType.All;
           break;
         case 1:
-          options = new GetBlobOptionsInternal(
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build(), false,
-              routerMetrics.ageAtGet);
+          operationType = GetBlobOptions.OperationType.Data;
+          break;
+        default:
+          operationType = GetBlobOptions.OperationType.BlobInfo;
           break;
       }
+      options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(operationType).build(), false,
+          routerMetrics.ageAtGet);
       getAndAssertSuccess();
     }
   }
@@ -321,18 +375,20 @@ public class GetBlobOperationTest {
     for (int i = 0; i < 10; i++) {
       blobSize = maxChunkSize * i + random.nextInt(maxChunkSize - 1) + 1;
       doPut();
-      switch (i % 2) {
+      GetBlobOptions.OperationType operationType;
+      switch (i % 3) {
         case 0:
-          options = new GetBlobOptionsInternal(
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(), false,
-              routerMetrics.ageAtGet);
+          operationType = GetBlobOptions.OperationType.All;
           break;
         case 1:
-          options = new GetBlobOptionsInternal(
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build(), false,
-              routerMetrics.ageAtGet);
+          operationType = GetBlobOptions.OperationType.Data;
+          break;
+        default:
+          operationType = GetBlobOptions.OperationType.BlobInfo;
           break;
       }
+      options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(operationType).build(), false,
+          routerMetrics.ageAtGet);
       getAndAssertSuccess();
     }
   }
@@ -610,6 +666,57 @@ public class GetBlobOperationTest {
         testDataChunkError(serverErrorCode, RouterErrorCode.UnexpectedInternalError);
       }
     }
+  }
+
+  /**
+   * A past issue with replication logic resulted in the blob size listed in the blob properties reflecting the size
+   * of a chunk's content buffer instead of the plaintext size of the entire blob. This issue affects composite blobs
+   * and simple encrypted blob. This test tests the router's ability to replace the incorrect blob size field in the
+   * blob properties with the inferred correct size.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobSizeReplacement() throws Exception {
+    userMetadata = new byte[10];
+    random.nextBytes(userMetadata);
+    options = new GetBlobOptionsInternal(
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
+        routerMetrics.ageAtGet);
+
+    // test simple blob case
+    blobSize = maxChunkSize;
+    putContent = new byte[blobSize];
+    random.nextBytes(putContent);
+    blobProperties =
+        new BlobProperties(blobSize + 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption);
+    doDirectPut(BlobType.DataBlob, ByteBuffer.wrap(putContent));
+    Counter sizeMismatchCounter = (testEncryption ? routerMetrics.simpleEncryptedBlobSizeMismatchCount
+        : routerMetrics.simpleUnencryptedBlobSizeMismatchCount);
+    long startCount = sizeMismatchCounter.getCount();
+    getAndAssertSuccess();
+    long endCount = sizeMismatchCounter.getCount();
+    Assert.assertEquals("Wrong number of blob size mismatches", 1, endCount - startCount);
+
+    // test composite blob case
+    int numChunks = 3;
+    blobSize = maxChunkSize;
+    List<StoreKey> storeKeys = new ArrayList<>(numChunks);
+    for (int i = 0; i < numChunks; i++) {
+      doPut();
+      storeKeys.add(blobId);
+    }
+    blobSize = maxChunkSize * numChunks;
+    ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContent(maxChunkSize, blobSize, storeKeys);
+    metadataContent.flip();
+    blobProperties =
+        new BlobProperties(blobSize - 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption);
+    doDirectPut(BlobType.MetadataBlob, metadataContent);
+    startCount = routerMetrics.compositeBlobSizeMismatchCount.getCount();
+    getAndAssertSuccess();
+    endCount = routerMetrics.compositeBlobSizeMismatchCount.getCount();
+    Assert.assertEquals("Wrong number of blob size mismatches", 1, endCount - startCount);
   }
 
   /**
@@ -985,52 +1092,58 @@ public class GetBlobOperationTest {
     final AtomicReference<Exception> operationException = new AtomicReference<>(null);
     final int numChunks = ((blobSize + maxChunkSize - 1) / maxChunkSize) + (blobSize > maxChunkSize ? 1 : 0);
     mockNetworkClient.resetProcessedResponseCount();
-    Callback<GetBlobResultInternal> callback = new Callback<GetBlobResultInternal>() {
-      @Override
-      public void onCompletion(final GetBlobResultInternal result, final Exception exception) {
-        if (exception != null) {
-          operationException.set(exception);
-          readCompleteLatch.countDown();
-        } else {
-          try {
-            switch (options.getBlobOptions.getOperationType()) {
-              case All:
-                BlobInfo blobInfo = result.getBlobResult.getBlobInfo();
-                Assert.assertTrue("Blob properties must be the same",
-                    RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
-                Assert.assertEquals("Blob size should in received blobProperties should be the same as actual",
-                    blobSize, blobInfo.getBlobProperties().getBlobSize());
-                Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
-                break;
-              case Data:
-                Assert.assertNull("Unexpected blob info in operation result", result.getBlobResult.getBlobInfo());
-                break;
-            }
-          } catch (Exception e) {
-            readCompleteException.set(e);
+    Callback<GetBlobResultInternal> callback = (result, exception) -> {
+      if (exception != null) {
+        operationException.set(exception);
+        readCompleteLatch.countDown();
+      } else {
+        try {
+          BlobInfo blobInfo;
+          switch (options.getBlobOptions.getOperationType()) {
+            case All:
+              blobInfo = result.getBlobResult.getBlobInfo();
+              Assert.assertTrue("Blob properties must be the same",
+                  RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
+              Assert.assertEquals("Blob size should in received blobProperties should be the same as actual", blobSize,
+                  blobInfo.getBlobProperties().getBlobSize());
+              Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
+              break;
+            case Data:
+              Assert.assertNull("Unexpected blob info in operation result", result.getBlobResult.getBlobInfo());
+              break;
+            case BlobInfo:
+              blobInfo = result.getBlobResult.getBlobInfo();
+              Assert.assertTrue("Blob properties must be the same",
+                  RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
+              Assert.assertEquals("Blob size should in received blobProperties should be the same as actual", blobSize,
+                  blobInfo.getBlobProperties().getBlobSize());
+              Assert.assertNull("Unexpected blob data in operation result", result.getBlobResult.getBlobDataChannel());
           }
+        } catch (Exception e) {
+          readCompleteException.set(e);
+        }
 
+        if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
           final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
           final Future<Long> preSetReadIntoFuture =
               initiateReadBeforeChunkGet ? result.getBlobResult.getBlobDataChannel()
                   .readInto(asyncWritableChannel, null) : null;
-          Utils.newThread(new Runnable() {
-            @Override
-            public void run() {
-              if (getChunksBeforeRead) {
-                // wait for all chunks (data + metadata) to be received
-                while (mockNetworkClient.getProcessedResponseCount()
-                    < numChunks * routerConfig.routerGetRequestParallelism) {
-                  Thread.yield();
-                }
+          Utils.newThread(() -> {
+            if (getChunksBeforeRead) {
+              // wait for all chunks (data + metadata) to be received
+              while (mockNetworkClient.getProcessedResponseCount()
+                  < numChunks * routerConfig.routerGetRequestParallelism) {
+                Thread.yield();
               }
-              Future<Long> readIntoFuture = initiateReadBeforeChunkGet ? preSetReadIntoFuture
-                  : result.getBlobResult.getBlobDataChannel().readInto(asyncWritableChannel, null);
-              assertBlobReadSuccess(options.getBlobOptions, readIntoFuture, asyncWritableChannel,
-                  result.getBlobResult.getBlobDataChannel(), readCompleteLatch, readCompleteResult,
-                  readCompleteException);
             }
+            Future<Long> readIntoFuture = initiateReadBeforeChunkGet ? preSetReadIntoFuture
+                : result.getBlobResult.getBlobDataChannel().readInto(asyncWritableChannel, null);
+            assertBlobReadSuccess(options.getBlobOptions, readIntoFuture, asyncWritableChannel,
+                result.getBlobResult.getBlobDataChannel(), readCompleteLatch, readCompleteResult,
+                readCompleteException);
           }, false).start();
+        } else {
+          readCompleteLatch.countDown();
         }
       }
     };

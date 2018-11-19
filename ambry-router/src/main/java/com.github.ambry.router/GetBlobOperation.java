@@ -195,7 +195,28 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
           }
           if (e == null) {
-            blobDataChannel = new BlobDataReadableStreamChannel();
+            // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly,
+            // we will replace the field with the size from inside of the metadata content.
+            if (blobInfo != null) {
+              if (blobInfo.getBlobProperties().getBlobSize() != totalSize) {
+                if (compositeBlobInfo != null) {
+                  routerMetrics.compositeBlobSizeMismatchCount.inc();
+                  logger.debug("Blob size mismatch for composite blob: {}", getBlobIdStr());
+                } else if (blobInfo.getBlobProperties().isEncrypted()) {
+                  routerMetrics.simpleEncryptedBlobSizeMismatchCount.inc();
+                  logger.debug("Blob size mismatch for simple encrypted blob: {}", getBlobIdStr());
+                } else {
+                  routerMetrics.simpleUnencryptedBlobSizeMismatchCount.inc();
+                  logger.warn("Blob size mismatch for simple unencrypted blob (should not happen): {}", getBlobIdStr());
+                }
+                blobInfo.getBlobProperties().setBlobSize(totalSize);
+              }
+            }
+            if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
+              blobDataChannel = new BlobDataReadableStreamChannel();
+            } else {
+              operationCompleted = true;
+            }
             operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
           } else {
             blobDataChannel = null;
@@ -869,7 +890,7 @@ class GetBlobOperation extends GetOperation {
      * @return A {@link ByteBuffer} that only includes bytes within the operation's specified byte range.
      */
     protected ByteBuffer filterChunkToRange(ByteBuffer buf) {
-      if (options == null || options.getBlobOptions.getRange() == null) {
+      if (options.getBlobOptions.getRange() == null) {
         return buf;
       }
       if (resolvedByteRange.getRangeSize() == 0) {
@@ -951,8 +972,8 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Return the {@link MessageFormatFlags} to associate with the first getBlob chunk operation.
-     * @return {@link MessageFormatFlags#Blob} for {@link GetBlobOptions.OperationType#Data}, or {@link MessageFormatFlags#All} by
-     *         default.
+     * @return {@link MessageFormatFlags#Blob} for {@link GetBlobOptions.OperationType#Data}, or
+     *         {@link MessageFormatFlags#All} by default.
      */
     @Override
     MessageFormatFlags getOperationFlag() {
@@ -989,8 +1010,9 @@ class GetBlobOperation extends GetOperation {
               blobInfo = new BlobInfo(serverBlobProperties,
                   decryptCallbackResultInfo.result.getDecryptedUserMetadata().array());
             }
-            int contentSize = decryptCallbackResultInfo.result.getDecryptedBlobContent().remaining();
-            if (!resolveRange(contentSize)) {
+            totalSize = decryptCallbackResultInfo.result.getDecryptedBlobContent().remaining();
+            chunkSize = totalSize;
+            if (!resolveRange(totalSize)) {
               chunkIndexToBuffer.put(0, filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
               numChunksRetrieved = 1;
               progressTracker.setDecryptionSuccess();
@@ -1101,31 +1123,10 @@ class GetBlobOperation extends GetOperation {
       chunkSize = compositeBlobInfo.getChunkSize();
       totalSize = compositeBlobInfo.getTotalSize();
 
-      // In order to mitigate impact of replication logic that set the size field in BlobProperties incorrectly, we will
-      // replace the field with the size from inside of the metadata content.
-      BlobProperties oldBlobProperties = null;
-      if (blobInfo != null) {
-        oldBlobProperties = blobInfo.getBlobProperties();
-      } else if (serverBlobProperties != null) {
-        oldBlobProperties = serverBlobProperties;
-      }
-      if (oldBlobProperties != null) {
-        BlobProperties newBlobProperties =
-            new BlobProperties(totalSize, oldBlobProperties.getServiceId(), oldBlobProperties.getOwnerId(),
-                oldBlobProperties.getContentType(), oldBlobProperties.isPrivate(),
-                oldBlobProperties.getTimeToLiveInSeconds(), oldBlobProperties.getCreationTimeInMs(),
-                oldBlobProperties.getAccountId(), oldBlobProperties.getContainerId(), oldBlobProperties.isEncrypted());
-        if (blobInfo != null) {
-          blobInfo = new BlobInfo(newBlobProperties, blobInfo.getUserMetadata());
-        } else if (serverBlobProperties != null) {
-          serverBlobProperties = newBlobProperties;
-        }
-      }
-
       keys = compositeBlobInfo.getKeys();
       boolean rangeResolutionFailure = false;
       try {
-        if (options != null && options.getBlobOptions.getRange() != null) {
+        if (options.getBlobOptions.getRange() != null) {
           resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
           // Get only the chunks within the range.
           int firstChunkIndexInRange = (int) (resolvedByteRange.getStartOffset() / chunkSize);
@@ -1137,33 +1138,27 @@ class GetBlobOperation extends GetOperation {
         rangeResolutionFailure = true;
       }
       if (!rangeResolutionFailure) {
-        if (options.getChunkIdsOnly) {
-          chunkIdIterator = null;
-          numChunksTotal = 0;
-          dataChunks = null;
+        if (options.getChunkIdsOnly || getOperationFlag() == MessageFormatFlags.Blob || encryptionKey == null) {
+          initializeDataChunks();
         } else {
           // if blob is encrypted, then decryption is required only in case of GetBlobInfo and GetBlobAll (since user-metadata
           // is expected to be encrypted). Incase of GetBlob, Metadata blob does not need any decryption even if BlobProperties says so
-          if (getOperationFlag() != MessageFormatFlags.Blob && encryptionKey != null) {
-            decryptCallbackResultInfo = new DecryptCallBackResultInfo();
-            progressTracker.initializeDecryptionTracker();
-            decryptJobMetricsTracker.onJobSubmission();
-            logger.trace("Submitting decrypt job for Metadaata chunk {}", blobId);
-            long startTimeMs = System.currentTimeMillis();
-            cryptoJobHandler.submitJob(
-                new DecryptJob(blobId, encryptionKey, null, ByteBuffer.wrap(userMetadata), cryptoService, kms,
-                    decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
-                  routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
-                  decryptJobMetricsTracker.onJobCallbackProcessingStart();
-                  logger.trace("Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
-                      blobId);
-                  decryptCallbackResultInfo.setResultAndException(result, exception);
-                  routerCallback.onPollReady();
-                  decryptJobMetricsTracker.onJobCallbackProcessingComplete();
-                }));
-          } else {
-            initializeDataChunks();
-          }
+          decryptCallbackResultInfo = new DecryptCallBackResultInfo();
+          progressTracker.initializeDecryptionTracker();
+          decryptJobMetricsTracker.onJobSubmission();
+          logger.trace("Submitting decrypt job for Metadaata chunk {}", blobId);
+          long startTimeMs = System.currentTimeMillis();
+          cryptoJobHandler.submitJob(
+              new DecryptJob(blobId, encryptionKey, null, ByteBuffer.wrap(userMetadata), cryptoService, kms,
+                  decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
+                routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                decryptJobMetricsTracker.onJobCallbackProcessingStart();
+                logger.trace("Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
+                    blobId);
+                decryptCallbackResultInfo.setResultAndException(result, exception);
+                routerCallback.onPollReady();
+                decryptJobMetricsTracker.onJobCallbackProcessingComplete();
+              }));
         }
       }
     }
@@ -1172,11 +1167,18 @@ class GetBlobOperation extends GetOperation {
      * Initialize data chunks and few other cast for metadata chunk
      */
     private void initializeDataChunks() {
-      chunkIdIterator = keys.listIterator();
-      numChunksTotal = keys.size();
-      dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
-      for (int i = 0; i < dataChunks.length; i++) {
-        dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
+      if (options.getChunkIdsOnly
+          || options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+        chunkIdIterator = null;
+        numChunksTotal = 0;
+        dataChunks = null;
+      } else {
+        chunkIdIterator = keys.listIterator();
+        numChunksTotal = keys.size();
+        dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
+        for (int i = 0; i < dataChunks.length; i++) {
+          dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
+        }
       }
     }
 
@@ -1187,10 +1189,10 @@ class GetBlobOperation extends GetOperation {
      * @param encryptionKey encryption key for the blob. Could be null for non encrypted blob.
      */
     private void handleSimpleBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
-      totalSize = blobData.getSize();
-      chunkSize = totalSize;
       boolean rangeResolutionFailure = false;
       if (encryptionKey == null) {
+        totalSize = blobData.getSize();
+        chunkSize = totalSize;
         rangeResolutionFailure = resolveRange(totalSize);
       } else {
         // for encrypted blobs, Blob data will not have the right size. Will have to wait until decryption is complete

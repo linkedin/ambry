@@ -125,7 +125,7 @@ class GetManager {
     BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
     boolean isEncrypted = false;
     try {
-      BlobId.isEncrypted(blobIdStr);
+      isEncrypted = BlobId.isEncrypted(blobIdStr);
     } catch (IOException e) {
       logger.warn(
           "This shouldn't happen because getBlobIdFromString() should have thrown RouterException for this case.", e);
@@ -135,15 +135,9 @@ class GetManager {
       routerMetrics.getBlobNotOriginateLocalOperationRate.mark();
     }
     trackGetBlobRateMetrics(options.getBlobOptions, isEncrypted);
-    if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-      getOperation =
-          new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-              routerCallback, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
-    } else {
-      getOperation =
-          new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
-    }
+    getOperation =
+        new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
+            routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
     getOperations.add(getOperation);
   }
 

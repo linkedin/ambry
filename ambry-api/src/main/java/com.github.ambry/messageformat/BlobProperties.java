@@ -22,7 +22,6 @@ import com.github.ambry.utils.Utils;
  * must be set. The creation time is determined when this object is constructed.
  */
 public class BlobProperties {
-  private final long blobSize;
   private final String serviceId;
   private final String ownerId;
   private final String contentType;
@@ -31,6 +30,7 @@ public class BlobProperties {
   private final short accountId;
   private final short containerId;
   private final boolean isEncrypted;
+  private long blobSize;
   private long timeToLiveInSeconds;
 
   /**
@@ -142,6 +142,13 @@ public class BlobProperties {
    */
   public void setTimeToLiveInSeconds(long timeToLiveInSeconds) {
     this.timeToLiveInSeconds = timeToLiveInSeconds;
+  }
+
+  /**
+   * @param blobSize the new blob size in bytes
+   */
+  public void setBlobSize(long blobSize) {
+    this.blobSize = blobSize;
   }
 
   @Override
