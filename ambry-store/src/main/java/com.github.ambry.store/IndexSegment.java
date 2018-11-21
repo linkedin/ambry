@@ -709,14 +709,18 @@ class IndexSegment {
   private void map() throws IOException, StoreException {
     rwLock.writeLock().lock();
     try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
-      if (config.storeKeepIndexInMemory) {
+      if (config.storeIndexMemState.equals(IndexMemState.IN_HEAP_MEM)) {
         if (indexFile.length() > Integer.MAX_VALUE) {
           throw new IllegalStateException("Configured to keep indexes in memory but index file length > IntegerMax");
         }
         serEntries = ByteBuffer.allocate((int) indexFile.length());
         raf.getChannel().read(serEntries);
       } else {
-        serEntries = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
+        MappedByteBuffer buf = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
+        if (config.storeIndexMemState.equals(IndexMemState.FORCE_LOAD_MMAP)) {
+          buf.load();
+        }
+        serEntries = buf;
       }
       serEntries.position(0);
       version = serEntries.getShort();

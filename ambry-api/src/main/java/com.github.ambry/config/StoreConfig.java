@@ -13,6 +13,9 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.store.IndexMemState;
+
+
 /**
  * The configs for the store
  */
@@ -248,12 +251,12 @@ public class StoreConfig {
   public static final String storeTtlUpdateBufferTimeSecondsName = "store.ttl.update.buffer.time.seconds";
 
   /**
-   * Specifies whether all index segments should be kept in memory (as opposed to a specific subset).
+   * Provides a hint for how indexes should be treated w.r.t memory
    */
-  @Config(storeKeepIndexInMemoryName)
+  @Config(storeIndexMemStateName)
   @Default("false")
-  public final boolean storeKeepIndexInMemory;
-  public static final String storeKeepIndexInMemoryName = "store.keep.index.in.memory";
+  public final IndexMemState storeIndexMemState;
+  public static final String storeIndexMemStateName = "store.index.mem.state";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -307,7 +310,8 @@ public class StoreConfig {
     storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", false);
     storeTtlUpdateBufferTimeSeconds =
         verifiableProperties.getIntInRange(storeTtlUpdateBufferTimeSecondsName, 60 * 60 * 24, 0, Integer.MAX_VALUE);
-    storeKeepIndexInMemory = verifiableProperties.getBoolean(storeKeepIndexInMemoryName, false);
+    storeIndexMemState =
+        IndexMemState.valueOf(verifiableProperties.getString(storeIndexMemStateName, IndexMemState.NOT_IN_MEM.name()));
   }
 }
 
