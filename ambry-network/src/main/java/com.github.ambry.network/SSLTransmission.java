@@ -440,12 +440,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       netReadBuffer = Utils.ensureCapacity(netReadBuffer, netReadBufferSize());
       if (netReadBuffer.remaining() > 0) {
         netread = readFromSocketChannel();
-        // TODO look at this
-//        if (netread == 0) {
-//          return read;
-//        } else if (netread < 0) {
-//          throw new EOFException("EOF during read");
-//        }
       }
 
       while (netReadBuffer.position() > 0) {
