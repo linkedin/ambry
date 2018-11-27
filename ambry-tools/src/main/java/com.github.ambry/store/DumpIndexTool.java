@@ -811,7 +811,12 @@ public class DumpIndexTool {
     return ans;
   }
 
-  private static File[] getSegmentFilesFromDir(File dir) {
+  /**
+   * Gets all index segment files that are present in a directory and sorts them by their logical order
+   * @param dir the directory to look for index segment files in
+   * @return all index segment files that are present in {@code dir} sorted by their logical order
+   */
+  public static File[] getSegmentFilesFromDir(File dir) {
     File[] segmentFiles = dir.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
     Arrays.sort(segmentFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
     return segmentFiles;
