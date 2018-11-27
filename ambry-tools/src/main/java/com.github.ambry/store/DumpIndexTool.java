@@ -706,9 +706,9 @@ public class DumpIndexTool {
                 }
               } else if (isTtlUpdate) {
                 states.add(isExpired ? BlobState.Expired : BlobState.Valid);
-                info = new Info(states, isInRecentIndexSegment, isPermanent);
-                info.markTtlUpdateSeen();
-                keyToState.put(key, new Info(states, isInRecentIndexSegment, isPermanent));
+                Info newInfo = new Info(states, isInRecentIndexSegment, isPermanent);
+                newInfo.markTtlUpdateSeen();
+                keyToState.put(key, newInfo);
               } else {
                 duplicatePuts.add(key);
               }
