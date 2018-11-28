@@ -18,7 +18,7 @@ import java.nio.ByteBuffer;
 
 
 /**
- * Represents a message that consists of the delete record in version {@link MessageFormatRecord.Update_Format_V3}
+ * Represents a message that consists of the delete record in version {@link MessageFormatRecord.Update_Format_V2}
  * This format is used to delete a blob
  *
  *  - - - - - - - - - - - - -
@@ -26,15 +26,15 @@ import java.nio.ByteBuffer;
  *  - - - - - - - - - - - - -
  * |       blob key          |
  *  - - - - - - - - - - - - -
- * |      Update Record      |
+ * |      Delete Record      |
  *  - - - - - - - - - - - - -
  *
  */
-public class DeleteMessageFormatV3InputStream extends MessageFormatInputStream {
-  public DeleteMessageFormatV3InputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs)
+public class DeleteMessageFormatV2InputStream extends MessageFormatInputStream {
+  public DeleteMessageFormatV2InputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs)
       throws MessageFormatException {
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
-    int deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.DELETE);
+    int deleteRecordSize = MessageFormatRecord.Update_Format_V2.getRecordSize();
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + deleteRecordSize);
     if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1) {
       MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(buffer, deleteRecordSize,
@@ -50,7 +50,7 @@ public class DeleteMessageFormatV3InputStream extends MessageFormatInputStream {
     }
     buffer.put(key.toBytes());
     // set the message as deleted
-    MessageFormatRecord.Update_Format_V3.serialize(buffer,
+    MessageFormatRecord.Update_Format_V2.serialize(buffer,
         new UpdateRecord(accountId, containerId, deletionTimeMs, new DeleteSubRecord()));
     messageLength = buffer.capacity();
     buffer.flip();

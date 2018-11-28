@@ -51,8 +51,8 @@ public class BlobStoreRecoveryTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V2}});
+    return Arrays.asList(new Object[][]{{MessageFormatRecord.Message_Header_Version_V1},
+        {MessageFormatRecord.Message_Header_Version_V2}});
   }
 
   public BlobStoreRecoveryTest(short headerVersionToUse) {
@@ -63,8 +63,8 @@ public class BlobStoreRecoveryTest {
 
     ByteBuffer buffer;
     public MockId[] keys =
-        {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5"), new MockId(
-            "id6")};
+        {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5"),
+            new MockId("id6")};
     long expectedExpirationTimeMs = 0;
     List<Long> sizes = new ArrayList<>();
 

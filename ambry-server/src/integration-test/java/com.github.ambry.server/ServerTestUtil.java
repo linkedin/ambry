@@ -1618,7 +1618,7 @@ final class ServerTestUtil {
 
       // delete a blob and ensure it is propagated
       DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIdList.get(0), System.currentTimeMillis());
-      expectedTokenSize += getDeleteRecordSize(blobIdList.get(0));
+      expectedTokenSize += getUpdateRecordSize(blobIdList.get(0), UpdateRecord.Type.DELETE);
       channel1.send(deleteRequest);
       InputStream deleteResponseStream = channel1.receive().getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
@@ -1640,7 +1640,8 @@ final class ServerTestUtil {
 
       // get the data node to inspect replication tokens on
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
-      checkReplicaTokens(clusterMap, dataNodeId, expectedTokenSize - getDeleteRecordSize(blobIdList.get(0)), "0");
+      checkReplicaTokens(clusterMap, dataNodeId,
+          expectedTokenSize - getUpdateRecordSize(blobIdList.get(0), UpdateRecord.Type.DELETE), "0");
 
       // Shut down server 1
       cluster.getServers().get(0).shutdown();
@@ -1843,16 +1844,6 @@ final class ServerTestUtil {
             blobEncryptionKey) : 0) + +MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(
         properties) + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata)
         + MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(data.length);
-  }
-
-  /**
-   * Fetches the delete record size in log
-   * @param blobId {@link BlobId} associated with the delete
-   * @return the size of the delete record in the log
-   */
-  private static long getDeleteRecordSize(BlobId blobId) {
-    return MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() + blobId.sizeInBytes()
-        + MessageFormatRecord.Update_Format_V2.getRecordSize();
   }
 
   /**

@@ -18,7 +18,7 @@ import java.nio.ByteBuffer;
 
 
 /**
- * Represents a message that consist of the delete record.
+ * Represents a message that consists of the delete record.
  * This format is used to delete a blob
  *
  *  - - - - - - - - - - - - -
@@ -26,7 +26,7 @@ import java.nio.ByteBuffer;
  *  - - - - - - - - - - - - -
  * |       blob key          |
  *  - - - - - - - - - - - - -
- * |      Delete Record      |
+ * |      Update Record      |
  *  - - - - - - - - - - - - -
  *
  */
@@ -34,7 +34,7 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
   public DeleteMessageFormatInputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs)
       throws MessageFormatException {
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
-    int deleteRecordSize = MessageFormatRecord.Update_Format_V2.getRecordSize();
+    int deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.DELETE);
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + deleteRecordSize);
     if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1) {
       MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(buffer, deleteRecordSize,
@@ -50,7 +50,7 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
     }
     buffer.put(key.toBytes());
     // set the message as deleted
-    MessageFormatRecord.Update_Format_V2.serialize(buffer,
+    MessageFormatRecord.Update_Format_V3.serialize(buffer,
         new UpdateRecord(accountId, containerId, deletionTimeMs, new DeleteSubRecord()));
     messageLength = buffer.capacity();
     buffer.flip();

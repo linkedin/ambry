@@ -242,8 +242,8 @@ public class MessageFormatInputStreamTest {
    */
   @Test
   public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
-    short[] versions =
-        {MessageFormatRecord.Update_Version_V1, MessageFormatRecord.Update_Version_V2, MessageFormatRecord.Update_Version_V3};
+    short[] versions = {MessageFormatRecord.Update_Version_V1, MessageFormatRecord.Update_Version_V2,
+        MessageFormatRecord.Update_Version_V3};
     for (short version : versions) {
       StoreKey key = new MockId("id1");
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -261,17 +261,18 @@ public class MessageFormatInputStreamTest {
         containerId = Container.UNKNOWN_CONTAINER_ID;
         deletionTimeMs = Utils.Infinite_Time;
       } else if (version == MessageFormatRecord.Update_Version_V2) {
-        messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
+        messageFormatStream = new DeleteMessageFormatV2InputStream(key, accountId, containerId, deletionTimeMs);
         deleteRecordSize = MessageFormatRecord.Update_Format_V2.getRecordSize();
         useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
       } else {
-        messageFormatStream = new DeleteMessageFormatV3InputStream(key, accountId, containerId, deletionTimeMs);
+        messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
         deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.DELETE);
         useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
       }
       int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
           useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1);
-      Assert.assertEquals(headerSize + deleteRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
+      Assert.assertEquals("Unexpected size for version " + version, headerSize + deleteRecordSize + key.sizeInBytes(),
+          messageFormatStream.getSize());
 
       // check header
       byte[] headerOutput = new byte[headerSize];
