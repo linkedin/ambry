@@ -27,6 +27,10 @@ public class GetBlobOptions {
   private final GetOption getOption;
   private final ByteRange range;
 
+  // Flag indicating whether to return the raw blob payload without deserialization.
+  // If blob was stored encrypted, decryption will be skipped, otherwise the router will encrypt the blob and associated chunks.
+  private boolean rawMode = false;
+
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
    * @param operationType the {@link OperationType} for this request. This must be non-null.
@@ -40,6 +44,28 @@ public class GetBlobOptions {
     this.operationType = operationType;
     this.getOption = getOption;
     this.range = range;
+  }
+
+  /**
+   * Sets the rawMode flag of the {@link GetBlobOptions} object.
+   * If rawMode is true, the returned {@link GetBlobResult} will contain the raw (unserialized) blob payload in the
+   * data channel and null blobInfo.  This option cannot be used in conjunction with a byte range.
+   * @param rawMode the new value of rawMode flag.
+   * @return this object.
+   */
+  public GetBlobOptions setRawMode(boolean rawMode) {
+    if (rawMode && range != null) {
+      throw new IllegalArgumentException("Raw mode and range cannot be used together");
+    }
+    this.rawMode = rawMode;
+    return this;
+  }
+
+  /**
+   * @return The value of the rawMode flag.
+   */
+  public boolean isRawMode() {
+    return rawMode;
   }
 
   /**
@@ -65,7 +91,8 @@ public class GetBlobOptions {
 
   @Override
   public String toString() {
-    return "GetBlobOptions{operationType=" + operationType + ", getOption=" + getOption + ", range=" + range + '}';
+    return "GetBlobOptions{operationType=" + operationType + ", getOption=" + getOption + ", range=" + range
+        + ", rawMode=" + rawMode + '}';
   }
 
   @Override
@@ -85,6 +112,9 @@ public class GetBlobOptions {
     if (getOption != that.getOption) {
       return false;
     }
+    if (rawMode != that.rawMode) {
+      return false;
+    }
     return !(range != null ? !range.equals(that.range) : that.range != null);
   }
 
@@ -93,6 +123,7 @@ public class GetBlobOptions {
     int result = operationType.hashCode();
     result = 31 * result + getOption.hashCode();
     result = 31 * result + (range != null ? range.hashCode() : 0);
+    result = 31 * result + Boolean.hashCode(rawMode);
     return result;
   }
 

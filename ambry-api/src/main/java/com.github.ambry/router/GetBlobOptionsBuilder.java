@@ -25,6 +25,7 @@ public class GetBlobOptionsBuilder {
   private GetBlobOptions.OperationType operationType = GetBlobOptions.OperationType.All;
   private GetOption getOption = GetOption.None;
   private ByteRange range = null;
+  private boolean rawMode = false;
 
   /**
    * @param operationType the {@link GetBlobOptions.OperationType} for this request.
@@ -54,9 +55,18 @@ public class GetBlobOptionsBuilder {
   }
 
   /**
+   * @param rawMode the raw mode for this get request.
+   * @return this builder
+   */
+  public GetBlobOptionsBuilder rawMode(boolean rawMode) {
+    this.rawMode = rawMode;
+    return this;
+  }
+
+  /**
    * @return the {@link GetBlobOptions} built.
    */
   public GetBlobOptions build() {
-    return new GetBlobOptions(operationType, getOption, range);
+    return new GetBlobOptions(operationType, getOption, range).setRawMode(rawMode);
   }
 }

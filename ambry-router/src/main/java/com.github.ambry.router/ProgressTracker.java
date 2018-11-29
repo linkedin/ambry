@@ -18,7 +18,8 @@ package com.github.ambry.router;
  */
 class ProgressTracker {
   private final OperationTracker operationTracker;
-  private DecryptionStatusTracker decryptionStatusTracker;
+  private CryptoJobStatusTracker cryptoJobStatusTracker;
+  private CryptoJobType cryptoJobType;
 
   /**
    * Instantiates {@link ProgressTracker}
@@ -30,31 +31,38 @@ class ProgressTracker {
   }
 
   /**
-   * Initializes the {@link DecryptionStatusTracker}
+   * Initializes the {@link CryptoJobStatusTracker}
    */
-  void initializeDecryptionTracker() {
-    decryptionStatusTracker = new DecryptionStatusTracker();
+  void initializeCryptoJobTracker(CryptoJobType cryptoJobType) {
+    cryptoJobStatusTracker = new CryptoJobStatusTracker();
+    this.cryptoJobType = cryptoJobType;
   }
 
   /**
-   * @return {@code true} if decryption is required. {@code false} otherwise
+   * @return {@code true} if crypto job is required. {@code false} otherwise
    */
-  boolean isDecryptionRequired() {
-    return decryptionStatusTracker != null;
+  boolean isCryptoJobRequired() {
+    return cryptoJobStatusTracker != null;
   }
 
   /**
-   * Sets decryption as succeeded
+   * Sets crypto job as succeeded
    */
-  void setDecryptionSuccess() {
-    decryptionStatusTracker.setSucceeded();
+  void setCryptoJobSuccess() {
+    if (cryptoJobStatusTracker == null) {
+      throw new IllegalStateException("No crypto job.");
+    }
+    cryptoJobStatusTracker.setSucceeded();
   }
 
   /**
-   * Sets decryption as failed
+   * Sets crypto job as failed
    */
-  void setDecryptionFailed() {
-    decryptionStatusTracker.setFailed();
+  void setCryptoJobFailed() {
+    if (cryptoJobStatusTracker == null) {
+      throw new IllegalStateException("No crypto job.");
+    }
+    cryptoJobStatusTracker.setFailed();
   }
 
   /**
@@ -63,7 +71,7 @@ class ProgressTracker {
    * @return {@code true} if the operation has completed.
    */
   boolean isDone() {
-    return operationTracker.isDone() && (decryptionStatusTracker == null || decryptionStatusTracker.isDone());
+    return operationTracker.isDone() && (cryptoJobStatusTracker == null || cryptoJobStatusTracker.isDone());
   }
 
   /**
@@ -75,20 +83,32 @@ class ProgressTracker {
       throw new IllegalStateException(new RouterException("hasSucceeded called before operation is complete",
           RouterErrorCode.UnexpectedInternalError));
     }
-    return operationTracker.hasSucceeded() && (decryptionStatusTracker == null
-        || decryptionStatusTracker.hasSucceeded());
+    return operationTracker.hasSucceeded() && (cryptoJobStatusTracker == null
+        || cryptoJobStatusTracker.hasSucceeded());
+  }
+
+  /**
+   * @return the crypto job type (encryption, decryption).  Returns {@code NULL} if no crypto job was set.
+   */
+  CryptoJobType getCryptoJobType() {
+    return cryptoJobType;
   }
 }
 
+enum CryptoJobType {
+  ENCRYPTION,
+  DECRYPTION
+}
+
 /**
- * Tracks decryption job status
+ * Tracks encryption/decryption job status
  */
-class DecryptionStatusTracker {
+class CryptoJobStatusTracker {
   private boolean succeeded;
   private boolean done;
 
   /**
-   * Updates the decryption status as completed and succeeded
+   * Updates the crypto job status as completed and succeeded
    */
   void setSucceeded() {
     succeeded = true;
@@ -96,7 +116,7 @@ class DecryptionStatusTracker {
   }
 
   /**
-   * Updates the decryption status as completed and failed
+   * Updates the crypto job status as completed and failed
    */
   void setFailed() {
     done = true;
@@ -104,14 +124,14 @@ class DecryptionStatusTracker {
   }
 
   /**
-   * @return {@code true} if the decryption is completed. {@code false} otherwise
+   * @return {@code true} if the crypto job is completed. {@code false} otherwise
    */
   boolean isDone() {
     return done;
   }
 
   /**
-   * @return {@code true} if the decryption has succeeded. {@code false} if failed.
+   * @return {@code true} if the crypto job has succeeded. {@code false} if failed.
    */
   boolean hasSucceeded() {
     return succeeded;

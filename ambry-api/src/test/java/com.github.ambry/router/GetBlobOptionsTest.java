@@ -63,6 +63,21 @@ public class GetBlobOptionsTest {
     assertEquals("GetOption from options not as expected.", GetOption.Include_All, options.getGetOption());
   }
 
+  @Test
+  public void testRawModeOption() {
+    GetBlobOptions options =
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).rawMode(true).build();
+    assertEquals("RawMode from options not as expected.", true, options.isRawMode());
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testRawModeWithRange() {
+    GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+        .range(ByteRange.fromOffsetRange(0, 1))
+        .rawMode(true)
+        .build();
+  }
+
   /**
    * Test toString, equals, and hashCode methods.
    */
@@ -75,21 +90,40 @@ public class GetBlobOptionsTest {
     GetBlobOptions b = new GetBlobOptionsBuilder().operationType(type).getOption(getOption).range(byteRange).build();
     assertEquals("GetBlobOptions should be equal", a, b);
     assertEquals("GetBlobOptions hashcodes should be equal", a.hashCode(), b.hashCode());
-    assertEquals("toString output not as expected",
-        "GetBlobOptions{operationType=" + type + ", getOption=" + getOption + ", range=" + byteRange.toString() + "}",
-        a.toString());
+    assertEquals("GetBlobOptions toString should be equal", a.toString(), b.toString());
 
-    b = new GetBlobOptionsBuilder().operationType(type)
-        .getOption(getOption)
-        .range(ByteRange.fromOffsetRange(2, 7))
-        .build();
-    assertThat("GetBlobOptions should not be equal.", a, not(b));
+    // Change OperationType
     b = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .getOption(getOption)
         .range(byteRange)
         .build();
-    assertThat("GetBlobOptions should not be equal.", a, not(b));
+    assertObjectsAreDistinct(a, b);
+
+    // Change GetOption
     b = new GetBlobOptionsBuilder().operationType(type).getOption(GetOption.Include_All).range(byteRange).build();
+    assertObjectsAreDistinct(a, b);
+
+    // Change range
+    b = new GetBlobOptionsBuilder().operationType(type)
+        .getOption(getOption)
+        .range(ByteRange.fromOffsetRange(2, 7))
+        .build();
+    assertObjectsAreDistinct(a, b);
+
+    // Change rawMode (need to omit range)
+    a = new GetBlobOptionsBuilder().operationType(type).getOption(getOption).build();
+    b = new GetBlobOptionsBuilder().operationType(type).getOption(getOption).rawMode(true).build();
+    assertObjectsAreDistinct(a, b);
+  }
+
+  /**
+   * Verify that two instances of GetBlobOptions are not equal and have distinct hashcodes and toStrings.
+   * @param a first instance
+   * @param b second instance
+   */
+  private static void assertObjectsAreDistinct(GetBlobOptions a, GetBlobOptions b) {
     assertThat("GetBlobOptions should not be equal.", a, not(b));
+    assertThat("GetBlobOptions hashcodes should not be equal", a.hashCode(), not(b.hashCode()));
+    assertThat("GetBlobOptions toString should not be equal", a.toString(), not(b.toString()));
   }
 }
