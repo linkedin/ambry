@@ -57,8 +57,8 @@ public class BlobStoreHardDeleteTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V2}});
+    return Arrays.asList(new Object[][]{{MessageFormatRecord.Message_Header_Version_V1},
+        {MessageFormatRecord.Message_Header_Version_V2}});
   }
 
   public BlobStoreHardDeleteTest(short headerVersionToUse) {
@@ -70,8 +70,8 @@ public class BlobStoreHardDeleteTest {
     private List<byte[]> recoveryInfoList = new ArrayList<byte[]>();
     private ByteBuffer buffer;
     private StoreKey[] keys =
-        {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5"), new MockId(
-            "id6"), new MockId("id7")};
+        {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5"),
+            new MockId("id6"), new MockId("id7")};
 
     public ArrayList<Long> initialize(short[] blobVersions, BlobType[] blobTypes)
         throws MessageFormatException, IOException {

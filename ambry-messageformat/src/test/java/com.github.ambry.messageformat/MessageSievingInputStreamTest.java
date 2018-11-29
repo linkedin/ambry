@@ -57,9 +57,9 @@ public class MessageSievingInputStreamTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{EnumSet.noneOf(TransformerOptions.class)}, {EnumSet.of(
-        TransformerOptions.Validate)}, {EnumSet.of(TransformerOptions.KeyConvert)}, {EnumSet.allOf(
-        TransformerOptions.class)}});
+    return Arrays.asList(
+        new Object[][]{{EnumSet.noneOf(TransformerOptions.class)}, {EnumSet.of(TransformerOptions.Validate)},
+            {EnumSet.of(TransformerOptions.KeyConvert)}, {EnumSet.allOf(TransformerOptions.class)}});
   }
 
   private static short messageFormatHeaderVersionSaved;

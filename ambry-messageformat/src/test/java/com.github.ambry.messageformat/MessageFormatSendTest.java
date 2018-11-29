@@ -57,8 +57,8 @@ public class MessageFormatSendTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{PutMessageFormatInputStream.class.getSimpleName()}, {PutMessageFormatBlobV1InputStream.class.getSimpleName()}});
+    return Arrays.asList(new Object[][]{{PutMessageFormatInputStream.class.getSimpleName()},
+        {PutMessageFormatBlobV1InputStream.class.getSimpleName()}});
   }
 
   public MessageFormatSendTest(String putFormat) {
@@ -338,15 +338,16 @@ public class MessageFormatSendTest {
     short headerFormatV1 = MessageFormatRecord.Message_Header_Version_V1;
     short headerFormatV2 = MessageFormatRecord.Message_Header_Version_V2;
 
-    byte[][] blob = {TestUtils.getRandomBytes(1000), TestUtils.getRandomBytes(2000), TestUtils.getRandomBytes(
-        10000), TestUtils.getRandomBytes(20000), TestUtils.getRandomBytes(40000)};
-    byte[][] userMetadata = {TestUtils.getRandomBytes(200), TestUtils.getRandomBytes(400), TestUtils.getRandomBytes(
-        2000), TestUtils.getRandomBytes(4000), TestUtils.getRandomBytes(8000)};
+    byte[][] blob = {TestUtils.getRandomBytes(1000), TestUtils.getRandomBytes(2000), TestUtils.getRandomBytes(10000),
+        TestUtils.getRandomBytes(20000), TestUtils.getRandomBytes(40000)};
+    byte[][] userMetadata =
+        {TestUtils.getRandomBytes(200), TestUtils.getRandomBytes(400), TestUtils.getRandomBytes(2000),
+            TestUtils.getRandomBytes(4000), TestUtils.getRandomBytes(8000)};
     StoreKey[] storeKeys = {new MockId("64"), new MockId("32"), new MockId("16"), new MockId("08"), new MockId("04")};
     ByteBuffer[] encryptionKeys =
-        {ByteBuffer.wrap(TestUtils.getRandomBytes(64)), ByteBuffer.wrap(TestUtils.getRandomBytes(128)), ByteBuffer.wrap(
-            TestUtils.getRandomBytes(256)), ByteBuffer.wrap(TestUtils.getRandomBytes(512)), ByteBuffer.wrap(
-            TestUtils.getRandomBytes(1024))};
+        {ByteBuffer.wrap(TestUtils.getRandomBytes(64)), ByteBuffer.wrap(TestUtils.getRandomBytes(128)),
+            ByteBuffer.wrap(TestUtils.getRandomBytes(256)), ByteBuffer.wrap(TestUtils.getRandomBytes(512)),
+            ByteBuffer.wrap(TestUtils.getRandomBytes(1024))};
     String putFormat1s[] = {putFormat1, putFormat1, putFormat1, putFormat1, putFormat1};
     String putFormat2s[] = {putFormat2, putFormat2, putFormat2, putFormat2, putFormat2};
     String putFormatComposite1[] = {putFormat1, putFormat2, putFormat2, putFormat2, putFormat1};

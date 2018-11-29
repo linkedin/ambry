@@ -300,8 +300,10 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
-    int expectedTokenValueT1 = 198728;
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.
+    // old value: 198728. Increased by 4 to 198732 because the format for delete record went from 2 to 3 which adds
+    // 4 bytes (two shorts) extra. The last record is a delete record so its extra 4 bytes are not (yet) added
+    int expectedTokenValueT1 = 198732;
     ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap,
         expectedTokenValueT1);
 
@@ -335,8 +337,10 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
-    int expectedTokenValueT2 = 298400;
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.
+    int expectedTokenValueT2 = 298416;
+    // old value: 298400. Increased by 16 (4 * 4) to 298416 because the format for delete record went from 2 to 3 which
+    // adds 4 bytes (two shorts) extra. The last record is a delete record so its extra 4 bytes are not added
     ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap,
         expectedTokenValueT2);
 
