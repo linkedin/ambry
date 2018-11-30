@@ -348,11 +348,9 @@ public class GetBlobOperationTest {
     }
   }
 
-  // TODO: test get blob with raw mode
-  // Simple encrypted blob should succeed, others should fail
-
   /**
    * Test gets of simple blob in raw mode.
+   * TODO: also test composite blob
    */
   @Test
   public void testSimpleBlobRawMode() throws Exception {
@@ -362,7 +360,6 @@ public class GetBlobOperationTest {
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).rawMode(true).build(), false,
         routerMetrics.ageAtGet);
     if (testEncryption) {
-      // will fail to match result
       getAndAssertSuccess();
     } else {
       GetBlobOperation op = createOperationAndComplete(null);
@@ -1189,7 +1186,6 @@ public class GetBlobOperationTest {
     // Ensure that a ChannelClosed exception is not set when the ReadableStreamChannel is closed correctly.
     Assert.assertNull("Callback operation exception should be null", op.getOperationException());
     if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo && !options.getBlobOptions.isRawMode()) {
-      // TODO: look at failing the "raw" operation if a range is set
       int sizeWritten = blobSize;
       if (options.getBlobOptions.getRange() != null) {
         ByteRange range = options.getBlobOptions.getRange().toResolvedByteRange(blobSize);
@@ -1277,8 +1273,8 @@ public class GetBlobOperationTest {
             putContentBuf = getBlobBufferFromServer(server);
             break;
           }
-          Assert.assertNotNull("Did not find server with blob: " + blobIdStr, putContentBuf);
         }
+        Assert.assertNotNull("Did not find server with blob: " + blobIdStr, putContentBuf);
       } else {
         putContentBuf = ByteBuffer.wrap(putContent);
         // If a range is set, compare the result against the specified byte range.

@@ -63,6 +63,7 @@ public class GetBlobOptionsTest {
     assertEquals("GetOption from options not as expected.", GetOption.Include_All, options.getGetOption());
   }
 
+  /** Test the rawMode option */
   @Test
   public void testRawModeOption() {
     GetBlobOptions options =
@@ -70,6 +71,9 @@ public class GetBlobOptionsTest {
     assertEquals("RawMode from options not as expected.", true, options.isRawMode());
   }
 
+  /**
+   * Test that using rawMode and range together fails.
+   */
   @Test(expected = IllegalArgumentException.class)
   public void testRawModeWithRange() {
     GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)

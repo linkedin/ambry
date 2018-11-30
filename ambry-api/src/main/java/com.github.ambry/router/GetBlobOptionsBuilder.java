@@ -55,7 +55,9 @@ public class GetBlobOptionsBuilder {
   }
 
   /**
-   * @param rawMode the raw mode for this get request.
+   * @param rawMode the raw mode flag for this get request.
+   * If rawMode is true, the returned {@link GetBlobResult} will contain the raw (unserialized) blob payload in the
+   * data channel and null blobInfo.  This option cannot be used in conjunction with a byte range.
    * @return this builder
    */
   public GetBlobOptionsBuilder rawMode(boolean rawMode) {
@@ -67,6 +69,6 @@ public class GetBlobOptionsBuilder {
    * @return the {@link GetBlobOptions} built.
    */
   public GetBlobOptions build() {
-    return new GetBlobOptions(operationType, getOption, range).setRawMode(rawMode);
+    return new GetBlobOptions(operationType, getOption, range, rawMode);
   }
 }

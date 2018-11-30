@@ -26,10 +26,8 @@ public class GetBlobOptions {
   private final OperationType operationType;
   private final GetOption getOption;
   private final ByteRange range;
-
   // Flag indicating whether to return the raw blob payload without deserialization.
-  // If blob was stored encrypted, decryption will be skipped, otherwise the router will encrypt the blob and associated chunks.
-  private boolean rawMode = false;
+  private final boolean rawMode;
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
@@ -37,27 +35,20 @@ public class GetBlobOptions {
    * @param getOption the {@link GetOption} associated with the request.
    * @param range a {@link ByteRange} for this get request. This can be null, if the entire blob is desired.
    */
-  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range) {
+  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean rawMode) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
+    }
+    if (rawMode && range != null) {
+      throw new IllegalArgumentException("Raw mode and range cannot be used together");
     }
     this.operationType = operationType;
     this.getOption = getOption;
     this.range = range;
+    this.rawMode = rawMode;
   }
 
-  /**
-   * Sets the rawMode flag of the {@link GetBlobOptions} object.
-   * If rawMode is true, the returned {@link GetBlobResult} will contain the raw (unserialized) blob payload in the
-   * data channel and null blobInfo.  This option cannot be used in conjunction with a byte range.
-   * @param rawMode the new value of rawMode flag.
-   * @return this object.
-   */
   public GetBlobOptions setRawMode(boolean rawMode) {
-    if (rawMode && range != null) {
-      throw new IllegalArgumentException("Raw mode and range cannot be used together");
-    }
-    this.rawMode = rawMode;
     return this;
   }
 
