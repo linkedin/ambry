@@ -14,11 +14,11 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.utils.TestUtils;
 import java.io.File;
 import java.io.IOException;
@@ -211,8 +211,8 @@ public class AccountUpdateToolTest {
     String badJsonFile = tempDirPath + File.separator + "badJsonFile.json";
     writeStringToFile("Invalid json string", badJsonFile);
     try {
-      AccountUpdateTool.updateAccount(badJsonFile, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000,
-          Container.getCurrentJsonVersion());
+      new AccountUpdateTool(ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000,
+          Container.getCurrentJsonVersion()).updateAccountsFromFile(badJsonFile);
       fail("Should have thrown.");
     } catch (Exception e) {
       // expected
@@ -230,8 +230,8 @@ public class AccountUpdateToolTest {
     String jsonFilePath = tempDirPath + File.separator + UUID.randomUUID().toString() + ".json";
     writeAccountsToFile(accounts, jsonFilePath);
     accountUpdateConsumer.reset();
-    AccountUpdateTool.updateAccount(jsonFilePath, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000,
-        containerJsonVersion);
+    new AccountUpdateTool(ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000,
+        containerJsonVersion).updateAccountsFromFile(jsonFilePath);
     accountUpdateConsumer.awaitUpdate();
   }
 

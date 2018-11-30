@@ -16,10 +16,12 @@ package com.github.ambry.tools.util;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
+import java.util.Scanner;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -150,6 +152,51 @@ public final class ToolUtils {
       Properties properties = Utils.loadProps(propsFilePath);
       addClusterMapProperties(properties);
       return new VerifiableProperties(properties);
+    }
+  }
+
+  /**
+   * Open a file for editing in a terminal text editor. Wait for the editor process to finish before returning.
+   * This should only be called from scripts that are run in a terminal as it requires user input.
+   * If the {@code EDITOR} environment variable is set, that editor is used, otherwise it defaults to vim.
+   * @param filePath the file to edit.
+   * @throws IOException
+   * @throws InterruptedException
+   */
+  public static void editFile(Path filePath) throws IOException, InterruptedException {
+    if (System.console() == null) {
+      throw new IllegalStateException("Script must be run from a terminal to support opening a file in an editor");
+    }
+    String editor = System.getenv("EDITOR");
+    ProcessBuilder processBuilder =
+        new ProcessBuilder(editor != null ? editor : "vim", filePath.toAbsolutePath().toString());
+    processBuilder.redirectInput(ProcessBuilder.Redirect.INHERIT).redirectOutput(ProcessBuilder.Redirect.INHERIT);
+    Process process = processBuilder.start();
+    process.waitFor();
+  }
+
+  /**
+   * Provide a yes/no prompt to the user for interactive scripts.
+   * @param question the question to include in the prompt.
+   * @return {@code true} if the user responded with "yes" or "y", or {@code false} if the user responded with "no" or
+   *         "n".
+   */
+  public static boolean yesNoPrompt(String question) {
+    if (System.console() == null) {
+      throw new IllegalStateException("Script must be run from a terminal to support user prompts");
+    }
+    while (true) {
+      String line = System.console().readLine("%s (y[es]/n[o]): ", question);
+      switch (line.toLowerCase()) {
+        case "yes":
+        case "y":
+          return true;
+        case "no":
+        case "n":
+          return false;
+        default:
+          System.out.println("Please enter either yes, y, no, or n");
+      }
     }
   }
 }
