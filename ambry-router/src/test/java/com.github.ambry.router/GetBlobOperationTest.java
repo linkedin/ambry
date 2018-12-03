@@ -29,9 +29,11 @@ import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobAll;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
+import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
@@ -52,6 +54,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -350,7 +353,6 @@ public class GetBlobOperationTest {
 
   /**
    * Test gets of simple blob in raw mode.
-   * TODO: also test composite blob
    */
   @Test
   public void testSimpleBlobRawMode() throws Exception {
@@ -364,6 +366,37 @@ public class GetBlobOperationTest {
     } else {
       GetBlobOperation op = createOperationAndComplete(null);
       Assert.assertEquals(IllegalStateException.class, op.getOperationException().getClass());
+    }
+  }
+
+  /**
+   * Test gets of composite blob in raw mode.
+   */
+  @Test
+  public void testCompositeBlobRawMode() throws Exception {
+    options = new GetBlobOptionsInternal(
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).rawMode(true).build(), false,
+        routerMetrics.ageAtGet);
+
+    for (int numChunks = 2; numChunks < 10; numChunks++) {
+      blobSize = numChunks * maxChunkSize;
+      doPut();
+      if (testEncryption) {
+        getAndAssertSuccess();
+        ByteBuffer payload = getBlobBuffer();
+        // extract chunk ids
+        BlobAll blobAll =
+            MessageFormatRecord.deserializeBlobAll(new ByteArrayInputStream(payload.array()), blobIdFactory);
+        ByteBuffer metadataBuffer = blobAll.getBlobData().getStream().getByteBuffer();
+        CompositeBlobInfo compositeBlobInfo =
+            MetadataContentSerDe.deserializeMetadataContentRecord(metadataBuffer, blobIdFactory);
+        Assert.assertEquals("Total size didn't match", blobSize, compositeBlobInfo.getTotalSize());
+        Assert.assertEquals("Chunk count didn't match", numChunks, compositeBlobInfo.getKeys().size());
+
+        // TODO; test raw get on each chunk (needs changes to test framework)
+      } else {
+        // Only supported for encrypted blobs now
+      }
     }
   }
 
@@ -1265,15 +1298,7 @@ public class GetBlobOperationTest {
     try {
       ByteBuffer putContentBuf = null;
       if (options.isRawMode()) {
-        // Find server with the blob
-        for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-          MockServer server = mockServerLayout.getMockServer(replicaId.getDataNodeId().getHostname(),
-              replicaId.getDataNodeId().getPort());
-          if (server.getBlobs().containsKey(blobIdStr)) {
-            putContentBuf = getBlobBufferFromServer(server);
-            break;
-          }
-        }
+        putContentBuf = getBlobBuffer();
         Assert.assertNotNull("Did not find server with blob: " + blobIdStr, putContentBuf);
       } else {
         putContentBuf = ByteBuffer.wrap(putContent);
@@ -1314,6 +1339,22 @@ public class GetBlobOperationTest {
     } finally {
       readCompleteLatch.countDown();
     }
+  }
+
+  /**
+   * @return the ByteBuffer for the blob contents on a server that hosts the partition.
+   * @throws IOException
+   */
+  private ByteBuffer getBlobBuffer() throws IOException {
+    // Find server with the blob
+    for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
+      MockServer server = mockServerLayout.getMockServer(replicaId.getDataNodeId().getHostname(),
+          replicaId.getDataNodeId().getPort());
+      if (server.getBlobs().containsKey(blobId.getID())) {
+        return getBlobBufferFromServer(server);
+      }
+    }
+    return null;
   }
 
   /**

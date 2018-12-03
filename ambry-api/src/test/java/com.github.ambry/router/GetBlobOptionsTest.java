@@ -15,6 +15,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.utils.TestUtils;
 import org.junit.Test;
 
 import static org.hamcrest.CoreMatchers.*;
@@ -73,13 +74,14 @@ public class GetBlobOptionsTest {
 
   /**
    * Test that using rawMode and range together fails.
+   * @throws Exception
    */
-  @Test(expected = IllegalArgumentException.class)
-  public void testRawModeWithRange() {
-    GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+  @Test
+  public void testRawModeWithRange() throws Exception {
+    GetBlobOptionsBuilder options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .range(ByteRange.fromOffsetRange(0, 1))
-        .rawMode(true)
-        .build();
+        .rawMode(true);
+    TestUtils.assertException(IllegalArgumentException.class, () -> options.build(), null);
   }
 
   /**
@@ -121,13 +123,14 @@ public class GetBlobOptionsTest {
   }
 
   /**
-   * Verify that two instances of GetBlobOptions are not equal and have distinct hashcodes and toStrings.
+   * Verify that two instances of GetBlobOptions are not equal and have distinct toStrings.
    * @param a first instance
    * @param b second instance
    */
   private static void assertObjectsAreDistinct(GetBlobOptions a, GetBlobOptions b) {
     assertThat("GetBlobOptions should not be equal.", a, not(b));
-    assertThat("GetBlobOptions hashcodes should not be equal", a.hashCode(), not(b.hashCode()));
+    // Don't compare hashcodes since collisions are possible.
+    // assertThat("GetBlobOptions hashcodes should not be equal", a.hashCode(), not(b.hashCode()));
     assertThat("GetBlobOptions toString should not be equal", a.toString(), not(b.toString()));
   }
 }

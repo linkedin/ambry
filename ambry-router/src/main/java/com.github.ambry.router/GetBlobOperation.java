@@ -813,7 +813,7 @@ class GetBlobOperation extends GetOperation {
         return true;
       } else {
         // encryptionKey == null && needEncryption
-        // TODO: defer this til later
+        // TODO: encrypt buffer if caller wants it
         /*
         logger.trace("Submitting encrypt job for {}", blobDesc);
         long startTimeMs = System.currentTimeMillis();
@@ -1089,7 +1089,6 @@ class GetBlobOperation extends GetOperation {
         ByteBuffer rawPayloadBuffer = null;
         boolean rawMode = options.getBlobOptions.isRawMode();
         if (rawMode) {
-          // Note: currently only works for simple blobs
           byte[] payloadBytes = new byte[payload.available()];
           payload.read(payloadBytes);
           payload = new ByteArrayInputStream(payloadBytes);
@@ -1119,7 +1118,9 @@ class GetBlobOperation extends GetOperation {
         chunkIndexToBuffer = new TreeMap<>();
         if (blobType == BlobType.MetadataBlob) {
           if (rawMode) {
-            setOperationException(new IllegalStateException("Only simple blobs supported in raw mode"));
+            // Send the list of chunk Ids
+            chunkIndexToBuffer.put(0, blobData.getStream().getByteBuffer());
+            numChunksRetrieved = 1;
           } else {
             handleMetadataBlob(blobData, userMetadata, encryptionKey);
           }

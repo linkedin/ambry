@@ -34,6 +34,7 @@ public class GetBlobOptions {
    * @param operationType the {@link OperationType} for this request. This must be non-null.
    * @param getOption the {@link GetOption} associated with the request.
    * @param range a {@link ByteRange} for this get request. This can be null, if the entire blob is desired.
+   * @param rawMode a system flag indicating that the raw bytes should be returned.
    */
   GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean rawMode) {
     if (operationType == null || getOption == null) {
@@ -46,10 +47,6 @@ public class GetBlobOptions {
     this.getOption = getOption;
     this.range = range;
     this.rawMode = rawMode;
-  }
-
-  public GetBlobOptions setRawMode(boolean rawMode) {
-    return this;
   }
 
   /**
