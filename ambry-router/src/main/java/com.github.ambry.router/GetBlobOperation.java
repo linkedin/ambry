@@ -779,6 +779,14 @@ class GetBlobOperation extends GetOperation {
       checkAndMaybeComplete();
     }
 
+    /**
+     * Launch a crypto job as needed.
+     * @param dataBuffer to buffer to encrypt or decrypt.
+     * @param userMetadata userMetadata of the blob.
+     * @param encryptionKey encryption key for the blob. Could be null for non encrypted blob.
+     * @param isSimple {@code true} for simple blob, {@code false} for data chunk.
+     * @return {@code true} if a crypto job was launched, otherwise {@code false}.
+     */
     protected boolean maybeLaunchCryptoJob(ByteBuffer dataBuffer, byte[] userMetadata, ByteBuffer encryptionKey,
         boolean isSimple) {
       //
