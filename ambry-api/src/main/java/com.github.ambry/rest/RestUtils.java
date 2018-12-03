@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -126,9 +127,13 @@ public class RestUtils {
      */
     public final static String SERVICE_ID = "x-ambry-service-id";
     /**
-     * for put request; string; name of target account
+     * for put or get account request; string; name of target account
      */
     public final static String TARGET_ACCOUNT_NAME = "x-ambry-target-account-name";
+    /**
+     * for get account request; short; numerical ID of target account
+     */
+    public final static String TARGET_ACCOUNT_ID = "x-ambry-target-account-id";
     /**
      * for put request; string; name of the target container
      */
@@ -734,11 +739,29 @@ public class RestUtils {
    *                              converted to a {@link Long}.
    */
   public static Long getLongHeader(Map<String, ?> args, String header, boolean required) throws RestServiceException {
+    return getNumericalHeader(args, header, required, Long::parseLong);
+  }
+
+  /**
+   * Gets the value of a header as a {@link Number}, using the provided converter function to parse the string.
+   * @param args a map of arguments to be used to look for {@code header}.
+   * @param header the name of the header.
+   * @param required if {@code true}, {@link RestServiceException} will be thrown if {@code header} is not present
+   *                 in {@code args}.
+   * @param converter a function to convert from a {@link String} to the desired numerical type. This should throw
+   *                  {@link NumberFormatException} if the argument is not a valid number.
+   * @return the value of {@code header} in {@code args} if it exists. If it does not exist and {@code required} is
+   *          {@code false}, then returns null.
+   * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
+   *                              converted to a {@link Long}.
+   */
+  public static <T extends Number> T getNumericalHeader(Map<String, ?> args, String header, boolean required,
+      Function<String, T> converter) throws RestServiceException {
     // if getHeader() is no longer called, tests for this function have to be changed.
     String value = getHeader(args, header, required);
     if (value != null) {
       try {
-        return Long.parseLong(value);
+        return converter.apply(value);
       } catch (NumberFormatException e) {
         throw new RestServiceException("Invalid value for " + header + ": " + value, e,
             RestServiceErrorCode.InvalidArgs);

@@ -127,6 +127,18 @@ public class InMemAccountService implements AccountService {
    * @return the {@link Account} that was created and added.
    */
   public synchronized Account createAndAddRandomAccount() {
+    Account account = generateRandomAccount();
+    updateAccounts(Collections.singletonList(account));
+    return account;
+  }
+
+  /**
+   * Generates an {@link Account} but does not add it to this {@link AccountService}. The account will contain one
+   * container with {@link Container#DEFAULT_PUBLIC_CONTAINER_ID}, one with
+   * {@link Container#DEFAULT_PRIVATE_CONTAINER_ID} and one other random {@link Container}.
+   * @return the {@link Account} that was created.
+   */
+  public synchronized Account generateRandomAccount() {
     short refAccountId;
     String refAccountName;
     do {
@@ -139,13 +151,10 @@ public class InMemAccountService implements AccountService {
         new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER).setParentAccountId(refAccountId).build();
     Container privateContainer =
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(refAccountId).build();
-    Account account =
-        new AccountBuilder(refAccountId, refAccountName, refAccountStatus).addOrUpdateContainer(publicContainer)
-            .addOrUpdateContainer(privateContainer)
-            .addOrUpdateContainer(randomContainer)
-            .build();
-    updateAccounts(Collections.singletonList(account));
-    return account;
+    return new AccountBuilder(refAccountId, refAccountName, refAccountStatus).addOrUpdateContainer(publicContainer)
+        .addOrUpdateContainer(privateContainer)
+        .addOrUpdateContainer(randomContainer)
+        .build();
   }
 
   /**

@@ -82,8 +82,6 @@ public class GetClusterMapSnapshotHandlerTest {
   public void securityServiceDenialTest() throws Exception {
     String msg = "@@expected";
     securityServiceFactory.exceptionToReturn = new IllegalStateException(msg);
-    securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.PreProcessRequest;
-    verifyFailureWithMsg(msg);
     securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.ProcessRequest;
     verifyFailureWithMsg(msg);
     securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.PostProcessRequest;
@@ -93,7 +91,7 @@ public class GetClusterMapSnapshotHandlerTest {
     verifyFailureWithMsg(msg);
     securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.ProcessRequest;
     verifyFailureWithMsg(msg);
-    securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.PreProcessRequest;
+    securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.PostProcessRequest;
     verifyFailureWithMsg(msg);
   }
 

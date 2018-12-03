@@ -28,23 +28,16 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
-import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONTokener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,8 +104,7 @@ class PostBlobHandler {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<ReadableStreamChannel> callback) {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
@@ -123,7 +115,7 @@ class PostBlobHandler {
     private final RestRequest restRequest;
     private final String uri;
     private final RestResponseChannel restResponseChannel;
-    private final Callback<ReadableStreamChannel> finalCallback;
+    private final Callback<Void> finalCallback;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -131,7 +123,7 @@ class PostBlobHandler {
      * @param finalCallback the {@link Callback} to call on completion.
      */
     private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<ReadableStreamChannel> finalCallback) {
+        Callback<Void> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;
@@ -139,27 +131,22 @@ class PostBlobHandler {
     }
 
     /**
-     * Start the chain by calling {@link SecurityService#preProcessRequest}.
+     * Start the chain by parsing the blob info headers in the request and calling
+     * {@link SecurityService#processRequest} to perform additional request time security checks.
      */
     private void start() {
       // Metrics initialization. Can potentially be updated after parsing blob properties.
       restRequest.getMetricsTracker()
-          .injectMetrics(frontendMetrics.postRequestMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
-      // Start the callback chain by performing request security pre-processing.
-      securityService.preProcessRequest(restRequest, securityPreProcessRequestCallback());
-    }
-
-    /**
-     * After {@link SecurityService#preProcessRequest} finishes, parse the blob info headers in the request and call
-     * {@link SecurityService#processRequest} to perform additional request time security checks.
-     * @return a {@link Callback} to be used with {@link SecurityService#preProcessRequest}.
-     */
-    private Callback<Void> securityPreProcessRequestCallback() {
-      return buildCallback(frontendMetrics.postSecurityPreProcessRequestMetrics, securityCheckResult -> {
+          .injectMetrics(
+              frontendMetrics.postRequestMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
+      try {
+        // Start the callback chain by parsing blob info headers and performing request security processing.
         BlobInfo blobInfo = getBlobInfoFromRequest();
         checkUploadRequirements(blobInfo.getBlobProperties());
         securityService.processRequest(restRequest, securityProcessRequestCallback(blobInfo));
-      }, uri, LOGGER, finalCallback);
+      } catch (Exception e) {
+        finalCallback.onCompletion(null, e);
+      }
     }
 
     /**
@@ -183,8 +170,7 @@ class PostBlobHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postSecurityPostProcessRequestMetrics, securityCheckResult -> {
         if (getOperation().equalsIgnoreCase(Operations.STITCH)) {
-          CopyingAsyncWritableChannel channel =
-              new CopyingAsyncWritableChannel(frontendConfig.maxStitchRequestSizeBytes);
+          CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
@@ -203,7 +189,7 @@ class PostBlobHandler {
     private Callback<Long> fetchStitchRequestBodyCallback(CopyingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
-              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
+              getChunksToStitch(blobInfo.getBlobProperties(), FrontendUtils.readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo)), uri, LOGGER, finalCallback);
     }
 
@@ -439,22 +425,6 @@ class PostBlobHandler {
             + accountAndContainer.getSecond() + ") does not match account and container for stitched blob: ("
             + stitchedBlobProperties.getAccountId() + ", " + stitchedBlobProperties.getContainerId() + ")",
             RestServiceErrorCode.BadRequest);
-      }
-    }
-
-    /**
-     * Parse a {@link JSONObject} from the data in {@code channel}. This assumes that the data is UTF-8 encoded.
-     * @param channel the {@link CopyingAsyncWritableChannel} that contains the JSON data.
-     * @return a {@link JSONObject}.
-     * @throws IOException if closing the {@link InputStream} fails.
-     * @throws RestServiceException if JSON parsing fails.
-     */
-    private JSONObject readJsonFromChannel(CopyingAsyncWritableChannel channel)
-        throws IOException, RestServiceException {
-      try (InputStream inputStream = channel.getContentAsInputStream()) {
-        return new JSONObject(new JSONTokener(new InputStreamReader(inputStream, StandardCharsets.UTF_8)));
-      } catch (JSONException e) {
-        throw new RestServiceException("Invalid stitch request body", e, RestServiceErrorCode.BadRequest);
       }
     }
   }
