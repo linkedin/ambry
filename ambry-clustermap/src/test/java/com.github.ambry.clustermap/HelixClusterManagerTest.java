@@ -243,8 +243,9 @@ public class HelixClusterManagerTest {
         metricRegistry);
     assertEquals(0L,
         metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
-    assertEquals(1L,
-        metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".remoteInstantiationFailed").getValue());
+    assertEquals(1L, metricRegistry.getGauges()
+        .get(HelixClusterManager.class.getName() + ".instantiationExceptionCount")
+        .getValue());
 
     // Local dc connectivity failure should fail instantiation.
     dcsToZkInfo.get(remoteDc).setPort(savedport);
@@ -261,8 +262,8 @@ public class HelixClusterManagerTest {
     } catch (IOException e) {
       assertEquals(1L,
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
-      assertEquals(0L, metricRegistry.getGauges()
-          .get(HelixClusterManager.class.getName() + ".remoteInstantiationFailed")
+      assertEquals(1L, metricRegistry.getGauges()
+          .get(HelixClusterManager.class.getName() + ".instantiationExceptionCount")
           .getValue());
     }
 

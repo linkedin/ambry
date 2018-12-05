@@ -28,13 +28,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.AccessOption;
@@ -83,9 +82,7 @@ class HelixClusterManager implements ClusterMap {
   private long clusterWideAllocatedUsableCapacityBytes;
   private final HelixClusterManagerCallback helixClusterManagerCallback;
   private final byte localDatacenterId;
-  private final AtomicReference<Exception> initializationException = new AtomicReference<>();
-  private final AtomicReference<Exception> remoteInitializationException = new AtomicReference<>();
-  private final AtomicInteger remoteInitializationFailedCount = new AtomicInteger();
+  private final ConcurrentHashMap<String, Exception> initializationFailureMap = new ConcurrentHashMap<>();
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final PartitionSelectionHelper partitionSelectionHelper;
@@ -122,22 +119,20 @@ class HelixClusterManager implements ClusterMap {
       localManager_ =
           initializeHelixManagerAndPropertyStoreInLocalDC(dataCenterToZkAddress_, instanceName, helixFactory);
     } catch (Exception e) {
-      initializationException.set(e);
+      initializationFailureMap.putIfAbsent(clusterMapConfig.clusterMapDatacenterName, e);
     }
-    Map<String, DcZkInfo> dataCenterToZkAddress = dataCenterToZkAddress_;
-    HelixManager localManager = localManager_;
-    if (initializationException.get() == null) {
-      final CountDownLatch initializationAttemptComplete = new CountDownLatch(dataCenterToZkAddress.size());
-      for (Map.Entry<String, DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
+    if (initializationFailureMap.get(clusterMapConfig.clusterMapDatacenterName) == null) {
+      HelixManager localManager = localManager_;
+      final CountDownLatch initializationAttemptComplete = new CountDownLatch(dataCenterToZkAddress_.size());
+      for (Map.Entry<String, DcZkInfo> entry : dataCenterToZkAddress_.entrySet()) {
         String dcName = entry.getKey();
-        boolean isLocalDc = dcName.equals(clusterMapConfig.clusterMapDatacenterName);
         String zkConnectStr = entry.getValue().getZkConnectStr();
-        ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName, isLocalDc);
+        ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName);
         // Initialize from every remote datacenter in a separate thread to speed things up.
         Utils.newThread(() -> {
           try {
             HelixManager manager;
-            if (isLocalDc) {
+            if (dcName.equals(clusterMapConfig.clusterMapDatacenterName)) {
               manager = localManager;
             } else {
               manager =
@@ -166,7 +161,7 @@ class HelixClusterManager implements ClusterMap {
               logger.info("Stopped listening to cross colo ZK server {}", zkConnectStr);
             }
           } catch (Exception e) {
-            setException(isLocalDc, e);
+            initializationFailureMap.putIfAbsent(dcName, e);
           } finally {
             initializationAttemptComplete.countDown();
           }
@@ -175,21 +170,25 @@ class HelixClusterManager implements ClusterMap {
       try {
         initializationAttemptComplete.await();
       } catch (InterruptedException e) {
-        initializationException.compareAndSet(null, e);
+        initializationFailureMap.putIfAbsent(clusterMapConfig.clusterMapDatacenterName, e);
       }
     }
-    if (initializationException.get() != null) {
-      helixClusterManagerMetrics.initializeInstantiationMetric(false, remoteInitializationFailedCount.get());
+    Exception blockingException = initializationFailureMap.get(clusterMapConfig.clusterMapDatacenterName);
+    if (blockingException != null) {
+      helixClusterManagerMetrics.initializeInstantiationMetric(false,
+          initializationFailureMap.values().stream().filter(Objects::nonNull).count());
       close();
-      throw new IOException("Encountered exception while parsing json, connecting or initializing in the local DC",
-          initializationException.get());
+      throw new IOException(
+          "Encountered startup blocking exception while parsing json, connecting or initializing in the local DC",
+          blockingException);
     } else {
       // resolve the status of all partitions before completing initialization
       for (AmbryPartition partition : partitionMap.values()) {
         partition.resolvePartitionState();
       }
       initializeCapacityStats();
-      helixClusterManagerMetrics.initializeInstantiationMetric(true, remoteInitializationFailedCount.get());
+      helixClusterManagerMetrics.initializeInstantiationMetric(true,
+          initializationFailureMap.values().stream().filter(Objects::nonNull).count());
       helixClusterManagerMetrics.initializeXidMetric(currentXid);
       helixClusterManagerMetrics.initializeDatacenterMetrics();
       helixClusterManagerMetrics.initializeDataNodeMetrics();
@@ -200,15 +199,6 @@ class HelixClusterManager implements ClusterMap {
     localDatacenterId = dcToDcZkInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
     partitionSelectionHelper =
         new PartitionSelectionHelper(partitionMap.values(), clusterMapConfig.clusterMapDatacenterName);
-  }
-
-  private void setException(boolean isLocalDc, Exception e) {
-    if (isLocalDc) {
-      initializationException.compareAndSet(null, e);
-    } else {
-      remoteInitializationException.compareAndSet(null, e);
-      remoteInitializationFailedCount.incrementAndGet();
-    }
   }
 
   /**
@@ -428,7 +418,6 @@ class HelixClusterManager implements ClusterMap {
    */
   private class ClusterChangeHandler implements InstanceConfigChangeListener, LiveInstanceChangeListener {
     private final String dcName;
-    private final boolean isLocalDc;
     final Set<String> allInstances = new HashSet<>();
     private final Object notificationLock = new Object();
     private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
@@ -437,11 +426,9 @@ class HelixClusterManager implements ClusterMap {
     /**
      * Initialize a ClusterChangeHandler in the given datacenter.
      * @param dcName the datacenter associated with this ClusterChangeHandler.
-     * @param isLocalDc if this datacenter is the local datacenter.
      */
-    ClusterChangeHandler(String dcName, boolean isLocalDc) {
+    ClusterChangeHandler(String dcName) {
       this.dcName = dcName;
-      this.isLocalDc = isLocalDc;
     }
 
     @Override
@@ -453,7 +440,7 @@ class HelixClusterManager implements ClusterMap {
           try {
             initializeInstances(configs);
           } catch (Exception e) {
-            setException(isLocalDc, e);
+            initializationFailureMap.putIfAbsent(dcName, e);
           }
           instanceConfigInitialized.set(true);
         } else {

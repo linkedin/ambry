@@ -79,13 +79,13 @@ class HelixClusterManagerMetrics {
     ignoredUpdatesCount = registry.counter(MetricRegistry.name(HelixClusterManager.class, "ignoredUpdatesCount"));
   }
 
-  void initializeInstantiationMetric(final boolean instantiated, final long remoteInstantiated) {
+  void initializeInstantiationMetric(final boolean instantiated, final long instantiationExceptionCount) {
     helixClusterManagerInstantiationFailed = () -> instantiated ? 0L : 1L;
     registry.register(MetricRegistry.name(HelixClusterManager.class, "instantiationFailed"),
         helixClusterManagerInstantiationFailed);
 
-    helixClusterManagerRemoteInstantiationFailed = () -> remoteInstantiated;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "remoteInstantiationFailed"),
+    helixClusterManagerRemoteInstantiationFailed = () -> instantiationExceptionCount;
+    registry.register(MetricRegistry.name(HelixClusterManager.class, "instantiationExceptionCount"),
         helixClusterManagerRemoteInstantiationFailed);
   }
 
