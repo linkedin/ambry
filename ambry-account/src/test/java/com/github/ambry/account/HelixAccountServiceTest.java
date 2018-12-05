@@ -15,7 +15,6 @@ package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.HelixStoreOperator;
-import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -80,6 +79,7 @@ public class HelixAccountServiceTest {
   private static final Map<Short, Map<Short, Container>> idToRefContainerMap = new HashMap<>();
   private final Properties helixConfigProps = new Properties();
   private final Path accountBackupDir;
+  private final MockNotifier<String> notifier;
   private VerifiableProperties vHelixConfigProps;
   private HelixPropertyStoreConfig storeConfig;
   private Account refAccount;
@@ -100,7 +100,6 @@ public class HelixAccountServiceTest {
   private short refParentAccountId;
   private AccountService accountService;
   private MockHelixAccountServiceFactory mockHelixAccountServiceFactory;
-  private Notifier<String> notifier;
 
   /**
    * Resets variables and settings, and cleans up if the store already exists.
@@ -134,6 +133,8 @@ public class HelixAccountServiceTest {
     if (accountService != null) {
       accountService.close();
     }
+    assertEquals("No TopicListeners should still be attached to Notifier", 0,
+        notifier.topicToListenersMap.getOrDefault(ACCOUNT_METADATA_CHANGE_TOPIC, Collections.emptySet()).size());
     deleteStoreIfExists();
   }
 

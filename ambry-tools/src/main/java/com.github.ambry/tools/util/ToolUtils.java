@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
-import java.util.Scanner;
+import java.util.StringTokenizer;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -167,11 +167,23 @@ public final class ToolUtils {
     if (System.console() == null) {
       throw new IllegalStateException("Script must be run from a terminal to support opening a file in an editor");
     }
+
     String editor = System.getenv("EDITOR");
-    ProcessBuilder processBuilder =
-        new ProcessBuilder(editor != null ? editor : "vim", filePath.toAbsolutePath().toString());
-    processBuilder.redirectInput(ProcessBuilder.Redirect.INHERIT).redirectOutput(ProcessBuilder.Redirect.INHERIT);
-    Process process = processBuilder.start();
+    List<String> command = new ArrayList<>();
+    if (editor == null) {
+      command.add("vim");
+    } else {
+      // If the EDITOR variable contains extra arguments, we have to split the string into tokens.
+      StringTokenizer st = new StringTokenizer(editor);
+      while (st.hasMoreTokens()) {
+        command.add(st.nextToken());
+      }
+    }
+    command.add(filePath.toAbsolutePath().toString());
+
+    Process process = new ProcessBuilder(command).redirectInput(ProcessBuilder.Redirect.INHERIT)
+        .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+        .start();
     process.waitFor();
   }
 
