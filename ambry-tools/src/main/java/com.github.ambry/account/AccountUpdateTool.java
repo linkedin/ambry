@@ -133,11 +133,12 @@ public class AccountUpdateTool implements Closeable {
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> accountsToEditOpt = parser.accepts("accountsToEdit",
-        "The names of the accounts to edit. "
+        "The names of the accounts to edit, separated by commas. "
             + "The script will open an editor where you can edit the json for these accounts.")
         .withRequiredArg()
-        .describedAs("account_json_file_path")
+        .describedAs("accounts_to_edit")
         .withValuesSeparatedBy(",");
+
     ArgumentAcceptingOptionSpec<String> zkServerOpt =
         parser.accepts("zkServer", "The address of ZooKeeper server. This option is required.")
             .withRequiredArg()
@@ -145,9 +146,12 @@ public class AccountUpdateTool implements Closeable {
             .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> storePathOpt = parser.accepts("storePath",
-        "The root path of helix property store in the ZooKeeper. Must start with /, and must not end with /. "
-            + "It is recommended to make root path in the form of /ambry/<clustername>/helixPropertyStore. "
-            + "This option is required.").withRequiredArg().describedAs("helix_store_path").ofType(String.class);
+        "The root path of helix property store in the ZooKeeper. "
+            + "Must start with /, and must not end with /. It is recommended to make root path in the form of "
+            + "/ambry/<clustername>/helixPropertyStore. This option is required.")
+        .withRequiredArg()
+        .describedAs("helix_store_path")
+        .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<Integer> zkConnectionTimeoutMsOpt = parser.accepts("zkConnectionTimeout",
         "Optional timeout in millisecond for connecting to the ZooKeeper server. This option is not required, "
@@ -197,7 +201,7 @@ public class AccountUpdateTool implements Closeable {
     Short containerJsonVersion = options.valueOf(containerJsonVersionOpt);
     String accountJsonPath = options.valueOf(accountJsonPathOpt);
     List<String> accountsToEdit = options.valuesOf(accountsToEditOpt);
-    if ((accountJsonPath == null) == (accountsToEdit.isEmpty())) {
+    if (!((accountJsonPath == null) ^ (accountsToEdit.isEmpty()))) {
       System.err.println("Must provide exactly one of --accountJsonPath or --accountsToEdit");
       parser.printHelpOn(System.err);
       System.exit(1);
@@ -266,6 +270,7 @@ public class AccountUpdateTool implements Closeable {
     } else {
       System.out.println("Not updating any accounts");
     }
+    Files.delete(accountJsonPath);
   }
 
   /**
@@ -278,8 +283,9 @@ public class AccountUpdateTool implements Closeable {
     Collection<Account> accountsToUpdate = getAccountsFromJson(accountJsonPath);
     if (!hasDuplicateAccountIdOrName(accountsToUpdate)) {
       if (accountService.updateAccounts(accountsToUpdate)) {
-        System.out.println(accountsToUpdate.size() + " accounts have been successfully created or updated, took " + (
-            System.currentTimeMillis() - startTime) + " ms");
+        System.out.println(
+            accountsToUpdate.size() + " account(s) successfully created or updated, took " + (System.currentTimeMillis()
+                - startTime) + " ms");
       } else {
         throw new RuntimeException("Updating accounts failed. See log for details.");
       }
