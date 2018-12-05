@@ -54,6 +54,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -317,7 +318,7 @@ class GetBlobOperation extends GetOperation {
     // the future to mark as done when all the chunks are successfully written out into the asyncWritableChannel.
     private FutureResult<Long> readIntoFuture;
     // the number of bytes written out to the asyncWritableChannel. This would be the size of the blob eventually.
-    private Long bytesWritten = 0L;
+    private AtomicLong bytesWritten = new AtomicLong(0);
     // the number of chunks that have been written out to the asyncWritableChannel.
     private volatile int numChunksWrittenOut = 0;
     // the index of the next chunk that is to be written out to the asyncWritableChannel.
@@ -328,7 +329,7 @@ class GetBlobOperation extends GetOperation {
     private final Callback<Long> chunkAsyncWriteCallback = new Callback<Long>() {
       @Override
       public void onCompletion(Long result, Exception exception) {
-        bytesWritten += result;
+        bytesWritten.addAndGet(result);
         if (exception != null) {
           setOperationException(exception);
         }
@@ -419,9 +420,9 @@ class GetBlobOperation extends GetOperation {
     void completeRead() {
       if (readIntoCallbackCalled.compareAndSet(false, true)) {
         Exception e = operationException.get();
-        readIntoFuture.done(bytesWritten, e);
+        readIntoFuture.done(bytesWritten.get(), e);
         if (readIntoCallback != null) {
-          readIntoCallback.onCompletion(bytesWritten, e);
+          readIntoCallback.onCompletion(bytesWritten.get(), e);
         }
         if (e == null) {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
@@ -442,16 +443,20 @@ class GetBlobOperation extends GetOperation {
      * Update chunking and size related metrics - blob size, chunk count, and whether the blob is simple or composite.
      */
     private void updateChunkingAndSizeMetricsOnSuccessfulGet() {
-      routerMetrics.getBlobSizeBytes.update(bytesWritten);
+      routerMetrics.getBlobSizeBytes.update(bytesWritten.get());
       routerMetrics.getBlobChunkCount.update(numChunksTotal);
       if (options != null && options.getBlobOptions.getRange() != null) {
-        routerMetrics.getBlobWithRangeSizeBytes.update(bytesWritten);
+        routerMetrics.getBlobWithRangeSizeBytes.update(bytesWritten.get());
         routerMetrics.getBlobWithRangeTotalBlobSizeBytes.update(totalSize);
       }
-      if (numChunksTotal == 1) {
-        routerMetrics.simpleBlobGetCount.inc();
+      if (!options.getBlobOptions.isRawMode()) {
+        if (numChunksTotal == 1) {
+          routerMetrics.simpleBlobGetCount.inc();
+        } else {
+          routerMetrics.compositeBlobGetCount.inc();
+        }
       } else {
-        routerMetrics.compositeBlobGetCount.inc();
+        // TODO: how to track these counts in raw mode?
       }
     }
   }
@@ -1097,7 +1102,11 @@ class GetBlobOperation extends GetOperation {
         ByteBuffer rawPayloadBuffer = null;
         boolean rawMode = options.getBlobOptions.isRawMode();
         if (rawMode) {
-          byte[] payloadBytes = new byte[payload.available()];
+          if (messageInfo.getSize() > Integer.MAX_VALUE) {
+            throw new IllegalStateException("Payload too large for blob " + blobId.getID());
+          }
+          // TODO: avoid extra copy using InputStreamReadableStreamChannel
+          byte[] payloadBytes = new byte[(int) messageInfo.getSize()];
           payload.read(payloadBytes);
           payload = new ByteArrayInputStream(payloadBytes);
           rawPayloadBuffer = ByteBuffer.wrap(payloadBytes);
@@ -1124,22 +1133,21 @@ class GetBlobOperation extends GetOperation {
         }
         blobType = blobData.getBlobType();
         chunkIndexToBuffer = new TreeMap<>();
-        if (blobType == BlobType.MetadataBlob) {
-          if (rawMode) {
-            // Send the list of chunk Ids
-            chunkIndexToBuffer.put(0, blobData.getStream().getByteBuffer());
+        if (rawMode) {
+          // Return the raw bytes from storage
+          if (encryptionKey != null) {
+            chunkIdIterator = null;
+            dataChunks = null;
+            chunkIndex = 0;
+            numChunksTotal = 1;
+            chunkIndexToBuffer.put(0, rawPayloadBuffer);
             numChunksRetrieved = 1;
           } else {
-            handleMetadataBlob(blobData, userMetadata, encryptionKey);
+            setOperationException(new IllegalStateException("Only encrypted blobs supported in raw mode"));
           }
         } else {
-          if (rawMode) {
-            if (encryptionKey != null) {
-              chunkIndexToBuffer.put(0, rawPayloadBuffer);
-              numChunksRetrieved = 1;
-            } else {
-              setOperationException(new IllegalStateException("Only encrypted blobs supported in raw mode"));
-            }
+          if (blobType == BlobType.MetadataBlob) {
+            handleMetadataBlob(blobData, userMetadata, encryptionKey);
           } else {
             handleSimpleBlob(blobData, userMetadata, encryptionKey);
           }

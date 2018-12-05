@@ -1143,7 +1143,7 @@ public class GetBlobOperationTest {
   private void getAndAssertSuccess(final boolean getChunksBeforeRead, final boolean initiateReadBeforeChunkGet)
       throws Exception {
     final CountDownLatch readCompleteLatch = new CountDownLatch(1);
-    final AtomicReference<Exception> readCompleteException = new AtomicReference<>(null);
+    final AtomicReference<Throwable> readCompleteThrowable = new AtomicReference<>(null);
     final AtomicLong readCompleteResult = new AtomicLong(0);
     final AtomicReference<Exception> operationException = new AtomicReference<>(null);
     final int numChunks = ((blobSize + maxChunkSize - 1) / maxChunkSize) + (blobSize > maxChunkSize ? 1 : 0);
@@ -1177,8 +1177,8 @@ public class GetBlobOperationTest {
                   blobInfo.getBlobProperties().getBlobSize());
               Assert.assertNull("Unexpected blob data in operation result", result.getBlobResult.getBlobDataChannel());
           }
-        } catch (Exception e) {
-          readCompleteException.set(e);
+        } catch (Throwable e) {
+          readCompleteThrowable.set(e);
         }
 
         if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
@@ -1198,7 +1198,7 @@ public class GetBlobOperationTest {
                 : result.getBlobResult.getBlobDataChannel().readInto(asyncWritableChannel, null);
             assertBlobReadSuccess(options.getBlobOptions, readIntoFuture, asyncWritableChannel,
                 result.getBlobResult.getBlobDataChannel(), readCompleteLatch, readCompleteResult,
-                readCompleteException);
+                readCompleteThrowable);
           }, false).start();
         } else {
           readCompleteLatch.countDown();
@@ -1213,8 +1213,8 @@ public class GetBlobOperationTest {
     if (operationException.get() != null) {
       throw operationException.get();
     }
-    if (readCompleteException.get() != null) {
-      throw readCompleteException.get();
+    if (readCompleteThrowable.get() != null) {
+      throw new IllegalStateException(readCompleteThrowable.get());
     }
     // Ensure that a ChannelClosed exception is not set when the ReadableStreamChannel is closed correctly.
     Assert.assertNull("Callback operation exception should be null", op.getOperationException());
@@ -1289,15 +1289,15 @@ public class GetBlobOperationTest {
    * @param readableStreamChannel The {@link ReadableStreamChannel} that bytes are read from in the operation.
    * @param readCompleteLatch The latch to count down once the read is completed.
    * @param readCompleteResult This will contain the bytes written on return.
-   * @param readCompleteException This will contain any exceptions encountered during the read.
+   * @param readCompleteThrowable This will contain any exceptions encountered during the read.
    */
   private void assertBlobReadSuccess(GetBlobOptions options, Future<Long> readIntoFuture,
       ByteBufferAsyncWritableChannel asyncWritableChannel, ReadableStreamChannel readableStreamChannel,
       CountDownLatch readCompleteLatch, AtomicLong readCompleteResult,
-      AtomicReference<Exception> readCompleteException) {
+      AtomicReference<Throwable> readCompleteThrowable) {
     try {
-      ByteBuffer putContentBuf = null;
-      if (options.isRawMode()) {
+      ByteBuffer putContentBuf;
+      if (options != null && options.isRawMode()) {
         putContentBuf = getBlobBuffer();
         Assert.assertNotNull("Did not find server with blob: " + blobIdStr, putContentBuf);
       } else {
@@ -1334,8 +1334,8 @@ public class GetBlobOperationTest {
       Assert.assertNull("There should be no more data in the channel", asyncWritableChannel.getNextChunk(0));
       readableStreamChannel.close();
       readCompleteResult.set(written);
-    } catch (Exception e) {
-      readCompleteException.set(e);
+    } catch (Throwable e) {
+      readCompleteThrowable.set(e);
     } finally {
       readCompleteLatch.countDown();
     }
