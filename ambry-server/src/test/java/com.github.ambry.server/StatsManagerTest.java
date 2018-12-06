@@ -42,6 +42,7 @@ import com.github.ambry.store.TimeRange;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
@@ -75,12 +76,12 @@ public class StatsManagerTest {
   private final File tempDir;
   private final StatsSnapshot preAggregatedSnapshot;
   private final Map<PartitionId, Store> storeMap;
+  private final Map<PartitionId, StatsSnapshot> partitionToSnapshot;
   private final Random random = new Random();
   private final StatsManagerConfig config;
 
   /**
    * Deletes the temporary directory.
-   * @throws InterruptedException
    * @throws IOException
    */
   @After
@@ -99,7 +100,8 @@ public class StatsManagerTest {
     tempDir.deleteOnExit();
     outputFileString = (new File(tempDir.getAbsolutePath(), "stats_output.json")).getAbsolutePath();
     storeMap = new HashMap<>();
-    preAggregatedSnapshot = generateRandomSnapshot();
+    partitionToSnapshot = new HashMap<>();
+    preAggregatedSnapshot = generateRandomSnapshot().get(StatsReportType.ACCOUNT_REPORT);
     Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
     List<ReplicaId> replicaIds = new ArrayList<>();
     PartitionId partitionId;
@@ -107,14 +109,21 @@ public class StatsManagerTest {
     for (int i = 0; i < 2; i++) {
       dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
           Collections.singletonList("/tmp"), "DC1");
-      partitionId =
-          new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
+      partitionId = new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS,
+          Collections.singletonList((MockDataNodeId) dataNodeId), 0);
       baseSliceAndNewSlice = decomposeSnapshot(baseSliceAndNewSlice.getFirst());
-      storeMap.put(partitionId, new MockStore(new MockStoreStats(baseSliceAndNewSlice.getSecond(), false)));
+      Map<StatsReportType, StatsSnapshot> snapshotsByType = new HashMap<>();
+      snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, baseSliceAndNewSlice.getSecond());
+      StoreStats storeStats = new MockStoreStats(snapshotsByType, false);
+      storeMap.put(partitionId, new MockStore(storeStats));
+      partitionToSnapshot.put(partitionId, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
       replicaIds.add(partitionId.getReplicaIds().get(0));
     }
-    storeMap.put(new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS),
-        new MockStore(new MockStoreStats(baseSliceAndNewSlice.getFirst(), false)));
+    Map<StatsReportType, StatsSnapshot> snapshotsByType = new HashMap<>();
+    snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, baseSliceAndNewSlice.getFirst());
+    partitionId = new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    storeMap.put(partitionId, new MockStore(new MockStoreStats(snapshotsByType, false)));
+    partitionToSnapshot.put(partitionId, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
     StorageManager storageManager = new MockStorageManager(storeMap);
     Properties properties = new Properties();
     properties.put("stats.output.file.path", outputFileString);
@@ -125,14 +134,12 @@ public class StatsManagerTest {
   /**
    * Test to verify that the {@link StatsManager} is collecting, aggregating and publishing correctly using randomly
    * generated data sets and mock {@link Store}s and {@link StorageManager}.
-   * @throws StoreException
    * @throws IOException
-   * @throws InterruptedException
    */
   @Test
   public void testStatsManagerCollectAggregateAndPublish() throws IOException {
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
-    List<String> unreachableStores = Collections.EMPTY_LIST;
+    List<String> unreachableStores = Collections.emptyList();
     for (PartitionId partitionId : storeMap.keySet()) {
       statsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
     }
@@ -160,12 +167,14 @@ public class StatsManagerTest {
     DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
         Collections.singletonList("/tmp"), "DC1");
     Map<PartitionId, Store> problematicStoreMap = new HashMap<>();
-    PartitionId partitionId1 =
-        new MockPartitionId(1, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
-    PartitionId partitionId2 =
-        new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
+    PartitionId partitionId1 = new MockPartitionId(1, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        Collections.singletonList((MockDataNodeId) dataNodeId), 0);
+    PartitionId partitionId2 = new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        Collections.singletonList((MockDataNodeId) dataNodeId), 0);
     problematicStoreMap.put(partitionId1, null);
-    Store exceptionStore = new MockStore(new MockStoreStats(null, true));
+    Map<StatsReportType, StatsSnapshot> snapshotsByType = new HashMap<>();
+    snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, new StatsSnapshot(0L, null));
+    Store exceptionStore = new MockStore(new MockStoreStats(snapshotsByType, true));
     problematicStoreMap.put(partitionId2, exceptionStore);
     StatsManager testStatsManager = new StatsManager(new MockStorageManager(problematicStoreMap),
         Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)), new MetricRegistry(),
@@ -180,10 +189,10 @@ public class StatsManagerTest {
     // test for the scenario where some stores are healthy and some are bad
     Map<PartitionId, Store> mixedStoreMap = new HashMap<>(storeMap);
     unreachableStores.clear();
-    PartitionId partitionId3 =
-        new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
-    PartitionId partitionId4 =
-        new MockPartitionId(4, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
+    PartitionId partitionId3 = new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        Collections.singletonList((MockDataNodeId) dataNodeId), 0);
+    PartitionId partitionId4 = new MockPartitionId(4, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        Collections.singletonList((MockDataNodeId) dataNodeId), 0);
     mixedStoreMap.put(partitionId3, null);
     mixedStoreMap.put(partitionId4, exceptionStore);
     testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap),
@@ -195,6 +204,17 @@ public class StatsManagerTest {
     }
     assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
         preAggregatedSnapshot.equals(actualSnapshot));
+    assertEquals("Unreachable store count mismatch with expected value", 2, unreachableStores.size());
+    // test fetchSnapshot method in StatsManager
+    unreachableStores.clear();
+    // partition 0, 1, 2 are healthy stores, partition 3, 4 are bad ones.
+    for (PartitionId partitionId : mixedStoreMap.keySet()) {
+      StatsSnapshot snapshot = testStatsManager.fetchSnapshot(partitionId, unreachableStores);
+      if (Integer.valueOf(partitionId.toPathString()) < 3) {
+        assertTrue("Actual StatsSnapshot does not match with expected snapshot",
+            snapshot.equals(partitionToSnapshot.get(partitionId)));
+      }
+    }
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachableStores.size());
   }
 
@@ -219,23 +239,31 @@ public class StatsManagerTest {
 
   /**
    * Generate a random, two levels of nesting (accountId, containerId) {@link StatsSnapshot} for testing aggregation
-   * @return a {@link StatsSnapshot} with random structure and values
+   * @return a map of all types of {@link StatsSnapshot} whose key is the type name and value is corresponding snapshot
    */
-  private StatsSnapshot generateRandomSnapshot() {
+  private Map<StatsReportType, StatsSnapshot> generateRandomSnapshot() {
     Map<String, StatsSnapshot> accountMap = new HashMap<>();
+    Map<String, StatsSnapshot> accountContainerPairMap = new HashMap<>();
     long totalSize = 0;
     for (int i = 0; i < random.nextInt(MAX_ACCOUNT_COUNT - MIN_ACCOUNT_COUNT + 1) + MIN_ACCOUNT_COUNT; i++) {
+      String accountIdStr = "Account[".concat(String.valueOf(i)).concat("]");
       Map<String, StatsSnapshot> containerMap = new HashMap<>();
       long subTotalSize = 0;
       for (int j = 0; j < random.nextInt(MAX_CONTAINER_COUNT - MIN_CONTAINER_COUNT + 1) + MIN_CONTAINER_COUNT; j++) {
+        String containerIdStr = "Container[".concat(String.valueOf(j)).concat("]");
         long validSize = random.nextInt(2501) + 500;
         subTotalSize += validSize;
-        containerMap.put("containerId_".concat(String.valueOf(j)), new StatsSnapshot(validSize, null));
+        containerMap.put(containerIdStr, new StatsSnapshot(validSize, null));
+        accountContainerPairMap.put(accountIdStr + Utils.ACCOUNT_CONTAINER_SEPARATOR + containerIdStr,
+            new StatsSnapshot(validSize, null));
       }
       totalSize += subTotalSize;
-      accountMap.put("accountId_".concat(String.valueOf(i)), new StatsSnapshot(subTotalSize, containerMap));
+      accountMap.put(accountIdStr, new StatsSnapshot(subTotalSize, containerMap));
     }
-    return new StatsSnapshot(totalSize, accountMap);
+    Map<StatsReportType, StatsSnapshot> allSnapshots = new HashMap<>();
+    allSnapshots.put(StatsReportType.PARTITION_CLASS_REPORT, new StatsSnapshot(totalSize, accountContainerPairMap));
+    allSnapshots.put(StatsReportType.ACCOUNT_REPORT, new StatsSnapshot(totalSize, accountMap));
+    return allSnapshots;
   }
 
   /**
@@ -376,11 +404,11 @@ public class StatsManagerTest {
    * Mocked {@link StoreStats} to return predefined {@link StatsSnapshot} when getStatsSnapshot is called.
    */
   private class MockStoreStats implements StoreStats {
-    private final StatsSnapshot statsSnapshot;
+    private final Map<StatsReportType, StatsSnapshot> snapshotsByType;
     private final boolean throwStoreException;
 
-    MockStoreStats(StatsSnapshot statsSnapshot, boolean throwStoreException) {
-      this.statsSnapshot = statsSnapshot;
+    MockStoreStats(Map<StatsReportType, StatsSnapshot> snapshotsByType, boolean throwStoreException) {
+      this.snapshotsByType = snapshotsByType;
       this.throwStoreException = throwStoreException;
     }
 
@@ -390,11 +418,12 @@ public class StatsManagerTest {
     }
 
     @Override
-    public StatsSnapshot getStatsSnapshot(long referenceTimeInMs) throws StoreException {
+    public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes,
+        long referenceTimeInMs) throws StoreException {
       if (throwStoreException) {
         throw new StoreException("Test", StoreErrorCodes.Unknown_Error);
       }
-      return statsSnapshot;
+      return snapshotsByType;
     }
   }
 }

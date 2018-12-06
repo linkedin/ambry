@@ -26,6 +26,7 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -135,8 +136,9 @@ class StatsManager {
     } else {
       try {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
-        StatsSnapshot statsSnapshot = store.getStoreStats().getStatsSnapshot(time.milliseconds());
-        StatsSnapshot.aggregate(aggregatedSnapshot, statsSnapshot);
+        Map<StatsReportType, StatsSnapshot> snapshotsByType =
+            store.getStoreStats().getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds());
+        StatsSnapshot.aggregate(aggregatedSnapshot, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {
         unreachableStores.add(partitionId.toString());
@@ -157,7 +159,9 @@ class StatsManager {
       unreachableStores.add(partitionId.toString());
     } else {
       try {
-        statsSnapshot = store.getStoreStats().getStatsSnapshot(time.milliseconds());
+        Map<StatsReportType, StatsSnapshot> snapshotsByType =
+            store.getStoreStats().getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds());
+        statsSnapshot = snapshotsByType.get(StatsReportType.ACCOUNT_REPORT);
       } catch (StoreException e) {
         logger.error("StoreException on fetching stats snapshot for store {}", store, e);
         unreachableStores.add(partitionId.toString());

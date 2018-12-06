@@ -77,6 +77,10 @@ public class Utils {
    * The highest possible port number.
    */
   public static final int MAX_PORT_NUM = 65535;
+  /**
+   * The separator used to construct account-container pair in stats report.
+   */
+  public static final String ACCOUNT_CONTAINER_SEPARATOR = "___";
   private static final String CLIENT_RESET_EXCEPTION_MSG = "Connection reset by peer";
   private static final String CLIENT_BROKEN_PIPE_EXCEPTION_MSG = "Broken pipe";
   private static final Logger logger = LoggerFactory.getLogger(Utils.class);
