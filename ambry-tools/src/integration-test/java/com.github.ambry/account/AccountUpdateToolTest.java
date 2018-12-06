@@ -210,9 +210,9 @@ public class AccountUpdateToolTest {
   public void testBadJsonFile() throws Exception {
     String badJsonFile = tempDirPath + File.separator + "badJsonFile.json";
     writeStringToFile("Invalid json string", badJsonFile);
-    try {
-      new AccountUpdateTool(ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000,
-          Container.getCurrentJsonVersion()).updateAccountsFromFile(badJsonFile);
+    try (AccountService accountService = AccountUpdateTool.getHelixAccountService(ZK_SERVER_ADDRESS,
+        HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000)) {
+      new AccountUpdateTool(accountService, Container.getCurrentJsonVersion()).updateAccountsFromFile(badJsonFile);
       fail("Should have thrown.");
     } catch (Exception e) {
       // expected
@@ -230,8 +230,10 @@ public class AccountUpdateToolTest {
     String jsonFilePath = tempDirPath + File.separator + UUID.randomUUID().toString() + ".json";
     writeAccountsToFile(accounts, jsonFilePath);
     accountUpdateConsumer.reset();
-    new AccountUpdateTool(ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000,
-        containerJsonVersion).updateAccountsFromFile(jsonFilePath);
+    try (AccountService accountService = AccountUpdateTool.getHelixAccountService(ZK_SERVER_ADDRESS,
+        HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000)) {
+      new AccountUpdateTool(accountService, containerJsonVersion).updateAccountsFromFile(jsonFilePath);
+    }
     accountUpdateConsumer.awaitUpdate();
   }
 

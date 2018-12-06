@@ -25,9 +25,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.stream.Stream;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -105,7 +106,7 @@ import static com.github.ambry.account.AccountUtils.*;
  *   </pre>
  * </p>
  */
-public class AccountUpdateTool implements Closeable {
+public class AccountUpdateTool {
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 5000;
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
   private static final String DEFAULT_LOCAL_BACKUP_DIR = "/tmp/account-update-tool-backups";
@@ -192,7 +193,7 @@ public class AccountUpdateTool implements Closeable {
       parser.printHelpOn(System.out);
       System.exit(0);
     }
-    ToolUtils.ensureOrExit(Collections.singletonList(zkServerOpt), options, parser);
+    ToolUtils.ensureOrExit(Arrays.asList(zkServerOpt, storePathOpt), options, parser);
     String storePath = options.valueOf(storePathOpt);
     String zkServer = options.valueOf(zkServerOpt);
     String backupDir = options.valueOf(backupDirOpt);
@@ -206,8 +207,9 @@ public class AccountUpdateTool implements Closeable {
       parser.printHelpOn(System.err);
       System.exit(1);
     }
-    try (AccountUpdateTool accountUpdateTool = new AccountUpdateTool(zkServer, storePath, backupDir,
-        zkConnectionTimeoutMs, zkSessionTimeoutMs, containerJsonVersion)) {
+    try (AccountService accountService = getHelixAccountService(zkServer, storePath, backupDir, zkConnectionTimeoutMs,
+        zkSessionTimeoutMs)) {
+      AccountUpdateTool accountUpdateTool = new AccountUpdateTool(accountService, containerJsonVersion);
       if (accountJsonPath != null) {
         accountUpdateTool.updateAccountsFromFile(accountJsonPath);
       } else {
@@ -221,28 +223,13 @@ public class AccountUpdateTool implements Closeable {
 
   /**
    * Constructor.
-   * @param zkServer The {@code ZooKeeper} server address to connect.
-   * @param storePath The root path on the {@code ZooKeeper} for account data.
-   * @param backupDir The path to the local backup directory.
-   * @param zkConnectionTimeoutMs The connection timeout in millisecond for connecting {@code ZooKeeper} server.
-   * @param zkSessionTimeoutMs The session timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @param accountService The {@link AccountService} to use.
    * @param containerJsonVersion The {@link Container} JSON version to write in.
    * @throws Exception
    */
-  AccountUpdateTool(String zkServer, String storePath, String backupDir, int zkConnectionTimeoutMs,
-      int zkSessionTimeoutMs, short containerJsonVersion) {
+  AccountUpdateTool(AccountService accountService, short containerJsonVersion) {
     Container.setCurrentJsonVersion(containerJsonVersion);
-    Properties helixConfigProps = new Properties();
-    helixConfigProps.setProperty(
-        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
-        String.valueOf(zkConnectionTimeoutMs));
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
-        String.valueOf(zkSessionTimeoutMs));
-    helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, zkServer);
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", storePath);
-    helixConfigProps.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, backupDir);
-    VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
-    accountService = new HelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry()).getAccountService();
+    this.accountService = accountService;
   }
 
   /**
@@ -255,7 +242,9 @@ public class AccountUpdateTool implements Closeable {
     Path accountJsonPath = Files.createTempFile("account-update-", ".json");
     JSONArray accountsToEdit = new JSONArray();
     accountNames.stream()
-        .map(accountName -> accountService.getAccountByName(accountName).toJson(false))
+        .map(accountName -> Optional.ofNullable(accountService.getAccountByName(accountName))
+            .orElseThrow(() -> new IllegalArgumentException("Could not find account: " + accountName))
+            .toJson(false))
         .forEach(accountsToEdit::put);
     try (BufferedWriter writer = Files.newBufferedWriter(accountJsonPath)) {
       accountsToEdit.write(writer, 2, 0);
@@ -294,9 +283,28 @@ public class AccountUpdateTool implements Closeable {
     }
   }
 
-  @Override
-  public void close() throws IOException {
-    accountService.close();
+  /**
+   * Method to create instances of {@link HelixAccountService}.
+   * @param zkServer The {@code ZooKeeper} server address to connect.
+   * @param storePath The root path on the {@code ZooKeeper} for account data.
+   * @param backupDir The path to the local backup directory.
+   * @param zkConnectionTimeoutMs The connection timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @param zkSessionTimeoutMs The session timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @return the {@link HelixAccountService}.
+   */
+  static AccountService getHelixAccountService(String zkServer, String storePath, String backupDir,
+      int zkConnectionTimeoutMs, int zkSessionTimeoutMs) {
+    Properties helixConfigProps = new Properties();
+    helixConfigProps.setProperty(
+        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
+        String.valueOf(zkConnectionTimeoutMs));
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
+        String.valueOf(zkSessionTimeoutMs));
+    helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, zkServer);
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", storePath);
+    helixConfigProps.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, backupDir);
+    VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    return new HelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry()).getAccountService();
   }
 
   /**
