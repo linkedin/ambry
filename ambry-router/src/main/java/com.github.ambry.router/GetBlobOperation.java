@@ -703,7 +703,7 @@ class GetBlobOperation extends GetOperation {
         ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
         ByteBuffer chunkBuffer = blobData.getStream().getByteBuffer();
 
-        boolean launchedJob = maybeLaunchCryptoJob(chunkBuffer, null, encryptionKey, false);
+        boolean launchedJob = maybeLaunchCryptoJob(chunkBuffer, null, encryptionKey, chunkBlobId);
         if (!launchedJob) {
           chunkIndexToBuffer.put(chunkIndex, filterChunkToRange(chunkBuffer));
           numChunksRetrieved++;
@@ -789,11 +789,11 @@ class GetBlobOperation extends GetOperation {
      * @param dataBuffer to buffer to encrypt or decrypt.
      * @param userMetadata userMetadata of the blob.
      * @param encryptionKey encryption key for the blob. Could be null for non encrypted blob.
-     * @param isSimple {@code true} for simple blob, {@code false} for data chunk.
+     * @param targetBlobId the {@link BlobId} of the blob.
      * @return {@code true} if a crypto job was launched, otherwise {@code false}.
      */
     protected boolean maybeLaunchCryptoJob(ByteBuffer dataBuffer, byte[] userMetadata, ByteBuffer encryptionKey,
-        boolean isSimple) {
+        BlobId targetBlobId) {
       //
       // Three cases to handle:
       // 1) needEncryption false and encryptionKey not null => decrypt buffer
@@ -805,20 +805,18 @@ class GetBlobOperation extends GetOperation {
         return false;
       }
 
-      BlobId theBlobId = isSimple ? blobId : chunkBlobId;
-      String blobDesc = isSimple ? "simple blob " + theBlobId : "data chunk " + theBlobId;
       if (encryptionKey != null && !needEncryption) {
-        logger.trace("Submitting decrypt job for {}", blobDesc);
+        logger.trace("Submitting decrypt job for blob {}", targetBlobId);
         long startTimeMs = System.currentTimeMillis();
         decryptCallbackResultInfo = new DecryptCallBackResultInfo();
         progressTracker.initializeCryptoJobTracker(CryptoJobType.DECRYPTION);
         decryptJobMetricsTracker.onJobSubmission();
-        cryptoJobHandler.submitJob(new DecryptJob(theBlobId, encryptionKey, dataBuffer,
+        cryptoJobHandler.submitJob(new DecryptJob(targetBlobId, encryptionKey, dataBuffer,
             userMetadata != null ? ByteBuffer.wrap(userMetadata) : null, cryptoService, kms, decryptJobMetricsTracker,
             (DecryptJob.DecryptJobResult result, Exception exception) -> {
               routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
               decryptJobMetricsTracker.onJobCallbackProcessingStart();
-              logger.trace("Handling decrypt job call back for {} to set decrypt callback results", blobDesc);
+              logger.trace("Handling decrypt job call back for blob {} to set decrypt callback results", targetBlobId);
               decryptCallbackResultInfo.setResultAndException(result, exception);
               routerCallback.onPollReady();
               decryptJobMetricsTracker.onJobCallbackProcessingComplete();
@@ -828,18 +826,18 @@ class GetBlobOperation extends GetOperation {
         // encryptionKey == null && needEncryption
         // TODO: encrypt buffer if caller wants it
         /*
-        logger.trace("Submitting encrypt job for {}", blobDesc);
+        logger.trace("Submitting encrypt job for blob {}", targetBlobId);
         long startTimeMs = System.currentTimeMillis();
         EncryptCallBackResultInfo encryptCallbackResultInfo = new EncryptCallBackResultInfo();
         progressTracker.initializeCryptoJobTracker(CryptoJobType.ENCRYPTION);
         encryptJobMetricsTracker.onJobSubmission();
         cryptoJobHandler.submitJob(
-            new EncryptJob(theBlobId.getAccountId(), theBlobId.getContainerId(), encryptionKey, dataBuffer,
+            new EncryptJob(targetBlobId.getAccountId(), targetBlobId.getContainerId(), encryptionKey, dataBuffer,
                 userMetadata != null ? ByteBuffer.wrap(userMetadata) : null, cryptoService, kms,
                 encryptJobMetricsTracker, (EncryptJob.EncryptJobResult result, Exception exception) -> {
               routerMetrics.encryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
               encryptJobMetricsTracker.onJobCallbackProcessingStart();
-              logger.trace("Handling encrypt job call back for {} to set encrypt callback results", blobDesc);
+              logger.trace("Handling encrypt job call back for blob {} to set encrypt callback results", targetBlobId);
               encryptCallbackResultInfo.setResultAndException(result, exception);
               routerCallback.onPollReady();
               encryptJobMetricsTracker.onJobCallbackProcessingComplete();
@@ -1290,7 +1288,7 @@ class GetBlobOperation extends GetOperation {
         chunkIndex = 0;
         numChunksTotal = 1;
         ByteBuffer dataBuffer = blobData.getStream().getByteBuffer();
-        boolean launchedJob = maybeLaunchCryptoJob(dataBuffer, userMetadata, encryptionKey, true);
+        boolean launchedJob = maybeLaunchCryptoJob(dataBuffer, userMetadata, encryptionKey, blobId);
         if (!launchedJob) {
           chunkIndexToBuffer.put(0, filterChunkToRange(dataBuffer));
           numChunksRetrieved = 1;
