@@ -67,20 +67,30 @@ public class GetBlobOptionsTest {
   /** Test the rawMode option */
   @Test
   public void testRawModeOption() {
-    GetBlobOptions options =
-        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).rawMode(true).build();
-    assertEquals("RawMode from options not as expected.", true, options.isRawMode());
+    for (Boolean boolVal : TestUtils.BOOLEAN_VALUES) {
+      GetBlobOptions options =
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).rawMode(boolVal).build();
+      assertEquals("RawMode from options not as expected.", boolVal, options.isRawMode());
+    }
   }
 
   /**
-   * Test that using rawMode and range together fails.
+   * Test rawMode with invalid combinations.
    * @throws Exception
    */
   @Test
-  public void testRawModeWithRange() throws Exception {
+  public void testRawModeWithInvalidCombinations() throws Exception {
+    // Test that using rawMode and range together fails.
     GetBlobOptionsBuilder options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .range(ByteRange.fromOffsetRange(0, 1))
         .rawMode(true);
+    TestUtils.assertException(IllegalArgumentException.class, () -> options.build(), null);
+
+    // Test that using rawMode fails with OperationType other than ALL.
+    options.range(null);
+    options.operationType(GetBlobOptions.OperationType.BlobInfo);
+    TestUtils.assertException(IllegalArgumentException.class, () -> options.build(), null);
+    options.operationType(GetBlobOptions.OperationType.Data);
     TestUtils.assertException(IllegalArgumentException.class, () -> options.build(), null);
   }
 
@@ -117,8 +127,11 @@ public class GetBlobOptionsTest {
     assertObjectsAreDistinct(a, b);
 
     // Change rawMode (need to omit range)
-    a = new GetBlobOptionsBuilder().operationType(type).getOption(getOption).build();
-    b = new GetBlobOptionsBuilder().operationType(type).getOption(getOption).rawMode(true).build();
+    a = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).getOption(getOption).build();
+    b = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+        .getOption(getOption)
+        .rawMode(true)
+        .build();
     assertObjectsAreDistinct(a, b);
   }
 
@@ -129,8 +142,7 @@ public class GetBlobOptionsTest {
    */
   private static void assertObjectsAreDistinct(GetBlobOptions a, GetBlobOptions b) {
     assertThat("GetBlobOptions should not be equal.", a, not(b));
-    // Don't compare hashcodes since collisions are possible.
-    // assertThat("GetBlobOptions hashcodes should not be equal", a.hashCode(), not(b.hashCode()));
     assertThat("GetBlobOptions toString should not be equal", a.toString(), not(b.toString()));
+    // Note: don't compare hashcodes since collisions are possible.
   }
 }

@@ -43,6 +43,9 @@ public class GetBlobOptions {
     if (rawMode && range != null) {
       throw new IllegalArgumentException("Raw mode and range cannot be used together");
     }
+    if (rawMode && operationType != OperationType.All) {
+      throw new IllegalArgumentException("Raw mode can be used only with OperationType.ALL");
+    }
     this.operationType = operationType;
     this.getOption = getOption;
     this.range = range;

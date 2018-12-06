@@ -456,7 +456,7 @@ class GetBlobOperation extends GetOperation {
           routerMetrics.compositeBlobGetCount.inc();
         }
       } else {
-        // TODO: how to track these counts in raw mode?
+        routerMetrics.rawBlobGetCount.inc();
       }
     }
   }
