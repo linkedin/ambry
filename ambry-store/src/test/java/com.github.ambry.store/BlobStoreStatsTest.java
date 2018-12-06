@@ -778,7 +778,8 @@ public class BlobStoreStatsTest {
         subTotal += randValue;
         innerUtilizationMap.put(String.valueOf(j), randValue);
         containerSubMap.put(String.valueOf(j), new StatsSnapshot(randValue, null));
-        accountContainerPairSubMap.put(String.valueOf(i) + "_" + String.valueOf(j), new StatsSnapshot(randValue, null));
+        accountContainerPairSubMap.put(String.valueOf(i) + Utils.ACCOUNT_CONTAINER_SEPARATOR + String.valueOf(j),
+            new StatsSnapshot(randValue, null));
       }
       total += subTotal;
       utilizationMap.put(String.valueOf(i), innerUtilizationMap);
@@ -858,7 +859,8 @@ public class BlobStoreStatsTest {
             Map<String, Long> containerUtilizationMap = accountToContainerEntry.getValue();
             for (Map.Entry<String, Long> containerEntry : containerUtilizationMap.entrySet()) {
               // Ensure account_container value and name in CONTAINER_SNAPSHOT match that in UtilizationMap
-              String accountContainerName = accountToContainerEntry.getKey() + "_" + containerEntry.getKey();
+              String accountContainerName =
+                  accountToContainerEntry.getKey() + Utils.ACCOUNT_CONTAINER_SEPARATOR + containerEntry.getKey();
               assertNotNull("Expected account_container pair: " + accountContainerName + " doesn't exist",
                   acctContPairToSnapshot.get(accountContainerName));
               assertEquals("Mismatch on value of container in container snapshot",

@@ -125,7 +125,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     for (Map.Entry<String, Map<String, Long>> accountEntry : utilizationMap.entrySet()) {
       for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
         totalSize += containerEntry.getValue();
-        containerValidSizeMap.put(accountEntry.getKey() + "_" + containerEntry.getKey(),
+        containerValidSizeMap.put(accountEntry.getKey() + Utils.ACCOUNT_CONTAINER_SEPARATOR + containerEntry.getKey(),
             new StatsSnapshot(containerEntry.getValue(), null));
       }
     }

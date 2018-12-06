@@ -42,6 +42,7 @@ import com.github.ambry.store.TimeRange;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
@@ -242,7 +243,7 @@ public class StatsManagerTest {
    */
   private Map<StatsReportType, StatsSnapshot> generateRandomSnapshot() {
     Map<String, StatsSnapshot> accountMap = new HashMap<>();
-    Map<String, StatsSnapshot> account_container_Map = new HashMap<>();
+    Map<String, StatsSnapshot> accountContainerPairMap = new HashMap<>();
     long totalSize = 0;
     for (int i = 0; i < random.nextInt(MAX_ACCOUNT_COUNT - MIN_ACCOUNT_COUNT + 1) + MIN_ACCOUNT_COUNT; i++) {
       String accountIdStr = "Account[".concat(String.valueOf(i)).concat("]");
@@ -253,13 +254,14 @@ public class StatsManagerTest {
         long validSize = random.nextInt(2501) + 500;
         subTotalSize += validSize;
         containerMap.put(containerIdStr, new StatsSnapshot(validSize, null));
-        account_container_Map.put(accountIdStr + "_" + containerIdStr, new StatsSnapshot(validSize, null));
+        accountContainerPairMap.put(accountIdStr + Utils.ACCOUNT_CONTAINER_SEPARATOR + containerIdStr,
+            new StatsSnapshot(validSize, null));
       }
       totalSize += subTotalSize;
       accountMap.put(accountIdStr, new StatsSnapshot(subTotalSize, containerMap));
     }
     Map<StatsReportType, StatsSnapshot> allSnapshots = new HashMap<>();
-    allSnapshots.put(StatsReportType.PARTITION_CLASS_REPORT, new StatsSnapshot(totalSize, account_container_Map));
+    allSnapshots.put(StatsReportType.PARTITION_CLASS_REPORT, new StatsSnapshot(totalSize, accountContainerPairMap));
     allSnapshots.put(StatsReportType.ACCOUNT_REPORT, new StatsSnapshot(totalSize, accountMap));
     return allSnapshots;
   }
