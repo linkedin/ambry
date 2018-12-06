@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
@@ -44,11 +45,14 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONString;
+import org.json.JSONTokener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -583,16 +587,7 @@ public class Utils {
    * @throws IOException
    */
   public static void writeStringToFile(String string, String path) throws IOException {
-    FileWriter fileWriter = null;
-    try {
-      File file = new File(path);
-      fileWriter = new FileWriter(file);
-      fileWriter.write(string);
-    } finally {
-      if (fileWriter != null) {
-        fileWriter.close();
-      }
-    }
+    Files.write(Paths.get(path), string.getBytes());
   }
 
   /**
@@ -627,30 +622,7 @@ public class Utils {
    * @throws IOException
    */
   public static String readStringFromFile(String path) throws IOException {
-    File file = new File(path);
-    byte[] encoded = new byte[(int) file.length()];
-    DataInputStream ds = null;
-    try {
-      ds = new DataInputStream(new FileInputStream(file));
-      ds.readFully(encoded);
-    } finally {
-      if (ds != null) {
-        ds.close();
-      }
-    }
-    return Charset.defaultCharset().decode(ByteBuffer.wrap(encoded)).toString();
-  }
-
-  /**
-   * Reads JSON object (in string format) from specified file.
-   *
-   * @param path file path to read
-   * @return JSONObject read from specified file
-   * @throws IOException
-   * @throws JSONException
-   */
-  public static JSONObject readJsonFromFile(String path) throws IOException, JSONException {
-    return new JSONObject(readStringFromFile(path));
+    return new String(Files.readAllBytes(Paths.get(path)));
   }
 
   /**

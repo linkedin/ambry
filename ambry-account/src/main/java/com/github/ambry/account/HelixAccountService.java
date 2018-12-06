@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.github.ambry.commons.Notifier;
+import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.utils.Pair;
 import java.io.BufferedWriter;
@@ -108,6 +109,7 @@ class HelixAccountService implements AccountService {
   private final HelixAccountServiceConfig config;
   private final Path backupDirPath;
   private final AtomicBoolean open = new AtomicBoolean(true);
+  private final TopicListener<String> changeTopicListener = this::onAccountChangeMessage;
 
   /**
    * <p>
@@ -139,7 +141,7 @@ class HelixAccountService implements AccountService {
 
     backupDirPath = config.backupDir.isEmpty() ? null : Files.createDirectories(Paths.get(config.backupDir));
     if (notifier != null) {
-      notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, this::onAccountChangeMessage);
+      notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
     } else {
       logger.warn("Notifier is null. Account updates cannot be notified to other entities. Local account cache may not "
           + "be in sync with remote account data.");
@@ -254,6 +256,9 @@ class HelixAccountService implements AccountService {
   @Override
   public void close() {
     if (open.compareAndSet(true, false)) {
+      if (notifier != null) {
+        notifier.unsubscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
+      }
       if (scheduler != null) {
         shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMs, TimeUnit.MILLISECONDS);
       }
@@ -268,7 +273,11 @@ class HelixAccountService implements AccountService {
    * @param message The message for the topic.
    */
   private void onAccountChangeMessage(String topic, String message) {
-    checkOpen();
+    if (!open.get()) {
+      // take no action instead of throwing an exception to silence noisy log messages when a message is received while
+      // closing the AccountService.
+      return;
+    }
     logger.trace("Start to process message={} for topic={}", message, topic);
     try {
       switch (message) {

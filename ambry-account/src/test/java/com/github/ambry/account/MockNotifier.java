@@ -28,7 +28,7 @@ import java.util.Set;
  */
 public class MockNotifier<T> implements Notifier<T> {
 
-  private final Map<String, Set<TopicListener<T>>> topicToListenersMap = new HashMap<>();
+  final Map<String, Set<TopicListener<T>>> topicToListenersMap = new HashMap<>();
 
   @Override
   public boolean publish(String topic, T message) {
