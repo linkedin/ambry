@@ -349,10 +349,11 @@ class NonBlockingRouter implements Router {
     };
     currentOperationsCount.incrementAndGet();
     currentBackgroundOperationsCount.incrementAndGet();
-    GetBlobOptionsInternal options =
-        new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.Include_All, null),
-            true, routerMetrics.ageAtDelete);
-    backgroundDeleter.getBlob(blobIdStr, options, callback);
+    GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+        .getOption(GetOption.Include_All)
+        .build();
+    GetBlobOptionsInternal optionsInternal = new GetBlobOptionsInternal(options, true, routerMetrics.ageAtDelete);
+    backgroundDeleter.getBlob(blobIdStr, optionsInternal, callback);
   }
 
   /**
@@ -700,11 +701,13 @@ class NonBlockingRouter implements Router {
           }
         };
 
-        GetBlobOptionsInternal options =
-            new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None, null), true,
-                routerMetrics.ageAtTtlUpdate);
+        GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+            .getOption(GetOption.None)
+            .build();
+        GetBlobOptionsInternal optionsInternal =
+            new GetBlobOptionsInternal(options, true, routerMetrics.ageAtTtlUpdate);
         try {
-          getBlob(blobIdStr, options, internalCallback);
+          getBlob(blobIdStr, optionsInternal, internalCallback);
         } catch (RouterException e) {
           completeUpdateBlobTtlOperation(e, futureResult, callback);
         }

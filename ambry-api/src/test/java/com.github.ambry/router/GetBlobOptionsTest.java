@@ -15,6 +15,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.utils.TestUtils;
 import org.junit.Test;
 
 import static org.hamcrest.CoreMatchers.*;
@@ -63,6 +64,36 @@ public class GetBlobOptionsTest {
     assertEquals("GetOption from options not as expected.", GetOption.Include_All, options.getGetOption());
   }
 
+  /** Test the rawMode option */
+  @Test
+  public void testRawModeOption() {
+    for (Boolean boolVal : TestUtils.BOOLEAN_VALUES) {
+      GetBlobOptions options =
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).rawMode(boolVal).build();
+      assertEquals("RawMode from options not as expected.", boolVal, options.isRawMode());
+    }
+  }
+
+  /**
+   * Test rawMode with invalid combinations.
+   * @throws Exception
+   */
+  @Test
+  public void testRawModeWithInvalidCombinations() throws Exception {
+    // Test that using rawMode and range together fails.
+    GetBlobOptionsBuilder options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+        .range(ByteRange.fromOffsetRange(0, 1))
+        .rawMode(true);
+    TestUtils.assertException(IllegalArgumentException.class, () -> options.build(), null);
+
+    // Test that using rawMode fails with OperationType other than ALL.
+    options.range(null);
+    options.operationType(GetBlobOptions.OperationType.BlobInfo);
+    TestUtils.assertException(IllegalArgumentException.class, () -> options.build(), null);
+    options.operationType(GetBlobOptions.OperationType.Data);
+    TestUtils.assertException(IllegalArgumentException.class, () -> options.build(), null);
+  }
+
   /**
    * Test toString, equals, and hashCode methods.
    */
@@ -75,21 +106,43 @@ public class GetBlobOptionsTest {
     GetBlobOptions b = new GetBlobOptionsBuilder().operationType(type).getOption(getOption).range(byteRange).build();
     assertEquals("GetBlobOptions should be equal", a, b);
     assertEquals("GetBlobOptions hashcodes should be equal", a.hashCode(), b.hashCode());
-    assertEquals("toString output not as expected",
-        "GetBlobOptions{operationType=" + type + ", getOption=" + getOption + ", range=" + byteRange.toString() + "}",
-        a.toString());
+    assertEquals("GetBlobOptions toString should be equal", a.toString(), b.toString());
 
-    b = new GetBlobOptionsBuilder().operationType(type)
-        .getOption(getOption)
-        .range(ByteRange.fromOffsetRange(2, 7))
-        .build();
-    assertThat("GetBlobOptions should not be equal.", a, not(b));
+    // Change OperationType
     b = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .getOption(getOption)
         .range(byteRange)
         .build();
-    assertThat("GetBlobOptions should not be equal.", a, not(b));
+    assertObjectsAreDistinct(a, b);
+
+    // Change GetOption
     b = new GetBlobOptionsBuilder().operationType(type).getOption(GetOption.Include_All).range(byteRange).build();
+    assertObjectsAreDistinct(a, b);
+
+    // Change range
+    b = new GetBlobOptionsBuilder().operationType(type)
+        .getOption(getOption)
+        .range(ByteRange.fromOffsetRange(2, 7))
+        .build();
+    assertObjectsAreDistinct(a, b);
+
+    // Change rawMode (need to omit range)
+    a = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).getOption(getOption).build();
+    b = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+        .getOption(getOption)
+        .rawMode(true)
+        .build();
+    assertObjectsAreDistinct(a, b);
+  }
+
+  /**
+   * Verify that two instances of GetBlobOptions are not equal and have distinct toStrings.
+   * @param a first instance
+   * @param b second instance
+   */
+  private static void assertObjectsAreDistinct(GetBlobOptions a, GetBlobOptions b) {
     assertThat("GetBlobOptions should not be equal.", a, not(b));
+    assertThat("GetBlobOptions toString should not be equal", a.toString(), not(b.toString()));
+    // Note: don't compare hashcodes since collisions are possible.
   }
 }

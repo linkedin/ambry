@@ -158,6 +158,7 @@ public class NonBlockingRouterMetrics {
   public final Counter simpleBlobGetCount;
   public final Counter compositeBlobPutCount;
   public final Counter compositeBlobGetCount;
+  public final Counter rawBlobGetCount;
 
   // AdaptiveOperationTracker metrics
   public final Histogram getBlobLocalColoLatencyMs;
@@ -373,6 +374,7 @@ public class NonBlockingRouterMetrics {
     compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));
     compositeBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "CompositeBlobGetCount"));
     skippedGetBlobCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "SkippedGetBlobCount"));
+    rawBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "RawBlobGetCount"));
 
     // Track metrics at the DataNode level.
     dataNodeToMetrics = new HashMap<>();

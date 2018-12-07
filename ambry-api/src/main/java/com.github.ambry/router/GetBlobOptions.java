@@ -26,20 +26,37 @@ public class GetBlobOptions {
   private final OperationType operationType;
   private final GetOption getOption;
   private final ByteRange range;
+  // Flag indicating whether to return the raw blob payload without deserialization.
+  private final boolean rawMode;
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
    * @param operationType the {@link OperationType} for this request. This must be non-null.
    * @param getOption the {@link GetOption} associated with the request.
    * @param range a {@link ByteRange} for this get request. This can be null, if the entire blob is desired.
+   * @param rawMode a system flag indicating that the raw bytes should be returned.
    */
-  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range) {
+  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean rawMode) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
+    }
+    if (rawMode && range != null) {
+      throw new IllegalArgumentException("Raw mode and range cannot be used together");
+    }
+    if (rawMode && operationType != OperationType.All) {
+      throw new IllegalArgumentException("Raw mode can be used only with OperationType.ALL");
     }
     this.operationType = operationType;
     this.getOption = getOption;
     this.range = range;
+    this.rawMode = rawMode;
+  }
+
+  /**
+   * @return The value of the rawMode flag.
+   */
+  public boolean isRawMode() {
+    return rawMode;
   }
 
   /**
@@ -65,7 +82,8 @@ public class GetBlobOptions {
 
   @Override
   public String toString() {
-    return "GetBlobOptions{operationType=" + operationType + ", getOption=" + getOption + ", range=" + range + '}';
+    return "GetBlobOptions{operationType=" + operationType + ", getOption=" + getOption + ", range=" + range
+        + ", rawMode=" + rawMode + '}';
   }
 
   @Override
@@ -85,6 +103,9 @@ public class GetBlobOptions {
     if (getOption != that.getOption) {
       return false;
     }
+    if (rawMode != that.rawMode) {
+      return false;
+    }
     return !(range != null ? !range.equals(that.range) : that.range != null);
   }
 
@@ -93,6 +114,7 @@ public class GetBlobOptions {
     int result = operationType.hashCode();
     result = 31 * result + getOption.hashCode();
     result = 31 * result + (range != null ? range.hashCode() : 0);
+    result = 31 * result + Boolean.hashCode(rawMode);
     return result;
   }
 

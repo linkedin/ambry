@@ -348,7 +348,7 @@ class GetBlobInfoOperation extends GetOperation {
               null);
     } else {
       // submit decrypt job
-      progressTracker.initializeDecryptionTracker();
+      progressTracker.initializeCryptoJobTracker(CryptoJobType.DECRYPTION);
       logger.trace("Submitting decrypt job for {}", blobId);
       decryptJobMetricsTracker.onJobSubmission();
       long startTimeMs = System.currentTimeMillis();
@@ -363,14 +363,14 @@ class GetBlobInfoOperation extends GetOperation {
               operationResult = new GetBlobResultInternal(
                   new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array()),
                       null), null);
-              progressTracker.setDecryptionSuccess();
+              progressTracker.setCryptoJobSuccess();
             } else {
               decryptJobMetricsTracker.incrementOperationError();
               logger.trace("Exception {} thrown on decryption for {}", exception, blobId);
               setOperationException(
                   new RouterException("Exception thrown on decrypting the content for " + blobId, exception,
                       RouterErrorCode.UnexpectedInternalError));
-              progressTracker.setDecryptionFailed();
+              progressTracker.setCryptoJobFailed();
             }
             decryptJobMetricsTracker.onJobResultProcessingComplete();
             routerCallback.onPollReady();
