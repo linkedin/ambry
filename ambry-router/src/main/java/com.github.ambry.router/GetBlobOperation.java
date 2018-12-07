@@ -796,16 +796,16 @@ class GetBlobOperation extends GetOperation {
         BlobId targetBlobId) {
       //
       // Three cases to handle:
-      // 1) needEncryption false and encryptionKey not null => decrypt buffer
-      // 2) needEncryption true and encryptionKey is null => encrypt buffer (later)
+      // 1) rawMode false and encryptionKey not null => decrypt buffer
+      // 2) rawMode true and encryptionKey is null => encrypt buffer (later)
       // 3) other cases => leave buffer as is
       //
-      boolean needEncryption = options.getBlobOptions.isRawMode();
-      if ((encryptionKey == null && !needEncryption) || (encryptionKey != null && needEncryption)) {
+      boolean rawMode = options.getBlobOptions.isRawMode();
+      if ((encryptionKey == null && !rawMode) || (encryptionKey != null && rawMode)) {
         return false;
       }
 
-      if (encryptionKey != null && !needEncryption) {
+      if (encryptionKey != null && !rawMode) {
         logger.trace("Submitting decrypt job for blob {}", targetBlobId);
         long startTimeMs = System.currentTimeMillis();
         decryptCallbackResultInfo = new DecryptCallBackResultInfo();
@@ -823,26 +823,8 @@ class GetBlobOperation extends GetOperation {
             }));
         return true;
       } else {
-        // encryptionKey == null && needEncryption
+        // encryptionKey == null && rawMode
         // TODO: encrypt buffer if caller wants it
-        /*
-        logger.trace("Submitting encrypt job for blob {}", targetBlobId);
-        long startTimeMs = System.currentTimeMillis();
-        EncryptCallBackResultInfo encryptCallbackResultInfo = new EncryptCallBackResultInfo();
-        progressTracker.initializeCryptoJobTracker(CryptoJobType.ENCRYPTION);
-        encryptJobMetricsTracker.onJobSubmission();
-        cryptoJobHandler.submitJob(
-            new EncryptJob(targetBlobId.getAccountId(), targetBlobId.getContainerId(), encryptionKey, dataBuffer,
-                userMetadata != null ? ByteBuffer.wrap(userMetadata) : null, cryptoService, kms,
-                encryptJobMetricsTracker, (EncryptJob.EncryptJobResult result, Exception exception) -> {
-              routerMetrics.encryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
-              encryptJobMetricsTracker.onJobCallbackProcessingStart();
-              logger.trace("Handling encrypt job call back for blob {} to set encrypt callback results", targetBlobId);
-              encryptCallbackResultInfo.setResultAndException(result, exception);
-              routerCallback.onPollReady();
-              encryptJobMetricsTracker.onJobCallbackProcessingComplete();
-            }));
-            */
         return false;
       }
     }

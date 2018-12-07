@@ -113,18 +113,18 @@ public class GetBlobOptionsTest {
         .getOption(getOption)
         .range(byteRange)
         .build();
-    assertObjectsAreDistinct(a, b);
+    assertOptionsAreDistinct(a, b);
 
     // Change GetOption
     b = new GetBlobOptionsBuilder().operationType(type).getOption(GetOption.Include_All).range(byteRange).build();
-    assertObjectsAreDistinct(a, b);
+    assertOptionsAreDistinct(a, b);
 
     // Change range
     b = new GetBlobOptionsBuilder().operationType(type)
         .getOption(getOption)
         .range(ByteRange.fromOffsetRange(2, 7))
         .build();
-    assertObjectsAreDistinct(a, b);
+    assertOptionsAreDistinct(a, b);
 
     // Change rawMode (need to omit range)
     a = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).getOption(getOption).build();
@@ -132,7 +132,7 @@ public class GetBlobOptionsTest {
         .getOption(getOption)
         .rawMode(true)
         .build();
-    assertObjectsAreDistinct(a, b);
+    assertOptionsAreDistinct(a, b);
   }
 
   /**
@@ -140,7 +140,7 @@ public class GetBlobOptionsTest {
    * @param a first instance
    * @param b second instance
    */
-  private static void assertObjectsAreDistinct(GetBlobOptions a, GetBlobOptions b) {
+  private static void assertOptionsAreDistinct(GetBlobOptions a, GetBlobOptions b) {
     assertThat("GetBlobOptions should not be equal.", a, not(b));
     assertThat("GetBlobOptions toString should not be equal", a.toString(), not(b.toString()));
     // Note: don't compare hashcodes since collisions are possible.
