@@ -62,6 +62,8 @@ public class AccountUpdateToolTest {
   private static final String HELIX_STORE_ROOT_PATH = "/ambry/defaultCluster/helixPropertyStore";
   private static final String BACKUP_DIR;
   private static final int LATCH_TIMEOUT_MS = 1000;
+  private static final int ZK_CONNECTION_TIMEOUT_MS = 5000;
+  private static final int ZK_SESSION_TIMEOUT_MS = 2000;
   private static final Properties helixConfigProps = new Properties();
   private static final VerifiableProperties vHelixConfigProps;
   private static final HelixPropertyStoreConfig storeConfig;
@@ -211,7 +213,7 @@ public class AccountUpdateToolTest {
     String badJsonFile = tempDirPath + File.separator + "badJsonFile.json";
     writeStringToFile("Invalid json string", badJsonFile);
     try (AccountService accountService = AccountUpdateTool.getHelixAccountService(ZK_SERVER_ADDRESS,
-        HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000)) {
+        HELIX_STORE_ROOT_PATH, BACKUP_DIR, ZK_CONNECTION_TIMEOUT_MS, ZK_SESSION_TIMEOUT_MS)) {
       new AccountUpdateTool(accountService, Container.getCurrentJsonVersion()).updateAccountsFromFile(badJsonFile);
       fail("Should have thrown.");
     } catch (Exception e) {
@@ -231,7 +233,7 @@ public class AccountUpdateToolTest {
     writeAccountsToFile(accounts, jsonFilePath);
     accountUpdateConsumer.reset();
     try (AccountService accountService = AccountUpdateTool.getHelixAccountService(ZK_SERVER_ADDRESS,
-        HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000)) {
+        HELIX_STORE_ROOT_PATH, BACKUP_DIR, ZK_CONNECTION_TIMEOUT_MS, ZK_SESSION_TIMEOUT_MS)) {
       new AccountUpdateTool(accountService, containerJsonVersion).updateAccountsFromFile(jsonFilePath);
     }
     accountUpdateConsumer.awaitUpdate();
