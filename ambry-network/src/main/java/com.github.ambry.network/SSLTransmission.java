@@ -62,7 +62,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     this.sslEngine = sslFactory.createSSLEngine(remoteHost, remotePort, mode);
     this.netReadBuffer = ByteBuffer.allocate(netReadBufferSize());
     this.netWriteBuffer = ByteBuffer.allocate(netWriteBufferSize());
-    this.appReadBuffer = ByteBuffer.allocate(applicationBufferSize());
+    this.appReadBuffer = ByteBuffer.allocate(appReadBufferSize());
     startHandshake();
   }
 
@@ -212,15 +212,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
               getConnectionId(), appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
           handshakeResult = handshakeWrap(write);
           if (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW) {
-            int currentNetWriteBufferSize = netWriteBufferSize();
-            netWriteBuffer.compact();
-            netWriteBuffer = Utils.ensureCapacity(netWriteBuffer, currentNetWriteBufferSize);
-            netWriteBuffer.flip();
-            if (netWriteBuffer.limit() >= currentNetWriteBufferSize) {
-              throw new IllegalStateException(
-                  "Buffer overflow when available data size (" + netWriteBuffer.limit() + ") >= network buffer size ("
-                      + currentNetWriteBufferSize + ")");
-            }
+            handleWrapOverflow();
           } else if (handshakeResult.getStatus() == Status.BUFFER_UNDERFLOW) {
             throw new IllegalStateException("Should not have received BUFFER_UNDERFLOW during handshake WRAP.");
           } else if (handshakeResult.getStatus() == Status.CLOSED) {
@@ -243,20 +235,11 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
           do {
             handshakeResult = handshakeUnwrap(read);
             if (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW) {
-              int currentAppBufferSize = applicationBufferSize();
-              appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentAppBufferSize);
-              if (appReadBuffer.position() > currentAppBufferSize) {
-                throw new IllegalStateException("Buffer underflow when available data size (" + appReadBuffer.position()
-                    + ") > packet buffer size (" + currentAppBufferSize + ")");
-              }
+              handleUnwrapOverflow();
             }
           } while (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW);
           if (handshakeResult.getStatus() == Status.BUFFER_UNDERFLOW) {
-            int currentNetReadBufferSize = netReadBufferSize();
-            netReadBuffer = Utils.ensureCapacity(netReadBuffer, currentNetReadBufferSize);
-            if (netReadBuffer.position() >= currentNetReadBufferSize) {
-              throw new IllegalStateException("Buffer underflow when there is available data");
-            }
+            handleUnwrapUnderflow();
           } else if (handshakeResult.getStatus() == Status.CLOSED) {
             throw new EOFException("SSL handshake status CLOSED during handshake UNWRAP");
           }
@@ -369,15 +352,15 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    */
   private SSLEngineResult handshakeUnwrap(Boolean doRead) throws IOException {
     logger.trace("SSLHandshake handshakeUnwrap {}", getConnectionId());
-    SSLEngineResult result;
-    boolean cont = false;
-    int read = 0;
+    int read;
     if (doRead) {
       read = readFromSocketChannel();
       if (read == -1) {
         throw new EOFException("EOF during handshake.");
       }
     }
+    SSLEngineResult result;
+    boolean cont;
     do {
       //prepare the buffer with the incoming data
       netReadBuffer.flip();
@@ -432,7 +415,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     if (appReadBuffer.position() > 0) {
       read = readFromAppBuffer(dst);
     }
-
     boolean isClosed = false;
     // Each loop reads at most once from the socket.
     while (dst.remaining() > 0) {
@@ -466,29 +448,18 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         if (unwrapResult.getStatus() == Status.OK) {
           read += readFromAppBuffer(dst);
         } else if (unwrapResult.getStatus() == Status.BUFFER_OVERFLOW) {
-          int currentApplicationBufferSize = applicationBufferSize();
-          appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentApplicationBufferSize);
-          if (appReadBuffer.position() >= currentApplicationBufferSize) {
-            throw new IllegalStateException("Buffer overflow when available data size (" + appReadBuffer.position()
-                + ") >= application buffer size (" + currentApplicationBufferSize + ")");
-          }
+          handleUnwrapOverflow();
 
-          // appReadBuffer will extended upto currentApplicationBufferSize
-          // we need to read the existing content into dst before we can do unwrap again. If there are no space in dst
-          // we can break here.
+          // appReadBuffer will extended up to currentApplicationBufferSize.
+          // We need to read the existing content into dst before we can do unwrap again.
+          // If there is no space in dst we can break here.
           if (dst.hasRemaining()) {
             read += readFromAppBuffer(dst);
           } else {
             break;
           }
         } else if (unwrapResult.getStatus() == Status.BUFFER_UNDERFLOW) {
-          int currentNetReadBufferSize = netReadBufferSize();
-          netReadBuffer = Utils.ensureCapacity(netReadBuffer, currentNetReadBufferSize);
-          if (netReadBuffer.position() >= currentNetReadBufferSize) {
-            throw new IllegalStateException(
-                "Buffer underflow when available data size (" + netReadBuffer.position() + ") > packet buffer size ("
-                    + currentNetReadBufferSize + ")");
-          }
+          handleUnwrapUnderflow();
           break;
         } else if (unwrapResult.getStatus() == Status.CLOSED) {
           // If data has been read and unwrapped, return the data. Close will be handled on the next poll.
@@ -581,15 +552,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       written = wrapResult.bytesConsumed();
       flush(netWriteBuffer);
     } else if (wrapResult.getStatus() == Status.BUFFER_OVERFLOW) {
-      int currentNetWriteBufferSize = netWriteBufferSize();
-      netWriteBuffer.compact();
-      netWriteBuffer = Utils.ensureCapacity(netWriteBuffer, currentNetWriteBufferSize);
-      netWriteBuffer.flip();
-      if (netWriteBuffer.limit() >= currentNetWriteBufferSize) {
-        throw new IllegalStateException(
-            "SSL BUFFER_OVERFLOW when available data size (" + netWriteBuffer.limit() + ") >= network buffer size ("
-                + currentNetWriteBufferSize + ")");
-      }
+      handleWrapOverflow();
     } else if (wrapResult.getStatus() == Status.BUFFER_UNDERFLOW) {
       throw new IllegalStateException("SSL BUFFER_UNDERFLOW during write");
     } else if (wrapResult.getStatus() == Status.CLOSED) {
@@ -623,24 +586,77 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   /**
+   * Exposed to support buffer resizing unit tests.
+   * @return the buffer used for reads from network.
+   */
+  ByteBuffer netReadBuffer() {
+    return netReadBuffer;
+  }
+
+  /**
+   * Exposed to support buffer resizing unit tests.
    * @return the recommended size for {@link #netReadBuffer}.
    */
-  private int netReadBufferSize() {
+  int netReadBufferSize() {
     return sslEngine.getSession().getPacketBufferSize();
   }
 
   /**
+   * Exposed to support buffer resizing unit tests.
    * @return the recommended size for {@link #netWriteBuffer}.
    */
-  private int netWriteBufferSize() {
+  int netWriteBufferSize() {
     return sslEngine.getSession().getPacketBufferSize();
   }
 
   /**
+   * Exposed to support buffer resizing unit tests.
    * @return the recommended size for {@link #appReadBuffer}.
    */
-  private int applicationBufferSize() {
+  int appReadBufferSize() {
     return sslEngine.getSession().getApplicationBufferSize();
+  }
+
+  /**
+   * Increase the size of {@link #appReadBuffer}. To be called when an unwrap call returns
+   * {@link Status#BUFFER_OVERFLOW}.
+   */
+  private void handleUnwrapOverflow() {
+    int currentAppReadBufferSize = appReadBufferSize();
+    appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentAppReadBufferSize);
+    if (appReadBuffer.position() >= currentAppReadBufferSize) {
+      throw new IllegalStateException("Buffer overflow when available data size (" + appReadBuffer.position()
+          + ") >= application buffer size (" + currentAppReadBufferSize + ")");
+    }
+  }
+
+  /**
+   * Increase the size of {@link #netReadBuffer}. To be called when an unwrap call returns
+   * {@link Status#BUFFER_UNDERFLOW}.
+   */
+  private void handleUnwrapUnderflow() {
+    int currentNetReadBufferSize = netReadBufferSize();
+    netReadBuffer = Utils.ensureCapacity(netReadBuffer, currentNetReadBufferSize);
+    if (netReadBuffer.position() >= currentNetReadBufferSize) {
+      throw new IllegalStateException(
+          "Buffer underflow when available data size (" + netReadBuffer.position() + ") >= packet buffer size ("
+              + currentNetReadBufferSize + ")");
+    }
+  }
+
+  /**
+   * Increase the size of {@link #netWriteBuffer}. To be called when a wrap call returns {@link Status#BUFFER_OVERFLOW}.
+   */
+  private void handleWrapOverflow() {
+    int currentNetWriteBufferSize = netWriteBufferSize();
+    netWriteBuffer.compact();
+    netWriteBuffer = Utils.ensureCapacity(netWriteBuffer, currentNetWriteBufferSize);
+    netWriteBuffer.flip();
+    if (netWriteBuffer.limit() >= currentNetWriteBufferSize) {
+      throw new IllegalStateException(
+          "Buffer overflow when available data size (" + netWriteBuffer.limit() + ") >= network buffer size ("
+              + currentNetWriteBufferSize + ")");
+    }
   }
 
   private void handshakeFailure() {

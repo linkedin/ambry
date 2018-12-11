@@ -18,15 +18,20 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Time;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import static java.util.Arrays.*;
@@ -35,22 +40,26 @@ import static org.junit.Assert.*;
 
 public class SSLSelectorTest {
 
-  private static final int BUFFER_SIZE = 4 * 1024;
-  private EchoServer server;
+  private static final int DEFAULT_SOCKET_BUF_SIZE = 4 * 1024;
+  private final SSLFactory clientSSLFactory;
+  private final int applicationBufferSize;
+  private final EchoServer server;
   private Selector selector;
-  private File trustStoreFile;
+  private final File trustStoreFile;
 
-  @Before
-  public void setup() throws Exception {
+  public SSLSelectorTest() throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
     SSLConfig sslConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
     SSLConfig clientSSLConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client"));
     SSLFactory serverSSLFactory = SSLFactory.getNewInstance(sslConfig);
-    SSLFactory clientSSLFactory = SSLFactory.getNewInstance(clientSSLConfig);
+    clientSSLFactory = SSLFactory.getNewInstance(clientSSLConfig);
     server = new EchoServer(serverSSLFactory, 18383);
     server.start();
+    applicationBufferSize = clientSSLFactory.createSSLEngine("localhost", server.port, SSLFactory.Mode.CLIENT)
+        .getSession()
+        .getApplicationBufferSize();
     selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), clientSSLFactory);
   }
 
@@ -58,6 +67,7 @@ public class SSLSelectorTest {
   public void teardown() throws Exception {
     selector.close();
     server.close();
+    trustStoreFile.delete();
   }
 
   /**
@@ -66,7 +76,7 @@ public class SSLSelectorTest {
   @Test
   public void testServerDisconnect() throws Exception {
     // connect and do a simple request
-    String connectionId = blockingSSLConnect();
+    String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
     assertEquals("hello", blockingRequest(connectionId, "hello"));
 
     // disconnect
@@ -76,7 +86,7 @@ public class SSLSelectorTest {
     }
 
     // reconnect and do another request
-    connectionId = blockingSSLConnect();
+    connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
     assertEquals("hello", blockingRequest(connectionId, "hello"));
   }
 
@@ -85,13 +95,13 @@ public class SSLSelectorTest {
    */
   @Test
   public void testClientDisconnect() throws Exception {
-    String connectionId = blockingSSLConnect();
+    String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
     selector.disconnect(connectionId);
     selector.poll(10, asList(SelectorTest.createSend(connectionId, "hello1")));
     assertEquals("Request should not have succeeded", 0, selector.completedSends().size());
     assertEquals("There should be a disconnect", 1, selector.disconnected().size());
     assertTrue("The disconnect should be from our node", selector.disconnected().contains(connectionId));
-    connectionId = blockingSSLConnect();
+    connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
     assertEquals("hello2", blockingRequest(connectionId, "hello2"));
   }
 
@@ -100,7 +110,7 @@ public class SSLSelectorTest {
    */
   @Test(expected = IllegalStateException.class)
   public void testCantSendWithInProgress() throws Exception {
-    String connectionId = blockingSSLConnect();
+    String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
     selector.poll(1000L,
         asList(SelectorTest.createSend(connectionId, "test1"), SelectorTest.createSend(connectionId, "test2")));
   }
@@ -110,7 +120,8 @@ public class SSLSelectorTest {
    */
   @Test(expected = IOException.class)
   public void testNoRouteToHost() throws Exception {
-    selector.connect(new InetSocketAddress("asdf.asdf.dsc", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
+    selector.connect(new InetSocketAddress("asdf.asdf.dsc", server.port), DEFAULT_SOCKET_BUF_SIZE,
+        DEFAULT_SOCKET_BUF_SIZE, PortType.SSL);
   }
 
   /**
@@ -119,7 +130,8 @@ public class SSLSelectorTest {
   @Test
   public void testConnectionRefused() throws Exception {
     String connectionId =
-        selector.connect(new InetSocketAddress("localhost", 6668), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
+        selector.connect(new InetSocketAddress("localhost", 6668), DEFAULT_SOCKET_BUF_SIZE, DEFAULT_SOCKET_BUF_SIZE,
+            PortType.SSL);
     while (selector.disconnected().contains(connectionId)) {
       selector.poll(1000L);
     }
@@ -136,7 +148,7 @@ public class SSLSelectorTest {
     // create connections
     ArrayList<String> connectionIds = new ArrayList<String>();
     for (int i = 0; i < conns; i++) {
-      connectionIds.add(blockingSSLConnect());
+      connectionIds.add(blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE));
     }
 
     // send echo requests and receive responses
@@ -180,8 +192,8 @@ public class SSLSelectorTest {
    */
   @Test
   public void testSendLargeRequest() throws Exception {
-    String connectionId = blockingSSLConnect();
-    String big = SelectorTest.randomString(10 * BUFFER_SIZE, new Random());
+    String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
+    String big = SelectorTest.randomString(10 * DEFAULT_SOCKET_BUF_SIZE, new Random());
     assertEquals(big, blockingRequest(connectionId, big));
   }
 
@@ -190,14 +202,14 @@ public class SSLSelectorTest {
    */
   @Test
   public void testEmptyRequest() throws Exception {
-    String connectionId = blockingSSLConnect();
+    String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
     assertEquals("", blockingRequest(connectionId, ""));
   }
 
   @Test
   public void testSSLConnect() throws IOException {
-    String connectionId =
-        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
+    String connectionId = selector.connect(new InetSocketAddress("localhost", server.port), DEFAULT_SOCKET_BUF_SIZE,
+        DEFAULT_SOCKET_BUF_SIZE, PortType.SSL);
     while (!selector.connected().contains(connectionId)) {
       selector.poll(10000L);
     }
@@ -206,33 +218,154 @@ public class SSLSelectorTest {
 
   @Test
   public void testCloseAfterConnectCall() throws IOException {
-    String connectionId =
-        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
+    String connectionId = selector.connect(new InetSocketAddress("localhost", server.port), DEFAULT_SOCKET_BUF_SIZE,
+        DEFAULT_SOCKET_BUF_SIZE, PortType.SSL);
     selector.close(connectionId);
     selector.poll(0);
     Assert.assertTrue("Channel should have been added to disconnected list",
         selector.disconnected().contains(connectionId));
   }
 
+  /**
+   * selector.poll() should be able to fetch more data than netReadBuffer from the socket.
+   */
+  @Test
+  public void testSelectorPollReadSize() throws Exception {
+    for (int socketBufSize : new int[]{applicationBufferSize, applicationBufferSize * 3, applicationBufferSize - 10}) {
+      String connectionId = blockingSSLConnect(socketBufSize);
+      String message =
+          SelectorTest.randomString(socketBufSize * 2 + TestUtils.RANDOM.nextInt(socketBufSize), TestUtils.RANDOM);
+
+      // Did not count the exact number of polls to completion since its hard to make that test deterministic.
+      // i.e. EchoServer could respond slower than expected.
+      assertEquals("Wrong echoed response", message, blockingRequest(connectionId, message));
+    }
+  }
+
+  /**
+   * Tests handling of BUFFER_UNDERFLOW during unwrap when network read buffer is smaller than SSL session packet buffer size.
+   */
+  @Test
+  public void testNetReadBufferResize() throws Exception {
+    useCustomBufferSizeSelector(10, null, null);
+    String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
+    String message = SelectorTest.randomString(5 * applicationBufferSize, new Random());
+    assertEquals("Wrong echoed response", message, blockingRequest(connectionId, message));
+  }
+
+  /**
+   * Tests handling of BUFFER_OVERFLOW during wrap when network write buffer is smaller than SSL session packet buffer size.
+   */
+  @Test
+  public void testNetWriteBufferResize() throws Exception {
+    useCustomBufferSizeSelector(null, 10, null);
+    String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
+    String message = SelectorTest.randomString(10, new Random());
+    assertEquals("Wrong echoed response", message, blockingRequest(connectionId, message));
+  }
+
+  /**
+   * Tests handling of BUFFER_OVERFLOW during unwrap when application read buffer is smaller than SSL session application buffer size.
+   */
+  @Test
+  public void testApplicationBufferResize() throws Exception {
+    useCustomBufferSizeSelector(null, null, 10);
+    String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
+    String message = SelectorTest.randomString(5 * applicationBufferSize, new Random());
+    assertEquals("Wrong echoed response", message, blockingRequest(connectionId, message));
+  }
+
+  /**
+   * Make a request to the echo server and wait for the full response to come.
+   * @param connectionId the ID of an established connection.
+   * @param s the data to send.
+   * @return the data received back from the echo server.
+   * @throws Exception
+   */
   private String blockingRequest(String connectionId, String s) throws Exception {
-    selector.poll(1000L, asList(SelectorTest.createSend(connectionId, s)));
+    selector.poll(1000L, Collections.singletonList(SelectorTest.createSend(connectionId, s)));
     while (true) {
       selector.poll(1000L);
       for (NetworkReceive receive : selector.completedReceives()) {
-        if (receive.getConnectionId() == connectionId) {
+        if (receive.getConnectionId().equals(connectionId)) {
           return SelectorTest.asString(receive);
         }
       }
     }
   }
 
-  /* connect and wait for the connection to complete */
-  private String blockingSSLConnect() throws IOException {
+  /**
+   * Connect and wait for the connection to complete.
+   * @param socketBufSize the size for the socket send and receive buffers.
+   * @return the connection ID.
+   * @throws IOException
+   */
+  private String blockingSSLConnect(int socketBufSize) throws IOException {
     String connectionId =
-        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
+        selector.connect(new InetSocketAddress("localhost", server.port), socketBufSize, socketBufSize, PortType.SSL);
     while (!selector.connected().contains(connectionId)) {
       selector.poll(10000L);
     }
     return connectionId;
+  }
+
+  /**
+   * Replace the {@link #selector} instance with that overrides buffer sizing logic to induce BUFFER_OVERFLOW and
+   * BUFFER_UNDERFLOW cases.
+   * @param netReadBufSizeStart
+   * @param netWriteBufSizeStart
+   * @param appBufSizeStart
+   */
+  private void useCustomBufferSizeSelector(final Integer netReadBufSizeStart, final Integer netWriteBufSizeStart,
+      final Integer appBufSizeStart) throws Exception {
+    // close existing selector
+    selector.close();
+    NetworkMetrics metrics = new NetworkMetrics(new MetricRegistry());
+    Time time = SystemTime.getInstance();
+    selector = new Selector(metrics, time, clientSSLFactory) {
+      @Override
+      protected Transmission createTransmission(String connectionId, SelectionKey key, String hostname, int port,
+          PortType portType, SSLFactory.Mode mode) throws IOException {
+        AtomicReference<Integer> netReadBufSizeOverride = new AtomicReference<>(netReadBufSizeStart);
+        AtomicReference<Integer> netWriteBufSizeOverride = new AtomicReference<>(netWriteBufSizeStart);
+        AtomicReference<Integer> appBufSizeOverride = new AtomicReference<>(appBufSizeStart);
+        return new SSLTransmission(clientSSLFactory, connectionId, (SocketChannel) key.channel(), key, hostname, port,
+            time, metrics, mode) {
+          @Override
+          protected int netReadBufferSize() {
+            // netReadBufferSize() is invoked in SSLTransportLayer.read() prior to the read
+            // operation. To avoid the read buffer being expanded too early, increase buffer size
+            // only when read buffer is full. This ensures that BUFFER_UNDERFLOW is always
+            // triggered in testNetReadBufferResize().
+            int size = super.netReadBufferSize();
+            if (netReadBufSizeOverride.get() != null && netReadBuffer() != null && !netReadBuffer().hasRemaining()) {
+              size = Math.min(netReadBufSizeOverride.get() * 2, size);
+              netReadBufSizeOverride.set(size);
+            }
+            return size;
+          }
+
+          @Override
+          protected int netWriteBufferSize() {
+            int size = super.netWriteBufferSize();
+            if (netWriteBufSizeOverride.get() != null) {
+              size = Math.min(netWriteBufSizeOverride.get() * 2, size);
+              netWriteBufSizeOverride.set(size);
+            }
+            return size;
+          }
+
+          @Override
+          protected int appReadBufferSize() {
+            int size = super.appReadBufferSize();
+            if (appBufSizeOverride.get() != null) {
+              size = Math.min(appBufSizeOverride.get() * 2, size);
+              appBufSizeOverride.set(size);
+            }
+            return size;
+          }
+        };
+      }
+    };
   }
 }

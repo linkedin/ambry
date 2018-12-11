@@ -55,7 +55,6 @@ public class BoundedByteBufferReceive implements Receive {
         sizeBuffer.flip();
         sizeToRead = sizeBuffer.getLong();
         sizeRead += 8;
-        bytesRead += 8;
         buffer = ByteBuffer.allocate((int) sizeToRead - 8);
       }
     }
