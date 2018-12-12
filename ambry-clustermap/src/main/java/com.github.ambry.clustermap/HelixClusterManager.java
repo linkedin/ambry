@@ -110,21 +110,21 @@ class HelixClusterManager implements ClusterMap {
     selfInstanceName = instanceName;
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
-    Map<String, DcZkInfo> dataCenterToZkAddress_ = null;
+    Map<String, DcZkInfo> dataCenterToZkAddress = null;
     HelixManager localManager_ = null;
     try {
-      dataCenterToZkAddress_ = parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
+      dataCenterToZkAddress = parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
       // Make sure the HelixManager of local datacenter gets connected first and partitionOverrideInfoMap use PropertyStore
       // in local DC for initialization.
       localManager_ =
-          initializeHelixManagerAndPropertyStoreInLocalDC(dataCenterToZkAddress_, instanceName, helixFactory);
+          initializeHelixManagerAndPropertyStoreInLocalDC(dataCenterToZkAddress, instanceName, helixFactory);
     } catch (Exception e) {
       initializationFailureMap.putIfAbsent(clusterMapConfig.clusterMapDatacenterName, e);
     }
     if (initializationFailureMap.get(clusterMapConfig.clusterMapDatacenterName) == null) {
       HelixManager localManager = localManager_;
-      final CountDownLatch initializationAttemptComplete = new CountDownLatch(dataCenterToZkAddress_.size());
-      for (Map.Entry<String, DcZkInfo> entry : dataCenterToZkAddress_.entrySet()) {
+      final CountDownLatch initializationAttemptComplete = new CountDownLatch(dataCenterToZkAddress.size());
+      for (Map.Entry<String, DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
         String dcName = entry.getKey();
         String zkConnectStr = entry.getValue().getZkConnectStr();
         ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName);
