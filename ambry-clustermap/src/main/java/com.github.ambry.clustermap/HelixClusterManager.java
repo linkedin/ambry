@@ -91,6 +91,7 @@ class HelixClusterManager implements ClusterMap {
   // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
   // reflects the current value.
   private final AtomicLong currentXid;
+  private final AtomicLong errorCount = new AtomicLong(0);
 
   /**
    * Instantiate a HelixClusterManager.
@@ -413,6 +414,13 @@ class HelixClusterManager implements ClusterMap {
   }
 
   /**
+   * @return the count of errors encountered by the Cluster Manager.
+   */
+  long getErrorCount() {
+    return errorCount.get();
+  }
+
+  /**
    * An instance of this object is used to register as listener for Helix related changes in each datacenter. This
    * class is also responsible for handling events received.
    */
@@ -433,21 +441,26 @@ class HelixClusterManager implements ClusterMap {
 
     @Override
     public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
-      logger.trace("InstanceConfig change triggered in {} with: {}", dcName, configs);
-      synchronized (notificationLock) {
-        if (!instanceConfigInitialized.get()) {
-          logger.info("Received initial notification for instance config change from {}", dcName);
-          try {
-            initializeInstances(configs);
-          } catch (Exception e) {
-            initializationFailureMap.putIfAbsent(dcName, e);
+      try {
+        logger.trace("InstanceConfig change triggered in {} with: {}", dcName, configs);
+        synchronized (notificationLock) {
+          if (!instanceConfigInitialized.get()) {
+            logger.info("Received initial notification for instance config change from {}", dcName);
+            try {
+              initializeInstances(configs);
+            } catch (Exception e) {
+              initializationFailureMap.putIfAbsent(dcName, e);
+            }
+            instanceConfigInitialized.set(true);
+          } else {
+            updateStateOfReplicas(configs);
           }
-          instanceConfigInitialized.set(true);
-        } else {
-          updateStateOfReplicas(configs);
+          sealedStateChangeCounter.incrementAndGet();
+          helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
         }
-        sealedStateChangeCounter.incrementAndGet();
-        helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
+      } catch (Throwable t) {
+        errorCount.incrementAndGet();
+        throw t;
       }
     }
 
@@ -544,13 +557,18 @@ class HelixClusterManager implements ClusterMap {
      */
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
-      logger.trace("Live instance change triggered from {} with: {}", dcName, liveInstances);
-      updateInstanceLiveness(liveInstances);
-      if (!liveStateInitialized.get()) {
-        logger.info("Received initial notification for live instance change from {}", dcName);
-        liveStateInitialized.set(true);
+      try {
+        logger.trace("Live instance change triggered from {} with: {}", dcName, liveInstances);
+        updateInstanceLiveness(liveInstances);
+        if (!liveStateInitialized.get()) {
+          logger.info("Received initial notification for live instance change from {}", dcName);
+          liveStateInitialized.set(true);
+        }
+        helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
+      } catch (Throwable t) {
+        errorCount.incrementAndGet();
+        throw t;
       }
-      helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
     }
 
     /**

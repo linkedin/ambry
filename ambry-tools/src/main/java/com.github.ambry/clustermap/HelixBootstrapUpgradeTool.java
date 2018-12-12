@@ -207,7 +207,7 @@ public class HelixBootstrapUpgradeTool {
           clusterNamePrefix, dcs,
           options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
               : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt)), options.has(dryRun),
-          options.has(forceRemove), new HelixAdminFactory());
+          options.has(forceRemove), new HelixAdminFactory(), true);
     }
   }
 }
