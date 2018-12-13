@@ -535,7 +535,7 @@ public class Utils {
   }
 
   /**
-   * Serializes a nullable string into byte buffer
+   * Serializes a nullable string into byte buffer using the default charset.
    *
    * @param outputBuffer The output buffer to serialize the value to
    * @param value The value to serialize
@@ -544,8 +544,7 @@ public class Utils {
     if (value == null) {
       outputBuffer.putInt(0);
     } else {
-      outputBuffer.putInt(value.length());
-      outputBuffer.put(value.getBytes());
+      serializeString(outputBuffer, value, Charset.defaultCharset());
     }
   }
 
@@ -556,8 +555,9 @@ public class Utils {
    * @param charset {@link Charset} to be used to encode
    */
   public static void serializeString(ByteBuffer outputBuffer, String value, Charset charset) {
-    outputBuffer.putInt(value.length());
-    outputBuffer.put(value.getBytes(charset));
+    byte[] valueArray = value.getBytes(charset);
+    outputBuffer.putInt(valueArray.length);
+    outputBuffer.put(valueArray);
   }
 
   /**

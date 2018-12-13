@@ -14,7 +14,9 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.network.Send;
+import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,8 +70,7 @@ public abstract class RequestOrResponse implements Send {
     bufferToSend.putShort((short) type.ordinal());
     bufferToSend.putShort(versionId);
     bufferToSend.putInt(correlationId);
-    bufferToSend.putInt(clientId.length());
-    bufferToSend.put(clientId.getBytes());
+    Utils.serializeString(bufferToSend, clientId, Charset.defaultCharset());
   }
 
   public long sizeInBytes() {

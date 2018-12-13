@@ -30,7 +30,6 @@ import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
@@ -296,40 +295,49 @@ public class RestUtilsTest {
     JSONObject headers = new JSONObject();
     setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), generateRandomString(10),
         Container.DEFAULT_PUBLIC_CONTAINER, "image/gif", generateRandomString(10));
-    Map<String, String> userMetadata = new HashMap<String, String>();
-    List<String> keysToCheck = new ArrayList<>();
+    Map<String, String> userMetadataArgs = new HashMap<String, String>();
+    Map<String, String> expectedUserMetadata = new HashMap<>();
     String key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1";
-    userMetadata.put(key, "value1");
-    keysToCheck.add(key);
+    String value = "value1";
+    userMetadataArgs.put(key, value);
+    expectedUserMetadata.put(key, value);
     // no valid prefix
-    userMetadata.put("key2", "value2_1");
+    userMetadataArgs.put("key2", "value2_1");
     // valid prefix as suffix
-    userMetadata.put("key3" + RestUtils.Headers.USER_META_DATA_HEADER_PREFIX, "value3");
+    userMetadataArgs.put("key3" + RestUtils.Headers.USER_META_DATA_HEADER_PREFIX, "value3");
     // empty value
     key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key4";
-    userMetadata.put(key, "");
-    keysToCheck.add(key);
+    value = "";
+    userMetadataArgs.put(key, value);
+    expectedUserMetadata.put(key, value);
     // different casing
     key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toUpperCase() + "KeY5";
-    userMetadata.put(key, "value5");
-    keysToCheck.add(key);
+    value = "value5";
+    userMetadataArgs.put(key, value);
+    expectedUserMetadata.put(key, value);
     key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toLowerCase() + "kEy6";
-    userMetadata.put(key, "value6");
-    keysToCheck.add(key);
-    setUserMetadataHeaders(headers, userMetadata);
+    value = "value6";
+    userMetadataArgs.put(key, value);
+    expectedUserMetadata.put(key, value);
+    // Unicode with multiple code point characters (i.e. emoji)
+    key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toLowerCase() + "kEy7";
+    userMetadataArgs.put(key, "å∫ \uD83D\uDE1D\uD83D\uDE31abcd");
+    // Non ascii characters should be replaced with question marks
+    expectedUserMetadata.put(key, "?? ??abcd");
+    setUserMetadataHeaders(headers, userMetadataArgs);
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
     byte[] userMetadataByteArray = RestUtils.buildUserMetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
 
-    assertEquals("Size of map unexpected ", keysToCheck.size(), userMetadataMap.size());
-    for (String keyToCheck : keysToCheck) {
+    assertEquals("Size of map unexpected ", expectedUserMetadata.size(), userMetadataMap.size());
+    expectedUserMetadata.forEach((keyToCheck, valueToCheck) -> {
       String keyInOutputMap = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + keyToCheck.substring(
           RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.length());
       assertTrue(keyInOutputMap + " not found in user metadata map", userMetadataMap.containsKey(keyInOutputMap));
-      assertEquals("Value for " + keyToCheck + " didnt match input value", userMetadata.get(keyToCheck),
+      assertEquals("Value for " + keyToCheck + " didnt match expected value", valueToCheck,
           userMetadataMap.get(keyInOutputMap));
-    }
+    });
   }
 
   /**

@@ -259,11 +259,7 @@ public class StoreFindTokenTest {
         // add version
         bufWrap.putShort(StoreFindToken.VERSION_0);
         // add sessionId
-        byte[] sessionIdBytes = sessionId == null ? null : sessionId.toString().getBytes();
-        bufWrap.putInt(sessionIdBytes == null ? 0 : sessionIdBytes.length);
-        if (sessionIdBytes != null) {
-          bufWrap.put(sessionIdBytes);
-        }
+        Utils.serializeNullableString(bufWrap, sessionId == null ? null : sessionId.toString());
         long logOffset = -1;
         long indexStartOffset = -1;
         StoreFindToken.Type type = token.getType();
@@ -294,11 +290,7 @@ public class StoreFindTokenTest {
         // add version
         bufWrap.putShort(StoreFindToken.VERSION_1);
         // add sessionId
-        sessionIdBytes = (sessionId == null) ? null : sessionId.toString().getBytes();
-        bufWrap.putInt(sessionIdBytes == null ? 0 : sessionIdBytes.length);
-        if (sessionIdBytes != null) {
-          bufWrap.put(sessionIdBytes);
-        }
+        Utils.serializeNullableString(bufWrap, sessionId == null ? null : sessionId.toString());
         // add type
         type = token.getType();
         bufWrap.putShort((byte) type.ordinal());
