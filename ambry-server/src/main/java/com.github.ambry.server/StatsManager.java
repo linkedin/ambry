@@ -234,7 +234,7 @@ class StatsManager {
       statsWrapperJSON = mapper.writeValueAsString(new StatsWrapper(statsHeader, combinedSnapshot));
     } catch (Exception | Error e) {
       metrics.statsAggregationFailureCount.inc();
-      logger.error("Exception while aggregating stats for Helix quota report", e);
+      logger.error("Exception while aggregating stats for Helix report", e);
     }
     return statsWrapperJSON;
   }
@@ -247,7 +247,7 @@ class StatsManager {
 
     @Override
     public void run() {
-      logger.info("Aggregating stats for local quota report");
+      logger.info("Aggregating stats for local report");
       try {
         long totalFetchAndAggregateStartTimeMs = time.milliseconds();
         StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
@@ -269,7 +269,7 @@ class StatsManager {
         }
       } catch (Exception | Error e) {
         metrics.statsAggregationFailureCount.inc();
-        logger.error("Exception while aggregating stats for local quota report. Stats output file path - {}",
+        logger.error("Exception while aggregating stats for local report. Stats output file path - {}",
             statsOutputFile.getAbsolutePath(), e);
       }
     }
