@@ -209,7 +209,8 @@ public class StatsManagerTest {
     unreachableStores.clear();
     // partition 0, 1, 2 are healthy stores, partition 3, 4 are bad ones.
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
-      StatsSnapshot snapshot = testStatsManager.fetchSnapshot(partitionId, unreachableStores);
+      StatsSnapshot snapshot =
+          testStatsManager.fetchSnapshot(partitionId, unreachableStores, StatsReportType.ACCOUNT_REPORT);
       if (Integer.valueOf(partitionId.toPathString()) < 3) {
         assertTrue("Actual StatsSnapshot does not match with expected snapshot",
             snapshot.equals(partitionToSnapshot.get(partitionId)));
@@ -313,7 +314,7 @@ public class StatsManagerTest {
    * Mocked {@link StorageManager} that is intended to have only the overwritten methods to be called and return
    * predefined values.
    */
-  private static class MockStorageManager extends StorageManager {
+  static class MockStorageManager extends StorageManager {
     private static final VerifiableProperties VPROPS = new VerifiableProperties(new Properties());
     private final Map<PartitionId, Store> storeMap;
 

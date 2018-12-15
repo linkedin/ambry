@@ -15,6 +15,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.server.StatsHeader;
+import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
 import com.github.ambry.utils.Pair;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.Test;
 
@@ -43,6 +45,12 @@ public class HelixClusterAggregatorTest {
     clusterAggregator = new HelixClusterAggregator(RELEVANT_PERIOD_IN_MINUTES);
   }
 
+  @Test
+  public void simpleTest(){
+    List<String> list = new ArrayList<>();
+    Stream.of(StatsReportType.values()).forEach(e -> list.add(e.toString()));
+    list.forEach(s -> System.out.println(s.substring(0, 1).toUpperCase() + s.substring(1).toLowerCase()));
+  }
   /**
    * Basic tests to verify the cluster wide aggregation.
    * @throws IOException

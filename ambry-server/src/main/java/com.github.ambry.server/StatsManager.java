@@ -152,7 +152,7 @@ class StatsManager {
    * @param unreachableStores a list of partitionIds to keep track of the unreachable stores (partitions)
    * @return
    */
-  StatsSnapshot fetchSnapshot(PartitionId partitionId, List<String> unreachableStores) {
+  StatsSnapshot fetchSnapshot(PartitionId partitionId, List<String> unreachableStores, StatsReportType reportType) {
     StatsSnapshot statsSnapshot = null;
     Store store = storageManager.getStore(partitionId);
     if (store == null) {
@@ -160,10 +160,12 @@ class StatsManager {
     } else {
       try {
         Map<StatsReportType, StatsSnapshot> snapshotsByType =
-            store.getStoreStats().getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds());
-        statsSnapshot = snapshotsByType.get(StatsReportType.ACCOUNT_REPORT);
+            store.getStoreStats().getStatsSnapshots(EnumSet.of(reportType), time.milliseconds());
+        statsSnapshot = snapshotsByType.get(reportType);
       } catch (StoreException e) {
-        logger.error("StoreException on fetching stats snapshot for store {}", store, e);
+        String reportTypeStr = reportType.toString();
+        logger.error("StoreException on fetching {} stats snapshot for store {}",
+            reportTypeStr.substring(0, reportTypeStr.lastIndexOf('_')), store, e);
         unreachableStores.add(partitionId.toString());
       }
     }
@@ -173,9 +175,10 @@ class StatsManager {
   /**
    * Get the combined {@link StatsSnapshot} of all partitions in this node. This json will contain one entry per partition
    * wrt valid data size.
+   * @param statsReportType the {@link StatsReportType} to get from this node
    * @return a combined {@link StatsSnapshot} of this node
    */
-  String getNodeStatsInJSON() {
+  String getNodeStatsInJSON(StatsReportType statsReportType) {
     String statsWrapperJSON = "";
     try {
       long totalFetchAndAggregateStartTimeMs = time.milliseconds();
@@ -186,7 +189,7 @@ class StatsManager {
       while (iterator.hasNext()) {
         PartitionId partitionId = iterator.next();
         long fetchSnapshotStartTimeMs = time.milliseconds();
-        StatsSnapshot statsSnapshot = fetchSnapshot(partitionId, unreachableStores);
+        StatsSnapshot statsSnapshot = fetchSnapshot(partitionId, unreachableStores, statsReportType);
         if (statsSnapshot != null) {
           combinedSnapshot.getSubMap().put(partitionId.toString(), statsSnapshot);
           totalValue += statsSnapshot.getValue();
