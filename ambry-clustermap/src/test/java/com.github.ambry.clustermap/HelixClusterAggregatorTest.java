@@ -57,7 +57,7 @@ public class HelixClusterAggregatorTest {
     }
     StatsWrapper nodeStats = generateNodeStats(storeSnapshots, DEFAULT_TIMESTAMP);
     String nodeStatsJSON = mapper.writeValueAsString(nodeStats);
-    StatsWrapper emptyNodeStats = generateNodeStats(Collections.EMPTY_LIST, DEFAULT_TIMESTAMP);
+    StatsWrapper emptyNodeStats = generateNodeStats(Collections.emptyList(), DEFAULT_TIMESTAMP);
     String emptyNodeStatsJSON = mapper.writeValueAsString(emptyNodeStats);
 
     Map<String, String> statsWrappersJSON = new HashMap<>();

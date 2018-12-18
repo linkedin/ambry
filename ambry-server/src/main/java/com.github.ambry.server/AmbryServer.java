@@ -43,16 +43,14 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StorageManager;
-import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -147,8 +145,7 @@ public class AmbryServer {
       connectionPool.start();
 
       StoreKeyConverterFactory storeKeyConverterFactory =
-          Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties,
-              registry);
+          Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
 
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
@@ -179,8 +176,9 @@ public class AmbryServer {
 
       List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
       if (serverConfig.serverStatsPublishHealthReportEnabled) {
-        ambryHealthReports.add(
-            new QuotaHealthReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes));
+        EnumSet.of(StatsReportType.ACCOUNT_REPORT)
+            .forEach(e -> ambryHealthReports.add(
+                new AmbryStatsReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes, e)));
       }
 
       clusterParticipant.participate(ambryHealthReports);
