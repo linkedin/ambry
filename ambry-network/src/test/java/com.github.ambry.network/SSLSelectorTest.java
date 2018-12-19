@@ -243,7 +243,8 @@ public class SSLSelectorTest {
   }
 
   /**
-   * Tests handling of BUFFER_UNDERFLOW during unwrap when network read buffer is smaller than SSL session packet buffer size.
+   * Tests handling of BUFFER_UNDERFLOW during unwrap when network read buffer is smaller than SSL session packet buffer
+   * size.
    */
   @Test
   public void testNetReadBufferResize() throws Exception {
@@ -254,7 +255,8 @@ public class SSLSelectorTest {
   }
 
   /**
-   * Tests handling of BUFFER_OVERFLOW during wrap when network write buffer is smaller than SSL session packet buffer size.
+   * Tests handling of BUFFER_OVERFLOW during wrap when network write buffer is smaller than SSL session packet buffer
+   * size.
    */
   @Test
   public void testNetWriteBufferResize() throws Exception {
@@ -265,10 +267,11 @@ public class SSLSelectorTest {
   }
 
   /**
-   * Tests handling of BUFFER_OVERFLOW during unwrap when application read buffer is smaller than SSL session application buffer size.
+   * Tests handling of BUFFER_OVERFLOW during unwrap when application read buffer is smaller than SSL session
+   * application buffer size.
    */
   @Test
-  public void testApplicationBufferResize() throws Exception {
+  public void testAppReadBufferResize() throws Exception {
     useCustomBufferSizeSelector(null, null, 10);
     String connectionId = blockingSSLConnect(DEFAULT_SOCKET_BUF_SIZE);
     String message = SelectorTest.randomString(5 * applicationBufferSize, new Random());
@@ -311,13 +314,15 @@ public class SSLSelectorTest {
 
   /**
    * Replace the {@link #selector} instance with that overrides buffer sizing logic to induce BUFFER_OVERFLOW and
-   * BUFFER_UNDERFLOW cases.
-   * @param netReadBufSizeStart
-   * @param netWriteBufSizeStart
-   * @param appBufSizeStart
+   * BUFFER_UNDERFLOW cases. This overrides the methods used to get the new size for the buffers used by
+   * {@link javax.net.ssl.SSLEngine}, doubling the size of the buffer each time until the size recommended by the
+   * engine is reached.
+   * @param netReadBufSizeStart if non-null, initialize the net read buffer with this size.
+   * @param netWriteBufSizeStart if non-null, initialize the net write buffer with this size.
+   * @param appReadBufSizeStart if non-null, initialize the app buffer with this size.
    */
   private void useCustomBufferSizeSelector(final Integer netReadBufSizeStart, final Integer netWriteBufSizeStart,
-      final Integer appBufSizeStart) throws Exception {
+      final Integer appReadBufSizeStart) throws Exception {
     // close existing selector
     selector.close();
     NetworkMetrics metrics = new NetworkMetrics(new MetricRegistry());
@@ -328,7 +333,7 @@ public class SSLSelectorTest {
           PortType portType, SSLFactory.Mode mode) throws IOException {
         AtomicReference<Integer> netReadBufSizeOverride = new AtomicReference<>(netReadBufSizeStart);
         AtomicReference<Integer> netWriteBufSizeOverride = new AtomicReference<>(netWriteBufSizeStart);
-        AtomicReference<Integer> appBufSizeOverride = new AtomicReference<>(appBufSizeStart);
+        AtomicReference<Integer> appReadBufSizeOverride = new AtomicReference<>(appReadBufSizeStart);
         return new SSLTransmission(clientSSLFactory, connectionId, (SocketChannel) key.channel(), key, hostname, port,
             time, metrics, mode) {
           @Override
@@ -337,32 +342,33 @@ public class SSLSelectorTest {
             // operation. To avoid the read buffer being expanded too early, increase buffer size
             // only when read buffer is full. This ensures that BUFFER_UNDERFLOW is always
             // triggered in testNetReadBufferResize().
-            int size = super.netReadBufferSize();
-            if (netReadBufSizeOverride.get() != null && netReadBuffer() != null && !netReadBuffer().hasRemaining()) {
-              size = Math.min(netReadBufSizeOverride.get() * 2, size);
-              netReadBufSizeOverride.set(size);
-            }
-            return size;
+            boolean updateAllowed = netReadBuffer() != null && !netReadBuffer().hasRemaining();
+            return getAndUpdateSize(super.netReadBufferSize(), netReadBufSizeOverride, updateAllowed);
           }
 
           @Override
           protected int netWriteBufferSize() {
-            int size = super.netWriteBufferSize();
-            if (netWriteBufSizeOverride.get() != null) {
-              size = Math.min(netWriteBufSizeOverride.get() * 2, size);
-              netWriteBufSizeOverride.set(size);
-            }
-            return size;
+            return getAndUpdateSize(super.netWriteBufferSize(), netWriteBufSizeOverride, true);
           }
 
           @Override
           protected int appReadBufferSize() {
-            int size = super.appReadBufferSize();
-            if (appBufSizeOverride.get() != null) {
-              size = Math.min(appBufSizeOverride.get() * 2, size);
-              appBufSizeOverride.set(size);
-            }
-            return size;
+            return getAndUpdateSize(super.appReadBufferSize(), appReadBufSizeOverride, true);
+          }
+
+          /**
+           * Helper method for incrementing the
+           * @param defaultSize the default size to use if an override is not present.
+           * @param sizeOverride a reference to the current override value, the reference can be null if the override
+           *                     is not enabled.
+           * @param updateAllowed if the override size should be increased. If {@code true}, the size returned will
+           *                      be double the last, capping out at {@code defaultSize}. Otherwise, the size returned
+           *                      will be the same as last.
+           * @return the recommended buffer size to return.
+           */
+          private int getAndUpdateSize(int defaultSize, AtomicReference<Integer> sizeOverride, boolean updateAllowed) {
+            return sizeOverride.get() == null ? defaultSize
+                : sizeOverride.updateAndGet(i -> updateAllowed ? Math.min(i * 2, defaultSize) : i);
           }
         };
       }

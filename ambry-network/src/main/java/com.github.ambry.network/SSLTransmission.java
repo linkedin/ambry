@@ -625,8 +625,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     int currentAppReadBufferSize = appReadBufferSize();
     appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentAppReadBufferSize);
     if (appReadBuffer.position() >= currentAppReadBufferSize) {
-      throw new IllegalStateException("Buffer overflow when available data size (" + appReadBuffer.position()
-          + ") >= application buffer size (" + currentAppReadBufferSize + ")");
+      throw new IllegalStateException(
+          "Buffer overflow when available data size (" + appReadBuffer.position() + ") >= application buffer size ("
+              + currentAppReadBufferSize + ")");
     }
   }
 
