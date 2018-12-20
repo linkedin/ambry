@@ -121,6 +121,15 @@ public class NettyConfig {
   @Default("20 * 1024 * 1024")
   public final long nettyMultipartPostMaxSizeBytes;
 
+  /**
+   * If set, use this implementation of {@link com.github.ambry.commons.SSLFactory} to use for the netty HTTP server.
+   * Otherwise, share the factory instance with the router.
+   */
+  public static final String SSL_FACTORY_KEY = "netty.server.ssl.factory";
+  @Config(SSL_FACTORY_KEY)
+  @Default("")
+  public final String nettyServerSslFactory;
+
   public NettyConfig(VerifiableProperties verifiableProperties) {
     nettyServerBossThreadCount = verifiableProperties.getInt("netty.server.boss.thread.count", 1);
     nettyServerIdleTimeSeconds = verifiableProperties.getInt("netty.server.idle.time.seconds", 60);
@@ -139,5 +148,6 @@ public class NettyConfig {
         Arrays.asList(verifiableProperties.getString("netty.server.blacklisted.query.params", "").split(",")));
     nettyMultipartPostMaxSizeBytes =
         verifiableProperties.getLongInRange("netty.multipart.post.max.size.bytes", 20 * 1024 * 1024, 0, Long.MAX_VALUE);
+    nettyServerSslFactory = verifiableProperties.getString(SSL_FACTORY_KEY, "");
   }
 }

@@ -16,12 +16,16 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Utils;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -31,6 +35,7 @@ import java.util.Map;
  * {@link #getNioServer()}.
  */
 public class NettyServerFactory implements NioServerFactory {
+  private static final Logger LOGGER = LoggerFactory.getLogger(NettyServerFactory.class);
 
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
@@ -47,17 +52,24 @@ public class NettyServerFactory implements NioServerFactory {
    * @param sslFactory the {@link SSLFactory} used to construct the {@link javax.net.ssl.SSLEngine} used for handling
    *                   SSL requests.
    * @throws IllegalArgumentException if any of the arguments are null.
+   * @throws ReflectiveOperationException if a netty-specific {@link SSLFactory} cannot be instantiated via reflection.
    */
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       final RestRequestHandler requestHandler, final PublicAccessLogger publicAccessLogger,
-      final RestServerState restServerState, SSLFactory sslFactory) {
+      final RestServerState restServerState, SSLFactory sslFactory) throws ReflectiveOperationException {
     if (verifiableProperties == null || metricRegistry == null || requestHandler == null || publicAccessLogger == null
         || restServerState == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of NettyServerFactory");
     }
     nettyConfig = new NettyConfig(verifiableProperties);
-    if (sslFactory == null && nettyConfig.nettyServerEnableSSL) {
-      throw new IllegalArgumentException("NettyServer requires SSL, but sslFactory is null");
+    if (nettyConfig.nettyServerEnableSSL) {
+      if (!nettyConfig.nettyServerSslFactory.isEmpty()) {
+        LOGGER.info("Using " + nettyConfig.nettyServerSslFactory + " for Netty SSL instead of the shared instance.");
+        sslFactory = Utils.getObj(nettyConfig.nettyServerSslFactory, new SSLConfig(verifiableProperties));
+      }
+      if (sslFactory == null) {
+        throw new IllegalArgumentException("NettyServer requires SSL, but sslFactory is null");
+      }
     }
     nettyMetrics = new NettyMetrics(metricRegistry);
     ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);

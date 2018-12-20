@@ -35,6 +35,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
+import com.github.ambry.rest.NettySslFactory;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServiceException;
@@ -522,6 +523,7 @@ public class FrontendIntegrationTest {
     properties.put("netty.server.port", Integer.toString(PLAINTEXT_SERVER_PORT));
     properties.put("netty.server.ssl.port", Integer.toString(SSL_SERVER_PORT));
     properties.put("netty.server.enable.ssl", "true");
+    properties.put(NettyConfig.SSL_FACTORY_KEY, NettySslFactory.class.getName());
     // to test that backpressure does not impede correct operation.
     properties.put("netty.server.request.buffer.watermark", "1");
     // to test that multipart requests over a certain size fail
