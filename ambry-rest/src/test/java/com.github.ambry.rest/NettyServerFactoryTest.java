@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.NettyConfig;
-import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
@@ -38,12 +37,6 @@ public class NettyServerFactoryTest {
   private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();
-  static {
-    try {
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
 
   /**
    * Checks to see that getting the default {@link NioServer} (currently {@link NettyServer}) works.
