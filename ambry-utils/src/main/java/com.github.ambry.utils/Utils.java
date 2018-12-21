@@ -18,13 +18,11 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
@@ -45,14 +43,11 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONString;
-import org.json.JSONTokener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -337,9 +332,7 @@ public class Utils {
    * @param className
    * @param <T>
    * @return
-   * @throws ClassNotFoundException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
+   * @throws ReflectiveOperationException
    */
   public static <T> T getObj(String className)
       throws ClassNotFoundException, InstantiationException, IllegalAccessException {
@@ -348,19 +341,13 @@ public class Utils {
 
   /**
    * Instantiate a class instance from a given className with an arg
+   * @param <T>
    * @param className
    * @param arg
-   * @param <T>
    * @return
-   * @throws ClassNotFoundException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
-   * @throws NoSuchMethodException
-   * @throws InvocationTargetException
+   * @throws ReflectiveOperationException
    */
-  public static <T> T getObj(String className, Object arg)
-      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
-             InvocationTargetException {
+  public static <T> T getObj(String className, Object arg) throws ReflectiveOperationException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
       Class<?>[] paramTypes = ctor.getParameterTypes();
       if (paramTypes.length == 1 && checkAssignable(paramTypes[0], arg)) {
@@ -372,20 +359,14 @@ public class Utils {
 
   /**
    * Instantiate a class instance from a given className with two args
+   * @param <T>
    * @param className
    * @param arg1
    * @param arg2
-   * @param <T>
    * @return
-   * @throws ClassNotFoundException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
-   * @throws NoSuchMethodException
-   * @throws InvocationTargetException
+   * @throws ReflectiveOperationException
    */
-  public static <T> T getObj(String className, Object arg1, Object arg2)
-      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
-             InvocationTargetException {
+  public static <T> T getObj(String className, Object arg1, Object arg2) throws ReflectiveOperationException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
       Class<?>[] paramTypes = ctor.getParameterTypes();
       if (paramTypes.length == 2 && checkAssignable(paramTypes[0], arg1) && checkAssignable(paramTypes[1], arg2)) {
@@ -403,15 +384,10 @@ public class Utils {
    * @param arg3
    * @param <T>
    * @return
-   * @throws ClassNotFoundException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
-   * @throws NoSuchMethodException
-   * @throws InvocationTargetException
+   * @throws ReflectiveOperationException
    */
   public static <T> T getObj(String className, Object arg1, Object arg2, Object arg3)
-      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
-             InvocationTargetException {
+      throws ReflectiveOperationException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
       Class<?>[] paramTypes = ctor.getParameterTypes();
       if (paramTypes.length == 3 && checkAssignable(paramTypes[0], arg1) && checkAssignable(paramTypes[1], arg2)
@@ -428,15 +404,9 @@ public class Utils {
    * @param args
    * @param <T>
    * @return
-   * @throws ClassNotFoundException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
-   * @throws NoSuchMethodException
-   * @throws InvocationTargetException
+   * @throws ReflectiveOperationException
    */
-  public static <T> T getObj(String className, Object... args)
-      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
-             InvocationTargetException {
+  public static <T> T getObj(String className, Object... args) throws ReflectiveOperationException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
       Class<?>[] paramTypes = ctor.getParameterTypes();
       if (paramTypes.length == args.length) {

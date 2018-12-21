@@ -16,7 +16,6 @@ package com.github.ambry.store;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;

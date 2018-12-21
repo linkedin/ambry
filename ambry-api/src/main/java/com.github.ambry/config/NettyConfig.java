@@ -22,6 +22,8 @@ import java.util.Set;
  * Configuration parameters required by Netty.
  */
 public class NettyConfig {
+  public static final String SSL_FACTORY_KEY = "netty.server.ssl.factory";
+
   /**
    * Number of netty boss threads.
    */
@@ -125,7 +127,6 @@ public class NettyConfig {
    * If set, use this implementation of {@link com.github.ambry.commons.SSLFactory} to use for the netty HTTP server.
    * Otherwise, share the factory instance with the router.
    */
-  public static final String SSL_FACTORY_KEY = "netty.server.ssl.factory";
   @Config(SSL_FACTORY_KEY)
   @Default("")
   public final String nettyServerSslFactory;

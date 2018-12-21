@@ -60,20 +60,20 @@ public class NettyServerFactoryTest {
   /**
    * Test that a {@link NettyServer} can be constructed by the factory.
    * @param properties the {@link Properties} to use.
-   * @param sslFactory the {@link SSLFactory} to use.
+   * @param defaultSslFactory the default {@link SSLFactory} to pass into the constructor.
    */
-  private void doGetNettyServerTest(Properties properties, SSLFactory sslFactory) throws Exception {
+  private void doGetNettyServerTest(Properties properties, SSLFactory defaultSslFactory) throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     NettyServerFactory nettyServerFactory =
         new NettyServerFactory(verifiableProperties, new MetricRegistry(), REST_REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER,
-            REST_SERVER_STATE, sslFactory);
+            REST_SERVER_STATE, defaultSslFactory);
     NioServer nioServer = nettyServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
         nioServer.getClass().getCanonicalName());
     Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = nettyServerFactory.channelInitializers;
-    if (nettyConfig.nettyServerEnableSSL && sslFactory != null) {
+    if (nettyConfig.nettyServerEnableSSL && defaultSslFactory != null) {
       assertEquals("Expected two ChannelInitializers when SSLFactory is not null", 2, channelInitializers.size());
       assertNotNull("No ChannelInitializer for SSL port", channelInitializers.get(nettyConfig.nettyServerSSLPort));
     } else {
