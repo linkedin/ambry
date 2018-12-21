@@ -278,6 +278,8 @@ public class StatsManagerTest {
     statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
     assertFalse("Partition0 should not present in stats report after removal",
         statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toPathString()));
+    // verify that removing the PartitionId0 should fail because it no longer exists in StatsManager
+    assertFalse(testStatsManager.removeReplica(testReplicas.get(0)));
 
     // concurrent remove test
     CountDownLatch getStatsCountdown1 = new CountDownLatch(1);

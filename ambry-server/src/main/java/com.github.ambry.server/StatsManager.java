@@ -32,6 +32,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
@@ -178,27 +179,31 @@ class StatsManager {
   /**
    * Add new {@link ReplicaId} to StatsManager and thus stats of this store will be collected during next round of aggregation.
    * @param id the {@link ReplicaId} associated with store to be added
-   * @return {@code true} if adding store was successful. {@code false} if not.
+   * @return {@code true} if adding replica was successful. {@code false} if not.
    */
   boolean addReplica(ReplicaId id) {
-    boolean addResult = true;
-    if (partitionToReplicaMap.containsKey(id.getPartitionId())) {
-      addResult = false;
-      logger.error("Failed to add " + id.getPartitionId() + " because it is already in StatsManager");
-    } else {
-      partitionToReplicaMap.put(id.getPartitionId(), id);
+    boolean success = partitionToReplicaMap.putIfAbsent(id.getPartitionId(), id) == null;
+    if (success) {
       logger.info(id.getPartitionId() + " is added into StatsManager");
+    } else {
+      logger.error("Failed to add " + id.getPartitionId() + " because it is already in StatsManager");
     }
-    return addResult;
+    return success;
   }
 
   /**
    * Remove {@link ReplicaId} from StatsManager and thus it won't be checked during next round of aggregation.
    * @param id the {@link ReplicaId} associated with store to be removed
+   * @return {@code true} if removing replica was successful. {@code false} if the replica doesn't exist.
    */
-  void removeReplica(ReplicaId id) {
-    partitionToReplicaMap.remove(id.getPartitionId());
-    logger.info(id.getPartitionId() + " is removed from StatsManager");
+  boolean removeReplica(ReplicaId id) {
+    boolean success = partitionToReplicaMap.remove(id.getPartitionId()) != null;
+    if (success) {
+      logger.info(id.getPartitionId() + " is removed from StatsManager");
+    } else {
+      logger.error("Failed to remove " + id.getPartitionId() + " because it doesn't exist in StatsManager");
+    }
+    return success;
   }
 
   /**
@@ -214,7 +219,8 @@ class StatsManager {
       StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
       long totalValue = 0;
       List<PartitionId> unreachablePartitions = new ArrayList<>();
-      Iterator<PartitionId> iterator = (new HashSet<>(partitionToReplicaMap.keySet())).iterator();
+      Set<PartitionId> partitionsBeforeAggregation = new HashSet<>(partitionToReplicaMap.keySet());
+      Iterator<PartitionId> iterator = partitionsBeforeAggregation.iterator();
       while (iterator.hasNext()) {
         PartitionId partitionId = iterator.next();
         long fetchSnapshotStartTimeMs = time.milliseconds();
@@ -226,11 +232,11 @@ class StatsManager {
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchSnapshotStartTimeMs);
       }
       combinedSnapshot.setValue(totalValue);
-      List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
+      List<String> examinedUnreachableStores = examineUnreachablePartitions(unreachablePartitions);
       metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-      StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(),
-          partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
-          unreachableStores);
+      StatsHeader statsHeader =
+          new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(), partitionsBeforeAggregation.size(),
+              partitionsBeforeAggregation.size() - unreachablePartitions.size(), examinedUnreachableStores);
       statsWrapperJSON = mapper.writeValueAsString(new StatsWrapper(statsHeader, combinedSnapshot));
     } catch (Exception | Error e) {
       metrics.statsAggregationFailureCount.inc();
