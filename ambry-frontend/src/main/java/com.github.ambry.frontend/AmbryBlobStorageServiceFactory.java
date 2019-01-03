@@ -88,7 +88,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
-              urlSigningService, accountAndContainerInjector);
+              urlSigningService, idSigningService, accountAndContainerInjector);
       return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
           idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountAndContainerInjector,
           clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName);

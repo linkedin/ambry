@@ -154,8 +154,9 @@ public class AmbryBlobStorageServiceTest {
         frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance());
     idSigningService = new AmbryIdSigningService();
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService);
-    securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService,
-        accountAndContainerInjector);
+    securityServiceFactory =
+        new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService, idSigningService,
+            accountAndContainerInjector);
     accountService.clear();
     accountService.updateAccounts(Collections.singleton(InMemAccountService.UNKNOWN_ACCOUNT));
     refAccount = accountService.createAndAddRandomAccount();

@@ -33,7 +33,7 @@ public class AmbrySecurityServiceFactoryTest {
   public void getAmbrySecurityServiceFactoryTest() throws Exception {
     SecurityService securityService =
         new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MockClusterMap(), null, null,
-            null).getSecurityService();
+            null, null).getSecurityService();
     Assert.assertNotNull(securityService);
   }
 }
