@@ -813,10 +813,10 @@ public class GetBlobOperationTest {
     testRangeRequestFromStartOffset(random.nextInt(blobSize), true);
     // Last n bytes of the blob
     testRangeRequestLastNBytes(random.nextInt(blobSize) + 1, true);
-    // Last blobSize + 1 bytes (should not succeed)
-    testRangeRequestLastNBytes(blobSize + 1, false);
-    // Range over the end of the blob (should not succeed)
-    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, false);
+    // Last blobSize + 1 bytes
+    testRangeRequestLastNBytes(blobSize + 1, true);
+    // Range over the end of the blob
+    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, true);
     // Ranges that start past the end of the blob (should not succeed)
     testRangeRequestFromStartOffset(blobSize, false);
     testRangeRequestOffsetRange(blobSize, blobSize + 20, false);
@@ -850,10 +850,10 @@ public class GetBlobOperationTest {
     testRangeRequestFromStartOffset(random.nextInt(blobSize), true);
     // Last n bytes of the blob
     testRangeRequestLastNBytes(random.nextInt(blobSize) + 1, true);
-    // Last blobSize + 1 bytes (should not succeed)
-    testRangeRequestLastNBytes(blobSize + 1, false);
-    // Range over the end of the blob (should not succeed)
-    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, false);
+    // Last blobSize + 1 bytes
+    testRangeRequestLastNBytes(blobSize + 1, true);
+    // Range over the end of the blob
+    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, true);
     // Ranges that start past the end of the blob (should not succeed)
     testRangeRequestFromStartOffset(blobSize, false);
     testRangeRequestOffsetRange(blobSize, blobSize + 20, false);

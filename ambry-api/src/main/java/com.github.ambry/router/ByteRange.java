@@ -17,119 +17,76 @@ package com.github.ambry.router;
 /**
  * Represents a byte range for performing ranged get requests.
  */
-public class ByteRange {
-  private static final long UNDEFINED_OFFSET = -1;
-
-  private final ByteRangeType type;
-  private final long startOffset;
-  private final long endOffset;
+public abstract class ByteRange {
 
   /**
    * Construct a range from a start offset to an end offset.
    * @param startOffset the (inclusive) start byte offset.
    * @param endOffset the (inclusive) end byte offset.
    * @return A {@link ByteRange} with the specified offsets.
-   * @throws IllegalArgumentException
+   * @throws IllegalArgumentException if the start offset is less than 0, or the end offset is less than the start.
    */
   public static ByteRange fromOffsetRange(long startOffset, long endOffset) {
     if (startOffset < 0 || endOffset < startOffset) {
       throw new IllegalArgumentException(
           "Invalid range offsets provided for ByteRange; startOffset=" + startOffset + ", endOffset=" + endOffset);
     }
-    return new ByteRange(startOffset, endOffset, ByteRangeType.OFFSET_RANGE);
+    return new OffsetRange(startOffset, endOffset);
   }
 
   /**
    * Construct a range from a start offset to the end of an object.
    * @param startOffset The (inclusive) start byte offset.
    * @return A {@link ByteRange} with the specified start offset.
-   * @throws IllegalArgumentException
+   * @throws IllegalArgumentException if the start offset is less than 0
    */
   public static ByteRange fromStartOffset(long startOffset) {
     if (startOffset < 0) {
       throw new IllegalArgumentException("Invalid range offsets provided for ByteRange; startOffset=" + startOffset);
     }
-    return new ByteRange(startOffset, UNDEFINED_OFFSET, ByteRangeType.FROM_START_OFFSET);
+    return new FromStartOffset(startOffset);
   }
 
   /**
    * Construct a range that represents the last N bytes of an object.
    * @param lastNBytes the number of bytes to read from the end of an object.
    * @return A {@link ByteRange} representing the last N bytes of an objects.
-   * @throws IllegalArgumentException
+   * @throws IllegalArgumentException if the number of bytes to read is less than or equal to 0.
    */
   public static ByteRange fromLastNBytes(long lastNBytes) {
     if (lastNBytes < 0) {
       throw new IllegalArgumentException("Invalid range offsets provided for ByteRange; lastNBytes=" + lastNBytes);
     }
-    return new ByteRange(lastNBytes, UNDEFINED_OFFSET, ByteRangeType.LAST_N_BYTES);
+    return new LastNBytes(lastNBytes);
   }
 
-  /**
-   * Construct a range from byte offsets.
-   * @param startOffset The (inclusive) start byte offset, or the number of bytes to read from the end of an object,
-   *                    in the case of a {@link ByteRangeType#LAST_N_BYTES} range type.
-   * @param endOffset The (inclusive) end byte offset, or {@link ByteRange#UNDEFINED_OFFSET}.
-   * @param type The {@link ByteRangeType} for the range.
-   */
-  private ByteRange(long startOffset, long endOffset, ByteRangeType type) {
-    this.type = type;
-    this.startOffset = startOffset;
-    this.endOffset = endOffset;
-  }
+  // Implement the following methods if they are supported for the range type.
 
   /**
-   * Get the start offset for this range.
    * @return The inclusive start offset for this range.
    * @throws UnsupportedOperationException if the range does not have a defined start offset (i.e. not of the type
    *                                       {@link ByteRangeType#OFFSET_RANGE} or
    *                                       {@link ByteRangeType#FROM_START_OFFSET})
    */
   public long getStartOffset() {
-    switch (getType()) {
-      case FROM_START_OFFSET:
-      case OFFSET_RANGE:
-        return startOffset;
-      default:
-        throw new UnsupportedOperationException("Cannot get start offset for range type: " + type);
-    }
+    throw new UnsupportedOperationException("Cannot get start offset for range type: " + getType());
   }
 
   /**
-   * Get the end offset for this range.
    * @return The inclusive end offset for this range.
    * @throws UnsupportedOperationException if the range does not have a defined start offset
    *                                       (i.e. not of the type {@link ByteRangeType#OFFSET_RANGE})
    */
   public long getEndOffset() {
-    switch (getType()) {
-      case OFFSET_RANGE:
-        return endOffset;
-      default:
-        throw new UnsupportedOperationException("Cannot get end offset for range type: " + type);
-    }
+    throw new UnsupportedOperationException("Cannot get end offset for range type: " + getType());
   }
 
   /**
-   * Get the number of bytes to read from the end of an object.
    * @return The number of bytes to read from the end of the object.
    * @throws UnsupportedOperationException if the range is not of the type {@link ByteRangeType#LAST_N_BYTES})
    */
   public long getLastNBytes() {
-    switch (getType()) {
-      case LAST_N_BYTES:
-        return startOffset;
-      default:
-        throw new UnsupportedOperationException("Cannot get last N bytes for range type: " + type);
-    }
-  }
-
-  /**
-   * Get the {@link ByteRangeType} for the range.
-   * @return the {@link ByteRangeType} for the range.
-   */
-  public ByteRangeType getType() {
-    return type;
+    throw new UnsupportedOperationException("Cannot get last N bytes for range type: " + getType());
   }
 
   /**
@@ -137,88 +94,33 @@ public class ByteRange {
    * @throws UnsupportedOperationException for {@link ByteRangeType#FROM_START_OFFSET} type ranges.
    */
   public long getRangeSize() {
-    switch (getType()) {
-      case OFFSET_RANGE:
-        return getEndOffset() - getStartOffset() + 1;
-      case LAST_N_BYTES:
-        return getLastNBytes();
-      default:
-        throw new UnsupportedOperationException("Cannot determine range size for range type: " + type);
-    }
+    throw new UnsupportedOperationException("Cannot determine range size for range type: " + getType());
   }
+
+  // implement these abstract methods for all range types.
+
+  /**
+   * @return the {@link ByteRangeType} for the range.
+   */
+  public abstract ByteRangeType getType();
 
   /**
    * Given the total size of a blob, generate a new {@link ByteRange} of type {@link ByteRangeType#OFFSET_RANGE} with
    * defined start and end offsets that are verified to be within the supplied total blob size.
    * @param totalSize the total size of the blob that this range corresponds to.
    * @return the {@link ByteRange} with start and end offsets
-   * @throws IllegalArgumentException if the byte range exceeds the total size of the blob.
+   * @throws IllegalArgumentException if the byte range starts past the end of the blob.
    */
-  public ByteRange toResolvedByteRange(long totalSize) {
-    switch (getType()) {
-      case LAST_N_BYTES:
-        if (getLastNBytes() <= totalSize) {
-          return new ByteRange(totalSize - getLastNBytes(), totalSize - 1, ByteRangeType.OFFSET_RANGE);
-        }
-        break;
-      case FROM_START_OFFSET:
-        if (getStartOffset() < totalSize) {
-          return new ByteRange(getStartOffset(), totalSize - 1, ByteRangeType.OFFSET_RANGE);
-        }
-        break;
-      case OFFSET_RANGE:
-        if (getEndOffset() < totalSize) {
-          return new ByteRange(getStartOffset(), getEndOffset(), ByteRangeType.OFFSET_RANGE);
-        }
-        break;
-    }
-    throw new IllegalArgumentException("ByteRange " + this + " exceeds the total blob size " + totalSize);
-  }
+  public abstract ByteRange toResolvedByteRange(long totalSize);
 
   @Override
-  public String toString() {
-    StringBuilder sb = new StringBuilder("ByteRange{").append("type=").append(type);
-    switch (type) {
-      case LAST_N_BYTES:
-        sb.append(", lastNBytes=").append(getLastNBytes());
-        break;
-      case FROM_START_OFFSET:
-        sb.append(", startOffset=").append(getStartOffset());
-        break;
-      case OFFSET_RANGE:
-        sb.append(", startOffset=").append(getStartOffset()).append(", endOffset=").append(getEndOffset());
-        break;
-    }
-    return sb.append('}').toString();
-  }
+  public abstract String toString();
 
   @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-
-    ByteRange byteRange = (ByteRange) o;
-
-    if (startOffset != byteRange.startOffset) {
-      return false;
-    }
-    if (endOffset != byteRange.endOffset) {
-      return false;
-    }
-    return type == byteRange.type;
-  }
+  public abstract boolean equals(Object o);
 
   @Override
-  public int hashCode() {
-    int result = type != null ? type.hashCode() : 0;
-    result = 31 * result + (int) (startOffset ^ (startOffset >>> 32));
-    result = 31 * result + (int) (endOffset ^ (endOffset >>> 32));
-    return result;
-  }
+  public abstract int hashCode();
 
   public enum ByteRangeType {
     /**
@@ -235,5 +137,184 @@ public class ByteRange {
      * If this range specifies a start and end offset to read between.
      */
     OFFSET_RANGE
+  }
+
+  /**
+   * A range from a start offset to an end offset.
+   */
+  private static class OffsetRange extends ByteRange {
+    private long startOffset;
+    private long endOffset;
+
+    /**
+     * @see ByteRange#fromOffsetRange(long, long)
+     */
+    private OffsetRange(long startOffset, long endOffset) {
+      this.startOffset = startOffset;
+      this.endOffset = endOffset;
+    }
+
+    @Override
+    public long getStartOffset() {
+      return startOffset;
+    }
+
+    @Override
+    public long getEndOffset() {
+      return endOffset;
+    }
+
+    @Override
+    public long getRangeSize() {
+      return getEndOffset() - getStartOffset() + 1;
+    }
+
+    @Override
+    public ByteRangeType getType() {
+      return ByteRangeType.OFFSET_RANGE;
+    }
+
+    @Override
+    public ByteRange toResolvedByteRange(long totalSize) {
+      if (getStartOffset() >= totalSize) {
+        throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
+      }
+      return new OffsetRange(getStartOffset(), Math.min(getEndOffset(), totalSize - 1));
+    }
+
+    @Override
+    public String toString() {
+      return "ByteRange{startOffset=" + startOffset + ", endOffset=" + endOffset + '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      OffsetRange that = (OffsetRange) o;
+      return startOffset == that.startOffset && endOffset == that.endOffset;
+    }
+
+    @Override
+    public int hashCode() {
+      return 31 * Long.hashCode(startOffset) + Long.hashCode(endOffset);
+    }
+  }
+
+  /**
+   * A range from a start offset to the end of an object.
+   */
+  private static class FromStartOffset extends ByteRange {
+    private long startOffset;
+
+    /**
+     * @see ByteRange#fromStartOffset(long)
+     */
+    private FromStartOffset(long startOffset) {
+      this.startOffset = startOffset;
+    }
+
+    @Override
+    public long getStartOffset() {
+      return startOffset;
+    }
+
+    @Override
+    public ByteRangeType getType() {
+      return ByteRangeType.FROM_START_OFFSET;
+    }
+
+    @Override
+    public ByteRange toResolvedByteRange(long totalSize) {
+      if (getStartOffset() >= totalSize) {
+        throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
+      }
+      return new OffsetRange(getStartOffset(), totalSize - 1);
+    }
+
+    @Override
+    public String toString() {
+      return "ByteRange{startOffset=" + startOffset + '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      FromStartOffset that = (FromStartOffset) o;
+      return startOffset == that.startOffset;
+    }
+
+    @Override
+    public int hashCode() {
+      return Long.hashCode(startOffset);
+    }
+  }
+
+  /**
+   * A range that represents the last N bytes of an object.
+   */
+  private static class LastNBytes extends ByteRange {
+    private long lastNBytes;
+
+    /**
+     * @see ByteRange#fromLastNBytes(long)
+     */
+    private LastNBytes(long lastNBytes) {
+      this.lastNBytes = lastNBytes;
+    }
+
+    @Override
+    public long getLastNBytes() {
+      return lastNBytes;
+    }
+
+    @Override
+    public long getRangeSize() {
+      return lastNBytes;
+    }
+
+    @Override
+    public ByteRangeType getType() {
+      return ByteRangeType.LAST_N_BYTES;
+    }
+
+    @Override
+    public ByteRange toResolvedByteRange(long totalSize) {
+      if (totalSize < 0) {
+        throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
+      }
+      return new OffsetRange(Math.max(totalSize - getLastNBytes(), 0), totalSize - 1);
+    }
+
+    @Override
+    public String toString() {
+      return "ByteRange{lastNBytes=" + lastNBytes + '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      LastNBytes that = (LastNBytes) o;
+      return lastNBytes == that.lastNBytes;
+    }
+
+    @Override
+    public int hashCode() {
+      return Long.hashCode(lastNBytes);
+    }
   }
 }

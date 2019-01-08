@@ -673,15 +673,16 @@ public class RestUtilsTest {
   public void buildContentRangeAndLengthTest() throws RestServiceException {
     // good cases
     doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 8), 12, "bytes 4-8/12", 5, true);
+    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 12), 12, "bytes 4-11/12", 8, true);
+    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 15), 12, "bytes 4-11/12", 8, true);
     doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(14), 17, "bytes 14-16/17", 3, true);
     doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(12), 17, "bytes 5-16/17", 12, true);
     doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(17), 17, "bytes 0-16/17", 17, true);
+    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(13), 12, "bytes 0-11/12", 12, true);
     // bad cases
-    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 12), 12, null, -1, false);
-    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 15), 12, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 12), 4, null, -1, false);
     doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(12), 12, null, -1, false);
     doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(15), 12, null, -1, false);
-    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(13), 12, null, -1, false);
   }
 
   /**

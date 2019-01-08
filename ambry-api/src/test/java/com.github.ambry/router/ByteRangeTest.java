@@ -85,14 +85,15 @@ public class ByteRangeTest {
 
     // -20 (last 20 bytes)
     range = ByteRange.fromLastNBytes(20);
-    assertRangeResolutionFailure(range, 0);
     assertRangeResolutionFailure(range, -1);
+    assertRangeResolutionSuccess(range, 0, 0, -1);
+    assertRangeResolutionSuccess(range, 19, 0, 18);
     assertRangeResolutionSuccess(range, 20, 0, 19);
     assertRangeResolutionSuccess(range, 30, 10, 29);
 
     // 22-44 (bytes 22 through 44, inclusive)
     range = ByteRange.fromOffsetRange(22, 44);
-    assertRangeResolutionFailure(range, 44);
+    assertRangeResolutionSuccess(range, 44, 22, 43);
     assertRangeResolutionSuccess(range, 45, 22, 44);
 
     // {MAX_LONG-50}- (bytes after/including MAX_LONG-50)
@@ -117,14 +118,14 @@ public class ByteRangeTest {
     ByteRange b = ByteRange.fromLastNBytes(4);
     assertEquals("ByteRanges should be equal", a, b);
     assertEquals("ByteRange hashcodes should be equal", a.hashCode(), b.hashCode());
-    assertEquals("toString output not as expected", "ByteRange{type=LAST_N_BYTES, lastNBytes=4}", a.toString());
+    assertEquals("toString output not as expected", "ByteRange{lastNBytes=4}", a.toString());
 
     a = ByteRange.fromOffsetRange(2, 5);
     assertFalse("ByteRanges should not be equal", a.equals(b));
     b = ByteRange.fromOffsetRange(2, 5);
     assertEquals("ByteRanges should be equal", a, b);
     assertEquals("ByteRange hashcodes should be equal", a.hashCode(), b.hashCode());
-    assertEquals("toString output not as expected", "ByteRange{type=OFFSET_RANGE, startOffset=2, endOffset=5}",
+    assertEquals("toString output not as expected", "ByteRange{startOffset=2, endOffset=5}",
         a.toString());
 
     a = ByteRange.fromStartOffset(7);
@@ -132,7 +133,7 @@ public class ByteRangeTest {
     b = ByteRange.fromStartOffset(7);
     assertEquals("ByteRanges should be equal", a, b);
     assertEquals("ByteRange hashcodes should be equal", a.hashCode(), b.hashCode());
-    assertEquals("toString output not as expected", "ByteRange{type=FROM_START_OFFSET, startOffset=7}", a.toString());
+    assertEquals("toString output not as expected", "ByteRange{startOffset=7}", a.toString());
   }
 
   /**
