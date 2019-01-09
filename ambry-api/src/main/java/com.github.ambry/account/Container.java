@@ -63,6 +63,7 @@ public class Container {
   static final String STATUS_KEY = "status";
   static final String DESCRIPTION_KEY = "description";
   static final String IS_PRIVATE_KEY = "isPrivate";
+  static final String IS_BACKED_UP_KEY = "isBackedUp";
   static final String ENCRYPTED_KEY = "encrypted";
   static final String PREVIOUSLY_ENCRYPTED_KEY = "previouslyEncrypted";
   static final String CACHEABLE_KEY = "cacheable";
@@ -71,6 +72,7 @@ public class Container {
   static final String TTL_REQUIRED_KEY = "ttlRequired";
   static final String CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD = "contentTypeWhitelistForFilenamesOnDownload";
   static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
+  static final boolean IS_BACKED_UP_DEFAULT_VALUE = false;
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
   static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
@@ -264,7 +266,8 @@ public class Container {
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
           UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, UNKNOWN_CONTAINER_CACHEABLE_SETTING,
           UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING,
-          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID,
+          IS_BACKED_UP_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -278,7 +281,8 @@ public class Container {
           DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING,
-          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID,
+          IS_BACKED_UP_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -292,7 +296,8 @@ public class Container {
           DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING,
-          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
+          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID,
+          IS_BACKED_UP_DEFAULT_VALUE);
 
   // container field variables
   private final short id;
@@ -302,6 +307,7 @@ public class Container {
   private final boolean encrypted;
   private final boolean previouslyEncrypted;
   private final boolean cacheable;
+  private final boolean isBackedUp;
   private final boolean mediaScanDisabled;
   private final String replicationPolicy;
   private final boolean ttlRequired;
@@ -328,6 +334,7 @@ public class Container {
         encrypted = ENCRYPTED_DEFAULT_VALUE;
         previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         cacheable = !metadata.getBoolean(IS_PRIVATE_KEY);
+        isBackedUp = IS_BACKED_UP_DEFAULT_VALUE;
         mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         replicationPolicy = null;
         ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
@@ -341,6 +348,7 @@ public class Container {
         encrypted = metadata.optBoolean(ENCRYPTED_KEY, ENCRYPTED_DEFAULT_VALUE);
         previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE);
         cacheable = metadata.optBoolean(CACHEABLE_KEY, CACHEABLE_DEFAULT_VALUE);
+        isBackedUp = metadata.optBoolean(IS_BACKED_UP_KEY, IS_BACKED_UP_DEFAULT_VALUE);
         mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED_KEY, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
         replicationPolicy = metadata.optString(REPLICATION_POLICY_KEY, null);
         ttlRequired = metadata.optBoolean(TTL_REQUIRED_KEY, TTL_REQUIRED_DEFAULT_VALUE);
@@ -380,7 +388,8 @@ public class Container {
    */
   Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
-      boolean ttlRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload, short parentAccountId) {
+      boolean ttlRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload, short parentAccountId,
+      boolean isBackedUp) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -390,6 +399,7 @@ public class Container {
     this.parentAccountId = parentAccountId;
     switch (currentJsonVersion) {
       case JSON_VERSION_1:
+        this.isBackedUp = IS_BACKED_UP_DEFAULT_VALUE;
         this.encrypted = ENCRYPTED_DEFAULT_VALUE;
         this.previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         this.mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
@@ -399,6 +409,7 @@ public class Container {
             CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
         break;
       case JSON_VERSION_2:
+        this.isBackedUp = isBackedUp;
         this.encrypted = encrypted;
         this.previouslyEncrypted = previouslyEncrypted;
         this.mediaScanDisabled = mediaScanDisabled;
@@ -467,6 +478,7 @@ public class Container {
         metadata.put(ENCRYPTED_KEY, encrypted);
         metadata.put(PREVIOUSLY_ENCRYPTED_KEY, previouslyEncrypted);
         metadata.put(CACHEABLE_KEY, cacheable);
+        metadata.put(IS_BACKED_UP_KEY, isBackedUp);
         metadata.put(MEDIA_SCAN_DISABLED_KEY, mediaScanDisabled);
         metadata.putOpt(REPLICATION_POLICY_KEY, replicationPolicy);
         metadata.put(TTL_REQUIRED_KEY, ttlRequired);
@@ -521,6 +533,13 @@ public class Container {
    */
   public boolean isEncrypted() {
     return encrypted;
+  }
+
+  /**
+   * @return {@code true} if blobs in the {@link Container} should be backed up, {@code false} otherwise.
+   */
+  public boolean isBackedUp() {
+    return isBackedUp;
   }
 
   /**
