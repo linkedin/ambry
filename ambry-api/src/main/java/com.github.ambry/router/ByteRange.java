@@ -31,7 +31,7 @@ public abstract class ByteRange {
       throw new IllegalArgumentException(
           "Invalid range offsets provided for ByteRange; startOffset=" + startOffset + ", endOffset=" + endOffset);
     }
-    return new OffsetRange(startOffset, endOffset);
+    return new ClosedRange(startOffset, endOffset);
   }
 
   /**
@@ -44,7 +44,7 @@ public abstract class ByteRange {
     if (startOffset < 0) {
       throw new IllegalArgumentException("Invalid range offsets provided for ByteRange; startOffset=" + startOffset);
     }
-    return new FromStartOffset(startOffset);
+    return new OpenRange(startOffset);
   }
 
   /**
@@ -57,7 +57,13 @@ public abstract class ByteRange {
     if (lastNBytes < 0) {
       throw new IllegalArgumentException("Invalid range offsets provided for ByteRange; lastNBytes=" + lastNBytes);
     }
-    return new LastNBytes(lastNBytes);
+    return new SuffixRange(lastNBytes);
+  }
+
+  /**
+   * All implementations should be defined in this class.
+   */
+  private ByteRange() {
   }
 
   // Implement the following methods if they are supported for the range type.
@@ -142,14 +148,14 @@ public abstract class ByteRange {
   /**
    * A range from a start offset to an end offset.
    */
-  private static class OffsetRange extends ByteRange {
+  private static class ClosedRange extends ByteRange {
     private long startOffset;
     private long endOffset;
 
     /**
      * @see ByteRange#fromOffsetRange(long, long)
      */
-    private OffsetRange(long startOffset, long endOffset) {
+    private ClosedRange(long startOffset, long endOffset) {
       this.startOffset = startOffset;
       this.endOffset = endOffset;
     }
@@ -179,7 +185,7 @@ public abstract class ByteRange {
       if (getStartOffset() >= totalSize) {
         throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
       }
-      return new OffsetRange(getStartOffset(), Math.min(getEndOffset(), totalSize - 1));
+      return new ClosedRange(getStartOffset(), Math.min(getEndOffset(), totalSize - 1));
     }
 
     @Override
@@ -195,7 +201,7 @@ public abstract class ByteRange {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      OffsetRange that = (OffsetRange) o;
+      ClosedRange that = (ClosedRange) o;
       return startOffset == that.startOffset && endOffset == that.endOffset;
     }
 
@@ -208,13 +214,13 @@ public abstract class ByteRange {
   /**
    * A range from a start offset to the end of an object.
    */
-  private static class FromStartOffset extends ByteRange {
+  private static class OpenRange extends ByteRange {
     private long startOffset;
 
     /**
      * @see ByteRange#fromStartOffset(long)
      */
-    private FromStartOffset(long startOffset) {
+    private OpenRange(long startOffset) {
       this.startOffset = startOffset;
     }
 
@@ -233,7 +239,7 @@ public abstract class ByteRange {
       if (getStartOffset() >= totalSize) {
         throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
       }
-      return new OffsetRange(getStartOffset(), totalSize - 1);
+      return new ClosedRange(getStartOffset(), totalSize - 1);
     }
 
     @Override
@@ -249,7 +255,7 @@ public abstract class ByteRange {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      FromStartOffset that = (FromStartOffset) o;
+      OpenRange that = (OpenRange) o;
       return startOffset == that.startOffset;
     }
 
@@ -262,13 +268,13 @@ public abstract class ByteRange {
   /**
    * A range that represents the last N bytes of an object.
    */
-  private static class LastNBytes extends ByteRange {
+  private static class SuffixRange extends ByteRange {
     private long lastNBytes;
 
     /**
      * @see ByteRange#fromLastNBytes(long)
      */
-    private LastNBytes(long lastNBytes) {
+    private SuffixRange(long lastNBytes) {
       this.lastNBytes = lastNBytes;
     }
 
@@ -292,7 +298,7 @@ public abstract class ByteRange {
       if (totalSize < 0) {
         throw new IllegalArgumentException("Invalid totalSize: " + totalSize + " for range: " + this);
       }
-      return new OffsetRange(Math.max(totalSize - getLastNBytes(), 0), totalSize - 1);
+      return new ClosedRange(Math.max(totalSize - getLastNBytes(), 0), totalSize - 1);
     }
 
     @Override
@@ -308,7 +314,7 @@ public abstract class ByteRange {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      LastNBytes that = (LastNBytes) o;
+      SuffixRange that = (SuffixRange) o;
       return lastNBytes == that.lastNBytes;
     }
 

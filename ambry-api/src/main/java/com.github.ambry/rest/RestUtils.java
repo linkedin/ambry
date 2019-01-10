@@ -515,7 +515,7 @@ public class RestUtils {
    * @return a {@link Pair} containing the content range header value and the content length in bytes.
    */
   public static Pair<String, Long> buildContentRangeAndLength(ByteRange range, long blobSize)
-      throws RestServiceException {
+      throws RestServiceException{
     try {
       range = range.toResolvedByteRange(blobSize);
     } catch (IllegalArgumentException e) {
