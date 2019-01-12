@@ -14,6 +14,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.server.StatsReportType;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.util.HashMap;
@@ -46,6 +47,7 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
   private final HelixClusterAggregator clusterAggregator;
   private final String healthReportName;
   private final String statsFieldName;
+  private final StatsReportType statsReportType;
   private static final Logger logger = LoggerFactory.getLogger(HelixHealthReportAggregatorTask.class);
 
   /**
@@ -55,13 +57,15 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
    *                               outside of this period will be ignored.
    * @param healthReportName Name of the health report
    * @param statsFieldName Stats field name
+   * @param statsReportType the type of stats report
    */
   HelixHealthReportAggregatorTask(TaskCallbackContext context, long relevantTimePeriodInMs, String healthReportName,
-      String statsFieldName) {
+      String statsFieldName, StatsReportType statsReportType) {
     manager = context.getManager();
     clusterAggregator = new HelixClusterAggregator(relevantTimePeriodInMs);
     this.healthReportName = healthReportName;
     this.statsFieldName = statsFieldName;
+    this.statsReportType = statsReportType;
   }
 
   @Override
@@ -77,13 +81,14 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
           statsWrappersJSON.put(instanceName, record.getRecord().getSimpleField(statsFieldName));
         }
       }
-      Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON);
+      Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON, statsReportType);
       String resultId = String.format("Aggregated_%s", healthReportName);
       ZNRecord znRecord = new ZNRecord(resultId);
       znRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME, results.getFirst());
       znRecord.setSimpleField(VALID_SIZE_FIELD_NAME, results.getSecond());
       znRecord.setSimpleField(TIMESTAMP_FIELD_NAME, String.valueOf(SystemTime.getInstance().milliseconds()));
-      znRecord.setListField(ERROR_OCCURRED_INSTANCES_FIELD_NAME, clusterAggregator.getExceptionOccurredInstances());
+      znRecord.setListField(ERROR_OCCURRED_INSTANCES_FIELD_NAME,
+          clusterAggregator.getExceptionOccurredInstances(statsReportType));
       String path = String.format("/%s", resultId);
       manager.getHelixPropertyStore().set(path, znRecord, AccessOption.PERSISTENT);
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");

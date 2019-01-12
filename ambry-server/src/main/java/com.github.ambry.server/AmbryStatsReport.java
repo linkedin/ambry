@@ -66,6 +66,11 @@ class AmbryStatsReport extends HealthReportProvider implements AmbryHealthReport
   }
 
   @Override
+  public StatsReportType getStatsReportType() {
+    return statsReportType;
+  }
+
+  @Override
   public long getAggregateIntervalInMinutes() {
     return aggregatePeriodInMinutes;
   }
