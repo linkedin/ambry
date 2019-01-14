@@ -357,7 +357,7 @@ public class SSLSelectorTest {
           }
 
           /**
-           * Helper method for incrementing the
+           * Helper method for incrementing the recommended buffer size for buffer expansion testing.
            * @param defaultSize the default size to use if an override is not present.
            * @param sizeOverride a reference to the current override value, the reference can be null if the override
            *                     is not enabled.

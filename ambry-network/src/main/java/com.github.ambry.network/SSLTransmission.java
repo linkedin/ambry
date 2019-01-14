@@ -210,13 +210,16 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
           logger.trace(
               "SSLHandshake NEED_WRAP channelId {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
               getConnectionId(), appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
-          handshakeResult = handshakeWrap(write);
-          if (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW) {
-            handleWrapOverflow();
-          } else if (handshakeResult.getStatus() == Status.BUFFER_UNDERFLOW) {
+          do {
+            handshakeResult = handshakeWrap(write);
+            if (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW) {
+              handleWrapOverflow();
+            }
+          } while (handshakeResult.getStatus() == Status.BUFFER_OVERFLOW);
+          if (handshakeResult.getStatus() == Status.BUFFER_UNDERFLOW) {
             throw new IllegalStateException("Should not have received BUFFER_UNDERFLOW during handshake WRAP.");
           } else if (handshakeResult.getStatus() == Status.CLOSED) {
-            throw new EOFException();
+            throw new EOFException("SSL handshake status CLOSED during handshake WRAP");
           }
           logger.trace(
               "SSLHandshake NEED_WRAP channelId {}, handshakeResult {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
