@@ -1030,7 +1030,7 @@ public class GetBlobOperationTest {
       throws Exception {
     doPut();
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRange.fromOffsetRange(startOffset, endOffset))
+        .range(ByteRanges.fromOffsetRange(startOffset, endOffset))
         .build(), false, routerMetrics.ageAtGet);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
@@ -1045,7 +1045,7 @@ public class GetBlobOperationTest {
   private void testRangeRequestFromStartOffset(long startOffset, boolean rangeSatisfiable) throws Exception {
     doPut();
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRange.fromStartOffset(startOffset))
+        .range(ByteRanges.fromStartOffset(startOffset))
         .build(), false, routerMetrics.ageAtGet);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
@@ -1060,7 +1060,7 @@ public class GetBlobOperationTest {
   private void testRangeRequestLastNBytes(long lastNBytes, boolean rangeSatisfiable) throws Exception {
     doPut();
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRange.fromLastNBytes(lastNBytes))
+        .range(ByteRanges.fromLastNBytes(lastNBytes))
         .build(), false, routerMetrics.ageAtGet);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }

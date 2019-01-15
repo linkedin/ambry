@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.utils.Crc32;
@@ -515,7 +516,7 @@ public class RestUtils {
    * @return a {@link Pair} containing the content range header value and the content length in bytes.
    */
   public static Pair<String, Long> buildContentRangeAndLength(ByteRange range, long blobSize)
-      throws RestServiceException{
+      throws RestServiceException {
     try {
       range = range.toResolvedByteRange(blobSize);
     } catch (IllegalArgumentException e) {
@@ -876,11 +877,11 @@ public class RestUtils {
       String startOffsetStr = rangeHeaderValue.substring(BYTE_RANGE_PREFIX.length(), hyphenIndex);
       String endOffsetStr = rangeHeaderValue.substring(hyphenIndex + 1);
       if (startOffsetStr.isEmpty()) {
-        range = ByteRange.fromLastNBytes(Long.parseLong(endOffsetStr));
+        range = ByteRanges.fromLastNBytes(Long.parseLong(endOffsetStr));
       } else if (endOffsetStr.isEmpty()) {
-        range = ByteRange.fromStartOffset(Long.parseLong(startOffsetStr));
+        range = ByteRanges.fromStartOffset(Long.parseLong(startOffsetStr));
       } else {
-        range = ByteRange.fromOffsetRange(Long.parseLong(startOffsetStr), Long.parseLong(endOffsetStr));
+        range = ByteRanges.fromOffsetRange(Long.parseLong(startOffsetStr), Long.parseLong(endOffsetStr));
       }
     } catch (Exception e) {
       throw new RestServiceException(
