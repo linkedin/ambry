@@ -62,7 +62,7 @@ public class AccountContainerTest {
   private List<Boolean> refContainerEncryptionValues;
   private List<Boolean> refContainerPreviousEncryptionValues;
   private List<Boolean> refContainerCachingValues;
-  private List<Boolean> refContainerIsBackedUpValues;
+  private List<Boolean> refContainerBackupEnabledValues;
   private List<Boolean> refContainerMediaScanDisabledValues;
   private List<String> refContainerReplicationPolicyValues;
   private List<Boolean> refContainerTtlRequiredValues;
@@ -130,7 +130,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
-            .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -143,7 +143,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
-            .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -165,7 +165,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
-            .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -178,7 +178,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
-            .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -200,7 +200,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
-            .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -213,7 +213,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
-            .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -225,7 +225,7 @@ public class AccountContainerTest {
         refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
         .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
         .setCacheable(refContainerCachingValues.get(0))
-        .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+        .setBackupEnabled(refContainerBackupEnabledValues.get(0))
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -237,7 +237,7 @@ public class AccountContainerTest {
         refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
         .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
         .setCacheable(refContainerCachingValues.get(0))
-        .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+        .setBackupEnabled(refContainerBackupEnabledValues.get(0))
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -269,7 +269,7 @@ public class AccountContainerTest {
         refContainerDescriptions.get(0), (short) (refAccountId + 1)).setEncrypted(refContainerEncryptionValues.get(0))
         .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
         .setCacheable(refContainerCachingValues.get(0))
-        .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+        .setBackupEnabled(refContainerBackupEnabledValues.get(0))
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -386,7 +386,7 @@ public class AccountContainerTest {
               refContainerDescriptions.get(i), refAccountId).setEncrypted(refContainerEncryptionValues.get(i))
               .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(i))
               .setCacheable(refContainerCachingValues.get(i))
-              .setIsBackedUp(refContainerIsBackedUpValues.get(i))
+              .setBackupEnabled(refContainerBackupEnabledValues.get(i))
               .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(i))
               .setReplicationPolicy(refContainerReplicationPolicyValues.get(i))
               .setTtlRequired(refContainerTtlRequiredValues.get(i))
@@ -624,7 +624,7 @@ public class AccountContainerTest {
             refContainerDescriptions.get(0), refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
-            .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -742,7 +742,7 @@ public class AccountContainerTest {
             "A changed container description", refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
-            .setIsBackedUp(refContainerIsBackedUpValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -920,7 +920,7 @@ public class AccountContainerTest {
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
-          Collections.emptySet(), (short) 0, false);
+          Collections.emptySet(), false, (short) 0);
     }, null);
   }
 
@@ -936,7 +936,7 @@ public class AccountContainerTest {
     refContainerEncryptionValues = new ArrayList<>();
     refContainerPreviousEncryptionValues = new ArrayList<>();
     refContainerCachingValues = new ArrayList<>();
-    refContainerIsBackedUpValues = new ArrayList<>();
+    refContainerBackupEnabledValues = new ArrayList<>();
     refContainerMediaScanDisabledValues = new ArrayList<>();
     refContainerReplicationPolicyValues = new ArrayList<>();
     refContainerTtlRequiredValues = new ArrayList<>();
@@ -961,7 +961,7 @@ public class AccountContainerTest {
       refContainerEncryptionValues.add(encrypted);
       refContainerPreviousEncryptionValues.add(previouslyEncrypted);
       refContainerCachingValues.add(random.nextBoolean());
-      refContainerIsBackedUpValues.add(random.nextBoolean());
+      refContainerBackupEnabledValues.add(random.nextBoolean());
       refContainerMediaScanDisabledValues.add(random.nextBoolean());
       if (refContainerReplicationPolicyValues.contains(null)) {
         refContainerReplicationPolicyValues.add(UtilsTest.getRandomString(10));
@@ -982,7 +982,7 @@ public class AccountContainerTest {
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
           refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
           refContainerTtlRequiredValues.get(i), refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i),
-          refAccountId, refContainerIsBackedUpValues.get(i)));
+          refContainerBackupEnabledValues.get(i), refAccountId));
       containerJsonList.add(buildContainerJson(refContainers.get(i)));
     }
   }
@@ -1022,7 +1022,7 @@ public class AccountContainerTest {
         containerJson.put(ENCRYPTED_KEY, container.isEncrypted());
         containerJson.put(PREVIOUSLY_ENCRYPTED_KEY, container.wasPreviouslyEncrypted());
         containerJson.put(CACHEABLE_KEY, container.isCacheable());
-        containerJson.put(IS_BACKED_UP_KEY, container.isBackedUp());
+        containerJson.put(BACKUP_ENABLED_KEY, container.isBackupEnabled());
         containerJson.put(MEDIA_SCAN_DISABLED_KEY, container.isMediaScanDisabled());
         containerJson.putOpt(REPLICATION_POLICY_KEY, container.getReplicationPolicy());
         containerJson.put(TTL_REQUIRED_KEY, container.isTtlRequired());

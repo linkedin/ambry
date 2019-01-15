@@ -41,7 +41,7 @@ public class ContainerBuilder {
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
   private Set<String> contentTypeWhitelistForFilenamesOnDownload =
       CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
-  private boolean isBackedUp = IS_BACKED_UP_DEFAULT_VALUE;
+  private boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -65,7 +65,7 @@ public class ContainerBuilder {
     ttlRequired = origin.isTtlRequired();
     parentAccountId = origin.getParentAccountId();
     contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
-    isBackedUp = origin.isBackedUp();
+    backupEnabled = origin.isBackupEnabled();
   }
 
   /**
@@ -166,11 +166,11 @@ public class ContainerBuilder {
 
   /**
    * Sets the backup setting of the {@link Container} to build
-   * @param isBackedUp The backup setting to set.
+   * @param backupEnabled The backup setting to set.
    * @return This builder.
    */
-  public ContainerBuilder setIsBackedUp(boolean isBackedUp) {
-    this.isBackedUp = isBackedUp;
+  public ContainerBuilder setBackupEnabled(boolean backupEnabled) {
+    this.backupEnabled = backupEnabled;
     return this;
   }
 
@@ -224,6 +224,7 @@ public class ContainerBuilder {
    */
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, replicationPolicy, ttlRequired, contentTypeWhitelistForFilenamesOnDownload, parentAccountId, isBackedUp);
+        mediaScanDisabled, replicationPolicy, ttlRequired, contentTypeWhitelistForFilenamesOnDownload, backupEnabled,
+        parentAccountId);
   }
 }
