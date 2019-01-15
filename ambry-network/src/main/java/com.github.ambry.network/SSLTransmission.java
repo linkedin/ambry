@@ -521,45 +521,47 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    */
   @Override
   public int write(ByteBuffer src) throws IOException {
-    int written = 0;
     if (closing) {
       throw new IllegalStateException("Channel is in closing state");
-    }
-    if (!handshakeComplete) {
-      return written;
-    }
-
-    if (!flush(netWriteBuffer)) {
-      return written;
+    } else if (!handshakeComplete) {
+      return 0;
+    } else if (!flush(netWriteBuffer)) {
+      return 0;
     }
 
-    netWriteBuffer.clear();
-    long startTimeMs = SystemTime.getInstance().milliseconds();
-    SSLEngineResult wrapResult = sslEngine.wrap(src, netWriteBuffer);
-    long encryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
-    logger.trace("SSL encryption time: {} ms for {} bytes", encryptionTimeMs, wrapResult.bytesConsumed());
-    if (wrapResult.bytesConsumed() > 0) {
-      metrics.sslEncryptionTimeInUsPerKB.update(
-          TimeUnit.MILLISECONDS.toMicros(encryptionTimeMs) * 1024 / wrapResult.bytesConsumed());
-    }
-    netWriteBuffer.flip();
+    int written = 0;
+    while (src.remaining() != 0) {
+      netWriteBuffer.clear();
+      long startTimeMs = SystemTime.getInstance().milliseconds();
+      SSLEngineResult wrapResult = sslEngine.wrap(src, netWriteBuffer);
+      long encryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
+      logger.trace("SSL encryption time: {} ms for {} bytes", encryptionTimeMs, wrapResult.bytesConsumed());
+      if (wrapResult.bytesConsumed() > 0) {
+        metrics.sslEncryptionTimeInUsPerKB.update(
+            TimeUnit.MILLISECONDS.toMicros(encryptionTimeMs) * 1024 / wrapResult.bytesConsumed());
+      }
+      netWriteBuffer.flip();
+      //handle ssl renegotiation
+      if (wrapResult.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
+        handshake();
+        metrics.sslRenegotiationCount.inc();
+        break;
+      }
 
-    //handle ssl renegotiation
-    if (wrapResult.getHandshakeStatus() != HandshakeStatus.NOT_HANDSHAKING) {
-      handshake();
-      metrics.sslRenegotiationCount.inc();
-      return written;
-    }
-
-    if (wrapResult.getStatus() == Status.OK) {
-      written = wrapResult.bytesConsumed();
-      flush(netWriteBuffer);
-    } else if (wrapResult.getStatus() == Status.BUFFER_OVERFLOW) {
-      handleWrapOverflow();
-    } else if (wrapResult.getStatus() == Status.BUFFER_UNDERFLOW) {
-      throw new IllegalStateException("SSL BUFFER_UNDERFLOW during write");
-    } else if (wrapResult.getStatus() == Status.CLOSED) {
-      throw new EOFException();
+      if (wrapResult.getStatus() == SSLEngineResult.Status.OK) {
+        written += wrapResult.bytesConsumed();
+        if (!flush(netWriteBuffer)) {
+          // break if socketChannel can't accept all data in netWriteBuffer
+          break;
+        }
+        // otherwise, we are safe to clear the buffer for next iteration.
+      } else if (wrapResult.getStatus() == Status.BUFFER_OVERFLOW) {
+        handleWrapOverflow();
+      } else if (wrapResult.getStatus() == Status.BUFFER_UNDERFLOW) {
+        throw new IllegalStateException("SSL BUFFER_UNDERFLOW during write");
+      } else if (wrapResult.getStatus() == Status.CLOSED) {
+        throw new EOFException();
+      }
     }
     return written;
   }
