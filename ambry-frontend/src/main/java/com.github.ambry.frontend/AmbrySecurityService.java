@@ -113,6 +113,19 @@ class AmbrySecurityService implements SecurityService {
       } catch (Exception e) {
         exception = e;
       }
+    } else if (restRequest.getRestMethod() == RestMethod.GET) {
+      SubResource subresource = getBlobSubResource(restRequest);
+      String operationOrBlobId =
+          getOperationOrBlobIdFromUri(restRequest, subresource, frontendConfig.pathPrefixesToRemove);
+      operationOrBlobId = operationOrBlobId.startsWith("/") ? operationOrBlobId.substring(1) : operationOrBlobId;
+      // ensure that secure path validation is only performed when getting blobs rather than other operations.
+      if (!operationOrBlobId.isEmpty() && !Operations.OperationsSet.contains(operationOrBlobId)) {
+        try {
+          validateSecurePathIfRequired(restRequest, frontendConfig.securePathToValidate);
+        } catch (Exception e) {
+          exception = e;
+        }
+      }
     }
     frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
@@ -340,5 +353,23 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, container.getName());
     }
     restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, !container.isCacheable());
+  }
+
+  /**
+   * Validate the secure path in the URI if required for specific {@link Container}.
+   * @param restRequest the {@link RestRequest} that may contain secure path.
+   * @param expectSecurePath the expected secure path specified in {@link com.github.ambry.config.FrontendConfig}.
+   * @throws RestServiceException
+   */
+  private void validateSecurePathIfRequired(RestRequest restRequest, String expectSecurePath)
+      throws RestServiceException {
+    Container targetContainer = getContainerFromArgs(restRequest.getArgs());
+    if (targetContainer.isSecurePathValidationRequired()) {
+      String securePathInUri = getSecurePath(restRequest);
+      if (!securePathInUri.equals(expectSecurePath)) {
+        throw new RestServiceException("Secure path in restRequest doesn't match the expected one",
+            RestServiceErrorCode.AccessDenied);
+      }
+    }
   }
 }

@@ -177,7 +177,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     try {
       logger.trace("Handling GET request - {}", restRequest.getUri());
       checkAvailable();
-      // TODO: make this non blocking once all handling of indiviual methods is moved to their own classes
+      // TODO: make this non blocking once all handling of individual methods is moved to their own classes
       securityService.preProcessRequest(restRequest).get();
       RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
       String operationOrBlobId =

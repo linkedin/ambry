@@ -13,6 +13,11 @@
  */
 package com.github.ambry.frontend;
 
+import java.util.Arrays;
+import java.util.Set;
+import java.util.TreeSet;
+
+
 /**
  * Defines all the operations that are expressed as a part of the URI
  */
@@ -22,4 +27,10 @@ public class Operations {
   public static final String UPDATE_TTL = "updateTtl";
   public static final String STITCH = "stitch";
   public static final String GET_CLUSTER_MAP_SNAPSHOT = "getClusterMapSnapshot";
+  public static final Set<String> OperationsSet;
+
+  static {
+    OperationsSet = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    OperationsSet.addAll(Arrays.asList(GET_PEERS, GET_SIGNED_URL, UPDATE_TTL, STITCH, GET_CLUSTER_MAP_SNAPSHOT));
+  }
 }

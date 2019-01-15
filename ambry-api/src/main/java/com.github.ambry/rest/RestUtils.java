@@ -530,12 +530,12 @@ public class RestUtils {
    * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
    * performed on.
    * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @param subResource the {@link RestUtils.SubResource} if one is present. {@code null} otherwise.
+   * @param subResource the {@link SubResource} if one is present. {@code null} otherwise.
    * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
    *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
    * @return extracted operation type or blob ID from the URI.
    */
-  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, RestUtils.SubResource subResource,
+  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, SubResource subResource,
       List<String> prefixesToRemove) {
     String path = restRequest.getPath();
     int startIndex = 0;
@@ -587,6 +587,39 @@ public class RestUtils {
       }
     }
     return subResource;
+  }
+
+  /**
+   * When validating secure path is required by container, this method parses the secure path from uri.
+   * Getting secure path is based on the assumption that the first non-empty segment (split by "/") is secure path.
+   * @param restRequest {@link RestRequest} containing metadata about the request.
+   * @return secure path if uri contains one; otherwise empty string is returned.
+   */
+  public static String getSecurePath(RestRequest restRequest) {
+    String path = restRequest.getPath();
+    SubResource subResource = getBlobSubResource(restRequest);
+    int endIndex = path.length();
+    String securePath = "";
+    if (subResource != null) {
+      // remove sub resource from path
+      endIndex = endIndex - subResource.name().length() - 1;
+      path = path.substring(0, endIndex);
+    }
+    if (path.startsWith("/")) {
+      // remove leading slash
+      path = path.substring(1);
+    }
+    // if this is a signed id, return empty secure path
+    if (!path.startsWith(RestUtils.SIGNED_ID_PREFIX)) {
+      String[] segments = path.split("/");
+      // extract secure path
+      // 1. if there are more than 1 segment   (i.e. "signed-path/blobId")
+      // 2. if there is 1 segment and uri ends with "/" (i.e. "signed-path/")
+      if (segments.length > 1 || (segments.length == 1 && path.endsWith("/"))) {
+        securePath = segments[0];
+      }
+    }
+    return securePath;
   }
 
   /**

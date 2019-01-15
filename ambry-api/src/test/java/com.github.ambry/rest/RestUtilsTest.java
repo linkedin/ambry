@@ -516,9 +516,10 @@ public class RestUtilsTest {
   public void getOperationOrBlobIdFromUriTest() throws JSONException, UnsupportedEncodingException, URISyntaxException {
     String baseId = "expectedOp";
     String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
+    String securePath = "secure-path";
     String[] validIdUris = {"/", "/" + baseId, "/" + baseId + "/random/extra", "", baseId, baseId + "/random/extra"};
-    List<String> prefixesToTestOn = Arrays.asList("", "/media", "/toRemove", "/orNotToRemove");
-    List<String> prefixesToRemove = Arrays.asList("/media", "/toRemove");
+    List<String> prefixesToTestOn = Arrays.asList("", "/media", "/toRemove", "/orNotToRemove", "/" + securePath);
+    List<String> prefixesToRemove = Arrays.asList("/media", "/toRemove", "/" + securePath);
     String blobId = UtilsTest.getRandomString(10);
     String blobIdQuery = RestUtils.Headers.BLOB_ID + "=" + blobId;
 
@@ -605,6 +606,54 @@ public class RestUtilsTest {
   }
 
   /**
+   * Tests {@link RestUtils#getSecurePath(RestRequest)}.
+   * @throws Exception
+   */
+  @Test
+  public void getSecurePathTest() throws Exception {
+    String blobId = UtilsTest.getRandomString(10);
+    String operation = "validOp";
+    String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
+    String[] validIdUris = {"/", "/" + blobId, "", blobId, RestUtils.SIGNED_ID_PREFIX + "/" + blobId};
+    String[] validOpUris = {operation + "/random/extra", "/" + operation + "/random/extra"};
+    String securePath = "secure-path";
+    // construct test cases and expected results
+    Map<String, String> testCasesAndExpectedResults = new HashMap<>();
+    for (String uri : validIdUris) {
+      testCasesAndExpectedResults.put(uri, "");
+      testCasesAndExpectedResults.put(uri + queryString, "");
+      if (uri.length() > 1) {
+        // add sub resource and query string
+        for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+          testCasesAndExpectedResults.put(uri + "/" + subResource, "");
+          testCasesAndExpectedResults.put(uri + "/" + subResource + queryString, "");
+        }
+      }
+    }
+    for (String uri : validOpUris) {
+      testCasesAndExpectedResults.put(uri, operation);
+      testCasesAndExpectedResults.put(uri + queryString, operation);
+      for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+        testCasesAndExpectedResults.put(uri + "/" + subResource, operation);
+        testCasesAndExpectedResults.put(uri + "/" + subResource + queryString, operation);
+      }
+    }
+    // verify that getSecurePath can correctly extract first segment in uri
+    for (Map.Entry<String, String> testCaseAndResult : testCasesAndExpectedResults.entrySet()) {
+      String testUri = testCaseAndResult.getKey();
+      String expectedOutput = testCaseAndResult.getValue();
+      // test without secure path
+      RestRequest restRequest = createRestRequest(RestMethod.GET, testUri, null);
+      assertEquals("Unexpected secure path for: " + testUri, expectedOutput, RestUtils.getSecurePath(restRequest));
+      // test with secure path
+      String processedUri = testUri.startsWith("/") ? testUri : "/" + testUri;
+      testUri = securePath + processedUri;
+      restRequest = createRestRequest(RestMethod.GET, testUri, null);
+      assertEquals("Unexpected secure path for: " + testUri, securePath, RestUtils.getSecurePath(restRequest));
+    }
+  }
+
+  /**
    * Tests {@link RestUtils#toSecondsPrecisionInMs(long)}.
    */
   @Test
@@ -658,9 +707,7 @@ public class RestUtilsTest {
     doBuildGetBlobOptionsTest("bytes=-123456789", ByteRange.fromLastNBytes(123456789), true, false);
     // bad ranges
     String[] badRanges =
-        {"bytes=0-abcd", "bytes=0as23-44444444", "bytes=22-7777777777777777777777777777777777777777777", "bytes=22--53",
-            "bytes=223-34", "bytes=-34ab", "bytes=--12", "bytes=-12-", "bytes=12ab-", "bytes=---", "btes=3-5",
-            "bytes=345", "bytes=3.14-22", "bytes=3-6.2", "bytes=", "bytes=-", "bytes= -"};
+        {"bytes=0-abcd", "bytes=0as23-44444444", "bytes=22-7777777777777777777777777777777777777777777", "bytes=22--53", "bytes=223-34", "bytes=-34ab", "bytes=--12", "bytes=-12-", "bytes=12ab-", "bytes=---", "btes=3-5", "bytes=345", "bytes=3.14-22", "bytes=3-6.2", "bytes=", "bytes=-", "bytes= -"};
     for (String badRange : badRanges) {
       doBuildGetBlobOptionsTest(badRange, null, false, false);
     }

@@ -178,6 +178,8 @@ public class AmbrySecurityServiceTest {
     // with GET sub resources
     for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
+      Account account = InMemAccountService.UNKNOWN_ACCOUNT;
+      insertAccountAndContainer(restRequest, account, account.getContainerById(Container.UNKNOWN_CONTAINER_ID));
       securityService.preProcessRequest(restRequest).get();
       securityService.processRequest(restRequest).get();
       securityService.postProcessRequest(restRequest).get();
