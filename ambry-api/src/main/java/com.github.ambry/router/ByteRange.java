@@ -29,7 +29,7 @@ public abstract class ByteRange {
    */
   @Deprecated
   public static ByteRange fromOffsetRange(long startOffset, long endOffset) {
-    return ByteRange.fromOffsetRange(startOffset, endOffset);
+    return ByteRanges.fromOffsetRange(startOffset, endOffset);
   }
 
   /**
