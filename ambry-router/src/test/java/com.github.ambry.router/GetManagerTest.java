@@ -143,7 +143,7 @@ public class GetManagerTest {
   @Test
   public void testRangeRequest() throws Exception {
     testGetSuccess(chunkSize * 6 + 11, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
-        .range(ByteRange.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
+        .range(ByteRanges.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
         .build());
   }
 

@@ -19,6 +19,7 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
@@ -650,12 +651,12 @@ public class RestUtilsTest {
     // no range
     doBuildGetBlobOptionsTest(null, null, true, true);
     // valid ranges
-    doBuildGetBlobOptionsTest("bytes=0-7", ByteRange.fromOffsetRange(0, 7), true, false);
-    doBuildGetBlobOptionsTest("bytes=234-56679090", ByteRange.fromOffsetRange(234, 56679090), true, false);
-    doBuildGetBlobOptionsTest("bytes=1-", ByteRange.fromStartOffset(1), true, false);
-    doBuildGetBlobOptionsTest("bytes=12345678-", ByteRange.fromStartOffset(12345678), true, false);
-    doBuildGetBlobOptionsTest("bytes=-8", ByteRange.fromLastNBytes(8), true, false);
-    doBuildGetBlobOptionsTest("bytes=-123456789", ByteRange.fromLastNBytes(123456789), true, false);
+    doBuildGetBlobOptionsTest("bytes=0-7", ByteRanges.fromOffsetRange(0, 7), true, false);
+    doBuildGetBlobOptionsTest("bytes=234-56679090", ByteRanges.fromOffsetRange(234, 56679090), true, false);
+    doBuildGetBlobOptionsTest("bytes=1-", ByteRanges.fromStartOffset(1), true, false);
+    doBuildGetBlobOptionsTest("bytes=12345678-", ByteRanges.fromStartOffset(12345678), true, false);
+    doBuildGetBlobOptionsTest("bytes=-8", ByteRanges.fromLastNBytes(8), true, false);
+    doBuildGetBlobOptionsTest("bytes=-123456789", ByteRanges.fromLastNBytes(123456789), true, false);
     // bad ranges
     String[] badRanges =
         {"bytes=0-abcd", "bytes=0as23-44444444", "bytes=22-7777777777777777777777777777777777777777777", "bytes=22--53",
@@ -672,16 +673,17 @@ public class RestUtilsTest {
   @Test
   public void buildContentRangeAndLengthTest() throws RestServiceException {
     // good cases
-    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 8), 12, "bytes 4-8/12", 5, true);
-    doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(14), 17, "bytes 14-16/17", 3, true);
-    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(12), 17, "bytes 5-16/17", 12, true);
-    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(17), 17, "bytes 0-16/17", 17, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromOffsetRange(4, 8), 12, "bytes 4-8/12", 5, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromOffsetRange(4, 12), 12, "bytes 4-11/12", 8, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromOffsetRange(4, 15), 12, "bytes 4-11/12", 8, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromStartOffset(14), 17, "bytes 14-16/17", 3, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromLastNBytes(12), 17, "bytes 5-16/17", 12, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromLastNBytes(17), 17, "bytes 0-16/17", 17, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromLastNBytes(13), 12, "bytes 0-11/12", 12, true);
     // bad cases
-    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 12), 12, null, -1, false);
-    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 15), 12, null, -1, false);
-    doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(12), 12, null, -1, false);
-    doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(15), 12, null, -1, false);
-    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(13), 12, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromOffsetRange(4, 12), 4, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromStartOffset(12), 12, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromStartOffset(15), 12, null, -1, false);
   }
 
   /**

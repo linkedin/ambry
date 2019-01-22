@@ -49,6 +49,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
@@ -1323,17 +1324,17 @@ public class AmbryBlobStorageServiceTest {
     getHeadAndVerify(blobId, null, null, headers, expectedAccount, expectedContainer);
     getHeadAndVerify(blobId, null, GetOption.None, headers, expectedAccount, expectedContainer);
 
-    ByteRange range = ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH));
+    ByteRange range = ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH));
     getBlobAndVerify(blobId, range, null, headers, content, expectedAccount, expectedContainer);
     getHeadAndVerify(blobId, range, null, headers, expectedAccount, expectedContainer);
 
-    range = ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH + 1));
+    range = ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH + 1));
     getBlobAndVerify(blobId, range, null, headers, content, expectedAccount, expectedContainer);
     getHeadAndVerify(blobId, range, null, headers, expectedAccount, expectedContainer);
 
     long random1 = ThreadLocalRandom.current().nextLong(CONTENT_LENGTH);
     long random2 = ThreadLocalRandom.current().nextLong(CONTENT_LENGTH);
-    range = ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
+    range = ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
     getBlobAndVerify(blobId, range, null, headers, content, expectedAccount, expectedContainer);
     getHeadAndVerify(blobId, range, null, headers, expectedAccount, expectedContainer);
 
