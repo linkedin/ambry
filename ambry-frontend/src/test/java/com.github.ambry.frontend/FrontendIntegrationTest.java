@@ -42,6 +42,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.ByteRanges;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -579,16 +580,16 @@ public class FrontendIntegrationTest {
     getBlobAndVerify(blobId, null, GetOption.None, headers, isPrivate, content, expectedAccountName,
         expectedContainerName);
     getHeadAndVerify(blobId, null, GetOption.None, headers, isPrivate, expectedAccountName, expectedContainerName);
-    ByteRange range = ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(content.capacity() + 1));
+    ByteRange range = ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(content.capacity() + 1));
     getBlobAndVerify(blobId, range, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
     getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
     if (contentSize > 0) {
-      range = ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(content.capacity()));
+      range = ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(content.capacity()));
       getBlobAndVerify(blobId, range, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
       getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
       long random1 = ThreadLocalRandom.current().nextLong(content.capacity());
       long random2 = ThreadLocalRandom.current().nextLong(content.capacity());
-      range = ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
+      range = ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
       getBlobAndVerify(blobId, range, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
       getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
     }
@@ -1278,11 +1279,11 @@ public class FrontendIntegrationTest {
         account.getName(), container.getName(), null);
     List<ByteRange> ranges = new ArrayList<>();
     ranges.add(null);
-    ranges.add(ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(fullContentArray.length + 1)));
-    ranges.add(ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(fullContentArray.length)));
+    ranges.add(ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(fullContentArray.length + 1)));
+    ranges.add(ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(fullContentArray.length)));
     long random1 = ThreadLocalRandom.current().nextLong(fullContentArray.length);
     long random2 = ThreadLocalRandom.current().nextLong(fullContentArray.length);
-    ranges.add(ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+    ranges.add(ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
     for (ByteRange range : ranges) {
       getBlobAndVerify(stitchedBlobId, range, GetOption.None, expectedGetHeaders, !container.isCacheable(),
           ByteBuffer.wrap(fullContentArray), account.getName(), container.getName());

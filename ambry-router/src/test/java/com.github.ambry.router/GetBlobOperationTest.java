@@ -813,10 +813,10 @@ public class GetBlobOperationTest {
     testRangeRequestFromStartOffset(random.nextInt(blobSize), true);
     // Last n bytes of the blob
     testRangeRequestLastNBytes(random.nextInt(blobSize) + 1, true);
-    // Last blobSize + 1 bytes (should not succeed)
-    testRangeRequestLastNBytes(blobSize + 1, false);
-    // Range over the end of the blob (should not succeed)
-    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, false);
+    // Last blobSize + 1 bytes
+    testRangeRequestLastNBytes(blobSize + 1, true);
+    // Range over the end of the blob
+    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, true);
     // Ranges that start past the end of the blob (should not succeed)
     testRangeRequestFromStartOffset(blobSize, false);
     testRangeRequestOffsetRange(blobSize, blobSize + 20, false);
@@ -850,10 +850,10 @@ public class GetBlobOperationTest {
     testRangeRequestFromStartOffset(random.nextInt(blobSize), true);
     // Last n bytes of the blob
     testRangeRequestLastNBytes(random.nextInt(blobSize) + 1, true);
-    // Last blobSize + 1 bytes (should not succeed)
-    testRangeRequestLastNBytes(blobSize + 1, false);
-    // Range over the end of the blob (should not succeed)
-    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, false);
+    // Last blobSize + 1 bytes
+    testRangeRequestLastNBytes(blobSize + 1, true);
+    // Range over the end of the blob
+    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, true);
     // Ranges that start past the end of the blob (should not succeed)
     testRangeRequestFromStartOffset(blobSize, false);
     testRangeRequestOffsetRange(blobSize, blobSize + 20, false);
@@ -1030,7 +1030,7 @@ public class GetBlobOperationTest {
       throws Exception {
     doPut();
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRange.fromOffsetRange(startOffset, endOffset))
+        .range(ByteRanges.fromOffsetRange(startOffset, endOffset))
         .build(), false, routerMetrics.ageAtGet);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
@@ -1045,7 +1045,7 @@ public class GetBlobOperationTest {
   private void testRangeRequestFromStartOffset(long startOffset, boolean rangeSatisfiable) throws Exception {
     doPut();
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRange.fromStartOffset(startOffset))
+        .range(ByteRanges.fromStartOffset(startOffset))
         .build(), false, routerMetrics.ageAtGet);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
@@ -1060,7 +1060,7 @@ public class GetBlobOperationTest {
   private void testRangeRequestLastNBytes(long lastNBytes, boolean rangeSatisfiable) throws Exception {
     doPut();
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRange.fromLastNBytes(lastNBytes))
+        .range(ByteRanges.fromLastNBytes(lastNBytes))
         .build(), false, routerMetrics.ageAtGet);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
