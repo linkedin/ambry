@@ -211,7 +211,7 @@ public class NonBlockingRouterTest {
    */
   private void setOperationParams(int putContentSize, long ttlSecs) {
     putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, ttlSecs,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption, null);
     putUserMetadata = new byte[USER_METADATA_SIZE];
     random.nextBytes(putUserMetadata);
     putContent = new byte[putContentSize];
@@ -555,7 +555,7 @@ public class NonBlockingRouterTest {
         // Create a clean cluster and put another blob that immediate expires.
         setOperationParams();
         putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, 0,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false);
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);
         blobId =
             router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
         Set<String> allBlobsInServer = getBlobsInServers(mockServerLayout);
@@ -720,7 +720,7 @@ public class NonBlockingRouterTest {
         GetBlobResult getBlobResult = router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build())
             .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         assertTrue("Blob properties must be the same",
-            RouterTestHelpers.haveEquivalentFields(putBlobProperties, getBlobResult.getBlobInfo().getBlobProperties()));
+            RouterTestHelpers.arePersistedFieldsEquivalent(putBlobProperties, getBlobResult.getBlobInfo().getBlobProperties()));
         assertEquals("Unexpected blob size", expectedContent.length,
             getBlobResult.getBlobInfo().getBlobProperties().getBlobSize());
         assertArrayEquals("User metadata must be the same", putUserMetadata,

@@ -2061,7 +2061,7 @@ public class AmbryBlobStorageServiceTest {
       Account expectedAccount, Container expectedContainer) throws Exception {
     BlobProperties blobProperties =
         new BlobProperties(0, serviceId, "owner", "image/gif", isPrivate, Utils.Infinite_Time,
-            Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false);
+            Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null);
     ReadableStreamChannel content = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
     String blobId = router.putBlobWithIdVersion(blobProperties, new byte[0], content, BlobId.BLOB_ID_V1).get();
     verifyAccountAndContainerFromBlobId(blobId, expectedAccount, expectedContainer, null);
