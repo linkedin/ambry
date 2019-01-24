@@ -14,6 +14,11 @@
 
 package com.github.ambry.router;
 
+import com.github.ambry.utils.TestUtils;
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.BiFunction;
+import java.util.function.LongFunction;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -65,45 +70,46 @@ public class ByteRangeTest {
   @Test
   public void testResolvedByteRange() throws Exception {
     // 0-0 (0th byte)
-    ByteRange range = ByteRange.fromOffsetRange(0, 0);
+    ByteRange range = ByteRanges.fromOffsetRange(0, 0);
     assertRangeResolutionFailure(range, 0);
     assertRangeResolutionFailure(range, -1);
     assertRangeResolutionSuccess(range, 2, 0, 0);
 
     // 0- (bytes after/including 0)
-    range = ByteRange.fromStartOffset(0);
+    range = ByteRanges.fromStartOffset(0);
     assertRangeResolutionFailure(range, 0);
     assertRangeResolutionFailure(range, -1);
     assertRangeResolutionSuccess(range, 20, 0, 19);
 
     // 15- (bytes after/including 15)
-    range = ByteRange.fromStartOffset(15);
+    range = ByteRanges.fromStartOffset(15);
     assertRangeResolutionFailure(range, 15);
     assertRangeResolutionFailure(range, -1);
     assertRangeResolutionSuccess(range, 20, 15, 19);
     assertRangeResolutionSuccess(range, 16, 15, 15);
 
     // -20 (last 20 bytes)
-    range = ByteRange.fromLastNBytes(20);
-    assertRangeResolutionFailure(range, 0);
+    range = ByteRanges.fromLastNBytes(20);
     assertRangeResolutionFailure(range, -1);
+    assertRangeResolutionSuccess(range, 0, 0, -1);
+    assertRangeResolutionSuccess(range, 19, 0, 18);
     assertRangeResolutionSuccess(range, 20, 0, 19);
     assertRangeResolutionSuccess(range, 30, 10, 29);
 
     // 22-44 (bytes 22 through 44, inclusive)
-    range = ByteRange.fromOffsetRange(22, 44);
-    assertRangeResolutionFailure(range, 44);
+    range = ByteRanges.fromOffsetRange(22, 44);
+    assertRangeResolutionSuccess(range, 44, 22, 43);
     assertRangeResolutionSuccess(range, 45, 22, 44);
 
     // {MAX_LONG-50}- (bytes after/including MAX_LONG-50)
-    range = ByteRange.fromStartOffset(Long.MAX_VALUE - 50);
+    range = ByteRanges.fromStartOffset(Long.MAX_VALUE - 50);
     assertRangeResolutionFailure(range, 0);
     assertRangeResolutionFailure(range, -1);
     assertRangeResolutionFailure(range, 20);
     assertRangeResolutionSuccess(range, Long.MAX_VALUE, Long.MAX_VALUE - 50, Long.MAX_VALUE - 1);
 
     // Last 0 bytes
-    range = ByteRange.fromLastNBytes(0);
+    range = ByteRanges.fromLastNBytes(0);
     assertRangeResolutionSuccess(range, 0, 0, -1);
     assertRangeResolutionSuccess(range, 20, 20, 19);
   }
@@ -113,26 +119,25 @@ public class ByteRangeTest {
    */
   @Test
   public void testToStringEqualsAndHashcode() {
-    ByteRange a = ByteRange.fromLastNBytes(4);
-    ByteRange b = ByteRange.fromLastNBytes(4);
+    ByteRange a = ByteRanges.fromLastNBytes(4);
+    ByteRange b = ByteRanges.fromLastNBytes(4);
     assertEquals("ByteRanges should be equal", a, b);
     assertEquals("ByteRange hashcodes should be equal", a.hashCode(), b.hashCode());
-    assertEquals("toString output not as expected", "ByteRange{type=LAST_N_BYTES, lastNBytes=4}", a.toString());
+    assertEquals("toString output not as expected", "ByteRange{lastNBytes=4}", a.toString());
 
-    a = ByteRange.fromOffsetRange(2, 5);
+    a = ByteRanges.fromOffsetRange(2, 5);
     assertFalse("ByteRanges should not be equal", a.equals(b));
-    b = ByteRange.fromOffsetRange(2, 5);
+    b = ByteRanges.fromOffsetRange(2, 5);
     assertEquals("ByteRanges should be equal", a, b);
     assertEquals("ByteRange hashcodes should be equal", a.hashCode(), b.hashCode());
-    assertEquals("toString output not as expected", "ByteRange{type=OFFSET_RANGE, startOffset=2, endOffset=5}",
-        a.toString());
+    assertEquals("toString output not as expected", "ByteRange{startOffset=2, endOffset=5}", a.toString());
 
-    a = ByteRange.fromStartOffset(7);
+    a = ByteRanges.fromStartOffset(7);
     assertFalse("ByteRanges should not be equal", a.equals(b));
-    b = ByteRange.fromStartOffset(7);
+    b = ByteRanges.fromStartOffset(7);
     assertEquals("ByteRanges should be equal", a, b);
     assertEquals("ByteRange hashcodes should be equal", a.hashCode(), b.hashCode());
-    assertEquals("toString output not as expected", "ByteRange{type=FROM_START_OFFSET, startOffset=7}", a.toString());
+    assertEquals("toString output not as expected", "ByteRange{startOffset=7}", a.toString());
   }
 
   /**
@@ -144,21 +149,18 @@ public class ByteRangeTest {
    */
   private void testByteRangeCreationOffsetRange(long startOffset, long endOffset, boolean expectSuccess)
       throws Exception {
-    if (expectSuccess) {
-      ByteRange byteRange = ByteRange.fromOffsetRange(startOffset, endOffset);
-      assertEquals("Wrong range type", ByteRange.ByteRangeType.OFFSET_RANGE, byteRange.getType());
-      assertEquals("Wrong startOffset", startOffset, byteRange.getStartOffset());
-      assertEquals("Wrong endOffset", endOffset, byteRange.getEndOffset());
-      try {
-        byteRange.getLastNBytes();
-        fail("Should not be able to call getLastNBytes for the range: " + byteRange);
-      } catch (UnsupportedOperationException expected) {
-      }
-    } else {
-      try {
-        ByteRange.fromOffsetRange(startOffset, endOffset);
-        fail(String.format("Range creation should not have succeeded with range [%d, %d]", startOffset, endOffset));
-      } catch (IllegalArgumentException expected) {
+    List<BiFunction<Long, Long, ByteRange>> factories =
+        Arrays.asList(ByteRange::fromOffsetRange, ByteRanges::fromOffsetRange);
+    for (BiFunction<Long, Long, ByteRange> factory : factories) {
+      if (expectSuccess) {
+        ByteRange byteRange = factory.apply(startOffset, endOffset);
+        assertEquals("Wrong range type", ByteRange.ByteRangeType.OFFSET_RANGE, byteRange.getType());
+        assertEquals("Wrong startOffset", startOffset, byteRange.getStartOffset());
+        assertEquals("Wrong endOffset", endOffset, byteRange.getEndOffset());
+        assertEquals("Wrong range size", endOffset - startOffset + 1, byteRange.getRangeSize());
+        TestUtils.assertException(UnsupportedOperationException.class, byteRange::getLastNBytes, null);
+      } else {
+        TestUtils.assertException(IllegalArgumentException.class, () -> factory.apply(startOffset, endOffset), null);
       }
     }
   }
@@ -170,21 +172,17 @@ public class ByteRangeTest {
    * @throws Exception
    */
   private void testByteRangeCreationFromStartOffset(long startOffset, boolean expectSuccess) throws Exception {
-    if (expectSuccess) {
-      ByteRange byteRange = ByteRange.fromStartOffset(startOffset);
-      assertEquals("Wrong range type", ByteRange.ByteRangeType.FROM_START_OFFSET, byteRange.getType());
-      assertEquals("Wrong startOffset", startOffset, byteRange.getStartOffset());
-      try {
-        byteRange.getEndOffset();
-        byteRange.getLastNBytes();
-        fail("Should not be able to call getEndOffset or getLastNBytes for the range: " + byteRange);
-      } catch (UnsupportedOperationException expected) {
-      }
-    } else {
-      try {
-        ByteRange.fromStartOffset(startOffset);
-        fail("Range creation should not have succeeded with range from " + startOffset);
-      } catch (IllegalArgumentException expected) {
+    List<LongFunction<ByteRange>> factories = Arrays.asList(ByteRange::fromStartOffset, ByteRanges::fromStartOffset);
+    for (LongFunction<ByteRange> factory : factories) {
+      if (expectSuccess) {
+        ByteRange byteRange = factory.apply(startOffset);
+        assertEquals("Wrong range type", ByteRange.ByteRangeType.FROM_START_OFFSET, byteRange.getType());
+        assertEquals("Wrong startOffset", startOffset, byteRange.getStartOffset());
+        TestUtils.assertException(UnsupportedOperationException.class, byteRange::getEndOffset, null);
+        TestUtils.assertException(UnsupportedOperationException.class, byteRange::getLastNBytes, null);
+        TestUtils.assertException(UnsupportedOperationException.class, byteRange::getRangeSize, null);
+      } else {
+        TestUtils.assertException(IllegalArgumentException.class, () -> factory.apply(startOffset), null);
       }
     }
   }
@@ -197,21 +195,17 @@ public class ByteRangeTest {
    * @throws Exception
    */
   private void testByteRangeCreationLastNBytes(long lastNBytes, boolean expectSuccess) throws Exception {
-    if (expectSuccess) {
-      ByteRange byteRange = ByteRange.fromLastNBytes(lastNBytes);
-      assertEquals("Wrong range type", ByteRange.ByteRangeType.LAST_N_BYTES, byteRange.getType());
-      assertEquals("Wrong lastNBytes", lastNBytes, byteRange.getLastNBytes());
-      try {
-        byteRange.getStartOffset();
-        byteRange.getLastNBytes();
-        fail("Should not be able to call getStartOffset or getEndOffset for the range: " + byteRange);
-      } catch (UnsupportedOperationException expected) {
-      }
-    } else {
-      try {
-        ByteRange.fromLastNBytes(lastNBytes);
-        fail("Range creation should not have succeeded with range of last " + lastNBytes + " bytes");
-      } catch (IllegalArgumentException expected) {
+    List<LongFunction<ByteRange>> factories = Arrays.asList(ByteRange::fromLastNBytes, ByteRanges::fromLastNBytes);
+    for (LongFunction<ByteRange> factory : factories) {
+      if (expectSuccess) {
+        ByteRange byteRange = factory.apply(lastNBytes);
+        assertEquals("Wrong range type", ByteRange.ByteRangeType.LAST_N_BYTES, byteRange.getType());
+        assertEquals("Wrong lastNBytes", lastNBytes, byteRange.getLastNBytes());
+        assertEquals("Wrong range size", lastNBytes, byteRange.getRangeSize());
+        TestUtils.assertException(UnsupportedOperationException.class, byteRange::getStartOffset, null);
+        TestUtils.assertException(UnsupportedOperationException.class, byteRange::getEndOffset, null);
+      } else {
+        TestUtils.assertException(IllegalArgumentException.class, () -> factory.apply(lastNBytes), null);
       }
     }
   }

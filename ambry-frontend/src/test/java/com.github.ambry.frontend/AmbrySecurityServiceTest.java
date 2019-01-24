@@ -33,6 +33,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
@@ -483,19 +484,19 @@ public class AmbrySecurityServiceTest {
     long blobSize = blobInfo.getBlobProperties().getBlobSize();
     testGetBlob(blobInfo, null);
 
-    testGetBlob(blobInfo, ByteRange.fromLastNBytes(0));
+    testGetBlob(blobInfo, ByteRanges.fromLastNBytes(0));
     if (blobSize > 0) {
-      testGetBlob(blobInfo, ByteRange.fromStartOffset(0));
-      testGetBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
-      testGetBlob(blobInfo, ByteRange.fromStartOffset(blobSize - 1));
+      testGetBlob(blobInfo, ByteRanges.fromStartOffset(0));
+      testGetBlob(blobInfo, ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
+      testGetBlob(blobInfo, ByteRanges.fromStartOffset(blobSize - 1));
 
       long random1 = ThreadLocalRandom.current().nextLong(blobSize);
       long random2 = ThreadLocalRandom.current().nextLong(blobSize);
-      testGetBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
-      testGetBlob(blobInfo, ByteRange.fromLastNBytes(blobSize));
+      testGetBlob(blobInfo, ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+      testGetBlob(blobInfo, ByteRanges.fromLastNBytes(blobSize));
     }
     if (blobSize > 1) {
-      testGetBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
+      testGetBlob(blobInfo, ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
     }
   }
 
@@ -559,20 +560,20 @@ public class AmbrySecurityServiceTest {
     long blobSize = blobInfo.getBlobProperties().getBlobSize();
     testHeadBlob(blobInfo, null);
 
-    testHeadBlob(blobInfo, ByteRange.fromLastNBytes(0));
+    testHeadBlob(blobInfo, ByteRanges.fromLastNBytes(0));
     if (blobSize > 0) {
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(0));
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(blobSize - 1));
+      testHeadBlob(blobInfo, ByteRanges.fromStartOffset(0));
+      testHeadBlob(blobInfo, ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
+      testHeadBlob(blobInfo, ByteRanges.fromStartOffset(blobSize - 1));
 
       long random1 = ThreadLocalRandom.current().nextLong(blobSize);
       long random2 = ThreadLocalRandom.current().nextLong(blobSize);
-      testHeadBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+      testHeadBlob(blobInfo, ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
 
-      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(blobSize));
+      testHeadBlob(blobInfo, ByteRanges.fromLastNBytes(blobSize));
     }
     if (blobSize > 1) {
-      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
+      testHeadBlob(blobInfo, ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
     }
   }
 

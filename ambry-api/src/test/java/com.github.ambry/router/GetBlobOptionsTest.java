@@ -34,9 +34,9 @@ public class GetBlobOptionsTest {
   public void testRangeOption() throws Exception {
     long startOffset = 1;
     long endOffset = 2;
-    ByteRange range = ByteRange.fromOffsetRange(startOffset, endOffset);
+    ByteRange range = ByteRanges.fromOffsetRange(startOffset, endOffset);
     GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRange.fromOffsetRange(startOffset, endOffset))
+        .range(ByteRanges.fromOffsetRange(startOffset, endOffset))
         .build();
     assertEquals("Range from options not as expected.", range, options.getRange());
   }
@@ -82,7 +82,7 @@ public class GetBlobOptionsTest {
   public void testRawModeWithInvalidCombinations() throws Exception {
     // Test that using rawMode and range together fails.
     GetBlobOptionsBuilder options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
-        .range(ByteRange.fromOffsetRange(0, 1))
+        .range(ByteRanges.fromOffsetRange(0, 1))
         .rawMode(true);
     TestUtils.assertException(IllegalArgumentException.class, () -> options.build(), null);
 
@@ -99,7 +99,7 @@ public class GetBlobOptionsTest {
    */
   @Test
   public void testToStringEqualsAndHashcode() {
-    ByteRange byteRange = ByteRange.fromLastNBytes(4);
+    ByteRange byteRange = ByteRanges.fromLastNBytes(4);
     GetOption getOption = GetOption.None;
     GetBlobOptions.OperationType type = GetBlobOptions.OperationType.Data;
     GetBlobOptions a = new GetBlobOptionsBuilder().operationType(type).getOption(getOption).range(byteRange).build();
@@ -122,7 +122,7 @@ public class GetBlobOptionsTest {
     // Change range
     b = new GetBlobOptionsBuilder().operationType(type)
         .getOption(getOption)
-        .range(ByteRange.fromOffsetRange(2, 7))
+        .range(ByteRanges.fromOffsetRange(2, 7))
         .build();
     assertOptionsAreDistinct(a, b);
 

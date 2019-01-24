@@ -163,11 +163,10 @@ public class Selector implements Selectable {
     }
     String connectionId = generateConnectionId(channel);
     SelectionKey key = channel.register(this.nioSelector, SelectionKey.OP_CONNECT);
-    Transmission transmission = null;
+    Transmission transmission;
     try {
-      transmission =
-          TransmissionFactory.getTransmission(connectionId, channel, key, address.getHostName(), address.getPort(),
-              time, metrics, portType, sslFactory, SSLFactory.Mode.CLIENT);
+      transmission = createTransmission(connectionId, key, address.getHostName(), address.getPort(), portType,
+          SSLFactory.Mode.CLIENT);
     } catch (IOException e) {
       logger.error("IOException on transmission creation " + e);
       channel.socket().close();
@@ -189,11 +188,11 @@ public class Selector implements Selectable {
     Socket socket = channel.socket();
     String connectionId = generateConnectionId(channel);
     SelectionKey key = channel.register(nioSelector, SelectionKey.OP_READ);
-    Transmission transmission = null;
+    Transmission transmission;
     try {
       transmission =
-          TransmissionFactory.getTransmission(connectionId, channel, key, socket.getInetAddress().getHostAddress(),
-              socket.getPort(), time, metrics, portType, sslFactory, SSLFactory.Mode.SERVER);
+          createTransmission(connectionId, key, socket.getInetAddress().getHostName(), socket.getPort(), portType,
+              SSLFactory.Mode.SERVER);
     } catch (IOException e) {
       logger.error("IOException on transmission creation " + e);
       socket.close();
@@ -440,8 +439,37 @@ public class Selector implements Selectable {
     return this.connected;
   }
 
-  public long getNumActiveConnections() {
-    return numActiveConnections.get();
+  /**
+   * Create a new {@link Transmission} to represent a live connection. This method is exposed so that it can be
+   * unit tests can override it.
+   * @param connectionId a unique ID for this connection.
+   * @param key the {@link SelectionKey} used to communicate socket events.
+   * @param hostname the remote hostname for the connection, used for SSL host verification.
+   * @param hostname the remote port for the connection, used for SSL host verification.
+   * @param portType used to select between a plaintext or SSL transmission.
+   * @param mode for SSL transmissions, whether to operate in client or server mode.
+   * @return either a {@link Transmission} or {@link SSLTransmission}.
+   * @throws IOException
+   */
+  protected Transmission createTransmission(String connectionId, SelectionKey key, String hostname, int port,
+      PortType portType, SSLFactory.Mode mode) throws IOException {
+    Transmission transmission;
+    if (portType == PortType.PLAINTEXT) {
+      transmission = new PlainTextTransmission(connectionId, channel(key), key, time, metrics);
+    } else if (portType == PortType.SSL) {
+      try {
+        transmission =
+            new SSLTransmission(sslFactory, connectionId, channel(key), key, hostname, port, time, metrics, mode);
+        metrics.sslTransmissionInitializationCount.inc();
+      } catch (IOException e) {
+        metrics.sslTransmissionInitializationErrorCount.inc();
+        logger.error("SSLTransmission initialization error ", e);
+        throw e;
+      }
+    } else {
+      throw new IllegalArgumentException("Unsupported portType " + portType + " passed in");
+    }
+    return transmission;
   }
 
   /**
