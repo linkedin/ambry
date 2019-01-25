@@ -55,6 +55,7 @@ import static org.junit.Assert.*;
 public class RestUtilsTest {
   private static final Random RANDOM = new Random();
   private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+  private static final String SECURE_PATH = "secure-path";
 
   /**
    * Tests building of {@link BlobProperties} given good input (all arguments in the number and format expected).
@@ -516,10 +517,13 @@ public class RestUtilsTest {
   public void getOperationOrBlobIdFromUriTest() throws JSONException, UnsupportedEncodingException, URISyntaxException {
     String baseId = "expectedOp";
     String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
-    String securePath = "secure-path";
-    String[] validIdUris = {"/", "/" + baseId, "/" + baseId + "/random/extra", "", baseId, baseId + "/random/extra"};
-    List<String> prefixesToTestOn = Arrays.asList("", "/media", "/toRemove", "/orNotToRemove", "/" + securePath);
-    List<String> prefixesToRemove = Arrays.asList("/media", "/toRemove", "/" + securePath);
+    String[] validIdUris = {"/",
+        "/" + baseId,
+        "/" + baseId + "/random/extra", "", baseId,
+        baseId + "/random/extra",
+        RestUtils.SIGNED_ID_PREFIX + "/" + baseId, "/" + RestUtils.SIGNED_ID_PREFIX + "/" + baseId};
+    List<String> prefixesToTestOn = Arrays.asList("", "/media", "/toRemove", "/orNotToRemove", "/" + SECURE_PATH);
+    List<String> prefixesToRemove = Arrays.asList("/media", "/toRemove", "/" + SECURE_PATH);
     String blobId = UtilsTest.getRandomString(10);
     String blobIdQuery = RestUtils.Headers.BLOB_ID + "=" + blobId;
 
@@ -616,8 +620,7 @@ public class RestUtilsTest {
     String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
     String[] validIdUris = {"/", "/" + blobId, "", blobId, RestUtils.SIGNED_ID_PREFIX + "/" + blobId};
     String[] validOpUris = {operation + "/random/extra", "/" + operation + "/random/extra"};
-    String securePath = "secure-path";
-    List<String> prefixesToRemove = Arrays.asList("/" + securePath, "/media", "/toRemove");
+    List<String> prefixesToRemove = Arrays.asList("/" + SECURE_PATH, "/media", "/toRemove");
     // construct test cases and expected results
     Map<String, String> testCasesAndExpectedResults = new HashMap<>();
     for (String prefix : prefixesToRemove) {
