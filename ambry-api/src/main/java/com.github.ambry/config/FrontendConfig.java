@@ -195,9 +195,9 @@ public class FrontendConfig {
   /**
    * The secure path to validate if required for certain container.
    */
-  @Config("frontend.secure.path.to.validate")
+  @Config("frontend.secure.path.prefix")
   @Default("")
-  public final String securePathToValidate;
+  public final String securePathPrefix;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -212,9 +212,9 @@ public class FrontendConfig {
         "com.github.ambry.frontend.AmbryUrlSigningServiceFactory");
     idSigningServiceFactory = verifiableProperties.getString(ID_SIGNING_SERVICE_FACTORY_KEY,
         "com.github.ambry.frontend.AmbryIdSigningServiceFactory");
-    securePathToValidate = verifiableProperties.getString("frontend.secure.path.to.validate", "");
+    securePathPrefix = verifiableProperties.getString("frontend.secure.path.prefix", "");
     pathPrefixesToRemove = Arrays.asList(
-        ((securePathToValidate.isEmpty() ? "" : "/" + securePathToValidate + ",") + verifiableProperties.getString(
+        ((securePathPrefix.isEmpty() ? "" : "/" + securePathPrefix + ",") + verifiableProperties.getString(
             "frontend.path.prefixes.to.remove", "")).split(","));
     chunkedGetResponseThresholdInBytes =
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);

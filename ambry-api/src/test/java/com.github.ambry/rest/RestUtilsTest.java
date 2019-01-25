@@ -606,50 +606,56 @@ public class RestUtilsTest {
   }
 
   /**
-   * Tests {@link RestUtils#getSecurePath(RestRequest)}.
+   * Tests {@link RestUtils#getPrefixAndResourceFromUri(RestRequest, RestUtils.SubResource, List)}.
    * @throws Exception
    */
   @Test
-  public void getSecurePathTest() throws Exception {
+  public void getPrefixFromUriTest() throws Exception {
     String blobId = UtilsTest.getRandomString(10);
     String operation = "validOp";
     String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
     String[] validIdUris = {"/", "/" + blobId, "", blobId, RestUtils.SIGNED_ID_PREFIX + "/" + blobId};
     String[] validOpUris = {operation + "/random/extra", "/" + operation + "/random/extra"};
     String securePath = "secure-path";
+    List<String> prefixesToRemove = Arrays.asList("/" + securePath, "/media", "/toRemove");
     // construct test cases and expected results
     Map<String, String> testCasesAndExpectedResults = new HashMap<>();
-    for (String uri : validIdUris) {
-      testCasesAndExpectedResults.put(uri, "");
-      testCasesAndExpectedResults.put(uri + queryString, "");
-      if (uri.length() > 1) {
-        // add sub resource and query string
+    for (String prefix : prefixesToRemove) {
+      for (String uri : validIdUris) {
+        testCasesAndExpectedResults.put(prefix + "/" + uri, prefix);
+        testCasesAndExpectedResults.put(prefix + "/" + uri + queryString, prefix);
+        if (uri.length() > 1) {
+          // add sub resource and query string
+          for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+            testCasesAndExpectedResults.put(uri + "/" + subResource, "");
+            testCasesAndExpectedResults.put(uri + "/" + subResource + queryString, "");
+            testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource, prefix);
+            testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource + queryString, prefix);
+          }
+        }
+      }
+
+      for (String uri : validOpUris) {
+        testCasesAndExpectedResults.put(prefix + "/" + uri, prefix);
+        testCasesAndExpectedResults.put(prefix + "/" + uri + queryString, prefix);
         for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+          testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource, prefix);
+          testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource + queryString, prefix);
           testCasesAndExpectedResults.put(uri + "/" + subResource, "");
           testCasesAndExpectedResults.put(uri + "/" + subResource + queryString, "");
         }
       }
     }
-    for (String uri : validOpUris) {
-      testCasesAndExpectedResults.put(uri, operation);
-      testCasesAndExpectedResults.put(uri + queryString, operation);
-      for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
-        testCasesAndExpectedResults.put(uri + "/" + subResource, operation);
-        testCasesAndExpectedResults.put(uri + "/" + subResource + queryString, operation);
-      }
-    }
-    // verify that getSecurePath can correctly extract first segment in uri
+    Pair<String, String> prefixAndResource;
+    RestUtils.SubResource subResource;
+    // verify that prefixes can be correctly extracted from uri
     for (Map.Entry<String, String> testCaseAndResult : testCasesAndExpectedResults.entrySet()) {
       String testUri = testCaseAndResult.getKey();
       String expectedOutput = testCaseAndResult.getValue();
-      // test without secure path
       RestRequest restRequest = createRestRequest(RestMethod.GET, testUri, null);
-      assertEquals("Unexpected secure path for: " + testUri, expectedOutput, RestUtils.getSecurePath(restRequest));
-      // test with secure path
-      String processedUri = testUri.startsWith("/") ? testUri : "/" + testUri;
-      testUri = securePath + processedUri;
-      restRequest = createRestRequest(RestMethod.GET, testUri, null);
-      assertEquals("Unexpected secure path for: " + testUri, securePath, RestUtils.getSecurePath(restRequest));
+      subResource = RestUtils.getBlobSubResource(restRequest);
+      prefixAndResource = RestUtils.getPrefixAndResourceFromUri(restRequest, subResource, prefixesToRemove);
+      assertEquals("Unexpected prefix for: " + testUri, expectedOutput, prefixAndResource.getFirst());
     }
   }
 

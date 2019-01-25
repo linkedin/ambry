@@ -537,36 +537,7 @@ public class RestUtils {
    */
   public static String getOperationOrBlobIdFromUri(RestRequest restRequest, SubResource subResource,
       List<String> prefixesToRemove) {
-    String path = restRequest.getPath();
-    int startIndex = 0;
-
-    // remove query string.
-    int endIndex = path.indexOf("?");
-    if (endIndex == -1) {
-      endIndex = path.length();
-    }
-
-    // remove prefix.
-    if (prefixesToRemove != null) {
-      for (String prefix : prefixesToRemove) {
-        if (path.startsWith(prefix)) {
-          startIndex = prefix.length();
-          break;
-        }
-      }
-    }
-
-    // remove subresource if present.
-    if (subResource != null) {
-      // "- 1" removes the "slash" that precedes the sub-resource.
-      endIndex = endIndex - subResource.name().length() - 1;
-    }
-    String operationOrBlobId = path.substring(startIndex, endIndex);
-    if ((operationOrBlobId.isEmpty() || operationOrBlobId.equals("/")) && restRequest.getArgs()
-        .containsKey(Headers.BLOB_ID)) {
-      operationOrBlobId = restRequest.getArgs().get(Headers.BLOB_ID).toString();
-    }
-    return operationOrBlobId;
+    return getPrefixAndResourceFromUri(restRequest, subResource, prefixesToRemove).getSecond();
   }
 
   /**
@@ -590,36 +561,44 @@ public class RestUtils {
   }
 
   /**
-   * When validating secure path is required by container, this method parses the secure path from uri.
-   * Getting secure path is based on the assumption that the first non-empty segment (split by "/") is secure path.
+   * Get prefix (if exists) and resource from URI so that operation can be performed based on them.
    * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @return secure path if uri contains one; otherwise empty string is returned.
+   * @param subResource the {@link SubResource} if one is present. {@code null} otherwise.
+   * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
+   *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
+   * @return a {@link Pair} containing the prefix and resource extracted from URI.
    */
-  public static String getSecurePath(RestRequest restRequest) {
+  public static Pair<String, String> getPrefixAndResourceFromUri(RestRequest restRequest, SubResource subResource,
+      List<String> prefixesToRemove) {
     String path = restRequest.getPath();
-    SubResource subResource = getBlobSubResource(restRequest);
-    int endIndex = path.length();
-    String securePath = "";
-    if (subResource != null) {
-      // remove sub resource from path
-      endIndex = endIndex - subResource.name().length() - 1;
-      path = path.substring(0, endIndex);
+    int startIndex = 0;
+    // remove query string.
+    int endIndex = path.indexOf("?");
+    if (endIndex == -1) {
+      endIndex = path.length();
     }
-    if (path.startsWith("/")) {
-      // remove leading slash
-      path = path.substring(1);
-    }
-    // if this is a signed id, return empty secure path
-    if (!path.startsWith(RestUtils.SIGNED_ID_PREFIX)) {
-      String[] segments = path.split("/");
-      // extract secure path
-      // 1. if there are more than 1 segment   (i.e. "signed-path/blobId")
-      // 2. if there is 1 segment and uri ends with "/" (i.e. "signed-path/")
-      if (segments.length > 1 || (segments.length == 1 && path.endsWith("/"))) {
-        securePath = segments[0];
+    // remove prefix.
+    String prefixFound = "";
+    if (prefixesToRemove != null) {
+      for (String prefix : prefixesToRemove) {
+        if (path.startsWith(prefix)) {
+          prefixFound = prefix;
+          startIndex = prefix.length();
+          break;
+        }
       }
     }
-    return securePath;
+    // remove subresource if present.
+    if (subResource != null) {
+      // "- 1" removes the "slash" that precedes the sub-resource.
+      endIndex = endIndex - subResource.name().length() - 1;
+    }
+    String operationOrBlobId = path.substring(startIndex, endIndex);
+    if ((operationOrBlobId.isEmpty() || operationOrBlobId.equals("/")) && restRequest.getArgs()
+        .containsKey(Headers.BLOB_ID)) {
+      operationOrBlobId = restRequest.getArgs().get(Headers.BLOB_ID).toString();
+    }
+    return new Pair<>(prefixFound, operationOrBlobId);
   }
 
   /**

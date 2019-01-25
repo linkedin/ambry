@@ -39,7 +39,7 @@ public class ContainerBuilder {
   private boolean mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
   private String replicationPolicy = null;
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
-  private boolean securePathValidationRequired = SECURE_PATH_VALIDATION_REQUIRED_DEFAULT_VALUE;
+  private boolean securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
   private Set<String> contentTypeWhitelistForFilenamesOnDownload =
       CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
   private boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
@@ -65,7 +65,7 @@ public class ContainerBuilder {
     replicationPolicy = origin.getReplicationPolicy();
     ttlRequired = origin.isTtlRequired();
     parentAccountId = origin.getParentAccountId();
-    securePathValidationRequired = origin.isSecurePathValidationRequired();
+    securePathRequired = origin.isSecurePathRequired();
     contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
     backupEnabled = origin.isBackupEnabled();
   }
@@ -198,11 +198,11 @@ public class ContainerBuilder {
 
   /**
    * Sets the secure path validation required setting of the {@link Container}.
-   * @param securePathValidationRequired The securePathValidationRequired setting to set.
+   * @param securePathRequired The securePathRequired setting to set.
    * @return This builder.
    */
-  public ContainerBuilder setSecurePathValidationRequired(boolean securePathValidationRequired) {
-    this.securePathValidationRequired = securePathValidationRequired;
+  public ContainerBuilder setSecurePathRequired(boolean securePathRequired) {
+    this.securePathRequired = securePathRequired;
     return this;
   }
 
@@ -236,7 +236,7 @@ public class ContainerBuilder {
    */
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, replicationPolicy, ttlRequired, securePathValidationRequired,
+        mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
         contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId);
   }
 }

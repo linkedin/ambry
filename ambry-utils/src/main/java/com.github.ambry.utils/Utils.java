@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
@@ -422,6 +423,21 @@ public class Utils {
       }
     }
     throw buildNoConstructorException(className, args);
+  }
+
+  /**
+   * Get a stream of the accessible {@link String} values of the static fields in the provided {@link Class}.
+   * @param type the {@link Class} to get static field values from.
+   * @return a {@link Stream} of the static field value strings.
+   */
+  public static Stream<String> getStaticFieldValuesAsStrings(Class type) {
+    return Arrays.stream(type.getFields()).filter(field -> Modifier.isStatic(field.getModifiers())).map(field -> {
+      try {
+        return field.get(null).toString();
+      } catch (IllegalAccessException e) {
+        throw new IllegalStateException("Could not get value of a static field, " + field + ", in " + type, e);
+      }
+    });
   }
 
   /**
