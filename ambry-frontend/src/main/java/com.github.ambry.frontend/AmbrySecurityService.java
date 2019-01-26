@@ -379,6 +379,7 @@ class AmbrySecurityService implements SecurityService {
     if (targetContainer.isSecurePathRequired()) {
       String securePath = prefixToCheck.startsWith("/") ? prefixToCheck.substring(1) : prefixToCheck;
       if (!securePath.equals(expectSecurePath)) {
+        frontendMetrics.securePathValidationFailedCount.inc();
         throw new RestServiceException("Secure path in restRequest doesn't match the expected one",
             RestServiceErrorCode.AccessDenied);
       }
