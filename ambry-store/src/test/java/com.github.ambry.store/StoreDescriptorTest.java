@@ -14,11 +14,13 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.CrcOutputStream;
+import com.github.ambry.utils.Utils;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.UUID;
 import org.junit.Test;
 
@@ -94,8 +96,7 @@ public class StoreDescriptorTest {
     byte[] toBytes = new byte[size];
     ByteBuffer byteBuffer = ByteBuffer.wrap(toBytes);
     byteBuffer.putShort(version);
-    byteBuffer.putInt(incarnationIdUUID.toString().getBytes().length);
-    byteBuffer.put(incarnationIdUUID.toString().getBytes());
+    Utils.serializeString(byteBuffer, incarnationIdUUID.toString(), Charset.defaultCharset());
     byteBuffer.flip();
     return byteBuffer.array();
   }

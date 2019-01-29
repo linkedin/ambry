@@ -21,6 +21,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,10 +63,8 @@ public class ReplicaMetadataRequestInfo {
   }
 
   public void writeTo(ByteBuffer buffer) {
-    buffer.putInt(hostName.getBytes().length);
-    buffer.put(hostName.getBytes());
-    buffer.putInt(replicaPath.getBytes().length);
-    buffer.put(replicaPath.getBytes());
+    Utils.serializeString(buffer, hostName, Charset.defaultCharset());
+    Utils.serializeString(buffer, replicaPath, Charset.defaultCharset());
     buffer.put(partitionId.getBytes());
     buffer.put(token.toBytes());
   }
