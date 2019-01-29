@@ -192,6 +192,13 @@ public class FrontendConfig {
   @Default("20 * 1024 * 1024")
   public final long maxStitchRequestSizeBytes;
 
+  /**
+   * The secure path to validate if required for certain container.
+   */
+  @Config("frontend.secure.path.prefix")
+  @Default("")
+  public final String securePathPrefix;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
@@ -205,8 +212,10 @@ public class FrontendConfig {
         "com.github.ambry.frontend.AmbryUrlSigningServiceFactory");
     idSigningServiceFactory = verifiableProperties.getString(ID_SIGNING_SERVICE_FACTORY_KEY,
         "com.github.ambry.frontend.AmbryIdSigningServiceFactory");
-    pathPrefixesToRemove =
-        Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
+    securePathPrefix = verifiableProperties.getString("frontend.secure.path.prefix", "");
+    pathPrefixesToRemove = Arrays.asList(
+        ((securePathPrefix.isEmpty() ? "" : "/" + securePathPrefix + ",") + verifiableProperties.getString(
+            "frontend.path.prefixes.to.remove", "")).split(","));
     chunkedGetResponseThresholdInBytes =
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
     allowServiceIdBasedPostRequest =

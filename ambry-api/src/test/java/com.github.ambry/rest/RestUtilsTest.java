@@ -56,6 +56,7 @@ import static org.junit.Assert.*;
 public class RestUtilsTest {
   private static final Random RANDOM = new Random();
   private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+  private static final String SECURE_PATH = "secure-path";
 
   /**
    * Tests building of {@link BlobProperties} given good input (all arguments in the number and format expected).
@@ -517,9 +518,13 @@ public class RestUtilsTest {
   public void getOperationOrBlobIdFromUriTest() throws JSONException, UnsupportedEncodingException, URISyntaxException {
     String baseId = "expectedOp";
     String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
-    String[] validIdUris = {"/", "/" + baseId, "/" + baseId + "/random/extra", "", baseId, baseId + "/random/extra"};
-    List<String> prefixesToTestOn = Arrays.asList("", "/media", "/toRemove", "/orNotToRemove");
-    List<String> prefixesToRemove = Arrays.asList("/media", "/toRemove");
+    String[] validIdUris = {"/",
+        "/" + baseId,
+        "/" + baseId + "/random/extra", "", baseId,
+        baseId + "/random/extra",
+        RestUtils.SIGNED_ID_PREFIX + "/" + baseId, "/" + RestUtils.SIGNED_ID_PREFIX + "/" + baseId};
+    List<String> prefixesToTestOn = Arrays.asList("", "/media", "/toRemove", "/orNotToRemove", "/" + SECURE_PATH);
+    List<String> prefixesToRemove = Arrays.asList("/media", "/toRemove", "/" + SECURE_PATH);
     String blobId = UtilsTest.getRandomString(10);
     String blobIdQuery = RestUtils.Headers.BLOB_ID + "=" + blobId;
 
@@ -606,6 +611,59 @@ public class RestUtilsTest {
   }
 
   /**
+   * Tests {@link RestUtils#getPrefixAndResourceFromUri(RestRequest, RestUtils.SubResource, List)}.
+   * @throws Exception
+   */
+  @Test
+  public void getPrefixFromUriTest() throws Exception {
+    String blobId = UtilsTest.getRandomString(10);
+    String operation = "validOp";
+    String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
+    String[] validIdUris = {"/", "/" + blobId, "", blobId, RestUtils.SIGNED_ID_PREFIX + "/" + blobId};
+    String[] validOpUris = {operation + "/random/extra", "/" + operation + "/random/extra"};
+    List<String> prefixesToRemove = Arrays.asList("/" + SECURE_PATH, "/media", "/toRemove");
+    // construct test cases and expected results
+    Map<String, String> testCasesAndExpectedResults = new HashMap<>();
+    for (String prefix : prefixesToRemove) {
+      for (String uri : validIdUris) {
+        testCasesAndExpectedResults.put(prefix + "/" + uri, prefix);
+        testCasesAndExpectedResults.put(prefix + "/" + uri + queryString, prefix);
+        if (uri.length() > 1) {
+          // add sub resource and query string
+          for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+            testCasesAndExpectedResults.put(uri + "/" + subResource, "");
+            testCasesAndExpectedResults.put(uri + "/" + subResource + queryString, "");
+            testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource, prefix);
+            testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource + queryString, prefix);
+          }
+        }
+      }
+
+      for (String uri : validOpUris) {
+        testCasesAndExpectedResults.put(prefix + "/" + uri, prefix);
+        testCasesAndExpectedResults.put(prefix + "/" + uri + queryString, prefix);
+        for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+          testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource, prefix);
+          testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource + queryString, prefix);
+          testCasesAndExpectedResults.put(uri + "/" + subResource, "");
+          testCasesAndExpectedResults.put(uri + "/" + subResource + queryString, "");
+        }
+      }
+    }
+    Pair<String, String> prefixAndResource;
+    RestUtils.SubResource subResource;
+    // verify that prefixes can be correctly extracted from uri
+    for (Map.Entry<String, String> testCaseAndResult : testCasesAndExpectedResults.entrySet()) {
+      String testUri = testCaseAndResult.getKey();
+      String expectedOutput = testCaseAndResult.getValue();
+      RestRequest restRequest = createRestRequest(RestMethod.GET, testUri, null);
+      subResource = RestUtils.getBlobSubResource(restRequest);
+      prefixAndResource = RestUtils.getPrefixAndResourceFromUri(restRequest, subResource, prefixesToRemove);
+      assertEquals("Unexpected prefix for: " + testUri, expectedOutput, prefixAndResource.getFirst());
+    }
+  }
+
+  /**
    * Tests {@link RestUtils#toSecondsPrecisionInMs(long)}.
    */
   @Test
@@ -659,9 +717,7 @@ public class RestUtilsTest {
     doBuildGetBlobOptionsTest("bytes=-123456789", ByteRanges.fromLastNBytes(123456789), true, false);
     // bad ranges
     String[] badRanges =
-        {"bytes=0-abcd", "bytes=0as23-44444444", "bytes=22-7777777777777777777777777777777777777777777", "bytes=22--53",
-            "bytes=223-34", "bytes=-34ab", "bytes=--12", "bytes=-12-", "bytes=12ab-", "bytes=---", "btes=3-5",
-            "bytes=345", "bytes=3.14-22", "bytes=3-6.2", "bytes=", "bytes=-", "bytes= -"};
+        {"bytes=0-abcd", "bytes=0as23-44444444", "bytes=22-7777777777777777777777777777777777777777777", "bytes=22--53", "bytes=223-34", "bytes=-34ab", "bytes=--12", "bytes=-12-", "bytes=12ab-", "bytes=---", "btes=3-5", "bytes=345", "bytes=3.14-22", "bytes=3-6.2", "bytes=", "bytes=-", "bytes= -"};
     for (String badRange : badRanges) {
       doBuildGetBlobOptionsTest(badRange, null, false, false);
     }

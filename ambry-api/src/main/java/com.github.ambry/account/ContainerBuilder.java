@@ -39,6 +39,7 @@ public class ContainerBuilder {
   private boolean mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
   private String replicationPolicy = null;
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
+  private boolean securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
   private Set<String> contentTypeWhitelistForFilenamesOnDownload =
       CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
   private boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
@@ -64,6 +65,7 @@ public class ContainerBuilder {
     replicationPolicy = origin.getReplicationPolicy();
     ttlRequired = origin.isTtlRequired();
     parentAccountId = origin.getParentAccountId();
+    securePathRequired = origin.isSecurePathRequired();
     contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
     backupEnabled = origin.isBackupEnabled();
   }
@@ -195,6 +197,16 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the secure path validation required setting of the {@link Container}.
+   * @param securePathRequired The securePathRequired setting to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setSecurePathRequired(boolean securePathRequired) {
+    this.securePathRequired = securePathRequired;
+    return this;
+  }
+
+  /**
    * Sets the replication policy desired by the {@link Container}.
    * @param replicationPolicy the replication policy desired by the container
    * @return This builder.
@@ -224,7 +236,7 @@ public class ContainerBuilder {
    */
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, replicationPolicy, ttlRequired, contentTypeWhitelistForFilenamesOnDownload, backupEnabled,
-        parentAccountId);
+        mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
+        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId);
   }
 }

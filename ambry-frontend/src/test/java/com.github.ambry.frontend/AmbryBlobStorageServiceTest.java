@@ -134,6 +134,8 @@ public class AmbryBlobStorageServiceTest {
   private Container refDefaultPrivateContainer;
   private InMemAccountService accountService = new InMemAccountServiceFactory(false, true).getAccountService();
   private AccountAndContainerInjector accountAndContainerInjector;
+  private final String SECURE_PATH_PREFIX = "secure-path";
+  private final int CONTENT_LENGTH = 1024;
 
   /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
@@ -144,6 +146,8 @@ public class AmbryBlobStorageServiceTest {
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     configProps.setProperty("frontend.allow.service.id.based.post.request",
         String.valueOf(shouldAllowServiceIdBasedPut));
+    configProps.setProperty("frontend.secure.path.prefix", SECURE_PATH_PREFIX);
+    configProps.setProperty("frontend.path.prefixes.to.remove", "/media");
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
@@ -209,10 +213,9 @@ public class AmbryBlobStorageServiceTest {
    * <p/>
    * This test is for  cases where {@link AmbryBlobStorageService#start()} has failed and
    * {@link AmbryBlobStorageService#shutdown()} needs to be run.
-   * @throws IOException
    */
   @Test
-  public void shutdownWithoutStartTest() throws Exception {
+  public void shutdownWithoutStartTest() {
     AmbryBlobStorageService ambryBlobStorageService = getAmbryBlobStorageService();
     ambryBlobStorageService.shutdown();
   }
@@ -1039,6 +1042,82 @@ public class AmbryBlobStorageServiceTest {
     verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
   }
 
+  /**
+   * Test that the secure path is validated if required by {@link Container}.
+   * @throws Exception
+   */
+  @Test
+  public void validateSecurePathTest() throws Exception {
+    short refAccountId = Utils.getRandomShort(TestUtils.RANDOM);
+    String refAccountName = UtilsTest.getRandomString(10);
+    short[] refContainerIds = new short[]{2, 3};
+    String[] refContainerNames = new String[]{"SecurePathValidation", "NoValidation"};
+    Container signedPathRequiredContainer =
+        new ContainerBuilder(refContainerIds[0], refContainerNames[0], Container.ContainerStatus.ACTIVE,
+            "validate secure path", refAccountId).setSecurePathRequired(true).build();
+    Container noValidationContainer =
+        new ContainerBuilder(refContainerIds[1], refContainerNames[1], Container.ContainerStatus.ACTIVE,
+            "no validation on secure path", refAccountId).setSecurePathRequired(false).build();
+    Account account =
+        new AccountBuilder(refAccountId, refAccountName, Account.AccountStatus.ACTIVE).addOrUpdateContainer(
+            signedPathRequiredContainer).addOrUpdateContainer(noValidationContainer).build();
+    accountService.updateAccounts(Collections.singletonList(account));
+
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
+    String contentType = "application/octet-stream";
+    String ownerId = "SecurePathValidationTest";
+    JSONObject headers = new JSONObject();
+    setAmbryHeadersForPut(headers, TTL_SECS, false, refAccountName, contentType, ownerId, refAccountName,
+        refContainerNames[0]);
+    Map<String, String> userMetadata = new HashMap<>();
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+    RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
+    String blobId = postBlobAndVerify(headers, content, account, signedPathRequiredContainer);
+    headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
+    // test that secure path validation succeeded
+    String testUri = "/" + frontendConfig.securePathPrefix + blobId;
+    getBlobAndVerify(testUri, null, null, headers, content, account, signedPathRequiredContainer);
+    // test that no secure path should fail (return AccessDenied)
+    try {
+      getBlobAndVerify(blobId, null, null, headers, content, account, signedPathRequiredContainer);
+      fail("get blob should fail because secure path is missing");
+    } catch (Exception e) {
+      assertEquals("Mismatch in error code", RestServiceErrorCode.AccessDenied,
+          ((RestServiceException) e).getErrorCode());
+    }
+    // test that secure path equals other prefix should fail (return AccessDenied)
+    try {
+      getBlobAndVerify("/media" + blobId, null, null, headers, content, account, signedPathRequiredContainer);
+      fail("get blob should fail because secure path equals other prefix and doesn't match expected one");
+    } catch (Exception e) {
+      assertEquals("Mismatch in error code", RestServiceErrorCode.AccessDenied,
+          ((RestServiceException) e).getErrorCode());
+    }
+    // test that incorrect path should fail (return BadRequest)
+    try {
+      getBlobAndVerify("/incorrect-path" + blobId, null, null, headers, content, account, signedPathRequiredContainer);
+      fail("get blob should fail because secure path is incorrect");
+    } catch (Exception e) {
+      assertEquals("Mismatch in error code", RestServiceErrorCode.BadRequest,
+          ((RestServiceException) e).getErrorCode());
+    }
+    // test container with no validation
+    setAmbryHeadersForPut(headers, TTL_SECS, false, refAccountName, contentType, ownerId, refAccountName,
+        refContainerNames[1]);
+    content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
+    blobId = postBlobAndVerify(headers, content, account, noValidationContainer);
+    // test container with no validation should fail if there is invalid path in URI
+    try {
+      getBlobAndVerify("/incorrect-path" + blobId, null, null, headers, content, account, noValidationContainer);
+      fail("get blob should fail because there is invalid path in uri");
+    } catch (Exception e) {
+      assertEquals("Mismatch in error code", RestServiceErrorCode.BadRequest,
+          ((RestServiceException) e).getErrorCode());
+    }
+    // test container with no validation should succeed if URI is correct
+    getBlobAndVerify(blobId, null, null, headers, content, account, noValidationContainer);
+  }
+
   // helpers
   // general
 
@@ -1303,7 +1382,6 @@ public class AmbryBlobStorageServiceTest {
    */
   private void doPostGetHeadUpdateDeleteTest(Account toPostAccount, Container toPostContainer, String serviceId,
       boolean isPrivate, Account expectedAccount, Container expectedContainer) throws Exception {
-    final int CONTENT_LENGTH = 1024;
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
     String contentType = "application/octet-stream";
     String ownerId = "postGetHeadDeleteOwnerID";
@@ -1993,9 +2071,8 @@ public class AmbryBlobStorageServiceTest {
    * @param getOption the options to use while getting the blob.
    * @return the {@link JSONObject} with range and getOption headers (if non-null). {@code null} if both args are
    * {@code null}.
-   * @throws Exception
    */
-  private JSONObject createRequestHeaders(ByteRange range, GetOption getOption) throws Exception {
+  private JSONObject createRequestHeaders(ByteRange range, GetOption getOption) {
     if (range == null && getOption == null) {
       return null;
     }
@@ -2082,7 +2159,6 @@ public class AmbryBlobStorageServiceTest {
   private String postBlobAndVerifyWithAccountAndContainer(String accountName, String containerName, String serviceId,
       boolean isPrivate, Account expectedAccount, Container expectedContainer,
       RestServiceErrorCode expectedRestErrorCode) throws Exception {
-    int CONTENT_LENGTH = 1024;
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
     List<ByteBuffer> contents = new LinkedList<>();
     contents.add(content);

@@ -531,43 +531,14 @@ public class RestUtils {
    * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
    * performed on.
    * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @param subResource the {@link RestUtils.SubResource} if one is present. {@code null} otherwise.
+   * @param subResource the {@link SubResource} if one is present. {@code null} otherwise.
    * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
    *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
    * @return extracted operation type or blob ID from the URI.
    */
-  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, RestUtils.SubResource subResource,
+  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, SubResource subResource,
       List<String> prefixesToRemove) {
-    String path = restRequest.getPath();
-    int startIndex = 0;
-
-    // remove query string.
-    int endIndex = path.indexOf("?");
-    if (endIndex == -1) {
-      endIndex = path.length();
-    }
-
-    // remove prefix.
-    if (prefixesToRemove != null) {
-      for (String prefix : prefixesToRemove) {
-        if (path.startsWith(prefix)) {
-          startIndex = prefix.length();
-          break;
-        }
-      }
-    }
-
-    // remove subresource if present.
-    if (subResource != null) {
-      // "- 1" removes the "slash" that precedes the sub-resource.
-      endIndex = endIndex - subResource.name().length() - 1;
-    }
-    String operationOrBlobId = path.substring(startIndex, endIndex);
-    if ((operationOrBlobId.isEmpty() || operationOrBlobId.equals("/")) && restRequest.getArgs()
-        .containsKey(Headers.BLOB_ID)) {
-      operationOrBlobId = restRequest.getArgs().get(Headers.BLOB_ID).toString();
-    }
-    return operationOrBlobId;
+    return getPrefixAndResourceFromUri(restRequest, subResource, prefixesToRemove).getSecond();
   }
 
   /**
@@ -588,6 +559,47 @@ public class RestUtils {
       }
     }
     return subResource;
+  }
+
+  /**
+   * Get prefix (if exists) and resource from URI so that operation can be performed based on them.
+   * @param restRequest {@link RestRequest} containing metadata about the request.
+   * @param subResource the {@link SubResource} if one is present. {@code null} otherwise.
+   * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
+   *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
+   * @return a {@link Pair} containing the prefix and resource extracted from URI.
+   */
+  public static Pair<String, String> getPrefixAndResourceFromUri(RestRequest restRequest, SubResource subResource,
+      List<String> prefixesToRemove) {
+    String path = restRequest.getPath();
+    int startIndex = 0;
+    // remove query string.
+    int endIndex = path.indexOf("?");
+    if (endIndex == -1) {
+      endIndex = path.length();
+    }
+    // remove prefix.
+    String prefixFound = "";
+    if (prefixesToRemove != null) {
+      for (String prefix : prefixesToRemove) {
+        if (path.startsWith(prefix)) {
+          prefixFound = prefix;
+          startIndex = prefix.length();
+          break;
+        }
+      }
+    }
+    // remove subresource if present.
+    if (subResource != null) {
+      // "- 1" removes the "slash" that precedes the sub-resource.
+      endIndex = endIndex - subResource.name().length() - 1;
+    }
+    String operationOrBlobId = path.substring(startIndex, endIndex);
+    if ((operationOrBlobId.isEmpty() || operationOrBlobId.equals("/")) && restRequest.getArgs()
+        .containsKey(Headers.BLOB_ID)) {
+      operationOrBlobId = restRequest.getArgs().get(Headers.BLOB_ID).toString();
+    }
+    return new Pair<>(prefixFound, operationOrBlobId);
   }
 
   /**

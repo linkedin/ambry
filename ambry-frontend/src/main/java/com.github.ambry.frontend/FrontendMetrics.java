@@ -148,6 +148,7 @@ public class FrontendMetrics {
   public final Histogram securityServiceProcessRequestTimeInMs;
   public final Histogram securityServicePostProcessRequestTimeInMs;
   public final Histogram securityServiceProcessResponseTimeInMs;
+  public final Counter securePathValidationFailedCount;
   // AmbryIdConverter
   public final Histogram idConverterProcessingTimeInMs;
   // GetPeersHandler
@@ -383,6 +384,8 @@ public class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "RequestPostProcessingTimeInMs"));
     securityServiceProcessResponseTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "ResponseProcessingTimeInMs"));
+    securePathValidationFailedCount =
+        metricRegistry.counter(MetricRegistry.name(AmbrySecurityService.class, "SecurePathValidationFailedCount"));
     // AmbryIdConverter
     idConverterProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "ProcessingTimeInMs"));
