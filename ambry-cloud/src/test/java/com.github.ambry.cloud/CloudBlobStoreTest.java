@@ -118,20 +118,20 @@ public class CloudBlobStoreTest {
     try {
       idleStore.put(messageWriteSet);
       fail("Store put should have failed.");
-    } catch (StoreException storex) {
-      assertEquals(StoreErrorCodes.Store_Not_Started, storex.getErrorCode());
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
     try {
       idleStore.delete(messageWriteSet);
       fail("Store delete should have failed.");
-    } catch (StoreException storex) {
-      assertEquals(StoreErrorCodes.Store_Not_Started, storex.getErrorCode());
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
     try {
       idleStore.findMissingKeys(keys);
       fail("Store findMissingKeys should have failed.");
-    } catch (StoreException storex) {
-      assertEquals(StoreErrorCodes.Store_Not_Started, storex.getErrorCode());
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
   }
 
@@ -150,35 +150,35 @@ public class CloudBlobStoreTest {
     try {
       exStore.put(messageWriteSet);
       fail("Store put should have failed.");
-    } catch (StoreException storex) {
-      assertEquals(StoreErrorCodes.IOError, storex.getErrorCode());
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.IOError, e.getErrorCode());
     }
     try {
       exStore.delete(messageWriteSet);
       fail("Store delete should have failed.");
-    } catch (StoreException storex) {
-      assertEquals(StoreErrorCodes.IOError, storex.getErrorCode());
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.IOError, e.getErrorCode());
     }
     try {
       exStore.findMissingKeys(keys);
       fail("Store findMissingKeys should have failed.");
-    } catch (StoreException storex) {
-      assertEquals(StoreErrorCodes.IOError, storex.getErrorCode());
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.IOError, e.getErrorCode());
     }
   }
 
   /**
    * Utility method to generate a BlobId and byte buffer for a blob with specified properties and add them to the specified MessageWriteSet.
    * @param messageWriteSet the {@link MockMessageWriteSet} in which to store the data.
-   * @param size
-   * @param expiresAtMs
-   * @param accountId
-   * @param containerId
+   * @param size the size of the byte buffer.
+   * @param expiresAtMs the expiration time.
+   * @param accountId the account Id.
+   * @param containerId the container Id.
    * @return the generated {@link BlobId}.
    * @throws StoreException
    */
   private BlobId addBlobToSet(MockMessageWriteSet messageWriteSet, long size, long expiresAtMs, short accountId,
-      short containerId) throws StoreException {
+      short containerId) {
     BlobId id = getUniqueId(accountId, containerId);
     long crc = random.nextLong();
     MessageInfo info =
@@ -190,8 +190,8 @@ public class CloudBlobStoreTest {
 
   /**
    * Utility method to generate a {@link BlobId} with specified account and container.
-   * @param accountId
-   * @param containerId
+   * @param accountId the account Id.
+   * @param containerId the container Id.
    * @return the generated {@link BlobId}.
    */
   private BlobId getUniqueId(short accountId, short containerId) {

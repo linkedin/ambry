@@ -125,6 +125,13 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   // TODO: get a CloudBlobDirectory within container reflecting accountId and containerId
+  /**
+   * Get an Azure container to place the specified {@link BlobId}.
+   * @param blobId the {@link BlobId} that needs a container.
+   * @param autoCreate flag indicating whether to create the container if it does not exist.
+   * @return the created {@link CloudBlobContainer}.
+   * @throws Exception
+   */
   private CloudBlobContainer getContainer(BlobId blobId, boolean autoCreate) throws Exception {
     // Need clustermap to construct BlobId and partitionId
     // Either pass to our constructor or pass BlobId to methods

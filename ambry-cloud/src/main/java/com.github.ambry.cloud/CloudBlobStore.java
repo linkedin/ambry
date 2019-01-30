@@ -80,7 +80,7 @@ class CloudBlobStore implements Store {
     checkDuplicates(messageSetToWrite);
 
     // Write the blobs in the message set
-    CloudWriter cloudWriter = new CloudWriter(this, messageSetToWrite.getMessageSetInfo());
+    CloudWriteChannel cloudWriter = new CloudWriteChannel(this, messageSetToWrite.getMessageSetInfo());
     try {
       messageSetToWrite.writeTo(cloudWriter);
     } catch (IOException ex) {
@@ -128,6 +128,7 @@ class CloudBlobStore implements Store {
   @Override
   public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
     checkStarted();
+    // This is currently a no-op because we skipped uploading the blob on receipt of the PUT record since it had a TTL.
   }
 
   @Override
@@ -143,7 +144,7 @@ class CloudBlobStore implements Store {
     try {
       for (StoreKey key : keys) {
         BlobId blobId = (BlobId) key;
-        if (cloudDestination.doesBlobExist(blobId) == false) {
+        if (!cloudDestination.doesBlobExist(blobId)) {
           missingKeys.add(key);
         }
       }
@@ -161,6 +162,9 @@ class CloudBlobStore implements Store {
   @Override
   public boolean isKeyDeleted(StoreKey key) throws StoreException {
     checkStarted();
+    // Return false for now, because we don't track recently deleted keys
+    // This way, the replica thread will replay the delete resulting in a no-op
+    // TODO: Consider LRU cache of recently deleted keys
     return false;
   }
 
@@ -175,15 +179,8 @@ class CloudBlobStore implements Store {
   }
 
   @Override
-  public void shutdown() throws StoreException {
+  public void shutdown() {
     started = false;
-  }
-
-  /**
-   * @return {@code true} if this store has been started successfully.
-   */
-  boolean isStarted() {
-    return started;
   }
 
   private void checkStarted() throws StoreException {
@@ -195,10 +192,9 @@ class CloudBlobStore implements Store {
   /**
    * Detects duplicates in {@code writeSet}
    * @param writeSet the {@link MessageWriteSet} to detect duplicates in
-   * @throws StoreException if a duplicate is detected
+   * @throws IllegalArgumentException if a duplicate is detected
    */
-  // TODO: move into MessageWriteSet?
-  private void checkDuplicates(MessageWriteSet writeSet) throws StoreException {
+  private void checkDuplicates(MessageWriteSet writeSet) {
     List<MessageInfo> infos = writeSet.getMessageSetInfo();
     if (infos.size() > 1) {
       Set<StoreKey> seenKeys = new HashSet<>();
@@ -215,19 +211,19 @@ class CloudBlobStore implements Store {
     return "PartitionId: " + partitionId.toPathString() + " in the cloud";
   }
 
-  private class CloudWriter implements Write {
+  private class CloudWriteChannel implements Write {
     private final CloudBlobStore cloudBlobStore;
     private final List<MessageInfo> messageInfoList;
     private int messageIndex = 0;
 
-    CloudWriter(CloudBlobStore cloudBlobStore, List<MessageInfo> messageInfoList) {
+    CloudWriteChannel(CloudBlobStore cloudBlobStore, List<MessageInfo> messageInfoList) {
       this.cloudBlobStore = cloudBlobStore;
       this.messageInfoList = messageInfoList;
     }
 
     @Override
     public int appendFrom(ByteBuffer buffer) throws IOException {
-      return 0;
+      throw new UnsupportedOperationException("Method not supported");
     }
 
     @Override
@@ -238,7 +234,11 @@ class CloudBlobStore implements Store {
         throw new IllegalStateException("Mismatched buffer length for blob: " + messageInfo.getStoreKey().getID());
       }
       ByteBuffer messageBuf = ByteBuffer.allocate((int) size);
-      channel.read(messageBuf);
+      int bytesRead = 0;
+      while (bytesRead < size) {
+        bytesRead += channel.read(messageBuf);
+      }
+
       try {
         cloudBlobStore.putBlob(messageInfo, messageBuf, size);
         messageIndex++;
