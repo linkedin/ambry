@@ -28,9 +28,9 @@ public interface CloudDestination {
    * @param blobSize size of the blob in bytes
    * @param blobInputStream the stream to read blob data
    * @return flag indicating whether the blob was uploaded
-   * @throws Exception if an exception occurs
+   * @throws CloudStorageException if the upload encounters an error.
    */
-  boolean uploadBlob(BlobId blobId, long blobSize, InputStream blobInputStream) throws Exception;
+  boolean uploadBlob(BlobId blobId, long blobSize, InputStream blobInputStream) throws CloudStorageException;
 
   // Alternatively, we can derive the path from blob's partition/account/container
 
@@ -38,15 +38,15 @@ public interface CloudDestination {
    * Delete blob in the cloud destination.
    * @param blobId id of the Ambry blob
    * @return flag indicating whether the blob was deleted
-   * @throws Exception if an exception occurs
+   * @throws CloudStorageException if the deletion encounters an error.
    */
-  boolean deleteBlob(BlobId blobId) throws Exception;
+  boolean deleteBlob(BlobId blobId) throws CloudStorageException;
 
   /**
    * Checks whether the blob exists in the cloud destination.
    * @param blobId id of the Ambry blob to check
    * @return {@code true} if the blob exists, otherwise {@code false}.
-   * @throws Exception if an exception occurs
+   * @throws CloudStorageException if the existence check encounters an error.
    */
-  boolean doesBlobExist(BlobId blobId) throws Exception;
+  boolean doesBlobExist(BlobId blobId) throws CloudStorageException;
 }

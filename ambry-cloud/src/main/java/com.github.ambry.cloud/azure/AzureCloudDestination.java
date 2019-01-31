@@ -14,15 +14,19 @@
 package com.github.ambry.cloud.azure;
 
 import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.OperationContext;
+import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.BlobContainerPublicAccessType;
 import com.microsoft.azure.storage.blob.BlobRequestOptions;
 import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.InputStream;
+import java.net.URISyntaxException;
+import java.security.InvalidKeyException;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +56,8 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureAccount the {@link CloudStorageAccount} to use.
    * @throws Exception
    */
-  AzureCloudDestination(String configSpec, CloudStorageAccount azureAccount) throws Exception {
+  AzureCloudDestination(String configSpec, CloudStorageAccount azureAccount)
+      throws URISyntaxException, InvalidKeyException {
     if (azureAccount == null) {
       azureAccount = CloudStorageAccount.parse(configSpec);
     }
@@ -64,7 +69,7 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean uploadBlob(BlobId blobId, long blobSize, InputStream blobInputStream) throws Exception {
+  public boolean uploadBlob(BlobId blobId, long blobSize, InputStream blobInputStream) throws CloudStorageException {
 
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     Objects.requireNonNull(blobInputStream, "Input stream cannot be null");
@@ -76,7 +81,8 @@ class AzureCloudDestination implements CloudDestination {
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobId.getID());
 
       if (azureBlob.exists()) {
-        LOGGER.debug("Skipping upload of blob {} as it already exists in Azure container {}.", blobId, azureContainer.getName());
+        LOGGER.debug("Skipping upload of blob {} as it already exists in Azure container {}.", blobId,
+            azureContainer.getName());
         return false;
       }
 
@@ -84,13 +90,12 @@ class AzureCloudDestination implements CloudDestination {
       LOGGER.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
       return true;
     } catch (Exception e) {
-      LOGGER.error("Failed to upload blob: " + blobId);
-      throw e;
+      throw new CloudStorageException("Failed to upload blob: " + blobId, e);
     }
   }
 
   @Override
-  public boolean deleteBlob(BlobId blobId) throws Exception {
+  public boolean deleteBlob(BlobId blobId) throws CloudStorageException {
     Objects.requireNonNull(blobId);
 
     try {
@@ -98,7 +103,8 @@ class AzureCloudDestination implements CloudDestination {
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobId.getID());
 
       if (!azureBlob.exists()) {
-        LOGGER.debug("Skipping deletion of blob {} as it does not exist in Azure container {}.", blobId, azureContainer.getName());
+        LOGGER.debug("Skipping deletion of blob {} as it does not exist in Azure container {}.", blobId,
+            azureContainer.getName());
         return false;
       }
 
@@ -106,25 +112,22 @@ class AzureCloudDestination implements CloudDestination {
       LOGGER.debug("Deleted blob {} from Azure container {}.", blobId, azureContainer.getName());
       return true;
     } catch (Exception e) {
-      LOGGER.error("Failed to delete blob: " + blobId);
-      throw e;
+      throw new CloudStorageException("Failed to delete blob: " + blobId, e);
     }
   }
 
   @Override
-  public boolean doesBlobExist(BlobId blobId) throws Exception {
+  public boolean doesBlobExist(BlobId blobId) throws CloudStorageException {
     try {
       CloudBlobContainer azureContainer = getContainer(blobId, false);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobId.getID());
 
       return azureBlob.exists();
     } catch (Exception e) {
-      LOGGER.error("Could not check existence of blob: " + blobId);
-      throw e;
+      throw new CloudStorageException("Could not check existence of blob: " + blobId, e);
     }
   }
 
-  // TODO: get a CloudBlobDirectory within container reflecting accountId and containerId
   /**
    * Get an Azure container to place the specified {@link BlobId}.
    * @param blobId the {@link BlobId} that needs a container.
@@ -132,13 +135,16 @@ class AzureCloudDestination implements CloudDestination {
    * @return the created {@link CloudBlobContainer}.
    * @throws Exception
    */
-  private CloudBlobContainer getContainer(BlobId blobId, boolean autoCreate) throws Exception {
+  // TODO: get a CloudBlobDirectory within container reflecting accountId and containerId
+  private CloudBlobContainer getContainer(BlobId blobId, boolean autoCreate)
+      throws URISyntaxException, StorageException {
     // Need clustermap to construct BlobId and partitionId
     // Either pass to our constructor or pass BlobId to methods
     String partitionPath = blobId.getPartition().toPathString();
     CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(partitionPath);
     if (autoCreate) {
-      azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(), new OperationContext());
+      azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
+          new OperationContext());
     }
     return azureContainer;
   }
