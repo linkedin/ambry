@@ -26,7 +26,6 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.InputStream;
 import java.net.URISyntaxException;
-import java.security.InvalidKeyException;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,9 +43,9 @@ class AzureCloudDestination implements CloudDestination {
   /**
    * Construct an Azure cloud destination from a container's replication config.
    * @param configSpec the config spec to use.
-   * @throws Exception
+   * @throws CloudStorageException if the destination could not be created.
    */
-  AzureCloudDestination(String configSpec) throws Exception {
+  AzureCloudDestination(String configSpec) throws CloudStorageException {
     this(configSpec, null);
   }
 
@@ -54,18 +53,21 @@ class AzureCloudDestination implements CloudDestination {
    * Construct an Azure cloud destination from a container's replication config and a {@link CloudStorageAccount} instance.
    * @param configSpec the config spec to use.
    * @param azureAccount the {@link CloudStorageAccount} to use.
-   * @throws Exception
+   * @throws CloudStorageException if the destination could not be created.
    */
-  AzureCloudDestination(String configSpec, CloudStorageAccount azureAccount)
-      throws URISyntaxException, InvalidKeyException {
-    if (azureAccount == null) {
-      azureAccount = CloudStorageAccount.parse(configSpec);
-    }
-    this.azureAccount = azureAccount;
+  AzureCloudDestination(String configSpec, CloudStorageAccount azureAccount) throws CloudStorageException {
+    try {
+      if (azureAccount == null) {
+        azureAccount = CloudStorageAccount.parse(configSpec);
+      }
+      this.azureAccount = azureAccount;
 
-    // Create a blob client to interact with Blob storage
-    azureBlobClient = azureAccount.createCloudBlobClient();
-    LOGGER.info("Created Azure destination");
+      // Create a blob client to interact with Blob storage
+      azureBlobClient = azureAccount.createCloudBlobClient();
+      LOGGER.info("Created Azure destination");
+    } catch (Exception e) {
+      throw new CloudStorageException("Failed to create AzureCloudDestination", e);
+    }
   }
 
   @Override
@@ -86,6 +88,7 @@ class AzureCloudDestination implements CloudDestination {
         return false;
       }
 
+      //azureBlob.setMetadata(new HashMap<>());
       azureBlob.upload(blobInputStream, blobSize, null, options, opContext);
       LOGGER.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
       return true;
@@ -108,6 +111,7 @@ class AzureCloudDestination implements CloudDestination {
         return false;
       }
 
+      // TODO: set deletedTime metadata
       azureBlob.delete();
       LOGGER.debug("Deleted blob {} from Azure container {}.", blobId, azureContainer.getName());
       return true;
@@ -121,7 +125,6 @@ class AzureCloudDestination implements CloudDestination {
     try {
       CloudBlobContainer azureContainer = getContainer(blobId, false);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobId.getID());
-
       return azureBlob.exists();
     } catch (Exception e) {
       throw new CloudStorageException("Could not check existence of blob: " + blobId, e);
