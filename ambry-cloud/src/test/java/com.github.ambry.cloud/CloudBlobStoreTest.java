@@ -139,9 +139,10 @@ public class CloudBlobStoreTest {
   @Test
   public void testExceptionalDest() throws Exception {
     CloudDestination exDest = mock(CloudDestination.class);
-    when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(InputStream.class))).thenThrow(new RuntimeException());
-    when(exDest.deleteBlob(any(BlobId.class))).thenThrow(new RuntimeException());
-    when(exDest.doesBlobExist(any(BlobId.class))).thenThrow(new RuntimeException());
+    when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(InputStream.class))).thenThrow(
+        new CloudStorageException("ouch"));
+    when(exDest.deleteBlob(any(BlobId.class))).thenThrow(new CloudStorageException("ouch"));
+    when(exDest.doesBlobExist(any(BlobId.class))).thenThrow(new CloudStorageException("ouch"));
     CloudBlobStore exStore = new CloudBlobStore(partitionId, null, exDest);
     exStore.start();
     List<StoreKey> keys = Collections.singletonList(getUniqueId(refAccountId, refContainerId));
