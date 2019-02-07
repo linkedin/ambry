@@ -238,7 +238,11 @@ class CloudBlobStore implements Store {
       ByteBuffer messageBuf = ByteBuffer.allocate((int) size);
       int bytesRead = 0;
       while (bytesRead < size) {
-        bytesRead += channel.read(messageBuf);
+        int readResult = channel.read(messageBuf);
+        if (readResult == -1) {
+          throw new IOException("Channel read returned -1 before reading expected number of bytes, blobId=" + messageInfo.getStoreKey().getID());
+        }
+        bytesRead += readResult;
       }
 
       try {
