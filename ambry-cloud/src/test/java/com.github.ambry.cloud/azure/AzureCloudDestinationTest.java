@@ -44,7 +44,6 @@ import static org.mockito.Mockito.*;
 public class AzureCloudDestinationTest {
 
   private String configSpec = "AccountName=ambry;AccountKey=ambry-kay";
-  private String containerName = "ambrytest";
   private AzureCloudDestination azureDest;
   private CloudStorageAccount mockAzureAccount;
   private CloudBlobClient mockAzureClient;
@@ -74,7 +73,7 @@ public class AzureCloudDestinationTest {
     blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
 
-    azureDest = new AzureCloudDestination(configSpec, mockAzureAccount);
+    azureDest = new AzureCloudDestination(mockAzureAccount);
   }
 
   /**
@@ -122,9 +121,9 @@ public class AzureCloudDestinationTest {
   }
 
   /** Test constructor with invalid config spec. */
-  @Test
-  public void testInitClientException() {
-    expectCloudStorageException(() -> new AzureCloudDestination(configSpec), InvalidKeyException.class);
+  @Test(expected = InvalidKeyException.class)
+  public void testInitClientException() throws Exception {
+    azureDest = new AzureCloudDestination(configSpec);
   }
 
   /** Test upload when client throws exception. */

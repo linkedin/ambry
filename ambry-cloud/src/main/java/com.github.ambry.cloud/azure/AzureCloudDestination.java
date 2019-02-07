@@ -43,33 +43,26 @@ class AzureCloudDestination implements CloudDestination {
   private final CloudBlobClient azureBlobClient;
 
   /**
-   * Construct an Azure cloud destination from a container's replication config.
+   * Construct an Azure cloud destination from a container's config spec.
    * @param configSpec the config spec to use.
-   * @throws CloudStorageException if the destination could not be created.
+   * @throws InvalidKeyException if credentials in the connection string contain an invalid key.
+   * @throws URISyntaxException if the connection string specifies an invalid URI.
    */
-  AzureCloudDestination(String configSpec) throws CloudStorageException {
-    this(configSpec, null);
+  AzureCloudDestination(String configSpec) throws URISyntaxException, InvalidKeyException {
+    this(CloudStorageAccount.parse(configSpec));
   }
 
   /**
-   * Construct an Azure cloud destination from a container's replication config and a {@link CloudStorageAccount} instance.
-   * @param configSpec the config spec to use.
+   * Construct an Azure cloud destination from a {@link CloudStorageAccount} instance.
    * @param azureAccount the {@link CloudStorageAccount} to use.
    * @throws CloudStorageException if the destination could not be created.
    */
-  AzureCloudDestination(String configSpec, CloudStorageAccount azureAccount) throws CloudStorageException {
-    try {
-      if (azureAccount == null) {
-        azureAccount = CloudStorageAccount.parse(configSpec);
-      }
-      this.azureAccount = azureAccount;
+  AzureCloudDestination(CloudStorageAccount azureAccount) {
+    this.azureAccount = azureAccount;
 
-      // Create a blob client to interact with Blob storage
-      azureBlobClient = azureAccount.createCloudBlobClient();
-      LOGGER.info("Created Azure destination");
-    } catch (URISyntaxException | InvalidKeyException e) {
-      throw new CloudStorageException("Failed to create AzureCloudDestination", e);
-    }
+    // Create a blob client to interact with Blob storage
+    azureBlobClient = azureAccount.createCloudBlobClient();
+    LOGGER.info("Created Azure destination");
   }
 
   // TODO: add blob properties arg in order to set Azure blob metadata
