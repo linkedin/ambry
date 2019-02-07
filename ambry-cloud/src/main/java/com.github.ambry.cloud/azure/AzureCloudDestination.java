@@ -24,8 +24,10 @@ import com.microsoft.azure.storage.blob.BlobRequestOptions;
 import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URISyntaxException;
+import java.security.InvalidKeyException;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,7 +67,7 @@ class AzureCloudDestination implements CloudDestination {
       // Create a blob client to interact with Blob storage
       azureBlobClient = azureAccount.createCloudBlobClient();
       LOGGER.info("Created Azure destination");
-    } catch (Exception e) {
+    } catch (URISyntaxException | InvalidKeyException e) {
       throw new CloudStorageException("Failed to create AzureCloudDestination", e);
     }
   }
@@ -93,7 +95,7 @@ class AzureCloudDestination implements CloudDestination {
       azureBlob.upload(blobInputStream, blobSize, null, options, opContext);
       LOGGER.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
       return true;
-    } catch (Exception e) {
+    } catch (URISyntaxException | StorageException | IOException e) {
       throw new CloudStorageException("Failed to upload blob: " + blobId, e);
     }
   }
@@ -116,7 +118,7 @@ class AzureCloudDestination implements CloudDestination {
       azureBlob.delete();
       LOGGER.debug("Deleted blob {} from Azure container {}.", blobId, azureContainer.getName());
       return true;
-    } catch (Exception e) {
+    } catch (URISyntaxException | StorageException e) {
       throw new CloudStorageException("Failed to delete blob: " + blobId, e);
     }
   }
@@ -127,7 +129,7 @@ class AzureCloudDestination implements CloudDestination {
       CloudBlobContainer azureContainer = getContainer(blobId, false);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobId.getID());
       return azureBlob.exists();
-    } catch (Exception e) {
+    } catch (URISyntaxException | StorageException e) {
       throw new CloudStorageException("Could not check existence of blob: " + blobId, e);
     }
   }
