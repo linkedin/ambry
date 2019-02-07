@@ -70,6 +70,7 @@ class AzureCloudDestination implements CloudDestination {
     }
   }
 
+  // TODO: add blob properties arg in order to set Azure blob metadata
   @Override
   public boolean uploadBlob(BlobId blobId, long blobSize, InputStream blobInputStream) throws CloudStorageException {
 

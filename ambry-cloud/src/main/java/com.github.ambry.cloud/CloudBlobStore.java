@@ -48,7 +48,7 @@ class CloudBlobStore implements Store {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final PartitionId partitionId;
-  private CloudDestination cloudDestination;
+  private final CloudDestination cloudDestination;
   private boolean started;
 
   /**
@@ -93,9 +93,9 @@ class CloudBlobStore implements Store {
    * @param messageInfo the {@link MessageInfo} containing blob metadata.
    * @param messageBuf the bytes to be uploaded.
    * @param size the number of bytes to upload.
-   * @throws Exception
+   * @throws CloudStorageException if the upload failed.
    */
-  private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size) throws Exception {
+  private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size) throws CloudStorageException {
     boolean performUpload = messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time && !messageInfo.isDeleted();
     // May need to encrypt buffer before upload
     if (performUpload) {
@@ -114,7 +114,7 @@ class CloudBlobStore implements Store {
         BlobId blobId = (BlobId) msgInfo.getStoreKey();
         cloudDestination.deleteBlob(blobId);
       }
-    } catch (Exception ex) {
+    } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
     }
   }
@@ -144,11 +144,12 @@ class CloudBlobStore implements Store {
     try {
       for (StoreKey key : keys) {
         BlobId blobId = (BlobId) key;
+        // TODO: checking each blob will be slow.  Add batch check to CloudDestination.
         if (!cloudDestination.doesBlobExist(blobId)) {
           missingKeys.add(key);
         }
       }
-    } catch (Exception ex) {
+    } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
     }
     return missingKeys;
@@ -175,6 +176,7 @@ class CloudBlobStore implements Store {
 
   @Override
   public boolean isEmpty() {
+    // TODO: query destination stats in start method
     return false;
   }
 
