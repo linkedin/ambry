@@ -72,7 +72,7 @@ public class GetReplicasHandlerTest {
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = getReplicasHandler.getReplicas(blobId.getID(), restResponseChannel);
       assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
-      assertEquals("Unexpected Content-Type", "application/json",
+      assertEquals("Unexpected Content-Type", RestUtils.JSON_CONTENT_TYPE,
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       String returnedReplicasStr = RestTestUtils.getJsonizedResponseBody(channel)
           .get(GetReplicasHandler.REPLICAS_KEY)

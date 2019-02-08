@@ -48,7 +48,7 @@ class PostAccountsHandler {
   private final FrontendMetrics frontendMetrics;
 
   /**
-   * Constructs a handler for handling requests for signed URLs.
+   * Constructs a handler for handling requests updating account metadata.
    * @param securityService the {@link SecurityService} to use.
    * @param accountService the {@link AccountService} to use.
    * @param frontendConfig the {@link FrontendConfig} to use.
@@ -63,7 +63,7 @@ class PostAccountsHandler {
   }
 
   /**
-   * Asynchronously post a blob.
+   * Asynchronously update account metadata.
    * @param restRequest the {@link RestRequest} that contains the request parameters and body.
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
@@ -95,7 +95,7 @@ class PostAccountsHandler {
     }
 
     /**
-     * Start the chain by calling {@link SecurityService#preProcessRequest}.
+     * Start the chain by calling {@link SecurityService#processRequest}.
      */
     private void start() {
       RestRequestMetrics requestMetrics =
@@ -134,7 +134,7 @@ class PostAccountsHandler {
      */
     private Callback<Long> fetchAccountUpdateBodyCallback(CopyingAsyncWritableChannel channel) {
       return buildCallback(frontendMetrics.postAccountsReadRequestMetrics, bytesRead -> {
-        updateAccounts(FrontendUtils.readJsonFromChannel(channel));
+        updateAccounts(readJsonFromChannel(channel));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
         finalCallback.onCompletion(null, null);

@@ -43,6 +43,7 @@ public class InMemAccountService implements AccountService {
           Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
               Container.DEFAULT_PRIVATE_CONTAINER));
+  private boolean shouldUpdateSucceed = true;
   private final boolean shouldReturnOnlyUnknown;
   private final boolean notifyConsumers;
   private final Map<Short, Account> idToAccountMap = new HashMap<>();
@@ -72,6 +73,9 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized boolean updateAccounts(Collection<Account> accounts) {
+    if (!shouldUpdateSucceed) {
+      return false;
+    }
     for (Account account : accounts) {
       idToAccountMap.put(account.getId(), account);
       nameToAccountMap.put(account.getName(), account);
@@ -155,6 +159,14 @@ public class InMemAccountService implements AccountService {
         .addOrUpdateContainer(privateContainer)
         .addOrUpdateContainer(randomContainer)
         .build();
+  }
+
+  /**
+   * @param shouldUpdateSucceed the new value of {@code shouldUpdateSucceed}, which will be returned by subsequent
+   *                            {@link #updateAccounts(Collection)} calls.
+   */
+  public void setShouldUpdateSucceed(boolean shouldUpdateSucceed) {
+    this.shouldUpdateSucceed = shouldUpdateSucceed;
   }
 
   /**

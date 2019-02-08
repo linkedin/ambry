@@ -218,7 +218,7 @@ class GetPeersHandler {
           }
           channel = getResponseBody(peerDataNodeIds);
           restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
         }
       } catch (Exception e) {

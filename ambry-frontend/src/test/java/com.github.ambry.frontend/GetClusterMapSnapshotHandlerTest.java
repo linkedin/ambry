@@ -62,7 +62,7 @@ public class GetClusterMapSnapshotHandlerTest {
     ReadableStreamChannel channel = sendRequestGetResponse(restRequest, restResponseChannel);
     assertNotNull("There should be a response", channel);
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
-    assertEquals("Content-type is not as expected", "application/json",
+    assertEquals("Content-type is not as expected", RestUtils.JSON_CONTENT_TYPE,
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
     assertEquals("Content-length is not as expected", channel.getSize(),
         Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));

@@ -67,7 +67,7 @@ class GetReplicasHandler {
     ReadableStreamChannel channel = null;
     try {
       channel = FrontendUtils.serializeJsonToChannel(getReplicas(blobId));
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
     } finally {
       metrics.getReplicasProcessingTimeInMs.update(System.currentTimeMillis() - startTime);

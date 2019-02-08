@@ -35,14 +35,14 @@ import static com.github.ambry.frontend.FrontendUtils.*;
 
 
 class GetAccountsHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(PostAccountsHandler.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(GetAccountsHandler.class);
 
   private final SecurityService securityService;
   private final AccountService accountService;
   private final FrontendMetrics frontendMetrics;
 
   /**
-   * Constructs a handler for handling requests for signed URLs.
+   * Constructs a handler for handling requests for getting account metadata.
    * @param securityService the {@link SecurityService} to use.
    * @param accountService the {@link AccountService} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
@@ -54,7 +54,7 @@ class GetAccountsHandler {
   }
 
   /**
-   * Asynchronously post a blob.
+   * Asynchronously get account metadata.
    * @param restRequest the {@link RestRequest} that contains the request parameters and body.
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
@@ -93,7 +93,7 @@ class GetAccountsHandler {
       RestRequestMetrics requestMetrics =
           restRequest.isSslUsed() ? frontendMetrics.getAccountsSSLMetrics : frontendMetrics.getAccountsMetrics;
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-      // Start the callback chain by performing request security pre-processing.
+      // Start the callback chain by performing request security processing.
       securityService.processRequest(restRequest, securityProcessRequestCallback());
     }
 
@@ -117,7 +117,7 @@ class GetAccountsHandler {
       return buildCallback(frontendMetrics.getAccountsSecurityPostProcessRequestMetrics, securityCheckResult -> {
         ReadableStreamChannel channel = serializeJsonToChannel(AccountCollectionSerde.toJson(getAccounts()));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
         finalCallback.onCompletion(channel, null);
       }, uri, LOGGER, finalCallback);
@@ -152,4 +152,3 @@ class GetAccountsHandler {
     }
   }
 }
-

@@ -75,7 +75,7 @@ class PostBlobHandler {
   private final FrontendMetrics frontendMetrics;
 
   /**
-   * Constructs a handler for handling requests for signed URLs.
+   * Constructs a handler for handling requests for uploading or stitching blobs.
    * @param securityService the {@link SecurityService} to use.
    * @param idConverter the {@link IdConverter} to use.
    * @param idSigningService the {@link IdSigningService} to use.
@@ -189,7 +189,7 @@ class PostBlobHandler {
     private Callback<Long> fetchStitchRequestBodyCallback(CopyingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
-              getChunksToStitch(blobInfo.getBlobProperties(), FrontendUtils.readJsonFromChannel(channel)),
+              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo)), uri, LOGGER, finalCallback);
     }
 
