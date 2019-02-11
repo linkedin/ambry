@@ -381,7 +381,7 @@ public class GetManagerTest {
    */
   private void compareBlobInfo(BlobInfo blobInfo) {
     Assert.assertTrue("Blob properties should match",
-        RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
+        RouterTestHelpers.arePersistedFieldsEquivalent(putBlobProperties, blobInfo.getBlobProperties()));
     Assert.assertEquals("Blob size in received blobProperties should be the same as actual", blobSize,
         blobInfo.getBlobProperties().getBlobSize());
     Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
@@ -424,7 +424,7 @@ public class GetManagerTest {
   private void setOperationParams(int blobSize, GetBlobOptions options) {
     this.blobSize = blobSize;
     putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption, null);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
     putContent = new byte[blobSize];

@@ -462,7 +462,7 @@ public class BlobIdTransformerTest {
       MessageInfo messageInfo;
       BlobProperties blobProperties =
           new BlobProperties(blobStreamSize, "serviceId", "ownerId", "contentType", false, 0, 0, blobId.getAccountId(),
-              blobId.getContainerId(), hasEncryption);
+              blobId.getContainerId(), hasEncryption, null);
       if (clazz != null) {
         MessageFormatInputStream messageFormatInputStream;
         if (clazz == PutMessageFormatInputStream.class) {

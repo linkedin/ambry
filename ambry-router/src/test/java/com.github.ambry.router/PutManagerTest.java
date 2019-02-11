@@ -107,6 +107,7 @@ public class PutManagerTest {
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
   private static final String LOCAL_DC = "DC1";
+  private static final String EXTERNAL_ASSET_TAG = "ExternalAssetTag";
 
   /**
    * Running for both regular and encrypted blobs
@@ -719,7 +720,8 @@ public class PutManagerTest {
         requestAndResult.putContent = new byte[actualBlobSize];
         requestAndResult.putBlobProperties =
             new BlobProperties(sizeInProperties, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-                Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false);
+                Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false,
+                EXTERNAL_ASSET_TAG);
         random.nextBytes(requestAndResult.putContent);
         requestAndResultsList.add(requestAndResult);
         submitPutsAndAssertSuccess(true);
@@ -1276,7 +1278,8 @@ public class PutManagerTest {
     RequestAndResult(int blobSize, Container container, PutBlobOptions options, List<ChunkInfo> chunksToStitch) {
       putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
           container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getParentAccountId(),
-          container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getId(), testEncryption);
+          container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getId(), testEncryption,
+          EXTERNAL_ASSET_TAG);
       putUserMetadata = new byte[10];
       random.nextBytes(putUserMetadata);
       putContent = new byte[blobSize];
@@ -1314,7 +1317,11 @@ public class PutManagerTest {
       assertEquals("NotificationBlobType does not match data in notification event.", expectedNotificationBlobType,
           event.notificationBlobType);
       Assert.assertTrue("BlobProperties does not match data in notification event.",
-          RouterTestHelpers.haveEquivalentFields(expectedBlobProperties, event.blobProperties));
+          RouterTestHelpers.arePersistedFieldsEquivalent(expectedBlobProperties, event.blobProperties));
+      assertNull("Non-persistent filed should be null after serialization.",
+          expectedBlobProperties.getExternalAssetTag());
+      assertEquals("ExternalAssetTag in notification should match", EXTERNAL_ASSET_TAG,
+          event.blobProperties.getExternalAssetTag());
       assertEquals("Expected blob size does not match data in notification event.",
           expectedBlobProperties.getBlobSize(), event.blobProperties.getBlobSize());
     }

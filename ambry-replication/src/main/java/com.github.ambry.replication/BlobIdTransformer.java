@@ -211,7 +211,7 @@ public class BlobIdTransformer implements Transformer {
           new BlobProperties(blobData.getSize(), oldProperties.getServiceId(), oldProperties.getOwnerId(),
               oldProperties.getContentType(), oldProperties.isPrivate(), oldProperties.getTimeToLiveInSeconds(),
               oldProperties.getCreationTimeInMs(), newBlobId.getAccountId(), newBlobId.getContainerId(),
-              oldProperties.isEncrypted());
+              oldProperties.isEncrypted(), null);
 
       PutMessageFormatInputStream putMessageFormatInputStream =
           new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData, blobDataBytes,

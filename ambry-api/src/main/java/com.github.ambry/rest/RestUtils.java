@@ -178,6 +178,10 @@ public class RestUtils {
      */
     public static final String MAX_UPLOAD_SIZE = "x-ambry-max-upload-size";
     /**
+     * An externalAssetTag for this blob.
+     */
+    public static final String EXTERNAL_ASSET_TAG = "x-ambry-external-asset-tag";
+    /**
      * The blob ID requested by the URL.
      */
     public static final String BLOB_ID = "x-ambry-blob-id";
@@ -328,6 +332,7 @@ public class RestUtils {
     String serviceId = getHeader(args, Headers.SERVICE_ID, true);
     String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
     String ownerId = getHeader(args, Headers.OWNER_ID, false);
+    String externalAssetTag = getHeader(args, Headers.EXTERNAL_ASSET_TAG, false);
 
     long ttl = Utils.Infinite_Time;
     Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
@@ -343,7 +348,7 @@ public class RestUtils {
     // based on the container properties and ACLs. For now, BlobProperties still includes this field, though.
     boolean isPrivate = !container.isCacheable();
     return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(), container.getId(),
-        container.isEncrypted());
+        container.isEncrypted(), externalAssetTag);
   }
 
   /**

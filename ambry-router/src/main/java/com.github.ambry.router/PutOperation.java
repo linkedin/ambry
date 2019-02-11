@@ -1095,7 +1095,8 @@ class PutOperation {
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
-            passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted());
+            passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
+            passedInBlobProperties.getExternalAssetTag());
         operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false, null, true,
             Integer.MAX_VALUE, routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
         correlationIdToChunkPutRequestInfo.clear();
@@ -1600,7 +1601,7 @@ class PutOperation {
               passedInBlobProperties.getContentType(), passedInBlobProperties.isPrivate(),
               passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs(),
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
-              passedInBlobProperties.isEncrypted());
+              passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag());
       if (isStitchOperation() || getNumDataChunks() > 1) {
         // values returned are in the right order as TreeMap returns them in key-order.
         List<StoreKey> orderedChunkIdList = new ArrayList<>(indexToChunkIds.values());

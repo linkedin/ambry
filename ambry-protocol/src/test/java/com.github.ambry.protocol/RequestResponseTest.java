@@ -235,7 +235,7 @@ public class RequestResponseTest {
     BlobProperties blobProperties =
         new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-            TestUtils.RANDOM.nextBoolean());
+            TestUtils.RANDOM.nextBoolean(), null);
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize, blobKey);
     doTest(InvalidVersionPutRequest.Put_Request_Invalid_version, clusterMap, correlationId, clientId, blobId,
@@ -245,7 +245,7 @@ public class RequestResponseTest {
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-            TestUtils.RANDOM.nextBoolean());
+            TestUtils.RANDOM.nextBoolean(), null);
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize, blobKey);
 
@@ -253,14 +253,15 @@ public class RequestResponseTest {
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-            TestUtils.RANDOM.nextBoolean());
+            TestUtils.RANDOM.nextBoolean(), null);
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.MetadataBlob,
         blob, blobSize, blobKey);
 
     // Put Request with empty user metadata.
     byte[] emptyUserMetadata = new byte[0];
     blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), TestUtils.RANDOM.nextBoolean());
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), TestUtils.RANDOM.nextBoolean(),
+        null);
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, emptyUserMetadata, BlobType.DataBlob,
         blob, blobSize, blobKey);
 

@@ -230,7 +230,7 @@ public class GetBlobOperationTest {
    */
   private void doPut() throws Exception {
     blobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption);
+        Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null);
     userMetadata = new byte[10];
     random.nextBytes(userMetadata);
     putContent = new byte[blobSize];
@@ -745,7 +745,7 @@ public class GetBlobOperationTest {
     random.nextBytes(putContent);
     blobProperties =
         new BlobProperties(blobSize + 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption);
+            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null);
     doDirectPut(BlobType.DataBlob, ByteBuffer.wrap(putContent));
     Counter sizeMismatchCounter = (testEncryption ? routerMetrics.simpleEncryptedBlobSizeMismatchCount
         : routerMetrics.simpleUnencryptedBlobSizeMismatchCount);
@@ -767,7 +767,7 @@ public class GetBlobOperationTest {
     metadataContent.flip();
     blobProperties =
         new BlobProperties(blobSize - 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption);
+            Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null);
     doDirectPut(BlobType.MetadataBlob, metadataContent);
     startCount = routerMetrics.compositeBlobSizeMismatchCount.getCount();
     getAndAssertSuccess();
@@ -1160,7 +1160,7 @@ public class GetBlobOperationTest {
               if (!options.getBlobOptions.isRawMode()) {
                 blobInfo = result.getBlobResult.getBlobInfo();
                 Assert.assertTrue("Blob properties must be the same",
-                    RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
+                    RouterTestHelpers.arePersistedFieldsEquivalent(blobProperties, blobInfo.getBlobProperties()));
                 Assert.assertEquals("Blob size should in received blobProperties should be the same as actual",
                     blobSize, blobInfo.getBlobProperties().getBlobSize());
                 Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
@@ -1172,7 +1172,7 @@ public class GetBlobOperationTest {
             case BlobInfo:
               blobInfo = result.getBlobResult.getBlobInfo();
               Assert.assertTrue("Blob properties must be the same",
-                  RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
+                  RouterTestHelpers.arePersistedFieldsEquivalent(blobProperties, blobInfo.getBlobProperties()));
               Assert.assertEquals("Blob size should in received blobProperties should be the same as actual", blobSize,
                   blobInfo.getBlobProperties().getBlobSize());
               Assert.assertNull("Unexpected blob data in operation result", result.getBlobResult.getBlobDataChannel());

@@ -91,7 +91,7 @@ public class BlobStoreHardDeleteTest {
       long updateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
 
       BlobProperties blobProperties =
-          new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999, accountId, containerId, true);
+          new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999, accountId, containerId, true, null);
 
       MessageFormatInputStream msg0 =
           getPutMessage(keys[0], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,

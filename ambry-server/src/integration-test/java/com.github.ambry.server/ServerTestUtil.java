@@ -165,7 +165,7 @@ final class ServerTestUtil {
       // put blob 2 with an expiry time and apply TTL update later
       BlobProperties propertiesForTtlUpdate =
           new BlobProperties(31870, "serviceid1", "ownerid", "image/png", false, TestUtils.TTL_SECS, accountId,
-              containerId, testEncryption);
+              containerId, testEncryption, null);
       long ttlUpdateBlobExpiryTimeMs = getExpiryTimeMs(propertiesForTtlUpdate);
       PutRequest putRequest2 =
           new PutRequest(1, "client1", blobId2, propertiesForTtlUpdate, ByteBuffer.wrap(usermetadata),
@@ -187,7 +187,8 @@ final class ServerTestUtil {
 
       // put blob 4 that is expired
       BlobProperties propertiesExpired =
-          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId, testEncryption);
+          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId, testEncryption,
+              null);
       PutRequest putRequest4 =
           new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
@@ -553,7 +554,8 @@ final class ServerTestUtil {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties properties =
-        new BlobProperties(100, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId, false);
+        new BlobProperties(100, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId, false,
+            null);
     long expectedExpiryTimeMs = getExpiryTimeMs(properties);
     TestUtils.RANDOM.nextBytes(usermetadata);
     TestUtils.RANDOM.nextBytes(data);
@@ -1174,7 +1176,7 @@ final class ServerTestUtil {
       int size = new Random().nextInt(5000);
       final BlobProperties properties =
           new BlobProperties(size, "service1", "owner id check", "image/jpeg", false, TestUtils.TTL_SECS, accountId,
-              containerId, false);
+              containerId, false, null);
       final byte[] metadata = new byte[new Random().nextInt(1000)];
       final byte[] blob = new byte[size];
       TestUtils.RANDOM.nextBytes(metadata);
@@ -1360,7 +1362,7 @@ final class ServerTestUtil {
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         propertyList.add(
             new BlobProperties(1000, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId,
-                testEncryption));
+                testEncryption, null));
         blobIdList.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
             clusterMap.getLocalDatacenterId(), accountId, containerId, partition, false,
             BlobId.BlobDataType.DATACHUNK));
