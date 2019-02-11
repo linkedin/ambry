@@ -143,6 +143,9 @@ public class BlobProperties {
     return isEncrypted;
   }
 
+  /**
+   * @return the ExternalAssetTag of a uploaded blob. Can be null.
+   */
   public String getExternalAssetTag() {
     return externalAssetTag;
   }
