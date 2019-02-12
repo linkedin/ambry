@@ -207,7 +207,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         securityService.processRequest(restRequest, securityCallback);
       }
     };
-    preProcessRequest(restRequest, restResponseChannel, frontendMetrics.getPreProcessingMetrics, routingAction);
+    preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.getPreProcessingMetrics, routingAction);
   }
 
   @Override
@@ -224,7 +224,8 @@ class AmbryBlobStorageService implements BlobStorageService {
             (result, exception) -> submitResponse(restRequest, restResponseChannel, null, exception));
       }
     };
-    preProcessRequest(restRequest, restResponseChannel, frontendMetrics.postPreProcessingMetrics, routingAction);
+    preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.postPreProcessingMetrics,
+        routingAction);
   }
 
   @Override
@@ -246,7 +247,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         throw new RestServiceException("Unrecognized operation: " + operationOrBlobId, RestServiceErrorCode.BadRequest);
       }
     };
-    preProcessRequest(restRequest, restResponseChannel, frontendMetrics.putPreProcessingMetrics, routingAction);
+    preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.putPreProcessingMetrics, routingAction);
   }
 
   @Override
@@ -260,7 +261,8 @@ class AmbryBlobStorageService implements BlobStorageService {
           new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
       securityService.processRequest(restRequest, securityCallback);
     };
-    preProcessRequest(restRequest, restResponseChannel, frontendMetrics.deletePreProcessingMetrics, routingAction);
+    preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.deletePreProcessingMetrics,
+        routingAction);
   }
 
   @Override
@@ -274,7 +276,8 @@ class AmbryBlobStorageService implements BlobStorageService {
           new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
       securityService.processRequest(restRequest, securityCallback);
     };
-    preProcessRequest(restRequest, restResponseChannel, frontendMetrics.headPreProcessingMetrics, routingAction);
+    preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.headPreProcessingMetrics,
+        routingAction);
   }
 
   @Override
@@ -365,7 +368,7 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param routingAction called with either an operation or blob ID as the first argument and maybe a sub-resource as
    *                      the second argument. Used to start request handling based on operation type.
    */
-  private void preProcessRequest(RestRequest restRequest, RestResponseChannel restResponseChannel,
+  private void preProcessAndRouteRequest(RestRequest restRequest, RestResponseChannel restResponseChannel,
       AsyncOperationTracker.Metrics preProcessingMetrics, ThrowingBiConsumer<String, SubResource> routingAction) {
     handlePrechecks(restRequest, restResponseChannel);
     Callback<Void> errorCallback = (r, e) -> submitResponse(restRequest, restResponseChannel, null, e);

@@ -124,11 +124,13 @@ class GetAccountsHandler {
     }
 
     /**
-     * Get the accounts to return in the response. If either  is set, this will return
-     * the account with the respective id or name. If neither are set, this will return all accounts that this frontend
-     * knows about.
+     * Get the accounts to return in the response. This method will check the
+     * {@link RestUtils.Headers#TARGET_ACCOUNT_ID} and {@link RestUtils.Headers#TARGET_ACCOUNT_NAME} request arguments.
+     * If either of those arguments is set in the request, this will return the account with the respective id or name.
+     * If neither is set in the request, this will return all accounts that this frontend knows about.
      * @return a {@link Collection} of {@link Account}s.
-     * @throws RestServiceException
+     * @throws RestServiceException If both the account ID and name arguments are set or if the requested account was
+     *                              not found.
      */
     private Collection<Account> getAccounts() throws RestServiceException {
       Short id = RestUtils.getNumericalHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_ID, false,

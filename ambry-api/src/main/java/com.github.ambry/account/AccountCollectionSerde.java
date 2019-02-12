@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.frontend.Operations;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -25,7 +26,7 @@ import org.json.JSONObject;
  * account management.
  */
 public class AccountCollectionSerde {
-  private static final String ACCOUNTS_KEY = "accounts";
+  private static final String ACCOUNTS_KEY = Operations.ACCOUNTS;
 
   /**
    * Serialize a collection of accounts to a json object that can be used in requests/responses.
