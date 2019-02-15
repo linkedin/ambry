@@ -47,9 +47,14 @@ public class FrontendMetrics {
   public final RestRequestMetrics getSignedUrlSSLMetrics;
   public final RestRequestMetrics getClusterMapSnapshotMetrics;
   public final RestRequestMetrics getClusterMapSnapshotSSLMetrics;
+  public final RestRequestMetrics getAccountsMetrics;
+  public final RestRequestMetrics getAccountsSSLMetrics;
   // OPTIONS
   public final RestRequestMetrics optionsMetrics;
   public final RestRequestMetrics optionsSSLMetrics;
+  // POST
+  public final RestRequestMetrics postAccountsMetrics;
+  public final RestRequestMetrics postAccountsSSLMetrics;
   // PUT
   public final RestRequestMetrics updateBlobTtlMetrics;
   public final RestRequestMetrics updateBlobTtlSSLMetrics;
@@ -62,7 +67,6 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup headRequestMetricsGroup;
 
   // AsyncOperationTracker.Metrics instances
-  public final AsyncOperationTracker.Metrics postSecurityPreProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics postSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics postSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics postReadStitchRequestMetrics;
@@ -77,13 +81,25 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics updateBlobTtlIdConversionMetrics;
   public final AsyncOperationTracker.Metrics updateBlobTtlSecurityProcessResponseMetrics;
 
+  public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityPostProcessRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics getAccountsSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics getAccountsSecurityPostProcessRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics postAccountsSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics postAccountsSecurityPostProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics postAccountsReadRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics getPreProcessingMetrics;
+  public final AsyncOperationTracker.Metrics headPreProcessingMetrics;
+  public final AsyncOperationTracker.Metrics deletePreProcessingMetrics;
+  public final AsyncOperationTracker.Metrics postPreProcessingMetrics;
+  public final AsyncOperationTracker.Metrics putPreProcessingMetrics;
+
   public final AsyncOperationTracker.Metrics getSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics headSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics deleteSecurityPostProcessRequestMetrics;
-
-  public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityPreProcessRequestMetrics;
-  public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityProcessRequestMetrics;
-  public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityPostProcessRequestMetrics;
 
   // Rates
   // AmbrySecurityService
@@ -96,21 +112,12 @@ public class FrontendMetrics {
 
   // Latencies
   // AmbryBlobStorageService
-  // DELETE
-  public final Histogram deletePreProcessingTimeInMs;
-  // HEAD
-  public final Histogram headPreProcessingTimeInMs;
-  // GET
-  public final Histogram getPreProcessingTimeInMs;
   // POST
   public final Histogram blobPropsBuildTimeInMs;
-  public final Histogram postPreProcessingTimeInMs;
   // OPTIONS
   public final Histogram optionsPreProcessingTimeInMs;
   public final Histogram optionsSecurityRequestTimeInMs;
   public final Histogram optionsSecurityResponseTimeInMs;
-  // PUT
-  public final Histogram putPreProcessingTimeInMs;
   // DeleteCallback
   public final Histogram deleteCallbackProcessingTimeInMs;
   public final Histogram deleteTimeInMs;
@@ -218,17 +225,16 @@ public class FrontendMetrics {
     getClusterMapSnapshotSSLMetrics =
         new RestRequestMetrics(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot" + SSL_SUFFIX,
             metricRegistry);
-    getClusterMapSnapshotSecurityPreProcessRequestMetrics =
-        new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityPreProcessRequest",
-            metricRegistry);
-    getClusterMapSnapshotSecurityProcessRequestMetrics =
-        new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityProcessRequest", metricRegistry);
-    getClusterMapSnapshotSecurityPostProcessRequestMetrics =
-        new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityPostProcessRequest",
-            metricRegistry);
+    getAccountsMetrics = new RestRequestMetrics(GetAccountsHandler.class, "GetAccounts", metricRegistry);
+    getAccountsSSLMetrics =
+        new RestRequestMetrics(GetAccountsHandler.class, "GetAccounts" + SSL_SUFFIX, metricRegistry);
     // OPTIONS
     optionsMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options", metricRegistry);
     optionsSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options" + SSL_SUFFIX, metricRegistry);
+    // POST
+    postAccountsMetrics = new RestRequestMetrics(PostAccountsHandler.class, "PostAccounts", metricRegistry);
+    postAccountsSSLMetrics =
+        new RestRequestMetrics(PostAccountsHandler.class, "PostAccounts" + SSL_SUFFIX, metricRegistry);
     // PUT
     updateBlobTtlMetrics = new RestRequestMetrics(TtlUpdateHandler.class, "UpdateBlobTtl", metricRegistry);
     updateBlobTtlSSLMetrics =
@@ -242,8 +248,6 @@ public class FrontendMetrics {
     headRequestMetricsGroup = new RestRequestMetricsGroup("Head", BLOB);
 
     // AsyncOperationTracker.Metrics instances
-    postSecurityPreProcessRequestMetrics =
-        new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityPreProcessRequest", metricRegistry);
     postSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityProcessRequest", metricRegistry);
     postSecurityPostProcessRequestMetrics =
@@ -268,6 +272,35 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "idConversion", metricRegistry);
     updateBlobTtlSecurityProcessResponseMetrics =
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "securityProcessResponse", metricRegistry);
+
+    getClusterMapSnapshotSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityProcessRequest", metricRegistry);
+    getClusterMapSnapshotSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityPostProcessRequest",
+            metricRegistry);
+
+    getAccountsSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetAccountsHandler.class, "SecurityProcessRequest", metricRegistry);
+    getAccountsSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetAccountsHandler.class, "SecurityPostProcessRequest", metricRegistry);
+
+    postAccountsSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(PostAccountsHandler.class, "SecurityProcessRequest", metricRegistry);
+    postAccountsSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(PostAccountsHandler.class, "SecurityPostProcessRequest", metricRegistry);
+    postAccountsReadRequestMetrics =
+        new AsyncOperationTracker.Metrics(PostAccountsHandler.class, "ReadRequest", metricRegistry);
+
+    getPreProcessingMetrics =
+        new AsyncOperationTracker.Metrics(AmbryBlobStorageService.class, "GetPreProcessing", metricRegistry);
+    headPreProcessingMetrics =
+        new AsyncOperationTracker.Metrics(AmbryBlobStorageService.class, "HeadPreProcessing", metricRegistry);
+    deletePreProcessingMetrics =
+        new AsyncOperationTracker.Metrics(AmbryBlobStorageService.class, "DeletePreProcessing", metricRegistry);
+    postPreProcessingMetrics =
+        new AsyncOperationTracker.Metrics(AmbryBlobStorageService.class, "PostPreProcessing", metricRegistry);
+    putPreProcessingMetrics =
+        new AsyncOperationTracker.Metrics(AmbryBlobStorageService.class, "PutPreProcessing", metricRegistry);
 
     getSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(AmbryBlobStorageService.class, "getSecurityPostProcessRequest",
@@ -294,20 +327,9 @@ public class FrontendMetrics {
 
     // Latencies
     // AmbryBlobStorageService
-    // DELETE
-    deletePreProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "DeletePreProcessingTimeInMs"));
-    // HEAD
-    headPreProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadPreProcessingTimeInMs"));
-    // GET
-    getPreProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetPreProcessingTimeInMs"));
     // POST
     blobPropsBuildTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "BlobPropsBuildTimeInMs"));
-    postPreProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostPreProcessingTimeInMs"));
     // OPTIONS
     optionsPreProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "OptionsPreProcessingTimeInMs"));
@@ -315,9 +337,6 @@ public class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "OptionsSecurityRequestTimeInMs"));
     optionsSecurityResponseTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "OptionsSecurityResponseTimeInMs"));
-    // PUT
-    putPreProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PutPreProcessingTimeInMs"));
     // DeleteCallback
     deleteCallbackProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(AmbryBlobStorageService.class, "DeleteCallbackProcessingTimeInMs"));

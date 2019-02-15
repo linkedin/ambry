@@ -137,10 +137,8 @@ class RouterUtils {
    */
   static void replaceOperationException(AtomicReference<Exception> operationExceptionRef, RouterException exception,
       ToIntFunction<RouterErrorCode> precedenceLevelFn) {
-    Exception currentException;
-    Exception newException;
-    do {
-      currentException = operationExceptionRef.get();
+    operationExceptionRef.updateAndGet(currentException -> {
+      Exception newException;
       if (currentException == null) {
         newException = exception;
       } else {
@@ -150,6 +148,7 @@ class RouterUtils {
         newException =
             precedenceLevelFn.applyAsInt(exception.getErrorCode()) < currentPrecedence ? exception : currentException;
       }
-    } while (!operationExceptionRef.compareAndSet(currentException, newException));
+      return newException;
+    });
   }
 }

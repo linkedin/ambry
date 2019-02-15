@@ -84,21 +84,10 @@ class GetClusterMapSnapshotHandler {
      * Start the chain by calling {@link SecurityService#preProcessRequest}.
      */
     private void start() {
-      RestRequestMetrics requestMetrics = restRequest.getSSLSession() != null ? metrics.getClusterMapSnapshotSSLMetrics
-          : metrics.getClusterMapSnapshotMetrics;
+      RestRequestMetrics requestMetrics =
+          restRequest.isSslUsed() ? metrics.getClusterMapSnapshotSSLMetrics : metrics.getClusterMapSnapshotMetrics;
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-      securityService.preProcessRequest(restRequest, securityPreProcessRequestCallback());
-    }
-
-    /**
-     * After {@link SecurityService#preProcessRequest} finishes, call {@link SecurityService#processRequest} to perform
-     * additional request time security checks.
-     * @return a {@link Callback} to be used with {@link SecurityService#preProcessRequest}.
-     */
-    private Callback<Void> securityPreProcessRequestCallback() {
-      return buildCallback(metrics.getClusterMapSnapshotSecurityPreProcessRequestMetrics, securityCheckResult -> {
-        securityService.processRequest(restRequest, securityProcessRequestCallback());
-      }, restRequest.getUri(), LOGGER, finalCallback);
+      securityService.processRequest(restRequest, securityProcessRequestCallback());
     }
 
     /**
@@ -123,7 +112,7 @@ class GetClusterMapSnapshotHandler {
         try {
           byte[] replicasResponseBytes = clusterMap.getSnapshot().toString().getBytes();
           restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, replicasResponseBytes.length);
           ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicasResponseBytes));
           finalCallback.onCompletion(channel, null);

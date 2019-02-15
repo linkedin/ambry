@@ -286,7 +286,7 @@ public class PostBlobHandlerTest {
     RestRequest request = AmbryBlobStorageServiceTest.createRestRequest(RestMethod.POST, "/", headers,
         new LinkedList<>(Arrays.asList(content, null)));
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    FutureResult<ReadableStreamChannel> future = new FutureResult<>();
+    FutureResult<Void> future = new FutureResult<>();
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (container.isTtlRequired() && (blobTtlSecs == Utils.Infinite_Time
         || blobTtlSecs > frontendConfig.maxAcceptableTtlSecsIfTtlRequired)) {
@@ -316,10 +316,9 @@ public class PostBlobHandlerTest {
    * @param expectWarning {@code true} if a warning header for non compliance is expected. {@code false} otherwise.
    * @throws Exception
    */
-  private void verifySuccessResponseOnTtlEnforcement(FutureResult<ReadableStreamChannel> postFuture, ByteBuffer content,
+  private void verifySuccessResponseOnTtlEnforcement(FutureResult<Void> postFuture, ByteBuffer content,
       long blobTtlSecs, RestResponseChannel restResponseChannel, boolean expectWarning) throws Exception {
-    ReadableStreamChannel channel = postFuture.get(TIMEOUT_SECS, TimeUnit.SECONDS);
-    assertNull("No body expected for POST", channel);
+    postFuture.get(TIMEOUT_SECS, TimeUnit.SECONDS);
 
     String id = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
     assertNotNull("There should be a blob ID returned", id);
@@ -369,12 +368,11 @@ public class PostBlobHandlerTest {
     long creationTimeMs = System.currentTimeMillis();
     time.setCurrentMilliseconds(creationTimeMs);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    FutureResult<ReadableStreamChannel> future = new FutureResult<>();
+    FutureResult<Void> future = new FutureResult<>();
     idConverterFactory.lastInput = null;
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
-      ReadableStreamChannel channel = future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
-      assertNull("No body expected for POST", channel);
+      future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
       assertEquals("Unexpected converted ID", CONVERTED_ID, restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
       Object metadata = request.getArgs().get(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY);
       if (chunkUpload) {
@@ -486,7 +484,7 @@ public class PostBlobHandlerTest {
         AmbryBlobStorageServiceTest.createRestRequest(RestMethod.POST, "/" + Operations.STITCH, headers,
             new LinkedList<>(Arrays.asList(ByteBuffer.wrap(requestBody), null)));
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    FutureResult<ReadableStreamChannel> future = new FutureResult<>();
+    FutureResult<Void> future = new FutureResult<>();
     idConverterFactory.lastInput = null;
     postBlobHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {

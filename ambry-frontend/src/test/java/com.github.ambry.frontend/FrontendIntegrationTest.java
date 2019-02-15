@@ -14,7 +14,10 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -79,14 +82,19 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -437,6 +445,26 @@ public class FrontendIntegrationTest {
         FRONTEND_CONFIG.optionsValiditySeconds,
         Long.parseLong(response.headers().get(HttpHeaderNames.ACCESS_CONTROL_MAX_AGE)));
     verifyTrackingHeaders(response);
+  }
+
+  /**
+   * Tests for the account get/update API.
+   */
+  @Test
+  public void accountApiTest() throws Exception {
+    getAccountsAndVerify();
+
+    // update and add accounts
+    Map<Short, Account> accountsById =
+        ACCOUNT_SERVICE.getAllAccounts().stream().collect(Collectors.toMap(Account::getId, Function.identity()));
+
+    Account editedAccount = accountsById.values().stream().findAny().get();
+    Container editedContainer = editedAccount.getAllContainers().stream().findAny().get();
+    editedContainer = new ContainerBuilder(editedContainer).setDescription("new description abcdefgh").build();
+    editedAccount = new AccountBuilder(editedAccount).addOrUpdateContainer(editedContainer).build();
+    updateAccountsAndVerify(editedAccount, ACCOUNT_SERVICE.generateRandomAccount());
+
+    getAccountsAndVerify();
   }
 
   // helpers
@@ -1296,5 +1324,65 @@ public class FrontendIntegrationTest {
     deleteBlobAndVerify(stitchedBlobId);
     verifyOperationsAfterDelete(stitchedBlobId, expectedGetHeaders, !container.isCacheable(), account.getName(),
         container.getName(), ByteBuffer.wrap(fullContentArray), null);
+  }
+
+  // accountApiTest() helpers
+
+  /**
+   * Call the {@code POST /accounts} API to update account metadata and verify that the update succeeded.
+   * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
+   */
+  private void updateAccountsAndVerify(Account... accounts) throws Exception {
+    JSONObject accountUpdateJson = AccountCollectionSerde.toJson(Arrays.asList(accounts));
+    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null,
+        ByteBuffer.wrap(accountUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
+    ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
+    assertNoContent(responseParts.queue, 1);
+
+    for (Account account : accounts) {
+      assertEquals("Update not reflected in AccountService", account, ACCOUNT_SERVICE.getAccountById(account.getId()));
+    }
+  }
+
+  /**
+   * Call the {@code GET /accounts} API and verify the response for all accounts managed by {@link #ACCOUNT_SERVICE}.
+   */
+  private void getAccountsAndVerify() throws Exception {
+    Collection<Account> expectedAccounts = ACCOUNT_SERVICE.getAllAccounts();
+    // fetch snapshot of all accounts
+    assertEquals("GET /accounts returned wrong result", new HashSet<>(expectedAccounts), getAccounts(null, null));
+    // fetch accounts one by one
+    for (Account account : expectedAccounts) {
+      assertEquals("Fetching of single account by name failed", Collections.singleton(account),
+          getAccounts(account.getName(), null));
+      assertEquals("Fetching of single account by name failed", Collections.singleton(account),
+          getAccounts(null, account.getId()));
+    }
+  }
+
+  /**
+   * Call the {@code GET /accounts} API and deserialize the response.
+   * @param accountName if non-null, fetch a single account by name instead of all accounts.
+   * @param accountId if non-null, fetch a single account by ID instead of all accounts.
+   * @return the accounts fetched.
+   */
+  private Set<Account> getAccounts(String accountName, Short accountId) throws Exception {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    if (accountName != null) {
+      headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
+    } else if (accountId != null) {
+      headers.add(RestUtils.Headers.TARGET_ACCOUNT_ID, accountId);
+    }
+    FullHttpRequest request = buildRequest(HttpMethod.GET, Operations.ACCOUNTS, headers, null);
+    ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
+    ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
+    return new HashSet<>(
+        AccountCollectionSerde.fromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8))));
   }
 }
