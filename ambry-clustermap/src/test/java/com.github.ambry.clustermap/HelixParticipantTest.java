@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Properties;
 import org.apache.helix.ClusterMessagingService;
 import org.apache.helix.ConfigAccessor;
-import org.apache.helix.ConfigChangeListener;
 import org.apache.helix.ControllerChangeListener;
 import org.apache.helix.CurrentStateChangeListener;
 import org.apache.helix.ExternalViewChangeListener;
@@ -42,6 +41,9 @@ import org.apache.helix.PreConnectCallback;
 import org.apache.helix.PropertyKey;
 import org.apache.helix.ScopedConfigChangeListener;
 import org.apache.helix.ZNRecord;
+import org.apache.helix.api.listeners.ClusterConfigChangeListener;
+import org.apache.helix.api.listeners.ConfigChangeListener;
+import org.apache.helix.api.listeners.ResourceConfigChangeListener;
 import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
 import org.apache.helix.messaging.handling.MessageHandler;
 import org.apache.helix.model.HelixConfigScope;
@@ -482,12 +484,29 @@ public class HelixParticipantTest {
     }
 
     @Override
+    public void addIdealStateChangeListener(
+        org.apache.helix.api.listeners.IdealStateChangeListener idealStateChangeListener) throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+    @Override
+    public void addLiveInstanceChangeListener(
+        org.apache.helix.api.listeners.LiveInstanceChangeListener liveInstanceChangeListener) throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void addLiveInstanceChangeListener(LiveInstanceChangeListener listener) throws Exception {
       throw new IllegalStateException("Not implemented");
     }
 
     @Override
-    public void addConfigChangeListener(ConfigChangeListener listener) throws Exception {
+    public void addConfigChangeListener(ConfigChangeListener configChangeListener) throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void addInstanceConfigChangeListener(
+        org.apache.helix.api.listeners.InstanceConfigChangeListener instanceConfigChangeListener) throws Exception {
       throw new IllegalStateException("Not implemented");
     }
 
@@ -497,7 +516,32 @@ public class HelixParticipantTest {
     }
 
     @Override
+    public void addResourceConfigChangeListener(ResourceConfigChangeListener resourceConfigChangeListener)
+        throws Exception {
+      throw new IllegalStateException("Not implemented");
+
+    }
+
+    @Override
+    public void addClusterfigChangeListener(ClusterConfigChangeListener clusterConfigChangeListener) throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void addConfigChangeListener(
+        org.apache.helix.api.listeners.ScopedConfigChangeListener scopedConfigChangeListener,
+        HelixConfigScope.ConfigScopeProperty configScopeProperty) throws Exception {
+
+    }
+
+    @Override
     public void addConfigChangeListener(ScopedConfigChangeListener listener, HelixConfigScope.ConfigScopeProperty scope)
+        throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void addMessageListener(org.apache.helix.api.listeners.MessageListener messageListener, String s)
         throws Exception {
       throw new IllegalStateException("Not implemented");
     }
@@ -508,8 +552,27 @@ public class HelixParticipantTest {
     }
 
     @Override
+    public void addCurrentStateChangeListener(
+        org.apache.helix.api.listeners.CurrentStateChangeListener currentStateChangeListener, String s, String s1)
+        throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void addCurrentStateChangeListener(CurrentStateChangeListener listener, String instanceName,
         String sessionId) throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void addExternalViewChangeListener(
+        org.apache.helix.api.listeners.ExternalViewChangeListener externalViewChangeListener) throws Exception {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void addTargetExternalViewChangeListener(
+        org.apache.helix.api.listeners.ExternalViewChangeListener externalViewChangeListener) throws Exception {
       throw new IllegalStateException("Not implemented");
     }
 
@@ -519,7 +582,18 @@ public class HelixParticipantTest {
     }
 
     @Override
+    public void addControllerListener(
+        org.apache.helix.api.listeners.ControllerChangeListener controllerChangeListener) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void addControllerListener(ControllerChangeListener listener) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void addControllerMessageListener(org.apache.helix.api.listeners.MessageListener messageListener) {
       throw new IllegalStateException("Not implemented");
     }
 
@@ -545,6 +619,11 @@ public class HelixParticipantTest {
 
     @Override
     public String getClusterName() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public String getMetadataStoreConnectionString() {
       throw new IllegalStateException("Not implemented");
     }
 

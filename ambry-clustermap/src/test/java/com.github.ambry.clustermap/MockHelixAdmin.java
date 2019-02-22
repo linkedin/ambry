@@ -52,7 +52,7 @@ public class MockHelixAdmin implements HelixAdmin {
    * @return the set of instances that have replicas for this partition.
    */
   Set<String> getInstancesForPartition(String partition) {
-    return partitionToInstances.containsKey(partition) ? partitionToInstances.get(partition) : Collections.EMPTY_SET;
+    return partitionToInstances.getOrDefault(partition, Collections.emptySet());
   }
 
   @Override
@@ -383,7 +383,22 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   @Override
+  public void updateIdealState(String s, String s1, IdealState idealState) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void removeFromIdealState(String s, String s1, IdealState idealState) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public void enableInstance(String clusterName, String instanceName, boolean enabled) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void enableInstance(String s, List<String> list, boolean b) {
     throw new IllegalStateException("Not implemented");
   }
 
@@ -400,6 +415,21 @@ public class MockHelixAdmin implements HelixAdmin {
 
   @Override
   public void enableCluster(String clusterName, boolean enabled) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void enableCluster(String s, boolean b, String s1) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void enableMaintenanceMode(String s, boolean b) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void enableMaintenanceMode(String s, boolean b, String s1) {
     throw new IllegalStateException("Not implemented");
   }
 
@@ -535,6 +565,26 @@ public class MockHelixAdmin implements HelixAdmin {
 
   @Override
   public void setInstanceZoneId(String clusterName, String instanceName, String zoneId) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void enableBatchMessageMode(String s, boolean b) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void enableBatchMessageMode(String s, String s1, boolean b) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public Map<String, String> getBatchDisabledInstances(String s) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public List<String> getInstancesByDomain(String s, String s1) {
     throw new IllegalStateException("Not implemented");
   }
 
