@@ -87,7 +87,6 @@ class IndexSegment {
   private final AtomicReference<Offset> endOffset;
   private final File indexFile;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-  private final AtomicBoolean mapped = new AtomicBoolean(false);
   private final AtomicBoolean sealed = new AtomicBoolean(false);
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final AtomicLong sizeWritten = new AtomicLong(0);
@@ -309,7 +308,7 @@ class IndexSegment {
     NavigableSet<IndexValue> toReturn = null;
     rwLock.readLock().lock();
     try {
-      if (!mapped.get()) {
+      if (!sealed.get()) {
         ConcurrentSkipListSet<IndexValue> values = index.get(keyToFind);
         if (values != null) {
           metrics.blobFoundInMemSegmentCount.inc();
@@ -769,7 +768,6 @@ class IndexSegment {
           throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " unknown version in index file",
               StoreErrorCodes.Index_Version_Error);
       }
-      mapped.set(true);
       index = null;
     } finally {
       rwLock.writeLock().unlock();
@@ -932,7 +930,7 @@ class IndexSegment {
     }
     NavigableSet<IndexValue> values = new TreeSet<>();
     List<IndexEntry> entriesLocal = new ArrayList<>();
-    if (mapped.get()) {
+    if (sealed.get()) {
       int index = 0;
       if (key != null) {
         index = findIndex(key, serEntries.duplicate());

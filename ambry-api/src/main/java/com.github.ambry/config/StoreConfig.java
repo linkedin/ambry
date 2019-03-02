@@ -254,7 +254,7 @@ public class StoreConfig {
    * Provides a hint for how indexes should be treated w.r.t memory
    */
   @Config(storeIndexMemStateName)
-  @Default("false")
+  @Default("NOT_IN_MEM")
   public final IndexMemState storeIndexMemState;
   public static final String storeIndexMemStateName = "store.index.mem.state";
 
