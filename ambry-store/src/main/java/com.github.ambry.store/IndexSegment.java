@@ -41,7 +41,6 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -88,7 +87,6 @@ class IndexSegment {
   private final AtomicReference<Offset> endOffset;
   private final File indexFile;
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-  private final AtomicBoolean mapped = new AtomicBoolean(false);
   private final AtomicBoolean sealed = new AtomicBoolean(false);
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final AtomicLong sizeWritten = new AtomicLong(0);
@@ -100,7 +98,7 @@ class IndexSegment {
 
   // an approximation of the last modified time.
   private final AtomicLong lastModifiedTimeSec = new AtomicLong(0);
-  private MappedByteBuffer mmap = null;
+  private ByteBuffer serEntries = null;
   private IFilter bloomFilter = null;
   private int valueSize;
   private int persistedEntrySize;
@@ -167,8 +165,8 @@ class IndexSegment {
       endOffset = new AtomicReference<>(startOffset);
       indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix(startOffset);
       bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
-      if (sealed && !config.storeKeepIndexInMemory) {
-        mmap();
+      if (sealed) {
+        map();
         if (!bloomFile.exists()) {
           generateBloomFilterAndPersist();
         } else {
@@ -189,15 +187,13 @@ class IndexSegment {
           stream.close();
         }
       } else {
-        index = sealed ? new TreeMap<>() : new ConcurrentSkipListMap<>();
-        if (!sealed) {
-          bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
-              config.storeIndexBloomMaxFalsePositiveProbability);
-        }
+        index = new ConcurrentSkipListMap<>();
+        bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
+            config.storeIndexBloomMaxFalsePositiveProbability);
         try {
           readFromFile(indexFile, journal);
         } catch (StoreException e) {
-          if (!sealed && (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure
+          if ((e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure
               || e.getErrorCode() == StoreErrorCodes.Index_Version_Error)) {
             // we just log the error here and retain the index so far created.
             // subsequent recovery process will add the missed out entries
@@ -206,9 +202,6 @@ class IndexSegment {
           } else {
             throw e;
           }
-        }
-        if (sealed) {
-          index = Collections.unmodifiableNavigableMap(index);
         }
       }
     } catch (Exception e) {
@@ -315,7 +308,7 @@ class IndexSegment {
     NavigableSet<IndexValue> toReturn = null;
     rwLock.readLock().lock();
     try {
-      if (!mapped.get()) {
+      if (!sealed.get()) {
         ConcurrentSkipListSet<IndexValue> values = index.get(keyToFind);
         if (values != null) {
           metrics.blobFoundInMemSegmentCount.inc();
@@ -335,7 +328,7 @@ class IndexSegment {
                 indexFile.getAbsolutePath(), startOffset, keyToFind);
           }
           // binary search on the mapped file
-          if (mmap.isLoaded()) {
+          if (!(serEntries instanceof MappedByteBuffer) || ((MappedByteBuffer) serEntries).isLoaded()) {
             // isLoaded() will be true only if the entire buffer is in memory - so it being false does not necessarily
             // mean that the pages in the scope of the search need to be loaded from disk.
             // Secondly, even if it returned true (or false), by the time the actual lookup is done,
@@ -344,7 +337,7 @@ class IndexSegment {
           } else {
             metrics.mappedSegmentIsNotLoadedDuringFindCount.inc();
           }
-          ByteBuffer duplicate = mmap.duplicate();
+          ByteBuffer duplicate = serEntries.duplicate();
           int low = 0;
           int totalEntries = numberOfEntries(duplicate);
           int high = totalEntries - 1;
@@ -384,10 +377,10 @@ class IndexSegment {
    * @throws IOException
    */
   private void generateBloomFilterAndPersist() throws IOException {
-    int numOfIndexEntries = numberOfEntries(mmap);
+    int numOfIndexEntries = numberOfEntries(serEntries);
     bloomFilter = FilterFactory.getFilter(numOfIndexEntries, config.storeIndexBloomMaxFalsePositiveProbability);
     for (int i = 0; i < numOfIndexEntries; i++) {
-      StoreKey key = getKeyAt(mmap, i);
+      StoreKey key = getKeyAt(serEntries, i);
       bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
     }
     persistBloomFilter();
@@ -408,13 +401,13 @@ class IndexSegment {
 
   /**
    * Gets values for all matches for {@code keyToFind} at and in the vicinity of {@code positiveMatchInd}.
-   * @param mmap the mmap to read values off of
+   * @param mmap the serEntries to read values off of
    * @param keyToFind the needle {@link StoreKey}
    * @param positiveMatchInd the index of a confirmed positive match
    * @param totalEntries the total number of entries in the index
    * @param values the set to which the {@link IndexValue}s will be added
    * @return a pair consisting of the lowest index that matched the key and the highest
-   * @throws IOException if there are problems reading from the mmap
+   * @throws IOException if there are problems reading from the serEntries
    */
   private Pair<Integer, Integer> getAllValuesFromMmap(ByteBuffer mmap, StoreKey keyToFind, int positiveMatchInd,
       int totalEntries, NavigableSet<IndexValue> values) throws IOException {
@@ -702,24 +695,34 @@ class IndexSegment {
    */
   void seal() throws IOException, StoreException {
     sealed.set(true);
-    if (!config.storeKeepIndexInMemory) {
-      mmap();
-    }
+    map();
     // we should be fine reading bloom filter here without synchronization as the index is read only
     persistBloomFilter();
   }
 
   /**
-   * Memory maps the segment of index.
+   * Maps the segment of index either as a memory map or a in memory buffer depending on config.
    * @throws IOException if there is any problem reading or mapping files
    * @throws StoreException if there are problems with the index
    */
-  private void mmap() throws IOException, StoreException {
+  private void map() throws IOException, StoreException {
     rwLock.writeLock().lock();
     try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
-      mmap = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
-      mmap.position(0);
-      version = mmap.getShort();
+      if (config.storeIndexMemState.equals(IndexMemState.IN_HEAP_MEM)) {
+        if (indexFile.length() > Integer.MAX_VALUE) {
+          throw new IllegalStateException("Configured to keep indexes in memory but index file length > IntegerMax");
+        }
+        serEntries = ByteBuffer.allocate((int) indexFile.length());
+        raf.getChannel().read(serEntries);
+      } else {
+        MappedByteBuffer buf = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
+        if (config.storeIndexMemState.equals(IndexMemState.FORCE_LOAD_MMAP)) {
+          buf.load();
+        }
+        serEntries = buf;
+      }
+      serEntries.position(0);
+      version = serEntries.getShort();
       StoreKey storeKey;
       int keySize;
       short resetKeyType;
@@ -727,21 +730,21 @@ class IndexSegment {
         case PersistentIndex.VERSION_0:
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
               + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
-          keySize = mmap.getInt();
-          valueSize = mmap.getInt();
+          keySize = serEntries.getInt();
+          valueSize = serEntries.getInt();
           persistedEntrySize = keySize + valueSize;
-          endOffset.set(new Offset(startOffset.getName(), mmap.getLong()));
+          endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
           lastModifiedTimeSec.set(indexFile.lastModified() / 1000);
           firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
           break;
         case PersistentIndex.VERSION_1:
-          keySize = mmap.getInt();
-          valueSize = mmap.getInt();
+          keySize = serEntries.getInt();
+          valueSize = serEntries.getInt();
           persistedEntrySize = keySize + valueSize;
-          endOffset.set(new Offset(startOffset.getName(), mmap.getLong()));
-          lastModifiedTimeSec.set(mmap.getLong());
-          storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
-          resetKeyType = mmap.getShort();
+          endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
+          lastModifiedTimeSec.set(serEntries.getLong());
+          storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
+          resetKeyType = serEntries.getShort();
           resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
               + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst()
@@ -749,12 +752,12 @@ class IndexSegment {
           firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
           break;
         case PersistentIndex.VERSION_2:
-          persistedEntrySize = mmap.getInt();
-          valueSize = mmap.getInt();
-          endOffset.set(new Offset(startOffset.getName(), mmap.getLong()));
-          lastModifiedTimeSec.set(mmap.getLong());
-          storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
-          resetKeyType = mmap.getShort();
+          persistedEntrySize = serEntries.getInt();
+          valueSize = serEntries.getInt();
+          endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
+          lastModifiedTimeSec.set(serEntries.getLong());
+          storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
+          resetKeyType = serEntries.getShort();
           resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
               + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst()
@@ -765,7 +768,6 @@ class IndexSegment {
           throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " unknown version in index file",
               StoreErrorCodes.Index_Version_Error);
       }
-      mapped.set(true);
       index = null;
     } finally {
       rwLock.writeLock().unlock();
@@ -834,22 +836,20 @@ class IndexSegment {
           index.computeIfAbsent(key, k -> new ConcurrentSkipListSet<>()).add(blobValue);
           logger.trace("IndexSegment : {} putting key {} in index offset {} size {}", indexFile.getAbsolutePath(), key,
               blobValue.getOffset(), blobValue.getSize());
-          if (!sealed.get()) {
-            // regenerate the bloom filter for index segments that are not sealed
-            if (!isPresent) {
-              bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
-            }
-            // add to the journal
-            long oMsgOff = blobValue.getOriginalMessageOffset();
-            if (oMsgOff != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && offsetInLogSegment != oMsgOff
-                && oMsgOff >= startOffset.getOffset()
-                && journal.getKeyAtOffset(new Offset(startOffset.getName(), oMsgOff)) == null) {
-              // we add an entry for the original message offset if it is within the same index segment and
-              // an entry is not already in the journal
-              journal.addEntry(new Offset(startOffset.getName(), blobValue.getOriginalMessageOffset()), key);
-            }
-            journal.addEntry(blobValue.getOffset(), key);
+          // regenerate the bloom filter for index segments that are not sealed
+          if (!isPresent) {
+            bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
           }
+          // add to the journal
+          long oMsgOff = blobValue.getOriginalMessageOffset();
+          if (oMsgOff != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && offsetInLogSegment != oMsgOff
+              && oMsgOff >= startOffset.getOffset()
+              && journal.getKeyAtOffset(new Offset(startOffset.getName(), oMsgOff)) == null) {
+            // we add an entry for the original message offset if it is within the same index segment and
+            // an entry is not already in the journal
+            journal.addEntry(new Offset(startOffset.getName(), blobValue.getOriginalMessageOffset()), key);
+          }
+          journal.addEntry(blobValue.getOffset(), key);
           // sizeWritten is only used for in-memory segments, and for those the padding does not come into picture.
           sizeWritten.addAndGet(key.sizeInBytes() + valueSize);
           numberOfItems.incrementAndGet();
@@ -873,9 +873,7 @@ class IndexSegment {
         valueSize = VALUE_SIZE_INVALID_VALUE;
         endOffset.set(startOffset);
         index.clear();
-        if (!sealed.get()) {
-          bloomFilter.clear();
-        }
+        bloomFilter.clear();
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
             StoreErrorCodes.Index_Creation_Failure);
       }
@@ -932,13 +930,13 @@ class IndexSegment {
     }
     NavigableSet<IndexValue> values = new TreeSet<>();
     List<IndexEntry> entriesLocal = new ArrayList<>();
-    if (mapped.get()) {
+    if (sealed.get()) {
       int index = 0;
       if (key != null) {
-        index = findIndex(key, mmap.duplicate());
+        index = findIndex(key, serEntries.duplicate());
       }
       if (index != -1) {
-        ByteBuffer readBuf = mmap.duplicate();
+        ByteBuffer readBuf = serEntries.duplicate();
         int totalEntries = numberOfEntries(readBuf);
         while (findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())
             && index < totalEntries) {

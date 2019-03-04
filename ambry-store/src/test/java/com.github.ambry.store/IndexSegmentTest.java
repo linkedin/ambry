@@ -78,25 +78,33 @@ public class IndexSegmentTest {
   private final Properties properties = new Properties();
 
   /**
-   * Running for {@link PersistentIndex#VERSION_0} and {@link PersistentIndex#VERSION_1}
-   * @return an array with both the versions ({@link PersistentIndex#VERSION_0} and {@link PersistentIndex#VERSION_1}).
+   * Running for all versions and {@link IndexMemState} values.
+   * @return an array with the list of parameters for different iterations.
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{PersistentIndex.VERSION_0, true}, {PersistentIndex.VERSION_0, false}, {PersistentIndex.VERSION_1, true}, {PersistentIndex.VERSION_1, false}, {PersistentIndex.VERSION_2, true}, {PersistentIndex.VERSION_2, false}});
+    short[] versions = new short[]{PersistentIndex.VERSION_0, PersistentIndex.VERSION_1, PersistentIndex.VERSION_2};
+    List<Object[]> parametersList = new ArrayList<>();
+    for (short version : versions) {
+      for (IndexMemState state : IndexMemState.values()) {
+        parametersList.add(new Object[]{version, state});
+      }
+    }
+    return parametersList;
   }
 
   /**
    * Creates a temporary directory and sets up metrics.
+   * @param version the version of the index
+   * @param indexMemState the value for {@link StoreConfig#storeIndexMemStateName}
    * @throws IOException
    */
-  public IndexSegmentTest(short version, boolean keepIndexInMemory) throws IOException {
+  public IndexSegmentTest(short version, IndexMemState indexMemState) throws IOException {
     tempDir = StoreTestUtils.createTempDirectory("indexSegmentDir-" + UtilsTest.getRandomString(10));
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
     this.version = version;
-    setKeepIndexInMemory(keepIndexInMemory);
+    setIndexMemState(indexMemState);
   }
 
   /**
@@ -343,10 +351,10 @@ public class IndexSegmentTest {
   // helpers
 
   /**
-   * @param keepIndexInMemory the value for {@link StoreConfig#storeKeepIndexInMemoryName}
+   * @param state the value for {@link StoreConfig#storeIndexMemStateName}
    */
-  private void setKeepIndexInMemory(boolean keepIndexInMemory) {
-    properties.setProperty(StoreConfig.storeKeepIndexInMemoryName, Boolean.toString(keepIndexInMemory));
+  private void setIndexMemState(IndexMemState state) {
+    properties.setProperty(StoreConfig.storeIndexMemStateName, state.name());
     config = new StoreConfig(new VerifiableProperties(properties));
   }
 
@@ -472,12 +480,16 @@ public class IndexSegmentTest {
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
           time.milliseconds(), resetKey);
 
-      // verify that flipping StoreConfig.storeKeepIndexInMemoryName does not break anything
-      boolean saved = config.storeKeepIndexInMemory;
-      setKeepIndexInMemory(!saved);
-      verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
-          time.milliseconds(), resetKey);
-      setKeepIndexInMemory(saved);
+      // verify that flipping StoreConfig.storeIndexMemStateName does not break anything
+      IndexMemState saved = config.storeIndexMemState;
+      for (IndexMemState state : IndexMemState.values()) {
+        if (!state.equals(saved)) {
+          setIndexMemState(state);
+          verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten,
+              endOffset, time.milliseconds(), resetKey);
+        }
+      }
+      setIndexMemState(saved);
     }
   }
 
@@ -961,20 +973,18 @@ public class IndexSegmentTest {
     // journal should not contain any entries
     assertNull("Journal should not have any entries", journal.getFirstOffset());
 
-    if (!config.storeKeepIndexInMemory) {
-      // test bloom file recreation
-      // delete the bloom file
-      assertTrue("File could not be deleted", bloomFile.delete());
+    // test bloom file recreation
+    // delete the bloom file
+    assertTrue("File could not be deleted", bloomFile.delete());
 
-      // read from file (sealed) again and verify that everything is ok
-      journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
-      fromDisk = createIndexSegmentFromFile(file, true, journal);
-      assertTrue("Bloom file does not exist", bloomFile.exists());
-      verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
-          endOffset, lastModifiedTimeInMs, resetKey);
-      // journal should not contain any entries
-      assertNull("Journal should not have any entries", journal.getFirstOffset());
-    }
+    // read from file (sealed) again and verify that everything is ok
+    journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
+    fromDisk = createIndexSegmentFromFile(file, true, journal);
+    assertTrue("Bloom file does not exist", bloomFile.exists());
+    verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
+        endOffset, lastModifiedTimeInMs, resetKey);
+    // journal should not contain any entries
+    assertNull("Journal should not have any entries", journal.getFirstOffset());
   }
 
   /**
