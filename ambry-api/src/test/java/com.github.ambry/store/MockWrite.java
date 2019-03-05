@@ -40,14 +40,20 @@ public class MockWrite implements Write {
   }
 
   @Override
-  public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
+  public void appendFrom(ReadableByteChannel channel, long size) throws StoreException {
     if (size > buf.remaining()) {
       throw new IllegalStateException("Cannot fit " + size + " bytes in buf that has " + buf.remaining() + " space");
     }
     int savedLimit = buf.limit();
     buf.limit(buf.position() + (int) size);
-    while (buf.hasRemaining()) {
-      channel.read(buf);
+    try {
+      while (buf.hasRemaining()) {
+        channel.read(buf);
+      }
+    } catch (IOException e) {
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " while writing into store", e, errorCode);
     }
     buf.limit(savedLimit);
   }

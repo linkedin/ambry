@@ -20,6 +20,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -66,10 +67,10 @@ class LogSegment implements Read, Write {
    * @param capacityInBytes the intended capacity of the segment
    * @param metrics the {@link StoreMetrics} instance to use.
    * @param writeHeader if {@code true}, headers are written that provide metadata about the segment.
-   * @throws IOException if the file cannot be read or created
+   * @throws StoreException if the file cannot be read or created
    */
   LogSegment(String name, File file, long capacityInBytes, StoreMetrics metrics, boolean writeHeader)
-      throws IOException {
+      throws StoreException {
     if (!file.exists() || !file.isFile()) {
       throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist or is not a file");
     }
@@ -77,15 +78,19 @@ class LogSegment implements Read, Write {
     this.name = name;
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
-    fileChannel = Utils.openChannel(file, true);
-    segmentView = new Pair<>(file, fileChannel);
-    // externals will set the correct value of end offset.
-    endOffset = new AtomicLong(0);
-    if (writeHeader) {
-      // this will update end offset
-      writeHeader(capacityInBytes);
+    try {
+      fileChannel = Utils.openChannel(file, true);
+      segmentView = new Pair<>(file, fileChannel);
+      // externals will set the correct value of end offset.
+      endOffset = new AtomicLong(0);
+      if (writeHeader) {
+        // this will update end offset
+        writeHeader(capacityInBytes);
+      }
+      startOffset = endOffset.get();
+    } catch (FileNotFoundException e) {
+      throw new StoreException("File not found while creating the log segment", e, StoreErrorCodes.File_Not_Found);
     }
-    startOffset = endOffset.get();
   }
 
   /**
@@ -94,37 +99,46 @@ class LogSegment implements Read, Write {
    *             different from the filename of the {@code file}.
    * @param file the backing {@link File} for this segment.
    * @param metrics he {@link StoreMetrics} instance to use.
-   * @throws IOException
+   * @throws StoreException
    */
-  LogSegment(String name, File file, StoreMetrics metrics) throws IOException {
+  LogSegment(String name, File file, StoreMetrics metrics) throws StoreException {
     if (!file.exists() || !file.isFile()) {
       throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist or is not a file");
     }
     // TODO: just because the file exists, it does not mean the headers have been written into it. LogSegment should
     // TODO: be able to handle this situation.
-    CrcInputStream crcStream = new CrcInputStream(new FileInputStream(file));
-    try (DataInputStream stream = new DataInputStream(crcStream)) {
-      switch (stream.readShort()) {
-        case 0:
-          capacityInBytes = stream.readLong();
-          long computedCrc = crcStream.getValue();
-          long crcFromFile = stream.readLong();
-          if (crcFromFile != computedCrc) {
-            throw new IllegalStateException("CRC from the segment file does not match computed CRC of header");
-          }
-          startOffset = HEADER_SIZE;
-          break;
-        default:
-          throw new IllegalArgumentException("Unknown version in segment [" + file.getAbsolutePath() + "]");
+    try {
+      CrcInputStream crcStream = new CrcInputStream(new FileInputStream(file));
+      try (DataInputStream stream = new DataInputStream(crcStream)) {
+        switch (stream.readShort()) {
+          case 0:
+            capacityInBytes = stream.readLong();
+            long computedCrc = crcStream.getValue();
+            long crcFromFile = stream.readLong();
+            if (crcFromFile != computedCrc) {
+              throw new IllegalStateException("CRC from the segment file does not match computed CRC of header");
+            }
+            startOffset = HEADER_SIZE;
+            break;
+          default:
+            throw new IllegalArgumentException("Unknown version in segment [" + file.getAbsolutePath() + "]");
+        }
       }
+      this.file = file;
+      this.name = name;
+      this.metrics = metrics;
+      fileChannel = Utils.openChannel(file, true);
+
+      segmentView = new Pair<>(file, fileChannel);
+      // externals will set the correct value of end offset.
+      endOffset = new AtomicLong(startOffset);
+    } catch (FileNotFoundException e) {
+      throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);
+    } catch (IOException e) {
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " while creating log segment", e, errorCode);
     }
-    this.file = file;
-    this.name = name;
-    this.metrics = metrics;
-    fileChannel = Utils.openChannel(file, true);
-    segmentView = new Pair<>(file, fileChannel);
-    // externals will set the correct value of end offset.
-    endOffset = new AtomicLong(startOffset);
   }
 
   /**
@@ -137,14 +151,22 @@ class LogSegment implements Read, Write {
    * @param buffer The buffer from which data needs to be written from
    * @return the number of bytes written.
    * @throws IllegalArgumentException if there is not enough space for {@code buffer}
-   * @throws IOException if data could not be written to the file because of I/O errors
+   * @throws StoreException if data could not be written to the file because of store exception
    */
   @Override
-  public int appendFrom(ByteBuffer buffer) throws IOException {
+  public int appendFrom(ByteBuffer buffer) throws StoreException {
     int bytesWritten = 0;
     validateAppendSize(buffer.remaining());
-    while (buffer.hasRemaining()) {
-      bytesWritten += fileChannel.write(buffer, endOffset.get() + bytesWritten);
+    try {
+      while (buffer.hasRemaining()) {
+        bytesWritten += fileChannel.write(buffer, endOffset.get() + bytesWritten);
+      }
+    } catch (ClosedChannelException e) {
+      throw new StoreException("Channel closed while writing into the log segment", e, StoreErrorCodes.Channel_Closed);
+    } catch (IOException e) {
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " while writing into the log segment", e, errorCode);
     }
     endOffset.addAndGet(bytesWritten);
     return bytesWritten;
@@ -160,13 +182,14 @@ class LogSegment implements Read, Write {
    * @param channel The channel from which data needs to be written from
    * @param size The amount of data in bytes to be written from the channel
    * @throws IllegalArgumentException if there is not enough space for data of size {@code size}.
-   * @throws IOException if data could not be written to the file because of I/O errors
+   * @throws StoreException if data could not be written to the file because of store exception
    */
   @Override
-  public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
+  public void appendFrom(ReadableByteChannel channel, long size) throws StoreException {
     validateAppendSize(size);
     if (!fileChannel.isOpen()) {
-      throw new ClosedChannelException();
+      throw new StoreException("Channel is closed when trying to write into log segment",
+          StoreErrorCodes.Channel_Closed);
     }
     int bytesWritten = 0;
     while (bytesWritten < size) {
@@ -176,12 +199,19 @@ class LogSegment implements Read, Write {
       } else {
         byteBufferForAppend.limit(byteBufferForAppend.capacity());
       }
-      if (channel.read(byteBufferForAppend) < 0) {
-        throw new IOException("ReadableByteChannel length less than requested size!");
-      }
-      byteBufferForAppend.flip();
-      while (byteBufferForAppend.hasRemaining()) {
-        bytesWritten += fileChannel.write(byteBufferForAppend, endOffset.get() + bytesWritten);
+      try {
+        if (channel.read(byteBufferForAppend) < 0) {
+          throw new StoreException("ReadableByteChannel length less than requested size!",
+              StoreErrorCodes.Unknown_Error);
+        }
+        byteBufferForAppend.flip();
+        while (byteBufferForAppend.hasRemaining()) {
+          bytesWritten += fileChannel.write(byteBufferForAppend, endOffset.get() + bytesWritten);
+        }
+      } catch (IOException e) {
+        StoreErrorCodes errorCode = e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+            : StoreErrorCodes.Unknown_Error;
+        throw new StoreException(errorCode.toString() + " while writing into the log segment", e, errorCode);
       }
     }
     endOffset.addAndGet(bytesWritten);
@@ -198,15 +228,20 @@ class LogSegment implements Read, Write {
    * @throws IllegalArgumentException if there is not enough space for data of size {@code length}.
    * @throws IOException if data could not be written to the file because of I/O errors
    */
-  int appendFromDirectly(byte[] byteArray, int offset, int length) throws IOException {
+  int appendFromDirectly(byte[] byteArray, int offset, int length) throws StoreException {
     if (!fileChannel.isOpen()) {
-      throw new ClosedChannelException();
+      throw new StoreException("Channel is closed while writing to segment via direct IO",
+          StoreErrorCodes.Channel_Closed);
     }
     validateAppendSize(length);
     try (DirectRandomAccessFile directFile = new DirectRandomAccessFile(file, "rw", 2 * 1024 * 1024)) {
       directFile.seek(endOffset.get());
       directFile.write(byteArray, offset, length);
       endOffset.addAndGet(length);
+    } catch (IOException e) {
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " while writing into segment via direct IO", e, errorCode);
     }
     return length;
   }
@@ -228,9 +263,9 @@ class LogSegment implements Read, Write {
    * Initialize a {@link java.nio.DirectByteBuffer} for {@link LogSegment#appendFrom(ReadableByteChannel, long)}.
    * The buffer is to optimize JDK 8KB small IO write.
    */
-  void initBufferForAppend() throws IOException {
+  void initBufferForAppend() throws StoreException {
     if (byteBufferForAppend != null) {
-      throw new IOException("ByteBufferForAppend has been initialized.");
+      throw new StoreException("ByteBufferForAppend has been initialized.", StoreErrorCodes.Initialization_Error);
     }
     byteBufferForAppend = ByteBuffer.allocateDirect(BYTE_BUFFER_SIZE_FOR_APPEND);
     byteBufferForAppendTotalCount.incrementAndGet();
@@ -375,16 +410,22 @@ class LogSegment implements Read, Write {
    * begin.
    * @param endOffset the end offset of this log.
    * @throws IllegalArgumentException if {@code endOffset} < header size or {@code endOffset} > the size of the file.
-   * @throws IOException if there is any I/O error.
+   * @throws StoreException if there is any store related exception.
    */
-  void setEndOffset(long endOffset) throws IOException {
-    long fileSize = sizeInBytes();
-    if (endOffset < startOffset || endOffset > fileSize) {
-      throw new IllegalArgumentException(
-          file.getAbsolutePath() + ": EndOffset [" + endOffset + "] outside the file size [" + fileSize + "]");
+  void setEndOffset(long endOffset) throws StoreException {
+    try {
+      long fileSize = sizeInBytes();
+      if (endOffset < startOffset || endOffset > fileSize) {
+        throw new IllegalArgumentException(
+            file.getAbsolutePath() + ": EndOffset [" + endOffset + "] outside the file size [" + fileSize + "]");
+      }
+      fileChannel.position(endOffset);
+      this.endOffset.set(endOffset);
+    } catch (IOException e) {
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " while setting end offset of segment", e, errorCode);
     }
-    fileChannel.position(endOffset);
-    this.endOffset.set(endOffset);
   }
 
   /**
@@ -437,9 +478,9 @@ class LogSegment implements Read, Write {
   /**
    * Writes a header describing the segment.
    * @param capacityInBytes the intended capacity of the segment.
-   * @throws IOException if there is any I/O error writing to the file.
+   * @throws StoreException if there is any store exception while writing to the file.
    */
-  private void writeHeader(long capacityInBytes) throws IOException {
+  private void writeHeader(long capacityInBytes) throws StoreException {
     Crc32 crc = new Crc32();
     ByteBuffer buffer = ByteBuffer.allocate(HEADER_SIZE);
     buffer.putShort(VERSION);

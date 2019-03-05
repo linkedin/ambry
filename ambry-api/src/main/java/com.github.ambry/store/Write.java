@@ -13,7 +13,6 @@
  */
 package com.github.ambry.store;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 
@@ -28,16 +27,16 @@ public interface Write {
    * successfully written
    * @param buffer The buffer from which data needs to be written from
    * @return The number of bytes written to the write interface
-   * @throws IOException
+   * @throws StoreException
    */
-  int appendFrom(ByteBuffer buffer) throws IOException;
+  int appendFrom(ByteBuffer buffer) throws StoreException;
 
   /**
    * Appends the channel to the underlying write interface. Writes "size" number of bytes
    * to the interface.
    * @param channel The channel from which data needs to be written from
    * @param size The amount of data in bytes to be written from the channel
-   * @throws IOException
+   * @throws StoreException
    */
-  void appendFrom(ReadableByteChannel channel, long size) throws IOException;
+  void appendFrom(ReadableByteChannel channel, long size) throws StoreException;
 }

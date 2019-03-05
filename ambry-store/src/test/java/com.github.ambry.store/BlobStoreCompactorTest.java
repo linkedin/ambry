@@ -2251,10 +2251,10 @@ public class BlobStoreCompactorTest {
      * Creates an instance of InterruptionInducingLog.
      * @param addSegmentCallCountToInterruptAt number of allowed calls to {@link #addSegment(LogSegment, boolean)}.
      * @param dropSegmentCallCountToInterruptAt number of allowed calls to {@link #dropSegment(String, boolean)}.
-     * @throws IOException
+     * @throws StoreException
      */
     InterruptionInducingLog(int addSegmentCallCountToInterruptAt, int dropSegmentCallCountToInterruptAt)
-        throws IOException {
+        throws StoreException {
       super(tempDirStr, state.log.getCapacityInBytes(), state.log.getSegmentCapacity(),
           StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, new StoreMetrics(new MetricRegistry()));
       // set end offsets correctly
@@ -2284,7 +2284,7 @@ public class BlobStoreCompactorTest {
     }
 
     @Override
-    void dropSegment(String segmentName, boolean decreaseUsedSegmentCount) throws IOException {
+    void dropSegment(String segmentName, boolean decreaseUsedSegmentCount) throws StoreException {
       segmentsDropped++;
       if (segmentsDropped == dropSegmentCallCountToInterruptAt) {
         throwExceptionIfRequired();

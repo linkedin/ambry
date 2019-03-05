@@ -209,7 +209,7 @@ public class AmbryRequests implements RequestAPI {
                 receivedRequest.getBlobProperties().getTimeToLiveInSeconds()), receivedRequest.getCrc(),
             receivedRequest.getBlobProperties().getAccountId(), receivedRequest.getBlobProperties().getContainerId(),
             receivedRequest.getBlobProperties().getCreationTimeInMs());
-        ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
+        ArrayList<MessageInfo> infoList = new ArrayList<>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
         Store storeToPut = storageManager.getStore(receivedRequest.getBlobId().getPartition());

@@ -14,7 +14,6 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.ByteBufferInputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
@@ -22,11 +21,13 @@ import java.util.List;
 
 
 /**
- * A mock implementation of {@link MessageWriteSet} to help write to a {@link Store}
+ * A mock implementation of {@link MessageWriteSet} to help write to a {@link Store} and simulate cases where
+ * IOException occurred.
  */
 public class MockMessageWriteSet implements MessageWriteSet {
   final List<ByteBuffer> buffers;
   final List<MessageInfo> infos;
+  final StoreException exception;
 
   /**
    * Constructor taking fixed lists of {@link MessageInfo} and {@link ByteBuffer}.
@@ -34,8 +35,19 @@ public class MockMessageWriteSet implements MessageWriteSet {
    * @param buffers
    */
   public MockMessageWriteSet(List<MessageInfo> infos, List<ByteBuffer> buffers) {
+    this(infos, buffers, null);
+  }
+
+  /**
+   * Constructor taking fixed lists of {@link MessageInfo} and {@link ByteBuffer} and specified {@link StoreException}
+   * @param infos
+   * @param buffers
+   * @param exception
+   */
+  public MockMessageWriteSet(List<MessageInfo> infos, List<ByteBuffer> buffers, StoreException exception) {
     this.infos = infos;
     this.buffers = buffers;
+    this.exception = exception;
   }
 
   /**
@@ -44,6 +56,7 @@ public class MockMessageWriteSet implements MessageWriteSet {
   public MockMessageWriteSet() {
     this.infos = new ArrayList<>();
     this.buffers = new ArrayList<>();
+    this.exception = null;
   }
 
   /**
@@ -57,7 +70,10 @@ public class MockMessageWriteSet implements MessageWriteSet {
   }
 
   @Override
-  public long writeTo(Write writeChannel) throws IOException {
+  public long writeTo(Write writeChannel) throws StoreException {
+    if (exception != null) {
+      throw exception;
+    }
     long sizeWritten = 0;
     for (ByteBuffer buffer : buffers) {
       sizeWritten += buffer.remaining();

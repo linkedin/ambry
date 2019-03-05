@@ -25,6 +25,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -53,6 +54,7 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -885,6 +887,12 @@ public class BlobStoreTest {
       keysPresent.add(info.getStoreKey());
     }
     assertEquals("All keys were not present in the return from findEntriesSince()", allKeys.keySet(), keysPresent);
+
+    // Extra Test: findEntriesSince method can correctly capture disk related IO error and shutdown store if needed.
+    store.shutdown();
+    catchStoreExceptionAndVerifyErrorCode(
+        (blobStore) -> blobStore.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE));
+    reloadStore();
   }
 
   /**
@@ -902,6 +910,11 @@ public class BlobStoreTest {
     Collections.shuffle(idsToProvide);
     Set<StoreKey> missingKeys = store.findMissingKeys(idsToProvide);
     assertEquals("Set of missing keys not as expected", nonExistentIds, missingKeys);
+
+    // Extra Test: findMissingKeys method can correctly capture store exception and shut down store if needed.
+    store.shutdown();
+    catchStoreExceptionAndVerifyErrorCode((blobStore) -> blobStore.findMissingKeys(idsToProvide));
+    reloadStore();
   }
 
   /**
@@ -964,8 +977,227 @@ public class BlobStoreTest {
     doDiskSpaceRequirementsTest(segmentsAllocated, 2);
   }
 
+  /**
+   * Tests that {@link BlobStore#onError()} and {@link BlobStore#onSuccess()} can correctly capture disk related I/O errors
+   * and properly shutdown the store.
+   * @throws StoreException
+   */
+  @Test
+  public void storeIoErrorCountTest() throws StoreException, IOException {
+    // setup testing environment
+    store.shutdown();
+    properties.put("store.io.error.count.to.trigger.shutdown", "2");
+    MockId id1 = getUniqueId();
+    MockId id2 = getUniqueId();
+    MockId id3 = getUniqueId();
+    MessageInfo corruptedInfo = new MessageInfo(getUniqueId(), PUT_RECORD_SIZE, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
+    MessageInfo info1 =
+        new MessageInfo(id1, PUT_RECORD_SIZE, 2 * 24 * 60 * 60 * 1000, id1.getAccountId(), id1.getContainerId(),
+            Utils.Infinite_Time);
+    MessageInfo info2 =
+        new MessageInfo(id2, PUT_RECORD_SIZE, id2.getAccountId(), id2.getContainerId(), Utils.Infinite_Time);
+    MessageInfo info3 =
+        new MessageInfo(id3, PUT_RECORD_SIZE, id3.getAccountId(), id3.getContainerId(), Utils.Infinite_Time);
+    MessageWriteSet corruptedWriteSet = new MockMessageWriteSet(Collections.singletonList(corruptedInfo),
+        Collections.singletonList(ByteBuffer.allocate(PUT_RECORD_SIZE)),
+        new StoreException(StoreException.IO_ERROR_STR, StoreErrorCodes.IOError));
+    MessageWriteSet validWriteSet1 = new MockMessageWriteSet(Collections.singletonList(info1),
+        Collections.singletonList(ByteBuffer.allocate(PUT_RECORD_SIZE)), null);
+    MessageWriteSet validWriteSet2 = new MockMessageWriteSet(Collections.singletonList(info2),
+        Collections.singletonList(ByteBuffer.allocate(PUT_RECORD_SIZE)), null);
+    MessageWriteSet validWriteSet3 = new MockMessageWriteSet(Collections.singletonList(info3),
+        Collections.singletonList(ByteBuffer.allocate(PUT_RECORD_SIZE)), null);
+
+    // Test1: simulate StoreErrorCodes.IOError triggered by corrupted write set.
+    // verify that store can capture disk I/O errors in Put/Delete/TtlUpdate methods and take proper actions.
+    BlobStore testStore1 =
+        createBlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)),
+            mock(ReplicaStatusDelegate.class));
+    testStore1.start();
+    assertTrue("Store should start successfully", testStore1.isStarted());
+    // verify store can keep track of real I/O errors for Put operation and shutdown properly.
+    try {
+      testStore1.put(corruptedWriteSet);
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    assertTrue("Store should be up", testStore1.isStarted());
+    // verify error count would be reset after successful Put operation
+    testStore1.put(validWriteSet1);
+    assertEquals("Error count should be reset", 0, testStore1.getErrorCount().get());
+    // verify consecutive two failed Puts would make store shutdown (storeIoErrorCountToTriggerShutdown = 2)
+    for (int i = 0; i < 2; ++i) {
+      try {
+        testStore1.put(corruptedWriteSet);
+      } catch (StoreException e) {
+        assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+      }
+    }
+    assertFalse("Store should shutdown because error count exceeded threshold", testStore1.isStarted());
+    testStore1.start();
+    // verify store can keep track of real I/O errors for Delete and TtlUpdate operations and shutdown properly.
+    assertEquals("Error count should be reset", 0, testStore1.getErrorCount().get());
+    MessageInfo deleteInfo =
+        new MessageInfo(id1, DELETE_RECORD_SIZE, id1.getAccountId(), id1.getContainerId(), time.milliseconds());
+    MessageWriteSet deleteWriteSet = new MockMessageWriteSet(Collections.singletonList(deleteInfo),
+        Collections.singletonList(ByteBuffer.wrap(DELETE_BUF)),
+        new StoreException(StoreException.IO_ERROR_STR, StoreErrorCodes.IOError));
+    MessageInfo ttlUpdateInfo =
+        new MessageInfo(id1, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, id1.getAccountId(),
+            id1.getContainerId(), time.milliseconds());
+    MessageWriteSet ttlUpdateWriteSet = new MockMessageWriteSet(Collections.singletonList(ttlUpdateInfo),
+        Collections.singletonList(ByteBuffer.wrap(TTL_UPDATE_BUF)),
+        new StoreException(StoreException.IO_ERROR_STR, StoreErrorCodes.IOError));
+    try {
+      testStore1.updateTtl(ttlUpdateWriteSet);
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    try {
+      testStore1.delete(deleteWriteSet);
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    assertFalse("Store should shutdown because error count exceeded threshold", testStore1.isStarted());
+
+    // Test2: Simulate StoreErrorCodes.IOError occurred in getStoreKey step even though WriteSet is valid
+    // verify that store can capture disk I/O errors in GET method and take proper actions. Put/Delete/TtlUpdates are also tested.
+    properties.put("store.index.max.number.of.inmem.elements", "1");
+    properties.put("store.io.error.count.to.trigger.shutdown", "3");
+    MetricRegistry registry = new MetricRegistry();
+    StoreMetrics metrics = new StoreMetrics(registry);
+    StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
+    BlobStore testStore2 =
+        new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
+            storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics, mockStoreKeyFactory, recovery,
+            hardDelete, mock(ReplicaStatusDelegate.class), time);
+
+    testStore2.start();
+    assertTrue("Store should start up", testStore2.isStarted());
+    testStore2.put(validWriteSet2);
+    testStore2.put(validWriteSet3);
+    // shutdown and restart to make the segments be memory mapped (this is used to simulate IOException generated by mockStoreKeyFactory)
+    testStore2.shutdown();
+    testStore2.start();
+    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockStoreKeyFactory)
+        .getStoreKey(any(DataInputStream.class));
+    // verify that store exceptions (caused by IOException and InternalError) could be captured by Get operation
+    try {
+      testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    doThrow(new InternalError(StoreException.INTERNAL_ERROR_STR)).when(mockStoreKeyFactory)
+        .getStoreKey(any(DataInputStream.class));
+    try {
+      testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    assertEquals("Mismatch in error count", 2, testStore2.getErrorCount().get());
+
+    // verify that StoreException.Unknown_Error could be captured by Get and error count stays unchanged.
+    doThrow(new IOException("Unknown exception")).when(mockStoreKeyFactory).getStoreKey(any(DataInputStream.class));
+    try {
+      testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+    }
+    doThrow(new InternalError("Unknown exception")).when(mockStoreKeyFactory).getStoreKey(any(DataInputStream.class));
+    try {
+      testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+    }
+    assertEquals("Mismatch in error count", 2, testStore2.getErrorCount().get());
+
+    // verify error count would be reset after successful Get operation
+    Mockito.reset(mockStoreKeyFactory);
+    StoreInfo storeInfo = testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
+    assertNotNull(storeInfo);
+    assertEquals("Error count should be reset", 0, testStore2.getErrorCount().get());
+
+    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockStoreKeyFactory)
+        .getStoreKey(any(DataInputStream.class));
+    // call put method to trigger StoreException
+    try {
+      testStore2.put(validWriteSet1);
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    // call TtlUpdate method to trigger StoreException
+    ttlUpdateInfo = new MessageInfo(id2, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, id2.getAccountId(),
+        id2.getContainerId(), time.milliseconds());
+    ttlUpdateWriteSet = new MockMessageWriteSet(Collections.singletonList(ttlUpdateInfo),
+        Collections.singletonList(ByteBuffer.wrap(TTL_UPDATE_BUF)), null);
+    try {
+      testStore2.updateTtl(ttlUpdateWriteSet);
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    // call delete method to trigger StoreException
+    deleteInfo =
+        new MessageInfo(id2, DELETE_RECORD_SIZE, id2.getAccountId(), id2.getContainerId(), time.milliseconds());
+    deleteWriteSet = new MockMessageWriteSet(Collections.singletonList(deleteInfo),
+        Collections.singletonList(ByteBuffer.wrap(DELETE_BUF)), null);
+    try {
+      testStore2.delete(deleteWriteSet);
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    // verify error count keeps track of StoreException and shut down store properly
+    assertFalse("Store should shutdown because error count exceeded threshold", testStore2.isStarted());
+
+    reloadStore();
+  }
+
   // helpers
   // general
+
+  /**
+   * Verify store method can capture store exception and correctly handle it.
+   * @param methodCaller the method caller to invoke store methods to trigger store exception
+   * @throws StoreException
+   */
+  private void catchStoreExceptionAndVerifyErrorCode(StoreMethodCaller methodCaller) throws StoreException {
+    properties.put("store.io.error.count.to.trigger.shutdown", "1");
+    MockBlobStore mockBlobStore =
+        new MockBlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)),
+            mock(ReplicaStatusDelegate.class), new StoreMetrics(new MetricRegistry()));
+    mockBlobStore.start();
+    // Verify that store won't be shut down if Unknown_Error occurred.
+    StoreException storeExceptionInIndex = new StoreException("Mock Unknown error", StoreErrorCodes.Unknown_Error);
+    mockBlobStore.setPersistentIndex(storeExceptionInIndex);
+    try {
+      methodCaller.invoke(mockBlobStore);
+      fail("should fail");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in StoreErrorCode", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+    }
+    assertEquals("Mismatch in store io error count", 0, mockBlobStore.getErrorCount().get());
+    // Verify that store will be shut down if IOError occurred
+    storeExceptionInIndex = new StoreException("Mock disk I/O error", StoreErrorCodes.IOError);
+    mockBlobStore.setPersistentIndex(storeExceptionInIndex);
+    try {
+      methodCaller.invoke(mockBlobStore);
+      //mockBlobStore.findMissingKeys(idsToProvide);
+      fail("should fail");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in StoreErrorCode", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    assertFalse("Store should be shutdown after error count exceeded threshold", mockBlobStore.isStarted());
+  }
 
   /**
    * @return a {@link MockId} that is unique and has not been generated before in this run.
@@ -1461,10 +1693,12 @@ public class BlobStoreTest {
   }
 
   /**
-   * Shuts down and restarts the store. All further tests will implicitly test persistence.
+   * Shuts down, restarts the store and reset configs. All further tests will implicitly test persistence.
    * @throws StoreException
    */
   private void reloadStore() throws StoreException {
+    properties.put("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS));
+    properties.put("store.io.error.count.to.trigger.shutdown", Integer.toString(Integer.MAX_VALUE));
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     reloadStore(config, getMockReplicaId(tempDirStr), null);
   }
@@ -1840,5 +2074,30 @@ public class BlobStoreTest {
       verifyTtlUpdateFailure(new MockId(id.getID(), accountIds[i], containerIds[i]), Utils.Infinite_Time,
           StoreErrorCodes.Authorization_Failure);
     }
+  }
+
+  private class MockBlobStore extends BlobStore {
+
+    MockBlobStore(ReplicaId replicaId, StoreConfig config, ReplicaStatusDelegate replicaStatusDelegate,
+        StoreMetrics metrics) {
+      super(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics,
+          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegate, time);
+    }
+
+    /**
+     * Replace initial index in store with mock index which would throw specified exception when finding entries/keys.
+     * @param exception the store exception to throw when finding entries or missing keys.
+     * @throws StoreException
+     */
+    void setPersistentIndex(StoreException exception) throws StoreException {
+      PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
+      index = mockPersistentIndex;
+      doThrow(exception).when(mockPersistentIndex).findEntriesSince(any(FindToken.class), anyLong());
+      doThrow(exception).when(mockPersistentIndex).findMissingKeys(anyList());
+    }
+  }
+
+  private interface StoreMethodCaller {
+    void invoke(Store store) throws StoreException;
   }
 }

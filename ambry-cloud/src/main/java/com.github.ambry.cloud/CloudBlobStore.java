@@ -82,11 +82,7 @@ class CloudBlobStore implements Store {
 
     // Write the blobs in the message set
     CloudWriteChannel cloudWriter = new CloudWriteChannel(this, messageSetToWrite.getMessageSetInfo());
-    try {
-      messageSetToWrite.writeTo(cloudWriter);
-    } catch (IOException ex) {
-      throw new StoreException(ex, StoreErrorCodes.IOError);
-    }
+    messageSetToWrite.writeTo(cloudWriter);
   }
 
   /**
@@ -230,12 +226,12 @@ class CloudBlobStore implements Store {
     }
 
     @Override
-    public int appendFrom(ByteBuffer buffer) throws IOException {
+    public int appendFrom(ByteBuffer buffer) throws StoreException {
       throw new UnsupportedOperationException("Method not supported");
     }
 
     @Override
-    public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
+    public void appendFrom(ReadableByteChannel channel, long size) throws StoreException {
       // Upload the blob corresponding to the current message index
       MessageInfo messageInfo = messageInfoList.get(messageIndex);
       if (messageInfo.getSize() != size) {
@@ -243,21 +239,20 @@ class CloudBlobStore implements Store {
       }
       ByteBuffer messageBuf = ByteBuffer.allocate((int) size);
       int bytesRead = 0;
-      while (bytesRead < size) {
-        int readResult = channel.read(messageBuf);
-        if (readResult == -1) {
-          throw new IOException(
-              "Channel read returned -1 before reading expected number of bytes, blobId=" + messageInfo.getStoreKey()
-                  .getID());
-        }
-        bytesRead += readResult;
-      }
-
       try {
+        while (bytesRead < size) {
+          int readResult = channel.read(messageBuf);
+          if (readResult == -1) {
+            throw new IOException(
+                "Channel read returned -1 before reading expected number of bytes, blobId=" + messageInfo.getStoreKey()
+                    .getID());
+          }
+          bytesRead += readResult;
+        }
         cloudBlobStore.putBlob(messageInfo, messageBuf, size);
         messageIndex++;
-      } catch (Exception e) {
-        throw new IOException(e);
+      } catch (IOException | CloudStorageException e) {
+        throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
       }
     }
   }
