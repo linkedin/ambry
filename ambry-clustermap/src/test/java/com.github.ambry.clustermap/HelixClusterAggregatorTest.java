@@ -84,8 +84,7 @@ public class HelixClusterAggregatorTest {
       // 1. Aggregate all snapshots into the first snapshot in snapshots list. The intention is to get expected aggregated snapshot.
       // 2. Then invoke clusterAggregator to do work on stats across all instances.
       // 3. Verify both raw stats and valid stats after aggregation
-      Pair<String, String> aggregatedRawAndValidStats = null;
-      aggregatedRawAndValidStats = clusterAggregator.doWork(instanceToStatsMap, type);
+      Pair<String, String> aggregatedRawAndValidStats = clusterAggregator.doWork(instanceToStatsMap, type);
 
       StatsSnapshot expectedSnapshot = null;
       switch (type) {
@@ -277,6 +276,29 @@ public class HelixClusterAggregatorTest {
       // verify aggregator keeps track of instances where exception occurred.
       assertEquals("Mismatch in instances where exception occurred", Collections.singletonList(EXCEPTION_INSTANCE_NAME),
           clusterAggregator.getExceptionOccurredInstances(type));
+    }
+  }
+
+  /**
+   * Tests to verify cluster aggregation with all empty nodes.
+   * @throws IOException
+   */
+  @Test
+  public void testStatsAggregationWithAllEmptyNodes() throws IOException {
+    int nodeCount = 3;
+    for (StatsReportType type : EnumSet.of(StatsReportType.ACCOUNT_REPORT, StatsReportType.PARTITION_CLASS_REPORT)) {
+      StatsWrapper emptyNodeStats = generateNodeStats(Collections.emptyList(), DEFAULT_TIMESTAMP, type);
+      String emptyStatsJSON = mapper.writeValueAsString(emptyNodeStats);
+      Map<String, String> instanceToStatsMap = new HashMap<>();
+      for (int i = 0; i < nodeCount; i++) {
+        instanceToStatsMap.put("Instance_" + i, emptyStatsJSON);
+      }
+      Pair<String, String> aggregatedRawAndValidStats = clusterAggregator.doWork(instanceToStatsMap, type);
+      StatsSnapshot expectedSnapshot = new StatsSnapshot(0L, null);
+      StatsSnapshot rawSnapshot = mapper.readValue(aggregatedRawAndValidStats.getFirst(), StatsSnapshot.class);
+      StatsSnapshot validSnapshot = mapper.readValue(aggregatedRawAndValidStats.getSecond(), StatsSnapshot.class);
+      assertTrue("Mismatch in raw snapshot", expectedSnapshot.equals(rawSnapshot));
+      assertTrue("Mismatch in valid snapshot", expectedSnapshot.equals(validSnapshot));
     }
   }
 

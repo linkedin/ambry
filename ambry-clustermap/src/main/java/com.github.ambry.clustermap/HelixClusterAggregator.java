@@ -54,9 +54,9 @@ public class HelixClusterAggregator {
    * @throws IOException
    */
   Pair<String, String> doWork(Map<String, String> statsWrappersJSON, StatsReportType type) throws IOException {
-    StatsSnapshot partitionSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
+    StatsSnapshot partitionSnapshot = new StatsSnapshot(0L, new HashMap<>());
     Map<String, Long> partitionTimestampMap = new HashMap<>();
-    StatsSnapshot rawPartitionSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
+    StatsSnapshot rawPartitionSnapshot = new StatsSnapshot(0L, new HashMap<>());
     exceptionOccurredInstances.remove(type);
     for (Map.Entry<String, String> statsWrapperJSON : statsWrappersJSON.entrySet()) {
       if (statsWrapperJSON != null && statsWrapperJSON.getValue() != null) {
@@ -87,8 +87,8 @@ public class HelixClusterAggregator {
       logger.trace("Combined raw snapshot {}", mapper.writeValueAsString(rawPartitionSnapshot));
       logger.trace("Combined valid snapshot {}", mapper.writeValueAsString(partitionSnapshot));
     }
-    StatsSnapshot reducedRawSnapshot = null;
-    StatsSnapshot reducedSnapshot = null;
+    StatsSnapshot reducedRawSnapshot;
+    StatsSnapshot reducedSnapshot;
     switch (type) {
       case ACCOUNT_REPORT:
         reducedRawSnapshot = reduceByAccount(rawPartitionSnapshot);
@@ -98,6 +98,8 @@ public class HelixClusterAggregator {
         reducedRawSnapshot = reduceByPartitionClass(rawPartitionSnapshot);
         reducedSnapshot = reduceByPartitionClass(partitionSnapshot);
         break;
+      default:
+        throw new IllegalArgumentException("Unrecognized stats report type: " + type);
     }
     if (logger.isTraceEnabled()) {
       logger.trace("Reduced raw snapshot {}", mapper.writeValueAsString(reducedRawSnapshot));
@@ -140,6 +142,7 @@ public class HelixClusterAggregator {
    *    b) Timestamp of a given partition entry is one aggregation period newer (greater) than the timestamp of the
    *       base entry.
    * The combined valid stats snapshot is represented in following format:
+   * <pre>
    * {
    *   value: 1000,
    *   subMap: {
@@ -173,6 +176,7 @@ public class HelixClusterAggregator {
    *     }
    *   }
    * }
+   * </pre>
    * @param baseSnapshot the base {@link StatsSnapshot} which will contain the aggregated result
    * @param snapshotWrapper the {@link StatsSnapshot} to be aggregated to the base {@link StatsSnapshot}
    * @param instance new instance from which snapshot is being combined
@@ -237,6 +241,7 @@ public class HelixClusterAggregator {
    *      c) otherwise, ignore the partition(replica) because it is either stale or not the replica with largest value.
    * 4. update basePartitionClassMap with up-to-date basePartitionMap and totalValueOfAllClasses.
    * The combined snapshot is represented in following format:
+   * <pre>
    * {
    *   value: 1000,
    *   subMap:{
@@ -270,6 +275,7 @@ public class HelixClusterAggregator {
    *     }
    *   }
    * }
+   * </pre>
    * @param baseSnapshot baseSnapshot the base {@link StatsSnapshot} which will contain the aggregated result
    * @param snapshotWrapper the {@link StatsSnapshot} from each instance to be aggregated to the base {@link StatsSnapshot}
    * @param instance new instance from which snapshot is being combined
@@ -347,8 +353,8 @@ public class HelixClusterAggregator {
    * @return the reduced {@link StatsSnapshot}
    */
   private StatsSnapshot reduceByAccount(StatsSnapshot statsSnapshot) {
-    StatsSnapshot reducedSnapshot = new StatsSnapshot(0L, null);
-    if (statsSnapshot.getSubMap() != null) {
+    StatsSnapshot reducedSnapshot = new StatsSnapshot(0L, new HashMap<>());
+    if (!statsSnapshot.getSubMap().isEmpty()) {
       for (StatsSnapshot snapshot : statsSnapshot.getSubMap().values()) {
         StatsSnapshot.aggregate(reducedSnapshot, snapshot);
       }
@@ -398,17 +404,15 @@ public class HelixClusterAggregator {
   static StatsSnapshot reduceByPartitionClass(StatsSnapshot statsSnapshot) {
     StatsSnapshot returnSnapshot = new StatsSnapshot(statsSnapshot.getValue(), new HashMap<>());
     Map<String, StatsSnapshot> partitionClassSnapshots = statsSnapshot.getSubMap();
-    if (partitionClassSnapshots != null) {
+    if (!partitionClassSnapshots.isEmpty()) {
       for (Map.Entry<String, StatsSnapshot> partitionClassToSnapshot : partitionClassSnapshots.entrySet()) {
         StatsSnapshot partitionClassSnapshot = partitionClassToSnapshot.getValue();
         StatsSnapshot reducedPartitionClassSnapshot = new StatsSnapshot(0L, null);
         Map<String, StatsSnapshot> partitionToSnapshot = partitionClassSnapshot.getSubMap();
-        if (partitionToSnapshot != null) {
-          for (StatsSnapshot snapshot : partitionToSnapshot.values()) {
-            StatsSnapshot.aggregate(reducedPartitionClassSnapshot, snapshot);
-          }
-          returnSnapshot.getSubMap().put(partitionClassToSnapshot.getKey(), reducedPartitionClassSnapshot);
+        for (StatsSnapshot snapshot : partitionToSnapshot.values()) {
+          StatsSnapshot.aggregate(reducedPartitionClassSnapshot, snapshot);
         }
+        returnSnapshot.getSubMap().put(partitionClassToSnapshot.getKey(), reducedPartitionClassSnapshot);
       }
     }
     return returnSnapshot;
