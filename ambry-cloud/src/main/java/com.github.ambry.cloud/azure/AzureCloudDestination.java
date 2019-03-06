@@ -54,11 +54,9 @@ class AzureCloudDestination implements CloudDestination {
   private static final Logger LOGGER = LoggerFactory.getLogger(AzureCloudDestination.class);
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
-  private DocumentClient documentClient;
-  private String cosmosServiceEndpoint; // eg "https://ambry-metadata-rblock.documents.azure.com:443/"
-  private String cosmosCollectionLink; // eg "/dbs/ambry-metadata/colls/blob-metadata"
-  private String cosmosKey;
-  private RequestOptions defaultRequestOptions = new RequestOptions();
+  private final DocumentClient documentClient;
+  private final String cosmosCollectionLink; // eg "/dbs/ambry-metadata/colls/blob-metadata"
+  private final RequestOptions defaultRequestOptions = new RequestOptions();
 
   public static final String STORAGE_CONFIG_SPEC = "storageConfigSpec";
   public static final String COSMOS_ENDPOINT = "cosmosEndpoint";
@@ -75,9 +73,9 @@ class AzureCloudDestination implements CloudDestination {
     String configSpec = verProps.getString(STORAGE_CONFIG_SPEC);
     azureAccount = CloudStorageAccount.parse(configSpec);
     azureBlobClient = azureAccount.createCloudBlobClient();
-    cosmosServiceEndpoint = verProps.getString(COSMOS_ENDPOINT);
+    String cosmosServiceEndpoint = verProps.getString(COSMOS_ENDPOINT);
+    String cosmosKey = verProps.getString(COSMOS_KEY);
     cosmosCollectionLink = verProps.getString(COSMOS_COLLECTION_LINK);
-    cosmosKey = verProps.getString(COSMOS_KEY);
     documentClient =
         new DocumentClient(cosmosServiceEndpoint, cosmosKey, ConnectionPolicy.GetDefault(), ConsistencyLevel.Session);
     // check that it works
@@ -141,7 +139,6 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-
   public boolean deleteBlob(BlobId blobId, long deletionTime) throws CloudStorageException {
     return updateBlobMetadata(blobId, CloudBlobMetadata.FIELD_DELETION_TIME, deletionTime);
   }
@@ -220,7 +217,7 @@ class AzureCloudDestination implements CloudDestination {
       throws URISyntaxException, StorageException {
     // Need clustermap to construct BlobId and partitionId
     // Either pass to our constructor or pass BlobId to methods
-    // TODO: minimum character limit, try setting "partition-<id>" or "clustername-<pid>"
+    // TODO: "clustername-<pid>"
     String partitionPath = "partition-" + blobId.getPartition().toPathString();
     CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(partitionPath);
     if (autoCreate) {
