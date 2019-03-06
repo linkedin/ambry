@@ -36,12 +36,9 @@ import org.junit.Test;
 
 import static com.github.ambry.commons.BlobId.*;
 import static org.junit.Assert.*;
-<<<<<<< Updated upstream
-=======
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.eq;
->>>>>>> Stashed changes
 import static org.mockito.Mockito.*;
 
 
@@ -56,10 +53,7 @@ public class CloudBlobStoreTest {
   private Random random = new Random();
   private short refAccountId = 50;
   private short refContainerId = 100;
-<<<<<<< Updated upstream
-=======
   private long operationTime = System.currentTimeMillis();
->>>>>>> Stashed changes
 
   @Before
   public void setup() throws Exception {
@@ -83,12 +77,8 @@ public class CloudBlobStoreTest {
       addBlobToSet(messageWriteSet, size, expireTime, refAccountId, refContainerId);
     }
     store.put(messageWriteSet);
-<<<<<<< Updated upstream
-    verify(dest, times(count)).uploadBlob(any(BlobId.class), anyLong(), any(InputStream.class));
-=======
     verify(dest, times(count)).uploadBlob(any(BlobId.class), anyLong(), any(CloudBlobMetadata.class),
         any(InputStream.class));
->>>>>>> Stashed changes
   }
 
   /** Test the CloudBlobStore delete method. */
@@ -101,9 +91,6 @@ public class CloudBlobStoreTest {
       addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId);
     }
     store.delete(messageWriteSet);
-<<<<<<< Updated upstream
-    verify(dest, times(count)).deleteBlob(any(BlobId.class));
-=======
     verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime));
   }
 
@@ -119,7 +106,6 @@ public class CloudBlobStoreTest {
     }
     store.updateTtl(messageWriteSet);
     verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong());
->>>>>>> Stashed changes
   }
 
   /** Test the CloudBlobStore findMissingKeys method. */
@@ -172,15 +158,9 @@ public class CloudBlobStoreTest {
   @Test
   public void testExceptionalDest() throws Exception {
     CloudDestination exDest = mock(CloudDestination.class);
-<<<<<<< Updated upstream
-    when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(InputStream.class))).thenThrow(
-        new CloudStorageException("ouch"));
-    when(exDest.deleteBlob(any(BlobId.class))).thenThrow(new CloudStorageException("ouch"));
-=======
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(
         new CloudStorageException("ouch"));
     when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(new CloudStorageException("ouch"));
->>>>>>> Stashed changes
     when(exDest.doesBlobExist(any(BlobId.class))).thenThrow(new CloudStorageException("ouch"));
     CloudBlobStore exStore = new CloudBlobStore(partitionId, null, exDest);
     exStore.start();
@@ -221,12 +201,7 @@ public class CloudBlobStoreTest {
       short containerId) {
     BlobId id = getUniqueId(accountId, containerId);
     long crc = random.nextLong();
-<<<<<<< Updated upstream
-    MessageInfo info =
-        new MessageInfo(id, size, false, false, expiresAtMs, crc, accountId, containerId, Utils.Infinite_Time);
-=======
     MessageInfo info = new MessageInfo(id, size, false, false, expiresAtMs, crc, accountId, containerId, operationTime);
->>>>>>> Stashed changes
     ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
     messageWriteSet.add(info, buffer);
     return id;
