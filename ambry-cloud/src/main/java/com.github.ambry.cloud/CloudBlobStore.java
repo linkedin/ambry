@@ -100,7 +100,9 @@ class CloudBlobStore implements Store {
     // May need to encrypt buffer before upload
     if (performUpload) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
-      cloudDestination.uploadBlob(blobId, size, new ByteBufferInputStream(messageBuf));
+      CloudBlobMetadata blobMetadata = new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getSize());
+      blobMetadata.setExpirationTime(messageInfo.getExpirationTimeInMs());
+      cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
     }
   }
 
@@ -112,7 +114,7 @@ class CloudBlobStore implements Store {
     try {
       for (MessageInfo msgInfo : messageSetToDelete.getMessageSetInfo()) {
         BlobId blobId = (BlobId) msgInfo.getStoreKey();
-        cloudDestination.deleteBlob(blobId);
+        cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs());
       }
     } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
@@ -128,7 +130,15 @@ class CloudBlobStore implements Store {
   @Override
   public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
     checkStarted();
-    // This is currently a no-op because we skipped uploading the blob on receipt of the PUT record since it had a TTL.
+    // Note: we skipped uploading the blob on PUT record if the TTL was below threshold.
+    try {
+      for (MessageInfo msgInfo : messageSetToUpdate.getMessageSetInfo()) {
+        BlobId blobId = (BlobId) msgInfo.getStoreKey();
+        cloudDestination.updateBlobExpiration(blobId, msgInfo.getExpirationTimeInMs());
+      }
+    } catch (CloudStorageException ex) {
+      throw new StoreException(ex, StoreErrorCodes.IOError);
+    }
   }
 
   @Override
@@ -140,6 +150,7 @@ class CloudBlobStore implements Store {
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     checkStarted();
     // Check existence of keys in cloud container
+    // TODO: metadata query
     Set<StoreKey> missingKeys = new HashSet<>();
     try {
       for (StoreKey key : keys) {

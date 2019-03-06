@@ -26,21 +26,31 @@ public interface CloudDestination {
    * Upload blob to the cloud destination.
    * @param blobId id of the Ambry blob
    * @param blobSize size of the blob in bytes
+   * @param cloudBlobMetadata the {@link CloudBlobMetadata} for the blob being uploaded.
    * @param blobInputStream the stream to read blob data
    * @return flag indicating whether the blob was uploaded
    * @throws CloudStorageException if the upload encounters an error.
    */
-  boolean uploadBlob(BlobId blobId, long blobSize, InputStream blobInputStream) throws CloudStorageException;
-
-  // Alternatively, we can derive the path from blob's partition/account/container
+  boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata, InputStream blobInputStream)
+      throws CloudStorageException;
 
   /**
    * Delete blob in the cloud destination.
    * @param blobId id of the Ambry blob
+   * @param deletionTime time of blob deletion
    * @return flag indicating whether the blob was deleted
    * @throws CloudStorageException if the deletion encounters an error.
    */
-  boolean deleteBlob(BlobId blobId) throws CloudStorageException;
+  boolean deleteBlob(BlobId blobId, long deletionTime) throws CloudStorageException;
+
+  /**
+   * Update expiration time of blob in the cloud destination.
+   * @param blobId id of the Ambry blob
+   * @param expirationTime the new expiration time
+   * @return flag indicating whether the blob was updated
+   * @throws CloudStorageException if the update encounters an error.
+   */
+  boolean updateBlobExpiration(BlobId blobId, long expirationTime) throws CloudStorageException;
 
   /**
    * Checks whether the blob exists in the cloud destination.
