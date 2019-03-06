@@ -17,6 +17,8 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.StorageException;
@@ -26,8 +28,8 @@ import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.security.InvalidKeyException;
+import java.util.Properties;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -35,7 +37,9 @@ import org.mockito.junit.MockitoJUnitRunner;
 
 import static com.github.ambry.commons.BlobId.*;
 import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 
@@ -43,7 +47,7 @@ import static org.mockito.Mockito.*;
 @RunWith(MockitoJUnitRunner.class)
 public class AzureCloudDestinationTest {
 
-  private String configSpec = "AccountName=ambry;AccountKey=ambry-kay";
+  private CloudConfig configSpec;
   private AzureCloudDestination azureDest;
   private CloudStorageAccount mockAzureAccount;
   private CloudBlobClient mockAzureClient;
@@ -54,6 +58,9 @@ public class AzureCloudDestinationTest {
 
   @Before
   public void setup() throws Exception {
+    Properties props = new Properties();
+    props.setProperty("azure.connection.string", "AccountName=ambry;AccountKey=ambry-kay");
+    configSpec = new CloudConfig(new VerifiableProperties(props));
     mockAzureAccount = mock(CloudStorageAccount.class);
     mockAzureClient = mock(CloudBlobClient.class);
     mockAzureContainer = mock(CloudBlobContainer.class);
@@ -84,7 +91,6 @@ public class AzureCloudDestinationTest {
   public void testUpload() throws Exception {
     InputStream inputStream = getBlobInputStream(blobSize);
     assertTrue("Expected upload to return true", azureDest.uploadBlob(blobId, blobSize, inputStream));
-
   }
 
   /** Test normal delete. */
@@ -114,7 +120,6 @@ public class AzureCloudDestinationTest {
   public void testExistenceCheck() throws Exception {
     when(mockBlob.exists()).thenReturn(true);
     assertTrue("Expected doesBlobExist to return true", azureDest.doesBlobExist(blobId));
-
 
     when(mockBlob.exists()).thenReturn(false);
     assertFalse("Expected doesBlobExist to return false", azureDest.doesBlobExist(blobId));

@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.CloudConfig;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.OperationContext;
 import com.microsoft.azure.storage.StorageException;
@@ -44,12 +45,12 @@ class AzureCloudDestination implements CloudDestination {
 
   /**
    * Construct an Azure cloud destination from a container's config spec.
-   * @param configSpec the config spec to use.
+   * @param config the config spec to use.
    * @throws InvalidKeyException if credentials in the connection string contain an invalid key.
    * @throws URISyntaxException if the connection string specifies an invalid URI.
    */
-  AzureCloudDestination(String configSpec) throws URISyntaxException, InvalidKeyException {
-    this(CloudStorageAccount.parse(configSpec));
+  AzureCloudDestination(CloudConfig config) throws URISyntaxException, InvalidKeyException {
+    this(CloudStorageAccount.parse(config.azureConnectionString));
   }
 
   /**
