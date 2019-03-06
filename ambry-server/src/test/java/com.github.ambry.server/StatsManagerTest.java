@@ -363,6 +363,76 @@ public class StatsManagerTest {
   }
 
   /**
+   * Test that the {@link StatsManager} can correctly collect and aggregate all type of stats on the node. This
+   * test is using randomly generated account snapshot and partitionClass snapshot in mock {@link StoreStats}.
+   * @throws StoreException
+   * @throws IOException
+   */
+  @Test
+  public void testGetNodeStatsInJSON() throws IOException, StoreException {
+    // initialize StatsManager and create all types of snapshots for testing
+    List<ReplicaId> replicaIds = new ArrayList<>();
+    PartitionId partitionId;
+    DataNodeId dataNodeId;
+    Map<PartitionId, Store> storeMap = new HashMap<>();
+    List<StatsSnapshot> partitionClassSnapshots = new ArrayList<>();
+    List<StatsSnapshot> accountSnapshots = new ArrayList<>();
+    for (int i = 0; i < 2; i++) {
+      dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
+          Collections.singletonList("/tmp"), "DC1");
+      partitionId = new MockPartitionId(i,
+          (i % 2 == 0) ? MockClusterMap.DEFAULT_PARTITION_CLASS : MockClusterMap.SPECIAL_PARTITION_CLASS,
+          Collections.singletonList((MockDataNodeId) dataNodeId), 0);
+      Map<StatsReportType, StatsSnapshot> allSnapshots = generateRandomSnapshot();
+      partitionClassSnapshots.add(allSnapshots.get(StatsReportType.PARTITION_CLASS_REPORT));
+      accountSnapshots.add(allSnapshots.get(StatsReportType.ACCOUNT_REPORT));
+      storeMap.put(partitionId, new MockStore(new MockStoreStats(allSnapshots, false)));
+      replicaIds.add(partitionId.getReplicaIds().get(0));
+    }
+    StorageManager storageManager = new MockStorageManager(storeMap);
+    StatsManager statsManager =
+        new StatsManager(storageManager, replicaIds, new MetricRegistry(), config, new MockTime());
+
+    StatsSnapshot expectAccountSnapshot = new StatsSnapshot(0L, new HashMap<>());
+    StatsSnapshot expectPartitionClassSnapshot = new StatsSnapshot(0L, new HashMap<>());
+    for (int i = 0; i < accountSnapshots.size(); ++i) {
+      Map<String, StatsSnapshot> partitionToAccountSnapshot = new HashMap<>();
+      Map<String, StatsSnapshot> partitionToPartitionClassSnapshot = new HashMap<>();
+      Map<String, StatsSnapshot> partitionClassSnapshotMap = new HashMap<>();
+      String partitionIdStr = String.valueOf(i);
+      String partitionClassStr =
+          i % 2 == 0 ? MockClusterMap.DEFAULT_PARTITION_CLASS : MockClusterMap.SPECIAL_PARTITION_CLASS;
+      partitionToAccountSnapshot.put(partitionIdStr, accountSnapshots.get(i));
+      partitionToPartitionClassSnapshot.put(partitionIdStr, partitionClassSnapshots.get(i));
+      partitionClassSnapshotMap.put(partitionClassStr,
+          new StatsSnapshot(partitionClassSnapshots.get(i).getValue(), partitionToPartitionClassSnapshot));
+      //aggregate two types of snapshots respectively
+      StatsSnapshot.aggregate(expectAccountSnapshot,
+          new StatsSnapshot(accountSnapshots.get(i).getValue(), partitionToAccountSnapshot));
+      StatsSnapshot.aggregate(expectPartitionClassSnapshot,
+          new StatsSnapshot(partitionClassSnapshots.get(i).getValue(), partitionClassSnapshotMap));
+    }
+
+    // Get node level stats in JSON to verify
+    for (StatsReportType type : EnumSet.of(StatsReportType.ACCOUNT_REPORT, StatsReportType.PARTITION_CLASS_REPORT)) {
+      String statsInJSON = statsManager.getNodeStatsInJSON(type);
+      StatsSnapshot actualSnapshot = mapper.readValue(statsInJSON, StatsWrapper.class).getSnapshot();
+      switch (type) {
+        case ACCOUNT_REPORT:
+          assertTrue("Mismatch in aggregated node stats at account level",
+              expectAccountSnapshot.equals(actualSnapshot));
+          break;
+        case PARTITION_CLASS_REPORT:
+          assertTrue("Mismatch in aggregated node stats at partitionClass level",
+              expectPartitionClassSnapshot.equals(actualSnapshot));
+          break;
+        default:
+          throw new IllegalArgumentException("Unrecognized stats report type: " + type);
+      }
+    }
+  }
+
+  /**
    * Test to verify {@link StatsManager} can start and shutdown properly.
    */
   @Test

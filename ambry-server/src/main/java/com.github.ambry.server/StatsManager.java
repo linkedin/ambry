@@ -208,7 +208,44 @@ class StatsManager {
 
   /**
    * Get the combined {@link StatsSnapshot} of all partitions in this node. This json will contain one entry per partition
-   * wrt valid data size.
+   * wrt valid data size. The node level stats format is as follows.
+   * <pre>
+   *             ACCOUNT_REPORT                   |             PARTITION_CLASS_REPORT
+   * ---------------------------------------------------------------------------------------------------
+   * {                                            |    {
+   *   value: 1000,                               |      value: 1000,
+   *   subMap: {                                  |      subMap: {
+   *     Partition[1]:{                           |        PartitionClass_1: {
+   *       value: 1000,                           |          value: 400,
+   *       subMap: {                              |          subMap: {
+   *         Account[1]:{                         |            Partition[1]: {
+   *           value: 400,                        |              value: 400,
+   *           subMap: {                          |              subMap: {
+   *             Container[1]:{                   |                Account[1]_Container[1]: {
+   *               value: 400,                    |                  value: 400,
+   *               subMap: null                   |                  subMap: null
+   *             }                                |                }
+   *           }                                  |              }
+   *         },                                   |            }
+   *         Account[2]:{                         |          }
+   *           value: 600,                        |        },
+   *           subMap: {                          |        PartitionClass_2: {
+   *             Container[2]:{                   |          value: 600,
+   *               value: 600,                    |          subMap: {
+   *               subMap: null                   |            Partition[2]: {
+   *             }                                |              value: 600,
+   *           }                                  |              subMap: {
+   *         }                                    |                Account[2]_Container[2]: {
+   *       }                                      |                  value: 600,
+   *     }                                        |                  subMap: null
+   *   }                                          |                }
+   * }                                            |              }
+   *                                              |            }
+   *                                              |          }
+   *                                              |        }
+   *                                              |      }
+   *                                              |    }
+   * </pre>
    * @param statsReportType the {@link StatsReportType} to get from this node
    * @return a combined {@link StatsSnapshot} of this node
    */
@@ -216,7 +253,7 @@ class StatsManager {
     String statsWrapperJSON = "";
     try {
       long totalFetchAndAggregateStartTimeMs = time.milliseconds();
-      StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
+      StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<>());
       long totalValue = 0;
       List<PartitionId> unreachablePartitions = new ArrayList<>();
       Set<PartitionId> partitionsBeforeAggregation = new HashSet<>(partitionToReplicaMap.keySet());
@@ -226,7 +263,22 @@ class StatsManager {
         long fetchSnapshotStartTimeMs = time.milliseconds();
         StatsSnapshot statsSnapshot = fetchSnapshot(partitionId, unreachablePartitions, statsReportType);
         if (statsSnapshot != null) {
-          combinedSnapshot.getSubMap().put(partitionId.toString(), statsSnapshot);
+          Map<String, StatsSnapshot> combinedSnapshotSubMap = combinedSnapshot.getSubMap();
+          switch (statsReportType) {
+            case ACCOUNT_REPORT:
+              combinedSnapshotSubMap.put(partitionId.toString(), statsSnapshot);
+              break;
+            case PARTITION_CLASS_REPORT:
+              StatsSnapshot partitionClassSnapshot =
+                  combinedSnapshotSubMap.getOrDefault(partitionId.getPartitionClass(),
+                      new StatsSnapshot(0L, new HashMap<>()));
+              partitionClassSnapshot.setValue(partitionClassSnapshot.getValue() + statsSnapshot.getValue());
+              partitionClassSnapshot.getSubMap().put(partitionId.toString(), statsSnapshot);
+              combinedSnapshotSubMap.put(partitionId.getPartitionClass(), partitionClassSnapshot);
+              break;
+            default:
+              throw new IllegalArgumentException("Unrecognized stats report type: " + statsReportType);
+          }
           totalValue += statsSnapshot.getValue();
         }
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchSnapshotStartTimeMs);
