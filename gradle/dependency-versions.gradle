@@ -22,13 +22,6 @@ ext {
     helixVersion = "0.8.3"
     jacksonVersion = "1.8.5"
     jaydioVersion = "0.1"
-<<<<<<< Updated upstream
-    azureStorageVersion = "5.0.0"
-=======
-<<<<<<< Updated upstream
-=======
     azureStorageVersion = "5.0.0"
     azureDocumentDbVersion = "2.1.1"
->>>>>>> Stashed changes
->>>>>>> Stashed changes
 }
