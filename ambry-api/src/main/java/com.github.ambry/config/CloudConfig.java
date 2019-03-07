@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,11 +21,9 @@ public class CloudConfig {
    * Azure connection string.
    */
   @Config("azure.connection.string")
-  @Default("some string")
   public final String azureConnectionString;
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
-    azureConnectionString =
-        verifiableProperties.getString("azure.connection.string", "AccountName=ambry;AccountKey=ambry-kay");
+    azureConnectionString = verifiableProperties.getString("azure.connection.string");
   }
 }

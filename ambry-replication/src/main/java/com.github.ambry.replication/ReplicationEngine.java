@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -279,15 +279,15 @@ abstract class ReplicationEngine {
   private final StoreKeyConverterFactory storeKeyConverterFactory;
   private final String transformerClassName;
 
-  ReplicaTokenPersistor persistor = null;
-  final DataNodeId dataNodeId;
-  final MetricRegistry metricRegistry;
-  final ReplicationMetrics replicationMetrics;
-  final FindTokenFactory factory;
-  final Logger logger = LoggerFactory.getLogger(getClass());
-  final Map<PartitionId, PartitionInfo> partitionsToReplicate;
-  final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
-  final Map<String, Integer> numberOfReplicaThreads;
+  protected final DataNodeId dataNodeId;
+  protected final MetricRegistry metricRegistry;
+  protected final ReplicationMetrics replicationMetrics;
+  protected final FindTokenFactory factory;
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
+  protected final Map<PartitionId, PartitionInfo> partitionsToReplicate;
+  protected final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
+  protected final Map<String, Integer> numberOfReplicaThreads;
+  protected ReplicaTokenPersistor persistor = null;
 
   static final short Replication_Delay_Multiplier = 5;
   static final String replicaTokenFileName = "replicaTokens";

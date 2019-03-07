@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import org.json.JSONObject;
 
 /**
  * The {@link VirtualCloudReplicatorClusterMap} provides a high-level interface to VCR Cluster backed by Helix.
- * In VCR Cluster, {@link PartitionId}s are Helix resources and {@link DataNodeId}s are participants.
+ * In VCR Cluster, {@link PartitionId}s are Helix resources and VCR hosts are Helix participants.
  */
 public interface VirtualCloudReplicatorClusterMap extends AutoCloseable {
 
@@ -79,10 +79,4 @@ public interface VirtualCloudReplicatorClusterMap extends AutoCloseable {
    * information about nodes, partitions and replicas from each datacenter
    */
   JSONObject getSnapshot();
-
-  /**
-   * Close the cluster map. Any cleanups should be done in this call.
-   */
-  @Override
-  void close();
 }

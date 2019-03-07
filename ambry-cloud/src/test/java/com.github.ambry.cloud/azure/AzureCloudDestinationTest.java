@@ -17,8 +17,6 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.config.CloudConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.StorageException;
@@ -28,7 +26,6 @@ import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.security.InvalidKeyException;
-import java.util.Properties;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -47,7 +44,7 @@ import static org.mockito.Mockito.*;
 @RunWith(MockitoJUnitRunner.class)
 public class AzureCloudDestinationTest {
 
-  private CloudConfig configSpec;
+  private String configSpec = "AccountName=ambry;AccountKey=ambry-kay";
   private AzureCloudDestination azureDest;
   private CloudStorageAccount mockAzureAccount;
   private CloudBlobClient mockAzureClient;
@@ -58,9 +55,6 @@ public class AzureCloudDestinationTest {
 
   @Before
   public void setup() throws Exception {
-    Properties props = new Properties();
-    props.setProperty("azure.connection.string", "AccountName=ambry;AccountKey=ambry-kay");
-    configSpec = new CloudConfig(new VerifiableProperties(props));
     mockAzureAccount = mock(CloudStorageAccount.class);
     mockAzureClient = mock(CloudBlobClient.class);
     mockAzureContainer = mock(CloudBlobContainer.class);

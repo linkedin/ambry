@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import java.util.concurrent.ScheduledExecutorService;
 
 
 /**
- * {@link BackupManager} is used to backup partitions to Cloud. Partitions are assigned by Helix Framework.
+ * {@link BackupManager} is used to backup partitions to Cloud. Partitions assignment is handled by Helix.
  */
 public class BackupManager extends ReplicationEngine {
 

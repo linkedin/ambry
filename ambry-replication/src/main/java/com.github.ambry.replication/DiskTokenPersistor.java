@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * {@link DiskTokenPersistor} persists replication token to disk.
+ */
 class DiskTokenPersistor implements ReplicaTokenPersistor {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -34,6 +37,12 @@ class DiskTokenPersistor implements ReplicaTokenPersistor {
   private final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
   private final ReplicationMetrics replicationMetrics;
 
+  /**
+   * Constructor for {@link DiskTokenPersistor}.
+   * @param replicaTokenFileName the token's file name.
+   * @param partitionGroupedByMountPath A map between mount path and list of partitions under this mount path.
+   * @param replicationMetrics metrics includes token persist time.
+   */
   DiskTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
       ReplicationMetrics replicationMetrics) {
     this.replicaTokenFileName = replicaTokenFileName;
@@ -90,11 +99,6 @@ class DiskTokenPersistor implements ReplicaTokenPersistor {
     logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
   }
 
-  /**
-   * Iterates through each mount path and persists all the replica tokens for the partitions on the mount
-   * path to a file. The file is saved on the corresponding mount path
-   * @param shuttingDown indicates whether this is being called as part of shut down
-   */
   @Override
   public void write(boolean shuttingDown) throws IOException, ReplicationException {
     for (String mountPath : partitionGroupedByMountPath.keySet()) {
