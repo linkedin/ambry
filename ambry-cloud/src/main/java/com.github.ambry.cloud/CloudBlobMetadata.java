@@ -14,6 +14,8 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.utils.Utils;
+import java.util.Objects;
 
 
 /**
@@ -27,15 +29,21 @@ public class CloudBlobMetadata {
   public static final String FIELD_ACCOUNT_ID = "accountId";
   public static final String FIELD_CONTAINER_ID = "containerId";
 
-  private final String id;
-  private final String partitionId;
-  private final long creationTime;
-  private final long uploadTime;
-  private final long size;
-  private final int accountId;
-  private final int containerId;
+  private String id;
+  private String partitionId;
+  private long creationTime;
+  private long uploadTime;
+  private long size;
+  private int accountId;
+  private int containerId;
   private long expirationTime;
   private long deletionTime;
+
+  /**
+   * Default constructor (for JSONSerializer).
+   */
+  public CloudBlobMetadata() {
+  }
 
   /**
    * Constructor from {@link BlobId}.
@@ -50,6 +58,8 @@ public class CloudBlobMetadata {
     this.containerId = blobId.getContainerId();
     this.creationTime = creationTime;
     this.uploadTime = System.currentTimeMillis();
+    this.expirationTime = Utils.Infinite_Time;
+    this.deletionTime = Utils.Infinite_Time;
     this.size = size;
   }
 
@@ -61,11 +71,26 @@ public class CloudBlobMetadata {
     return id;
   }
 
+  public CloudBlobMetadata setId(String id) {
+    this.id = id;
+    return this;
+  }
+
   /**
    * @return the partition Id.
    */
   public String getPartitionId() {
     return partitionId;
+  }
+
+  /**
+   * Set the partition Id.
+   * @param partitionId the partition Id of the blob.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setPartitionId(String partitionId) {
+    this.partitionId = partitionId;
+    return this;
   }
 
   /**
@@ -76,10 +101,30 @@ public class CloudBlobMetadata {
   }
 
   /**
+   * Set the creation time.
+   * @param creationTime the creation time of the blob.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setCreationTime(long creationTime) {
+    this.creationTime = creationTime;
+    return this;
+  }
+
+  /**
    * @return the blob upload time.
    */
   public long getUploadTime() {
     return uploadTime;
+  }
+
+  /**
+   * Set the upload time.
+   * @param uploadTime the upload time of the blob.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setUploadTime(long uploadTime) {
+    this.uploadTime = uploadTime;
+    return this;
   }
 
   /**
@@ -124,6 +169,16 @@ public class CloudBlobMetadata {
   }
 
   /**
+   * Set the size.
+   * @param size the size of the blob in bytes.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setSize(long size) {
+    this.size = size;
+    return this;
+  }
+
+  /**
    * @return the account Id.
    */
   public int getAccountId() {
@@ -131,9 +186,40 @@ public class CloudBlobMetadata {
   }
 
   /**
+   * Set the account Id.
+   * @param accountId the account Id of the blob.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setAccountId(int accountId) {
+    this.accountId = accountId;
+    return this;
+  }
+
+  /**
    * @return the container Id.
    */
   public int getContainerId() {
     return containerId;
+  }
+
+  /**
+   * Set the container Id.
+   * @param containerId the container Id of the blob.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setContainerId(int containerId) {
+    this.containerId = containerId;
+    return this;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (!(o instanceof CloudBlobMetadata)) {
+      return false;
+    }
+    CloudBlobMetadata om = (CloudBlobMetadata) o;
+    return (Objects.equals(id, om.id) && Objects.equals(partitionId, om.partitionId) && creationTime == om.creationTime
+        && uploadTime == om.uploadTime && expirationTime == om.expirationTime && deletionTime == om.deletionTime
+        && size == om.size && accountId == om.accountId && containerId == om.containerId);
   }
 }

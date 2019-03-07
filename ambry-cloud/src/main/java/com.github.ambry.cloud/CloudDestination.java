@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
 import java.io.InputStream;
+import java.util.List;
 
 
 /**
@@ -51,6 +52,13 @@ public interface CloudDestination {
    * @throws CloudStorageException if the update encounters an error.
    */
   boolean updateBlobExpiration(BlobId blobId, long expirationTime) throws CloudStorageException;
+
+  /**
+   * Query the blob metadata for the specified blobs.
+   * @param blobIds list of blob Ids to query.
+   * @return a list of {@link CloudBlobMetadata} of the blobs for which metadata exists.
+   */
+  List<CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds);
 
   /**
    * Checks whether the blob exists in the cloud destination.

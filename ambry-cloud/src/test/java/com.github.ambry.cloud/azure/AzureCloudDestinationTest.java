@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -24,6 +25,9 @@ import com.github.ambry.utils.Utils;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
+import com.microsoft.azure.documentdb.FeedOptions;
+import com.microsoft.azure.documentdb.FeedResponse;
+import com.microsoft.azure.documentdb.QueryIterable;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
 import com.microsoft.azure.storage.CloudStorageAccount;
@@ -34,7 +38,9 @@ import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.security.InvalidKeyException;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Properties;
 import org.junit.Before;
 import org.junit.Test;
@@ -52,7 +58,8 @@ import static org.mockito.Mockito.*;
 @RunWith(MockitoJUnitRunner.class)
 public class AzureCloudDestinationTest {
 
-  private String configSpec = "AccountName=ambry;AccountKey=ambry-kay";
+  private final String configSpec = "AccountName=ambry;AccountKey=ambry-kay";
+  private final ObjectMapper objectMapper = new ObjectMapper();
   private AzureCloudDestination azureDest;
   private CloudStorageAccount mockAzureAccount;
   private CloudBlobClient mockAzureClient;
@@ -141,7 +148,24 @@ public class AzureCloudDestinationTest {
   @Test
   public void testUpdateNotExists() throws Exception {
     when(mockBlob.exists()).thenReturn(false);
-    assertFalse("Update of nonexistent blob should return false", azureDest.updateBlobExpiration(blobId, expirationTime));
+    assertFalse("Update of nonexistent blob should return false",
+        azureDest.updateBlobExpiration(blobId, expirationTime));
+  }
+
+  /** Test querying metadata. */
+  @Test
+  public void testQueryMetadata() throws Exception {
+    QueryIterable<Document> mockIterable = mock(QueryIterable.class);
+    CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, blobSize);
+    List<Document> docList = Collections.singletonList(new Document(objectMapper.writeValueAsString(inputMetadata)));
+    when(mockIterable.toList()).thenReturn(docList);
+    FeedResponse<Document> feedResponse = mock(FeedResponse.class);
+    when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
+    when(mockumentClient.queryDocuments(anyString(), anyString(), any(FeedOptions.class))).thenReturn(feedResponse);
+    List<CloudBlobMetadata> metadataList = azureDest.getBlobMetadata(Collections.singletonList(blobId));
+    assertEquals(1, metadataList.size());
+    CloudBlobMetadata outputMetadata = metadataList.get(0);
+    assertEquals(inputMetadata, outputMetadata);
   }
 
   /** Test blob existence check. */
@@ -209,7 +233,8 @@ public class AzureCloudDestinationTest {
     when(mockBlob.exists()).thenReturn(true);
     when(mockumentClient.readDocument(anyString(), any())).thenThrow(DocumentClientException.class);
     expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime), DocumentClientException.class);
-    expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime), DocumentClientException.class);
+    expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
+        DocumentClientException.class);
   }
 
   /**

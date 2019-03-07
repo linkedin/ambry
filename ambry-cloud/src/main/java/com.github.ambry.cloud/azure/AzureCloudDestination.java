@@ -24,6 +24,8 @@ import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.FeedOptions;
+import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.PartitionKey;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
@@ -39,8 +41,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -146,6 +151,27 @@ class AzureCloudDestination implements CloudDestination {
   @Override
   public boolean updateBlobExpiration(BlobId blobId, long expirationTime) throws CloudStorageException {
     return updateBlobMetadata(blobId, CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime);
+  }
+
+  @Override
+  public List<CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) {
+    Objects.requireNonNull(blobIds, "BlobIds cannot be null");
+    if (blobIds.isEmpty()) {
+      return Collections.emptyList();
+    }
+    char dq = '"';
+    String quotedBlobIds =
+        String.join(",", blobIds.stream().map(s -> dq + s.getID() + dq).collect(Collectors.toList()));
+    String querySpec =
+        new StringBuilder("SELECT * FROM c WHERE c.id in (").append(quotedBlobIds).append(")").toString();
+    FeedOptions feedOptions = new FeedOptions();
+    feedOptions.setPartitionKey(new PartitionKey(blobIds.get(0).getPartition().toPathString()));
+    FeedResponse<Document> response = documentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions);
+    return response.getQueryIterable()
+        .toList()
+        .stream()
+        .map(doc -> doc.toObject(CloudBlobMetadata.class))
+        .collect(Collectors.toList());
   }
 
   /**
