@@ -251,6 +251,7 @@ class StatsManager {
    */
   String getNodeStatsInJSON(StatsReportType statsReportType) {
     String statsWrapperJSON = "";
+    logger.info("Aggregating node-level stats for Helix report");
     try {
       long totalFetchAndAggregateStartTimeMs = time.milliseconds();
       StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<>());
@@ -286,10 +287,11 @@ class StatsManager {
       combinedSnapshot.setValue(totalValue);
       List<String> examinedUnreachableStores = examineUnreachablePartitions(unreachablePartitions);
       metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-      StatsHeader statsHeader =
-          new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(), partitionsBeforeAggregation.size(),
-              partitionsBeforeAggregation.size() - unreachablePartitions.size(), examinedUnreachableStores);
+      StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
+          partitionsBeforeAggregation.size(), partitionsBeforeAggregation.size() - unreachablePartitions.size(),
+          examinedUnreachableStores);
       statsWrapperJSON = mapper.writeValueAsString(new StatsWrapper(statsHeader, combinedSnapshot));
+      logger.info("Node-level stats aggregated for Helix report");
     } catch (Exception | Error e) {
       metrics.statsAggregationFailureCount.inc();
       logger.error("Exception while aggregating stats for Helix report", e);
@@ -319,7 +321,7 @@ class StatsManager {
         List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-          StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(),
+          StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
               partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
               unreachableStores);
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));

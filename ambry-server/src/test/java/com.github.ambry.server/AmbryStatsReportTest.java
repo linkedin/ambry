@@ -19,7 +19,6 @@ import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.MockTime;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.Properties;
 import org.junit.Test;
@@ -31,7 +30,7 @@ public class AmbryStatsReportTest {
   private static final long AGGREGATE_INTERVAL_MINS = 60;
 
   @Test
-  public void testAmbryStatsReport() throws StoreException, IOException {
+  public void testAmbryStatsReport() throws StoreException {
     StatsManagerConfig config = new StatsManagerConfig(new VerifiableProperties(new Properties()));
     StatsManager testStatsManager =
         new StatsManager(new StatsManagerTest.MockStorageManager(Collections.emptyMap()), Collections.emptyList(),

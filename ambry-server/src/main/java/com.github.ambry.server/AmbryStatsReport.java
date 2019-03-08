@@ -22,8 +22,8 @@ import org.apache.helix.healthcheck.HealthReportProvider;
 /**
  * Customized Helix Health Report for collecting account usage stats per node (instance).
  */
-class AmbryStatsReport extends HealthReportProvider implements AmbryHealthReport {
-  private static final String REPORT_NAME_SUFFIX = "Report";
+public class AmbryStatsReport extends HealthReportProvider implements AmbryHealthReport {
+  public static final String REPORT_NAME_SUFFIX = "Report";
   private static final String STATS_FIELD_SUFFIX = "Stats";
   private final String reportName;
   private final String statsFieldName;
@@ -34,13 +34,9 @@ class AmbryStatsReport extends HealthReportProvider implements AmbryHealthReport
   AmbryStatsReport(StatsManager statsManager, long aggregatePeriodInMinutes, StatsReportType type) {
     this.statsManager = statsManager;
     this.aggregatePeriodInMinutes = aggregatePeriodInMinutes;
-    StringBuilder sb = new StringBuilder();
-    String[] reportTypeStrs = type.toString().split("_");
-    for (int i = 0; i < reportTypeStrs.length - 1; ++i) {
-      sb.append(toProperCase(reportTypeStrs[i]));
-    }
-    reportName = sb.toString() + REPORT_NAME_SUFFIX;
-    statsFieldName = sb.toString() + STATS_FIELD_SUFFIX;
+    String reportTypeStr = convertStatsReportTypeToProperString(type);
+    reportName = reportTypeStr + REPORT_NAME_SUFFIX;
+    statsFieldName = reportTypeStr + STATS_FIELD_SUFFIX;
     statsReportType = type;
   }
 
@@ -81,11 +77,27 @@ class AmbryStatsReport extends HealthReportProvider implements AmbryHealthReport
   }
 
   /**
+   * Convert input stats report type to proper format (i.e PARTITION_CLASS_REPORT -> PartitionClass). That is:
+   * 1. remove underscores.
+   * 2. capitalize first letter and keep remaining letters lowercase.
+   * @param type the stats report type.
+   * @return converted string.
+   */
+  public static String convertStatsReportTypeToProperString(StatsReportType type) {
+    StringBuilder sb = new StringBuilder();
+    String[] reportTypeStrs = type.toString().split("_");
+    for (int i = 0; i < reportTypeStrs.length - 1; ++i) {
+      sb.append(toProperCase(reportTypeStrs[i]));
+    }
+    return sb.toString();
+  }
+
+  /**
    * Convert input string to proper format. That is, capitalize first letter and keep remaining letters lowercase.
    * @param s the input string to convert.
    * @return capitalized string.
    */
-  private String toProperCase(String s) {
+  private static String toProperCase(String s) {
     return s.substring(0, 1).toUpperCase() + s.substring(1).toLowerCase();
   }
 }

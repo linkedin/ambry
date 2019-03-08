@@ -14,14 +14,18 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.Config;
+import com.github.ambry.config.Default;
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.AmbryStatsReport;
+import com.github.ambry.server.StatsReportType;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.task.JobConfig;
@@ -32,113 +36,157 @@ import org.apache.helix.task.Workflow;
 
 
 /**
- * This tool triggers a one-time cluster wide stats aggregation as a generic job (executed by a random live instance).
+ * This tool triggers a one-time/recurrent cluster wide stats aggregation as a generic job (executed by a random live instance).
  */
 public class HelixClusterWideAggregationTool {
   private static int SESSION_TIMEOUT = (int) TimeUnit.SECONDS.toMillis(30);
   private static int CONNECTION_TIMEOUT = (int) TimeUnit.SECONDS.toMillis(120);
-  private static String REPORT_NAME = "QuotaReport";
-  private static String TASK_ID = "aggregate_task";
-  private static String ONE_TIME_JOB_ID = "one_time_aggregate_job";
-  private static String RECURRENT_JOB_ID = "recurrent_aggregate_job";
+  private static String TASK_SUFFIX = "_aggregate_task";
+  private static String ONE_TIME_JOB_SUFFIX = "_one_time";
+  private static String RECURRENT_JOB_SUFFIX = "_recurrent";
+  private static long TIME_OUT_MILLI_SEC = 10000L;
 
   /**
-   * @param args takes in three mandatory arguments: the ZK layout, the cluster name, the workflow name. Optional
-   *             argument to create the workflow as a recurrent workflow and specifies the recurrent time interval.
-   *             The ZK layout has to be of the following form:
-   *             {
-   *               "zkInfo" : [
-   *                 {
-   *                   "datacenter":"dc1",
-   *                    "id" : "1",
-   *                   "zkConnectStr":"abc.example.com:2199",
-   *                 },
-   *                 {
-   *                   "datacenter":"dc2",
-   *                   "id" : "2",
-   *                   "zkConnectStr":"def.example.com:2300",
-   *                 }
-   *               ]
-   *             }
+   * Config for the HelixClusterWideAggregationTool.
+   */
+  private static class AggregationToolConfig {
+
+    /**
+     * The path to the zookeeper layout file.
+     * The ZK layout has to be of the following form:
+     *             {
+     *               "zkInfo" : [
+     *                 {
+     *                   "datacenter":"dc1",
+     *                    "id" : "1",
+     *                   "zkConnectStr":"abc.example.com:2199",
+     *                 },
+     *                 {
+     *                   "datacenter":"dc2",
+     *                   "id" : "2",
+     *                   "zkConnectStr":"def.example.com:2300",
+     *                 }
+     *               ]
+     *             }
+     */
+    @Config("zk.layout.file.path")
+    @Default("")
+    final String zkLayoutFilePath;
+
+    /**
+     * The cluster name in helix
+     */
+    @Config("cluster.name")
+    @Default("")
+    final String clusterName;
+
+    /**
+     * The name of the one-time/recurrent workflow
+     */
+    @Config("workflow.name")
+    @Default("")
+    final String workflowName;
+
+    /**
+     * The type of stats report {@link StatsReportType} to aggregate
+     */
+    @Config("stats.reports.to.aggregate")
+    @Default("")
+    final List<String> statsReportsToAggregate;
+
+    /**
+     * The period of recurrent workflow in minutes
+     */
+    @Config("recurrent.interval.in.minutes")
+    @Default("Long.MAX_VALUE")
+    final long recurrentIntervalInMinutes;
+
+    /**
+     * Flag to remove the specified workflow from the cluster(s) instead of creating one
+     */
+    @Config("delete.specified.workflow")
+    @Default("false")
+    final boolean deleteSpecifiedWorkflow;
+
+    /**
+     * Constructs the configs associated with the tool.
+     * @param verifiableProperties the props to use to load the config.
+     */
+    AggregationToolConfig(VerifiableProperties verifiableProperties) {
+      zkLayoutFilePath = verifiableProperties.getString("zk.layout.file.path", "");
+      clusterName = verifiableProperties.getString("cluster.name", "");
+      workflowName = verifiableProperties.getString("workflow.name", "");
+      recurrentIntervalInMinutes =
+          verifiableProperties.getLongInRange("recurrent.interval.in.minutes", Long.MAX_VALUE, 1, Long.MAX_VALUE);
+      deleteSpecifiedWorkflow = verifiableProperties.getBoolean("delete.specified.workflow", false);
+      statsReportsToAggregate =
+          Arrays.asList(verifiableProperties.getString("stats.reports.to.aggregate", "").split(","));
+    }
+  }
+
+  /**
+   * Runs the cluster wide aggregation tool
+   * @param args arguments specifying config file. For example: --propsFile /path/AggregationToolConfig
    * @throws Exception
    */
   public static void main(String args[]) throws Exception {
-    OptionParser parser = new OptionParser();
-
-    ArgumentAcceptingOptionSpec<String> zkLayoutPathOpt = parser.accepts("zkLayoutPath",
-        "The path to the json file containing zookeeper connect info. This should be of the following form: \n{\n"
-            + "  \"zkInfo\" : [\n" + "     {\n" + "       \"datacenter\":\"dc1\",\n" + "       \"id\":\"1\",\n"
-            + "       \"zkConnectStr\":\"abc.example.com:2199\",\n" + "     },\n" + "     {\n"
-            + "       \"datacenter\":\"dc2\",\n" + "       \"id\":\"2\",\n"
-            + "       \"zkConnectStr\":\"def.example.com:2300\",\n" + "     },\n" + "     {\n"
-            + "       \"datacenter\":\"dc3\",\n" + "       \"id\":\"3\",\n"
-            + "       \"zkConnectStr\":\"ghi.example.com:2400\",\n" + "     }\n" + "  ]\n" + "}").
-        withRequiredArg().
-        describedAs("zk_connect_info_path").
-        ofType(String.class);
-
-    ArgumentAcceptingOptionSpec<String> clusterNameOpt = parser.accepts("clusterName", "The cluster name in helix")
-        .withRequiredArg()
-        .describedAs("cluster_name")
-        .ofType(String.class);
-
-    ArgumentAcceptingOptionSpec<String> workflowNameOpt =
-        parser.accepts("workflowName", "The name of the one-time workflow")
-            .withRequiredArg()
-            .describedAs("workflow_name")
-            .ofType(String.class);
-
-    ArgumentAcceptingOptionSpec<Long> recurrentIntervalInMinutesOpt =
-        parser.accepts("recurrentIntervalInMinutes", "The frequency for the recurrent workflow")
-            .withOptionalArg()
-            .describedAs("recurrent_interval_in_minutes")
-            .ofType(Long.class)
-            .defaultsTo(Utils.Infinite_Time);
-
-    parser.accepts("delete", "Flag to remove the given workflow from the cluster(s) instead of creating one");
-
-    OptionSet options = parser.parse(args);
-    Boolean isDelete = options.has("delete");
-    String zkLayoutPath = options.valueOf(zkLayoutPathOpt);
-    String clusterName = options.valueOf(clusterNameOpt);
-    String workflowName = options.valueOf(workflowNameOpt);
-    Long recurrentIntervalInMinutes = options.valueOf(recurrentIntervalInMinutesOpt);
+    VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
+    AggregationToolConfig config = new AggregationToolConfig(verifiableProperties);
     Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZKAddress =
-        ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
+        ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(config.zkLayoutFilePath));
+    String clusterName = config.clusterName;
+    String workflowName = config.workflowName;
+    Long recurrentIntervalInMinutes = config.recurrentIntervalInMinutes;
+    boolean isDelete = config.deleteSpecifiedWorkflow;
+    boolean isRecurrentWorkflow = recurrentIntervalInMinutes != Utils.Infinite_Time;
     for (ClusterMapUtils.DcZkInfo zkInfo : dataCenterToZKAddress.values()) {
       String zkAddress = zkInfo.getZkConnectStr();
       ZkClient zkClient = new ZkClient(zkAddress, SESSION_TIMEOUT, CONNECTION_TIMEOUT, new ZNRecordSerializer());
       TaskDriver taskDriver = new TaskDriver(zkClient, clusterName);
       if (isDelete) {
         try {
-          taskDriver.stop(workflowName);
+          taskDriver.waitToStop(workflowName, TIME_OUT_MILLI_SEC);
           taskDriver.delete(workflowName);
+          System.out.println(
+              String.format("Successfully deleted the workflow: %s in cluster %s at %s", workflowName, clusterName,
+                  zkAddress));
         } catch (Exception | Error e) {
           System.out.println(
               String.format("Failed to delete %s. Workflow not found in cluster %s at %s", workflowName, clusterName,
                   zkAddress));
         }
-        System.out.println(String.format("Successfully delete the workflow: %s from %s", workflowName, clusterName));
       } else {
+        Workflow.Builder workflowBuilder = new Workflow.Builder(workflowName);
         try {
-          Workflow.Builder workflowBuilder = new Workflow.Builder(workflowName);
-          String jobId = ONE_TIME_JOB_ID;
-          if (recurrentIntervalInMinutes != Utils.Infinite_Time) {
-            jobId = RECURRENT_JOB_ID;
+          // create separate job for each type of stats report
+          for (String report : config.statsReportsToAggregate) {
+            StatsReportType statsType = StatsReportType.valueOf(report);
+            String reportName =
+                AmbryStatsReport.convertStatsReportTypeToProperString(statsType) + AmbryStatsReport.REPORT_NAME_SUFFIX;
+            String jobId =
+                statsType.toString().toLowerCase() + (isRecurrentWorkflow ? RECURRENT_JOB_SUFFIX : ONE_TIME_JOB_SUFFIX);
+            String taskId = statsType.toString().toLowerCase() + TASK_SUFFIX;
+            String aggregationCommand =
+                String.format("%s_%s", HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, reportName);
+            // build task
+            List<TaskConfig> taskConfigs = new ArrayList<>();
+            taskConfigs.add(new TaskConfig.Builder().setTaskId(taskId).setCommand(aggregationCommand).build());
+            // build job
+            JobConfig.Builder jobConfigBuilder = new JobConfig.Builder();
+            jobConfigBuilder.addTaskConfigs(taskConfigs);
+            jobConfigBuilder.setCommand(aggregationCommand);
+            // add job into workflow
+            workflowBuilder.addJob(jobId, jobConfigBuilder);
+          }
+          if (isRecurrentWorkflow) {
             workflowBuilder.setScheduleConfig(
                 ScheduleConfig.recurringFromNow(TimeUnit.MINUTES, recurrentIntervalInMinutes));
             workflowBuilder.setExpiry(TimeUnit.MINUTES.toMillis(recurrentIntervalInMinutes));
           }
-          JobConfig.Builder jobConfigBuilder = new JobConfig.Builder();
-          List<TaskConfig> taskConfigs = new ArrayList<>();
-          taskConfigs.add(new TaskConfig.Builder().setTaskId(TASK_ID)
-              .setCommand(String.format("%s_%s", HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, REPORT_NAME))
-              .build());
-          jobConfigBuilder.addTaskConfigs(taskConfigs);
-          workflowBuilder.addJob(jobId, jobConfigBuilder);
           Workflow workflow = workflowBuilder.build();
           taskDriver.start(workflow);
-          System.out.println(String.format("%s_%s started successfully", workflowName, jobId));
+          System.out.println(
+              String.format("%s started successfully in cluster %s at %s", workflowName, clusterName, zkAddress));
         } catch (Exception | Error e) {
           System.out.println(
               String.format("Failed to start %s in cluster %s at %s", workflowName, clusterName, zkAddress));

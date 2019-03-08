@@ -435,8 +435,8 @@ class BlobStoreStats implements StoreStats, Closeable {
         if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !indexValue.isFlagSet(
             IndexValue.Flags.Delete_Index)) {
           // delete and TTL update records does not count towards valid data size for usage (containers)
-          updateNestedMapHelper(validDataSizePerContainer, "Account[" + indexValue.getAccountId() + "]",
-              "Container[" + indexValue.getContainerId() + "]", indexValue.getSize());
+          updateNestedMapHelper(validDataSizePerContainer, "A[" + indexValue.getAccountId() + "]",
+              "C[" + indexValue.getContainerId() + "]", indexValue.getSize());
         }
       }
       metrics.statsOnDemandScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTimeMs,
@@ -718,7 +718,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       int operator) {
     if (isWithinRange(results.containerForecastStartTimeMs, results.containerLastBucketTimeMs, expOrDelTimeInMs)) {
       results.updateContainerBucket(results.getContainerBucketKey(expOrDelTimeInMs),
-          "Account[" + indexValue.getAccountId() + "]", "Container[" + indexValue.getContainerId() + "]",
+          "A[" + indexValue.getAccountId() + "]", "C[" + indexValue.getContainerId() + "]",
           indexValue.getSize() * operator);
     }
   }
@@ -746,8 +746,8 @@ class BlobStoreStats implements StoreStats, Closeable {
   private void processNewPut(ScanResults results, IndexValue putValue) {
     long expiresAtMs = putValue.getExpiresAtMs();
     if (!isExpired(expiresAtMs, results.containerForecastStartTimeMs)) {
-      results.updateContainerBaseBucket("Account[" + putValue.getAccountId() + "]",
-          "Container[" + putValue.getContainerId() + "]", putValue.getSize());
+      results.updateContainerBaseBucket("A[" + putValue.getAccountId() + "]", "C[" + putValue.getContainerId() + "]",
+          putValue.getSize());
       if (expiresAtMs != Utils.Infinite_Time) {
         handleContainerBucketUpdate(results, putValue, expiresAtMs, SUBTRACT);
       }
@@ -808,8 +808,8 @@ class BlobStoreStats implements StoreStats, Closeable {
       if (!indexValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !indexValue.isFlagSet(
           IndexValue.Flags.Delete_Index)) {
         // delete and TTL update records does not count towards valid data size for usage (containers)
-        results.updateContainerBaseBucket("Account[" + indexValue.getAccountId() + "]",
-            "Container[" + indexValue.getContainerId() + "]", indexValue.getSize());
+        results.updateContainerBaseBucket("A[" + indexValue.getAccountId() + "]",
+            "C[" + indexValue.getContainerId() + "]", indexValue.getSize());
         long expOrDelTimeInMs = indexValue.getExpiresAtMs();
         if (deletedKeys.containsKey(indexEntry.getKey())) {
           long deleteTimeInMs = deletedKeys.get(indexEntry.getKey());
