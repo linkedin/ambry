@@ -21,16 +21,25 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.microsoft.azure.documentdb.Document;
+import com.microsoft.azure.documentdb.DocumentClient;
+import com.microsoft.azure.documentdb.FeedOptions;
+import com.microsoft.azure.documentdb.FeedResponse;
+import com.microsoft.azure.documentdb.PartitionKey;
+import com.microsoft.azure.documentdb.RequestOptions;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.commons.BlobId.*;
 import static org.junit.Assert.*;
@@ -48,17 +57,20 @@ import static org.junit.Assert.*;
 @Ignore
 public class AzureIntegrationTest {
 
+  private static final Logger logger = LoggerFactory.getLogger(AzureIntegrationTest.class);
   private AzureCloudDestination azureDest;
   private int blobSize = 1024;
   private byte dataCenterId = 66;
   private short accountId = 101;
   private short containerId = 5;
+  private String cosmosCollectionLink;
 
   @Before
   public void setup() throws Exception {
 
     VerifiableProperties verProps = new VerifiableProperties(System.getProperties());
     azureDest = new AzureCloudDestination(verProps);
+    cosmosCollectionLink = verProps.getString(AzureCloudDestination.COSMOS_COLLECTION_LINK);
   }
 
   /**
@@ -76,11 +88,11 @@ public class AzureIntegrationTest {
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     long expirationTime = Utils.Infinite_Time;
     assertTrue("Expected update to return true", azureDest.updateBlobExpiration(blobId, expirationTime));
-    CloudBlobMetadata metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(0);
+    CloudBlobMetadata metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
     assertEquals(expirationTime, metadata.getExpirationTime());
     long deletionTime = System.currentTimeMillis() + 1000;
     assertTrue("Expected deletion to return true", azureDest.deleteBlob(blobId, deletionTime));
-    metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(0);
+    metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
     assertEquals(deletionTime, metadata.getDeletionTime());
   }
 
@@ -91,7 +103,8 @@ public class AzureIntegrationTest {
   @Test
   public void testBatchQuery() throws Exception {
     int numBlobs = 100;
-    PartitionId partitionId = new MockPartitionId(666, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    long partition = 666;
+    PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     List<BlobId> blobIdList = new ArrayList<>();
     long creationTime = System.currentTimeMillis();
     for (int j = 0; j < numBlobs; j++) {
@@ -105,14 +118,32 @@ public class AzureIntegrationTest {
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     }
 
-    List<CloudBlobMetadata> metadataList = azureDest.getBlobMetadata(blobIdList);
-    assertEquals(numBlobs, metadataList.size());
-    for (CloudBlobMetadata metadata : metadataList) {
-      assertEquals(accountId, metadata.getAccountId());
-      assertEquals(containerId, metadata.getContainerId());
-      assertEquals(partitionId.toPathString(), metadata.getPartitionId());
-      assertEquals(creationTime, metadata.getCreationTime());
+    Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(blobIdList);
+    assertEquals("Unexpected size of returned metadata map", numBlobs, metadataMap.size());
+    for (BlobId blobId : blobIdList) {
+      CloudBlobMetadata metadata = metadataMap.get(blobId.getID());
+      assertNotNull("No metadata found for blobId: " + blobId);
+      assertEquals("Unexpected metadata id", blobId.getID(), metadata.getId());
+      assertEquals("Unexpected metadata accountId", accountId, metadata.getAccountId());
+      assertEquals("Unexpected metadata containerId", containerId, metadata.getContainerId());
+      assertEquals("Unexpected metadata partitionId", partitionId.toPathString(), metadata.getPartitionId());
+      assertEquals("Unexpected metadata creationTime", creationTime, metadata.getCreationTime());
     }
+
+    // Cleanup
+    DocumentClient documentClient = azureDest.getDocumentClient();
+    FeedOptions feedOptions = new FeedOptions();
+    feedOptions.setPartitionKey(new PartitionKey(partitionId.toPathString()));
+    RequestOptions requestOptions = new RequestOptions();
+    requestOptions.setPartitionKey(feedOptions.getPartitionKey());
+    FeedResponse<Document> feedResponse =
+        documentClient.queryDocuments(cosmosCollectionLink, "SELECT * FROM c", feedOptions);
+    int numDeletes = 0;
+    for (Document document : feedResponse.getQueryIterable().toList()) {
+      documentClient.deleteDocument(document.getSelfLink(), requestOptions);
+      numDeletes++;
+    }
+    logger.info("Deleted {} metadata documents in partition {}", numDeletes, partitionId.toPathString());
   }
 
   /**

@@ -41,6 +41,7 @@ import java.security.InvalidKeyException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import org.junit.Before;
 import org.junit.Test;
@@ -158,14 +159,15 @@ public class AzureCloudDestinationTest {
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
     CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, blobSize);
     List<Document> docList = Collections.singletonList(new Document(objectMapper.writeValueAsString(inputMetadata)));
-    when(mockIterable.toList()).thenReturn(docList);
+    //when(mockIterable.toList()).thenReturn(docList);
+    when(mockIterable.iterator()).thenReturn(docList.iterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
     when(mockumentClient.queryDocuments(anyString(), anyString(), any(FeedOptions.class))).thenReturn(feedResponse);
-    List<CloudBlobMetadata> metadataList = azureDest.getBlobMetadata(Collections.singletonList(blobId));
-    assertEquals(1, metadataList.size());
-    CloudBlobMetadata outputMetadata = metadataList.get(0);
-    assertEquals(inputMetadata, outputMetadata);
+    Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(Collections.singletonList(blobId));
+    assertEquals("Expected single entry", 1, metadataMap.size());
+    CloudBlobMetadata outputMetadata = metadataMap.get(blobId.getID());
+    assertEquals("Returned metadata does not match original", inputMetadata, outputMetadata);
   }
 
   /** Test blob existence check. */

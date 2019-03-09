@@ -16,6 +16,7 @@ package com.github.ambry.cloud;
 import com.github.ambry.commons.BlobId;
 import java.io.InputStream;
 import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -56,9 +57,10 @@ public interface CloudDestination {
   /**
    * Query the blob metadata for the specified blobs.
    * @param blobIds list of blob Ids to query.
-   * @return a list of {@link CloudBlobMetadata} of the blobs for which metadata exists.
+   * @return a {@link Map} of blobId strings to {@link CloudBlobMetadata}.  If metadata for a blob could not be found,
+   * it will not be included in the returned map.
    */
-  List<CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds);
+  Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException;
 
   /**
    * Checks whether the blob exists in the cloud destination.

@@ -44,6 +44,7 @@ import java.security.InvalidKeyException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -56,7 +57,8 @@ import org.slf4j.LoggerFactory;
 @SuppressWarnings({"ALL", "MagicConstant"})
 class AzureCloudDestination implements CloudDestination {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(AzureCloudDestination.class);
+  private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
+  private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
   private final DocumentClient documentClient;
@@ -93,7 +95,7 @@ class AzureCloudDestination implements CloudDestination {
     } catch (DocumentClientException ex) {
       throw new IllegalArgumentException("Invalid CosmosDB properties", ex);
     }
-    LOGGER.info("Created Azure destination");
+    logger.info("Created Azure destination");
   }
 
   /**
@@ -112,6 +114,14 @@ class AzureCloudDestination implements CloudDestination {
     azureBlobClient = azureAccount.createCloudBlobClient();
   }
 
+  /**
+   * For integration test
+   * @return the CosmosDB DocumentClient.
+   */
+  DocumentClient getDocumentClient() {
+    return documentClient;
+  }
+
   @Override
   public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) throws CloudStorageException {
@@ -126,7 +136,7 @@ class AzureCloudDestination implements CloudDestination {
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobId.getID());
 
       if (azureBlob.exists()) {
-        LOGGER.debug("Skipping upload of blob {} as it already exists in Azure container {}.", blobId,
+        logger.debug("Skipping upload of blob {} as it already exists in Azure container {}.", blobId,
             azureContainer.getName());
         return false;
       }
@@ -136,7 +146,7 @@ class AzureCloudDestination implements CloudDestination {
 
       documentClient.createDocument(cosmosCollectionLink, cloudBlobMetadata, defaultRequestOptions, true);
 
-      LOGGER.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
+      logger.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
       return true;
     } catch (URISyntaxException | StorageException | DocumentClientException | IOException e) {
       throw new CloudStorageException("Failed to upload blob: " + blobId, e);
@@ -154,24 +164,31 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) {
-    Objects.requireNonNull(blobIds, "BlobIds cannot be null");
+  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
+    Objects.requireNonNull(blobIds, "blobIds cannot be null");
     if (blobIds.isEmpty()) {
-      return Collections.emptyList();
+      return Collections.emptyMap();
     }
-    char dq = '"';
     String quotedBlobIds =
-        String.join(",", blobIds.stream().map(s -> dq + s.getID() + dq).collect(Collectors.toList()));
-    String querySpec =
-        new StringBuilder("SELECT * FROM c WHERE c.id in (").append(quotedBlobIds).append(")").toString();
+        String.join(",", blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.toList()));
+    String querySpec = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
     FeedOptions feedOptions = new FeedOptions();
     feedOptions.setPartitionKey(new PartitionKey(blobIds.get(0).getPartition().toPathString()));
     FeedResponse<Document> response = documentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions);
-    return response.getQueryIterable()
-        .toList()
-        .stream()
-        .map(doc -> doc.toObject(CloudBlobMetadata.class))
-        .collect(Collectors.toList());
+    try {
+      // Note: internal query iterator wraps DocumentClientException in IllegalStateException!
+      Map<String, CloudBlobMetadata> metadataMap = new HashMap<>();
+      response.getQueryIterable()
+          .iterator()
+          .forEachRemaining(doc -> metadataMap.put(doc.getId(), doc.toObject(CloudBlobMetadata.class)));
+      return metadataMap;
+    } catch (RuntimeException rex) {
+      if (rex.getCause() instanceof DocumentClientException) {
+        throw new CloudStorageException("Failed to query blob metadata", rex.getCause());
+      } else {
+        throw rex;
+      }
+    }
   }
 
   /**
@@ -195,7 +212,7 @@ class AzureCloudDestination implements CloudDestination {
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobId.getID());
 
       if (!azureBlob.exists()) {
-        LOGGER.debug("Blob {} not found in Azure container {}.", blobId, azureContainer.getName());
+        logger.debug("Blob {} not found in Azure container {}.", blobId, azureContainer.getName());
         return false;
       }
       azureBlob.downloadAttributes(); // Makes sure we have latest
@@ -209,12 +226,12 @@ class AzureCloudDestination implements CloudDestination {
       //CloudBlobMetadata blobMetadata = response.getResource().toObject(CloudBlobMetadata.class);
       Document doc = response.getResource();
       if (doc == null) {
-        LOGGER.warn("Blob metadata record not found: " + docLink);
+        logger.warn("Blob metadata record not found: " + docLink);
         return false;
       }
       doc.set(fieldName, value);
       documentClient.replaceDocument(doc, options);
-      LOGGER.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
+      logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
       return true;
     } catch (URISyntaxException | StorageException | DocumentClientException e) {
       throw new CloudStorageException("Failed to update blob metadata: " + blobId, e);

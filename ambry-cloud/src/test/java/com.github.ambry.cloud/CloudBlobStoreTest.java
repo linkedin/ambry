@@ -28,7 +28,9 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import org.junit.Before;
@@ -113,16 +115,19 @@ public class CloudBlobStoreTest {
   public void testFindMissingKeys() throws Exception {
     int count = 10;
     List<StoreKey> keys = new ArrayList<>();
+    Map<String, CloudBlobMetadata> metadataMap = new HashMap<>();
     for (int j = 0; j < count; j++) {
-      BlobId blobId = getUniqueId(refAccountId, refContainerId);
-      when(dest.doesBlobExist(eq(blobId))).thenReturn(true);
-      keys.add(blobId);
-      blobId = getUniqueId(refAccountId, refContainerId);
-      when(dest.doesBlobExist(eq(blobId))).thenReturn(false);
-      keys.add(blobId);
+      // Blob with metadata
+      BlobId existentBlobId = getUniqueId(refAccountId, refContainerId);
+      keys.add(existentBlobId);
+      metadataMap.put(existentBlobId.getID(), new CloudBlobMetadata(existentBlobId, operationTime, 1024));
+      // Blob without metadata
+      BlobId nonexistentBlobId = getUniqueId(refAccountId, refContainerId);
+      keys.add(nonexistentBlobId);
     }
+    when(dest.getBlobMetadata(anyList())).thenReturn(metadataMap);
     Set<StoreKey> missingKeys = store.findMissingKeys(keys);
-    verify(dest, times(count * 2)).doesBlobExist(any(BlobId.class));
+    verify(dest).getBlobMetadata(anyList());
     assertEquals("Wrong number of missing keys", count, missingKeys.size());
   }
 
@@ -161,7 +166,7 @@ public class CloudBlobStoreTest {
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(
         new CloudStorageException("ouch"));
     when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(new CloudStorageException("ouch"));
-    when(exDest.doesBlobExist(any(BlobId.class))).thenThrow(new CloudStorageException("ouch"));
+    when(exDest.getBlobMetadata(anyList())).thenThrow(new CloudStorageException("ouch"));
     CloudBlobStore exStore = new CloudBlobStore(partitionId, null, exDest);
     exStore.start();
     List<StoreKey> keys = Collections.singletonList(getUniqueId(refAccountId, refContainerId));
