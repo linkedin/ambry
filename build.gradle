@@ -219,8 +219,7 @@ project(':ambry-replication') {
                 project(':ambry-store'),
                 project(':ambry-commons'),
                 project(':ambry-protocol'),
-                project(':ambry-network'),
-                project(':ambry-cloud')
+                project(':ambry-network')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-api').sourceSets.test.output
@@ -331,7 +330,8 @@ project(':ambry-cloud') {
         compile project(':ambry-api'),
             project(':ambry-utils'),
             project(':ambry-store'),
-            project(':ambry-commons')
+            project(':ambry-commons'),
+            project(':ambry-replication')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "com.microsoft.azure:azure-storage:$azureStorageVersion"
         testCompile project(':ambry-api').sourceSets.test.output

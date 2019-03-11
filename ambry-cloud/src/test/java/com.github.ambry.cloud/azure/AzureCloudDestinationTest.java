@@ -27,6 +27,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.security.InvalidKeyException;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -34,9 +35,7 @@ import org.mockito.junit.MockitoJUnitRunner;
 
 import static com.github.ambry.commons.BlobId.*;
 import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 
@@ -85,6 +84,7 @@ public class AzureCloudDestinationTest {
   public void testUpload() throws Exception {
     InputStream inputStream = getBlobInputStream(blobSize);
     assertTrue("Expected upload to return true", azureDest.uploadBlob(blobId, blobSize, inputStream));
+
   }
 
   /** Test normal delete. */
@@ -114,6 +114,7 @@ public class AzureCloudDestinationTest {
   public void testExistenceCheck() throws Exception {
     when(mockBlob.exists()).thenReturn(true);
     assertTrue("Expected doesBlobExist to return true", azureDest.doesBlobExist(blobId));
+
 
     when(mockBlob.exists()).thenReturn(false);
     assertFalse("Expected doesBlobExist to return false", azureDest.doesBlobExist(blobId));
