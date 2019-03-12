@@ -36,13 +36,13 @@ public class CloudBackupManager extends ReplicationEngine {
 
   public CloudBackupManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreKeyFactory storeKeyFactory,
-      ClusterMap clusterMap, VirtualReplicatorClusterMap virtualCloudReplicatorClusterMap,
+      ClusterMap clusterMap, VirtualReplicatorClusterMap virtualReplicatorClusterMap,
       ScheduledExecutorService scheduler, ConnectionPool connectionPool, MetricRegistry metricRegistry,
       NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
       String transformerClassName) throws ReplicationException {
 
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
-        virtualCloudReplicatorClusterMap.getDataNodeId(clusterMapConfig.clusterMapHostName,
+        virtualReplicatorClusterMap.getDataNodeId(clusterMapConfig.clusterMapHostName,
             clusterMapConfig.clusterMapPort), connectionPool, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName);
   }
