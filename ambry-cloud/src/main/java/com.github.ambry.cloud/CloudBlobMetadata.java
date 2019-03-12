@@ -49,16 +49,17 @@ public class CloudBlobMetadata {
    * Constructor from {@link BlobId}.
    * @param blobId The BlobId for metadata record.
    * @param creationTime The blob creation time.
+   * @param expirationTime The blob expiration time.
    * @param size The blob size.
    */
-  public CloudBlobMetadata(BlobId blobId, long creationTime, long size) {
+  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size) {
     this.id = blobId.getID();
     this.partitionId = blobId.getPartition().toPathString();
     this.accountId = blobId.getAccountId();
     this.containerId = blobId.getContainerId();
     this.creationTime = creationTime;
+    this.expirationTime = expirationTime;
     this.uploadTime = System.currentTimeMillis();
-    this.expirationTime = Utils.Infinite_Time;
     this.deletionTime = Utils.Infinite_Time;
     this.size = size;
   }

@@ -109,9 +109,7 @@ public class AzureCloudDestinationTest {
    */
   @Test
   public void testUpload() throws Exception {
-    InputStream inputStream = getBlobInputStream(blobSize);
-    CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, blobSize);
-    assertTrue("Expected success", azureDest.uploadBlob(blobId, blobSize, metadata, inputStream));
+    assertTrue("Expected success", uploadDefaultBlob());
   }
 
   /** Test normal delete. */
@@ -132,10 +130,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testUploadExists() throws Exception {
     when(mockBlob.exists()).thenReturn(true);
-    InputStream inputStream = getBlobInputStream(blobSize);
-    CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, blobSize);
-    assertFalse("Upload on existing blob should return false",
-        azureDest.uploadBlob(blobId, blobSize, metadata, inputStream));
+    assertFalse("Upload of existing blob should return false", uploadDefaultBlob());
   }
 
   /** Test delete of nonexistent blob. */
@@ -157,7 +152,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testQueryMetadata() throws Exception {
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
-    CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, blobSize);
+    CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize);
     List<Document> docList = Collections.singletonList(new Document(objectMapper.writeValueAsString(inputMetadata)));
     //when(mockIterable.toList()).thenReturn(docList);
     when(mockIterable.iterator()).thenReturn(docList.iterator());
@@ -192,30 +187,21 @@ public class AzureCloudDestinationTest {
   @Test
   public void testUploadContainerReferenceException() throws Exception {
     when(mockAzureClient.getContainerReference(anyString())).thenThrow(StorageException.class);
-    InputStream inputStream = getBlobInputStream(blobSize);
-    CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, blobSize);
-    expectCloudStorageException(() -> azureDest.uploadBlob(blobId, blobSize, metadata, inputStream),
-        StorageException.class);
+    expectCloudStorageException(() -> uploadDefaultBlob(), StorageException.class);
   }
 
   /** Test upload when container throws exception. */
   @Test
   public void testUploadContainerException() throws Exception {
     when(mockAzureContainer.getBlockBlobReference(anyString())).thenThrow(StorageException.class);
-    InputStream inputStream = getBlobInputStream(blobSize);
-    CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, blobSize);
-    expectCloudStorageException(() -> azureDest.uploadBlob(blobId, blobSize, metadata, inputStream),
-        StorageException.class);
+    expectCloudStorageException(() -> uploadDefaultBlob(), StorageException.class);
   }
 
   /** Test upload when blob throws exception. */
   @Test
   public void testUploadBlobException() throws Exception {
     Mockito.doThrow(StorageException.class).when(mockBlob).upload(any(), anyLong(), any(), any(), any());
-    InputStream inputStream = getBlobInputStream(blobSize);
-    CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, blobSize);
-    expectCloudStorageException(() -> azureDest.uploadBlob(blobId, blobSize, metadata, inputStream),
-        StorageException.class);
+    expectCloudStorageException(() -> uploadDefaultBlob(), StorageException.class);
   }
 
   /** Test upload when doc client throws exception. */
@@ -223,10 +209,7 @@ public class AzureCloudDestinationTest {
   public void testUploadDocClientException() throws Exception {
     when(mockumentClient.createDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenThrow(
         DocumentClientException.class);
-    InputStream inputStream = getBlobInputStream(blobSize);
-    CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, blobSize);
-    expectCloudStorageException(() -> azureDest.uploadBlob(blobId, blobSize, metadata, inputStream),
-        DocumentClientException.class);
+    expectCloudStorageException(() -> uploadDefaultBlob(), DocumentClientException.class);
   }
 
   /** Test update methods when doc client throws exception. */
@@ -237,6 +220,17 @@ public class AzureCloudDestinationTest {
     expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime), DocumentClientException.class);
     expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
         DocumentClientException.class);
+  }
+
+  /**
+   * Upload a blob with default properties.
+   * @return the result of the uploadBlob call.
+   * @throws CloudStorageException on error.
+   */
+  private boolean uploadDefaultBlob() throws CloudStorageException {
+    InputStream inputStream = getBlobInputStream(blobSize);
+    CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize);
+    return azureDest.uploadBlob(blobId, blobSize, metadata, inputStream);
   }
 
   /**

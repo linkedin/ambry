@@ -36,7 +36,6 @@ import java.nio.channels.ReadableByteChannel;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -103,8 +102,8 @@ class CloudBlobStore implements Store {
     if (performUpload) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       CloudBlobMetadata blobMetadata =
-          new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getSize());
-      blobMetadata.setExpirationTime(messageInfo.getExpirationTimeInMs());
+          new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
+              messageInfo.getSize());
       cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
     }
   }
