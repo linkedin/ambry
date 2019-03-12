@@ -37,6 +37,7 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -100,7 +101,10 @@ class CloudBlobStore implements Store {
     // May need to encrypt buffer before upload
     if (performUpload) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
-      cloudDestination.uploadBlob(blobId, size, new ByteBufferInputStream(messageBuf));
+      CloudBlobMetadata blobMetadata =
+          new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
+              messageInfo.getSize());
+      cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
     }
   }
 
@@ -112,7 +116,7 @@ class CloudBlobStore implements Store {
     try {
       for (MessageInfo msgInfo : messageSetToDelete.getMessageSetInfo()) {
         BlobId blobId = (BlobId) msgInfo.getStoreKey();
-        cloudDestination.deleteBlob(blobId);
+        cloudDestination.deleteBlob(blobId, msgInfo.getOperationTimeMs());
       }
     } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
@@ -128,7 +132,15 @@ class CloudBlobStore implements Store {
   @Override
   public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
     checkStarted();
-    // This is currently a no-op because we skipped uploading the blob on receipt of the PUT record since it had a TTL.
+    // Note: we skipped uploading the blob on PUT record if the TTL was below threshold.
+    try {
+      for (MessageInfo msgInfo : messageSetToUpdate.getMessageSetInfo()) {
+        BlobId blobId = (BlobId) msgInfo.getStoreKey();
+        cloudDestination.updateBlobExpiration(blobId, msgInfo.getExpirationTimeInMs());
+      }
+    } catch (CloudStorageException ex) {
+      throw new StoreException(ex, StoreErrorCodes.IOError);
+    }
   }
 
   @Override
@@ -139,20 +151,14 @@ class CloudBlobStore implements Store {
   @Override
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     checkStarted();
-    // Check existence of keys in cloud container
-    Set<StoreKey> missingKeys = new HashSet<>();
+    // Check existence of keys in cloud metadata
+    List<BlobId> blobIdList = keys.stream().map(key -> (BlobId) key).collect(Collectors.toList());
     try {
-      for (StoreKey key : keys) {
-        BlobId blobId = (BlobId) key;
-        // TODO: checking each blob will be slow.  Add batch check to CloudDestination.
-        if (!cloudDestination.doesBlobExist(blobId)) {
-          missingKeys.add(key);
-        }
-      }
+      Set<String> foundSet = cloudDestination.getBlobMetadata(blobIdList).keySet();
+      return keys.stream().filter(key -> !foundSet.contains(key.getID())).collect(Collectors.toSet());
     } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
     }
-    return missingKeys;
   }
 
   @Override
@@ -240,7 +246,9 @@ class CloudBlobStore implements Store {
       while (bytesRead < size) {
         int readResult = channel.read(messageBuf);
         if (readResult == -1) {
-          throw new IOException("Channel read returned -1 before reading expected number of bytes, blobId=" + messageInfo.getStoreKey().getID());
+          throw new IOException(
+              "Channel read returned -1 before reading expected number of bytes, blobId=" + messageInfo.getStoreKey()
+                  .getID());
         }
         bytesRead += readResult;
       }

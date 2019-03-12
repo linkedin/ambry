@@ -333,6 +333,7 @@ project(':ambry-cloud') {
             project(':ambry-commons')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "com.microsoft.azure:azure-storage:$azureStorageVersion"
+        compile "com.microsoft.azure:azure-documentdb:$azureDocumentDbVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
