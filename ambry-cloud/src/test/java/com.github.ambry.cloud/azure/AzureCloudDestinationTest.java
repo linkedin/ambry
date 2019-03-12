@@ -154,7 +154,6 @@ public class AzureCloudDestinationTest {
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
     CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize);
     List<Document> docList = Collections.singletonList(new Document(objectMapper.writeValueAsString(inputMetadata)));
-    //when(mockIterable.toList()).thenReturn(docList);
     when(mockIterable.iterator()).thenReturn(docList.iterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     when(feedResponse.getQueryIterable()).thenReturn(mockIterable);

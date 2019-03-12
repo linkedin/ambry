@@ -54,7 +54,6 @@ import org.slf4j.LoggerFactory;
 /**
  * Implementation of {@link CloudDestination} that interacts with Azure Blob Storage service.
  */
-@SuppressWarnings({"ALL", "MagicConstant"})
 class AzureCloudDestination implements CloudDestination {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
