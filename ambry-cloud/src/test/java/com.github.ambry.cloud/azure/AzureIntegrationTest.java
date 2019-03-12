@@ -86,6 +86,9 @@ public class AzureIntegrationTest {
     CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, 0, blobSize);
     assertTrue("Expected upload to return true",
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+    // Try to upload same blob again
+    assertFalse("Expected duplicate upload to return false",
+        azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     long expirationTime = Utils.Infinite_Time;
     assertTrue("Expected update to return true", azureDest.updateBlobExpiration(blobId, expirationTime));
     CloudBlobMetadata metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
