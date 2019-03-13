@@ -17,8 +17,8 @@ import java.util.List;
 
 
 /**
- * The {@link VirtualReplicatorClusterMap} provides a high-level interface to Virtual Replicator Cluster backed by Helix.
- * In Virtual Replicator Cluster, {@link PartitionId}s are Helix resources and Virtual Replicators are Helix participants.
+ * The {@link VirtualReplicatorClusterMap} provides a high-level interface to Virtual Replicator Cluster.
+ * In Virtual Replicator Cluster, {@link PartitionId}s are resources and they are assigned to virtual replicators.
  */
 public interface VirtualReplicatorClusterMap extends AutoCloseable {
 
@@ -32,7 +32,7 @@ public interface VirtualReplicatorClusterMap extends AutoCloseable {
   DataNodeId getDataNodeId(String hostname, int port);
 
   /**
-   * Gets the PartitionIds backing up by specified DataNodeId.
+   * Gets all PartitionIds backing up by given DataNodeId.
    *
    * @param dataNodeId the {@link DataNodeId} whose replicas are to be returned.
    * @return list of PartitionId on the specified dataNodeId
