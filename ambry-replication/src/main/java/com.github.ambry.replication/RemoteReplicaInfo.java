@@ -42,7 +42,6 @@ import com.github.ambry.utils.Time;
 class RemoteReplicaInfo {
   private final ReplicaId replicaId;
   private final ReplicaId localReplicaId;
-  private final Object lock = new Object();
   private final Store localStore;
   private final Port port;
   private final Time time;
@@ -117,10 +116,8 @@ class RemoteReplicaInfo {
     return localLagFromRemoteStore;
   }
 
-  FindToken getToken() {
-    synchronized (lock) {
-      return currentToken;
-    }
+  synchronized FindToken getToken() {
+    return currentToken;
   }
 
   void setTotalBytesReadFromLocalStore(long totalBytesReadFromLocalStore) {
@@ -135,46 +132,38 @@ class RemoteReplicaInfo {
     return this.totalBytesReadFromLocalStore;
   }
 
-  void setToken(FindToken token) {
+  synchronized void setToken(FindToken token) {
     // reference assignment is atomic in java but we want to be completely safe. performance is
     // not important here
-    synchronized (lock) {
-      this.currentToken = token;
-    }
+    currentToken = token;
   }
 
-  void initializeTokens(FindToken token) {
-    synchronized (lock) {
-      this.currentToken = token;
-      this.candidateTokenToPersist = token;
-      this.tokenSafeToPersist = token;
-      this.timeCandidateSetInMs = time.milliseconds();
-    }
+  synchronized void initializeTokens(FindToken token) {
+    currentToken = token;
+    candidateTokenToPersist = token;
+    tokenSafeToPersist = token;
+    timeCandidateSetInMs = time.milliseconds();
   }
 
   /**
    * get the token to persist. Returns either the candidate token if enough time has passed since it was
    * set, or the last token again.
    */
-  FindToken getTokenToPersist() {
-    synchronized (lock) {
-      if (time.milliseconds() - timeCandidateSetInMs > tokenPersistIntervalInMs) {
-        // candidateTokenToPersist is now safe to be persisted.
-        tokenSafeToPersist = candidateTokenToPersist;
-      }
-      return tokenSafeToPersist;
+  synchronized FindToken getTokenToPersist() {
+    if (time.milliseconds() - timeCandidateSetInMs > tokenPersistIntervalInMs) {
+      // candidateTokenToPersist is now safe to be persisted.
+      tokenSafeToPersist = candidateTokenToPersist;
     }
+    return tokenSafeToPersist;
   }
 
-  void onTokenPersisted() {
-    synchronized (lock) {
-      /* Only update the candidate token if it qualified as the token safe to be persisted in the previous get call.
-       * If not, keep it as it is.
-       */
-      if (tokenSafeToPersist == candidateTokenToPersist) {
-        candidateTokenToPersist = currentToken;
-        timeCandidateSetInMs = time.milliseconds();
-      }
+  synchronized void onTokenPersisted() {
+    /* Only update the candidate token if it qualified as the token safe to be persisted in the previous get call.
+     * If not, keep it as it is.
+     */
+    if (tokenSafeToPersist == candidateTokenToPersist) {
+      candidateTokenToPersist = currentToken;
+      timeCandidateSetInMs = time.milliseconds();
     }
   }
 
