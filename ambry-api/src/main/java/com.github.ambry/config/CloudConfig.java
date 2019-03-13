@@ -14,16 +14,7 @@
 package com.github.ambry.config;
 
 /**
- * The configs for Cloud backup and recovery.
+ * The class for cloud related configurations.
  */
 public class CloudConfig {
-  /**
-   * Azure connection string.
-   */
-  @Config("azure.connection.string")
-  public final String azureConnectionString;
-
-  public CloudConfig(VerifiableProperties verifiableProperties) {
-    azureConnectionString = verifiableProperties.getString("azure.connection.string");
-  }
 }
