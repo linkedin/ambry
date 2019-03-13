@@ -23,14 +23,14 @@ interface ReplicaTokenPersistor extends Runnable {
   /**
    * Method to persist the token of partition(s) under the same mountPath.
    * @param mountPath The mouth path of the partition(s).
-   * @param shuttingDown indicates whether this is being called as part of shut down
+   * @param shuttingDown indicates whether this is being called as part of shut down.
    */
   void write(String mountPath, boolean shuttingDown) throws IOException, ReplicationException;
 
   /**
    * Iterates through each mount path and persists all the replica tokens for the partitions on the mount
    * path to a file. The file is saved on the corresponding mount path.
-   * @param shuttingDown indicates whether this is being called as part of shut down
+   * @param shuttingDown indicates whether this is being called as part of shut down.
    */
   void write(boolean shuttingDown) throws IOException, ReplicationException;
 }

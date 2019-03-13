@@ -35,7 +35,7 @@ public interface VirtualReplicatorClusterMap extends AutoCloseable {
    * Gets the PartitionIds backing up by specified DataNodeId.
    *
    * @param dataNodeId the {@link DataNodeId} whose replicas are to be returned.
-   * @return list of ReplicaIds on the specified dataNodeId
+   * @return list of PartitionId on the specified dataNodeId
    */
   List<? extends PartitionId> getPartitionIds(DataNodeId dataNodeId);
 }

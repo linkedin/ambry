@@ -19,6 +19,25 @@ import com.github.ambry.store.FindToken;
 import com.github.ambry.store.Store;
 import com.github.ambry.utils.Time;
 
+/*
+ * The token persist logic ensures that a token corresponding to an entry in the store is never persisted in the
+ * replicaTokens file before the entry itself is persisted in the store. This is done as follows. Objects of this
+ * class maintain 3 tokens: tokenSafeToPersist, candidateTokenToPersist and currentToken:
+ *
+ * tokenSafeToPersist: this is the token that we know is safe to be persisted. The associated store entry from the
+ * remote replica is guaranteed to have been persisted by the store.
+ *
+ * candidateTokenToPersist: this is the token that we would like to persist next. We would go ahead with this
+ * only if we know for sure that the associated store entry has been persisted. We ensure safety by maintaining the
+ * time at which candidateTokenToPersist was set and ensuring that tokenSafeToPersist is assigned this value only if
+ * sufficient time has passed since the time we set candidateTokenToPersist.
+ *
+ * currentToken: this is the latest token associated with the latest record obtained from the remote replica.
+ *
+ * tokenSafeToPersist <= candidateTokenToPersist <= currentToken
+ * (Note: when a token gets reset by the remote, the above equation may not hold true immediately after, but it should
+ * eventually hold true.)
+ */
 
 class RemoteReplicaInfo {
   private final ReplicaId replicaId;
@@ -132,26 +151,6 @@ class RemoteReplicaInfo {
       this.timeCandidateSetInMs = time.milliseconds();
     }
   }
-
-  /*
-   * The token persist logic ensures that a token corresponding to an entry in the store is never persisted in the
-   * replicaTokens file before the entry itself is persisted in the store. This is done as follows. Objects of this
-   * class maintain 3 tokens: tokenSafeToPersist, candidateTokenToPersist and currentToken:
-   *
-   * tokenSafeToPersist: this is the token that we know is safe to be persisted. The associated store entry from the
-   * remote replica is guaranteed to have been persisted by the store.
-   *
-   * candidateTokenToPersist: this is the token that we would like to persist next. We would go ahead with this
-   * only if we know for sure that the associated store entry has been persisted. We ensure safety by maintaining the
-   * time at which candidateTokenToPersist was set and ensuring that tokenSafeToPersist is assigned this value only if
-   * sufficient time has passed since the time we set candidateTokenToPersist.
-   *
-   * currentToken: this is the latest token associated with the latest record obtained from the remote replica.
-   *
-   * tokenSafeToPersist <= candidateTokenToPersist <= currentToken
-   * (Note: when a token gets reset by the remote, the above equation may not hold true immediately after, but it should
-   * eventually hold true.)
-   */
 
   /**
    * get the token to persist. Returns either the candidate token if enough time has passed since it was

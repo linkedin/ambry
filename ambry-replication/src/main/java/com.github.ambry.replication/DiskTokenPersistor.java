@@ -41,7 +41,7 @@ class DiskTokenPersistor implements ReplicaTokenPersistor {
    * Constructor for {@link DiskTokenPersistor}.
    * @param replicaTokenFileName the token's file name.
    * @param partitionGroupedByMountPath A map between mount path and list of partitions under this mount path.
-   * @param replicationMetrics metrics includes token persist time.
+   * @param replicationMetrics metrics including token persist time.
    */
   DiskTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
       ReplicationMetrics replicationMetrics) {

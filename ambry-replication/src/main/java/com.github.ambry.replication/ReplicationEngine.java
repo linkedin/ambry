@@ -83,8 +83,8 @@ public abstract class ReplicationEngine {
   protected final Map<String, Integer> numberOfReplicaThreads;
   protected ReplicaTokenPersistor persistor = null;
 
-  static final short Replication_Delay_Multiplier = 5;
-  static final String replicaTokenFileName = "replicaTokens";
+  protected static final short Replication_Delay_Multiplier = 5;
+  protected static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
