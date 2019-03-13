@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
  */
 class DiskTokenPersistor implements ReplicaTokenPersistor {
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(DiskTokenPersistor.class);
   private final short version = 0;
   private final String replicaTokenFileName;
   private final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
