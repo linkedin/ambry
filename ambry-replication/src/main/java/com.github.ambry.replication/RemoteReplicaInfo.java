@@ -51,11 +51,11 @@ class RemoteReplicaInfo {
   // The latest known token
   private FindToken currentToken = null;
   // The token that will be safe to persist eventually
-  private FindToken candidateTokenToPersist = null;
+  private FindToken candidateTokenToPersist;
   // The time at which the candidate token is set
   private long timeCandidateSetInMs;
   // The token that is known to be safe to persist.
-  private FindToken tokenSafeToPersist = null;
+  private FindToken tokenSafeToPersist;
   private long totalBytesReadFromLocalStore;
   private long localLagFromRemoteStore = -1;
   private long reEnableReplicationTime = 0;
