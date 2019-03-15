@@ -39,6 +39,8 @@ public class ClusterMapUtils {
   public static final String ZNODE_NAME = "PartitionOverride";
   public static final String ZNODE_PATH = "/ClusterConfigs/" + ZNODE_NAME;
   public static final String PROPERTYSTORE_ZNODE_PATH = "/PROPERTYSTORE/ClusterConfigs/" + ZNODE_NAME;
+  public static final int MIN_PORT = 1025;
+  public static final int MAX_PORT = 65535;
   static final String DISK_CAPACITY_STR = "capacityInBytes";
   static final String DISK_STATE = "diskState";
   static final String PARTITION_STATE = "state";
@@ -60,8 +62,6 @@ public class ClusterMapUtils {
   static final String SCHEMA_VERSION_STR = "schemaVersion";
   static final String XID_STR = "xid";
   static final long DEFAULT_XID = Long.MIN_VALUE;
-  static final int MIN_PORT = 1025;
-  static final int MAX_PORT = 65535;
   static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
   static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
@@ -208,7 +208,7 @@ public class ClusterMapUtils {
    * @param unqualifiedHostname hostname to be fully qualified
    * @return canonical hostname that can be compared with DataNode.getHostname()
    */
-  static String getFullyQualifiedDomainName(String unqualifiedHostname) {
+  public static String getFullyQualifiedDomainName(String unqualifiedHostname) {
     if (unqualifiedHostname == null) {
       throw new IllegalStateException("Hostname cannot be null.");
     } else if (unqualifiedHostname.length() == 0) {
