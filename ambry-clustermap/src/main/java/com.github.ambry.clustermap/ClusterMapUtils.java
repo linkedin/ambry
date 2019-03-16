@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.network.Port;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
@@ -39,8 +40,6 @@ public class ClusterMapUtils {
   public static final String ZNODE_NAME = "PartitionOverride";
   public static final String ZNODE_PATH = "/ClusterConfigs/" + ZNODE_NAME;
   public static final String PROPERTYSTORE_ZNODE_PATH = "/PROPERTYSTORE/ClusterConfigs/" + ZNODE_NAME;
-  public static final int MIN_PORT = 1025;
-  public static final int MAX_PORT = 65535;
   static final String DISK_CAPACITY_STR = "capacityInBytes";
   static final String DISK_STATE = "diskState";
   static final String PARTITION_STATE = "state";
@@ -62,6 +61,8 @@ public class ClusterMapUtils {
   static final String SCHEMA_VERSION_STR = "schemaVersion";
   static final String XID_STR = "xid";
   static final long DEFAULT_XID = Long.MIN_VALUE;
+  static final int MIN_PORT = 1025;
+  static final int MAX_PORT = 65535;
   static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
   static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
@@ -220,6 +221,46 @@ public class ClusterMapUtils {
     } catch (UnknownHostException e) {
       throw new IllegalStateException(
           "Host (" + unqualifiedHostname + ") is unknown so cannot determine fully qualified domain name.");
+    }
+  }
+
+  /**
+   * Validate hostName.
+   * @param clusterMapResolveHostnames indicates if a reverse DNS lookup is enabled or not.
+   * @param hostName hostname to be validated.
+   * @throws IllegalStateException if hostname is not valid.
+   */
+  public static void validateHostName(Boolean clusterMapResolveHostnames, String hostName) {
+    if (clusterMapResolveHostnames) {
+      String fqdn = getFullyQualifiedDomainName(hostName);
+      if (!fqdn.equals(hostName)) {
+        throw new IllegalStateException(
+            "Hostname for AmbryDataNode (" + hostName + ") does not match its fully qualified domain name: " + fqdn);
+      }
+    }
+  }
+
+  /**
+   * Validate plainTextPort and sslPort.
+   * @param plainTextPort PlainText {@link Port}.
+   * @param sslPort SSL {@link Port}.
+   * @throws IllegalStateException if ports are not valid.
+   */
+  public static void validatePort(Port plainTextPort, Port sslPort, boolean sslPortRequired) {
+    if (sslPort != null) {
+      if (sslPort.getPort() == plainTextPort.getPort()) {
+        throw new IllegalStateException("Same port number for both plain and ssl ports");
+      }
+      if (sslPort.getPort() < MIN_PORT || sslPort.getPort() > MAX_PORT) {
+        throw new IllegalStateException(
+            "SSL Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
+      }
+    } else if (sslPortRequired) {
+      throw new IllegalArgumentException("No SSL port to a datanode to which SSL is enabled.");
+    }
+    if (plainTextPort.getPort() < MIN_PORT || plainTextPort.getPort() > MAX_PORT) {
+      throw new IllegalStateException(
+          "PlainText Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
     }
   }
 

@@ -22,7 +22,6 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
 import java.util.Comparator;
 import java.util.List;
-import java.util.TreeSet;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -50,43 +49,16 @@ class CloudDataNode implements DataNodeId {
   /**
    * Instantiate an CloudDataNode object.
    * @param cloudConfig the {@link CloudConfig} to use.
+   * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    */
   CloudDataNode(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
     this.hostName = clusterMapConfig.clusterMapHostName;
     this.plainTextPort = new Port(clusterMapConfig.clusterMapPort, PortType.PLAINTEXT);
     this.sslPort = new Port(cloudConfig.vcrSslPort, PortType.SSL);
-    this.dataCenterName = cloudConfig.vcrDatacenterName;
+    this.dataCenterName = clusterMapConfig.clusterMapDatacenterName;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
-    validate(clusterMapConfig);
-  }
-
-  /**
-   * Validate the constructed CloudDataNode.
-   */
-  private void validate(ClusterMapConfig clusterMapConfig) {
-    // validate hostname
-    if (clusterMapConfig.clusterMapResolveHostnames) {
-      String fqdn = getFullyQualifiedDomainName(hostName);
-      if (!fqdn.equals(hostName)) {
-        throw new IllegalStateException(
-            "Hostname for AmbryDataNode (" + hostName + ") does not match its fully qualified domain name: " + fqdn);
-      }
-    }
-
-    // validate ports
-    TreeSet<Integer> ports = new TreeSet<>();
-    ports.add(plainTextPort.getPort());
-    if (sslPort != null) {
-      if (sslPort.getPort() == plainTextPort.getPort()) {
-        throw new IllegalStateException("Same port number for both plain and ssl ports");
-      }
-      ports.add(sslPort.getPort());
-    } else if (sslEnabledDataCenters.contains(dataCenterName)) {
-      throw new IllegalArgumentException("No SSL port to a datanode to which SSL is enabled.");
-    }
-    if (ports.first() < MIN_PORT || ports.last() > MAX_PORT) {
-      throw new IllegalStateException("Ports " + ports + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
-    }
+    validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
+    validatePort(plainTextPort, sslPort, sslEnabledDataCenters.contains(dataCenterName));
   }
 
   @Override

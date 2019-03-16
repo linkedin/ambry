@@ -29,12 +29,6 @@ public class CloudConfig {
   public final String vcrClusterName;
 
   /**
-   * The name of the associated datacenter for this node.
-   */
-  @Config("vcr.datacenter.name")
-  public final String vcrDatacenterName;
-
-  /**
    * The ssl port number associated with this node.
    */
   @Config("vcr.ssl.port")
@@ -44,7 +38,6 @@ public class CloudConfig {
   public CloudConfig(VerifiableProperties verifiableProperties) {
     vcrClusterZkConnectString = verifiableProperties.getString("vcr.cluster.zk.connect.string", "");
     vcrClusterName = verifiableProperties.getString("vcr.cluster.name");
-    vcrDatacenterName = verifiableProperties.getString("vcr.datacenter.name");
     vcrSslPort = verifiableProperties.getInteger("vcr.ssl.port", null);
   }
 }
