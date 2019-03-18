@@ -74,7 +74,7 @@ class AmbryDataNode implements DataNodeId {
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     this.clusterManagerCallback = clusterManagerCallback;
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
-    validatePort(plainTextPort, sslPort, sslEnabledDataCenters.contains(dataCenterName));
+    validatePorts(plainTextPort, sslPort, sslEnabledDataCenters.contains(dataCenterName));
   }
 
   @Override

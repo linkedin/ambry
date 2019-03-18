@@ -16,6 +16,7 @@ package com.github.ambry.cloud;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.CloudConfig;
 import java.io.File;
@@ -38,7 +39,7 @@ class CloudReplica implements ReplicaId {
    * Instantiate an CloudReplica instance.
    * @param cloudConfig the {@link CloudConfig} to use.
    * @param partitionId the {@link PartitionId} of which this is a replica.
-   * @param dataNodeId the {@link DataNodeId} of which this replica on.
+   * @param dataNodeId which hosts this replica.
    *
    */
   CloudReplica(CloudConfig cloudConfig, PartitionId partitionId, DataNodeId dataNodeId) {
@@ -79,13 +80,12 @@ class CloudReplica implements ReplicaId {
 
   @Override
   public boolean isSealed() {
-    return false;
+    return partitionId.getPartitionState().equals(PartitionState.READ_ONLY);
   }
 
   @Override
   public JSONObject getSnapshot() {
     JSONObject snapshot = new JSONObject();
-    DataNodeId dataNodeId = getDataNodeId();
     snapshot.put(REPLICA_NODE, dataNodeId.getHostname() + ":" + dataNodeId.getPort());
     snapshot.put(REPLICA_PARTITION, getPartitionId().toPathString());
     snapshot.put(REPLICA_PATH, getReplicaPath());
@@ -100,21 +100,22 @@ class CloudReplica implements ReplicaId {
 
   @Override
   public boolean isDown() {
-    return false;
+    throw new UnsupportedOperationException("isDown() is not supported.");
   }
 
   @Override
   public String toString() {
-    return "CloudReplica[" + getDataNodeId().getHostname() + ":" + getDataNodeId().getPort() + ":" + getReplicaPath()
-        + "]";
+    return "CloudReplica[" + dataNodeId.getHostname() + ":" + getDataNodeId().getPort() + ":" + getReplicaPath() + "]";
   }
 
   @Override
   public void markDiskDown() {
+    throw new UnsupportedOperationException("markDiskDown() is not supported.");
   }
 
   @Override
   public void markDiskUp() {
+    throw new UnsupportedOperationException("markDiskUp() is not supported.");
   }
 }
 

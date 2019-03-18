@@ -18,34 +18,43 @@ package com.github.ambry.config;
  */
 public class CloudConfig {
 
+  private final static String VCR_CLUSTER_NAME = "VCRCluster";
+  private final static String VCR_CLUSTER_ZK_CONNECT_STRING = "localhost:2181";
+  private final static String VCR_REPLICA_MOUNT_PATH_PREFIX = "/tmp/vcr/";
+  private final static int VCR_SSL_PORT = 6668;
+
   @Config("vcr.cluster.zk.connect.string")
-  @Default("")
+  @Default(VCR_CLUSTER_ZK_CONNECT_STRING)
   public final String vcrClusterZkConnectString;
 
   /**
    * The name of the associated vcr cluster for this node.
    */
   @Config("vcr.cluster.name")
+  @Default(VCR_CLUSTER_NAME)
   public final String vcrClusterName;
 
   /**
    * The ssl port number associated with this node.
    */
   @Config("vcr.ssl.port")
-  @Default("null")
+  @Default("6668")
   public final Integer vcrSslPort;
 
   /**
-   * The ssl port number associated with this node.
+   * The path prefix for CloudReplica mouth path.
    */
   @Config("vcr.replica.mount.path.prefix")
-  @Default("/tmp/vcr/")
+  @Default(VCR_REPLICA_MOUNT_PATH_PREFIX)
   public final String vcrReplicaMountPathPrefix;
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
-    vcrClusterZkConnectString = verifiableProperties.getString("vcr.cluster.zk.connect.string", "");
-    vcrClusterName = verifiableProperties.getString("vcr.cluster.name");
-    vcrSslPort = verifiableProperties.getInteger("vcr.ssl.port", null);
-    vcrReplicaMountPathPrefix = verifiableProperties.getString("vcr.replica.mount.path.prefix", "/tmp/vcr/");
+
+    vcrClusterZkConnectString =
+        verifiableProperties.getString("vcr.cluster.zk.connect.string", VCR_CLUSTER_ZK_CONNECT_STRING);
+    vcrClusterName = verifiableProperties.getString("vcr.cluster.name", VCR_CLUSTER_NAME);
+    vcrSslPort = verifiableProperties.getInteger("vcr.ssl.port", VCR_SSL_PORT);
+    vcrReplicaMountPathPrefix =
+        verifiableProperties.getString("vcr.replica.mount.path.prefix", VCR_REPLICA_MOUNT_PATH_PREFIX);
   }
 }

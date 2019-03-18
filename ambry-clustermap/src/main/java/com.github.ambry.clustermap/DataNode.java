@@ -236,7 +236,7 @@ class DataNode implements DataNodeId {
     logger.trace("begin validate.");
     validateDatacenter();
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostname);
-    validatePort(ports.get(PortType.PLAINTEXT), ports.get(PortType.SSL), ports.containsKey(PortType.SSL));
+    validatePorts(ports.get(PortType.PLAINTEXT), ports.get(PortType.SSL), ports.containsKey(PortType.SSL));
     for (Disk disk : disks) {
       disk.validate();
     }

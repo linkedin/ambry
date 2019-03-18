@@ -41,8 +41,6 @@ public class CloudDataNodeTest {
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     props = new Properties();
-    props.setProperty("vcr.ssl.port", "12301");
-    props.setProperty("vcr.cluster.name", "VCRCluster");
     cloudConfig = new CloudConfig(new VerifiableProperties(props));
   }
 

@@ -235,7 +235,7 @@ public class ClusterMapUtils {
       String fqdn = getFullyQualifiedDomainName(hostName);
       if (!fqdn.equals(hostName)) {
         throw new IllegalStateException(
-            "Hostname for AmbryDataNode (" + hostName + ") does not match its fully qualified domain name: " + fqdn);
+            "Hostname(" + hostName + ") does not match its fully qualified domain name: " + fqdn);
       }
     }
   }
@@ -244,22 +244,22 @@ public class ClusterMapUtils {
    * Validate plainTextPort and sslPort.
    * @param plainTextPort PlainText {@link Port}.
    * @param sslPort SSL {@link Port}.
-   * @throws IllegalStateException if ports are not valid.
+   * @throws IllegalArgumentException if ports are not valid.
    */
-  public static void validatePort(Port plainTextPort, Port sslPort, boolean sslPortRequired) {
+  public static void validatePorts(Port plainTextPort, Port sslPort, boolean sslPortRequired) {
     if (sslPort != null) {
       if (sslPort.getPort() == plainTextPort.getPort()) {
-        throw new IllegalStateException("Same port number for both plain and ssl ports");
+        throw new IllegalArgumentException("Same port number for both plain and ssl ports");
       }
       if (sslPort.getPort() < MIN_PORT || sslPort.getPort() > MAX_PORT) {
-        throw new IllegalStateException(
+        throw new IllegalArgumentException(
             "SSL Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
       }
     } else if (sslPortRequired) {
       throw new IllegalArgumentException("No SSL port to a datanode to which SSL is enabled.");
     }
     if (plainTextPort.getPort() < MIN_PORT || plainTextPort.getPort() > MAX_PORT) {
-      throw new IllegalStateException(
+      throw new IllegalArgumentException(
           "PlainText Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
     }
   }

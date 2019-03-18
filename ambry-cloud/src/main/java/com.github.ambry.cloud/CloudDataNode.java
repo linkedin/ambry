@@ -43,8 +43,8 @@ class CloudDataNode implements DataNodeId {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private final static Comparator<CloudDataNode> CLOUD_DATA_NODE_COMPARATOR =
-      Comparator.comparingInt((CloudDataNode k) -> k.plainTextPort.getPort()).
-          thenComparing(k -> k.hostName);
+      Comparator.comparing((CloudDataNode k) -> k.hostName).
+          thenComparing(k -> k.plainTextPort.getPort());
 
   /**
    * Instantiate an CloudDataNode object.
@@ -58,7 +58,7 @@ class CloudDataNode implements DataNodeId {
     this.dataCenterName = clusterMapConfig.clusterMapDatacenterName;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
-    validatePort(plainTextPort, sslPort, sslEnabledDataCenters.contains(dataCenterName));
+    validatePorts(plainTextPort, sslPort, sslEnabledDataCenters.contains(dataCenterName));
   }
 
   @Override
