@@ -211,15 +211,15 @@ public class ClusterMapUtils {
    */
   public static String getFullyQualifiedDomainName(String unqualifiedHostname) {
     if (unqualifiedHostname == null) {
-      throw new IllegalStateException("Hostname cannot be null.");
+      throw new IllegalArgumentException("Hostname cannot be null.");
     } else if (unqualifiedHostname.length() == 0) {
-      throw new IllegalStateException("Hostname cannot be zero length.");
+      throw new IllegalArgumentException("Hostname cannot be zero length.");
     }
 
     try {
       return InetAddress.getByName(unqualifiedHostname).getCanonicalHostName().toLowerCase();
     } catch (UnknownHostException e) {
-      throw new IllegalStateException(
+      throw new IllegalArgumentException(
           "Host (" + unqualifiedHostname + ") is unknown so cannot determine fully qualified domain name.");
     }
   }
@@ -228,13 +228,13 @@ public class ClusterMapUtils {
    * Validate hostName.
    * @param clusterMapResolveHostnames indicates if a reverse DNS lookup is enabled or not.
    * @param hostName hostname to be validated.
-   * @throws IllegalStateException if hostname is not valid.
+   * @throws IllegalArgumentException if hostname is not valid.
    */
   public static void validateHostName(Boolean clusterMapResolveHostnames, String hostName) {
     if (clusterMapResolveHostnames) {
       String fqdn = getFullyQualifiedDomainName(hostName);
       if (!fqdn.equals(hostName)) {
-        throw new IllegalStateException(
+        throw new IllegalArgumentException(
             "Hostname(" + hostName + ") does not match its fully qualified domain name: " + fqdn);
       }
     }

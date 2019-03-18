@@ -21,7 +21,6 @@ public class CloudConfig {
   private final static String VCR_CLUSTER_NAME = "VCRCluster";
   private final static String VCR_CLUSTER_ZK_CONNECT_STRING = "localhost:2181";
   private final static String VCR_REPLICA_MOUNT_PATH_PREFIX = "/tmp/vcr/";
-  private final static int VCR_SSL_PORT = 6668;
 
   @Config("vcr.cluster.zk.connect.string")
   @Default(VCR_CLUSTER_ZK_CONNECT_STRING)
@@ -53,7 +52,7 @@ public class CloudConfig {
     vcrClusterZkConnectString =
         verifiableProperties.getString("vcr.cluster.zk.connect.string", VCR_CLUSTER_ZK_CONNECT_STRING);
     vcrClusterName = verifiableProperties.getString("vcr.cluster.name", VCR_CLUSTER_NAME);
-    vcrSslPort = verifiableProperties.getInteger("vcr.ssl.port", VCR_SSL_PORT);
+    vcrSslPort = verifiableProperties.getInteger("vcr.ssl.port", 6668);
     vcrReplicaMountPathPrefix =
         verifiableProperties.getString("vcr.replica.mount.path.prefix", VCR_REPLICA_MOUNT_PATH_PREFIX);
   }
