@@ -13,10 +13,11 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.PortType;
+import java.io.File;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -24,14 +25,14 @@ import static org.junit.Assert.*;
 
 
 /**
- * Test class testing behavior of {@link CloudDataNode}.
+ * Test class testing behavior of {@link CloudReplica}.
  */
-public class CloudDataNodeTest {
+public class CloudReplicaTest {
 
   private final ClusterMapConfig clusterMapConfig;
   private final CloudConfig cloudConfig;
 
-  public CloudDataNodeTest() {
+  public CloudReplicaTest() {
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("clustermap.cluster.name", "clusterName");
@@ -46,15 +47,19 @@ public class CloudDataNodeTest {
     cloudConfig = new CloudConfig(new VerifiableProperties(props));
   }
 
-  /** Test the CloudDataNode constructor and methods */
+  /** Test the CloudReplica constructor and methods */
   @Test
   public void basicTest() {
+    MockPartitionId mockPartitionId = new MockPartitionId();
     CloudDataNode cloudDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
-    assertEquals("Wrong hostname", clusterMapConfig.clusterMapHostName, cloudDataNode.getHostname());
-    assertEquals("Wrong datacenter name", clusterMapConfig.clusterMapDatacenterName, cloudDataNode.getDatacenterName());
-    assertEquals("Wrong port", clusterMapConfig.clusterMapPort.intValue(), cloudDataNode.getPort());
-    assertEquals("Wrong ssl port", cloudConfig.vcrSslPort.intValue(), cloudDataNode.getSSLPort());
-    assertEquals("Wrong connect to port", PortType.SSL, cloudDataNode.getPortToConnectTo().getPortType());
-    assertTrue("Should have SSL port", cloudDataNode.hasSSLPort());
+    CloudReplica cloudReplica = new CloudReplica(cloudConfig, new MockPartitionId(), cloudDataNode);
+    assertEquals("Wrong mount path", cloudConfig.vcrReplicaMountPathPrefix + mockPartitionId.toPathString(),
+        cloudReplica.getMountPath());
+    assertEquals("Wrong replica path",
+        cloudConfig.vcrReplicaMountPathPrefix + mockPartitionId.toPathString() + File.separator
+            + mockPartitionId.toPathString(), cloudReplica.getReplicaPath());
+    assertEquals("Wrong dataNodeId", cloudDataNode, cloudReplica.getDataNodeId());
+    assertEquals("Wrong partitionId", mockPartitionId, cloudReplica.getPartitionId());
+    assertEquals("Wrong peer replicaIds", mockPartitionId.getReplicaIds(), cloudReplica.getPeerReplicaIds());
   }
 }

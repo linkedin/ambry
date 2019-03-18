@@ -35,9 +35,17 @@ public class CloudConfig {
   @Default("null")
   public final Integer vcrSslPort;
 
+  /**
+   * The ssl port number associated with this node.
+   */
+  @Config("vcr.replica.mount.path.prefix")
+  @Default("/tmp/vcr/")
+  public final String vcrReplicaMountPathPrefix;
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
     vcrClusterZkConnectString = verifiableProperties.getString("vcr.cluster.zk.connect.string", "");
     vcrClusterName = verifiableProperties.getString("vcr.cluster.name");
     vcrSslPort = verifiableProperties.getInteger("vcr.ssl.port", null);
+    vcrReplicaMountPathPrefix = verifiableProperties.getString("vcr.replica.mount.path.prefix", "/tmp/vcr/");
   }
 }
