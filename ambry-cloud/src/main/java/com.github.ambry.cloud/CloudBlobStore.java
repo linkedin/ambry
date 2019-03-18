@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
@@ -33,6 +32,7 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+import java.security.GeneralSecurityException;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -47,19 +47,22 @@ import org.slf4j.LoggerFactory;
  */
 class CloudBlobStore implements Store {
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
+  private final CloudBlobCryptoService cryptoService;
   private boolean started;
 
   /**
    * Constructor for CloudBlobStore
    * @param partitionId partition associated with BlobStore.
-   * @param verProps the cloud store properties.
+   * @param cloudDestination the {@link CloudDestination}.
+   * @param cryptoService the {@link CloudBlobCryptoService} to use for encryption.
    */
-  CloudBlobStore(PartitionId partitionId, VerifiableProperties verProps, CloudDestination cloudDestination) {
+  CloudBlobStore(PartitionId partitionId, CloudDestination cloudDestination, CloudBlobCryptoService cryptoService) {
     this.cloudDestination = cloudDestination;
     this.partitionId = partitionId;
+    this.cryptoService = cryptoService;
   }
 
   @Override
@@ -96,11 +99,16 @@ class CloudBlobStore implements Store {
    * @param size the number of bytes to upload.
    * @throws CloudStorageException if the upload failed.
    */
-  private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size) throws CloudStorageException {
+  private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size)
+      throws CloudStorageException, IOException, GeneralSecurityException {
     boolean performUpload = messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time && !messageInfo.isDeleted();
-    // May need to encrypt buffer before upload
     if (performUpload) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
+      // TODO: would be more efficient to call blobId.isEncrypted()
+      if (!BlobId.isEncrypted(blobId.getID())) {
+        // Need to encrypt the buffer before upload
+        messageBuf = cryptoService.encrypt(blobId, messageBuf);
+      }
       CloudBlobMetadata blobMetadata =
           new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
               messageInfo.getSize());

@@ -58,6 +58,11 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
     // no op
   }
 
+  @Override
+  public void register(String context) throws GeneralSecurityException {
+    // no op
+  }
+
   /**
    * Fetches the key associated with the pair of AccountId and ContainerId. {@link SingleKeyManagementService} returns
    * the default key for all {@link #getKey(short, short)}}
@@ -67,6 +72,11 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
    */
   @Override
   public SecretKeySpec getKey(short accountId, short containerId) throws GeneralSecurityException {
+    return getKey(accountId + ":" + containerId);
+  }
+
+  @Override
+  public SecretKeySpec getKey(String context) throws GeneralSecurityException {
     if (enabled) {
       return secretKeySpec;
     } else {
