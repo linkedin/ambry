@@ -32,11 +32,11 @@ public interface VirtualReplicatorCluster extends AutoCloseable {
    * Gets {@link DataNodeId} representation of current node.
    * @return DataNodeId.
    */
-  DataNodeId getDataNodeId();
+  DataNodeId getCurrentDataNodeId();
 
   /**
    * Gets all {@link PartitionId}s assigned to current node.
    * @return list of PartitionId
    */
-  List<? extends PartitionId> getPartitionIds();
+  List<? extends PartitionId> getAssignedPartitionIds();
 }

@@ -41,7 +41,7 @@ public class CloudBackupManager extends ReplicationEngine {
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
 
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
-        virtualReplicatorCluster.getDataNodeId(), connectionPool, metricRegistry, requestNotification,
+        virtualReplicatorCluster.getCurrentDataNodeId(), connectionPool, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName);
   }
 }
