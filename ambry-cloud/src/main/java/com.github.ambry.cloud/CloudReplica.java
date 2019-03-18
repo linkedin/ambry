@@ -105,7 +105,7 @@ class CloudReplica implements ReplicaId {
 
   @Override
   public String toString() {
-    return "CloudReplica[" + dataNodeId.getHostname() + ":" + getDataNodeId().getPort() + ":" + getReplicaPath() + "]";
+    return "CloudReplica[" + dataNodeId.getHostname() + ":" + dataNodeId.getPort() + ":" + getReplicaPath() + "]";
   }
 
   @Override
