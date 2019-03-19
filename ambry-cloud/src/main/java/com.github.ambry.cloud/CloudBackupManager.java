@@ -15,7 +15,7 @@ package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.VirtualReplicatorClusterMap;
+import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -36,14 +36,12 @@ public class CloudBackupManager extends ReplicationEngine {
 
   public CloudBackupManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreKeyFactory storeKeyFactory,
-      ClusterMap clusterMap, VirtualReplicatorClusterMap virtualReplicatorClusterMap,
-      ScheduledExecutorService scheduler, ConnectionPool connectionPool, MetricRegistry metricRegistry,
-      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
-      String transformerClassName) throws ReplicationException {
+      ClusterMap clusterMap, VirtualReplicatorCluster virtualReplicatorCluster, ScheduledExecutorService scheduler,
+      ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification,
+      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
 
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
-        virtualReplicatorClusterMap.getDataNodeId(clusterMapConfig.clusterMapHostName,
-            clusterMapConfig.clusterMapPort), connectionPool, metricRegistry, requestNotification,
+        virtualReplicatorCluster.getCurrentDataNodeId(), connectionPool, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName);
   }
 }
