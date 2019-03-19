@@ -122,7 +122,7 @@ public class DataNodeTest {
     try {
       new TestDataNode("datacenter", jsonObject, clusterMapConfig);
       fail("Construction of TestDataNode should have failed validation.");
-    } catch (IllegalStateException e) {
+    } catch (IllegalArgumentException e) {
       // Expected.
     }
   }

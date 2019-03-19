@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.network.Port;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
@@ -208,18 +209,58 @@ public class ClusterMapUtils {
    * @param unqualifiedHostname hostname to be fully qualified
    * @return canonical hostname that can be compared with DataNode.getHostname()
    */
-  static String getFullyQualifiedDomainName(String unqualifiedHostname) {
+  public static String getFullyQualifiedDomainName(String unqualifiedHostname) {
     if (unqualifiedHostname == null) {
-      throw new IllegalStateException("Hostname cannot be null.");
+      throw new IllegalArgumentException("Hostname cannot be null.");
     } else if (unqualifiedHostname.length() == 0) {
-      throw new IllegalStateException("Hostname cannot be zero length.");
+      throw new IllegalArgumentException("Hostname cannot be zero length.");
     }
 
     try {
       return InetAddress.getByName(unqualifiedHostname).getCanonicalHostName().toLowerCase();
     } catch (UnknownHostException e) {
-      throw new IllegalStateException(
+      throw new IllegalArgumentException(
           "Host (" + unqualifiedHostname + ") is unknown so cannot determine fully qualified domain name.");
+    }
+  }
+
+  /**
+   * Validate hostName.
+   * @param clusterMapResolveHostnames indicates if a reverse DNS lookup is enabled or not.
+   * @param hostName hostname to be validated.
+   * @throws IllegalArgumentException if hostname is not valid.
+   */
+  public static void validateHostName(Boolean clusterMapResolveHostnames, String hostName) {
+    if (clusterMapResolveHostnames) {
+      String fqdn = getFullyQualifiedDomainName(hostName);
+      if (!fqdn.equals(hostName)) {
+        throw new IllegalArgumentException(
+            "Hostname(" + hostName + ") does not match its fully qualified domain name: " + fqdn);
+      }
+    }
+  }
+
+  /**
+   * Validate plainTextPort and sslPort.
+   * @param plainTextPort PlainText {@link Port}.
+   * @param sslPort SSL {@link Port}.
+   * @throws IllegalArgumentException if ports are not valid.
+   */
+  public static void validatePorts(Port plainTextPort, Port sslPort, boolean sslPortRequired) {
+    if (sslPort != null) {
+      if (sslPort.getPort() == plainTextPort.getPort()) {
+        throw new IllegalArgumentException("Same port number for both plain and ssl ports");
+      }
+      if (sslPort.getPort() < MIN_PORT || sslPort.getPort() > MAX_PORT) {
+        throw new IllegalArgumentException(
+            "SSL Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
+      }
+    } else if (sslPortRequired) {
+      throw new IllegalArgumentException("No SSL port to a datanode to which SSL is enabled.");
+    }
+    if (plainTextPort.getPort() < MIN_PORT || plainTextPort.getPort() > MAX_PORT) {
+      throw new IllegalArgumentException(
+          "PlainText Port " + plainTextPort.getPort() + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
     }
   }
 
