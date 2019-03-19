@@ -337,7 +337,7 @@ public class HelixClusterAggregatorTest {
       nodeSnapshot = new StatsSnapshot(total, partitionClassMap);
     }
     StatsHeader header =
-        new StatsHeader(StatsHeader.StatsDescription.QUOTA, timestamp, numbOfPartitions, numbOfPartitions,
+        new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, timestamp, numbOfPartitions, numbOfPartitions,
             Collections.emptyList());
     return new StatsWrapper(header, nodeSnapshot);
   }

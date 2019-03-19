@@ -50,7 +50,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -176,9 +175,9 @@ public class AmbryServer {
 
       List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
       if (serverConfig.serverStatsPublishHealthReportEnabled) {
-        EnumSet.of(StatsReportType.ACCOUNT_REPORT)
-            .forEach(e -> ambryHealthReports.add(
-                new AmbryStatsReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes, e)));
+        serverConfig.serverStatsReportsToPublish.forEach(e -> ambryHealthReports.add(
+            new AmbryStatsReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes,
+                StatsReportType.valueOf(e))));
       }
 
       clusterParticipant.participate(ambryHealthReports);

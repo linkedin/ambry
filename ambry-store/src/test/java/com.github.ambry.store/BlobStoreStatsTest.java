@@ -1030,8 +1030,8 @@ public class BlobStoreStatsTest {
         IndexValue indexValue = indexEntry.getValue();
         if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index) && !indexValue.isFlagSet(
             IndexValue.Flags.Ttl_Update_Index)) {
-          updateNestedMapHelper(containerValidSizeMap, "Account[" + indexValue.getAccountId() + "]",
-              "Container[" + indexValue.getContainerId() + "]", indexValue.getSize());
+          updateNestedMapHelper(containerValidSizeMap, "A[" + indexValue.getAccountId() + "]",
+              "C[" + indexValue.getContainerId() + "]", indexValue.getSize());
         }
       }
     }
