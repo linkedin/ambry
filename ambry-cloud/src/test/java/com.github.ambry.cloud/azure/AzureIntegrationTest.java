@@ -69,7 +69,8 @@ public class AzureIntegrationTest {
   @Before
   public void setup() throws Exception {
     VerifiableProperties verProps = new VerifiableProperties(System.getProperties());
-    azureDest = new AzureCloudDestination(new AzureCloudConfig(verProps), new MetricRegistry());
+    azureDest =
+        (AzureCloudDestination) new AzureCloudDestinationFactory(verProps, new MetricRegistry()).getCloudDestination();
     cosmosCollectionLink = verProps.getString(AzureCloudConfig.COSMOS_COLLECTION_LINK);
   }
 
