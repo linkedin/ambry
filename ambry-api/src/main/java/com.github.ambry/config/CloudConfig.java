@@ -22,7 +22,8 @@ public class CloudConfig {
   private final static String VCR_CLUSTER_ZK_CONNECT_STRING = "localhost:2181";
   private final static String VCR_REPLICA_MOUNT_PATH_PREFIX = "/tmp/vcr/";
   public static final String CLOUD_DESTINATION_FACTORY_CLASS = "cloud.destination.factory.class";
-  public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS = "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
+  public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
+      "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
 
   @Config("vcr.cluster.zk.connect.string")
   @Default(VCR_CLUSTER_ZK_CONNECT_STRING)
