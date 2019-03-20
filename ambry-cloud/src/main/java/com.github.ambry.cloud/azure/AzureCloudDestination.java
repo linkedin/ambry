@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
@@ -63,6 +64,7 @@ class AzureCloudDestination implements CloudDestination {
   private final DocumentClient documentClient;
   private final String cosmosCollectionLink; // eg "/dbs/ambry-metadata/colls/blob-metadata"
   private final RequestOptions defaultRequestOptions = new RequestOptions();
+  private final MetricRegistry metricRegistry;
 
   public static final String STORAGE_CONFIG_SPEC = "storageConfigSpec";
   public static final String COSMOS_ENDPOINT = "cosmosEndpoint";
@@ -72,10 +74,12 @@ class AzureCloudDestination implements CloudDestination {
   /**
    * Construct an Azure cloud destination from config properties.
    * @param verProps the {@link VerifiableProperties} to use.
+   * @param metricRegistry the {@link MetricRegistry} to use.
    * @throws InvalidKeyException if credentials in the connection string contain an invalid key.
    * @throws URISyntaxException if the connection string specifies an invalid URI.
    */
-  AzureCloudDestination(VerifiableProperties verProps) throws URISyntaxException, InvalidKeyException {
+  AzureCloudDestination(VerifiableProperties verProps, MetricRegistry metricRegistry) throws URISyntaxException, InvalidKeyException {
+    this.metricRegistry = metricRegistry;
     String configSpec = verProps.getString(STORAGE_CONFIG_SPEC);
     azureAccount = CloudStorageAccount.parse(configSpec);
     azureBlobClient = azureAccount.createCloudBlobClient();
@@ -111,6 +115,7 @@ class AzureCloudDestination implements CloudDestination {
 
     // Create a blob client to interact with Blob storage
     azureBlobClient = azureAccount.createCloudBlobClient();
+    metricRegistry = new MetricRegistry();
   }
 
   /**
