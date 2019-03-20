@@ -18,7 +18,6 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.config.VerifiableProperties;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.Document;
@@ -66,28 +65,22 @@ class AzureCloudDestination implements CloudDestination {
   private final RequestOptions defaultRequestOptions = new RequestOptions();
   private final MetricRegistry metricRegistry;
 
-  public static final String STORAGE_CONFIG_SPEC = "storageConfigSpec";
-  public static final String COSMOS_ENDPOINT = "cosmosEndpoint";
-  public static final String COSMOS_COLLECTION_LINK = "cosmosCollectionLink";
-  public static final String COSMOS_KEY = "cosmosKey";
-
   /**
    * Construct an Azure cloud destination from config properties.
-   * @param verProps the {@link VerifiableProperties} to use.
+   * @param azureCloudConfig the {@link AzureCloudConfig} to use.
    * @param metricRegistry the {@link MetricRegistry} to use.
    * @throws InvalidKeyException if credentials in the connection string contain an invalid key.
    * @throws URISyntaxException if the connection string specifies an invalid URI.
    */
-  AzureCloudDestination(VerifiableProperties verProps, MetricRegistry metricRegistry) throws URISyntaxException, InvalidKeyException {
+  AzureCloudDestination(AzureCloudConfig azureCloudConfig, MetricRegistry metricRegistry)
+      throws URISyntaxException, InvalidKeyException {
     this.metricRegistry = metricRegistry;
-    String configSpec = verProps.getString(STORAGE_CONFIG_SPEC);
-    azureAccount = CloudStorageAccount.parse(configSpec);
+    azureAccount = CloudStorageAccount.parse(azureCloudConfig.storageConnectionString);
     azureBlobClient = azureAccount.createCloudBlobClient();
-    String cosmosServiceEndpoint = verProps.getString(COSMOS_ENDPOINT);
-    String cosmosKey = verProps.getString(COSMOS_KEY);
-    cosmosCollectionLink = verProps.getString(COSMOS_COLLECTION_LINK);
+    cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
     documentClient =
-        new DocumentClient(cosmosServiceEndpoint, cosmosKey, ConnectionPolicy.GetDefault(), ConsistencyLevel.Session);
+        new DocumentClient(azureCloudConfig.cosmosEndpoint, azureCloudConfig.cosmosKey, ConnectionPolicy.GetDefault(),
+            ConsistencyLevel.Session);
     // check that it works
     try {
       ResourceResponse<DocumentCollection> response =

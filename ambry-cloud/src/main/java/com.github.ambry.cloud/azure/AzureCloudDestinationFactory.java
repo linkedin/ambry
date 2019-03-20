@@ -27,21 +27,20 @@ import org.slf4j.LoggerFactory;
 public class AzureCloudDestinationFactory implements CloudDestinationFactory {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationFactory.class);
-  private final VerifiableProperties destinationFactoryProperties;
+  private final AzureCloudConfig azureCloudConfig;
   private final MetricRegistry metricRegistry;
 
-  public AzureCloudDestinationFactory(VerifiableProperties destinationFactoryProperties,
-      MetricRegistry metricRegistry) {
-    this.destinationFactoryProperties = destinationFactoryProperties;
+  public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+    this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
     this.metricRegistry = metricRegistry;
   }
 
   @Override
-  public CloudDestination getCloudDestination(VerifiableProperties destinationProperties) throws IllegalStateException {
+  public CloudDestination getCloudDestination() throws IllegalStateException {
     try {
-      return new AzureCloudDestination(destinationProperties, metricRegistry);
+      return new AzureCloudDestination(azureCloudConfig, metricRegistry);
     } catch (Exception e) {
-      logger.error("Initializing destination with properties {}", e.getMessage());
+      logger.error("Initializing Azure destination", e.getMessage());
       throw new IllegalStateException(e);
     }
   }

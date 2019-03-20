@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -175,12 +176,21 @@ public class AzureCloudDestinationTest {
     assertFalse("Expected doesBlobExist to return false", azureDest.doesBlobExist(blobId));
   }
 
-  /** Test constructor with invalid config spec. */
-  @Test(expected = InvalidKeyException.class)
+  /** Test constructor with invalid connection string. */
+  @Test
   public void testInitClientException() throws Exception {
     Properties props = new Properties();
-    props.setProperty(AzureCloudDestination.STORAGE_CONFIG_SPEC, configSpec);
-    azureDest = new AzureCloudDestination(new VerifiableProperties(props), new MetricRegistry());
+    props.setProperty(AzureCloudConfig.STORAGE_CONNECTION_STRING, configSpec);
+    props.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.cosmos.com");
+    props.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
+    props.setProperty(AzureCloudConfig.COSMOS_KEY, "dummykey");
+    CloudDestinationFactory factory = new AzureCloudDestinationFactory(new VerifiableProperties(props), new MetricRegistry());
+    try {
+      factory.getCloudDestination();
+      fail("Expected exception to be thrown");
+    } catch (IllegalStateException ex) {
+      assertEquals("Unexpected exception", InvalidKeyException.class, ex.getCause().getClass());
+    }
   }
 
   /** Test upload when client throws exception. */
