@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudStorageException;
@@ -179,7 +180,7 @@ public class AzureCloudDestinationTest {
   public void testInitClientException() throws Exception {
     Properties props = new Properties();
     props.setProperty(AzureCloudDestination.STORAGE_CONFIG_SPEC, configSpec);
-    azureDest = new AzureCloudDestination(new VerifiableProperties(props));
+    azureDest = new AzureCloudDestination(new VerifiableProperties(props), new MetricRegistry());
   }
 
   /** Test upload when client throws exception. */

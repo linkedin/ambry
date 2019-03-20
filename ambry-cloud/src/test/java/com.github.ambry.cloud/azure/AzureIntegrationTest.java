@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -69,7 +70,7 @@ public class AzureIntegrationTest {
   public void setup() throws Exception {
 
     VerifiableProperties verProps = new VerifiableProperties(System.getProperties());
-    azureDest = new AzureCloudDestination(verProps);
+    azureDest = new AzureCloudDestination(verProps, new MetricRegistry());
     cosmosCollectionLink = verProps.getString(AzureCloudDestination.COSMOS_COLLECTION_LINK);
   }
 
