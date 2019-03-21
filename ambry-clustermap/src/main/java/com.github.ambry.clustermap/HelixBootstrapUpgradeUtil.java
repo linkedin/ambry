@@ -155,7 +155,7 @@ class HelixBootstrapUpgradeUtil {
    * @param dryRun if true, perform a dry run; do not update anything in Helix.
    * @param forceRemove if true, removes any hosts from Helix not present in the json files.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
-   * @param startValidatingClusterManager whether validation should include staring up a {@link HelixClusterManager}
+   * @param startValidatingClusterManager whether validation should include starting up a {@link HelixClusterManager}
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
@@ -698,7 +698,7 @@ class HelixBootstrapUpgradeUtil {
   /**
    * Initialize a map of dataCenter to HelixAdmin based on the given zk Connect Strings.
    */
-  private void maybeAddCluster() throws IOException {
+  private void maybeAddCluster() {
     for (Map.Entry<String, HelixAdmin> entry : adminForDc.entrySet()) {
       // Add a cluster entry in every DC
       String dcName = entry.getKey();
@@ -711,6 +711,10 @@ class HelixBootstrapUpgradeUtil {
     }
   }
 
+  /**
+   * Start the Helix Cluster Manager to be used for validation.
+   * @throws IOException if there was an error instantiating the cluster manager.
+   */
   private void startClusterManager() throws IOException {
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
@@ -735,7 +739,7 @@ class HelixBootstrapUpgradeUtil {
    * Validate that the information in Helix is consistent with the information in the static clustermap; and close
    * all the admin connections to ZK hosts.
    */
-  private void validateAndClose() throws Exception {
+  private void validateAndClose() {
     try {
       info("Validating static and Helix cluster maps");
       verifyEquivalencyWithStaticClusterMap(staticClusterMap.hardwareLayout, staticClusterMap.partitionLayout);
