@@ -35,6 +35,7 @@ public class CloudReplicaTest {
   public CloudReplicaTest() {
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.resolve.hostnames", "false");
     props.setProperty("clustermap.cluster.name", "clusterName");
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.ssl.enabled.datacenters", "DC0,DC1");
