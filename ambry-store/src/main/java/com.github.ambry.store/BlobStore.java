@@ -716,6 +716,7 @@ class BlobStore implements Store {
     if (count == config.storeIoErrorCountToTriggerShutdown) {
       logger.error("Shutting down BlobStore {} because IO error count exceeds threshold", storeId);
       shutdown();
+      metrics.storeIoErrorTriggeredShutdownCount.inc();
     }
   }
 

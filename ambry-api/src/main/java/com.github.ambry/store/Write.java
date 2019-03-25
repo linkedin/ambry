@@ -27,7 +27,7 @@ public interface Write {
    * successfully written
    * @param buffer The buffer from which data needs to be written from
    * @return The number of bytes written to the write interface
-   * @throws StoreException
+   * @throws StoreException if store error occurs when writing into underlying interface
    */
   int appendFrom(ByteBuffer buffer) throws StoreException;
 
@@ -36,7 +36,7 @@ public interface Write {
    * to the interface.
    * @param channel The channel from which data needs to be written from
    * @param size The amount of data in bytes to be written from the channel
-   * @throws StoreException
+   * @throws StoreException if store error occurs when writing into underlying interface
    */
   void appendFrom(ReadableByteChannel channel, long size) throws StoreException;
 }

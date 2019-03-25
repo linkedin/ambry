@@ -1157,6 +1157,7 @@ public class BlobStoreTest {
       assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
     }
     // verify error count keeps track of StoreException and shut down store properly
+    assertEquals("Mismatch in triggered shutdown counter", 1, metrics.storeIoErrorTriggeredShutdownCount.getCount());
     assertFalse("Store should shutdown because error count exceeded threshold", testStore2.isStarted());
 
     reloadStore();
