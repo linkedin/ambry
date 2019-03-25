@@ -126,6 +126,16 @@ public class ServerSSLTest {
         clientSSLSocketFactory1, routerProps, testEncryption);
   }
 
+  /**
+   * Do endToEndTest with backup manager.
+   */
+  @Test
+  public void endToEndBackupManagerTest() throws Exception {
+    DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
+    ServerTestUtil.endToEndBackupManagerTest(sslCluster, dataNode, clientSSLConfig1, clientSSLSocketFactory1,
+        testEncryption, notificationSystem);
+  }
+
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest() throws Exception {
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);

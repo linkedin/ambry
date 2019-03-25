@@ -19,7 +19,7 @@ import com.github.ambry.store.Store;
 import java.util.List;
 
 
-class PartitionInfo {
+public class PartitionInfo {
 
   private final List<RemoteReplicaInfo> remoteReplicas;
   private final PartitionId partitionId;

@@ -228,7 +228,8 @@ public abstract class ReplicationEngine {
         foundRemoteReplicaInfo = remoteReplicaInfo;
       }
     }
-    if (foundRemoteReplicaInfo == null) {
+    // TODO: replace replicaPath.contains("vcr").
+    if (foundRemoteReplicaInfo == null && !replicaPath.contains("vcr")) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
@@ -263,7 +264,7 @@ public abstract class ReplicationEngine {
    * @param datacenter remote datacenter name
    * @param remoteReplicaInfo The remote replica that needs to be added to the mapping
    */
-  void updateReplicasToReplicate(String datacenter, RemoteReplicaInfo remoteReplicaInfo) {
+  protected void updateReplicasToReplicate(String datacenter, RemoteReplicaInfo remoteReplicaInfo) {
     DataNodeRemoteReplicaInfos dataNodeRemoteReplicaInfos = dataNodeRemoteReplicaInfosPerDC.get(datacenter);
     if (dataNodeRemoteReplicaInfos != null) {
       dataNodeRemoteReplicaInfos.addRemoteReplica(remoteReplicaInfo);

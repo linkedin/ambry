@@ -92,6 +92,16 @@ public class ServerPlaintextTest {
         routerProps, testEncryption);
   }
 
+  /**
+   * Do endToEndTest with backup manager.
+   */
+  @Test
+  public void endToEndBackupManagerTest() throws Exception {
+    DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
+    ServerTestUtil.endToEndBackupManagerTest(plaintextCluster, dataNode, null, null, testEncryption,
+        notificationSystem);
+  }
+
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest() throws Exception {
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);

@@ -34,7 +34,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 /**
  * {@link DataNodeId} implementation to use within VCR cluster.
  */
-class CloudDataNode implements DataNodeId {
+public class CloudDataNode implements DataNodeId {
   private final String hostName;
   private final Port plainTextPort;
   private final Port sslPort;
@@ -51,7 +51,7 @@ class CloudDataNode implements DataNodeId {
    * @param cloudConfig the {@link CloudConfig} to use.
    * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    */
-  CloudDataNode(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
+  public CloudDataNode(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
     this.hostName = clusterMapConfig.clusterMapHostName;
     this.plainTextPort = new Port(clusterMapConfig.clusterMapPort, PortType.PLAINTEXT);
     this.sslPort = new Port(cloudConfig.vcrSslPort, PortType.SSL);
