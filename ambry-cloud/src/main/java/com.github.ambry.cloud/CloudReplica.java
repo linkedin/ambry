@@ -33,7 +33,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 class CloudReplica implements ReplicaId {
   private final PartitionId partitionId;
   private final DataNodeId dataNodeId;
-  private String mountPathPrefix;
+  private final String mountPathPrefix;
 
   /**
    * Instantiate an CloudReplica instance.

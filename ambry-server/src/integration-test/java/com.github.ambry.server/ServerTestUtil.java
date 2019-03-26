@@ -567,15 +567,17 @@ final class ServerTestUtil {
       throws Exception {
     // TODO: test encryption
     int blobBackupCount = 10;
+    int blobSize = 100;
+    int userMetaDataSize = 100;
     ClusterMap clusterMap = cluster.getClusterMap();
     // Send blobs to DataNode
-    byte[] userMetadata = new byte[100];
-    byte[] data = new byte[100];
+    byte[] userMetadata = new byte[userMetaDataSize];
+    byte[] data = new byte[blobSize];
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties properties =
-        new BlobProperties(100, "serviceid1", null, null, false, Utils.Infinite_Time, accountId, containerId, false,
-            null);
+        new BlobProperties(blobSize, "serviceid1", null, null, false, Utils.Infinite_Time, accountId, containerId,
+            false, null);
     TestUtils.RANDOM.nextBytes(userMetadata);
     TestUtils.RANDOM.nextBytes(data);
 
@@ -634,7 +636,7 @@ final class ServerTestUtil {
             new StoreKeyConverterFactoryImpl(null, null), serverConfig.serverMessageTransformer);
     cloudBackupManager.start();
     // Waiting for backup done
-    latchBasedInMemoryCloudDestination.await(2, TimeUnit.MINUTES);
+    assertTrue("Did not backup all blobs in 2 minutes", latchBasedInMemoryCloudDestination.await(2, TimeUnit.MINUTES));
     Map<String, CloudBlobMetadata> cloudBlobMetadataMap = latchBasedInMemoryCloudDestination.getBlobMetadata(blobIds);
     for (BlobId blobId : blobIds) {
       CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataMap.get(blobId.toString());

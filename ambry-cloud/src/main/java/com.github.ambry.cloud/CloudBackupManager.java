@@ -68,21 +68,21 @@ public class CloudBackupManager extends ReplicationEngine {
       List<? extends ReplicaId> peerReplicas = cloudReplica.getPeerReplicaIds();
       if (peerReplicas != null) {
         List<RemoteReplicaInfo> remoteReplicas = new ArrayList<>();
-        for (ReplicaId remoteReplica : peerReplicas) {
-          if (!remoteReplica.getDataNodeId().getDatacenterName().equals(dataNodeId.getDatacenterName())) {
+        for (ReplicaId peerReplica : peerReplicas) {
+          if (!peerReplica.getDataNodeId().getDatacenterName().equals(dataNodeId.getDatacenterName())) {
             continue;
           }
           // We need to ensure that a replica token gets persisted only after the corresponding data in the
           // store gets flushed to cloud. We use the store flush interval multiplied by a constant factor
           // to determine the token flush interval
           RemoteReplicaInfo remoteReplicaInfo =
-              new RemoteReplicaInfo(remoteReplica, cloudReplica, cloudStore, factory.getNewFindToken(),
+              new RemoteReplicaInfo(peerReplica, cloudReplica, cloudStore, factory.getNewFindToken(),
                   storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
-                  SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
+                  SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
           replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
           replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
           remoteReplicas.add(remoteReplicaInfo);
-          updateReplicasToReplicate(remoteReplica.getDataNodeId().getDatacenterName(), remoteReplicaInfo);
+          updateReplicasToReplicate(peerReplica.getDataNodeId().getDatacenterName(), remoteReplicaInfo);
         }
         PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, partitionId, cloudStore, cloudReplica);
         partitionsToReplicate.put(partitionId, partitionInfo);
