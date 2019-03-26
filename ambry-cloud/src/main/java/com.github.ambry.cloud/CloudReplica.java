@@ -46,6 +46,8 @@ class CloudReplica implements ReplicaId {
     this.partitionId = partitionId;
     this.dataNodeId = dataNodeId;
     this.mountPathPrefix = cloudConfig.vcrReplicaMountPathPrefix;
+    File mountPath = new File(getMountPath());
+    mountPath.mkdirs();
   }
 
   @Override
