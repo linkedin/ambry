@@ -20,6 +20,9 @@ import com.github.ambry.cloud.CloudBackupManager;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDataNode;
 import com.github.ambry.cloud.CloudDestinationFactory;
+import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
+import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
+import com.github.ambry.cloud.MockVirtualReplicatorCluster;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HardwareState;
@@ -615,8 +618,10 @@ final class ServerTestUtil {
 
     DataNodeId vcr = new CloudDataNode(cloudConfig, clusterMapConfig);
     VirtualReplicatorCluster virtualReplicatorCluster = new MockVirtualReplicatorCluster(vcr, clusterMap);
-    MockCloudDestination mockCloudDestination = new MockCloudDestination(blobIds);
-    CloudDestinationFactory mockCloudDestinationFactory = new MockCloudDestinationFactory(mockCloudDestination);
+    LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
+        new LatchBasedInMemoryCloudDestination(blobIds);
+    CloudDestinationFactory mockCloudDestinationFactory =
+        new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
     ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(connectionPoolConfig, clientSSLConfig, clusterMapConfig,
@@ -629,8 +634,8 @@ final class ServerTestUtil {
             new StoreKeyConverterFactoryImpl(null, null), serverConfig.serverMessageTransformer);
     cloudBackupManager.start();
     // Waiting for backup done
-    mockCloudDestination.await(2, TimeUnit.MINUTES);
-    Map<String, CloudBlobMetadata> cloudBlobMetadataMap = mockCloudDestination.getBlobMetadata(blobIds);
+    latchBasedInMemoryCloudDestination.await(2, TimeUnit.MINUTES);
+    Map<String, CloudBlobMetadata> cloudBlobMetadataMap = latchBasedInMemoryCloudDestination.getBlobMetadata(blobIds);
     for (BlobId blobId : blobIds) {
       CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataMap.get(blobId.toString());
       assertNotNull("cloudBlobMetadata shold not be null", cloudBlobMetadata);

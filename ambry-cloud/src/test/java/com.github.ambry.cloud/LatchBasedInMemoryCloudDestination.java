@@ -11,16 +11,8 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.cloud;
 
-import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudDestination;
-import com.github.ambry.cloud.CloudDestinationFactory;
-import com.github.ambry.cloud.CloudStorageException;
-import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Pair;
 import java.io.InputStream;
@@ -33,26 +25,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 
-class MockCloudDestinationFactory implements CloudDestinationFactory {
-  MockCloudDestination mockCloudDestination;
-
-  MockCloudDestinationFactory(MockCloudDestination mockCloudDestination) {
-    this.mockCloudDestination = mockCloudDestination;
-  }
-
-  @Override
-  public CloudDestination getCloudDestination() throws IllegalStateException {
-    return mockCloudDestination;
-  }
-}
-
-class MockCloudDestination implements CloudDestination {
+public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   private final Map<BlobId, Pair<CloudBlobMetadata, InputStream>> map = new HashMap<>();
   private final CountDownLatch latch;
   private final Set<BlobId> blobIds;
 
-  MockCloudDestination(List<BlobId> blobIds) {
+  public LatchBasedInMemoryCloudDestination(List<BlobId> blobIds) {
     this.blobIds = new HashSet<>(blobIds);
     this.latch = new CountDownLatch(blobIds.size());
   }
@@ -93,38 +72,8 @@ class MockCloudDestination implements CloudDestination {
     return map.containsKey(blobId);
   }
 
-  boolean await(long duration, TimeUnit timeUnit) throws InterruptedException {
+  public boolean await(long duration, TimeUnit timeUnit) throws InterruptedException {
     return latch.await(duration, timeUnit);
   }
 }
 
-class MockVirtualReplicatorCluster implements VirtualReplicatorCluster {
-
-  DataNodeId dataNodeId;
-  ClusterMap clusterMap;
-
-  MockVirtualReplicatorCluster(DataNodeId dataNodeId, ClusterMap clusterMap) {
-    this.dataNodeId = dataNodeId;
-    this.clusterMap = clusterMap;
-  }
-
-  @Override
-  public List<? extends DataNodeId> getAllDataNodeIds() {
-    return null;
-  }
-
-  @Override
-  public DataNodeId getCurrentDataNodeId() {
-    return dataNodeId;
-  }
-
-  @Override
-  public List<? extends PartitionId> getAssignedPartitionIds() {
-    return clusterMap.getAllPartitionIds(null);
-  }
-
-  @Override
-  public void close() throws Exception {
-
-  }
-}
