@@ -588,6 +588,7 @@ final class ServerTestUtil {
     Properties props = new Properties();
     props.setProperty("connectionpool.read.timeout.ms", "15000");
     props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.resolve.hostnames", "false");
     props.setProperty("clustermap.cluster.name", "thisIsClusterName");
     props.setProperty("clustermap.datacenter.name", dataNode.getDatacenterName());
     props.setProperty("clustermap.ssl.enabled.datacenters",
