@@ -59,7 +59,7 @@ class MockCloudDestination implements CloudDestination {
 
   @Override
   public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
-      InputStream blobInputStream) throws CloudStorageException {
+      InputStream blobInputStream) {
     if (blobIds.contains(blobId)) {
       map.put(blobId, new Pair<>(cloudBlobMetadata, blobInputStream));
       latch.countDown();

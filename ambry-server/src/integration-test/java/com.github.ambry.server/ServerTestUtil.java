@@ -550,6 +550,15 @@ final class ServerTestUtil {
     assertEquals(expectedErrorCode, response.getError());
   }
 
+  /**
+   * Tests blobs put to dataNode can be backed up by {@link CloudBackupManager}.
+   * @param cluster the {@link MockCluster} of dataNodes.
+   * @param dataNode the datanode where blobs are originally put.
+   * @param clientSSLConfig the {@link SSLConfig}.
+   * @param clientSSLSocketFactory the {@link SSLSocketFactory}.
+   * @param testEncryption if encryption will be tested. Not used now.
+   * @param notificationSystem the {@link MockNotificationSystem} to track blobs event in {@link MockCluster}.
+   */
   static void endToEndBackupManagerTest(MockCluster cluster, DataNodeId dataNode, SSLConfig clientSSLConfig,
       SSLSocketFactory clientSSLSocketFactory, boolean testEncryption, MockNotificationSystem notificationSystem)
       throws Exception {
@@ -601,7 +610,6 @@ final class ServerTestUtil {
     CloudConfig cloudConfig = new CloudConfig(vProps);
     ReplicationConfig replicationConfig = new ReplicationConfig(vProps);
     ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(vProps);
-    SSLConfig sslConfig = new SSLConfig(vProps);
     StoreConfig storeConfig = new StoreConfig(vProps);
     ServerConfig serverConfig = new ServerConfig(vProps);
 
