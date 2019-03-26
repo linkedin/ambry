@@ -13,9 +13,16 @@
  */
 package com.github.ambry.cloud;
 
+/**
+ * An implementation of {@link CloudDestinationFactory} to produce {@link LatchBasedInMemoryCloudDestination}
+ */
 public class LatchBasedInMemoryCloudDestinationFactory implements CloudDestinationFactory {
   LatchBasedInMemoryCloudDestination _latchBasedInMemoryCloudDestination;
 
+  /**
+   * Instantiate {@link LatchBasedInMemoryCloudDestinationFactory}.
+   * @param latchBasedInMemoryCloudDestination the instance of {@link LatchBasedInMemoryCloudDestination}.
+   */
   public LatchBasedInMemoryCloudDestinationFactory(
       LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination) {
     this._latchBasedInMemoryCloudDestination = latchBasedInMemoryCloudDestination;

@@ -20,11 +20,19 @@ import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import java.util.List;
 
 
+/**
+ * A mock implementation for {@link VirtualReplicatorCluster}.
+ */
 public class MockVirtualReplicatorCluster implements VirtualReplicatorCluster {
 
   DataNodeId dataNodeId;
   ClusterMap clusterMap;
 
+  /**
+   * Instantiate {@link MockVirtualReplicatorCluster}.
+   * @param dataNodeId the {@link DataNodeId} representation of current VCR.
+   * @param clusterMap the {@link ClusterMap} of dataNodes cluster.
+   */
   public MockVirtualReplicatorCluster(DataNodeId dataNodeId, ClusterMap clusterMap) {
     this.dataNodeId = dataNodeId;
     this.clusterMap = clusterMap;

@@ -25,12 +25,19 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 
+/**
+ * An latch based in memory implementation of {@link CloudDestination}.
+ */
 public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   private final Map<BlobId, Pair<CloudBlobMetadata, InputStream>> map = new HashMap<>();
   private final CountDownLatch latch;
   private final Set<BlobId> blobIds;
 
+  /**
+   * Instantiate {@link LatchBasedInMemoryCloudDestination}.
+   * @param blobIds a list of blobs that {@link LatchBasedInMemoryCloudDestination} tracks.
+   */
   public LatchBasedInMemoryCloudDestination(List<BlobId> blobIds) {
     this.blobIds = new HashSet<>(blobIds);
     this.latch = new CountDownLatch(blobIds.size());
