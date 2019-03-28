@@ -41,7 +41,7 @@ public class CloudConfig {
    * The ssl port number associated with this node.
    */
   @Config("vcr.ssl.port")
-  @Default("6668")
+  @Default("null")
   public final Integer vcrSslPort;
 
   /**
@@ -62,7 +62,7 @@ public class CloudConfig {
    * The comma-separated list of statically assigned partitions.  Optional.
    */
   @Config(VCR_ASSIGNED_PARTITIONS)
-  @Default("")
+  @Default("null")
   public final String vcrAssignedPartitions;
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
@@ -70,7 +70,7 @@ public class CloudConfig {
     vcrClusterZkConnectString =
         verifiableProperties.getString("vcr.cluster.zk.connect.string", VCR_CLUSTER_ZK_CONNECT_STRING);
     vcrClusterName = verifiableProperties.getString("vcr.cluster.name", VCR_CLUSTER_NAME);
-    vcrSslPort = verifiableProperties.getInteger("vcr.ssl.port", 6668);
+    vcrSslPort = verifiableProperties.getInteger("vcr.ssl.port", null);
     vcrReplicaMountPathPrefix =
         verifiableProperties.getString("vcr.replica.mount.path.prefix", VCR_REPLICA_MOUNT_PATH_PREFIX);
     cloudDestinationFactoryClass =

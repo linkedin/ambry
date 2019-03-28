@@ -175,8 +175,7 @@ project(':ambry-server') {
                 project(':ambry-commons'),
                 project(':ambry-store'),
                 project(':ambry-utils'),
-                project(':ambry-replication'),
-                project(':ambry-cloud')
+                project(':ambry-replication')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-router')
         testCompile project(':ambry-cloud')

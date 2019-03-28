@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.cloud;
 
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
@@ -39,6 +39,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -92,7 +93,15 @@ public class VCRServer {
     this.notificationSystem = notificationSystem;
   }
 
-  /** Test constructor */
+  /**
+   * Test constructor.
+   * @param properties the config properties to use.
+   * @param clusterAgentsFactory the {@link ClusterAgentsFactory} to use.
+   * @param notificationSystem the {@link NotificationSystem} to use.
+   * @param cloudDestinationFactory the {@link CloudDestinationFactory} to use.
+   * @param virtualReplicatorCluster the {@link VirtualReplicatorCluster} to use.
+   * @param sslConfig the {@link SSLConfig} to use.
+   */
   VCRServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory,
       VirtualReplicatorCluster virtualReplicatorCluster, SSLConfig sslConfig) {
@@ -174,13 +183,12 @@ public class VCRServer {
       List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
       clusterParticipant.participate(ambryHealthReports);
 
-      logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
-      metrics.serverStartTimeInMs.update(processingTime);
-      logger.info("Server startup time in Ms " + processingTime);
+      metrics.vcrStartTimeInMs.update(processingTime);
+      logger.info("VCR startup time in Ms " + processingTime);
     } catch (Exception e) {
-      logger.error("Error during startup", e);
-      throw new InstantiationException("failure during startup " + e);
+      logger.error("Error during VCR startup", e);
+      throw new InstantiationException("failure during VCR startup " + e);
     }
   }
 
@@ -223,14 +231,14 @@ public class VCRServer {
       if (virtualReplicatorCluster != null) {
         virtualReplicatorCluster.close();
       }
-      logger.info("shutdown completed");
+      logger.info("VCR shutdown completed");
     } catch (Exception e) {
-      logger.error("Error while shutting down server", e);
+      logger.error("Error while shutting down VCR", e);
     } finally {
       shutdownLatch.countDown();
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
-      metrics.serverShutdownTimeInMs.update(processingTime);
-      logger.info("Server shutdown time in Ms " + processingTime);
+      metrics.vcrShutdownTimeInMs.update(processingTime);
+      logger.info("VCR shutdown time in Ms " + processingTime);
     }
   }
 

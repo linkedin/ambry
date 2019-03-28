@@ -54,12 +54,10 @@ public class CloudDataNode implements DataNodeId {
   public CloudDataNode(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
     if (clusterMapConfig.clusterMapPort == null) {
       throw new IllegalArgumentException("PlainText port is not provided");
-    } else if (cloudConfig.vcrSslPort == null) {
-      throw new IllegalArgumentException("VCR SSL Port is not provided.");
     }
     this.hostName = clusterMapConfig.clusterMapHostName;
     this.plainTextPort = new Port(clusterMapConfig.clusterMapPort, PortType.PLAINTEXT);
-    this.sslPort = new Port(cloudConfig.vcrSslPort, PortType.SSL);
+    this.sslPort = (cloudConfig.vcrSslPort != null) ? new Port(cloudConfig.vcrSslPort, PortType.SSL) : null;
     this.dataCenterName = clusterMapConfig.clusterMapDatacenterName;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);

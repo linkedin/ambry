@@ -11,18 +11,18 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.cloud;
 
-import com.github.ambry.cloud.CloudDestinationFactory;
-import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
-import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.notification.NotificationSystem;
 import java.util.Collections;
 import java.util.Properties;
 import org.junit.Before;
 import org.junit.Test;
+
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -32,11 +32,13 @@ public class VCRServerTest {
 
   private MockClusterAgentsFactory mockClusterAgentsFactory;
   private MockClusterMap mockClusterMap;
-  private MockNotificationSystem notificationSystem;
+  private NotificationSystem notificationSystem;
 
   @Before
-  public void setup() {
-
+  public void setup() throws Exception {
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, 1, 1, 2);
+    mockClusterMap = mockClusterAgentsFactory.getClusterMap();
+    notificationSystem = mock(NotificationSystem.class);
   }
 
   /**
@@ -45,9 +47,6 @@ public class VCRServerTest {
    */
   @Test
   public void testVCRServer() throws Exception {
-    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, 1, 1, 2);
-    mockClusterMap = mockClusterAgentsFactory.getClusterMap();
-    notificationSystem = new MockNotificationSystem(mockClusterMap);
     Properties props = new Properties();
     props.setProperty("host.name", mockClusterMap.getDataNodes().get(0).getHostname());
     int port = mockClusterMap.getDataNodes().get(0).getPort();
@@ -60,7 +59,6 @@ public class VCRServerTest {
     props.setProperty("server.scheduler.num.of.threads", "1");
     props.setProperty("num.io.threads", "1");
     props.setProperty("vcr.assigned.partitions", "0,1");
-    props.setProperty("ssl.factory", MockSSLFactory.class.getName());
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(new LatchBasedInMemoryCloudDestination(Collections.emptyList()));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);

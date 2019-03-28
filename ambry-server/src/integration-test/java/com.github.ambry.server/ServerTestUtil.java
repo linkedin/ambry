@@ -18,12 +18,12 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.CloudBackupManager;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudDataNode;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
-import com.github.ambry.cloud.MockVirtualReplicatorCluster;
 import com.github.ambry.cloud.StaticVCRCluster;
+import com.github.ambry.cloud.VCRServer;
+import com.github.ambry.cloud.VCRTestUtil;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
@@ -560,7 +560,7 @@ final class ServerTestUtil {
    * @param testEncryption if encryption will be tested. Not used now.
    * @param notificationSystem the {@link MockNotificationSystem} to track blobs event in {@link MockCluster}.
    */
-  static void endToEndReplicationToCloudBackupTest(MockCluster cluster, DataNodeId dataNode, SSLConfig clientSSLConfig,
+  static void endToEndCloudBackupTest(MockCluster cluster, DataNodeId dataNode, SSLConfig clientSSLConfig,
       SSLSocketFactory clientSSLSocketFactory, boolean testEncryption, MockNotificationSystem notificationSystem)
       throws Exception {
     // TODO: test encryption
@@ -608,9 +608,8 @@ final class ServerTestUtil {
     props.setProperty("clustermap.ssl.enabled.datacenters",
         clientSSLConfig == null ? "" : dataNode.getDatacenterName());
     props.setProperty("clustermap.port", "12309");
-    props.setProperty("vcr.ssl.port", "12310");
-    if (clientSSLConfig == null) {
-      props.setProperty("ssl.factory", MockSSLFactory.class.getName());
+    if (clientSSLConfig != null) {
+      props.setProperty("vcr.ssl.port", "12310");
     }
     props.setProperty("vcr.cluster.name", "VCRCluster");
     props.setProperty("vcr.assigned.partitions", String.join(",",
@@ -624,8 +623,9 @@ final class ServerTestUtil {
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
 
-    VCRServer vcrServer = new VCRServer(vProps, clusterAgentsFactory, notificationSystem, cloudDestinationFactory,
-        vcrCluster, clientSSLConfig);
+    VCRServer vcrServer =
+        VCRTestUtil.createVCRServer(vProps, clusterAgentsFactory, notificationSystem, cloudDestinationFactory,
+            vcrCluster, clientSSLConfig);
     vcrServer.startup();
 
     // Waiting for backup done

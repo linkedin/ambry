@@ -11,20 +11,21 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.cloud;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.VCRServer;
 
 
 public class VCRMetrics {
 
-  public final Histogram serverStartTimeInMs;
-  public final Histogram serverShutdownTimeInMs;
+  public final Histogram vcrStartTimeInMs;
+  public final Histogram vcrShutdownTimeInMs;
 
   public VCRMetrics(MetricRegistry registry) {
     // TODO: add metrics to registry
-    serverStartTimeInMs = registry.histogram(MetricRegistry.name(VCRServer.class, "ServerStartTimeInMs"));
-    serverShutdownTimeInMs = registry.histogram(MetricRegistry.name(VCRServer.class, "ServerShutdownTimeInMs"));
+    vcrStartTimeInMs = registry.histogram(MetricRegistry.name(VCRServer.class, "VcrStartTimeInMs"));
+    vcrShutdownTimeInMs = registry.histogram(MetricRegistry.name(VCRServer.class, "VcrShutdownTimeInMs"));
   }
 }
