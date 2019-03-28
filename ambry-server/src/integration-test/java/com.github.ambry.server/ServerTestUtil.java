@@ -21,9 +21,9 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
-import com.github.ambry.cloud.StaticVCRCluster;
-import com.github.ambry.cloud.VCRServer;
-import com.github.ambry.cloud.VCRTestUtil;
+import com.github.ambry.cloud.StaticVcrCluster;
+import com.github.ambry.cloud.VcrServer;
+import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
@@ -617,14 +617,14 @@ final class ServerTestUtil {
     VerifiableProperties vProps = new VerifiableProperties(props);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
     CloudConfig cloudConfig = new CloudConfig(vProps);
-    VirtualReplicatorCluster vcrCluster = new StaticVCRCluster(cloudConfig, clusterMapConfig, clusterMap);
+    VirtualReplicatorCluster vcrCluster = new StaticVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIds);
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
 
-    VCRServer vcrServer =
-        VCRTestUtil.createVCRServer(vProps, clusterAgentsFactory, notificationSystem, cloudDestinationFactory,
+    VcrServer vcrServer =
+        VcrTestUtil.createVcrServer(vProps, clusterAgentsFactory, notificationSystem, cloudDestinationFactory,
             vcrCluster, clientSSLConfig);
     vcrServer.startup();
 

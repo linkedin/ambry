@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 /**
  * VCR Cluster based on static partition assignment.
  */
-public class StaticVCRCluster implements VirtualReplicatorCluster {
+public class StaticVcrCluster implements VirtualReplicatorCluster {
 
   private final DataNodeId currentDataNode;
   private final List<PartitionId> assignedPartitionIds;
@@ -45,7 +45,7 @@ public class StaticVCRCluster implements VirtualReplicatorCluster {
    * @param clusterMapConfig The clustermap configuration to use.
    * @param clusterMap The clustermap to use.
    */
-  public StaticVCRCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
+  public StaticVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
     currentDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
     if (Utils.isNullOrEmpty(cloudConfig.vcrAssignedPartitions)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_ASSIGNED_PARTITIONS);

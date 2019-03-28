@@ -15,9 +15,6 @@ package com.github.ambry.cloud;
 
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.CloudBackupManager;
-import com.github.ambry.cloud.CloudDestinationFactory;
-import com.github.ambry.cloud.StaticVCRCluster;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -60,7 +57,7 @@ import static com.github.ambry.utils.Utils.*;
 /**
  * Virtual Cloud Replicator server
  */
-public class VCRServer {
+public class VcrServer {
 
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
   private NetworkServer networkServer = null;
@@ -78,15 +75,15 @@ public class VCRServer {
   private final NotificationSystem notificationSystem;
   private CloudDestinationFactory cloudDestinationFactory;
   private SSLConfig sslConfig;
-  private VCRMetrics metrics = null;
+  private VcrMetrics metrics = null;
 
   /**
-   * VCRServer constructor.
+   * VcrServer constructor.
    * @param properties the config properties to use.
    * @param clusterAgentsFactory the {@link ClusterAgentsFactory} to use.
    * @param notificationSystem the {@link NotificationSystem} to use.
    */
-  public VCRServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
+  public VcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       NotificationSystem notificationSystem) {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
@@ -102,7 +99,7 @@ public class VCRServer {
    * @param virtualReplicatorCluster the {@link VirtualReplicatorCluster} to use.
    * @param sslConfig the {@link SSLConfig} to use.
    */
-  VCRServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
+  VcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory,
       VirtualReplicatorCluster virtualReplicatorCluster, SSLConfig sslConfig) {
     this(properties, clusterAgentsFactory, notificationSystem);
@@ -125,7 +122,7 @@ public class VCRServer {
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
-      this.metrics = new VCRMetrics(registry);
+      this.metrics = new VcrMetrics(registry);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -145,7 +142,8 @@ public class VCRServer {
 
       // Note: using static cluster until Helix version implemented
       if (virtualReplicatorCluster == null) {
-        virtualReplicatorCluster = new StaticVCRCluster(cloudConfig, clusterMapConfig, clusterMap);
+        // TODO: obtain factory from config property
+        virtualReplicatorCluster = new StaticVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
       }
 
       // initialize cloud destination

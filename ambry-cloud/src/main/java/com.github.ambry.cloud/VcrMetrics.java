@@ -15,17 +15,16 @@ package com.github.ambry.cloud;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.VCRServer;
 
 
-public class VCRMetrics {
+public class VcrMetrics {
 
   public final Histogram vcrStartTimeInMs;
   public final Histogram vcrShutdownTimeInMs;
 
-  public VCRMetrics(MetricRegistry registry) {
+  public VcrMetrics(MetricRegistry registry) {
     // TODO: add metrics to registry
-    vcrStartTimeInMs = registry.histogram(MetricRegistry.name(VCRServer.class, "VcrStartTimeInMs"));
-    vcrShutdownTimeInMs = registry.histogram(MetricRegistry.name(VCRServer.class, "VcrShutdownTimeInMs"));
+    vcrStartTimeInMs = registry.histogram(MetricRegistry.name(VcrServer.class, "VcrStartTimeInMs"));
+    vcrShutdownTimeInMs = registry.histogram(MetricRegistry.name(VcrServer.class, "VcrShutdownTimeInMs"));
   }
 }

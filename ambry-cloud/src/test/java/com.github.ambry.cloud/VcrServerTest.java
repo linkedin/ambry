@@ -28,7 +28,7 @@ import static org.mockito.Mockito.*;
 /**
  * Test of the VCR Server.
  */
-public class VCRServerTest {
+public class VcrServerTest {
 
   private MockClusterAgentsFactory mockClusterAgentsFactory;
   private MockClusterMap mockClusterMap;
@@ -62,8 +62,8 @@ public class VCRServerTest {
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(new LatchBasedInMemoryCloudDestination(Collections.emptyList()));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
-    VCRServer vcrServer =
-        new VCRServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory, null,
+    VcrServer vcrServer =
+        new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory, null,
             null);
     vcrServer.startup();
     vcrServer.shutdown();

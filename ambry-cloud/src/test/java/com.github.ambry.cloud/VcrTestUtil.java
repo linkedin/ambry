@@ -23,10 +23,10 @@ import com.github.ambry.notification.NotificationSystem;
 /**
  * Utility class for VCR tests.
  */
-public class VCRTestUtil {
+public class VcrTestUtil {
 
   /**
-   * Create a {@link VCRServer}.
+   * Create a {@link VcrServer}.
    * @param properties the config properties to use.
    * @param clusterAgentsFactory the {@link ClusterAgentsFactory} to use.
    * @param notificationSystem the {@link NotificationSystem} to use.
@@ -35,10 +35,10 @@ public class VCRTestUtil {
    * @param sslConfig the {@link SSLConfig} to use.
    * @return the created VCR server.
    */
-  public static VCRServer createVCRServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
+  public static VcrServer createVcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory,
       VirtualReplicatorCluster virtualReplicatorCluster, SSLConfig sslConfig) {
-    return new VCRServer(properties, clusterAgentsFactory, notificationSystem, cloudDestinationFactory,
+    return new VcrServer(properties, clusterAgentsFactory, notificationSystem, cloudDestinationFactory,
         virtualReplicatorCluster, sslConfig);
   }
 }
