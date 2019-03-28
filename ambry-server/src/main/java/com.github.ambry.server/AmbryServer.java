@@ -50,7 +50,9 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -174,10 +176,18 @@ public class AmbryServer {
       }
 
       List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
+      Set<String> validStatsTypes = new HashSet<>();
+      for (StatsReportType type : StatsReportType.values()) {
+        validStatsTypes.add(type.toString());
+      }
       if (serverConfig.serverStatsPublishHealthReportEnabled) {
-        serverConfig.serverStatsReportsToPublish.forEach(e -> ambryHealthReports.add(
-            new AmbryStatsReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes,
-                StatsReportType.valueOf(e))));
+        serverConfig.serverStatsReportsToPublish.forEach(e -> {
+          if (validStatsTypes.contains(e)) {
+            ambryHealthReports.add(
+                new AmbryStatsReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes,
+                    StatsReportType.valueOf(e)));
+          }
+        });
       }
 
       clusterParticipant.participate(ambryHealthReports);
