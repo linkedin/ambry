@@ -24,6 +24,7 @@ public class CloudConfig {
   public static final String CLOUD_DESTINATION_FACTORY_CLASS = "cloud.destination.factory.class";
   public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
       "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
+  public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
 
   @Config("vcr.cluster.zk.connect.string")
   @Default(VCR_CLUSTER_ZK_CONNECT_STRING)
@@ -57,6 +58,13 @@ public class CloudConfig {
   @Default(DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS)
   public final String cloudDestinationFactoryClass;
 
+  /**
+   * The comma-separated list of statically assigned partitions.  Optional.
+   */
+  @Config(VCR_ASSIGNED_PARTITIONS)
+  @Default("")
+  public final String vcrAssignedPartitions;
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
     vcrClusterZkConnectString =
@@ -67,5 +75,6 @@ public class CloudConfig {
         verifiableProperties.getString("vcr.replica.mount.path.prefix", VCR_REPLICA_MOUNT_PATH_PREFIX);
     cloudDestinationFactoryClass =
         verifiableProperties.getString(CLOUD_DESTINATION_FACTORY_CLASS, DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS);
+    vcrAssignedPartitions = verifiableProperties.getString(VCR_ASSIGNED_PARTITIONS, null);
   }
 }

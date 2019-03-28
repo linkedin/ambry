@@ -130,9 +130,9 @@ public class ServerSSLTest {
    * Do endToEndTest with backup manager.
    */
   @Test
-  public void endToEndBackupManagerTest() throws Exception {
+  public void endToEndReplicationToCloudBackupTest() throws Exception {
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndBackupManagerTest(sslCluster, dataNode, clientSSLConfig1, clientSSLSocketFactory1,
+    ServerTestUtil.endToEndReplicationToCloudBackupTest(sslCluster, dataNode, clientSSLConfig1, clientSSLSocketFactory1,
         testEncryption, notificationSystem);
   }
 
