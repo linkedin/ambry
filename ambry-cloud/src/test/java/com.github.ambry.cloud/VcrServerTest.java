@@ -56,6 +56,7 @@ public class VcrServerTest {
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("clustermap.port", Integer.toString(port));
     props.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
+    props.setProperty("clustermap.resolve.hostnames", "false");
     props.setProperty("server.scheduler.num.of.threads", "1");
     props.setProperty("num.io.threads", "1");
     props.setProperty("vcr.assigned.partitions", "0,1");
