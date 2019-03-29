@@ -15,7 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
@@ -36,7 +36,9 @@ import java.nio.channels.ReadableByteChannel;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,16 +52,21 @@ class CloudBlobStore implements Store {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
+  private final CloudConfig cloudConfig;
+  private final long minTtlMillis;
   private boolean started;
 
   /**
    * Constructor for CloudBlobStore
    * @param partitionId partition associated with BlobStore.
-   * @param verProps the cloud store properties.
+   * @param cloudConfig the {@link CloudConfig} to use.
+   * @param cloudDestination the {@link CloudDestination} to use.
    */
-  CloudBlobStore(PartitionId partitionId, VerifiableProperties verProps, CloudDestination cloudDestination) {
-    this.cloudDestination = cloudDestination;
-    this.partitionId = partitionId;
+  CloudBlobStore(PartitionId partitionId, CloudConfig cloudConfig, CloudDestination cloudDestination) {
+    this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
+    this.cloudConfig = Objects.requireNonNull(cloudConfig, "cloudConfig is required");
+    this.cloudDestination = Objects.requireNonNull(cloudDestination, "cloudDestination is required");
+    minTtlMillis = cloudConfig.vcrMinTtlDays * TimeUnit.DAYS.toMillis(1);
   }
 
   @Override
@@ -96,16 +103,34 @@ class CloudBlobStore implements Store {
    * @param size the number of bytes to upload.
    * @throws CloudStorageException if the upload failed.
    */
-  private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size) throws CloudStorageException {
-    boolean performUpload = messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time && !messageInfo.isDeleted();
-    // May need to encrypt buffer before upload
-    if (performUpload) {
+  private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size)
+      throws CloudStorageException, IOException {
+    if (shouldUpload(messageInfo)) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
+      if (cloudConfig.vcrRequireEncryption && !BlobId.isEncrypted(blobId.getID())) {
+        // TODO: encrypt on demand before uploading, skip for now
+        return;
+      }
       CloudBlobMetadata blobMetadata =
           new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
               messageInfo.getSize());
       cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
     }
+  }
+
+  /**
+   * Utility to decide whether a blob should be uploaded.
+   * @param messageInfo The {@link MessageInfo} containing the blob metadata.
+   * @return {@code true} is the blob should be upload, {@code false} otherwise.
+   */
+  private boolean shouldUpload(MessageInfo messageInfo) {
+    if (messageInfo.isDeleted()) {
+      return false;
+    }
+
+    // expiration time above threshold
+    return (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time
+        || messageInfo.getExpirationTimeInMs() - messageInfo.getOperationTimeMs() >= minTtlMillis);
   }
 
   @Override

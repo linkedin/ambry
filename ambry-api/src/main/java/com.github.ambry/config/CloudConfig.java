@@ -18,13 +18,17 @@ package com.github.ambry.config;
  */
 public class CloudConfig {
 
-  private final static String VCR_CLUSTER_NAME = "VCRCluster";
-  private final static String VCR_CLUSTER_ZK_CONNECT_STRING = "localhost:2181";
-  private final static String VCR_REPLICA_MOUNT_PATH_PREFIX = "/tmp/vcr/";
   public static final String CLOUD_DESTINATION_FACTORY_CLASS = "cloud.destination.factory.class";
-  public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
-      "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
+  public static final String VCR_REQUIRE_ENCRYPTION = "vcr.require.encryption";
+  public static final String VCR_MIN_TTL_DAYS = "vcr.min.ttl.days";
+
+  private static final String VCR_CLUSTER_NAME = "VCRCluster";
+  private static final String VCR_CLUSTER_ZK_CONNECT_STRING = "localhost:2181";
+  private static final String VCR_REPLICA_MOUNT_PATH_PREFIX = "/tmp/vcr/";
+  private static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
+      "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
+  private static final Integer DEFAULT_MIN_TTL_DAYS = 14;
 
   @Config("vcr.cluster.zk.connect.string")
   @Default(VCR_CLUSTER_ZK_CONNECT_STRING)
@@ -59,6 +63,20 @@ public class CloudConfig {
   public final String cloudDestinationFactoryClass;
 
   /**
+   * Require blobs to be encrypted prior to cloud upload?
+   */
+  @Config(VCR_REQUIRE_ENCRYPTION)
+  @Default("false")
+  public final Boolean vcrRequireEncryption;
+
+  /**
+   * Minimum TTL in days required for blobs to be uploaded to cloud.
+   */
+  @Config(VCR_MIN_TTL_DAYS)
+  @Default("14")
+  public final Integer vcrMinTtlDays;
+
+  /**
    * The comma-separated list of statically assigned partitions.  Optional.
    */
   @Config(VCR_ASSIGNED_PARTITIONS)
@@ -76,5 +94,7 @@ public class CloudConfig {
     cloudDestinationFactoryClass =
         verifiableProperties.getString(CLOUD_DESTINATION_FACTORY_CLASS, DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS);
     vcrAssignedPartitions = verifiableProperties.getString(VCR_ASSIGNED_PARTITIONS, null);
+    vcrRequireEncryption = verifiableProperties.getBoolean(VCR_REQUIRE_ENCRYPTION, false);
+    vcrMinTtlDays = verifiableProperties.getInteger(VCR_MIN_TTL_DAYS, DEFAULT_MIN_TTL_DAYS);
   }
 }
