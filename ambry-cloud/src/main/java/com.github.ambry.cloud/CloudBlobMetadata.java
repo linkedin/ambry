@@ -28,6 +28,7 @@ public class CloudBlobMetadata {
   public static final String FIELD_EXPIRATION_TIME = "expirationTime";
   public static final String FIELD_ACCOUNT_ID = "accountId";
   public static final String FIELD_CONTAINER_ID = "containerId";
+  public static final String FIELD_ENCRYPTION_CONTEXT = "encryptionContext";
 
   private String id;
   private String partitionId;
@@ -38,6 +39,7 @@ public class CloudBlobMetadata {
   private int containerId;
   private long expirationTime;
   private long deletionTime;
+  private  String encryptionContext;
 
   /**
    * Default constructor (for JSONSerializer).
@@ -210,6 +212,21 @@ public class CloudBlobMetadata {
    */
   public CloudBlobMetadata setContainerId(int containerId) {
     this.containerId = containerId;
+    return this;
+  }
+
+  /**
+   * @return the encryption context.
+   */
+  public String getEncryptionContext() { return encryptionContext;}
+
+  /**
+   * Set the encryption context.
+   * @param encryptionContext the encryption context of the blob.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setEncryptionContext(String encryptionContext) {
+    this.encryptionContext = encryptionContext;
     return this;
   }
 
