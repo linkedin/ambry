@@ -106,6 +106,8 @@ class CloudBlobStore implements Store {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       // TODO: would be more efficient to call blobId.isEncrypted()
 
+
+
       if (!BlobId.isEncrypted(blobId.getID())) {
         // Need to encrypt the buffer before upload
         messageBuf = cryptoService.encrypt(blobId, messageBuf);

@@ -28,7 +28,7 @@ public class CloudBlobMetadata {
   public static final String FIELD_EXPIRATION_TIME = "expirationTime";
   public static final String FIELD_ACCOUNT_ID = "accountId";
   public static final String FIELD_CONTAINER_ID = "containerId";
-  public static final String FIELD_ENCRYPTION_CONTEXT = "encryptionContext";
+  public static final String FIELD_SHOULD_ENCRYPT = "shouldEncrypt";
 
   private String id;
   private String partitionId;
