@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureCloudBlobCryptoService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -34,6 +35,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -49,17 +51,21 @@ public class CloudBackupManager extends ReplicationEngine {
       ClusterMap clusterMap, VirtualReplicatorCluster virtualReplicatorCluster,
       CloudDestinationFactory cloudDestinationFactory, ScheduledExecutorService scheduler,
       ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification,
-      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
+      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
+      CloudBlobCryptoServiceFactory cloudBlobCryptoServiceFactory) throws ReplicationException {
 
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
         virtualReplicatorCluster.getCurrentDataNodeId(), connectionPool, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName);
     CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
     List<? extends PartitionId> partitionIds = virtualReplicatorCluster.getAssignedPartitionIds();
+
     for (PartitionId partitionId : partitionIds) {
       ReplicaId cloudReplica =
           new CloudReplica(cloudConfig, partitionId, virtualReplicatorCluster.getCurrentDataNodeId());
-      Store cloudStore = new CloudBlobStore(partitionId, null, cloudDestination);
+
+      Store cloudStore = new CloudBlobStore(partitionId, null, cloudDestination,
+          cloudBlobCryptoServiceFactory.getCloudBlobCryptoService());
       try {
         cloudStore.start();
       } catch (StoreException e) {

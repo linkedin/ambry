@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.CloudBackupManager;
+import com.github.ambry.cloud.CloudBlobCryptoServiceFactory;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDataNode;
 import com.github.ambry.cloud.CloudDestinationFactory;
@@ -610,6 +611,7 @@ final class ServerTestUtil {
     props.setProperty("clustermap.port", "12309");
     props.setProperty("vcr.ssl.port", "12310");
     props.setProperty("vcr.cluster.name", "VCRCluster");
+    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     VerifiableProperties vProps = new VerifiableProperties(props);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
     CloudConfig cloudConfig = new CloudConfig(vProps);
@@ -629,11 +631,14 @@ final class ServerTestUtil {
         new BlockingChannelConnectionPool(connectionPoolConfig, clientSSLConfig, clusterMapConfig,
             clusterMap.getMetricRegistry());
     connectionPool.start();
+    CloudBlobCryptoServiceFactory cloudBlobCryptoServiceFactory = Utils.getObj(cloudConfig.cloudBlobCryptoServiceFactoryClass,
+        vProps, "ambry", clusterMap.getMetricRegistry());
     CloudBackupManager cloudBackupManager =
         new CloudBackupManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
             Utils.getObj(storeConfig.storeKeyFactory, clusterMap), clusterMap, virtualReplicatorCluster,
             mockCloudDestinationFactory, scheduler, connectionPool, clusterMap.getMetricRegistry(), null,
-            new StoreKeyConverterFactoryImpl(null, null), serverConfig.serverMessageTransformer);
+            new StoreKeyConverterFactoryImpl(null, null), serverConfig.serverMessageTransformer,
+            cloudBlobCryptoServiceFactory);
     cloudBackupManager.start();
     // Waiting for backup done
     assertTrue("Did not backup all blobs in 2 minutes", latchBasedInMemoryCloudDestination.await(2, TimeUnit.MINUTES));

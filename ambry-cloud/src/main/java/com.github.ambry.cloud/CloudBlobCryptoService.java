@@ -29,7 +29,7 @@ public interface CloudBlobCryptoService {
    * @return The encrypted buffer.
    * @throws {@link GeneralSecurityException} on any exception with encryption.
    */
-  public ByteBuffer encrypt(ByteBuffer buffer) throws GeneralSecurityException;
+  ByteBuffer encrypt(ByteBuffer buffer) throws GeneralSecurityException;
 
   /**
    * Decrypts the blob buffer being downloaded from cloud storage.
@@ -37,5 +37,5 @@ public interface CloudBlobCryptoService {
    * @return The decrypted buffer.
    * @throws {@link GeneralSecurityException} on any exception with decryption
    */
-  public ByteBuffer decrypt(ByteBuffer buffer) throws GeneralSecurityException;
+  ByteBuffer decrypt(ByteBuffer buffer) throws GeneralSecurityException;
 }

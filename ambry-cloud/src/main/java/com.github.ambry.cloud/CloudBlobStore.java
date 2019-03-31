@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
@@ -59,7 +60,7 @@ class CloudBlobStore implements Store {
    * @param cloudDestination the {@link CloudDestination}.
    * @param cryptoService the {@link CloudBlobCryptoService} to use for encryption.
    */
-  CloudBlobStore(PartitionId partitionId, CloudDestination cloudDestination, CloudBlobCryptoService cryptoService) {
+  CloudBlobStore(PartitionId partitionId, VerifiableProperties verProps, CloudDestination cloudDestination, CloudBlobCryptoService cryptoService) {
     this.cloudDestination = cloudDestination;
     this.partitionId = partitionId;
     this.cryptoService = cryptoService;
@@ -106,7 +107,7 @@ class CloudBlobStore implements Store {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       // TODO: would be more efficient to call blobId.isEncrypted()
       boolean usesCloudEncryption = false;
-      if (blobId.getVersion() < 4 || !BlobId.isEncrypted(blobId.getID())) {
+      if (cryptoService != null && (blobId.getVersion() < 4 || !BlobId.isEncrypted(blobId.getID()))) {
         // Need to encrypt the buffer before upload
         messageBuf = cryptoService.encrypt(messageBuf);
         usesCloudEncryption = true;

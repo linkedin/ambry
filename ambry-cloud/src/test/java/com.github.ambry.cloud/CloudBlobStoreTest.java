@@ -62,7 +62,7 @@ public class CloudBlobStoreTest {
   public void setup() throws Exception {
     dest = mock(CloudDestination.class);
     partitionId = new MockPartitionId();
-    store = new CloudBlobStore(partitionId, dest, cryptoService);
+    store = new CloudBlobStore(partitionId, null, dest, cryptoService);
     store.start();
   }
 
@@ -136,7 +136,7 @@ public class CloudBlobStoreTest {
   @Test
   public void testStoreNotStarted() throws Exception {
     // Create store and don't start it.
-    CloudBlobStore idleStore = new CloudBlobStore(partitionId, dest, cryptoService);
+    CloudBlobStore idleStore = new CloudBlobStore(partitionId,null, dest, cryptoService);
     List<StoreKey> keys = Collections.singletonList(getUniqueId(refAccountId, refContainerId));
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     addBlobToSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId);
@@ -168,7 +168,7 @@ public class CloudBlobStoreTest {
         new CloudStorageException("ouch"));
     when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(new CloudStorageException("ouch"));
     when(exDest.getBlobMetadata(anyList())).thenThrow(new CloudStorageException("ouch"));
-    CloudBlobStore exStore = new CloudBlobStore(partitionId, exDest, cryptoService);
+    CloudBlobStore exStore = new CloudBlobStore(partitionId, null, exDest, cryptoService);
     exStore.start();
     List<StoreKey> keys = Collections.singletonList(getUniqueId(refAccountId, refContainerId));
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
