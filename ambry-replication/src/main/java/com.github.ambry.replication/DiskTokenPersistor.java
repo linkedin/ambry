@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 /**
  * {@link DiskTokenPersistor} persists replication token to disk.
  */
-class DiskTokenPersistor implements ReplicaTokenPersistor {
+public class DiskTokenPersistor implements ReplicaTokenPersistor {
 
   private static final Logger logger = LoggerFactory.getLogger(DiskTokenPersistor.class);
   private final short version = 0;
@@ -43,7 +43,7 @@ class DiskTokenPersistor implements ReplicaTokenPersistor {
    * @param partitionGroupedByMountPath A map between mount path and list of partitions under this mount path.
    * @param replicationMetrics metrics including token persist time.
    */
-  DiskTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
+  public DiskTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
       ReplicationMetrics replicationMetrics) {
     this.replicaTokenFileName = replicaTokenFileName;
     this.partitionGroupedByMountPath = partitionGroupedByMountPath;

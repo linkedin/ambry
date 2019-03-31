@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -48,10 +49,10 @@ import static org.junit.Assert.*;
 /**
  * Integration Test cases for {@link AzureCloudDestination}
  * Must be supplied with valid system property values for:
- *   "storageConfigSpec" (Azure Blob Storage connection string)
- *   "cosmosEndpoint"
- *   "cosmosCollectionLink"
- *   "cosmosKey"
+ *   "storage.connection.string" (Azure Blob Storage connection string)
+ *   "cosmos.endpoint"
+ *   "cosmos.collection.link"
+ *   "cosmos.key"
  */
 @RunWith(MockitoJUnitRunner.class)
 @Ignore
@@ -67,10 +68,10 @@ public class AzureIntegrationTest {
 
   @Before
   public void setup() throws Exception {
-
     VerifiableProperties verProps = new VerifiableProperties(System.getProperties());
-    azureDest = new AzureCloudDestination(verProps);
-    cosmosCollectionLink = verProps.getString(AzureCloudDestination.COSMOS_COLLECTION_LINK);
+    azureDest =
+        (AzureCloudDestination) new AzureCloudDestinationFactory(verProps, new MetricRegistry()).getCloudDestination();
+    cosmosCollectionLink = verProps.getString(AzureCloudConfig.COSMOS_COLLECTION_LINK);
   }
 
   /**

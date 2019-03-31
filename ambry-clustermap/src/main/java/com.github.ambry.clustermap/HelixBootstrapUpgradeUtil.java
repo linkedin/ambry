@@ -90,6 +90,7 @@ import org.slf4j.LoggerFactory;
  */
 class HelixBootstrapUpgradeUtil {
   private final StaticClusterManager staticClusterMap;
+  private final String zkLayoutPath;
   private final Map<String, HelixAdmin> adminForDc = new HashMap<>();
   private final Map<String, Map<DiskId, SortedSet<Replica>>> instanceToDiskReplicasMap = new HashMap<>();
   private final Map<String, Map<String, DataNodeId>> dcToInstanceNameToDataNodeId = new HashMap<>();
@@ -108,6 +109,7 @@ class HelixBootstrapUpgradeUtil {
   private int resourcesUpdated = 0;
   private int resourcesDropped = 0;
   private Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
+  private HelixClusterManager validatingHelixClusterManager;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
   private static final String ALL = "all";
 
@@ -153,12 +155,13 @@ class HelixBootstrapUpgradeUtil {
    * @param dryRun if true, perform a dry run; do not update anything in Helix.
    * @param forceRemove if true, removes any hosts from Helix not present in the json files.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
+   * @param startValidatingClusterManager whether validation should include starting up a {@link HelixClusterManager}
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
-      HelixAdminFactory helixAdminFactory) throws Exception {
+      HelixAdminFactory helixAdminFactory, boolean startValidatingClusterManager) throws Exception {
     if (dryRun) {
       info("==== This is a dry run ====");
       info("No changes will be made to the information in Helix (except adding the cluster if it does not exist.");
@@ -170,7 +173,7 @@ class HelixBootstrapUpgradeUtil {
       info("To drop the cluster, run this tool again with the '--dropCluster {}' argument.",
           clusterMapToHelixMapper.clusterName);
     }
-    clusterMapToHelixMapper.updateClusterMapInHelix();
+    clusterMapToHelixMapper.updateClusterMapInHelix(startValidatingClusterManager);
     if (!dryRun) {
       clusterMapToHelixMapper.validateAndClose();
     }
@@ -265,6 +268,7 @@ class HelixBootstrapUpgradeUtil {
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     this.dryRun = dryRun;
     this.forceRemove = forceRemove;
+    this.zkLayoutPath = zkLayoutPath;
     dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     Properties props = new Properties();
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
@@ -410,12 +414,17 @@ class HelixBootstrapUpgradeUtil {
    *     dropInstanceFromHelix()
    *   endfor
    * endfor
+   *
+   * @param startValidatingClusterManager whether validation should include staring up a {@link HelixClusterManager}
    */
 
-  private void updateClusterMapInHelix() {
+  private void updateClusterMapInHelix(boolean startValidatingClusterManager) throws IOException {
     info("Initializing admins and possibly adding cluster in Helix (if non-existent)");
     maybeAddCluster();
-    info("Initialized");
+    info("Initialized, starting validating cluster manager");
+    if (startValidatingClusterManager) {
+      startClusterManager();
+    }
     info("Populating resources and partitions set");
     populateInstancesAndPartitionsMap();
     info("Populated resources and partitions set");
@@ -703,6 +712,21 @@ class HelixBootstrapUpgradeUtil {
   }
 
   /**
+   * Start the Helix Cluster Manager to be used for validation.
+   * @throws IOException if there was an error instantiating the cluster manager.
+   */
+  private void startClusterManager() throws IOException {
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.cluster.name", clusterName);
+    props.setProperty("clustermap.datacenter.name", adminForDc.keySet().iterator().next());
+    props.setProperty("clustermap.dcs.zk.connect.strings", Utils.readStringFromFile(zkLayoutPath));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    HelixClusterAgentsFactory helixClusterAgentsFactory = new HelixClusterAgentsFactory(clusterMapConfig, null, null);
+    validatingHelixClusterManager = helixClusterAgentsFactory.getClusterMap();
+  }
+
+  /**
    * Get the instance name string associated with this data node in Helix.
    * @param dataNode the {@link DataNodeId} of the data node.
    * @return the instance name string.
@@ -715,11 +739,18 @@ class HelixBootstrapUpgradeUtil {
    * Validate that the information in Helix is consistent with the information in the static clustermap; and close
    * all the admin connections to ZK hosts.
    */
-  private void validateAndClose() throws Exception {
+  private void validateAndClose() {
     try {
       info("Validating static and Helix cluster maps");
       verifyEquivalencyWithStaticClusterMap(staticClusterMap.hardwareLayout, staticClusterMap.partitionLayout);
+      if (validatingHelixClusterManager != null) {
+        ensureOrThrow(validatingHelixClusterManager.getErrorCount() == 0,
+            "Helix cluster manager should not have encountered any errors");
+      }
     } finally {
+      if (validatingHelixClusterManager != null) {
+        validatingHelixClusterManager.close();
+      }
       for (HelixAdmin admin : adminForDc.values()) {
         admin.close();
       }

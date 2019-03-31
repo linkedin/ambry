@@ -19,7 +19,6 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
 import java.util.Comparator;
 import java.util.List;
-import java.util.TreeSet;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -42,9 +41,8 @@ class AmbryDataNode implements DataNodeId {
   private final List<String> sslEnabledDataCenters;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ResourceStatePolicy resourceStatePolicy;
-  private final ClusterMapConfig clusterMapConfig;
   private final ClusterManagerCallback clusterManagerCallback;
-  
+
   private final static Comparator<AmbryDataNode> AMBRY_DATA_NODE_COMPARATOR =
       Comparator.comparingInt((AmbryDataNode k) -> k.plainTextPort.getPort()).
           thenComparing(k -> k.hostName);
@@ -67,7 +65,6 @@ class AmbryDataNode implements DataNodeId {
     this.plainTextPort = new Port(portNum, PortType.PLAINTEXT);
     this.sslPort = sslPortNum != null ? new Port(sslPortNum, PortType.SSL) : null;
     this.dataCenterName = dataCenterName;
-    this.clusterMapConfig = clusterMapConfig;
     this.rackId = rackId;
     this.xid = xid;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
@@ -76,36 +73,8 @@ class AmbryDataNode implements DataNodeId {
             clusterMapConfig);
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     this.clusterManagerCallback = clusterManagerCallback;
-    validate();
-  }
-
-  /**
-   * Validate the constructed AmbryDataNode.
-   */
-  private void validate() {
-    // validate hostname
-    if (clusterMapConfig.clusterMapResolveHostnames) {
-      String fqdn = getFullyQualifiedDomainName(hostName);
-      if (!fqdn.equals(hostName)) {
-        throw new IllegalStateException(
-            "Hostname for AmbryDataNode (" + hostName + ") does not match its fully qualified domain name: " + fqdn);
-      }
-    }
-
-    // validate ports
-    TreeSet<Integer> ports = new TreeSet<>();
-    ports.add(plainTextPort.getPort());
-    if (sslPort != null) {
-      if (sslPort.getPort() == plainTextPort.getPort()) {
-        throw new IllegalStateException("Same port number for both plain and ssl ports");
-      }
-      ports.add(sslPort.getPort());
-    } else if (sslEnabledDataCenters.contains(dataCenterName)) {
-      throw new IllegalArgumentException("No SSL port to a datanode to which SSL is enabled.");
-    }
-    if (ports.first() < MIN_PORT || ports.last() > MAX_PORT) {
-      throw new IllegalStateException("Ports " + ports + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
-    }
+    validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
+    validatePorts(plainTextPort, sslPort, sslEnabledDataCenters.contains(dataCenterName));
   }
 
   @Override

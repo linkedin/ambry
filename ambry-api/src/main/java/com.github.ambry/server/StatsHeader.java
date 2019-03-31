@@ -27,7 +27,7 @@ import org.codehaus.jackson.annotate.JsonPropertyOrder;
 @JsonPropertyOrder({"description", "timestamp", "storesContactedCount", "storesRespondedCount", "unreachableStores"})
 public class StatsHeader {
   public enum StatsDescription {
-    QUOTA
+    STORED_DATA_SIZE
   }
 
   private StatsDescription description;

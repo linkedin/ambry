@@ -39,7 +39,7 @@ import com.github.ambry.utils.Time;
  * eventually hold true.)
  */
 
-class RemoteReplicaInfo {
+public class RemoteReplicaInfo {
   private final ReplicaId replicaId;
   private final ReplicaId localReplicaId;
   private final Store localStore;
@@ -60,7 +60,7 @@ class RemoteReplicaInfo {
   private long localLagFromRemoteStore = -1;
   private long reEnableReplicationTime = 0;
 
-  RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
+  public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;

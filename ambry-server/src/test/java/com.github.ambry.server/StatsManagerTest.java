@@ -151,7 +151,7 @@ public class StatsManagerTest {
         preAggregatedSnapshot.equals(actualSnapshot));
     List<String> unreachableStores = statsManager.examineUnreachablePartitions(unreachablePartitions);
     StatsHeader statsHeader =
-        new StatsHeader(StatsHeader.StatsDescription.QUOTA, SystemTime.getInstance().milliseconds(),
+        new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, SystemTime.getInstance().milliseconds(),
             storeMap.keySet().size(), storeMap.keySet().size(), unreachableStores);
     File outputFile = new File(outputFileString);
     if (outputFile.exists()) {
@@ -458,11 +458,11 @@ public class StatsManagerTest {
     Map<String, StatsSnapshot> accountContainerPairMap = new HashMap<>();
     long totalSize = 0;
     for (int i = 0; i < random.nextInt(MAX_ACCOUNT_COUNT - MIN_ACCOUNT_COUNT + 1) + MIN_ACCOUNT_COUNT; i++) {
-      String accountIdStr = "Account[".concat(String.valueOf(i)).concat("]");
+      String accountIdStr = "A[".concat(String.valueOf(i)).concat("]");
       Map<String, StatsSnapshot> containerMap = new HashMap<>();
       long subTotalSize = 0;
       for (int j = 0; j < random.nextInt(MAX_CONTAINER_COUNT - MIN_CONTAINER_COUNT + 1) + MIN_CONTAINER_COUNT; j++) {
-        String containerIdStr = "Container[".concat(String.valueOf(j)).concat("]");
+        String containerIdStr = "C[".concat(String.valueOf(j)).concat("]");
         long validSize = random.nextInt(2501) + 500;
         subTotalSize += validSize;
         containerMap.put(containerIdStr, new StatsSnapshot(validSize, null));

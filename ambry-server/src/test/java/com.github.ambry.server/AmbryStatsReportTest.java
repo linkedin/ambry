@@ -19,9 +19,13 @@ import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.MockTime;
-import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -31,7 +35,7 @@ public class AmbryStatsReportTest {
   private static final long AGGREGATE_INTERVAL_MINS = 60;
 
   @Test
-  public void testAmbryStatsReport() throws StoreException, IOException {
+  public void testAmbryStatsReport() throws StoreException {
     StatsManagerConfig config = new StatsManagerConfig(new VerifiableProperties(new Properties()));
     StatsManager testStatsManager =
         new StatsManager(new StatsManagerTest.MockStorageManager(Collections.emptyMap()), Collections.emptyList(),
@@ -51,5 +55,31 @@ public class AmbryStatsReportTest {
         ambryStatsReport.getAggregateIntervalInMinutes());
     assertEquals("Mismatch in report name", "PartitionClassReport", ambryStatsReport.getReportName());
     assertEquals("Mismatch in stats field name", "PartitionClassStats", ambryStatsReport.getStatsFieldName());
+  }
+
+  @Test
+  public void testStatsToPublishConfig() {
+    // use the same logic/code in AmbryServer to test that server only accepts valid stats types and won't fail on startup.
+    Set<String> validStatsTypes = new HashSet<>();
+    for (StatsReportType type : StatsReportType.values()) {
+      validStatsTypes.add(type.toString());
+    }
+    List<String> acceptedStatsTypes = new ArrayList<>();
+    String statsReportsToPublishStr = "";
+    List<String> statsReportsTypes = Arrays.asList(statsReportsToPublishStr.split(","));
+    statsReportsTypes.forEach(e -> {
+      if (validStatsTypes.contains(e)) {
+        acceptedStatsTypes.add(e);
+      }
+    });
+    assertTrue("The accepted stats type list should be empty", acceptedStatsTypes.isEmpty());
+    statsReportsToPublishStr = "ACCOUNT_REPORT";
+    statsReportsTypes = Arrays.asList(statsReportsToPublishStr.split(","));
+    statsReportsTypes.forEach(e -> {
+      if (validStatsTypes.contains(e)) {
+        acceptedStatsTypes.add(e);
+      }
+    });
+    assertEquals("Mismatch in the size of accepted stats type list", 1, acceptedStatsTypes.size());
   }
 }

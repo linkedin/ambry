@@ -20,10 +20,8 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -234,37 +232,11 @@ class DataNode implements DataNodeId {
     }
   }
 
-  private void validateHostname() {
-    if (clusterMapConfig.clusterMapResolveHostnames) {
-      String fqdn = getFullyQualifiedDomainName(hostname);
-      if (!fqdn.equals(hostname)) {
-        throw new IllegalStateException(
-            "Hostname for DataNode (" + hostname + ") does not match its fully qualified domain name: " + fqdn + ".");
-      }
-    }
-  }
-
-  private void validatePorts() {
-    Set<Integer> portNumbers = new HashSet<Integer>();
-    for (PortType portType : ports.keySet()) {
-      int portNo = ports.get(portType).getPort();
-      if (portNumbers.contains(portNo)) {
-        throw new IllegalStateException("Same port number " + portNo + " found for two port types");
-      }
-      if (portNo < MIN_PORT) {
-        throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is less than " + MIN_PORT);
-      } else if (portNo > MAX_PORT) {
-        throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is greater than " + MAX_PORT);
-      }
-      portNumbers.add(portNo);
-    }
-  }
-
   private void validate() {
     logger.trace("begin validate.");
     validateDatacenter();
-    validateHostname();
-    validatePorts();
+    validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostname);
+    validatePorts(ports.get(PortType.PLAINTEXT), ports.get(PortType.SSL), ports.containsKey(PortType.SSL));
     for (Disk disk : disks) {
       disk.validate();
     }
