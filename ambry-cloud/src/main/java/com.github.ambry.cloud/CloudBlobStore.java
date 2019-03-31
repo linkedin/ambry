@@ -66,7 +66,7 @@ class CloudBlobStore implements Store {
     this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
     this.cloudConfig = Objects.requireNonNull(cloudConfig, "cloudConfig is required");
     this.cloudDestination = Objects.requireNonNull(cloudDestination, "cloudDestination is required");
-    minTtlMillis = cloudConfig.vcrMinTtlDays * TimeUnit.DAYS.toMillis(1);
+    minTtlMillis = TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays);
   }
 
   @Override

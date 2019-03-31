@@ -17,7 +17,6 @@ import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.config.CloudConfig;
@@ -36,7 +35,6 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -44,7 +42,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -67,7 +64,6 @@ public class VcrServer {
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
   private ClusterMap clusterMap;
-  private ClusterParticipant clusterParticipant;
   private VirtualReplicatorCluster virtualReplicatorCluster;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
@@ -117,7 +113,6 @@ public class VcrServer {
       logger.info("starting");
       clusterMap = clusterAgentsFactory.getClusterMap();
       logger.info("Initialized clusterMap");
-      clusterParticipant = clusterAgentsFactory.getClusterParticipant();
 
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
@@ -143,6 +138,7 @@ public class VcrServer {
       // Note: using static cluster until Helix version implemented
       if (virtualReplicatorCluster == null) {
         // TODO: obtain factory from config property
+        // Participate in vcr cluster?
         virtualReplicatorCluster = new StaticVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
       }
 
@@ -178,9 +174,6 @@ public class VcrServer {
 
       // TODO: for recovery, need AmbryRequests and RequestHandlerPool
 
-      List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
-      clusterParticipant.participate(ambryHealthReports);
-
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.vcrStartTimeInMs.update(processingTime);
       logger.info("VCR startup time in Ms " + processingTime);
@@ -198,9 +191,6 @@ public class VcrServer {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
-      if (clusterParticipant != null) {
-        clusterParticipant.close();
-      }
       if (scheduler != null) {
         shutDownExecutorService(scheduler, 5, TimeUnit.MINUTES);
       }
