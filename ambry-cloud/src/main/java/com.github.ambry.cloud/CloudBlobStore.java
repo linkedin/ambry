@@ -60,7 +60,8 @@ class CloudBlobStore implements Store {
    * @param cloudDestination the {@link CloudDestination}.
    * @param cryptoService the {@link CloudBlobCryptoService} to use for encryption.
    */
-  CloudBlobStore(PartitionId partitionId, VerifiableProperties verProps, CloudDestination cloudDestination, CloudBlobCryptoService cryptoService) {
+  CloudBlobStore(PartitionId partitionId, VerifiableProperties verProps, CloudDestination cloudDestination,
+      CloudBlobCryptoService cryptoService) {
     this.cloudDestination = cloudDestination;
     this.partitionId = partitionId;
     this.cryptoService = cryptoService;

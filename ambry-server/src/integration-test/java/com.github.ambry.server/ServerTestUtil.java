@@ -631,8 +631,8 @@ final class ServerTestUtil {
         new BlockingChannelConnectionPool(connectionPoolConfig, clientSSLConfig, clusterMapConfig,
             clusterMap.getMetricRegistry());
     connectionPool.start();
-    CloudBlobCryptoServiceFactory cloudBlobCryptoServiceFactory = Utils.getObj(cloudConfig.cloudBlobCryptoServiceFactoryClass,
-        vProps, "ambry", clusterMap.getMetricRegistry());
+    CloudBlobCryptoServiceFactory cloudBlobCryptoServiceFactory =
+        Utils.getObj(cloudConfig.cloudBlobCryptoServiceFactoryClass, vProps, "ambry", clusterMap.getMetricRegistry());
     CloudBackupManager cloudBackupManager =
         new CloudBackupManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
             Utils.getObj(storeConfig.storeKeyFactory, clusterMap), clusterMap, virtualReplicatorCluster,

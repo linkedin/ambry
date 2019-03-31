@@ -54,7 +54,8 @@ public class CloudBlobMetadata {
    * @param expirationTime The blob expiration time.
    * @param size The blob size.
    */
-  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size, boolean usesCloudEncryption) {
+  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
+      boolean usesCloudEncryption) {
     this.id = blobId.getID();
     this.partitionId = blobId.getPartition().toPathString();
     this.accountId = blobId.getAccountId();
@@ -218,7 +219,9 @@ public class CloudBlobMetadata {
   /**
    * @return whether the blob was cloud encrypted.
    */
-  public boolean getUsesCloudEncryption() { return usesCloudEncryption;}
+  public boolean getUsesCloudEncryption() {
+    return usesCloudEncryption;
+  }
 
   /**
    * Set the encryption context.

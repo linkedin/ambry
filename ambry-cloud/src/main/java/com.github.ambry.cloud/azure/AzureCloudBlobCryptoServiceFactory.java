@@ -33,18 +33,20 @@ public class AzureCloudBlobCryptoServiceFactory implements CloudBlobCryptoServic
   private KeyManagementServiceFactory keyManagementServiceFactory;
   private String context;
 
-  public AzureCloudBlobCryptoServiceFactory(VerifiableProperties verifiableProperties, String clusterName, MetricRegistry metricRegistry)
-      throws ReflectiveOperationException {
+  public AzureCloudBlobCryptoServiceFactory(VerifiableProperties verifiableProperties, String clusterName,
+      MetricRegistry metricRegistry) throws ReflectiveOperationException {
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
     cryptoServiceFactory = Utils.getObj(cloudConfig.cryptoServiceFactoryClass, verifiableProperties, metricRegistry);
-    keyManagementServiceFactory = Utils.getObj(cloudConfig.kmsServiceFactoryClass, verifiableProperties, clusterName, metricRegistry);
+    keyManagementServiceFactory =
+        Utils.getObj(cloudConfig.kmsServiceFactoryClass, verifiableProperties, clusterName, metricRegistry);
     context = cloudConfig.kmsServiceKeyContext;
   }
 
   @Override
   public CloudBlobCryptoService getCloudBlobCryptoService() {
     try {
-      return new AzureCloudBlobCryptoService(cryptoServiceFactory.getCryptoService(), keyManagementServiceFactory.getKeyManagementService(), context);
+      return new AzureCloudBlobCryptoService(cryptoServiceFactory.getCryptoService(),
+          keyManagementServiceFactory.getKeyManagementService(), context);
     } catch (GeneralSecurityException e) {
       throw new IllegalStateException(e);
     }

@@ -25,15 +25,13 @@ public class CloudConfig {
   public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
       "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
   public static final String CRYPTO_SERVICE_FACTORY_CLASS = "vcr.crypto.service.factory.class";
-  public static final String DEFAULT_CRYPTO_SERVICE_FACTORY_CLASS =
-      "com.github.ambry.router.GCMCryptoServiceFactory";
+  public static final String DEFAULT_CRYPTO_SERVICE_FACTORY_CLASS = "com.github.ambry.router.GCMCryptoServiceFactory";
   public static final String KMS_SERVICE_FACTORY_CLASS = "vcr.kms.service.factory.class";
   public static final String DEFAULT_KMS_SERVICE_FACTORY_CLASS =
       "com.github.ambry.router.SingleKeyManagementServiceFactory";
   public static final String KMS_SERVICE_KEY_CONTEXT = "vcr.kms.service.key.context";
   public static final String DEFAULT_KMS_SERVICE_KEY_CONTEXT = "vcr.kms.service.key.context";
-  public static final String CLOUD_BLOB_CRYPTO_SERVICE_FACTORY_CLASS =
-      "vcr.cloud.blob.crypto.service.factory.class";
+  public static final String CLOUD_BLOB_CRYPTO_SERVICE_FACTORY_CLASS = "vcr.cloud.blob.crypto.service.factory.class";
   public static final String DEFAULT_CLOUD_BLOB_CRYPTO_SERVICE_FACTORY_CLASS =
       "com.github.ambry.cloud.azure.AzureCloudBlobCryptoServiceFactory";
 
@@ -111,10 +109,8 @@ public class CloudConfig {
         verifiableProperties.getString(CRYPTO_SERVICE_FACTORY_CLASS, DEFAULT_CRYPTO_SERVICE_FACTORY_CLASS);
     kmsServiceFactoryClass =
         verifiableProperties.getString(KMS_SERVICE_FACTORY_CLASS, DEFAULT_KMS_SERVICE_FACTORY_CLASS);
-    kmsServiceKeyContext =
-        verifiableProperties.getString(KMS_SERVICE_KEY_CONTEXT, DEFAULT_KMS_SERVICE_KEY_CONTEXT);
-    cloudBlobCryptoServiceFactoryClass =
-        verifiableProperties.getString(CLOUD_BLOB_CRYPTO_SERVICE_FACTORY_CLASS,
-            DEFAULT_CLOUD_BLOB_CRYPTO_SERVICE_FACTORY_CLASS);
+    kmsServiceKeyContext = verifiableProperties.getString(KMS_SERVICE_KEY_CONTEXT, DEFAULT_KMS_SERVICE_KEY_CONTEXT);
+    cloudBlobCryptoServiceFactoryClass = verifiableProperties.getString(CLOUD_BLOB_CRYPTO_SERVICE_FACTORY_CLASS,
+        DEFAULT_CLOUD_BLOB_CRYPTO_SERVICE_FACTORY_CLASS);
   }
 }

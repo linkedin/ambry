@@ -184,7 +184,8 @@ public class AzureCloudDestinationTest {
     props.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.cosmos.com");
     props.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
     props.setProperty(AzureCloudConfig.COSMOS_KEY, "dummykey");
-    CloudDestinationFactory factory = new AzureCloudDestinationFactory(new VerifiableProperties(props), new MetricRegistry());
+    CloudDestinationFactory factory =
+        new AzureCloudDestinationFactory(new VerifiableProperties(props), new MetricRegistry());
     try {
       factory.getCloudDestination();
       fail("Expected exception to be thrown");

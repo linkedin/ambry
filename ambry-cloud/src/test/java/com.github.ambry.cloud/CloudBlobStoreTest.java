@@ -121,7 +121,8 @@ public class CloudBlobStoreTest {
       // Blob with metadata
       BlobId existentBlobId = getUniqueId(refAccountId, refContainerId);
       keys.add(existentBlobId);
-      metadataMap.put(existentBlobId.getID(), new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024, false));
+      metadataMap.put(existentBlobId.getID(),
+          new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024, false));
       // Blob without metadata
       BlobId nonexistentBlobId = getUniqueId(refAccountId, refContainerId);
       keys.add(nonexistentBlobId);
@@ -136,7 +137,7 @@ public class CloudBlobStoreTest {
   @Test
   public void testStoreNotStarted() throws Exception {
     // Create store and don't start it.
-    CloudBlobStore idleStore = new CloudBlobStore(partitionId,null, dest, cryptoService);
+    CloudBlobStore idleStore = new CloudBlobStore(partitionId, null, dest, cryptoService);
     List<StoreKey> keys = Collections.singletonList(getUniqueId(refAccountId, refContainerId));
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     addBlobToSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId);
