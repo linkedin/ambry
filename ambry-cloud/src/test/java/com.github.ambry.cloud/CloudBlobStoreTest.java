@@ -121,7 +121,7 @@ public class CloudBlobStoreTest {
       // Blob with metadata
       BlobId existentBlobId = getUniqueId(refAccountId, refContainerId);
       keys.add(existentBlobId);
-      metadataMap.put(existentBlobId.getID(), new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024));
+      metadataMap.put(existentBlobId.getID(), new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024, false));
       // Blob without metadata
       BlobId nonexistentBlobId = getUniqueId(refAccountId, refContainerId);
       keys.add(nonexistentBlobId);

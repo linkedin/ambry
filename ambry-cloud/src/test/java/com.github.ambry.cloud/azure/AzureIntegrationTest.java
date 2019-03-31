@@ -84,7 +84,7 @@ public class AzureIntegrationTest {
         BlobDataType.DATACHUNK);
     InputStream inputStream = getBlobInputStream(blobSize);
     CloudBlobMetadata cloudBlobMetadata =
-        new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize);
+        new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize, false);
     assertTrue("Expected upload to return true",
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     // Try to upload same blob again
@@ -117,7 +117,7 @@ public class AzureIntegrationTest {
               BlobDataType.DATACHUNK);
       blobIdList.add(blobId);
       InputStream inputStream = getBlobInputStream(blobSize);
-      CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize);
+      CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize, false);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     }

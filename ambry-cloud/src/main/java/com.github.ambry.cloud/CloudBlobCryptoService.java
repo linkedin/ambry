@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.commons.BlobId;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 
@@ -26,19 +25,17 @@ public interface CloudBlobCryptoService {
 
   /**
    * Encrypts the blob buffer being uploaded to cloud storage.
-   * @param blobId the {@link BlobId} associated with the buffer.
    * @param buffer The {@link ByteBuffer} that needs to be encrypted.
    * @return The encrypted buffer.
    * @throws {@link GeneralSecurityException} on any exception with encryption.
    */
-  public ByteBuffer encrypt(BlobId blobId, ByteBuffer buffer) throws GeneralSecurityException;
+  public ByteBuffer encrypt(ByteBuffer buffer) throws GeneralSecurityException;
 
   /**
    * Decrypts the blob buffer being downloaded from cloud storage.
-   * @param blobId the {@link BlobId} associated with the buffer.
    * @param buffer The {@link ByteBuffer} that needs to be decrypted.
    * @return The decrypted buffer.
    * @throws {@link GeneralSecurityException} on any exception with decryption
    */
-  public ByteBuffer decrypt(BlobId blobId, ByteBuffer buffer) throws GeneralSecurityException;
+  public ByteBuffer decrypt(ByteBuffer buffer) throws GeneralSecurityException;
 }

@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.commons.BlobId;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 
@@ -23,12 +22,12 @@ import java.security.GeneralSecurityException;
  */
 class TestCloudBlobCryptoService implements CloudBlobCryptoService {
   @Override
-  public ByteBuffer encrypt(BlobId blobId, ByteBuffer buffer) throws GeneralSecurityException {
+  public ByteBuffer encrypt(ByteBuffer buffer) throws GeneralSecurityException {
     return buffer;
   }
 
   @Override
-  public ByteBuffer decrypt(BlobId blobId, ByteBuffer buffer) throws GeneralSecurityException {
+  public ByteBuffer decrypt(ByteBuffer buffer) throws GeneralSecurityException {
     return buffer;
   }
 }

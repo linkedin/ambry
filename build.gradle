@@ -331,7 +331,8 @@ project(':ambry-cloud') {
             project(':ambry-utils'),
             project(':ambry-store'),
             project(':ambry-commons'),
-            project(':ambry-replication')
+            project(':ambry-replication'),
+            project(':ambry-router')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "com.microsoft.azure:azure-storage:$azureStorageVersion"
         compile "com.microsoft.azure:azure-documentdb:$azureDocumentDbVersion"

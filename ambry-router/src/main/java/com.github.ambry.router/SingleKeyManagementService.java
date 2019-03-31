@@ -40,7 +40,7 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
    * @param defaultContainerKey the default container key that will be returned for all {@link #getKey(short, short)} calls
    * @throws GeneralSecurityException
    */
-  SingleKeyManagementService(KMSConfig config, String defaultContainerKey) throws GeneralSecurityException {
+  public SingleKeyManagementService(KMSConfig config, String defaultContainerKey) throws GeneralSecurityException {
     byte[] key = Hex.decode(defaultContainerKey);
     keyGenAlgo = config.kmsKeyGenAlgo;
     secretKeySpec = new SecretKeySpec(key, keyGenAlgo);

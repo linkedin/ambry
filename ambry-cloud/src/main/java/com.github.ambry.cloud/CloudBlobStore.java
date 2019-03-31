@@ -105,16 +105,15 @@ class CloudBlobStore implements Store {
     if (performUpload) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       // TODO: would be more efficient to call blobId.isEncrypted()
-
-
-
-      if (!BlobId.isEncrypted(blobId.getID())) {
+      boolean usesCloudEncryption = false;
+      if (blobId.getVersion() < 4 || !BlobId.isEncrypted(blobId.getID())) {
         // Need to encrypt the buffer before upload
-        messageBuf = cryptoService.encrypt(blobId, messageBuf);
+        messageBuf = cryptoService.encrypt(messageBuf);
+        usesCloudEncryption = true;
       }
       CloudBlobMetadata blobMetadata =
           new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
-              messageInfo.getSize());
+              messageInfo.getSize(), usesCloudEncryption);
       cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
     }
   }

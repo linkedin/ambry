@@ -28,7 +28,7 @@ public class CloudBlobMetadata {
   public static final String FIELD_EXPIRATION_TIME = "expirationTime";
   public static final String FIELD_ACCOUNT_ID = "accountId";
   public static final String FIELD_CONTAINER_ID = "containerId";
-  public static final String FIELD_SHOULD_ENCRYPT = "shouldEncrypt";
+  public static final String FIELD_USES_CLOUD_ENCRYPTION = "usesCloudEncryption";
 
   private String id;
   private String partitionId;
@@ -39,7 +39,7 @@ public class CloudBlobMetadata {
   private int containerId;
   private long expirationTime;
   private long deletionTime;
-  private  String encryptionContext;
+  private boolean usesCloudEncryption;
 
   /**
    * Default constructor (for JSONSerializer).
@@ -54,7 +54,7 @@ public class CloudBlobMetadata {
    * @param expirationTime The blob expiration time.
    * @param size The blob size.
    */
-  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size) {
+  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size, boolean usesCloudEncryption) {
     this.id = blobId.getID();
     this.partitionId = blobId.getPartition().toPathString();
     this.accountId = blobId.getAccountId();
@@ -216,17 +216,17 @@ public class CloudBlobMetadata {
   }
 
   /**
-   * @return the encryption context.
+   * @return whether the blob was cloud encrypted.
    */
-  public String getEncryptionContext() { return encryptionContext;}
+  public boolean getUsesCloudEncryption() { return usesCloudEncryption;}
 
   /**
    * Set the encryption context.
-   * @param encryptionContext the encryption context of the blob.
+   * @param usesCloudEncryption whether {@link CloudBlobCryptoService} was used on the blob.
    * @return this instance.
    */
-  public CloudBlobMetadata setEncryptionContext(String encryptionContext) {
-    this.encryptionContext = encryptionContext;
+  public CloudBlobMetadata setUsesCloudEncryption(boolean usesCloudEncryption) {
+    this.usesCloudEncryption = usesCloudEncryption;
     return this;
   }
 
