@@ -95,12 +95,7 @@ public class VerifiableProperties {
    * @return the integer value
    */
   public int getIntInRange(String name, int defaultVal, int start, int end) {
-    int v = 0;
-    if (containsKey(name)) {
-      v = Integer.parseInt(getProperty(name));
-    } else {
-      v = defaultVal;
-    }
+    int v = containsKey(name) ? Integer.parseInt(getProperty(name)) : defaultVal;
     if (v >= start && v <= end) {
       return v;
     } else {
@@ -110,12 +105,7 @@ public class VerifiableProperties {
   }
 
   public Short getShortInRange(String name, Short defaultVal, Short start, Short end) {
-    Short v = 0;
-    if (containsKey(name)) {
-      v = Short.parseShort(getProperty(name));
-    } else {
-      v = defaultVal;
-    }
+    Short v = containsKey(name) ? Short.parseShort(getProperty(name)) : defaultVal;
     if (v >= start && v <= end) {
       return v;
     } else {
@@ -143,12 +133,7 @@ public class VerifiableProperties {
   }
 
   public Double getDoubleInRange(String name, Double defaultVal, Double start, Double end) {
-    Double v = 0.0;
-    if (containsKey(name)) {
-      v = Double.parseDouble(getProperty(name));
-    } else {
-      v = defaultVal;
-    }
+    Double v = containsKey(name) ? Double.valueOf(Double.parseDouble(getProperty(name))) : defaultVal;
     // use big decimal for double comparison
     BigDecimal startDecimal = new BigDecimal(start);
     BigDecimal endDecimal = new BigDecimal(end);
@@ -189,12 +174,7 @@ public class VerifiableProperties {
    * @return the long value
    */
   public long getLongInRange(String name, long defaultVal, long start, long end) {
-    long v = 0;
-    if (containsKey(name)) {
-      v = Long.parseLong(getProperty(name));
-    } else {
-      return defaultVal;
-    }
+    long v = containsKey(name) ? Long.parseLong(getProperty(name)) : defaultVal;
     if (v >= start && v <= end) {
       return v;
     } else {
@@ -219,11 +199,7 @@ public class VerifiableProperties {
    * @default The default value for the property if not present
    */
   public double getDouble(String name, double defaultVal) {
-    if (containsKey(name)) {
-      return getDouble(name);
-    } else {
-      return defaultVal;
-    }
+    return containsKey(name) ? getDouble(name) : defaultVal;
   }
 
   /**
@@ -233,11 +209,10 @@ public class VerifiableProperties {
    * @return the boolean value
    */
   public boolean getBoolean(String name, boolean defaultVal) {
-    String v = "";
     if (!containsKey(name)) {
       return defaultVal;
     } else {
-      v = getProperty(name);
+      String v = getProperty(name);
       if (v.compareTo("true") == 0 || v.compareTo("false") == 0) {
         return Boolean.parseBoolean(v);
       } else {
@@ -254,11 +229,7 @@ public class VerifiableProperties {
    * Get a string property, or, if no such property is defined, return the given default value
    */
   public String getString(String name, String defaultVal) {
-    if (containsKey(name)) {
-      return getProperty(name);
-    } else {
-      return defaultVal;
-    }
+    return containsKey(name) ? getProperty(name) : defaultVal;
   }
 
   /**

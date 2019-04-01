@@ -35,6 +35,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import org.slf4j.Logger;
@@ -285,6 +286,11 @@ public class RestUtils {
      * response.
      */
     public static final String SEND_USER_METADATA_AS_RESPONSE_BODY = KEY_PREFIX + "send-user-metadata-as-response-body";
+
+    /**
+     * The key for the {@link RequestPath} that represents the parsed path of an incoming request.
+     */
+    public static final String REQUEST_PATH = KEY_PREFIX + "request-path";
   }
 
   /**
@@ -307,8 +313,7 @@ public class RestUtils {
      * "replicas" here means the string representation of all the replicas (i.e. host:port/path) where the blob might
      * reside.
      */
-    Replicas
-  }
+    Replicas}
 
   public static final class MultipartPost {
     public final static String BLOB_PART = "Blob";
@@ -540,78 +545,13 @@ public class RestUtils {
   }
 
   /**
-   * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
-   * performed on.
-   * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @param subResource the {@link SubResource} if one is present. {@code null} otherwise.
-   * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
-   *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
-   * @return extracted operation type or blob ID from the URI.
+   * Extract the {@link RequestPath} object from {@link RestRequest} arguments.
+   * @param restRequest the {@link RestRequest}.
+   * @return the {@link RequestPath}
    */
-  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, SubResource subResource,
-      List<String> prefixesToRemove) {
-    return getPrefixAndResourceFromUri(restRequest, subResource, prefixesToRemove).getSecond();
-  }
-
-  /**
-   * Determines if URI is for a blob sub-resource, and if so, returns that sub-resource
-   * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @return sub-resource if the URI includes one; null otherwise.
-   */
-  public static RestUtils.SubResource getBlobSubResource(RestRequest restRequest) {
-    String path = restRequest.getPath();
-    final int minSegmentsRequired = path.startsWith("/") ? 3 : 2;
-    String[] segments = path.split("/");
-    RestUtils.SubResource subResource = null;
-    if (segments.length >= minSegmentsRequired) {
-      try {
-        subResource = RestUtils.SubResource.valueOf(segments[segments.length - 1]);
-      } catch (IllegalArgumentException e) {
-        // nothing to do.
-      }
-    }
-    return subResource;
-  }
-
-  /**
-   * Get prefix (if exists) and resource from URI so that operation can be performed based on them.
-   * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @param subResource the {@link SubResource} if one is present. {@code null} otherwise.
-   * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
-   *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
-   * @return a {@link Pair} containing the prefix and resource extracted from URI.
-   */
-  public static Pair<String, String> getPrefixAndResourceFromUri(RestRequest restRequest, SubResource subResource,
-      List<String> prefixesToRemove) {
-    String path = restRequest.getPath();
-    int startIndex = 0;
-    // remove query string.
-    int endIndex = path.indexOf("?");
-    if (endIndex == -1) {
-      endIndex = path.length();
-    }
-    // remove prefix.
-    String prefixFound = "";
-    if (prefixesToRemove != null) {
-      for (String prefix : prefixesToRemove) {
-        if (path.startsWith(prefix)) {
-          prefixFound = prefix;
-          startIndex = prefix.length();
-          break;
-        }
-      }
-    }
-    // remove subresource if present.
-    if (subResource != null) {
-      // "- 1" removes the "slash" that precedes the sub-resource.
-      endIndex = endIndex - subResource.name().length() - 1;
-    }
-    String operationOrBlobId = path.substring(startIndex, endIndex);
-    if ((operationOrBlobId.isEmpty() || operationOrBlobId.equals("/")) && restRequest.getArgs()
-        .containsKey(Headers.BLOB_ID)) {
-      operationOrBlobId = restRequest.getArgs().get(Headers.BLOB_ID).toString();
-    }
-    return new Pair<>(prefixFound, operationOrBlobId);
+  public static RequestPath getRequestPath(RestRequest restRequest) {
+    return (RequestPath) Objects.requireNonNull(restRequest.getArgs().get(InternalKeys.REQUEST_PATH),
+        InternalKeys.REQUEST_PATH + " not set in " + restRequest);
   }
 
   /**

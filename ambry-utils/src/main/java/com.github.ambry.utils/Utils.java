@@ -734,15 +734,15 @@ public class Utils {
 
   /**
    * Split the input string "data" using the delimiter and return as list of strings for the slices obtained
-   * @param data
-   * @param delimiter
-   * @return
+   * @param data the string to split. If this string is empty, a zero element list will be returned.
+   * @param delimiter the delimiter for splitting.
+   * @return a mutable list of items.
    */
   public static ArrayList<String> splitString(String data, String delimiter) {
     if (data == null) {
       throw new IllegalArgumentException("Passed in string is null ");
     }
-    return new ArrayList<>(Arrays.asList(data.split(delimiter)));
+    return data.isEmpty() ? new ArrayList<>() : new ArrayList<>(Arrays.asList(data.split(delimiter)));
   }
 
   /**
