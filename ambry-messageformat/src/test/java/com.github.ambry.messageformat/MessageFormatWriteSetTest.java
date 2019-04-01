@@ -16,6 +16,7 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockId;
 import com.github.ambry.store.MockWrite;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -30,7 +31,7 @@ import org.junit.Test;
 public class MessageFormatWriteSetTest {
 
   @Test
-  public void writeSetTest() throws IOException {
+  public void writeSetTest() throws IOException, StoreException {
     byte[] buf = new byte[2000];
     MessageInfo info1 = new MessageInfo(new MockId("id1"), 1000, 123, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis() + TestUtils.RANDOM.nextInt());

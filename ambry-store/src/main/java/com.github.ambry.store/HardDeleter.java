@@ -157,7 +157,7 @@ public class HardDeleter implements Runnable {
    * the hard delete tokens are persisted before returning from pause. Hard delete will be in a paused state until
    * {@link #resume()} is called.
    */
-  void pause() throws InterruptedException, StoreException, IOException {
+  void pause() throws StoreException, IOException {
     hardDeleteLock.lock();
     try {
       if (paused.compareAndSet(false, true)) {
@@ -234,7 +234,9 @@ public class HardDeleter implements Runnable {
       }
     } catch (IOException e) {
       metrics.hardDeleteExceptionsCount.inc();
-      throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " occurred while performing hard delete ", e, errorCode);
     }
       /* Now that all the blobs in the range were successfully hard deleted, the next time hard deletes can be resumed
          at recoveryEndToken. */
@@ -538,8 +540,10 @@ public class HardDeleter implements Runnable {
       fileStream.getChannel().force(true);
       tempFile.renameTo(actual);
     } catch (IOException e) {
-      throw new StoreException("IO error while persisting cleanup tokens to disk " + tempFile.getAbsoluteFile(),
-          StoreErrorCodes.IOError);
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(
+          errorCode.toString() + " while persisting cleanup tokens to disk " + tempFile.getAbsoluteFile(), errorCode);
     } finally {
       writer.close();
       context.stop();
@@ -617,7 +621,9 @@ public class HardDeleter implements Runnable {
         diskIOScheduler.getSlice(HARD_DELETE_CLEANUP_JOB_NAME, HARD_DELETE_CLEANUP_JOB_NAME, logWriteInfo.size);
       }
     } catch (IOException e) {
-      throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " while performing hard delete ", e, errorCode);
     }
     logger.trace("Performed hard deletes from {} to {} for {}", startToken, endToken, dataDir);
   }

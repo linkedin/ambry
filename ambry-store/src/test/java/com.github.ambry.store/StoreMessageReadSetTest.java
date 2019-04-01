@@ -95,7 +95,7 @@ public class StoreMessageReadSetTest {
    * @throws IOException
    */
   @Test
-  public void storeMessageReadSetTest() throws IOException {
+  public void storeMessageReadSetTest() throws IOException, StoreException {
     int logCapacity = 2000;
     int segCapacity = 1000;
     Log log = new Log(tempDir.getAbsolutePath(), logCapacity, segCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
@@ -241,7 +241,7 @@ public class StoreMessageReadSetTest {
    * @throws IOException
    */
   @Test
-  public void blobReadOptionsTest() throws IOException {
+  public void blobReadOptionsTest() throws IOException, StoreException {
     int logCapacity = 2000;
     int[] segCapacities = {2000, 1000};
     for (int segCapacity : segCapacities) {

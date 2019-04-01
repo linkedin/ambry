@@ -13,7 +13,6 @@
  */
 package com.github.ambry.store;
 
-import java.io.IOException;
 import java.util.List;
 
 
@@ -27,7 +26,7 @@ public interface MessageWriteSet {
    * @param writeChannel The write interface to write the messages to
    * @return The size in bytes that was written to the write interface
    */
-  public long writeTo(Write writeChannel) throws IOException;
+  public long writeTo(Write writeChannel) throws StoreException;
 
   /**
    * Returns info about the messages contained in this write set. The messages

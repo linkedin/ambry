@@ -22,6 +22,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -44,8 +45,12 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -172,7 +177,7 @@ public class IndexSegmentTest {
     delValue2.setNewOffset(new Offset(logSegmentName, 3050));
     delValue2.setNewSize(100);
     delValue2.setFlag(IndexValue.Flags.Delete_Index);
-    IndexSegment indexSegment = generateIndexSegment(startOffset);
+    IndexSegment indexSegment = generateIndexSegment(startOffset, STORE_KEY_FACTORY);
     // inserting in the opposite order by design to ensure that writes are based on offset ordering and not key ordering
     indexSegment.addEntry(new IndexEntry(id3, value1), new Offset(logSegmentName, 1000));
     indexSegment.addEntry(new IndexEntry(id2, value2), new Offset(logSegmentName, 2000));
@@ -271,7 +276,7 @@ public class IndexSegmentTest {
     delValue2.setNewOffset(new Offset(logSegmentName, 3050));
     delValue2.setNewSize(100);
     delValue2.setFlag(IndexValue.Flags.Delete_Index);
-    IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0));
+    IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), STORE_KEY_FACTORY);
     // inserting in the opposite order by design to ensure that writes are based on offset ordering and not key ordering
     indexSegment.addEntry(new IndexEntry(id3, value1), new Offset(logSegmentName, 1000));
     indexSegment.addEntry(new IndexEntry(id2, value2), new Offset(logSegmentName, 2000));
@@ -348,6 +353,71 @@ public class IndexSegmentTest {
     }
   }
 
+  /**
+   * Test cases where exceptions occurred while performing memory mapping of index segment.
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void memoryMapFailureTest() throws IOException, StoreException {
+    assumeTrue(version == PersistentIndex.VERSION_1 && !config.storeIndexMemState.equals(IndexMemState.IN_HEAP_MEM)
+        && !config.storeIndexMemState.equals(IndexMemState.FORCE_LOAD_MMAP));
+    String logSegmentName = LogSegmentNameHelper.getName(0, 0);
+    StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
+    IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), mockStoreKeyFactory);
+    // verify that StoreErrorCodes.File_Not_Found can be captured when performing memory map
+    try {
+      indexSegment.seal();
+      fail("should fail");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.File_Not_Found, e.getErrorCode());
+    }
+    // verify that StoreErrorCodes.IOError can be captured when performing memory map
+    indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), mockStoreKeyFactory);
+    MockId id1 = new MockId("0" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    IndexValue value1 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), version);
+    indexSegment.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName, 1000));
+    indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 1000));
+    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockStoreKeyFactory)
+        .getStoreKey(any(DataInputStream.class));
+    try {
+      indexSegment.seal();
+      fail("should fail");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Test cases where exceptions occurred while reading from file.
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void readFromFileFailureTest() throws StoreException, IOException {
+    String logSegmentName = LogSegmentNameHelper.getName(0, 0);
+    StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
+    Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
+    IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), mockStoreKeyFactory);
+    MockId id1 = new MockId("0" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    IndexValue value1 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), version);
+    indexSegment.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName, 1000));
+    indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 1000));
+    // test IOException is captured and StoreException.IOError is thrown
+    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockStoreKeyFactory)
+        .getStoreKey(any(DataInputStream.class));
+    try {
+      new IndexSegment(indexSegment.getFile(), false, mockStoreKeyFactory, config, metrics, journal, time);
+      fail("should fail");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+    }
+  }
+
   // helpers
 
   /**
@@ -385,7 +455,7 @@ public class IndexSegmentTest {
       // segments
       time.sleep(10 * Time.MsPerSec);
       PersistentIndex.cleanupIndexSegmentFilesForLogSegment(tempDir.getAbsolutePath(), logSegmentName);
-      IndexSegment indexSegment = generateIndexSegment(startOffset);
+      IndexSegment indexSegment = generateIndexSegment(startOffset, STORE_KEY_FACTORY);
       Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey = null;
       verifyIndexSegmentDetails(indexSegment, startOffset, 0, 0, false, startOffset.getOffset(), time.milliseconds(),
           null);
@@ -505,20 +575,21 @@ public class IndexSegmentTest {
   /**
    * Generates an {@link IndexSegment} for entries from {@code startOffset}.
    * @param startOffset the start {@link Offset} of the {@link IndexSegment}.
+   * @param storeKeyFactory the {@link StoreKeyFactory} to use when generating index segment
    * @return an {@link IndexSegment} for entries from {@code startOffset}.
    */
-  private IndexSegment generateIndexSegment(Offset startOffset) {
+  private IndexSegment generateIndexSegment(Offset startOffset, StoreKeyFactory storeKeyFactory) {
     IndexSegment indexSegment;
     if (version == PersistentIndex.VERSION_0) {
-      indexSegment = new MockIndexSegmentV0(tempDir.getAbsolutePath(), startOffset, STORE_KEY_FACTORY,
+      indexSegment = new MockIndexSegmentV0(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
           KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0, config, metrics,
           time);
     } else if (version == PersistentIndex.VERSION_1) {
-      indexSegment = new MockIndexSegmentV1(tempDir.getAbsolutePath(), startOffset, STORE_KEY_FACTORY,
+      indexSegment = new MockIndexSegmentV1(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
           KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, config, metrics,
           time);
     } else {
-      indexSegment = new IndexSegment(tempDir.getAbsolutePath(), startOffset, STORE_KEY_FACTORY,
+      indexSegment = new IndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
           KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, config, metrics,
           time);
     }
@@ -654,10 +725,10 @@ public class IndexSegmentTest {
    * it returns the right values for all keys in {@code referenceIndex} and for all conditions.
    * @param referenceIndex the index entries to be used as reference.
    * @param segment the {@link IndexSegment} to test
-   * @throws IOException
+   * @throws StoreException
    */
   private void verifyGetEntriesSince(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
-      IndexSegment segment) throws IOException {
+      IndexSegment segment) throws StoreException {
     // index segment is "too" recent
     FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE, segment.getLastModifiedTimeSecs() - 1);
     List<MessageInfo> entries = new ArrayList<>();
@@ -682,10 +753,10 @@ public class IndexSegmentTest {
    * @param segment the {@link IndexSegment} to test
    * @param idToCheck the {@link MockId} to use as input for getEntriesSince().
    * @param sizeLeftInSegment the total size of values in the segment beyond {@code idToCheck}.
-   * @throws IOException
+   * @throws StoreException
    */
   private void getEntriesSinceTest(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, IndexSegment segment,
-      MockId idToCheck, long sizeLeftInSegment) throws IOException {
+      MockId idToCheck, long sizeLeftInSegment) throws StoreException {
     long maxSize = 0;
     MockId idHigherThanIdToCheck = idToCheck == null ? referenceIndex.firstKey() : referenceIndex.higherKey(idToCheck);
     MockId highestIdIncluded = null;
@@ -727,11 +798,11 @@ public class IndexSegmentTest {
    * @param maxSize the parameter for {@link FindEntriesCondition#FindEntriesCondition(long)}.
    * @param existingSize the third parameter for getEntriesSince().
    * @param highestExpectedId the highest expected Id in the returned entries.
-   * @throws IOException
+   * @throws StoreException
    */
   private void doGetEntriesSinceTest(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
       IndexSegment segment, MockId idToCheck, long maxSize, long existingSize, MockId highestExpectedId)
-      throws IOException {
+      throws StoreException {
     // test getEntriesSince
     FindEntriesCondition condition = new FindEntriesCondition(maxSize);
 

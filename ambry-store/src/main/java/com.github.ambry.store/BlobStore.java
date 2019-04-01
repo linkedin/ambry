@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,13 +67,14 @@ class BlobStore implements Store {
   private final long thresholdBytesHigh;
   private final long thresholdBytesLow;
   private final long ttlUpdateBufferTimeMs;
+  private final AtomicInteger errorCount;
 
   private Log log;
   private BlobStoreCompactor compactor;
-  private PersistentIndex index;
   private BlobStoreStats blobStoreStats;
   private boolean started;
   private FileLock fileLock;
+  protected PersistentIndex index;
 
   /**
    * States representing the different scenarios that can occur when a set of messages are to be written to the store.
@@ -166,6 +168,7 @@ class BlobStore implements Store {
     this.thresholdBytesHigh = (long) (capacityInBytes * (threshold / 100.0));
     this.thresholdBytesLow = (long) (capacityInBytes * ((threshold - delta) / 100.0));
     ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
+    errorCount = new AtomicInteger(0);
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
         config.storeReplicaStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
@@ -220,6 +223,7 @@ class BlobStore implements Store {
                 taskScheduler, diskIOScheduler, metrics);
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
+        onSuccess();
         started = true;
         if (replicaId != null) {
           replicaId.markDiskUp();
@@ -273,8 +277,12 @@ class BlobStore implements Store {
       for (int i = 0; i < readSet.count(); i++) {
         messageInfoList.add(indexMessages.get(readSet.getKeyAt(i)));
       }
+      onSuccess();
       return new StoreInfo(readSet, messageInfoList);
     } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown exception while trying to fetch blobs from store " + dataDir, e,
@@ -413,10 +421,12 @@ class BlobStore implements Store {
           logger.trace("All entries were absent, and were written to the store successfully");
           break;
       }
+      onSuccess();
     } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
       throw e;
-    } catch (IOException e) {
-      throw new StoreException("IO error while trying to put blobs to store " + dataDir, e, StoreErrorCodes.IOError);
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to put blobs to store " + dataDir, e,
           StoreErrorCodes.Unknown_Error);
@@ -482,11 +492,12 @@ class BlobStore implements Store {
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }
+      onSuccess();
     } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
       throw e;
-    } catch (IOException e) {
-      throw new StoreException("IO error while trying to delete blobs from store " + dataDir, e,
-          StoreErrorCodes.IOError);
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to delete blobs from store " + dataDir, e,
           StoreErrorCodes.Unknown_Error);
@@ -577,11 +588,12 @@ class BlobStore implements Store {
         }
         logger.trace("Store : {} ttl update has been marked in the index ", dataDir);
       }
+      onSuccess();
     } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
       throw e;
-    } catch (IOException e) {
-      throw new StoreException("IO error while trying to update ttl of blobs from store " + dataDir, e,
-          StoreErrorCodes.IOError);
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to update ttl of blobs from store " + dataDir, e,
           StoreErrorCodes.Unknown_Error);
@@ -595,7 +607,14 @@ class BlobStore implements Store {
     checkStarted();
     final Timer.Context context = metrics.findEntriesSinceResponse.time();
     try {
-      return index.findEntriesSince(token, maxTotalSizeOfEntries);
+      FindInfo findInfo = index.findEntriesSince(token, maxTotalSizeOfEntries);
+      onSuccess();
+      return findInfo;
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
+      throw e;
     } finally {
       context.stop();
     }
@@ -606,7 +625,14 @@ class BlobStore implements Store {
     checkStarted();
     final Timer.Context context = metrics.findMissingKeysResponse.time();
     try {
-      return index.findMissingKeys(keys);
+      Set<StoreKey> missingKeys = index.findMissingKeys(keys);
+      onSuccess();
+      return missingKeys;
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
+      throw e;
     } finally {
       context.stop();
     }
@@ -683,6 +709,32 @@ class BlobStore implements Store {
   }
 
   /**
+   * On an exception/error, if error count exceeds threshold, properly shutdown store.
+   */
+  private void onError() throws StoreException {
+    int count = errorCount.incrementAndGet();
+    if (count == config.storeIoErrorCountToTriggerShutdown) {
+      logger.error("Shutting down BlobStore {} because IO error count exceeds threshold", storeId);
+      shutdown();
+      metrics.storeIoErrorTriggeredShutdownCount.inc();
+    }
+  }
+
+  /**
+   * If store restarted successfully or at least one operation succeeded, reset the error count.
+   */
+  private void onSuccess() {
+    errorCount.getAndSet(0);
+  }
+
+  /**
+   * @return errorCount of store.
+   */
+  AtomicInteger getErrorCount() {
+    return errorCount;
+  }
+
+  /**
    * @return the {@link DiskSpaceRequirements} for this store to provide to
    * {@link DiskSpaceAllocator#initializePool(Collection)}. This will be {@code null} if this store uses a non-segmented
    * log. This is because it does not require any additional/swap segments.
@@ -742,9 +794,8 @@ class BlobStore implements Store {
   /**
    * Detects duplicates in {@code writeSet}
    * @param writeSet the {@link MessageWriteSet} to detect duplicates in
-   * @throws StoreException if a duplicate is detected
    */
-  private void checkDuplicates(MessageWriteSet writeSet) throws StoreException {
+  private void checkDuplicates(MessageWriteSet writeSet) {
     List<MessageInfo> infos = writeSet.getMessageSetInfo();
     if (infos.size() > 1) {
       Set<StoreKey> seenKeys = new HashSet<>();

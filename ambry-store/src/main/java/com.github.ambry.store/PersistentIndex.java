@@ -18,6 +18,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -360,9 +361,9 @@ class PersistentIndex {
    * Sets the end offset of all log segments.
    * <p/>
    * Assumed to run only on startup.
-   * @throws IOException if an end offset could not be set due to I/O error.
+   * @throws StoreException if an end offset could not be set due to store exception.
    */
-  private void setEndOffsets() throws IOException {
+  private void setEndOffsets() throws StoreException {
     for (Offset segmentStartOffset : validIndexSegments.keySet()) {
       Offset nextIndexSegmentStartOffset = validIndexSegments.higherKey(segmentStartOffset);
       if (nextIndexSegmentStartOffset == null || !segmentStartOffset.getName()
@@ -827,8 +828,10 @@ class PersistentIndex {
             + "]", StoreErrorCodes.ID_Deleted);
       }
     } catch (IOException e) {
-      throw new StoreException("IOError when reading delete blob info from the log " + dataDir, e,
-          StoreErrorCodes.IOError);
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " when reading delete blob info from the log " + dataDir, e,
+          errorCode);
     }
     return readOptions;
   }
@@ -977,8 +980,8 @@ class PersistentIndex {
         newToken.setBytesRead(totalBytesRead);
         return new FindInfo(messageEntries, newToken);
       }
-    } catch (IOException e) {
-      throw new StoreException("IOError when finding entries for index " + dataDir, e, StoreErrorCodes.IOError);
+    } catch (StoreException e) {
+      throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error when finding entries for index " + dataDir, e,
           StoreErrorCodes.Unknown_Error);
@@ -1140,7 +1143,7 @@ class PersistentIndex {
    */
   private StoreFindToken findEntriesFromSegmentStartOffset(Offset initialSegmentStartOffset, StoreKey key,
       List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition,
-      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws IOException, StoreException {
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
     Offset segmentStartOffset = initialSegmentStartOffset;
     if (segmentStartOffset.equals(indexSegments.lastKey())) {
       // We would never have given away a token with a segmentStartOffset of the latest segment.
@@ -1432,85 +1435,78 @@ class PersistentIndex {
    */
   FindInfo findDeletedEntriesSince(FindToken token, long maxTotalSizeOfEntries, long endTimeSeconds)
       throws StoreException {
-    try {
-      StoreFindToken storeToken = (StoreFindToken) token;
-      StoreFindToken newToken;
-      List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
+    StoreFindToken storeToken = (StoreFindToken) token;
+    StoreFindToken newToken;
+    List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
 
-      if (storeToken.getType().equals(StoreFindToken.Type.IndexBased)) {
-        // Case 1: index based
-        // Find the index segment corresponding to the token indexStartOffset.
-        // Get entries starting from the token Key in this index.
-        newToken = findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
-            new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), validIndexSegments);
-        if (newToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
-          newToken = storeToken;
+    if (storeToken.getType().equals(StoreFindToken.Type.IndexBased)) {
+      // Case 1: index based
+      // Find the index segment corresponding to the token indexStartOffset.
+      // Get entries starting from the token Key in this index.
+      newToken = findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
+          new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), validIndexSegments);
+      if (newToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
+        newToken = storeToken;
+      }
+    } else {
+      // journal based or empty
+      Offset offsetToStart = storeToken.getOffset();
+      boolean inclusive = false;
+      if (storeToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
+        offsetToStart = getStartOffset();
+        inclusive = true;
+      }
+      List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
+      // we deliberately obtain a snapshot of the index segments AFTER fetching from the journal. This ensures that
+      // any and all entries returned from the journal are guaranteed to be in the obtained snapshot of indexSegments.
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
+
+      Offset offsetEnd = offsetToStart;
+      if (entries != null) {
+        // Case 2: offset based, and offset still in journal
+        IndexSegment currentSegment = indexSegments.floorEntry(offsetToStart).getValue();
+        long currentTotalSizeOfEntries = 0;
+        for (JournalEntry entry : entries) {
+          if (entry.getOffset().compareTo(currentSegment.getEndOffset()) > 0) {
+            Offset nextSegmentStartOffset = indexSegments.higherKey(currentSegment.getStartOffset());
+            currentSegment = indexSegments.get(nextSegmentStartOffset);
+          }
+          if (endTimeSeconds < currentSegment.getLastModifiedTimeSecs()) {
+            break;
+          }
+
+          IndexValue value =
+              findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
+                  EnumSet.allOf(IndexEntryType.class), indexSegments);
+          if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+            messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), true,
+                value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
+                value.getContainerId(), value.getOperationTimeInMs()));
+          }
+          offsetEnd = entry.getOffset();
+          currentTotalSizeOfEntries += value.getSize();
+          if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
+            break;
+          }
         }
+        newToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false);
       } else {
-        // journal based or empty
-        Offset offsetToStart = storeToken.getOffset();
-        boolean inclusive = false;
-        if (storeToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
-          offsetToStart = getStartOffset();
-          inclusive = true;
-        }
-        List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
-        // we deliberately obtain a snapshot of the index segments AFTER fetching from the journal. This ensures that
-        // any and all entries returned from the journal are guaranteed to be in the obtained snapshot of indexSegments.
-        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
-
-        Offset offsetEnd = offsetToStart;
-        if (entries != null) {
-          // Case 2: offset based, and offset still in journal
-          IndexSegment currentSegment = indexSegments.floorEntry(offsetToStart).getValue();
-          long currentTotalSizeOfEntries = 0;
-          for (JournalEntry entry : entries) {
-            if (entry.getOffset().compareTo(currentSegment.getEndOffset()) > 0) {
-              Offset nextSegmentStartOffset = indexSegments.higherKey(currentSegment.getStartOffset());
-              currentSegment = indexSegments.get(nextSegmentStartOffset);
-            }
-            if (endTimeSeconds < currentSegment.getLastModifiedTimeSecs()) {
-              break;
-            }
-
-            IndexValue value =
-                findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
-                    EnumSet.allOf(IndexEntryType.class), indexSegments);
-            if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-              messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), true,
-                  value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
-                  value.getContainerId(), value.getOperationTimeInMs()));
-            }
-            offsetEnd = entry.getOffset();
-            currentTotalSizeOfEntries += value.getSize();
-            if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
-              break;
-            }
+        // Case 3: offset based, but offset out of journal
+        Map.Entry<Offset, IndexSegment> entry = indexSegments.floorEntry(offsetToStart);
+        if (entry != null && entry.getKey() != indexSegments.lastKey()) {
+          newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
+              new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), indexSegments);
+          if (newToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
+            newToken = storeToken;
           }
-          newToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false);
         } else {
-          // Case 3: offset based, but offset out of journal
-          Map.Entry<Offset, IndexSegment> entry = indexSegments.floorEntry(offsetToStart);
-          if (entry != null && entry.getKey() != indexSegments.lastKey()) {
-            newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
-                new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), indexSegments);
-            if (newToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
-              newToken = storeToken;
-            }
-          } else {
-            newToken = storeToken; //use the same offset as before.
-          }
+          newToken = storeToken; //use the same offset as before.
         }
       }
-      filterDeleteEntries(messageEntries);
-      eliminateDuplicates(messageEntries);
-      return new FindInfo(messageEntries, newToken);
-    } catch (IOException e) {
-      throw new StoreException("IOError when finding entries for index " + dataDir, e, StoreErrorCodes.IOError);
-    } catch (Exception e) {
-      throw new StoreException("Unknown error when finding entries for index " + dataDir, e,
-          StoreErrorCodes.Unknown_Error);
     }
+    filterDeleteEntries(messageEntries);
+    eliminateDuplicates(messageEntries);
+    return new FindInfo(messageEntries, newToken);
   }
 
   /**
@@ -1586,9 +1582,9 @@ class PersistentIndex {
    * Cleans up all files related to index segments that refer to the log segment with name {@code logSegmentName}.
    *  @param dataDir the directory where the index files are.
    * @param logSegmentName the name of the log segment whose index segment related files need to be deleteds.
-   * @throws IOException if {@code dataDir} could not be read or if a file could not be deleted.
+   * @throws StoreException if {@code dataDir} could not be read or if a file could not be deleted.
    */
-  static void cleanupIndexSegmentFilesForLogSegment(String dataDir, final String logSegmentName) throws IOException {
+  static void cleanupIndexSegmentFilesForLogSegment(String dataDir, final String logSegmentName) throws StoreException {
     File[] filesToCleanup = new File(dataDir).listFiles(new FilenameFilter() {
       @Override
       public boolean accept(File dir, String name) {
@@ -1597,11 +1593,11 @@ class PersistentIndex {
       }
     });
     if (filesToCleanup == null) {
-      throw new IOException("Failed to list index segment files");
+      throw new StoreException("Failed to list index segment files", StoreErrorCodes.IOError);
     }
     for (File file : filesToCleanup) {
       if (!file.delete()) {
-        throw new IOException("Could not delete file named " + file);
+        throw new StoreException("Could not delete file named " + file, StoreErrorCodes.Unknown_Error);
       }
     }
   }
@@ -1648,7 +1644,7 @@ class PersistentIndex {
             if (prevInfo.getEndOffset().compareTo(currentLogEndPointer) > 0) {
               String message = "The read only index cannot have a file end pointer " + prevInfo.getEndOffset()
                   + " greater than the log end offset " + currentLogEndPointer;
-              throw new StoreException(message, StoreErrorCodes.IOError);
+              throw new StoreException(message, StoreErrorCodes.Illegal_Index_State);
             }
             prevInfosToWrite.add(prevInfo);
             Map.Entry<Offset, IndexSegment> infoEntry = indexSegments.lowerEntry(prevInfo.getStartOffset());
@@ -1662,8 +1658,12 @@ class PersistentIndex {
           }
           currentInfo.writeIndexSegmentToFile(indexEndOffsetBeforeFlush);
         }
+      } catch (FileNotFoundException e) {
+        throw new StoreException("File not found while writing index to file", e, StoreErrorCodes.File_Not_Found);
       } catch (IOException e) {
-        throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);
+        StoreErrorCodes errorCode = e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+            : StoreErrorCodes.Unknown_Error;
+        throw new StoreException(errorCode.toString() + " while persisting index to disk", e, errorCode);
       } finally {
         context.stop();
       }

@@ -158,7 +158,7 @@ public class IndexTest {
    * @throws StoreException
    */
   @Test
-  public void getBlobReadInfoTest() throws StoreException {
+  public void getBlobReadInfoTest() throws StoreException, IOException {
     final AtomicReference<MockId> idRequested = new AtomicReference<>();
     state.hardDelete = new MessageStoreHardDelete() {
       @Override
@@ -204,6 +204,14 @@ public class IndexTest {
     // try to get BlobReadOption for a non existent key
     MockId nonExistentId = state.getUniqueId();
     verifyBlobReadOptions(nonExistentId, EnumSet.allOf(StoreGetOptions.class), StoreErrorCodes.ID_Not_Found);
+    // test getBlobReadInfo encounters I/O error
+    MessageStoreHardDelete mockHardDelete = Mockito.mock(MessageStoreHardDelete.class);
+    state.hardDelete = mockHardDelete;
+    state.reloadIndex(true, false);
+    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockHardDelete)
+        .getMessageInfo(any(Read.class), anyLong(), any(StoreKeyFactory.class));
+    MockId mockId = state.deletedKeys.stream().filter(id -> state.getExpectedValue(id, true) != null).findAny().get();
+    verifyBlobReadOptions(mockId, EnumSet.of(StoreGetOptions.Store_Include_Deleted), StoreErrorCodes.IOError);
   }
 
   /**
@@ -266,11 +274,10 @@ public class IndexTest {
    * 2. FileSpan is across segments
    * 3. ID does not exist
    * 4. ID already deleted
-   * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void markAsDeletedBadInputTest() throws IOException, StoreException {
+  public void markAsDeletedBadInputTest() throws StoreException {
     // FileSpan end offset < currentIndexEndOffset
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
     try {
@@ -1154,6 +1161,18 @@ public class IndexTest {
     }
     // append to log so that log and index are in sync with each other
     state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
+    // test persistor.write() failure due to I/O error
+    Log mockLog = Mockito.spy(state.log);
+    state.log = mockLog;
+    state.reloadIndex(true, false);
+    try {
+      doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockLog).flush();
+      state.index.close();
+      fail("Should have thrown exception due to I/O error");
+    } catch (StoreException e) {
+      assertEquals("StoreException error code mismatch ", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    Mockito.reset(mockLog);
   }
 
   /**
@@ -1289,11 +1308,10 @@ public class IndexTest {
   /**
    * Tests {@link PersistentIndex#cleanupIndexSegmentFilesForLogSegment(String, String)} and makes sure it deletes all
    * the relevant files and no more.
-   * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void cleanupIndexSegmentFilesForLogSegmentTest() throws IOException, StoreException {
+  public void cleanupIndexSegmentFilesForLogSegmentTest() throws StoreException {
     state.index.close();
     LogSegment logSegment = state.log.getFirstSegment();
     while (logSegment != null) {
@@ -1316,6 +1334,13 @@ public class IndexTest {
       }
       assertEquals("Number of files to check does not match expectation", expectedNumFilesToDelete,
           filesToCheck.length);
+      // test list index segment files failure (use incorrect path to simulate I/O errors)
+      try {
+        PersistentIndex.cleanupIndexSegmentFilesForLogSegment("Non-Directory", logSegmentName);
+        fail("should fail when listing index segment files");
+      } catch (StoreException e) {
+        assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+      }
       PersistentIndex.cleanupIndexSegmentFilesForLogSegment(tempDir.getAbsolutePath(), logSegmentName);
       for (File fileToCheck : filesToCheck) {
         assertFalse(fileToCheck + " should have been deleted", fileToCheck.exists());
@@ -1796,9 +1821,9 @@ public class IndexTest {
    * Creates a few curated recovery entries. For understanding the created entries, please read the source code which is
    * annotated with comments.
    * @return curated recovery entries.
-   * @throws IOException
+   * @throws StoreException
    */
-  private List<MessageInfo> getCuratedSingleSegmentRecoveryInfos() throws IOException {
+  private List<MessageInfo> getCuratedSingleSegmentRecoveryInfos() throws StoreException {
     List<MessageInfo> infos = new ArrayList<>();
     state.appendToLog(5 * CuratedLogIndexState.DELETE_RECORD_SIZE + 4 * CuratedLogIndexState.PUT_RECORD_SIZE
         + 5 * TTL_UPDATE_RECORD_SIZE);

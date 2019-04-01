@@ -515,10 +515,10 @@ class ReplicaThread implements Runnable {
    * @param remoteNode The remote node from which replication needs to happen
    * @param remoteReplicaInfo The remote replica that contains information about the remote replica id
    * @return List of store keys that are missing from the local store
-   * @throws Exception
+   * @throws StoreException if store error (usually IOError) occurs when getting missing keys.
    */
   private Set<StoreKey> getMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
-      DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws Exception {
+      DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     Map<StoreKey, StoreKey> remoteToConvertedNonNull = new HashMap<>();

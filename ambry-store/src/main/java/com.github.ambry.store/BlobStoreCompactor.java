@@ -258,7 +258,7 @@ class BlobStoreCompactor {
   int getSwapSegmentsInUse() throws StoreException {
     String[] tempSegments = dataDir.list(TEMP_LOG_SEGMENTS_FILTER);
     if (tempSegments == null) {
-      throw new StoreException("Error occured while listing files in data dir:" + dataDir.getAbsolutePath(),
+      throw new StoreException("Error occurred while listing files in data dir:" + dataDir.getAbsolutePath(),
           StoreErrorCodes.IOError);
     }
     return tempSegments.length;
@@ -425,9 +425,9 @@ class BlobStoreCompactor {
    * 3. Deleting the clean shutdown file associated with the index of the swap spaces.
    * 4. Resetting state.
    * @param recovering {@code true} if this function was called in the context of recovery. {@code false} otherwise.
-   * @throws IOException if there were I/O errors during cleanup.
+   * @throws StoreException if there were store exception during cleanup.
    */
-  private void cleanup(boolean recovering) throws IOException {
+  private void cleanup(boolean recovering) throws StoreException {
     cleanupLogAndIndexSegments(recovering);
     File cleanShutdownFile = new File(dataDir, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
     if (cleanShutdownFile.exists() && !cleanShutdownFile.delete()) {
@@ -1152,9 +1152,9 @@ class BlobStoreCompactor {
    * Adds the log segments with names {@code logSegmentNames} to the application log instance.
    * @param logSegmentNames the names of the log segments to commit.
    * @param recovering {@code true} if this function was called in the context of recovery. {@code false} otherwise.
-   * @throws IOException if there were any I/O errors creating a log segment
+   * @throws StoreException if there were any store exception creating a log segment
    */
-  private void addNewLogSegmentsToSrcLog(List<String> logSegmentNames, boolean recovering) throws IOException {
+  private void addNewLogSegmentsToSrcLog(List<String> logSegmentNames, boolean recovering) throws StoreException {
     logger.debug("Adding {} in {} to the application log", logSegmentNames, storeId);
     for (String logSegmentName : logSegmentNames) {
       File segmentFile = new File(dataDir, LogSegmentNameHelper.nameToFilename(logSegmentName));
@@ -1168,10 +1168,9 @@ class BlobStoreCompactor {
    * removes all the index segments that refer to the log segments that will be cleaned up from the application index.
    * The change is atomic with the use of {@link PersistentIndex#changeIndexSegments(List, Set)}.
    * @param logSegmentNames the names of the log segments whose index segments need to be committed.
-   * @throws IOException if there were any I/O errors in setting up the index segment.
    * @throws StoreException if there were any problems committing the changed index segments.
    */
-  private void updateSrcIndex(List<String> logSegmentNames) throws IOException, StoreException {
+  private void updateSrcIndex(List<String> logSegmentNames) throws StoreException {
     Set<Offset> indexSegmentsToRemove = new HashSet<>();
     for (String logSegmentName : compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction()) {
       indexSegmentsToRemove.addAll(getIndexSegmentDetails(logSegmentName).keySet());
@@ -1241,7 +1240,7 @@ class BlobStoreCompactor {
    * @param recovering {@code true} if this function was called in the context of recovery. {@code false} otherwise.
    * @throws IOException
    */
-  private void cleanupLogAndIndexSegments(boolean recovering) throws IOException {
+  private void cleanupLogAndIndexSegments(boolean recovering) throws StoreException {
     CompactionDetails details = compactionLog.getCompactionDetails();
     List<String> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
     logger.debug("Cleaning up {} (and related index segments) in {}", segmentsUnderCompaction, storeId);

@@ -26,6 +26,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -363,9 +364,9 @@ class IndexSegment {
           }
         }
       }
-    } catch (IOException e) {
-      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " IO error while searching", e,
-          StoreErrorCodes.IOError);
+    } catch (StoreException e) {
+      throw new StoreException(String.format("IndexSegment %s : %s", indexFile.getAbsolutePath(), e.getMessage()), e,
+          e.getErrorCode());
     } finally {
       rwLock.readLock().unlock();
     }
@@ -374,9 +375,9 @@ class IndexSegment {
 
   /**
    * Generate bloom filter by walking through all index entries in this segment and persist it.
-   * @throws IOException
+   * @throws StoreException
    */
-  private void generateBloomFilterAndPersist() throws IOException {
+  private void generateBloomFilterAndPersist() throws StoreException {
     int numOfIndexEntries = numberOfEntries(serEntries);
     bloomFilter = FilterFactory.getFilter(numOfIndexEntries, config.storeIndexBloomMaxFalsePositiveProbability);
     for (int i = 0; i < numOfIndexEntries; i++) {
@@ -388,15 +389,21 @@ class IndexSegment {
 
   /**
    * Persist the bloom filter.
-   * @throws IOException
+   * @throws StoreException
    */
-  private void persistBloomFilter() throws IOException {
-    CrcOutputStream crcStream = new CrcOutputStream(new FileOutputStream(bloomFile));
-    DataOutputStream stream = new DataOutputStream(crcStream);
-    FilterFactory.serialize(bloomFilter, stream);
-    long crcValue = crcStream.getValue();
-    stream.writeLong(crcValue);
-    stream.close();
+  private void persistBloomFilter() throws StoreException {
+    try {
+      CrcOutputStream crcStream = new CrcOutputStream(new FileOutputStream(bloomFile));
+      DataOutputStream stream = new DataOutputStream(crcStream);
+      FilterFactory.serialize(bloomFilter, stream);
+      long crcValue = crcStream.getValue();
+      stream.writeLong(crcValue);
+      stream.close();
+    } catch (IOException e) {
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " while trying to persist bloom filter", e, errorCode);
+    }
   }
 
   /**
@@ -407,10 +414,10 @@ class IndexSegment {
    * @param totalEntries the total number of entries in the index
    * @param values the set to which the {@link IndexValue}s will be added
    * @return a pair consisting of the lowest index that matched the key and the highest
-   * @throws IOException if there are problems reading from the serEntries
+   * @throws StoreException if there are problems reading from the mmap
    */
   private Pair<Integer, Integer> getAllValuesFromMmap(ByteBuffer mmap, StoreKey keyToFind, int positiveMatchInd,
-      int totalEntries, NavigableSet<IndexValue> values) throws IOException {
+      int totalEntries, NavigableSet<IndexValue> values) throws StoreException {
     byte[] buf = new byte[valueSize];
     // add the value at the positive match and anything after that matches
     int end = positiveMatchInd;
@@ -435,12 +442,27 @@ class IndexSegment {
     return (mmap.capacity() - indexSizeExcludingEntries) / persistedEntrySize;
   }
 
-  private StoreKey getKeyAt(ByteBuffer mmap, int index) throws IOException {
-    mmap.position(firstKeyRelativeOffset + index * persistedEntrySize);
-    return factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
+  private StoreKey getKeyAt(ByteBuffer mmap, int index) throws StoreException {
+    StoreKey storeKey = null;
+    try {
+      mmap.position(firstKeyRelativeOffset + index * persistedEntrySize);
+      storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
+    } catch (InternalError e) {
+      throw e.getMessage().equals(StoreException.INTERNAL_ERROR_STR) ? new StoreException(
+          "Internal error occurred due to unsafe memory access", e, StoreErrorCodes.IOError)
+          : new StoreException("Unknown internal error while trying to get store key", e,
+              StoreErrorCodes.Unknown_Error);
+    } catch (IOException e) {
+      throw e.getMessage().equals(StoreException.IO_ERROR_STR) ? new StoreException(
+          "IO error while trying to get store key", e, StoreErrorCodes.IOError)
+          : new StoreException("Unknown IO error while trying to get store key", e, StoreErrorCodes.Unknown_Error);
+    } catch (Throwable t) {
+      throw new StoreException("Unknown error while trying to get store key ", t, StoreErrorCodes.Unknown_Error);
+    }
+    return storeKey;
   }
 
-  private int findIndex(StoreKey keyToFind, ByteBuffer mmap) throws IOException {
+  private int findIndex(StoreKey keyToFind, ByteBuffer mmap) throws StoreException {
     // binary search on the mapped file
     int low = 0;
     int high = numberOfEntries(mmap) - 1;
@@ -614,10 +636,10 @@ class IndexSegment {
    *  crc             - the crc of the index segment content
    *
    * @param safeEndPoint the end point (that is relevant to this segment) until which the log has been flushed.
-   * @throws IOException
+   * @throws FileNotFoundException
    * @throws StoreException
    */
-  void writeIndexSegmentToFile(Offset safeEndPoint) throws IOException, StoreException {
+  void writeIndexSegmentToFile(Offset safeEndPoint) throws FileNotFoundException, StoreException {
     if (sealed.get()) {
       throw new StoreException("Cannot persist sealed index segment", StoreErrorCodes.Illegal_Index_Operation);
     }
@@ -678,9 +700,11 @@ class IndexSegment {
         // swap temp file with the original file
         temp.renameTo(getFile());
       } catch (IOException e) {
+        StoreErrorCodes errorCode = e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+            : StoreErrorCodes.Unknown_Error;
         throw new StoreException(
-            "IndexSegment : " + indexFile.getAbsolutePath() + " IO error while persisting index to disk", e,
-            StoreErrorCodes.IOError);
+            "IndexSegment : " + indexFile.getAbsolutePath() + " encountered " + errorCode.toString()
+                + " while persisting index to disk", e, errorCode);
       } finally {
         rwLock.readLock().unlock();
       }
@@ -690,10 +714,9 @@ class IndexSegment {
 
   /**
    * Marks the segment as sealed. Also persists the bloom filter to disk and conditionally mmaps the index segment.
-   * @throws IOException if there is any problem with I/O
    * @throws StoreException if there are problems with the index
    */
-  void seal() throws IOException, StoreException {
+  void seal() throws StoreException {
     sealed.set(true);
     map();
     // we should be fine reading bloom filter here without synchronization as the index is read only
@@ -702,10 +725,9 @@ class IndexSegment {
 
   /**
    * Maps the segment of index either as a memory map or a in memory buffer depending on config.
-   * @throws IOException if there is any problem reading or mapping files
    * @throws StoreException if there are problems with the index
    */
-  private void map() throws IOException, StoreException {
+  private void map() throws StoreException {
     rwLock.writeLock().lock();
     try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
       if (config.storeIndexMemState.equals(IndexMemState.IN_HEAP_MEM)) {
@@ -769,6 +791,12 @@ class IndexSegment {
               StoreErrorCodes.Index_Version_Error);
       }
       index = null;
+    } catch (FileNotFoundException e) {
+      throw new StoreException("File not found while mapping the segment of index", e, StoreErrorCodes.File_Not_Found);
+    } catch (IOException e) {
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " while mapping the segment of index", e, errorCode);
     } finally {
       rwLock.writeLock().unlock();
     }
@@ -779,9 +807,9 @@ class IndexSegment {
    * @param fileToRead The file to read the index segment from
    * @param journal The journal to use.
    * @throws StoreException
-   * @throws IOException
+   * @throws FileNotFoundException
    */
-  private void readFromFile(File fileToRead, Journal journal) throws StoreException, IOException {
+  private void readFromFile(File fileToRead, Journal journal) throws StoreException, FileNotFoundException {
     logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
     index.clear();
     CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToRead));
@@ -878,8 +906,10 @@ class IndexSegment {
             StoreErrorCodes.Index_Creation_Failure);
       }
     } catch (IOException e) {
-      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " IO error while reading from file ",
-          e, StoreErrorCodes.IOError);
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " encountered " + errorCode.toString()
+          + " while reading from file ", e, errorCode);
     }
   }
 
@@ -892,10 +922,10 @@ class IndexSegment {
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
    * @return true if any entries were added.
-   * @throws IOException
+   * @throws StoreException
    */
   boolean getEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<MessageInfo> entries,
-      AtomicLong currentTotalSizeOfEntriesInBytes) throws IOException {
+      AtomicLong currentTotalSizeOfEntriesInBytes) throws StoreException {
     List<IndexEntry> indexEntries = new ArrayList<>();
     boolean areNewEntriesAdded =
         getIndexEntriesSince(key, findEntriesCondition, indexEntries, currentTotalSizeOfEntriesInBytes, true);
@@ -921,10 +951,10 @@ class IndexSegment {
    * @param oneEntryPerKey returns only one index entry per key even if the segment has multiple values for the key.
    *                       Favors DELETE records over all other records. Favors PUT over a TTL update record.
    * @return true if any entries were added.
-   * @throws IOException
+   * @throws StoreException
    */
   boolean getIndexEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<IndexEntry> entries,
-      AtomicLong currentTotalSizeOfEntriesInBytes, boolean oneEntryPerKey) throws IOException {
+      AtomicLong currentTotalSizeOfEntriesInBytes, boolean oneEntryPerKey) throws StoreException {
     if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
       return false;
     }

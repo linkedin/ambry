@@ -673,7 +673,7 @@ public class CompactionVerifier implements Closeable {
         indexEntries.addAll(entriesToAdd);
         Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
         LOGGER.info("Loaded entries from {}", indexSegment.getFile());
-      } catch (IOException | StoreException e) {
+      } catch (StoreException e) {
         throw new IllegalStateException(e);
       }
       indexEntriesIterator = indexEntries.iterator();

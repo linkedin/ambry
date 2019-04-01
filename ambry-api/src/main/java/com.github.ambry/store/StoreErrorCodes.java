@@ -33,5 +33,7 @@ public enum StoreErrorCodes {
   Authorization_Failure,
   Unknown_Error,
   Already_Updated,
-  Update_Not_Allowed
+  Update_Not_Allowed,
+  File_Not_Found,
+  Channel_Closed
 }

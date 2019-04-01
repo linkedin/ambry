@@ -1985,7 +1985,7 @@ public class ReplicationTest {
       }
 
       @Override
-      public int appendFrom(ByteBuffer buffer) throws IOException {
+      public int appendFrom(ByteBuffer buffer) {
         ByteBuffer buf = ByteBuffer.allocate(buffer.remaining());
         buf.put(buffer);
         buf.flip();
@@ -1994,11 +1994,17 @@ public class ReplicationTest {
       }
 
       @Override
-      public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
+      public void appendFrom(ReadableByteChannel channel, long size) throws StoreException {
         ByteBuffer buf = ByteBuffer.allocate((int) size);
         int sizeRead = 0;
-        while (sizeRead < size) {
-          sizeRead += channel.read(buf);
+        try {
+          while (sizeRead < size) {
+            sizeRead += channel.read(buf);
+          }
+        } catch (IOException e) {
+          StoreErrorCodes errorCode = e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+              : StoreErrorCodes.Unknown_Error;
+          throw new StoreException(errorCode.toString() + " while writing into dummy log", e, errorCode);
         }
         buf.flip();
         storeBuf(buf);
@@ -2061,7 +2067,7 @@ public class ReplicationTest {
       List<MessageInfo> newInfos = messageSetToWrite.getMessageSetInfo();
       try {
         messageSetToWrite.writeTo(log);
-      } catch (IOException e) {
+      } catch (StoreException e) {
         throw new IllegalStateException(e);
       }
       List<MessageInfo> infos = new ArrayList<>();
@@ -2084,7 +2090,7 @@ public class ReplicationTest {
       for (MessageInfo info : messageSetToDelete.getMessageSetInfo()) {
         try {
           messageSetToDelete.writeTo(log);
-        } catch (IOException e) {
+        } catch (StoreException e) {
           throw new IllegalStateException(e);
         }
         MessageInfo ttlUpdateInfo = getMessageInfo(info.getStoreKey(), messageInfos, false, true);
@@ -2105,7 +2111,7 @@ public class ReplicationTest {
         }
         try {
           messageSetToUpdate.writeTo(log);
-        } catch (IOException e) {
+        } catch (StoreException e) {
           throw new IllegalStateException(e);
         }
         messageInfos.add(new MessageInfo(info.getStoreKey(), info.getSize(), false, true, info.getExpirationTimeInMs(),

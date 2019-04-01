@@ -408,9 +408,9 @@ class CuratedLogIndexState {
    * Appends random data of size {@code size} to the {@link #log}.
    * @param size the size of data that needs to be appended.
    * @return the data that was appended.
-   * @throws IOException
+   * @throws StoreException
    */
-  byte[] appendToLog(long size) throws IOException {
+  byte[] appendToLog(long size) throws StoreException {
     byte[] bytes = TestUtils.getRandomBytes((int) size);
     if (size > CuratedLogIndexState.HARD_DELETE_START_OFFSET) {
       // ensure at least one byte is set to 1 for hard delete verification purposes
@@ -742,9 +742,9 @@ class CuratedLogIndexState {
    * 1. It contains no duplicate entries.
    * 2. The ordering of PUT and DELETE entries is correct.
    * 3. There are no offsets in the log not accounted for in the index.
-   * @throws IOException
+   * @throws StoreException
    */
-  void verifyRealIndexSanity() throws IOException {
+  void verifyRealIndexSanity() throws StoreException {
     IndexSegment prevIndexSegment = null;
     for (IndexSegment indexSegment : index.getIndexSegments().values()) {
       Offset indexSegmentStartOffset = indexSegment.getStartOffset();
