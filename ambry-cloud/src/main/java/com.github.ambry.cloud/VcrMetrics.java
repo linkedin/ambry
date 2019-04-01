@@ -13,21 +13,18 @@
  */
 package com.github.ambry.cloud;
 
-/**
- * Exception class indicating an error moving data between Ambry and cloud storage.
- */
-public class CloudStorageException extends Exception {
-  private static final long serialVersionUID = 1;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
 
-  public CloudStorageException(String message) {
-    super(message);
-  }
 
-  public CloudStorageException(String message, Throwable e) {
-    super(message, e);
-  }
+public class VcrMetrics {
 
-  public CloudStorageException(Throwable e) {
-    super(e);
+  public final Histogram vcrStartTimeInMs;
+  public final Histogram vcrShutdownTimeInMs;
+
+  public VcrMetrics(MetricRegistry registry) {
+    // TODO: add metrics to registry
+    vcrStartTimeInMs = registry.histogram(MetricRegistry.name(VcrServer.class, "VcrStartTimeInMs"));
+    vcrShutdownTimeInMs = registry.histogram(MetricRegistry.name(VcrServer.class, "VcrShutdownTimeInMs"));
   }
 }
