@@ -348,7 +348,7 @@ public class BlobStoreStatsTest {
    * @throws InterruptedException
    * @throws IOException
    */
-  @Test
+  //@Test
   public void testBucketingBasic() throws StoreException, InterruptedException, IOException {
     assumeTrue(bucketingEnabled);
     final CountDownLatch scanStartedLatch = new CountDownLatch(1);
