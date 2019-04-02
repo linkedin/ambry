@@ -58,8 +58,7 @@ import org.mockito.Mockito;
 
 import static com.github.ambry.store.CuratedLogIndexState.*;
 import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 
@@ -210,8 +209,8 @@ public class IndexTest {
     state.reloadIndex(true, false);
     doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockHardDelete)
         .getMessageInfo(any(Read.class), anyLong(), any(StoreKeyFactory.class));
-    MockId mockId = state.deletedKeys.stream().filter(id -> state.getExpectedValue(id, true) != null).findAny().get();
-    verifyBlobReadOptions(mockId, EnumSet.of(StoreGetOptions.Store_Include_Deleted), StoreErrorCodes.IOError);
+    verifyBlobReadOptions(state.deletedKeyWithPutInSameSegment, EnumSet.of(StoreGetOptions.Store_Include_Deleted),
+        StoreErrorCodes.IOError);
   }
 
   /**
@@ -402,11 +401,10 @@ public class IndexTest {
    * 2. Add data to log but not index, restart and check that end offsets have been reset.
    * 3. Add data to log such that a new log segment is created but not to index, restart and check that the new log
    * segment is gone.
-   * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void setEndOffsetsTest() throws IOException, StoreException {
+  public void setEndOffsetsTest() throws StoreException {
     // check that current end offsets set are correct
     LogSegment segment = state.log.getFirstSegment();
     while (segment != null) {
@@ -915,11 +913,10 @@ public class IndexTest {
 
   /**
    * Tests behaviour of {@link PersistentIndex#findEntriesSince(FindToken, long)} relating to incarnationId
-   * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void findEntriesSinceIncarnationIdTest() throws IOException, StoreException {
+  public void findEntriesSinceIncarnationIdTest() throws StoreException {
     Offset lastRecordOffset = state.index.journal.getLastOffset();
     state.appendToLog(2 * CuratedLogIndexState.PUT_RECORD_SIZE);
     // will be recovered
@@ -1705,10 +1702,9 @@ public class IndexTest {
 
   /**
    * Test recovery of a single segment.
-   * @throws IOException
    * @throws StoreException
    */
-  private void singleSegmentRecoveryTest() throws IOException, StoreException {
+  private void singleSegmentRecoveryTest() throws StoreException {
     Offset indexEndOffsetBeforeRecovery = state.index.getCurrentEndOffset();
     // recover a few messages in a single segment
     final List<MessageInfo> infos = getCuratedSingleSegmentRecoveryInfos();
@@ -1734,10 +1730,9 @@ public class IndexTest {
 
   /**
    * Tests recovery of more than one segment.
-   * @throws IOException
    * @throws StoreException
    */
-  private void multipleSegmentRecoveryTest() throws IOException, StoreException {
+  private void multipleSegmentRecoveryTest() throws StoreException {
     Offset indexEndOffsetBeforeRecovery = state.index.getCurrentEndOffset();
     LogSegment activeSegment = state.log.getSegment(indexEndOffsetBeforeRecovery.getName());
     // recover a few messages across segments
@@ -2688,11 +2683,10 @@ public class IndexTest {
    * @param expiresAtMs expiration value at ms for the put entries
    * @param createV0IndexValue if true, create {@link IndexValue} in V0.
    * @return a list {@link IndexEntry}s added to the {@link PersistentIndex}
-   * @throws IOException
    * @throws StoreException
    */
   private List<IndexEntry> addPutEntries(Offset prevEntryEndOffset, IndexSegment indexSegment, int count, long size,
-      long expiresAtMs, int idLength, boolean createV0IndexValue) throws IOException, StoreException {
+      long expiresAtMs, int idLength, boolean createV0IndexValue) throws StoreException {
     List<IndexEntry> indexEntries = new ArrayList<>();
     for (int i = 0; i < count; i++) {
       state.appendToLog(size);
