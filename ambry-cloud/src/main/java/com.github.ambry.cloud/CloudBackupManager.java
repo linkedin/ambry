@@ -14,7 +14,6 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.azure.AzureCloudBlobCryptoService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -35,7 +34,6 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
