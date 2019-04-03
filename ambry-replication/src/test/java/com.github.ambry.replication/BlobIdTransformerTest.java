@@ -502,13 +502,8 @@ public class BlobIdTransformerTest {
       int inputStreamSize;
       MessageInfo messageInfo;
       BlobProperties blobProperties =
-//<<<<<<< HEAD
-//          new BlobProperties(blobPropertiesSize, "serviceId", "ownerId", "contentType", false, 0, 0,
-//              blobId.getAccountId(), blobId.getContainerId(), hasEncryption);
-//=======
           new BlobProperties(blobPropertiesSize, "serviceId", "ownerId", "contentType", false, 0, 0, blobId.getAccountId(),
               blobId.getContainerId(), hasEncryption, null);
-//>>>>>>> master_pure
       if (clazz != null) {
         MessageFormatInputStream messageFormatInputStream;
         if (clazz == PutMessageFormatInputStream.class) {
