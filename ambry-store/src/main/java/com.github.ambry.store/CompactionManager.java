@@ -16,7 +16,6 @@ package com.github.ambry.store;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -177,7 +176,7 @@ class CompactionManager {
     private final Set<BlobStore> storesDisabledCompaction = ConcurrentHashMap.newKeySet();
     private final LinkedBlockingDeque<BlobStore> storesToCheck = new LinkedBlockingDeque<>();
     private final long waitTimeMs = TimeUnit.HOURS.toMillis(storeConfig.storeCompactionCheckFrequencyInHours);
-    private final ByteBuffer bundleReadBuffer;
+    private final byte[] bundleReadBuffer;
 
     private volatile boolean enabled = false;
 
@@ -189,7 +188,7 @@ class CompactionManager {
      */
     CompactionExecutor(EnumSet<Trigger> triggers, int bundleReadBufferSize) {
       this.triggers = triggers;
-      bundleReadBuffer = bundleReadBufferSize == 0 ? null : ByteBuffer.allocateDirect(bundleReadBufferSize);
+      bundleReadBuffer = bundleReadBufferSize == 0 ? null : new byte[bundleReadBufferSize];
       logger.info("Buffer size is {} in compaction thread for {}", bundleReadBufferSize, mountPath);
     }
 

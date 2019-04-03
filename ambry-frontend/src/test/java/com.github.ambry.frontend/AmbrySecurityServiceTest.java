@@ -33,6 +33,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
@@ -81,10 +82,10 @@ public class AmbrySecurityServiceTest {
   private static final BlobInfo DEFAULT_INFO;
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
+          Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
   private static final BlobInfo UNKNOWN_INFO_ENC = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, true), new byte[0]);
+          Container.UNKNOWN_CONTAINER_ID, true, null), new byte[0]);
   private static final FrontendTestUrlSigningServiceFactory URL_SIGNING_SERVICE_FACTORY =
       new FrontendTestUrlSigningServiceFactory();
 
@@ -105,7 +106,7 @@ public class AmbrySecurityServiceTest {
           UtilsTest.getRandomString(11));
       DEFAULT_INFO = new BlobInfo(
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
-              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false),
+              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null),
           RestUtils.buildUserMetadata(USER_METADATA));
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
     } catch (Exception e) {
@@ -178,6 +179,8 @@ public class AmbrySecurityServiceTest {
     // with GET sub resources
     for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
+      Account account = InMemAccountService.UNKNOWN_ACCOUNT;
+      insertAccountAndContainer(restRequest, account, account.getContainerById(Container.UNKNOWN_CONTAINER_ID));
       securityService.preProcessRequest(restRequest).get();
       securityService.processRequest(restRequest).get();
       securityService.postProcessRequest(restRequest).get();
@@ -281,17 +284,17 @@ public class AmbrySecurityServiceTest {
     // with no owner id
     BlobInfo blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, null, "image/gif", false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
-            REF_CONTAINER.getId(), false), new byte[0]);
+            REF_CONTAINER.getId(), false, null), new byte[0]);
     testHeadBlobWithVariousRanges(blobInfo);
     // with no content type
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, null, false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
-            REF_CONTAINER.getId(), false), new byte[0]);
+            REF_CONTAINER.getId(), false, null), new byte[0]);
     testHeadBlobWithVariousRanges(blobInfo);
     // with a TTL
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, 10000, REF_ACCOUNT.getId(),
-            REF_CONTAINER.getId(), false), new byte[0]);
+            REF_CONTAINER.getId(), false, null), new byte[0]);
     testHeadBlobWithVariousRanges(blobInfo);
 
     // GET BlobInfo
@@ -312,29 +315,29 @@ public class AmbrySecurityServiceTest {
     // less than chunk threshold size
     blobInfo = new BlobInfo(
         new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID, "image/gif",
-            false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
+            false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // == chunk threshold size
     blobInfo = new BlobInfo(
         new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, SERVICE_ID, OWNER_ID, "image/gif", false,
-            10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
+            10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // more than chunk threshold size
     blobInfo = new BlobInfo(
         new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 2, SERVICE_ID, OWNER_ID, "image/gif",
-            false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
+            false, 10000, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // Get blob with content type null
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, null, true, 10000, Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
+        Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // Get blob in a non-cacheable container. AmbrySecurityService should not care about the isPrivate setting.
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time,
-        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PRIVATE_CONTAINER_ID, false), new byte[0]);
+        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PRIVATE_CONTAINER_ID, false, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // Get blob in a cacheable container. AmbrySecurityService should not care about the isPrivate setting.
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", true, Utils.Infinite_Time,
-        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PUBLIC_CONTAINER_ID, false), new byte[0]);
+        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PUBLIC_CONTAINER_ID, false, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // not modified response
     // > creation time (in secs).
@@ -347,7 +350,7 @@ public class AmbrySecurityServiceTest {
     // Get blob for a public blob with content type as "text/html"
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, "text/html", true, 10000, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID, false), new byte[0]);
+            Container.UNKNOWN_CONTAINER_ID, false, null), new byte[0]);
     testGetBlobWithVariousRanges(blobInfo);
     // not modified response
     // > creation time (in secs).
@@ -483,19 +486,19 @@ public class AmbrySecurityServiceTest {
     long blobSize = blobInfo.getBlobProperties().getBlobSize();
     testGetBlob(blobInfo, null);
 
-    testGetBlob(blobInfo, ByteRange.fromLastNBytes(0));
+    testGetBlob(blobInfo, ByteRanges.fromLastNBytes(0));
     if (blobSize > 0) {
-      testGetBlob(blobInfo, ByteRange.fromStartOffset(0));
-      testGetBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
-      testGetBlob(blobInfo, ByteRange.fromStartOffset(blobSize - 1));
+      testGetBlob(blobInfo, ByteRanges.fromStartOffset(0));
+      testGetBlob(blobInfo, ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
+      testGetBlob(blobInfo, ByteRanges.fromStartOffset(blobSize - 1));
 
       long random1 = ThreadLocalRandom.current().nextLong(blobSize);
       long random2 = ThreadLocalRandom.current().nextLong(blobSize);
-      testGetBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
-      testGetBlob(blobInfo, ByteRange.fromLastNBytes(blobSize));
+      testGetBlob(blobInfo, ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+      testGetBlob(blobInfo, ByteRanges.fromLastNBytes(blobSize));
     }
     if (blobSize > 1) {
-      testGetBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
+      testGetBlob(blobInfo, ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
     }
   }
 
@@ -559,20 +562,20 @@ public class AmbrySecurityServiceTest {
     long blobSize = blobInfo.getBlobProperties().getBlobSize();
     testHeadBlob(blobInfo, null);
 
-    testHeadBlob(blobInfo, ByteRange.fromLastNBytes(0));
+    testHeadBlob(blobInfo, ByteRanges.fromLastNBytes(0));
     if (blobSize > 0) {
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(0));
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(blobSize - 1));
+      testHeadBlob(blobInfo, ByteRanges.fromStartOffset(0));
+      testHeadBlob(blobInfo, ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
+      testHeadBlob(blobInfo, ByteRanges.fromStartOffset(blobSize - 1));
 
       long random1 = ThreadLocalRandom.current().nextLong(blobSize);
       long random2 = ThreadLocalRandom.current().nextLong(blobSize);
-      testHeadBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+      testHeadBlob(blobInfo, ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
 
-      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(blobSize));
+      testHeadBlob(blobInfo, ByteRanges.fromLastNBytes(blobSize));
     }
     if (blobSize > 1) {
-      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
+      testHeadBlob(blobInfo, ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
     }
   }
 

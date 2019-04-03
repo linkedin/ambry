@@ -62,9 +62,11 @@ public class AccountContainerTest {
   private List<Boolean> refContainerEncryptionValues;
   private List<Boolean> refContainerPreviousEncryptionValues;
   private List<Boolean> refContainerCachingValues;
+  private List<Boolean> refContainerBackupEnabledValues;
   private List<Boolean> refContainerMediaScanDisabledValues;
   private List<String> refContainerReplicationPolicyValues;
   private List<Boolean> refContainerTtlRequiredValues;
+  private List<Boolean> refContainerSignedPathRequiredValues;
   private List<Set<String>> refContainerContentTypeWhitelistForFilenamesOnDownloadValues;
   private List<JSONObject> containerJsonList;
   private List<Container> refContainers;
@@ -129,6 +131,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -141,6 +144,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -162,6 +166,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -174,6 +179,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -195,6 +201,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -207,6 +214,7 @@ public class AccountContainerTest {
             .setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -218,6 +226,7 @@ public class AccountContainerTest {
         refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
         .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
         .setCacheable(refContainerCachingValues.get(0))
+        .setBackupEnabled(refContainerBackupEnabledValues.get(0))
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -229,6 +238,7 @@ public class AccountContainerTest {
         refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
         .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
         .setCacheable(refContainerCachingValues.get(0))
+        .setBackupEnabled(refContainerBackupEnabledValues.get(0))
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -260,6 +270,7 @@ public class AccountContainerTest {
         refContainerDescriptions.get(0), (short) (refAccountId + 1)).setEncrypted(refContainerEncryptionValues.get(0))
         .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
         .setCacheable(refContainerCachingValues.get(0))
+        .setBackupEnabled(refContainerBackupEnabledValues.get(0))
         .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -376,9 +387,11 @@ public class AccountContainerTest {
               refContainerDescriptions.get(i), refAccountId).setEncrypted(refContainerEncryptionValues.get(i))
               .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(i))
               .setCacheable(refContainerCachingValues.get(i))
+              .setBackupEnabled(refContainerBackupEnabledValues.get(i))
               .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(i))
               .setReplicationPolicy(refContainerReplicationPolicyValues.get(i))
               .setTtlRequired(refContainerTtlRequiredValues.get(i))
+              .setSecurePathRequired(refContainerSignedPathRequiredValues.get(i))
               .setContentTypeWhitelistForFilenamesOnDownload(
                   refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i));
       Container containerFromBuilder = containerBuilder.build();
@@ -528,6 +541,7 @@ public class AccountContainerTest {
       boolean updatedMediaScanDisabled = !container.isMediaScanDisabled();
       String updatedReplicationPolicy = container.getReplicationPolicy() + "---updated";
       boolean updatedTtlRequired = !container.isTtlRequired();
+      boolean updatedSignedPathRequired = !container.isSecurePathRequired();
       Set<String> updatedContentTypeWhitelistForFilenamesOnDownloadValues =
           container.getContentTypeWhitelistForFilenamesOnDownload()
               .stream()
@@ -543,6 +557,7 @@ public class AccountContainerTest {
           .setMediaScanDisabled(updatedMediaScanDisabled)
           .setReplicationPolicy(updatedReplicationPolicy)
           .setTtlRequired(updatedTtlRequired)
+          .setSecurePathRequired(updatedSignedPathRequired)
           .setContentTypeWhitelistForFilenamesOnDownload(updatedContentTypeWhitelistForFilenamesOnDownloadValues);
       accountBuilder.addOrUpdateContainer(containerBuilder.build());
 
@@ -564,6 +579,8 @@ public class AccountContainerTest {
               updatedContainer.isMediaScanDisabled());
           assertNull("Wrong replication policy", updatedContainer.getReplicationPolicy());
           assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, updatedContainer.isTtlRequired());
+          assertEquals("Wrong secure required setting", SECURE_PATH_REQUIRED_DEFAULT_VALUE,
+              updatedContainer.isSecurePathRequired());
           assertEquals("Wrong content type whitelist for filenames on download value",
               CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
               updatedContainer.getContentTypeWhitelistForFilenamesOnDownload());
@@ -576,6 +593,8 @@ public class AccountContainerTest {
               updatedContainer.isMediaScanDisabled());
           assertEquals("Wrong replication policy", updatedReplicationPolicy, updatedContainer.getReplicationPolicy());
           assertEquals("Wrong ttl required setting", updatedTtlRequired, updatedContainer.isTtlRequired());
+          assertEquals("Wrong secure path required setting", updatedSignedPathRequired,
+              updatedContainer.isSecurePathRequired());
           assertEquals("Wrong content type whitelist for filenames on download value",
               updatedContentTypeWhitelistForFilenamesOnDownloadValues,
               updatedContainer.getContentTypeWhitelistForFilenamesOnDownload());
@@ -613,6 +632,7 @@ public class AccountContainerTest {
             refContainerDescriptions.get(0), refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -730,6 +750,7 @@ public class AccountContainerTest {
             "A changed container description", refAccountId).setEncrypted(refContainerEncryptionValues.get(0))
             .setPreviouslyEncrypted(refContainerPreviousEncryptionValues.get(0))
             .setCacheable(refContainerCachingValues.get(0))
+            .setBackupEnabled(refContainerBackupEnabledValues.get(0))
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
@@ -824,6 +845,8 @@ public class AccountContainerTest {
             container.isMediaScanDisabled());
         assertNull("Wrong replication policy", container.getReplicationPolicy());
         assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, container.isTtlRequired());
+        assertEquals("Wrong secure path required setting", SECURE_PATH_REQUIRED_DEFAULT_VALUE,
+            container.isSecurePathRequired());
         break;
       case Container.JSON_VERSION_2:
         assertEquals("Wrong encryption setting", refContainerEncryptionValues.get(index), container.isEncrypted());
@@ -834,6 +857,8 @@ public class AccountContainerTest {
         assertEquals("Wrong replication policy", refContainerReplicationPolicyValues.get(index),
             container.getReplicationPolicy());
         assertEquals("Wrong ttl required setting", refContainerTtlRequiredValues.get(index), container.isTtlRequired());
+        assertEquals("Wrong secure path required setting", refContainerSignedPathRequiredValues.get(index),
+            container.isSecurePathRequired());
         Set<String> expectedContentTypeWhitelistForFilenamesOnDownloadValue =
             refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(index) == null ? Collections.emptySet()
                 : refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(index);
@@ -907,7 +932,7 @@ public class AccountContainerTest {
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
-          Collections.emptySet(), (short) 0);
+          false, Collections.emptySet(), false, (short) 0);
     }, null);
   }
 
@@ -923,9 +948,11 @@ public class AccountContainerTest {
     refContainerEncryptionValues = new ArrayList<>();
     refContainerPreviousEncryptionValues = new ArrayList<>();
     refContainerCachingValues = new ArrayList<>();
+    refContainerBackupEnabledValues = new ArrayList<>();
     refContainerMediaScanDisabledValues = new ArrayList<>();
     refContainerReplicationPolicyValues = new ArrayList<>();
     refContainerTtlRequiredValues = new ArrayList<>();
+    refContainerSignedPathRequiredValues = new ArrayList<>();
     refContainerContentTypeWhitelistForFilenamesOnDownloadValues = new ArrayList<>();
     containerJsonList = new ArrayList<>();
     refContainers = new ArrayList<>();
@@ -947,6 +974,7 @@ public class AccountContainerTest {
       refContainerEncryptionValues.add(encrypted);
       refContainerPreviousEncryptionValues.add(previouslyEncrypted);
       refContainerCachingValues.add(random.nextBoolean());
+      refContainerBackupEnabledValues.add(random.nextBoolean());
       refContainerMediaScanDisabledValues.add(random.nextBoolean());
       if (refContainerReplicationPolicyValues.contains(null)) {
         refContainerReplicationPolicyValues.add(UtilsTest.getRandomString(10));
@@ -954,6 +982,7 @@ public class AccountContainerTest {
         refContainerReplicationPolicyValues.add(null);
       }
       refContainerTtlRequiredValues.add(random.nextBoolean());
+      refContainerSignedPathRequiredValues.add(random.nextBoolean());
       if (i == 0) {
         refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(null);
       } else if (i == 1) {
@@ -966,7 +995,8 @@ public class AccountContainerTest {
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
           refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
-          refContainerTtlRequiredValues.get(i), refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i),
+          refContainerTtlRequiredValues.get(i), refContainerSignedPathRequiredValues.get(i),
+          refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i), refContainerBackupEnabledValues.get(i),
           refAccountId));
       containerJsonList.add(buildContainerJson(refContainers.get(i)));
     }
@@ -1007,9 +1037,11 @@ public class AccountContainerTest {
         containerJson.put(ENCRYPTED_KEY, container.isEncrypted());
         containerJson.put(PREVIOUSLY_ENCRYPTED_KEY, container.wasPreviouslyEncrypted());
         containerJson.put(CACHEABLE_KEY, container.isCacheable());
+        containerJson.put(BACKUP_ENABLED_KEY, container.isBackupEnabled());
         containerJson.put(MEDIA_SCAN_DISABLED_KEY, container.isMediaScanDisabled());
         containerJson.putOpt(REPLICATION_POLICY_KEY, container.getReplicationPolicy());
         containerJson.put(TTL_REQUIRED_KEY, container.isTtlRequired());
+        containerJson.put(SECURE_PATH_REQUIRED_KEY, container.isSecurePathRequired());
         if (container.getContentTypeWhitelistForFilenamesOnDownload() != null
             && !container.getContentTypeWhitelistForFilenamesOnDownload().isEmpty()) {
           containerJson.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD,

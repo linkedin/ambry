@@ -18,7 +18,6 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
@@ -87,34 +86,6 @@ public class BlobStoreTest {
   private static final byte[] TTL_UPDATE_BUF = TestUtils.getRandomBytes(TTL_UPDATE_RECORD_SIZE);
 
   private final Random random = new Random();
-
-  /**
-   * A mock implementation of {@link MessageWriteSet} to help write to the {@link BlobStore}
-   */
-  private static class MockMessageWriteSet implements MessageWriteSet {
-    final List<ByteBuffer> buffers;
-    final List<MessageInfo> infos;
-
-    MockMessageWriteSet(List<MessageInfo> infos, List<ByteBuffer> buffers) {
-      this.infos = infos;
-      this.buffers = buffers;
-    }
-
-    @Override
-    public long writeTo(Write writeChannel) throws IOException {
-      long sizeWritten = 0;
-      for (ByteBuffer buffer : buffers) {
-        sizeWritten += buffer.remaining();
-        writeChannel.appendFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), buffer.remaining());
-      }
-      return sizeWritten;
-    }
-
-    @Override
-    public List<MessageInfo> getMessageSetInfo() {
-      return infos;
-    }
-  }
 
   /**
    * A mock implementation of {@link MessageStoreHardDelete} that can be set to return {@link MessageInfo} for a
@@ -388,7 +359,7 @@ public class BlobStoreTest {
       //that the store is now read-write
       time.sleep(TimeUnit.DAYS.toMillis(8));
       store.compact(store.getCompactionDetails(new CompactAllPolicy(defaultConfig, time)),
-          ByteBuffer.allocateDirect(PUT_RECORD_SIZE * 2 + 1));
+          new byte[PUT_RECORD_SIZE * 2 + 1]);
       verify(replicaStatusDelegate, times(2)).unseal(replicaId);
 
       //Test if replicaId is erroneously true that it updates the status upon startup

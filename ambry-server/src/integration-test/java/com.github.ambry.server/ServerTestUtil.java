@@ -16,6 +16,13 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.cloud.CloudBackupManager;
+import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudDataNode;
+import com.github.ambry.cloud.CloudDestinationFactory;
+import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
+import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
+import com.github.ambry.cloud.MockVirtualReplicatorCluster;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HardwareState;
@@ -26,6 +33,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -33,9 +41,13 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
+import com.github.ambry.config.ServerConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobAll;
 import com.github.ambry.messageformat.BlobData;
@@ -78,6 +90,7 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
+import com.github.ambry.store.StoreKeyConverterFactoryImpl;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.SystemTime;
@@ -104,6 +117,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -165,7 +179,7 @@ final class ServerTestUtil {
       // put blob 2 with an expiry time and apply TTL update later
       BlobProperties propertiesForTtlUpdate =
           new BlobProperties(31870, "serviceid1", "ownerid", "image/png", false, TestUtils.TTL_SECS, accountId,
-              containerId, testEncryption);
+              containerId, testEncryption, null);
       long ttlUpdateBlobExpiryTimeMs = getExpiryTimeMs(propertiesForTtlUpdate);
       PutRequest putRequest2 =
           new PutRequest(1, "client1", blobId2, propertiesForTtlUpdate, ByteBuffer.wrap(usermetadata),
@@ -187,7 +201,8 @@ final class ServerTestUtil {
 
       // put blob 4 that is expired
       BlobProperties propertiesExpired =
-          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId, testEncryption);
+          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId, testEncryption,
+              null);
       PutRequest putRequest4 =
           new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
@@ -538,6 +553,103 @@ final class ServerTestUtil {
     assertEquals(expectedErrorCode, response.getError());
   }
 
+  /**
+   * Tests blobs put to dataNode can be backed up by {@link CloudBackupManager}.
+   * @param cluster the {@link MockCluster} of dataNodes.
+   * @param dataNode the datanode where blobs are originally put.
+   * @param clientSSLConfig the {@link SSLConfig}.
+   * @param clientSSLSocketFactory the {@link SSLSocketFactory}.
+   * @param testEncryption if encryption will be tested. Not used now.
+   * @param notificationSystem the {@link MockNotificationSystem} to track blobs event in {@link MockCluster}.
+   */
+  static void endToEndBackupManagerTest(MockCluster cluster, DataNodeId dataNode, SSLConfig clientSSLConfig,
+      SSLSocketFactory clientSSLSocketFactory, boolean testEncryption, MockNotificationSystem notificationSystem)
+      throws Exception {
+    // TODO: test encryption
+    int blobBackupCount = 10;
+    int blobSize = 100;
+    int userMetaDataSize = 100;
+    ClusterMap clusterMap = cluster.getClusterMap();
+    // Send blobs to DataNode
+    byte[] userMetadata = new byte[userMetaDataSize];
+    byte[] data = new byte[blobSize];
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    BlobProperties properties =
+        new BlobProperties(blobSize, "serviceid1", null, null, false, Utils.Infinite_Time, accountId, containerId,
+            false, null);
+    TestUtils.RANDOM.nextBytes(userMetadata);
+    TestUtils.RANDOM.nextBytes(data);
+
+    Port port = clientSSLConfig == null ? new Port(dataNode.getPort(), PortType.PLAINTEXT)
+        : new Port(dataNode.getSSLPort(), PortType.SSL);
+    BlockingChannel channel =
+        getBlockingChannelBasedOnPortType(port, "localhost", clientSSLSocketFactory, clientSSLConfig);
+    channel.connect();
+    CountDownLatch latch = new CountDownLatch(1);
+    DirectSender runnable =
+        new DirectSender(cluster, channel, blobBackupCount, data, userMetadata, properties, null, latch);
+    Thread threadToRun = new Thread(runnable);
+    threadToRun.start();
+    assertTrue("Did not put all blobs in 2 minutes", latch.await(2, TimeUnit.MINUTES));
+    List<BlobId> blobIds = runnable.getBlobIds();
+    for (BlobId blobId : blobIds) {
+      notificationSystem.awaitBlobCreations(blobId.getID());
+    }
+
+    // Set up backup manager.
+    // TODO: start VCR instead of backupManger itself.
+    Properties props = new Properties();
+    props.setProperty("connectionpool.read.timeout.ms", "15000");
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.resolve.hostnames", "false");
+    props.setProperty("clustermap.cluster.name", "thisIsClusterName");
+    props.setProperty("clustermap.datacenter.name", dataNode.getDatacenterName());
+    props.setProperty("clustermap.ssl.enabled.datacenters",
+        clientSSLConfig == null ? "" : dataNode.getDatacenterName());
+    props.setProperty("clustermap.port", "12309");
+    props.setProperty("vcr.ssl.port", "12310");
+    props.setProperty("vcr.cluster.name", "VCRCluster");
+    VerifiableProperties vProps = new VerifiableProperties(props);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+    CloudConfig cloudConfig = new CloudConfig(vProps);
+    ReplicationConfig replicationConfig = new ReplicationConfig(vProps);
+    ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(vProps);
+    StoreConfig storeConfig = new StoreConfig(vProps);
+    ServerConfig serverConfig = new ServerConfig(vProps);
+
+    DataNodeId vcr = new CloudDataNode(cloudConfig, clusterMapConfig);
+    VirtualReplicatorCluster virtualReplicatorCluster = new MockVirtualReplicatorCluster(vcr, clusterMap);
+    LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
+        new LatchBasedInMemoryCloudDestination(blobIds);
+    CloudDestinationFactory mockCloudDestinationFactory =
+        new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+    ConnectionPool connectionPool =
+        new BlockingChannelConnectionPool(connectionPoolConfig, clientSSLConfig, clusterMapConfig,
+            clusterMap.getMetricRegistry());
+    connectionPool.start();
+    CloudBackupManager cloudBackupManager =
+        new CloudBackupManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
+            Utils.getObj(storeConfig.storeKeyFactory, clusterMap), clusterMap, virtualReplicatorCluster,
+            mockCloudDestinationFactory, scheduler, connectionPool, clusterMap.getMetricRegistry(), null,
+            new StoreKeyConverterFactoryImpl(null, null), serverConfig.serverMessageTransformer);
+    cloudBackupManager.start();
+    // Waiting for backup done
+    assertTrue("Did not backup all blobs in 2 minutes", latchBasedInMemoryCloudDestination.await(2, TimeUnit.MINUTES));
+    Map<String, CloudBlobMetadata> cloudBlobMetadataMap = latchBasedInMemoryCloudDestination.getBlobMetadata(blobIds);
+    for (BlobId blobId : blobIds) {
+      CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataMap.get(blobId.toString());
+      assertNotNull("cloudBlobMetadata shold not be null", cloudBlobMetadata);
+      assertEquals("AccountId mismatch", accountId, cloudBlobMetadata.getAccountId());
+      assertEquals("ContainerId mismatch", containerId, cloudBlobMetadata.getContainerId());
+      assertEquals("Expiration time mismatch", Utils.Infinite_Time, cloudBlobMetadata.getExpirationTime());
+      // TODO: verify other metadata and blob data
+    }
+    connectionPool.shutdown();
+    cloudBackupManager.shutdown();
+  }
+
   static void endToEndReplicationWithMultiNodeMultiPartitionTest(int interestedDataNodePortNumber, Port dataNode1Port,
       Port dataNode2Port, Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1,
       SSLConfig clientSSLConfig2, SSLConfig clientSSLConfig3, SSLSocketFactory clientSSLSocketFactory1,
@@ -553,7 +665,8 @@ final class ServerTestUtil {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties properties =
-        new BlobProperties(100, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId, false);
+        new BlobProperties(100, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId, false,
+            null);
     long expectedExpiryTimeMs = getExpiryTimeMs(properties);
     TestUtils.RANDOM.nextBytes(usermetadata);
     TestUtils.RANDOM.nextBytes(data);
@@ -1174,7 +1287,7 @@ final class ServerTestUtil {
       int size = new Random().nextInt(5000);
       final BlobProperties properties =
           new BlobProperties(size, "service1", "owner id check", "image/jpeg", false, TestUtils.TTL_SECS, accountId,
-              containerId, false);
+              containerId, false, null);
       final byte[] metadata = new byte[new Random().nextInt(1000)];
       final byte[] blob = new byte[size];
       TestUtils.RANDOM.nextBytes(metadata);
@@ -1360,7 +1473,7 @@ final class ServerTestUtil {
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         propertyList.add(
             new BlobProperties(1000, "serviceid1", null, null, false, TestUtils.TTL_SECS, accountId, containerId,
-                testEncryption));
+                testEncryption, null));
         blobIdList.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
             clusterMap.getLocalDatacenterId(), accountId, containerId, partition, false,
             BlobId.BlobDataType.DATACHUNK));
@@ -1618,7 +1731,7 @@ final class ServerTestUtil {
 
       // delete a blob and ensure it is propagated
       DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIdList.get(0), System.currentTimeMillis());
-      expectedTokenSize += getDeleteRecordSize(blobIdList.get(0));
+      expectedTokenSize += getUpdateRecordSize(blobIdList.get(0), UpdateRecord.Type.DELETE);
       channel1.send(deleteRequest);
       InputStream deleteResponseStream = channel1.receive().getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
@@ -1640,7 +1753,8 @@ final class ServerTestUtil {
 
       // get the data node to inspect replication tokens on
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
-      checkReplicaTokens(clusterMap, dataNodeId, expectedTokenSize - getDeleteRecordSize(blobIdList.get(0)), "0");
+      checkReplicaTokens(clusterMap, dataNodeId,
+          expectedTokenSize - getUpdateRecordSize(blobIdList.get(0), UpdateRecord.Type.DELETE), "0");
 
       // Shut down server 1
       cluster.getServers().get(0).shutdown();
@@ -1843,16 +1957,6 @@ final class ServerTestUtil {
             blobEncryptionKey) : 0) + +MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(
         properties) + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata)
         + MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(data.length);
-  }
-
-  /**
-   * Fetches the delete record size in log
-   * @param blobId {@link BlobId} associated with the delete
-   * @return the size of the delete record in the log
-   */
-  private static long getDeleteRecordSize(BlobId blobId) {
-    return MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() + blobId.sizeInBytes()
-        + MessageFormatRecord.Update_Format_V2.getRecordSize();
   }
 
   /**

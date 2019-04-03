@@ -47,8 +47,8 @@ public class MockHelixCluster {
     this.hardwareLayoutPath = hardwareLayoutPath;
     this.partitionLayoutPath = partitionLayoutPath;
     this.zkLayoutPath = zkLayoutPath;
-    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName, 3,
-        false, false, helixAdminFactory);
+    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
+        "all", 3, false, false, helixAdminFactory, false);
     this.clusterName = clusterName;
   }
 
@@ -58,8 +58,8 @@ public class MockHelixCluster {
    * @throws Exception
    */
   void upgradeWithNewHardwareLayout(String hardwareLayoutPath) throws Exception {
-    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName, 3,
-        false, false, helixAdminFactory);
+    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
+        "all", 3, false, false, helixAdminFactory, false);
     triggerInstanceConfigChangeNotification();
   }
 
@@ -69,8 +69,8 @@ public class MockHelixCluster {
    * @throws Exception
    */
   void upgradeWithNewPartitionLayout(String partitionLayoutPath) throws Exception {
-    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName, 3,
-        false, false, helixAdminFactory);
+    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
+        "all", 3, false, false, helixAdminFactory, false);
     triggerInstanceConfigChangeNotification();
   }
 

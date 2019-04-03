@@ -96,7 +96,8 @@ public class MessageFormatRecord {
    * @return a formatted header for the given version.
    * @throws MessageFormatException if the given header version is invalid.
    */
-  public static MessageHeader_Format getMessageHeader(short headerVersion, ByteBuffer input) throws MessageFormatException {
+  public static MessageHeader_Format getMessageHeader(short headerVersion, ByteBuffer input)
+      throws MessageFormatException {
     switch (headerVersion) {
       case Message_Header_Version_V1:
         return new MessageHeader_Format_V1(input);

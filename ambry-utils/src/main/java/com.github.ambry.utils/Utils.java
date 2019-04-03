@@ -18,13 +18,12 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
@@ -32,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
@@ -73,6 +73,10 @@ public class Utils {
    * The highest possible port number.
    */
   public static final int MAX_PORT_NUM = 65535;
+  /**
+   * The separator used to construct account-container pair in stats report.
+   */
+  public static final String ACCOUNT_CONTAINER_SEPARATOR = "___";
   private static final String CLIENT_RESET_EXCEPTION_MSG = "Connection reset by peer";
   private static final String CLIENT_BROKEN_PIPE_EXCEPTION_MSG = "Broken pipe";
   private static final Logger logger = LoggerFactory.getLogger(Utils.class);
@@ -329,9 +333,7 @@ public class Utils {
    * @param className
    * @param <T>
    * @return
-   * @throws ClassNotFoundException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
+   * @throws ReflectiveOperationException
    */
   public static <T> T getObj(String className)
       throws ClassNotFoundException, InstantiationException, IllegalAccessException {
@@ -340,19 +342,13 @@ public class Utils {
 
   /**
    * Instantiate a class instance from a given className with an arg
+   * @param <T>
    * @param className
    * @param arg
-   * @param <T>
    * @return
-   * @throws ClassNotFoundException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
-   * @throws NoSuchMethodException
-   * @throws InvocationTargetException
+   * @throws ReflectiveOperationException
    */
-  public static <T> T getObj(String className, Object arg)
-      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
-             InvocationTargetException {
+  public static <T> T getObj(String className, Object arg) throws ReflectiveOperationException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
       Class<?>[] paramTypes = ctor.getParameterTypes();
       if (paramTypes.length == 1 && checkAssignable(paramTypes[0], arg)) {
@@ -364,20 +360,14 @@ public class Utils {
 
   /**
    * Instantiate a class instance from a given className with two args
+   * @param <T>
    * @param className
    * @param arg1
    * @param arg2
-   * @param <T>
    * @return
-   * @throws ClassNotFoundException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
-   * @throws NoSuchMethodException
-   * @throws InvocationTargetException
+   * @throws ReflectiveOperationException
    */
-  public static <T> T getObj(String className, Object arg1, Object arg2)
-      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
-             InvocationTargetException {
+  public static <T> T getObj(String className, Object arg1, Object arg2) throws ReflectiveOperationException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
       Class<?>[] paramTypes = ctor.getParameterTypes();
       if (paramTypes.length == 2 && checkAssignable(paramTypes[0], arg1) && checkAssignable(paramTypes[1], arg2)) {
@@ -395,15 +385,10 @@ public class Utils {
    * @param arg3
    * @param <T>
    * @return
-   * @throws ClassNotFoundException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
-   * @throws NoSuchMethodException
-   * @throws InvocationTargetException
+   * @throws ReflectiveOperationException
    */
   public static <T> T getObj(String className, Object arg1, Object arg2, Object arg3)
-      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
-             InvocationTargetException {
+      throws ReflectiveOperationException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
       Class<?>[] paramTypes = ctor.getParameterTypes();
       if (paramTypes.length == 3 && checkAssignable(paramTypes[0], arg1) && checkAssignable(paramTypes[1], arg2)
@@ -420,15 +405,9 @@ public class Utils {
    * @param args
    * @param <T>
    * @return
-   * @throws ClassNotFoundException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
-   * @throws NoSuchMethodException
-   * @throws InvocationTargetException
+   * @throws ReflectiveOperationException
    */
-  public static <T> T getObj(String className, Object... args)
-      throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
-             InvocationTargetException {
+  public static <T> T getObj(String className, Object... args) throws ReflectiveOperationException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
       Class<?>[] paramTypes = ctor.getParameterTypes();
       if (paramTypes.length == args.length) {
@@ -444,6 +423,21 @@ public class Utils {
       }
     }
     throw buildNoConstructorException(className, args);
+  }
+
+  /**
+   * Get a stream of the accessible {@link String} values of the static fields in the provided {@link Class}.
+   * @param type the {@link Class} to get static field values from.
+   * @return a {@link Stream} of the static field value strings.
+   */
+  public static Stream<String> getStaticFieldValuesAsStrings(Class type) {
+    return Arrays.stream(type.getFields()).filter(field -> Modifier.isStatic(field.getModifiers())).map(field -> {
+      try {
+        return field.get(null).toString();
+      } catch (IllegalAccessException e) {
+        throw new IllegalStateException("Could not get value of a static field, " + field + ", in " + type, e);
+      }
+    });
   }
 
   /**
@@ -527,7 +521,7 @@ public class Utils {
   }
 
   /**
-   * Serializes a nullable string into byte buffer
+   * Serializes a nullable string into byte buffer using the default charset.
    *
    * @param outputBuffer The output buffer to serialize the value to
    * @param value The value to serialize
@@ -536,8 +530,7 @@ public class Utils {
     if (value == null) {
       outputBuffer.putInt(0);
     } else {
-      outputBuffer.putInt(value.length());
-      outputBuffer.put(value.getBytes());
+      serializeString(outputBuffer, value, Charset.defaultCharset());
     }
   }
 
@@ -548,8 +541,9 @@ public class Utils {
    * @param charset {@link Charset} to be used to encode
    */
   public static void serializeString(ByteBuffer outputBuffer, String value, Charset charset) {
-    outputBuffer.putInt(value.length());
-    outputBuffer.put(value.getBytes(charset));
+    byte[] valueArray = value.getBytes(charset);
+    outputBuffer.putInt(valueArray.length);
+    outputBuffer.put(valueArray);
   }
 
   /**
@@ -583,16 +577,7 @@ public class Utils {
    * @throws IOException
    */
   public static void writeStringToFile(String string, String path) throws IOException {
-    FileWriter fileWriter = null;
-    try {
-      File file = new File(path);
-      fileWriter = new FileWriter(file);
-      fileWriter.write(string);
-    } finally {
-      if (fileWriter != null) {
-        fileWriter.close();
-      }
-    }
+    Files.write(Paths.get(path), string.getBytes());
   }
 
   /**
@@ -627,30 +612,14 @@ public class Utils {
    * @throws IOException
    */
   public static String readStringFromFile(String path) throws IOException {
-    File file = new File(path);
-    byte[] encoded = new byte[(int) file.length()];
-    DataInputStream ds = null;
-    try {
-      ds = new DataInputStream(new FileInputStream(file));
-      ds.readFully(encoded);
-    } finally {
-      if (ds != null) {
-        ds.close();
-      }
-    }
-    return Charset.defaultCharset().decode(ByteBuffer.wrap(encoded)).toString();
+    return new String(Files.readAllBytes(Paths.get(path)));
   }
 
   /**
-   * Reads JSON object (in string format) from specified file.
-   *
-   * @param path file path to read
-   * @return JSONObject read from specified file
-   * @throws IOException
-   * @throws JSONException
+   * @return true if current operating system is Linux.
    */
-  public static JSONObject readJsonFromFile(String path) throws IOException, JSONException {
-    return new JSONObject(readStringFromFile(path));
+  public static boolean isLinux() {
+    return System.getProperty("os.name").toLowerCase().startsWith("linux");
   }
 
   /**
@@ -663,7 +632,7 @@ public class Utils {
     if (!file.exists()) {
       file.createNewFile();
     }
-    if (System.getProperty("os.name").toLowerCase().startsWith("linux")) {
+    if (isLinux()) {
       Runtime runtime = Runtime.getRuntime();
       Process process = runtime.exec("fallocate --keep-size -l " + capacityBytes + " " + file.getAbsolutePath());
       try {

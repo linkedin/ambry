@@ -43,6 +43,7 @@ public class InMemAccountService implements AccountService {
           Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
               Container.DEFAULT_PRIVATE_CONTAINER));
+  private boolean shouldUpdateSucceed = true;
   private final boolean shouldReturnOnlyUnknown;
   private final boolean notifyConsumers;
   private final Map<Short, Account> idToAccountMap = new HashMap<>();
@@ -72,6 +73,9 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized boolean updateAccounts(Collection<Account> accounts) {
+    if (!shouldUpdateSucceed) {
+      return false;
+    }
     for (Account account : accounts) {
       idToAccountMap.put(account.getId(), account);
       nameToAccountMap.put(account.getName(), account);
@@ -127,6 +131,18 @@ public class InMemAccountService implements AccountService {
    * @return the {@link Account} that was created and added.
    */
   public synchronized Account createAndAddRandomAccount() {
+    Account account = generateRandomAccount();
+    updateAccounts(Collections.singletonList(account));
+    return account;
+  }
+
+  /**
+   * Generates an {@link Account} but does not add it to this {@link AccountService}. The account will contain one
+   * container with {@link Container#DEFAULT_PUBLIC_CONTAINER_ID}, one with
+   * {@link Container#DEFAULT_PRIVATE_CONTAINER_ID} and one other random {@link Container}.
+   * @return the {@link Account} that was created.
+   */
+  public synchronized Account generateRandomAccount() {
     short refAccountId;
     String refAccountName;
     do {
@@ -139,13 +155,18 @@ public class InMemAccountService implements AccountService {
         new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER).setParentAccountId(refAccountId).build();
     Container privateContainer =
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(refAccountId).build();
-    Account account =
-        new AccountBuilder(refAccountId, refAccountName, refAccountStatus).addOrUpdateContainer(publicContainer)
-            .addOrUpdateContainer(privateContainer)
-            .addOrUpdateContainer(randomContainer)
-            .build();
-    updateAccounts(Collections.singletonList(account));
-    return account;
+    return new AccountBuilder(refAccountId, refAccountName, refAccountStatus).addOrUpdateContainer(publicContainer)
+        .addOrUpdateContainer(privateContainer)
+        .addOrUpdateContainer(randomContainer)
+        .build();
+  }
+
+  /**
+   * @param shouldUpdateSucceed the new value of {@code shouldUpdateSucceed}, which will be returned by subsequent
+   *                            {@link #updateAccounts(Collection)} calls.
+   */
+  public void setShouldUpdateSucceed(boolean shouldUpdateSucceed) {
+    this.shouldUpdateSucceed = shouldUpdateSucceed;
   }
 
   /**
@@ -177,12 +198,15 @@ public class InMemAccountService implements AccountService {
     boolean refContainerPreviousEncryption = refContainerEncryption || TestUtils.RANDOM.nextBoolean();
     boolean refContainerCaching = TestUtils.RANDOM.nextBoolean();
     boolean refContainerMediaScanDisabled = TestUtils.RANDOM.nextBoolean();
+    boolean refContainerBackupEnabled = TestUtils.RANDOM.nextBoolean();
     return new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
         accountId).setEncrypted(refContainerEncryption)
         .setPreviouslyEncrypted(refContainerPreviousEncryption)
         .setCacheable(refContainerCaching)
         .setMediaScanDisabled(refContainerMediaScanDisabled)
         .setTtlRequired(false)
+        .setSecurePathRequired(false)
+        .setBackupEnabled(refContainerBackupEnabled)
         .build();
   }
 }

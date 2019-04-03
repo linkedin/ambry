@@ -31,8 +31,12 @@ import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.util.Collections;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import static com.github.ambry.rest.RestUtils.*;
 
@@ -48,6 +52,12 @@ class AmbrySecurityService implements SecurityService {
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
   private final QuotaManager quotaManager;
+  static final Set<String> OPERATIONS;
+
+  static {
+    OPERATIONS = Collections.unmodifiableSet(Utils.getStaticFieldValuesAsStrings(Operations.class)
+        .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
+  }
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       UrlSigningService urlSigningService, QuotaManager quotaManager) {
@@ -112,6 +122,20 @@ class AmbrySecurityService implements SecurityService {
         accountAndContainerNamePreconditionCheck(restRequest);
       } catch (Exception e) {
         exception = e;
+      }
+    } else if (restRequest.getRestMethod() == RestMethod.GET) {
+      SubResource subresource = getBlobSubResource(restRequest);
+      Pair<String, String> prefixAndResource =
+          getPrefixAndResourceFromUri(restRequest, subresource, frontendConfig.pathPrefixesToRemove);
+      String operationOrBlobId = prefixAndResource.getSecond();
+      operationOrBlobId = operationOrBlobId.startsWith("/") ? operationOrBlobId.substring(1) : operationOrBlobId;
+      // ensure that secure path validation is only performed when getting blobs rather than other operations.
+      if (!operationOrBlobId.isEmpty() && !OPERATIONS.contains(operationOrBlobId)) {
+        try {
+          validateSecurePathIfRequired(restRequest, prefixAndResource.getFirst(), frontendConfig.securePathPrefix);
+        } catch (Exception e) {
+          exception = e;
+        }
       }
     }
     frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
@@ -340,5 +364,25 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, container.getName());
     }
     restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, !container.isCacheable());
+  }
+
+  /**
+   * Validate the secure path in the URI if required for specific {@link Container}.
+   * @param restRequest the {@link RestRequest} that contains the {@link Account} and {@link Container} details.
+   * @param prefixToCheck the prefix from URI which may contain secure path.
+   * @param expectSecurePath the expected secure path specified in {@link com.github.ambry.config.FrontendConfig}.
+   * @throws RestServiceException
+   */
+  private void validateSecurePathIfRequired(RestRequest restRequest, String prefixToCheck, String expectSecurePath)
+      throws RestServiceException {
+    Container targetContainer = getContainerFromArgs(restRequest.getArgs());
+    if (targetContainer.isSecurePathRequired()) {
+      String securePath = prefixToCheck.startsWith("/") ? prefixToCheck.substring(1) : prefixToCheck;
+      if (!securePath.equals(expectSecurePath)) {
+        frontendMetrics.securePathValidationFailedCount.inc();
+        throw new RestServiceException("Secure path in restRequest doesn't match the expected one",
+            RestServiceErrorCode.AccessDenied);
+      }
+    }
   }
 }

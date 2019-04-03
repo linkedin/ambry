@@ -31,7 +31,7 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
   private final UrlSigningService urlSigningService;
 
   public AmbrySecurityServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      AccountService accountService, UrlSigningService urlSigningService,
+      AccountService accountService, UrlSigningService urlSigningService, IdSigningService idSigningService,
       AccountAndContainerInjector accountAndContainerInjector) {
     frontendConfig = new FrontendConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());

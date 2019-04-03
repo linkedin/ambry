@@ -59,7 +59,7 @@ public class BlobPropertiesSerDe {
     short containerId = version > VERSION_1 ? stream.readShort() : Container.UNKNOWN_CONTAINER_ID;
     boolean isEncrypted = version > VERSION_2 && stream.readByte() == (byte) 1;
     return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
-        containerId, isEncrypted);
+        containerId, isEncrypted, null);
   }
 
   /**

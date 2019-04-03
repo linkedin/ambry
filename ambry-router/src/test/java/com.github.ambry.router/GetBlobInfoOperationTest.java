@@ -156,7 +156,7 @@ public class GetBlobInfoOperationTest {
     short containerId = Utils.getRandomShort(random);
     blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, accountId,
-            containerId, testEncryption);
+            containerId, testEncryption, null);
     userMetadata = new byte[BLOB_USER_METADATA_SIZE];
     random.nextBytes(userMetadata);
     putContent = new byte[BLOB_SIZE];
@@ -574,7 +574,7 @@ public class GetBlobInfoOperationTest {
     Assert.assertNull("Unexpected blob data channel in operation result",
         op.getOperationResult().getBlobResult.getBlobDataChannel());
     Assert.assertTrue("Blob properties must be the same",
-        RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
+        RouterTestHelpers.arePersistedFieldsEquivalent(blobProperties, blobInfo.getBlobProperties()));
     Assert.assertEquals("Blob size should in received blobProperties should be the same as actual", BLOB_SIZE,
         blobInfo.getBlobProperties().getBlobSize());
     Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());

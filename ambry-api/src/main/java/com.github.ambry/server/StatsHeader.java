@@ -27,7 +27,7 @@ import org.codehaus.jackson.annotate.JsonPropertyOrder;
 @JsonPropertyOrder({"description", "timestamp", "storesContactedCount", "storesRespondedCount", "unreachableStores"})
 public class StatsHeader {
   public enum StatsDescription {
-    QUOTA
+    STORED_DATA_SIZE
   }
 
   private StatsDescription description;
@@ -50,10 +50,16 @@ public class StatsHeader {
   }
 
   /**
-   * Returns the reference timestamp at which the the stats are collected
-   * @return the reference timestamp at which the the stats are collected
+   * @return the reference timestamp at which the stats are collected
    */
   public long getTimestamp() {
     return timestamp;
+  }
+
+  /**
+   * @return the list of unreachable stores generated in the stats report
+   */
+  public List<String> getUnreachableStores() {
+    return unreachableStores;
   }
 }

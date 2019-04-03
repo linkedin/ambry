@@ -139,6 +139,9 @@ public class NonBlockingRouterMetrics {
   public final Counter ignoredResponseCount;
   public final Counter crossColoRequestCount;
   public final Counter crossColoSuccessCount;
+  public final Counter simpleEncryptedBlobSizeMismatchCount;
+  public final Counter simpleUnencryptedBlobSizeMismatchCount;
+  public final Counter compositeBlobSizeMismatchCount;
   // Number of unnecessary blob gets avoided via use of BlobDataType
   public final Counter skippedGetBlobCount;
   public Gauge<Long> chunkFillerThreadRunning;
@@ -155,6 +158,7 @@ public class NonBlockingRouterMetrics {
   public final Counter simpleBlobGetCount;
   public final Counter compositeBlobPutCount;
   public final Counter compositeBlobGetCount;
+  public final Counter rawBlobGetCount;
 
   // AdaptiveOperationTracker metrics
   public final Histogram getBlobLocalColoLatencyMs;
@@ -349,6 +353,12 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoRequestCount"));
     crossColoSuccessCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoSuccessCount"));
+    simpleEncryptedBlobSizeMismatchCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "SimpleEncryptedBlobSizeMismatchCount"));
+    simpleUnencryptedBlobSizeMismatchCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "SimpleUnencryptedBlobSizeMismatchCount"));
+    compositeBlobSizeMismatchCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "CompositeBlobSizeMismatchCount"));
 
     // metrics to track blob sizes and chunking.
     putBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobSizeBytes"));
@@ -364,6 +374,7 @@ public class NonBlockingRouterMetrics {
     compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));
     compositeBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "CompositeBlobGetCount"));
     skippedGetBlobCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "SkippedGetBlobCount"));
+    rawBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "RawBlobGetCount"));
 
     // Track metrics at the DataNode level.
     dataNodeToMetrics = new HashMap<>();

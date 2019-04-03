@@ -33,7 +33,7 @@ public class FrontendConfig {
       PREFIX + "fail.if.ttl.required.but.not.provided";
   public static final String MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY =
       PREFIX + "max.acceptable.ttl.secs.if.ttl.required";
-  public static final String MAX_STITCH_REQUEST_SIZE_BYTES_KEY = PREFIX + "max.stitch.request.size.bytes";
+  public static final String MAX_JSON_REQUEST_SIZE_BYTES_KEY = PREFIX + "max.json.request.size.bytes";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -188,9 +188,16 @@ public class FrontendConfig {
   /**
    * The maximum size in bytes for the JSON body of a "POST /stitch" request.
    */
-  @Config(MAX_STITCH_REQUEST_SIZE_BYTES_KEY)
+  @Config(MAX_JSON_REQUEST_SIZE_BYTES_KEY)
   @Default("20 * 1024 * 1024")
-  public final long maxStitchRequestSizeBytes;
+  public final long maxJsonRequestSizeBytes;
+
+  /**
+   * The secure path to validate if required for certain container.
+   */
+  @Config("frontend.secure.path.prefix")
+  @Default("")
+  public final String securePathPrefix;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -205,8 +212,10 @@ public class FrontendConfig {
         "com.github.ambry.frontend.AmbryUrlSigningServiceFactory");
     idSigningServiceFactory = verifiableProperties.getString(ID_SIGNING_SERVICE_FACTORY_KEY,
         "com.github.ambry.frontend.AmbryIdSigningServiceFactory");
-    pathPrefixesToRemove =
-        Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
+    securePathPrefix = verifiableProperties.getString("frontend.secure.path.prefix", "");
+    pathPrefixesToRemove = Arrays.asList(
+        ((securePathPrefix.isEmpty() ? "" : "/" + securePathPrefix + ",") + verifiableProperties.getString(
+            "frontend.path.prefixes.to.remove", "")).split(","));
     chunkedGetResponseThresholdInBytes =
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
     allowServiceIdBasedPostRequest =
@@ -229,7 +238,7 @@ public class FrontendConfig {
     failIfTtlRequiredButNotProvided = verifiableProperties.getBoolean(FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY, false);
     maxAcceptableTtlSecsIfTtlRequired = verifiableProperties.getIntInRange(MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY,
         (int) TimeUnit.DAYS.toSeconds(30), 0, Integer.MAX_VALUE);
-    maxStitchRequestSizeBytes =
-        verifiableProperties.getLongInRange(MAX_STITCH_REQUEST_SIZE_BYTES_KEY, 20 * 1024 * 1024, 0, Long.MAX_VALUE);
+    maxJsonRequestSizeBytes =
+        verifiableProperties.getLongInRange(MAX_JSON_REQUEST_SIZE_BYTES_KEY, 20 * 1024 * 1024, 0, Long.MAX_VALUE);
   }
 }

@@ -25,6 +25,7 @@ public class GetBlobOptionsBuilder {
   private GetBlobOptions.OperationType operationType = GetBlobOptions.OperationType.All;
   private GetOption getOption = GetOption.None;
   private ByteRange range = null;
+  private boolean rawMode = false;
 
   /**
    * @param operationType the {@link GetBlobOptions.OperationType} for this request.
@@ -54,9 +55,20 @@ public class GetBlobOptionsBuilder {
   }
 
   /**
+   * @param rawMode the raw mode flag for this get request.
+   * If rawMode is true, the returned {@link GetBlobResult} will contain the raw (unserialized) blob payload in the
+   * data channel and null blobInfo.  This option cannot be used in conjunction with a byte range.
+   * @return this builder
+   */
+  public GetBlobOptionsBuilder rawMode(boolean rawMode) {
+    this.rawMode = rawMode;
+    return this;
+  }
+
+  /**
    * @return the {@link GetBlobOptions} built.
    */
   public GetBlobOptions build() {
-    return new GetBlobOptions(operationType, getOption, range);
+    return new GetBlobOptions(operationType, getOption, range, rawMode);
   }
 }

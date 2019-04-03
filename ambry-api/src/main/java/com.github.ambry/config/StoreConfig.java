@@ -13,6 +13,9 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.store.IndexMemState;
+
+
 /**
  * The configs for the store
  */
@@ -88,6 +91,14 @@ public class StoreConfig {
   @Config("store.compaction.operations.bytes.per.sec")
   @Default("1*1024*1024")
   public final int storeCompactionOperationsBytesPerSec;
+
+  /**
+   * Whether direct IO are to be enable or not for compaction.
+   * This is only supported on > Linux 2.6
+   */
+  @Config("store.compaction.enable.direct.io")
+  @Default("false")
+  public final boolean storeCompactionEnableDirectIO;
 
   /**
    * The minimum buffer size for compaction copy phase.
@@ -240,12 +251,12 @@ public class StoreConfig {
   public static final String storeTtlUpdateBufferTimeSecondsName = "store.ttl.update.buffer.time.seconds";
 
   /**
-   * Specifies whether all index segments should be kept in memory (as opposed to a specific subset).
+   * Provides a hint for how indexes should be treated w.r.t memory
    */
-  @Config(storeKeepIndexInMemoryName)
-  @Default("false")
-  public final boolean storeKeepIndexInMemory;
-  public static final String storeKeepIndexInMemoryName = "store.keep.index.in.memory";
+  @Config(storeIndexMemStateName)
+  @Default("NOT_IN_MEM")
+  public final IndexMemState storeIndexMemState;
+  public static final String storeIndexMemStateName = "store.index.mem.state";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -265,6 +276,7 @@ public class StoreConfig {
     storeCompactionOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.compaction.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
+    storeCompactionEnableDirectIO = verifiableProperties.getBoolean("store.compaction.enable.direct.io", false);
     storeCompactionMinBufferSize =
         verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 0, Integer.MAX_VALUE);
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
@@ -298,7 +310,8 @@ public class StoreConfig {
     storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", false);
     storeTtlUpdateBufferTimeSeconds =
         verifiableProperties.getIntInRange(storeTtlUpdateBufferTimeSecondsName, 60 * 60 * 24, 0, Integer.MAX_VALUE);
-    storeKeepIndexInMemory = verifiableProperties.getBoolean(storeKeepIndexInMemoryName, false);
+    storeIndexMemState =
+        IndexMemState.valueOf(verifiableProperties.getString(storeIndexMemStateName, IndexMemState.NOT_IN_MEM.name()));
   }
 }
 

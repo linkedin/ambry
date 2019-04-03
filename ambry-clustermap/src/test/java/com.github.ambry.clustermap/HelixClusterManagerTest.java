@@ -216,27 +216,44 @@ public class HelixClusterManagerTest {
   }
 
   /**
-   * Test bad instantiation.
+   * Test instantiations.
    * @throws Exception
    */
   @Test
-  public void badInstantiationTest() throws Exception {
+  public void instantiationTest() throws Exception {
     assumeTrue(!overrideEnabled);
 
-    // Good test happened in the constructor
+    // Several good instantiations happens in the constructor itself.
     assertEquals(0L,
         metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
 
-    // Bad test
+    int savedport = dcsToZkInfo.get(remoteDc).getPort();
+    // Connectivity failure to remote should not prevent instantiation.
+    dcsToZkInfo.get(remoteDc).setPort(0);
     Set<com.github.ambry.utils.TestUtils.ZkInfo> zkInfos = new HashSet<>(dcsToZkInfo.values());
-    zkInfos.iterator().next().setPort(0);
     JSONObject invalidZkJson = constructZkLayoutJSON(zkInfos);
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
     props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
-    props.setProperty("clustermap.datacenter.name", dcs[0]);
+    props.setProperty("clustermap.datacenter.name", localDc);
     props.setProperty("clustermap.dcs.zk.connect.strings", invalidZkJson.toString(2));
     ClusterMapConfig invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    metricRegistry = new MetricRegistry();
+    new HelixClusterManager(invalidClusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
+        metricRegistry);
+    assertEquals(0L,
+        metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
+    assertEquals(1L, metricRegistry.getGauges()
+        .get(HelixClusterManager.class.getName() + ".instantiationExceptionCount")
+        .getValue());
+
+    // Local dc connectivity failure should fail instantiation.
+    dcsToZkInfo.get(remoteDc).setPort(savedport);
+    dcsToZkInfo.get(localDc).setPort(0);
+    zkInfos = new HashSet<>(dcsToZkInfo.values());
+    invalidZkJson = constructZkLayoutJSON(zkInfos);
+    props.setProperty("clustermap.dcs.zk.connect.strings", invalidZkJson.toString(2));
+    invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     metricRegistry = new MetricRegistry();
     try {
       new HelixClusterManager(invalidClusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
@@ -245,6 +262,9 @@ public class HelixClusterManagerTest {
     } catch (IOException e) {
       assertEquals(1L,
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
+      assertEquals(1L, metricRegistry.getGauges()
+          .get(HelixClusterManager.class.getName() + ".instantiationExceptionCount")
+          .getValue());
     }
 
     metricRegistry = new MetricRegistry();

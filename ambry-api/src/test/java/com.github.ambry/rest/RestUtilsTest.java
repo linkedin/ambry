@@ -19,6 +19,7 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
@@ -30,7 +31,6 @@ import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
@@ -55,6 +55,7 @@ import static org.junit.Assert.*;
 public class RestUtilsTest {
   private static final Random RANDOM = new Random();
   private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+  private static final String SECURE_PATH = "secure-path";
 
   /**
    * Tests building of {@link BlobProperties} given good input (all arguments in the number and format expected).
@@ -296,40 +297,49 @@ public class RestUtilsTest {
     JSONObject headers = new JSONObject();
     setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), generateRandomString(10),
         Container.DEFAULT_PUBLIC_CONTAINER, "image/gif", generateRandomString(10));
-    Map<String, String> userMetadata = new HashMap<String, String>();
-    List<String> keysToCheck = new ArrayList<>();
+    Map<String, String> userMetadataArgs = new HashMap<String, String>();
+    Map<String, String> expectedUserMetadata = new HashMap<>();
     String key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1";
-    userMetadata.put(key, "value1");
-    keysToCheck.add(key);
+    String value = "value1";
+    userMetadataArgs.put(key, value);
+    expectedUserMetadata.put(key, value);
     // no valid prefix
-    userMetadata.put("key2", "value2_1");
+    userMetadataArgs.put("key2", "value2_1");
     // valid prefix as suffix
-    userMetadata.put("key3" + RestUtils.Headers.USER_META_DATA_HEADER_PREFIX, "value3");
+    userMetadataArgs.put("key3" + RestUtils.Headers.USER_META_DATA_HEADER_PREFIX, "value3");
     // empty value
     key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key4";
-    userMetadata.put(key, "");
-    keysToCheck.add(key);
+    value = "";
+    userMetadataArgs.put(key, value);
+    expectedUserMetadata.put(key, value);
     // different casing
     key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toUpperCase() + "KeY5";
-    userMetadata.put(key, "value5");
-    keysToCheck.add(key);
+    value = "value5";
+    userMetadataArgs.put(key, value);
+    expectedUserMetadata.put(key, value);
     key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toLowerCase() + "kEy6";
-    userMetadata.put(key, "value6");
-    keysToCheck.add(key);
-    setUserMetadataHeaders(headers, userMetadata);
+    value = "value6";
+    userMetadataArgs.put(key, value);
+    expectedUserMetadata.put(key, value);
+    // Unicode with multiple code point characters (i.e. emoji)
+    key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toLowerCase() + "kEy7";
+    userMetadataArgs.put(key, "å∫ \uD83D\uDE1D\uD83D\uDE31abcd");
+    // Non ascii characters should be replaced with question marks
+    expectedUserMetadata.put(key, "?? ??abcd");
+    setUserMetadataHeaders(headers, userMetadataArgs);
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
     byte[] userMetadataByteArray = RestUtils.buildUserMetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
 
-    assertEquals("Size of map unexpected ", keysToCheck.size(), userMetadataMap.size());
-    for (String keyToCheck : keysToCheck) {
+    assertEquals("Size of map unexpected ", expectedUserMetadata.size(), userMetadataMap.size());
+    expectedUserMetadata.forEach((keyToCheck, valueToCheck) -> {
       String keyInOutputMap = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + keyToCheck.substring(
           RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.length());
       assertTrue(keyInOutputMap + " not found in user metadata map", userMetadataMap.containsKey(keyInOutputMap));
-      assertEquals("Value for " + keyToCheck + " didnt match input value", userMetadata.get(keyToCheck),
+      assertEquals("Value for " + keyToCheck + " didnt match expected value", valueToCheck,
           userMetadataMap.get(keyInOutputMap));
-    }
+    });
   }
 
   /**
@@ -516,9 +526,13 @@ public class RestUtilsTest {
   public void getOperationOrBlobIdFromUriTest() throws JSONException, UnsupportedEncodingException, URISyntaxException {
     String baseId = "expectedOp";
     String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
-    String[] validIdUris = {"/", "/" + baseId, "/" + baseId + "/random/extra", "", baseId, baseId + "/random/extra"};
-    List<String> prefixesToTestOn = Arrays.asList("", "/media", "/toRemove", "/orNotToRemove");
-    List<String> prefixesToRemove = Arrays.asList("/media", "/toRemove");
+    String[] validIdUris = {"/",
+        "/" + baseId,
+        "/" + baseId + "/random/extra", "", baseId,
+        baseId + "/random/extra",
+        RestUtils.SIGNED_ID_PREFIX + "/" + baseId, "/" + RestUtils.SIGNED_ID_PREFIX + "/" + baseId};
+    List<String> prefixesToTestOn = Arrays.asList("", "/media", "/toRemove", "/orNotToRemove", "/" + SECURE_PATH);
+    List<String> prefixesToRemove = Arrays.asList("/media", "/toRemove", "/" + SECURE_PATH);
     String blobId = UtilsTest.getRandomString(10);
     String blobIdQuery = RestUtils.Headers.BLOB_ID + "=" + blobId;
 
@@ -605,6 +619,59 @@ public class RestUtilsTest {
   }
 
   /**
+   * Tests {@link RestUtils#getPrefixAndResourceFromUri(RestRequest, RestUtils.SubResource, List)}.
+   * @throws Exception
+   */
+  @Test
+  public void getPrefixFromUriTest() throws Exception {
+    String blobId = UtilsTest.getRandomString(10);
+    String operation = "validOp";
+    String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
+    String[] validIdUris = {"/", "/" + blobId, "", blobId, RestUtils.SIGNED_ID_PREFIX + "/" + blobId};
+    String[] validOpUris = {operation + "/random/extra", "/" + operation + "/random/extra"};
+    List<String> prefixesToRemove = Arrays.asList("/" + SECURE_PATH, "/media", "/toRemove");
+    // construct test cases and expected results
+    Map<String, String> testCasesAndExpectedResults = new HashMap<>();
+    for (String prefix : prefixesToRemove) {
+      for (String uri : validIdUris) {
+        testCasesAndExpectedResults.put(prefix + "/" + uri, prefix);
+        testCasesAndExpectedResults.put(prefix + "/" + uri + queryString, prefix);
+        if (uri.length() > 1) {
+          // add sub resource and query string
+          for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+            testCasesAndExpectedResults.put(uri + "/" + subResource, "");
+            testCasesAndExpectedResults.put(uri + "/" + subResource + queryString, "");
+            testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource, prefix);
+            testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource + queryString, prefix);
+          }
+        }
+      }
+
+      for (String uri : validOpUris) {
+        testCasesAndExpectedResults.put(prefix + "/" + uri, prefix);
+        testCasesAndExpectedResults.put(prefix + "/" + uri + queryString, prefix);
+        for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+          testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource, prefix);
+          testCasesAndExpectedResults.put(prefix + "/" + uri + "/" + subResource + queryString, prefix);
+          testCasesAndExpectedResults.put(uri + "/" + subResource, "");
+          testCasesAndExpectedResults.put(uri + "/" + subResource + queryString, "");
+        }
+      }
+    }
+    Pair<String, String> prefixAndResource;
+    RestUtils.SubResource subResource;
+    // verify that prefixes can be correctly extracted from uri
+    for (Map.Entry<String, String> testCaseAndResult : testCasesAndExpectedResults.entrySet()) {
+      String testUri = testCaseAndResult.getKey();
+      String expectedOutput = testCaseAndResult.getValue();
+      RestRequest restRequest = createRestRequest(RestMethod.GET, testUri, null);
+      subResource = RestUtils.getBlobSubResource(restRequest);
+      prefixAndResource = RestUtils.getPrefixAndResourceFromUri(restRequest, subResource, prefixesToRemove);
+      assertEquals("Unexpected prefix for: " + testUri, expectedOutput, prefixAndResource.getFirst());
+    }
+  }
+
+  /**
    * Tests {@link RestUtils#toSecondsPrecisionInMs(long)}.
    */
   @Test
@@ -650,12 +717,12 @@ public class RestUtilsTest {
     // no range
     doBuildGetBlobOptionsTest(null, null, true, true);
     // valid ranges
-    doBuildGetBlobOptionsTest("bytes=0-7", ByteRange.fromOffsetRange(0, 7), true, false);
-    doBuildGetBlobOptionsTest("bytes=234-56679090", ByteRange.fromOffsetRange(234, 56679090), true, false);
-    doBuildGetBlobOptionsTest("bytes=1-", ByteRange.fromStartOffset(1), true, false);
-    doBuildGetBlobOptionsTest("bytes=12345678-", ByteRange.fromStartOffset(12345678), true, false);
-    doBuildGetBlobOptionsTest("bytes=-8", ByteRange.fromLastNBytes(8), true, false);
-    doBuildGetBlobOptionsTest("bytes=-123456789", ByteRange.fromLastNBytes(123456789), true, false);
+    doBuildGetBlobOptionsTest("bytes=0-7", ByteRanges.fromOffsetRange(0, 7), true, false);
+    doBuildGetBlobOptionsTest("bytes=234-56679090", ByteRanges.fromOffsetRange(234, 56679090), true, false);
+    doBuildGetBlobOptionsTest("bytes=1-", ByteRanges.fromStartOffset(1), true, false);
+    doBuildGetBlobOptionsTest("bytes=12345678-", ByteRanges.fromStartOffset(12345678), true, false);
+    doBuildGetBlobOptionsTest("bytes=-8", ByteRanges.fromLastNBytes(8), true, false);
+    doBuildGetBlobOptionsTest("bytes=-123456789", ByteRanges.fromLastNBytes(123456789), true, false);
     // bad ranges
     String[] badRanges =
         {"bytes=0-abcd", "bytes=0as23-44444444", "bytes=22-7777777777777777777777777777777777777777777", "bytes=22--53", "bytes=223-34", "bytes=-34ab", "bytes=--12", "bytes=-12-", "bytes=12ab-", "bytes=---", "btes=3-5", "bytes=345", "bytes=3.14-22", "bytes=3-6.2", "bytes=", "bytes=-", "bytes= -"};
@@ -670,16 +737,17 @@ public class RestUtilsTest {
   @Test
   public void buildContentRangeAndLengthTest() throws RestServiceException {
     // good cases
-    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 8), 12, "bytes 4-8/12", 5, true);
-    doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(14), 17, "bytes 14-16/17", 3, true);
-    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(12), 17, "bytes 5-16/17", 12, true);
-    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(17), 17, "bytes 0-16/17", 17, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromOffsetRange(4, 8), 12, "bytes 4-8/12", 5, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromOffsetRange(4, 12), 12, "bytes 4-11/12", 8, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromOffsetRange(4, 15), 12, "bytes 4-11/12", 8, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromStartOffset(14), 17, "bytes 14-16/17", 3, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromLastNBytes(12), 17, "bytes 5-16/17", 12, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromLastNBytes(17), 17, "bytes 0-16/17", 17, true);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromLastNBytes(13), 12, "bytes 0-11/12", 12, true);
     // bad cases
-    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 12), 12, null, -1, false);
-    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 15), 12, null, -1, false);
-    doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(12), 12, null, -1, false);
-    doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(15), 12, null, -1, false);
-    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(13), 12, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromOffsetRange(4, 12), 4, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromStartOffset(12), 12, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRanges.fromStartOffset(15), 12, null, -1, false);
   }
 
   /**

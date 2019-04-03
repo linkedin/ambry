@@ -39,8 +39,10 @@ public class ContainerBuilder {
   private boolean mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
   private String replicationPolicy = null;
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
+  private boolean securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
   private Set<String> contentTypeWhitelistForFilenamesOnDownload =
       CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
+  private boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -63,7 +65,9 @@ public class ContainerBuilder {
     replicationPolicy = origin.getReplicationPolicy();
     ttlRequired = origin.isTtlRequired();
     parentAccountId = origin.getParentAccountId();
+    securePathRequired = origin.isSecurePathRequired();
     contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
+    backupEnabled = origin.isBackupEnabled();
   }
 
   /**
@@ -163,6 +167,16 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the backup setting of the {@link Container} to build
+   * @param backupEnabled The backup setting to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setBackupEnabled(boolean backupEnabled) {
+    this.backupEnabled = backupEnabled;
+    return this;
+  }
+
+  /**
    * Sets the media scan disabled setting of the {@link Container} to build
    * @param mediaScanDisabled The media scan disabled setting to set.
    * @return This builder.
@@ -179,6 +193,16 @@ public class ContainerBuilder {
    */
   public ContainerBuilder setTtlRequired(boolean ttlRequired) {
     this.ttlRequired = ttlRequired;
+    return this;
+  }
+
+  /**
+   * Sets the secure path validation required setting of the {@link Container}.
+   * @param securePathRequired The securePathRequired setting to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setSecurePathRequired(boolean securePathRequired) {
+    this.securePathRequired = securePathRequired;
     return this;
   }
 
@@ -212,6 +236,7 @@ public class ContainerBuilder {
    */
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, replicationPolicy, ttlRequired, contentTypeWhitelistForFilenamesOnDownload, parentAccountId);
+        mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
+        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId);
   }
 }

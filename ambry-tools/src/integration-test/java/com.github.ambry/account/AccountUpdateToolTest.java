@@ -14,11 +14,11 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.utils.TestUtils;
 import java.io.File;
 import java.io.IOException;
@@ -62,6 +62,8 @@ public class AccountUpdateToolTest {
   private static final String HELIX_STORE_ROOT_PATH = "/ambry/defaultCluster/helixPropertyStore";
   private static final String BACKUP_DIR;
   private static final int LATCH_TIMEOUT_MS = 1000;
+  private static final int ZK_CONNECTION_TIMEOUT_MS = 5000;
+  private static final int ZK_SESSION_TIMEOUT_MS = 2000;
   private static final Properties helixConfigProps = new Properties();
   private static final VerifiableProperties vHelixConfigProps;
   private static final HelixPropertyStoreConfig storeConfig;
@@ -210,9 +212,9 @@ public class AccountUpdateToolTest {
   public void testBadJsonFile() throws Exception {
     String badJsonFile = tempDirPath + File.separator + "badJsonFile.json";
     writeStringToFile("Invalid json string", badJsonFile);
-    try {
-      AccountUpdateTool.updateAccount(badJsonFile, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000,
-          Container.getCurrentJsonVersion());
+    try (AccountService accountService = AccountUpdateTool.getHelixAccountService(ZK_SERVER_ADDRESS,
+        HELIX_STORE_ROOT_PATH, BACKUP_DIR, ZK_CONNECTION_TIMEOUT_MS, ZK_SESSION_TIMEOUT_MS)) {
+      new AccountUpdateTool(accountService, Container.getCurrentJsonVersion()).updateAccountsFromFile(badJsonFile);
       fail("Should have thrown.");
     } catch (Exception e) {
       // expected
@@ -230,8 +232,10 @@ public class AccountUpdateToolTest {
     String jsonFilePath = tempDirPath + File.separator + UUID.randomUUID().toString() + ".json";
     writeAccountsToFile(accounts, jsonFilePath);
     accountUpdateConsumer.reset();
-    AccountUpdateTool.updateAccount(jsonFilePath, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, BACKUP_DIR, 2000, 2000,
-        containerJsonVersion);
+    try (AccountService accountService = AccountUpdateTool.getHelixAccountService(ZK_SERVER_ADDRESS,
+        HELIX_STORE_ROOT_PATH, BACKUP_DIR, ZK_CONNECTION_TIMEOUT_MS, ZK_SESSION_TIMEOUT_MS)) {
+      new AccountUpdateTool(accountService, containerJsonVersion).updateAccountsFromFile(jsonFilePath);
+    }
     accountUpdateConsumer.awaitUpdate();
   }
 

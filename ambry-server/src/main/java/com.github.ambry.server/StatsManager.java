@@ -26,10 +26,14 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -53,7 +57,7 @@ class StatsManager {
   private final File statsOutputFile;
   private final long publishPeriodInSecs;
   private final int initialDelayInSecs;
-  private final Map<PartitionId, ReplicaId> partitionToReplicaMap;
+  private final ConcurrentMap<PartitionId, ReplicaId> partitionToReplicaMap;
   private final StatsManagerMetrics metrics;
   private final Time time;
   private final ObjectMapper mapper = new ObjectMapper();
@@ -67,17 +71,16 @@ class StatsManager {
    * @param registry the {@link MetricRegistry} to be used for {@link StatsManagerMetrics}
    * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period
    * @param time the {@link Time} instance to be used for reporting
-   * @throws IOException
    */
   StatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry registry,
-      StatsManagerConfig config, Time time) throws IOException {
+      StatsManagerConfig config, Time time) {
     this.storageManager = storageManager;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
     initialDelayInSecs = config.initialDelayUpperBoundInSecs;
     metrics = new StatsManagerMetrics(registry);
     partitionToReplicaMap =
-        replicaIds.stream().collect(Collectors.toMap(ReplicaId::getPartitionId, Function.identity()));
+        replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
   }
 
@@ -95,7 +98,7 @@ class StatsManager {
   /**
    * Stops the periodic task that is collecting, aggregating and publishing stats.
    */
-  void shutdown() throws InterruptedException {
+  void shutdown() {
     if (statsAggregator != null) {
       statsAggregator.cancel();
     }
@@ -126,20 +129,22 @@ class StatsManager {
    * Fetch and aggregate stats from a given {@link Store}
    * @param aggregatedSnapshot the {@link StatsSnapshot} to hold the aggregated result
    * @param partitionId specifies the {@link Store} to be fetched from
-   * @param unreachableStores a {@link List} containing partition Ids that were unable to successfully fetch from
+   * @param unreachablePartitions a {@link List} containing partition Ids that were unable to successfully fetch from
    */
-  void collectAndAggregate(StatsSnapshot aggregatedSnapshot, PartitionId partitionId, List<String> unreachableStores) {
+  void collectAndAggregate(StatsSnapshot aggregatedSnapshot, PartitionId partitionId,
+      List<PartitionId> unreachablePartitions) {
     Store store = storageManager.getStore(partitionId);
     if (store == null) {
-      unreachableStores.add(partitionId.toString());
+      unreachablePartitions.add(partitionId);
     } else {
       try {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
-        StatsSnapshot statsSnapshot = store.getStoreStats().getStatsSnapshot(time.milliseconds());
-        StatsSnapshot.aggregate(aggregatedSnapshot, statsSnapshot);
+        Map<StatsReportType, StatsSnapshot> snapshotsByType =
+            store.getStoreStats().getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds());
+        StatsSnapshot.aggregate(aggregatedSnapshot, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {
-        unreachableStores.add(partitionId.toString());
+        unreachablePartitions.add(partitionId);
       }
     }
   }
@@ -147,57 +152,149 @@ class StatsManager {
   /**
    * Fetch the {@link StatsSnapshot} for the given {@link PartitionId}.
    * @param partitionId the {@link PartitionId} to try to fetch the {@link StatsSnapshot} from
-   * @param unreachableStores a list of partitionIds to keep track of the unreachable stores (partitions)
-   * @return
+   * @param unreachablePartitions a list of partitionIds to keep track of the unreachable partitions
+   * @return the generated {@link StatsSnapshot}
    */
-  StatsSnapshot fetchSnapshot(PartitionId partitionId, List<String> unreachableStores) {
+  StatsSnapshot fetchSnapshot(PartitionId partitionId, List<PartitionId> unreachablePartitions,
+      StatsReportType reportType) {
     StatsSnapshot statsSnapshot = null;
     Store store = storageManager.getStore(partitionId);
     if (store == null) {
-      unreachableStores.add(partitionId.toString());
+      unreachablePartitions.add(partitionId);
     } else {
       try {
-        statsSnapshot = store.getStoreStats().getStatsSnapshot(time.milliseconds());
+        Map<StatsReportType, StatsSnapshot> snapshotsByType =
+            store.getStoreStats().getStatsSnapshots(EnumSet.of(reportType), time.milliseconds());
+        statsSnapshot = snapshotsByType.get(reportType);
       } catch (StoreException e) {
-        logger.error("StoreException on fetching stats snapshot for store {}", store, e);
-        unreachableStores.add(partitionId.toString());
+        String reportTypeStr = reportType.toString();
+        logger.error("StoreException on fetching {} stats snapshot for store {}",
+            reportTypeStr.substring(0, reportTypeStr.lastIndexOf('_')), store, e);
+        unreachablePartitions.add(partitionId);
       }
     }
     return statsSnapshot;
   }
 
   /**
+   * Add new {@link ReplicaId} to StatsManager and thus stats of this store will be collected during next round of aggregation.
+   * @param id the {@link ReplicaId} associated with store to be added
+   * @return {@code true} if adding replica was successful. {@code false} if not.
+   */
+  boolean addReplica(ReplicaId id) {
+    boolean success = partitionToReplicaMap.putIfAbsent(id.getPartitionId(), id) == null;
+    if (success) {
+      logger.info(id.getPartitionId() + " is added into StatsManager");
+    } else {
+      logger.error("Failed to add " + id.getPartitionId() + " because it is already in StatsManager");
+    }
+    return success;
+  }
+
+  /**
+   * Remove {@link ReplicaId} from StatsManager and thus it won't be checked during next round of aggregation.
+   * @param id the {@link ReplicaId} associated with store to be removed
+   * @return {@code true} if removing replica was successful. {@code false} if the replica doesn't exist.
+   */
+  boolean removeReplica(ReplicaId id) {
+    boolean success = partitionToReplicaMap.remove(id.getPartitionId()) != null;
+    if (success) {
+      logger.info(id.getPartitionId() + " is removed from StatsManager");
+    } else {
+      logger.error("Failed to remove " + id.getPartitionId() + " because it doesn't exist in StatsManager");
+    }
+    return success;
+  }
+
+  /**
    * Get the combined {@link StatsSnapshot} of all partitions in this node. This json will contain one entry per partition
-   * wrt valid data size.
+   * wrt valid data size. The node level stats format is as follows.
+   * <pre>
+   *             ACCOUNT_REPORT                   |             PARTITION_CLASS_REPORT
+   * ---------------------------------------------------------------------------------------------------
+   * {                                            |    {
+   *   value: 1000,                               |      value: 1000,
+   *   subMap: {                                  |      subMap: {
+   *     Partition[1]:{                           |        PartitionClass_1: {
+   *       value: 1000,                           |          value: 400,
+   *       subMap: {                              |          subMap: {
+   *         Account[1]:{                         |            Partition[1]: {
+   *           value: 400,                        |              value: 400,
+   *           subMap: {                          |              subMap: {
+   *             Container[1]:{                   |                Account[1]_Container[1]: {
+   *               value: 400,                    |                  value: 400,
+   *               subMap: null                   |                  subMap: null
+   *             }                                |                }
+   *           }                                  |              }
+   *         },                                   |            }
+   *         Account[2]:{                         |          }
+   *           value: 600,                        |        },
+   *           subMap: {                          |        PartitionClass_2: {
+   *             Container[2]:{                   |          value: 600,
+   *               value: 600,                    |          subMap: {
+   *               subMap: null                   |            Partition[2]: {
+   *             }                                |              value: 600,
+   *           }                                  |              subMap: {
+   *         }                                    |                Account[2]_Container[2]: {
+   *       }                                      |                  value: 600,
+   *     }                                        |                  subMap: null
+   *   }                                          |                }
+   * }                                            |              }
+   *                                              |            }
+   *                                              |          }
+   *                                              |        }
+   *                                              |      }
+   *                                              |    }
+   * </pre>
+   * @param statsReportType the {@link StatsReportType} to get from this node
    * @return a combined {@link StatsSnapshot} of this node
    */
-  String getNodeStatsInJSON() {
+  String getNodeStatsInJSON(StatsReportType statsReportType) {
     String statsWrapperJSON = "";
+    logger.info("Aggregating node-level stats for Helix report");
     try {
       long totalFetchAndAggregateStartTimeMs = time.milliseconds();
-      StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
+      StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<>());
       long totalValue = 0;
-      List<String> unreachableStores = new ArrayList<>();
-      Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
+      List<PartitionId> unreachablePartitions = new ArrayList<>();
+      Set<PartitionId> partitionsBeforeAggregation = new HashSet<>(partitionToReplicaMap.keySet());
+      Iterator<PartitionId> iterator = partitionsBeforeAggregation.iterator();
       while (iterator.hasNext()) {
         PartitionId partitionId = iterator.next();
         long fetchSnapshotStartTimeMs = time.milliseconds();
-        StatsSnapshot statsSnapshot = fetchSnapshot(partitionId, unreachableStores);
+        StatsSnapshot statsSnapshot = fetchSnapshot(partitionId, unreachablePartitions, statsReportType);
         if (statsSnapshot != null) {
-          combinedSnapshot.getSubMap().put(partitionId.toString(), statsSnapshot);
+          Map<String, StatsSnapshot> combinedSnapshotSubMap = combinedSnapshot.getSubMap();
+          switch (statsReportType) {
+            case ACCOUNT_REPORT:
+              combinedSnapshotSubMap.put(partitionId.toString(), statsSnapshot);
+              break;
+            case PARTITION_CLASS_REPORT:
+              StatsSnapshot partitionClassSnapshot =
+                  combinedSnapshotSubMap.getOrDefault(partitionId.getPartitionClass(),
+                      new StatsSnapshot(0L, new HashMap<>()));
+              partitionClassSnapshot.setValue(partitionClassSnapshot.getValue() + statsSnapshot.getValue());
+              partitionClassSnapshot.getSubMap().put(partitionId.toString(), statsSnapshot);
+              combinedSnapshotSubMap.put(partitionId.getPartitionClass(), partitionClassSnapshot);
+              break;
+            default:
+              throw new IllegalArgumentException("Unrecognized stats report type: " + statsReportType);
+          }
           totalValue += statsSnapshot.getValue();
         }
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchSnapshotStartTimeMs);
       }
       combinedSnapshot.setValue(totalValue);
+      List<String> examinedUnreachableStores = examineUnreachablePartitions(unreachablePartitions);
       metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-      StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(),
-          partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
-          unreachableStores);
+      StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
+          partitionsBeforeAggregation.size(), partitionsBeforeAggregation.size() - unreachablePartitions.size(),
+          examinedUnreachableStores);
       statsWrapperJSON = mapper.writeValueAsString(new StatsWrapper(statsHeader, combinedSnapshot));
+      logger.info("Node-level stats aggregated for Helix report");
     } catch (Exception | Error e) {
       metrics.statsAggregationFailureCount.inc();
-      logger.error("Exception while aggregating stats.", e);
+      logger.error("Exception while aggregating stats for Helix report", e);
     }
     return statsWrapperJSON;
   }
@@ -210,28 +307,29 @@ class StatsManager {
 
     @Override
     public void run() {
-      logger.info("Aggregating stats");
+      logger.info("Aggregating stats for local report");
       try {
         long totalFetchAndAggregateStartTimeMs = time.milliseconds();
         StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
-        List<String> unreachableStores = new ArrayList<>();
-        Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
+        List<PartitionId> unreachablePartitions = new ArrayList<>();
+        Iterator<PartitionId> iterator = (new HashSet<>(partitionToReplicaMap.keySet())).iterator();
         while (!cancelled && iterator.hasNext()) {
           PartitionId partitionId = iterator.next();
-          logger.info("Aggregating stats started for store {}", partitionId);
-          collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
+          logger.info("Aggregating stats for local report started for store {}", partitionId);
+          collectAndAggregate(aggregatedSnapshot, partitionId, unreachablePartitions);
         }
+        List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-          StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(),
+          StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
               partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
               unreachableStores);
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
-          logger.info("Stats snapshot published to {}", statsOutputFile.getAbsolutePath());
+          logger.info("Local stats snapshot published to {}", statsOutputFile.getAbsolutePath());
         }
       } catch (Exception | Error e) {
         metrics.statsAggregationFailureCount.inc();
-        logger.error("Exception while aggregating stats. Stats output file path - {}",
+        logger.error("Exception while aggregating stats for local report. Stats output file path - {}",
             statsOutputFile.getAbsolutePath(), e);
       }
     }
@@ -239,5 +337,23 @@ class StatsManager {
     void cancel() {
       cancelled = true;
     }
+  }
+
+  /**
+   * Re-examine the unreachable partitions to preclude those already removed from StatsManager.
+   * @param unreachablePartitions a list of unreachable partitions generated during stats aggregation.
+   * @return a list of stores which are unreachable and still present in StatsManager.
+   */
+  List<String> examineUnreachablePartitions(List<PartitionId> unreachablePartitions) {
+    List<String> unreachableStores = new ArrayList<>();
+    for (PartitionId partition : unreachablePartitions) {
+      if (partitionToReplicaMap.containsKey(partition)) {
+        unreachableStores.add(partition.toPathString());
+      } else {
+        logger.info("Removing partition " + partition.toPathString()
+            + " from unreachable list because it is no longer in StatsManager");
+      }
+    }
+    return unreachableStores;
   }
 }

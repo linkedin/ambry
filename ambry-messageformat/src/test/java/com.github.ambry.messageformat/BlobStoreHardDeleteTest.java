@@ -57,8 +57,8 @@ public class BlobStoreHardDeleteTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V2}});
+    return Arrays.asList(new Object[][]{{MessageFormatRecord.Message_Header_Version_V1},
+        {MessageFormatRecord.Message_Header_Version_V2}});
   }
 
   public BlobStoreHardDeleteTest(short headerVersionToUse) {
@@ -70,8 +70,8 @@ public class BlobStoreHardDeleteTest {
     private List<byte[]> recoveryInfoList = new ArrayList<byte[]>();
     private ByteBuffer buffer;
     private StoreKey[] keys =
-        {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5"), new MockId(
-            "id6"), new MockId("id7")};
+        {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5"),
+            new MockId("id6"), new MockId("id7")};
 
     public ArrayList<Long> initialize(short[] blobVersions, BlobType[] blobTypes)
         throws MessageFormatException, IOException {
@@ -91,7 +91,7 @@ public class BlobStoreHardDeleteTest {
       long updateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
 
       BlobProperties blobProperties =
-          new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999, accountId, containerId, true);
+          new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999, accountId, containerId, true, null);
 
       MessageFormatInputStream msg0 =
           getPutMessage(keys[0], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,

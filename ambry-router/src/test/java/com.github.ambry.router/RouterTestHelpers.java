@@ -53,10 +53,10 @@ class RouterTestHelpers {
   private static final short BLOB_ID_VERSION = CommonTestUtils.getCurrentBlobIdVersion();
 
   /**
-   * Test whether two {@link BlobProperties} have the same fields
-   * @return true if the fields are equivalent in the two {@link BlobProperties}
+   * Test whether persistent properties in two {@link BlobProperties} are same.
+   * @return true if the persistent properties are equivalent in the two {@link BlobProperties}
    */
-  static boolean haveEquivalentFields(BlobProperties a, BlobProperties b) {
+  static boolean arePersistedFieldsEquivalent(BlobProperties a, BlobProperties b) {
     return a.getServiceId().equals(b.getServiceId()) && a.getOwnerId().equals(b.getOwnerId()) && a.getContentType()
         .equals(b.getContentType()) && a.isPrivate() == b.isPrivate()
         && a.getTimeToLiveInSeconds() == b.getTimeToLiveInSeconds()
@@ -226,8 +226,8 @@ class RouterTestHelpers {
    * @throws Exception
    */
   static void assertTtl(Router router, Collection<String> blobIds, long expectedTtlSecs) throws Exception {
-    GetBlobOptions options[] = {new GetBlobOptionsBuilder().build(),
-        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build()};
+    GetBlobOptions options[] = {new GetBlobOptionsBuilder().build(), new GetBlobOptionsBuilder().operationType(
+        GetBlobOptions.OperationType.BlobInfo).build()};
     for (String blobId : blobIds) {
       for (GetBlobOptions option : options) {
         GetBlobResult result = router.getBlob(blobId, option).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);

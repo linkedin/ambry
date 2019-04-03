@@ -22,7 +22,6 @@ import com.github.ambry.utils.Utils;
  * must be set. The creation time is determined when this object is constructed.
  */
 public class BlobProperties {
-  private final long blobSize;
   private final String serviceId;
   private final String ownerId;
   private final String contentType;
@@ -31,7 +30,10 @@ public class BlobProperties {
   private final short accountId;
   private final short containerId;
   private final boolean isEncrypted;
+  private long blobSize;
   private long timeToLiveInSeconds;
+  // Non persistent blob properties.
+  private final String externalAssetTag;
 
   /**
    * @param blobSize The size of the blob in bytes
@@ -42,7 +44,7 @@ public class BlobProperties {
    */
   public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, boolean isEncrypted) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds(),
-        accountId, containerId, isEncrypted);
+        accountId, containerId, isEncrypted, null);
   }
 
   /**
@@ -55,11 +57,12 @@ public class BlobProperties {
    * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
    * @param isEncrypted whether this blob is encrypted.
+   * @param externalAssetTag externalAssetTag for this blob. This is a non-persistent field.
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, short accountId, short containerId, boolean isEncrypted) {
+      long timeToLiveInSeconds, short accountId, short containerId, boolean isEncrypted, String externalAssetTag) {
     this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
-        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted);
+        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag);
   }
 
   /**
@@ -73,9 +76,11 @@ public class BlobProperties {
    * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
    * @param isEncrypted whether this blob is encrypted.
+   * @param externalAssetTag externalAssetTag for this blob. This is a non-persistent field.
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId, boolean isEncrypted) {
+      long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId, boolean isEncrypted,
+      String externalAssetTag) {
     this.blobSize = blobSize;
     this.serviceId = serviceId;
     this.ownerId = ownerId;
@@ -86,6 +91,7 @@ public class BlobProperties {
     this.accountId = accountId;
     this.containerId = containerId;
     this.isEncrypted = isEncrypted;
+    this.externalAssetTag = externalAssetTag;
   }
 
   public long getTimeToLiveInSeconds() {
@@ -138,10 +144,24 @@ public class BlobProperties {
   }
 
   /**
+   * @return the ExternalAssetTag of a uploaded blob. Can be null.
+   */
+  public String getExternalAssetTag() {
+    return externalAssetTag;
+  }
+
+  /**
    * @param timeToLiveInSeconds the new value of timeToLiveInSeconds
    */
   public void setTimeToLiveInSeconds(long timeToLiveInSeconds) {
     this.timeToLiveInSeconds = timeToLiveInSeconds;
+  }
+
+  /**
+   * @param blobSize the new blob size in bytes
+   */
+  public void setBlobSize(long blobSize) {
+    this.blobSize = blobSize;
   }
 
   @Override
@@ -174,6 +194,7 @@ public class BlobProperties {
     sb.append(", ").append("AccountId=").append(getAccountId());
     sb.append(", ").append("ContainerId=").append(getContainerId());
     sb.append(", ").append("IsEncrypted=").append(isEncrypted());
+    sb.append(", ").append("externalAssetTag=").append(getExternalAssetTag());
     sb.append("]");
     return sb.toString();
   }

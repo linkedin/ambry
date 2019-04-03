@@ -23,6 +23,7 @@ import org.I0Itec.zkclient.DataUpdater;
 import org.I0Itec.zkclient.IZkChildListener;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.BaseDataAccessor;
+import org.apache.helix.HelixException;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.zookeeper.data.Stat;
@@ -167,7 +168,17 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
   }
 
   @Override
+  public List<T> get(List<String> list, List<Stat> list1, int i, boolean b) throws HelixException {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public List<T> getChildren(String parentPath, List<Stat> stats, int options) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public List<T> getChildren(String s, List<Stat> list, int i, int i1, int i2) throws HelixException {
     throw new IllegalStateException("Not implemented");
   }
 

@@ -23,24 +23,26 @@ import org.junit.Test;
 
 public class BoundedByteBufferReceiveTest {
 
+  /**
+   * Test basic operation of {@link BoundedByteBufferReceive}.
+   * @throws Exception
+   */
   @Test
-  public void testBoundedByteBufferReceive() {
-    try {
-      ByteBuffer buffer = ByteBuffer.allocate(2000);
-      buffer.putLong(2000);
-      byte[] buf = new byte[1992];
-      new Random().nextBytes(buf);
-      buffer.put(buf);
-      buffer.flip();
-      BoundedByteBufferReceive set = new BoundedByteBufferReceive();
-      set.readFrom(Channels.newChannel(new ByteBufferInputStream(buffer)));
-      buffer.clear();
-      ByteBuffer payload = set.getPayload();
-      for (int i = 8; i < 2000; i++) {
-        Assert.assertEquals(buffer.array()[i], payload.get());
-      }
-    } catch (Exception e) {
-      Assert.assertEquals(true, false);
+  public void testBoundedByteBufferReceive() throws Exception {
+    int bufferSize = 2000;
+    ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
+    buffer.putLong(bufferSize);
+    byte[] buf = new byte[bufferSize - Long.BYTES];
+    new Random().nextBytes(buf);
+    buffer.put(buf);
+    buffer.flip();
+    BoundedByteBufferReceive set = new BoundedByteBufferReceive();
+    Assert.assertEquals("Wrong number of bytes read", bufferSize,
+        set.readFrom(Channels.newChannel(new ByteBufferInputStream(buffer))));
+    buffer.clear();
+    ByteBuffer payload = set.getPayload();
+    for (int i = 8; i < bufferSize; i++) {
+      Assert.assertEquals(buffer.array()[i], payload.get());
     }
   }
 }

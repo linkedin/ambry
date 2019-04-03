@@ -22,7 +22,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -713,7 +712,7 @@ class BlobStore implements Store {
    * @throws IOException if there is any error creating the {@link CompactionLog}.
    * @throws StoreException if there are any errors during the compaction.
    */
-  void compact(CompactionDetails details, ByteBuffer bundleReadBuffer) throws IOException, StoreException {
+  void compact(CompactionDetails details, byte[] bundleReadBuffer) throws IOException, StoreException {
     checkStarted();
     compactor.compact(details, bundleReadBuffer);
     checkCapacityAndUpdateReplicaStatusDelegate();
@@ -725,7 +724,7 @@ class BlobStore implements Store {
    * @throws StoreException if there are any errors during the compaction.
    * @param bundleReadBuffer the preAllocated buffer for bundle read in compaction copy phase.
    */
-  void maybeResumeCompaction(ByteBuffer bundleReadBuffer) throws StoreException {
+  void maybeResumeCompaction(byte[] bundleReadBuffer) throws StoreException {
     checkStarted();
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);

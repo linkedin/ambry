@@ -224,10 +224,22 @@ public class LogSegmentTest {
         assertFalse("The buffer was not completely written", buffer.hasRemaining());
       }
     });
+
+    // direct IO append
+    if (Utils.isLinux()) {
+      doAppendTest(new Appender() {
+        @Override
+        public void append(LogSegment segment, ByteBuffer buffer) throws IOException {
+          int writeSize = buffer.remaining();
+          segment.appendFromDirectly(buffer.array(), 0, writeSize);
+        }
+      });
+    }
   }
 
   /**
-   * Tests {@link LogSegment#readInto(ByteBuffer, long)} for various cases.
+   * Tests {@link LogSegment#readInto(ByteBuffer, long)} and {@link LogSegment#readIntoDirectly(byte[], long, int)}(if
+   * current OS is Linux) for various cases.
    * @throws IOException
    */
   @Test
@@ -239,11 +251,14 @@ public class LogSegmentTest {
       long writeStartOffset = segment.getStartOffset();
       byte[] data = appendRandomData(segment, 2 * STANDARD_SEGMENT_SIZE / 3);
       readAndEnsureMatch(segment, writeStartOffset, data);
+      readDirectlyAndEnsureMatch(segment, writeStartOffset, data);
       int readCount = 10;
       for (int i = 0; i < readCount; i++) {
         int position = random.nextInt(data.length);
         int size = random.nextInt(data.length - position);
         readAndEnsureMatch(segment, writeStartOffset + position, Arrays.copyOfRange(data, position, position + size));
+        readDirectlyAndEnsureMatch(segment, writeStartOffset + position,
+            Arrays.copyOfRange(data, position, position + size));
       }
 
       // check for position > endOffset and < data size written to the segment
@@ -252,9 +267,12 @@ public class LogSegmentTest {
       int position = (int) segment.getEndOffset() + random.nextInt(data.length - (int) segment.getEndOffset());
       int size = random.nextInt(data.length - position);
       readAndEnsureMatch(segment, writeStartOffset + position, Arrays.copyOfRange(data, position, position + size));
+      readDirectlyAndEnsureMatch(segment, writeStartOffset + position,
+          Arrays.copyOfRange(data, position, position + size));
 
-      // error scenarios
-      ByteBuffer readBuf = ByteBuffer.wrap(new byte[data.length]);
+      // error scenarios for general IO
+      byte[] byteArray = new byte[data.length];
+      ByteBuffer readBuf = ByteBuffer.wrap(byteArray);
       // data cannot be read at invalid offsets.
       long[] invalidOffsets = {writeStartOffset - 1, segment.sizeInBytes(), segment.sizeInBytes() + 1};
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1));
@@ -266,9 +284,20 @@ public class LogSegmentTest {
           assertEquals("Position of buffer has changed", 0, buffer.position());
         }
       }
+      if (Utils.isLinux()) {
+        for (long invalidOffset : invalidOffsets) {
+          try {
+            segment.readIntoDirectly(byteArray, invalidOffset, data.length);
+            fail("Should have failed to read because position provided is invalid");
+          } catch (IndexOutOfBoundsException e) {
+            assertEquals("Position of buffer has changed", 0, buffer.position());
+          }
+        }
+      }
 
       // position + buffer.remaining > sizeInBytes
       long readOverFlowCount = metrics.overflowReadError.getCount();
+      byteArray = new byte[2];
       readBuf = ByteBuffer.allocate(2);
       segment.setEndOffset(segment.getStartOffset());
       position = (int) segment.sizeInBytes() - 1;
@@ -280,6 +309,15 @@ public class LogSegmentTest {
             metrics.overflowReadError.getCount());
         assertEquals("Position of buffer has changed", 0, readBuf.position());
       }
+      if (Utils.isLinux()) {
+        try {
+          segment.readIntoDirectly(byteArray, position, byteArray.length);
+          fail("Should have failed to read because position + buffer.remaining() > sizeInBytes");
+        } catch (IndexOutOfBoundsException e) {
+          assertEquals("Read overflow should have been reported", readOverFlowCount + 2,
+              metrics.overflowReadError.getCount());
+        }
+      }
 
       segment.close();
       // read after close
@@ -289,6 +327,14 @@ public class LogSegmentTest {
         fail("Should have failed to read because segment is closed");
       } catch (ClosedChannelException e) {
         assertEquals("Position of buffer has changed", 0, buffer.position());
+      }
+      if (Utils.isLinux()) {
+        byteArray = new byte[1];
+        try {
+          segment.readIntoDirectly(byteArray, writeStartOffset, byteArray.length);
+          fail("Should have failed to read because segment is closed");
+        } catch (ClosedChannelException e) {
+        }
       }
     } finally {
       closeSegmentAndDeleteFile(segment);
@@ -523,6 +569,22 @@ public class LogSegmentTest {
   }
 
   /**
+   * Reads data(direct IO) starting from {@code offsetToStartRead} of {@code segment} and matches it with {@code original}.
+   * @param segment the {@link LogSegment} to read from.
+   * @param offsetToStartRead the offset in {@code segment} to start reading from.
+   * @param original the byte array to compare against.
+   * @throws IOException
+   */
+  private void readDirectlyAndEnsureMatch(LogSegment segment, long offsetToStartRead, byte[] original)
+      throws IOException {
+    if (Utils.isLinux()) {
+      byte[] byteArray = new byte[original.length];
+      segment.readIntoDirectly(byteArray, offsetToStartRead, original.length);
+      assertArrayEquals("Data read does not match data written", original, byteArray);
+    }
+  }
+
+  /**
    * Closes the {@code segment} and deletes the backing file.
    * @param segment the {@link LogSegment} that needs to be closed and whose backing file needs to be deleted.
    * @throws IOException
@@ -606,6 +668,9 @@ public class LogSegmentTest {
       readAndEnsureMatch(segment, writeStartOffset, bufOne);
       readAndEnsureMatch(segment, writeStartOffset + bufOne.length, bufTwo);
       readAndEnsureMatch(segment, writeStartOffset + bufOne.length + bufTwo.length, bufThree);
+      readDirectlyAndEnsureMatch(segment, writeStartOffset, bufOne);
+      readDirectlyAndEnsureMatch(segment, writeStartOffset + bufOne.length, bufTwo);
+      readDirectlyAndEnsureMatch(segment, writeStartOffset + bufOne.length + bufTwo.length, bufThree);
 
       segment.close();
       // ensure that append fails.

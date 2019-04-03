@@ -14,7 +14,10 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -35,12 +38,14 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
+import com.github.ambry.rest.NettySslFactory;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.ByteRanges;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -77,14 +82,19 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -437,6 +447,26 @@ public class FrontendIntegrationTest {
     verifyTrackingHeaders(response);
   }
 
+  /**
+   * Tests for the account get/update API.
+   */
+  @Test
+  public void accountApiTest() throws Exception {
+    getAccountsAndVerify();
+
+    // update and add accounts
+    Map<Short, Account> accountsById =
+        ACCOUNT_SERVICE.getAllAccounts().stream().collect(Collectors.toMap(Account::getId, Function.identity()));
+
+    Account editedAccount = accountsById.values().stream().findAny().get();
+    Container editedContainer = editedAccount.getAllContainers().stream().findAny().get();
+    editedContainer = new ContainerBuilder(editedContainer).setDescription("new description abcdefgh").build();
+    editedAccount = new AccountBuilder(editedAccount).addOrUpdateContainer(editedContainer).build();
+    updateAccountsAndVerify(editedAccount, ACCOUNT_SERVICE.generateRandomAccount());
+
+    getAccountsAndVerify();
+  }
+
   // helpers
   // general
 
@@ -522,6 +552,7 @@ public class FrontendIntegrationTest {
     properties.put("netty.server.port", Integer.toString(PLAINTEXT_SERVER_PORT));
     properties.put("netty.server.ssl.port", Integer.toString(SSL_SERVER_PORT));
     properties.put("netty.server.enable.ssl", "true");
+    properties.put(NettyConfig.SSL_FACTORY_KEY, NettySslFactory.class.getName());
     // to test that backpressure does not impede correct operation.
     properties.put("netty.server.request.buffer.watermark", "1");
     // to test that multipart requests over a certain size fail
@@ -577,16 +608,16 @@ public class FrontendIntegrationTest {
     getBlobAndVerify(blobId, null, GetOption.None, headers, isPrivate, content, expectedAccountName,
         expectedContainerName);
     getHeadAndVerify(blobId, null, GetOption.None, headers, isPrivate, expectedAccountName, expectedContainerName);
-    ByteRange range = ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(content.capacity() + 1));
+    ByteRange range = ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(content.capacity() + 1));
     getBlobAndVerify(blobId, range, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
     getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
     if (contentSize > 0) {
-      range = ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(content.capacity()));
+      range = ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(content.capacity()));
       getBlobAndVerify(blobId, range, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
       getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
       long random1 = ThreadLocalRandom.current().nextLong(content.capacity());
       long random2 = ThreadLocalRandom.current().nextLong(content.capacity());
-      range = ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
+      range = ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
       getBlobAndVerify(blobId, range, null, headers, isPrivate, content, expectedAccountName, expectedContainerName);
       getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
     }
@@ -1276,11 +1307,11 @@ public class FrontendIntegrationTest {
         account.getName(), container.getName(), null);
     List<ByteRange> ranges = new ArrayList<>();
     ranges.add(null);
-    ranges.add(ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(fullContentArray.length + 1)));
-    ranges.add(ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(fullContentArray.length)));
+    ranges.add(ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(fullContentArray.length + 1)));
+    ranges.add(ByteRanges.fromStartOffset(ThreadLocalRandom.current().nextLong(fullContentArray.length)));
     long random1 = ThreadLocalRandom.current().nextLong(fullContentArray.length);
     long random2 = ThreadLocalRandom.current().nextLong(fullContentArray.length);
-    ranges.add(ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+    ranges.add(ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
     for (ByteRange range : ranges) {
       getBlobAndVerify(stitchedBlobId, range, GetOption.None, expectedGetHeaders, !container.isCacheable(),
           ByteBuffer.wrap(fullContentArray), account.getName(), container.getName());
@@ -1293,5 +1324,65 @@ public class FrontendIntegrationTest {
     deleteBlobAndVerify(stitchedBlobId);
     verifyOperationsAfterDelete(stitchedBlobId, expectedGetHeaders, !container.isCacheable(), account.getName(),
         container.getName(), ByteBuffer.wrap(fullContentArray), null);
+  }
+
+  // accountApiTest() helpers
+
+  /**
+   * Call the {@code POST /accounts} API to update account metadata and verify that the update succeeded.
+   * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
+   */
+  private void updateAccountsAndVerify(Account... accounts) throws Exception {
+    JSONObject accountUpdateJson = AccountCollectionSerde.toJson(Arrays.asList(accounts));
+    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null,
+        ByteBuffer.wrap(accountUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
+    ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
+    assertNoContent(responseParts.queue, 1);
+
+    for (Account account : accounts) {
+      assertEquals("Update not reflected in AccountService", account, ACCOUNT_SERVICE.getAccountById(account.getId()));
+    }
+  }
+
+  /**
+   * Call the {@code GET /accounts} API and verify the response for all accounts managed by {@link #ACCOUNT_SERVICE}.
+   */
+  private void getAccountsAndVerify() throws Exception {
+    Collection<Account> expectedAccounts = ACCOUNT_SERVICE.getAllAccounts();
+    // fetch snapshot of all accounts
+    assertEquals("GET /accounts returned wrong result", new HashSet<>(expectedAccounts), getAccounts(null, null));
+    // fetch accounts one by one
+    for (Account account : expectedAccounts) {
+      assertEquals("Fetching of single account by name failed", Collections.singleton(account),
+          getAccounts(account.getName(), null));
+      assertEquals("Fetching of single account by name failed", Collections.singleton(account),
+          getAccounts(null, account.getId()));
+    }
+  }
+
+  /**
+   * Call the {@code GET /accounts} API and deserialize the response.
+   * @param accountName if non-null, fetch a single account by name instead of all accounts.
+   * @param accountId if non-null, fetch a single account by ID instead of all accounts.
+   * @return the accounts fetched.
+   */
+  private Set<Account> getAccounts(String accountName, Short accountId) throws Exception {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    if (accountName != null) {
+      headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
+    } else if (accountId != null) {
+      headers.add(RestUtils.Headers.TARGET_ACCOUNT_ID, accountId);
+    }
+    FullHttpRequest request = buildRequest(HttpMethod.GET, Operations.ACCOUNTS, headers, null);
+    ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
+    ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
+    return new HashSet<>(
+        AccountCollectionSerde.fromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8))));
   }
 }

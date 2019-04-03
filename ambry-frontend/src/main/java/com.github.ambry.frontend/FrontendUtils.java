@@ -15,12 +15,25 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.CallbackUtils;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.ThrowingConsumer;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import org.json.JSONObject;
+import org.json.JSONTokener;
 import org.slf4j.Logger;
 
 
@@ -56,5 +69,37 @@ class FrontendUtils {
       String context, Logger logger, Callback<V> finalCallback) {
     AsyncOperationTracker tracker = new AsyncOperationTracker(context, logger, metrics);
     return CallbackUtils.chainCallback(tracker, finalCallback, successAction);
+  }
+
+  /**
+   * Parse a {@link JSONObject} from the data in {@code channel}. This assumes that the data is UTF-8 encoded.
+   * @param channel the {@link CopyingAsyncWritableChannel} that contains the JSON data.
+   * @return a {@link JSONObject}.
+   * @throws IOException if closing the {@link InputStream} fails.
+   * @throws RestServiceException if JSON parsing fails.
+   */
+  static JSONObject readJsonFromChannel(CopyingAsyncWritableChannel channel) throws RestServiceException {
+    try (InputStream inputStream = channel.getContentAsInputStream()) {
+      return new JSONObject(new JSONTokener(new InputStreamReader(inputStream, StandardCharsets.UTF_8)));
+    } catch (Exception e) {
+      throw new RestServiceException("Could not parse json request body", e, RestServiceErrorCode.BadRequest);
+    }
+  }
+
+  /**
+   * @param jsonObject the {@link JSONObject} to serialize.
+   * @return the {@link ReadableStreamChannel} containing UTF-8 formatted json.
+   * @throws RestServiceException if there was an error during serialization.
+   */
+  static ReadableStreamChannel serializeJsonToChannel(JSONObject jsonObject) throws RestServiceException {
+    try {
+      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      try (Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)) {
+        jsonObject.write(writer);
+      }
+      return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
+    } catch (Exception e) {
+      throw new RestServiceException("Could not serialize response json.", e, RestServiceErrorCode.InternalServerError);
+    }
   }
 }

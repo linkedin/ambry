@@ -16,7 +16,6 @@ package com.github.ambry.frontend;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
@@ -26,7 +25,6 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.SystemTime;
-import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
 import java.util.List;
@@ -117,7 +115,8 @@ class GetPeersHandler {
    * @return a {@link ReadableStreamChannel} containing the response.
    * @throws JSONException if there is any problem with JSON construction or manipulation.
    */
-  private static ReadableStreamChannel getResponseBody(Set<DataNodeId> dataNodeIds) throws JSONException {
+  private static ReadableStreamChannel getResponseBody(Set<DataNodeId> dataNodeIds)
+      throws JSONException, RestServiceException {
     JSONObject peers = new JSONObject();
     peers.put(PEERS_FIELD_NAME, new JSONArray());
     for (DataNodeId dataNodeId : dataNodeIds) {
@@ -126,7 +125,7 @@ class GetPeersHandler {
       peer.put(PORT_QUERY_PARAM, dataNodeId.getPort());
       peers.append(PEERS_FIELD_NAME, peer);
     }
-    return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(peers.toString().getBytes()));
+    return FrontendUtils.serializeJsonToChannel(peers);
   }
 
   /**
@@ -219,7 +218,7 @@ class GetPeersHandler {
           }
           channel = getResponseBody(peerDataNodeIds);
           restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
         }
       } catch (Exception e) {

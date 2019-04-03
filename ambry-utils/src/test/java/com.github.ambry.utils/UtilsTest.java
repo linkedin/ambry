@@ -20,10 +20,13 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.commons.io.FileUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -35,6 +38,7 @@ import static org.junit.Assert.*;
  * Tests Utils methods
  */
 public class UtilsTest {
+  static final String STATIC_FIELD_TEST_STRING = "field1";
 
   @Test(expected = IllegalArgumentException.class)
   public void testGetRandomLongException() {
@@ -404,6 +408,17 @@ public class UtilsTest {
   }
 
   /**
+   * Tests {@link Utils#getStaticFieldValuesAsStrings(Class)}.
+   */
+  @Test
+  public void testGetStaticFieldValuesAsStrings() {
+    Stream<String> fieldValuesAsStrings = Utils.getStaticFieldValuesAsStrings(MockClassForTesting.class);
+    Set<String> staticFields = fieldValuesAsStrings.collect(Collectors.toSet());
+    assertTrue("Static field is not found in the result.", staticFields.contains(STATIC_FIELD_TEST_STRING));
+    assertEquals("The number of static field strings in result", 1, staticFields.size());
+  }
+
+  /**
    * Tests {@link Utils#getRootCause(Throwable)}.
    */
   @Test
@@ -557,6 +572,7 @@ class MockClassForTesting {
   public boolean twoArgConstructorInvoked = false;
   public boolean threeArgConstructorInvoked = false;
   public boolean fourArgConstructorInvoked = false;
+  public static String STATIC_FIELD = UtilsTest.STATIC_FIELD_TEST_STRING;
 
   public MockClassForTesting() {
     noArgConstructorInvoked = true;

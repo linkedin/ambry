@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.utils.Crc32;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -125,9 +127,13 @@ public class RestUtils {
      */
     public final static String SERVICE_ID = "x-ambry-service-id";
     /**
-     * for put request; string; name of target account
+     * for put or get account request; string; name of target account
      */
     public final static String TARGET_ACCOUNT_NAME = "x-ambry-target-account-name";
+    /**
+     * for get account request; short; numerical ID of target account
+     */
+    public final static String TARGET_ACCOUNT_ID = "x-ambry-target-account-id";
     /**
      * for put request; string; name of the target container
      */
@@ -176,6 +182,10 @@ public class RestUtils {
      * The maximum size of the blob that can be uploaded using the URL.
      */
     public static final String MAX_UPLOAD_SIZE = "x-ambry-max-upload-size";
+    /**
+     * An externalAssetTag for this blob.
+     */
+    public static final String EXTERNAL_ASSET_TAG = "x-ambry-external-asset-tag";
     /**
      * The blob ID requested by the URL.
      */
@@ -308,10 +318,12 @@ public class RestUtils {
   public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
   public static final String BYTE_RANGE_UNITS = "bytes";
   public static final String SIGNED_ID_PREFIX = "signedId/";
+  public static final String JSON_CONTENT_TYPE = "application/json";
+  private static final String BYTE_RANGE_PREFIX = BYTE_RANGE_UNITS + "=";
 
   private static final int CRC_SIZE = 8;
   private static final short USER_METADATA_VERSION_V1 = 1;
-  private static final String BYTE_RANGE_PREFIX = BYTE_RANGE_UNITS + "=";
+
   private static final Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
   /**
@@ -327,6 +339,7 @@ public class RestUtils {
     String serviceId = getHeader(args, Headers.SERVICE_ID, true);
     String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
     String ownerId = getHeader(args, Headers.OWNER_ID, false);
+    String externalAssetTag = getHeader(args, Headers.EXTERNAL_ASSET_TAG, false);
 
     long ttl = Utils.Infinite_Time;
     Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
@@ -342,7 +355,7 @@ public class RestUtils {
     // based on the container properties and ACLs. For now, BlobProperties still includes this field, though.
     boolean isPrivate = !container.isCacheable();
     return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(), container.getId(),
-        container.isEncrypted());
+        container.isEncrypted(), externalAssetTag);
   }
 
   /**
@@ -530,43 +543,14 @@ public class RestUtils {
    * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
    * performed on.
    * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @param subResource the {@link RestUtils.SubResource} if one is present. {@code null} otherwise.
+   * @param subResource the {@link SubResource} if one is present. {@code null} otherwise.
    * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
    *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
    * @return extracted operation type or blob ID from the URI.
    */
-  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, RestUtils.SubResource subResource,
+  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, SubResource subResource,
       List<String> prefixesToRemove) {
-    String path = restRequest.getPath();
-    int startIndex = 0;
-
-    // remove query string.
-    int endIndex = path.indexOf("?");
-    if (endIndex == -1) {
-      endIndex = path.length();
-    }
-
-    // remove prefix.
-    if (prefixesToRemove != null) {
-      for (String prefix : prefixesToRemove) {
-        if (path.startsWith(prefix)) {
-          startIndex = prefix.length();
-          break;
-        }
-      }
-    }
-
-    // remove subresource if present.
-    if (subResource != null) {
-      // "- 1" removes the "slash" that precedes the sub-resource.
-      endIndex = endIndex - subResource.name().length() - 1;
-    }
-    String operationOrBlobId = path.substring(startIndex, endIndex);
-    if ((operationOrBlobId.isEmpty() || operationOrBlobId.equals("/")) && restRequest.getArgs()
-        .containsKey(Headers.BLOB_ID)) {
-      operationOrBlobId = restRequest.getArgs().get(Headers.BLOB_ID).toString();
-    }
-    return operationOrBlobId;
+    return getPrefixAndResourceFromUri(restRequest, subResource, prefixesToRemove).getSecond();
   }
 
   /**
@@ -587,6 +571,47 @@ public class RestUtils {
       }
     }
     return subResource;
+  }
+
+  /**
+   * Get prefix (if exists) and resource from URI so that operation can be performed based on them.
+   * @param restRequest {@link RestRequest} containing metadata about the request.
+   * @param subResource the {@link SubResource} if one is present. {@code null} otherwise.
+   * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
+   *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
+   * @return a {@link Pair} containing the prefix and resource extracted from URI.
+   */
+  public static Pair<String, String> getPrefixAndResourceFromUri(RestRequest restRequest, SubResource subResource,
+      List<String> prefixesToRemove) {
+    String path = restRequest.getPath();
+    int startIndex = 0;
+    // remove query string.
+    int endIndex = path.indexOf("?");
+    if (endIndex == -1) {
+      endIndex = path.length();
+    }
+    // remove prefix.
+    String prefixFound = "";
+    if (prefixesToRemove != null) {
+      for (String prefix : prefixesToRemove) {
+        if (path.startsWith(prefix)) {
+          prefixFound = prefix;
+          startIndex = prefix.length();
+          break;
+        }
+      }
+    }
+    // remove subresource if present.
+    if (subResource != null) {
+      // "- 1" removes the "slash" that precedes the sub-resource.
+      endIndex = endIndex - subResource.name().length() - 1;
+    }
+    String operationOrBlobId = path.substring(startIndex, endIndex);
+    if ((operationOrBlobId.isEmpty() || operationOrBlobId.equals("/")) && restRequest.getArgs()
+        .containsKey(Headers.BLOB_ID)) {
+      operationOrBlobId = restRequest.getArgs().get(Headers.BLOB_ID).toString();
+    }
+    return new Pair<>(prefixFound, operationOrBlobId);
   }
 
   /**
@@ -693,8 +718,7 @@ public class RestUtils {
    *                                    {@code args} or if there is more than one value for {@code header} in
    *                                    {@code args}.
    */
-  public static String getHeader(Map<String, ?> args, String header, boolean required)
-      throws RestServiceException {
+  public static String getHeader(Map<String, ?> args, String header, boolean required) throws RestServiceException {
     String value = null;
     if (args.containsKey(header)) {
       Object valueObj = args.get(header);
@@ -721,13 +745,30 @@ public class RestUtils {
    * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
    *                              converted to a {@link Long}.
    */
-  public static Long getLongHeader(Map<String, ?> args, String header, boolean required)
-      throws RestServiceException {
+  public static Long getLongHeader(Map<String, ?> args, String header, boolean required) throws RestServiceException {
+    return getNumericalHeader(args, header, required, Long::parseLong);
+  }
+
+  /**
+   * Gets the value of a header as a {@link Number}, using the provided converter function to parse the string.
+   * @param args a map of arguments to be used to look for {@code header}.
+   * @param header the name of the header.
+   * @param required if {@code true}, {@link RestServiceException} will be thrown if {@code header} is not present
+   *                 in {@code args}.
+   * @param converter a function to convert from a {@link String} to the desired numerical type. This should throw
+   *                  {@link NumberFormatException} if the argument is not a valid number.
+   * @return the value of {@code header} in {@code args} if it exists. If it does not exist and {@code required} is
+   *          {@code false}, then returns null.
+   * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
+   *                              converted to a {@link Long}.
+   */
+  public static <T extends Number> T getNumericalHeader(Map<String, ?> args, String header, boolean required,
+      Function<String, T> converter) throws RestServiceException {
     // if getHeader() is no longer called, tests for this function have to be changed.
     String value = getHeader(args, header, required);
     if (value != null) {
       try {
-        return Long.parseLong(value);
+        return converter.apply(value);
       } catch (NumberFormatException e) {
         throw new RestServiceException("Invalid value for " + header + ": " + value, e,
             RestServiceErrorCode.InvalidArgs);
@@ -878,11 +919,11 @@ public class RestUtils {
       String startOffsetStr = rangeHeaderValue.substring(BYTE_RANGE_PREFIX.length(), hyphenIndex);
       String endOffsetStr = rangeHeaderValue.substring(hyphenIndex + 1);
       if (startOffsetStr.isEmpty()) {
-        range = ByteRange.fromLastNBytes(Long.parseLong(endOffsetStr));
+        range = ByteRanges.fromLastNBytes(Long.parseLong(endOffsetStr));
       } else if (endOffsetStr.isEmpty()) {
-        range = ByteRange.fromStartOffset(Long.parseLong(startOffsetStr));
+        range = ByteRanges.fromStartOffset(Long.parseLong(startOffsetStr));
       } else {
-        range = ByteRange.fromOffsetRange(Long.parseLong(startOffsetStr), Long.parseLong(endOffsetStr));
+        range = ByteRanges.fromOffsetRange(Long.parseLong(startOffsetStr), Long.parseLong(endOffsetStr));
       }
     } catch (Exception e) {
       throw new RestServiceException(

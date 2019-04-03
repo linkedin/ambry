@@ -15,10 +15,12 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
+import java.io.File;
 import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
@@ -44,27 +46,34 @@ public class NettyServerFactoryTest {
     Properties properties = new Properties();
     doGetNettyServerTest(properties, SSL_FACTORY);
     doGetNettyServerTest(properties, null);
+    // test with ssl
     properties.setProperty("netty.server.enable.ssl", "true");
+    doGetNettyServerTest(properties, SSL_FACTORY);
+    // test overriding ssl factory
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    trustStoreFile.deleteOnExit();
+    TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
+    properties.setProperty(NettyConfig.SSL_FACTORY_KEY, NettySslFactory.class.getName());
     doGetNettyServerTest(properties, SSL_FACTORY);
   }
 
   /**
    * Test that a {@link NettyServer} can be constructed by the factory.
    * @param properties the {@link Properties} to use.
-   * @param sslFactory the {@link SSLFactory} to use.
+   * @param defaultSslFactory the default {@link SSLFactory} to pass into the constructor.
    */
-  private void doGetNettyServerTest(Properties properties, SSLFactory sslFactory) {
+  private void doGetNettyServerTest(Properties properties, SSLFactory defaultSslFactory) throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     NettyServerFactory nettyServerFactory =
         new NettyServerFactory(verifiableProperties, new MetricRegistry(), REST_REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER,
-            REST_SERVER_STATE, sslFactory);
+            REST_SERVER_STATE, defaultSslFactory);
     NioServer nioServer = nettyServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
         nioServer.getClass().getCanonicalName());
     Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = nettyServerFactory.channelInitializers;
-    if (nettyConfig.nettyServerEnableSSL && sslFactory != null) {
+    if (nettyConfig.nettyServerEnableSSL && defaultSslFactory != null) {
       assertEquals("Expected two ChannelInitializers when SSLFactory is not null", 2, channelInitializers.size());
       assertNotNull("No ChannelInitializer for SSL port", channelInitializers.get(nettyConfig.nettyServerSSLPort));
     } else {
@@ -77,7 +86,7 @@ public class NettyServerFactoryTest {
    * Tests instantiation of {@link NettyServerFactory} with bad input.
    */
   @Test
-  public void getNettyServerFactoryWithBadInputTest() {
+  public void getNettyServerFactoryWithBadInputTest() throws Exception {
     Properties properties = new Properties();
     properties.setProperty("netty.server.enable.ssl", "true");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -107,7 +116,7 @@ public class NettyServerFactoryTest {
    */
   private void doConstructionFailureTest(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       RestRequestHandler restRequestHandler, PublicAccessLogger publicAccessLogger, RestServerState restServerState,
-      SSLFactory sslFactory) {
+      SSLFactory sslFactory) throws Exception {
     try {
       new NettyServerFactory(verifiableProperties, metricRegistry, restRequestHandler, publicAccessLogger,
           restServerState, sslFactory);

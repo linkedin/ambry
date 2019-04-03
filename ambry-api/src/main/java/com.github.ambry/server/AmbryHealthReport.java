@@ -22,17 +22,23 @@ import java.util.Map;
  */
 public interface AmbryHealthReport {
   /**
-   * Get the field name (accessor) to fetch quota stats in the health report.
+   * Get the field name (accessor) to fetch stats in the health report.
    * @return the key in the health report that holds the stats
    */
-  String getQuotaStatsFieldName();
+  String getStatsFieldName();
 
   /**
-   * Get the name of the health report. One Health Report can have many fields and {@link #getQuotaStatsFieldName()} is
+   * Get the name of the health report. One Health Report can have many fields and {@link #getStatsFieldName()} is
    * one such field. The report's structure is {@link Map<String,String>}.
    * @return the name of the health report
    */
   String getReportName();
+
+  /**
+   * Get the type of stats report specified in this health report. The stats report type is defined in {@link StatsReportType}
+   * @return the type of stats represented by this health report
+   */
+  StatsReportType getStatsReportType();
 
   /**
    * Get the most recent health report in the form of a {@link Map}.

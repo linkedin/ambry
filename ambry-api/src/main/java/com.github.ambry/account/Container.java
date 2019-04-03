@@ -63,18 +63,22 @@ public class Container {
   static final String STATUS_KEY = "status";
   static final String DESCRIPTION_KEY = "description";
   static final String IS_PRIVATE_KEY = "isPrivate";
+  static final String BACKUP_ENABLED_KEY = "backupEnabled";
   static final String ENCRYPTED_KEY = "encrypted";
   static final String PREVIOUSLY_ENCRYPTED_KEY = "previouslyEncrypted";
   static final String CACHEABLE_KEY = "cacheable";
   static final String MEDIA_SCAN_DISABLED_KEY = "mediaScanDisabled";
   static final String REPLICATION_POLICY_KEY = "replicationPolicy";
   static final String TTL_REQUIRED_KEY = "ttlRequired";
+  static final String SECURE_PATH_REQUIRED_KEY = "securePathRequired";
   static final String CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD = "contentTypeWhitelistForFilenamesOnDownload";
   static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
+  static final boolean BACKUP_ENABLED_DEFAULT_VALUE = false;
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
   static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
   static final boolean TTL_REQUIRED_DEFAULT_VALUE = true;
+  static final boolean SECURE_PATH_REQUIRED_DEFAULT_VALUE = false;
   static final boolean CACHEABLE_DEFAULT_VALUE = true;
   static final Set<String> CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE = Collections.emptySet();
 
@@ -264,7 +268,8 @@ public class Container {
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
           UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, UNKNOWN_CONTAINER_CACHEABLE_SETTING,
           UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, UNKNOWN_CONTAINER_TTL_REQUIRED_SETTING,
-          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
+          SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
+          BACKUP_ENABLED_DEFAULT_VALUE, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -278,7 +283,8 @@ public class Container {
           DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PUBLIC_CONTAINER_TTL_REQUIRED_SETTING,
-          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
+          SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
+          BACKUP_ENABLED_DEFAULT_VALUE, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -292,7 +298,8 @@ public class Container {
           DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
           DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PRIVATE_CONTAINER_TTL_REQUIRED_SETTING,
-          CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
+          SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
+          BACKUP_ENABLED_DEFAULT_VALUE, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
 
   // container field variables
   private final short id;
@@ -302,9 +309,11 @@ public class Container {
   private final boolean encrypted;
   private final boolean previouslyEncrypted;
   private final boolean cacheable;
+  private final boolean backupEnabled;
   private final boolean mediaScanDisabled;
   private final String replicationPolicy;
   private final boolean ttlRequired;
+  private final boolean securePathRequired;
   private final Set<String> contentTypeWhitelistForFilenamesOnDownload;
   private final short parentAccountId;
 
@@ -328,9 +337,11 @@ public class Container {
         encrypted = ENCRYPTED_DEFAULT_VALUE;
         previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         cacheable = !metadata.getBoolean(IS_PRIVATE_KEY);
+        backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
         mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         replicationPolicy = null;
         ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
+        securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
         contentTypeWhitelistForFilenamesOnDownload = CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
         break;
       case JSON_VERSION_2:
@@ -341,9 +352,11 @@ public class Container {
         encrypted = metadata.optBoolean(ENCRYPTED_KEY, ENCRYPTED_DEFAULT_VALUE);
         previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE);
         cacheable = metadata.optBoolean(CACHEABLE_KEY, CACHEABLE_DEFAULT_VALUE);
+        backupEnabled = metadata.optBoolean(BACKUP_ENABLED_KEY, BACKUP_ENABLED_DEFAULT_VALUE);
         mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED_KEY, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
         replicationPolicy = metadata.optString(REPLICATION_POLICY_KEY, null);
         ttlRequired = metadata.optBoolean(TTL_REQUIRED_KEY, TTL_REQUIRED_DEFAULT_VALUE);
+        securePathRequired = metadata.optBoolean(SECURE_PATH_REQUIRED_KEY, SECURE_PATH_REQUIRED_DEFAULT_VALUE);
         JSONArray contentTypeWhitelistForFilenamesOnDownloadJson =
             metadata.optJSONArray(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD);
         if (contentTypeWhitelistForFilenamesOnDownloadJson != null) {
@@ -374,13 +387,16 @@ public class Container {
    * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
    * @param replicationPolicy the replication policy to use. If {@code null}, the cluster's default will be used.
    * @param ttlRequired {@code true} if ttl is required on content created in this container.
+   * @param securePathRequired {@code true} if secure path validation is required in this container.
    * @param contentTypeWhitelistForFilenamesOnDownload the set of content types for which the filename can be sent on
    *                                                   download
+   * @param backupEnabled Whether backup is enabled for this container or not
    * @param parentAccountId The id of the parent {@link Account} of this container.
    */
   Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
-      boolean ttlRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload, short parentAccountId) {
+      boolean ttlRequired, boolean securePathRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload,
+      boolean backupEnabled, short parentAccountId) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -390,20 +406,24 @@ public class Container {
     this.parentAccountId = parentAccountId;
     switch (currentJsonVersion) {
       case JSON_VERSION_1:
+        this.backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
         this.encrypted = ENCRYPTED_DEFAULT_VALUE;
         this.previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         this.mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         this.replicationPolicy = null;
         this.ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
+        this.securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
         this.contentTypeWhitelistForFilenamesOnDownload =
             CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
         break;
       case JSON_VERSION_2:
+        this.backupEnabled = backupEnabled;
         this.encrypted = encrypted;
         this.previouslyEncrypted = previouslyEncrypted;
         this.mediaScanDisabled = mediaScanDisabled;
         this.replicationPolicy = replicationPolicy;
         this.ttlRequired = ttlRequired;
+        this.securePathRequired = securePathRequired;
         this.contentTypeWhitelistForFilenamesOnDownload =
             contentTypeWhitelistForFilenamesOnDownload == null ? Collections.emptySet()
                 : contentTypeWhitelistForFilenamesOnDownload;
@@ -467,9 +487,11 @@ public class Container {
         metadata.put(ENCRYPTED_KEY, encrypted);
         metadata.put(PREVIOUSLY_ENCRYPTED_KEY, previouslyEncrypted);
         metadata.put(CACHEABLE_KEY, cacheable);
+        metadata.put(BACKUP_ENABLED_KEY, backupEnabled);
         metadata.put(MEDIA_SCAN_DISABLED_KEY, mediaScanDisabled);
         metadata.putOpt(REPLICATION_POLICY_KEY, replicationPolicy);
         metadata.put(TTL_REQUIRED_KEY, ttlRequired);
+        metadata.put(SECURE_PATH_REQUIRED_KEY, securePathRequired);
         if (contentTypeWhitelistForFilenamesOnDownload != null
             && !contentTypeWhitelistForFilenamesOnDownload.isEmpty()) {
           JSONArray contentTypeWhitelistForFilenamesOnDownloadJson = new JSONArray();
@@ -524,6 +546,13 @@ public class Container {
   }
 
   /**
+   * @return {@code true} if blobs in the {@link Container} should be backed up, {@code false} otherwise.
+   */
+  public boolean isBackupEnabled() {
+    return backupEnabled;
+  }
+
+  /**
    * @return {@code true} if this {@link Container} was encrypted in the past, and a subset of blobs in it could still
    *         be encrypted.
    */
@@ -568,6 +597,13 @@ public class Container {
   }
 
   /**
+   * @return {@code true} if secure path validation is required for url to access blobs in this container.
+   */
+  public boolean isSecurePathRequired() {
+    return securePathRequired;
+  }
+
+  /**
    * Gets the if of the {@link Account} that owns this container.
    * @return The id of the parent {@link Account} of this container.
    */
@@ -599,8 +635,8 @@ public class Container {
         && mediaScanDisabled == container.mediaScanDisabled && parentAccountId == container.parentAccountId
         && Objects.equals(name, container.name) && status == container.status && Objects.equals(description,
         container.description) && Objects.equals(replicationPolicy, container.replicationPolicy)
-        && ttlRequired == container.ttlRequired && Objects.equals(contentTypeWhitelistForFilenamesOnDownload,
-        container.contentTypeWhitelistForFilenamesOnDownload);
+        && ttlRequired == container.ttlRequired && securePathRequired == container.securePathRequired && Objects.equals(
+        contentTypeWhitelistForFilenamesOnDownload, container.contentTypeWhitelistForFilenamesOnDownload);
   }
 
   @Override

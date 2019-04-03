@@ -13,6 +13,10 @@
  */
 package com.github.ambry.config;
 
+import java.util.Arrays;
+import java.util.List;
+
+
 /**
  * The configs for the server
  */
@@ -75,6 +79,13 @@ public class ServerConfig {
   @Default("com.github.ambry.messageformat.ValidatingTransformer")
   public final String serverMessageTransformer;
 
+  /**
+   * The comma separated list of stats reports to publish in Helix.
+   */
+  @Config("server.stats.reports.to.publish")
+  @Default("")
+  public final List<String> serverStatsReportsToPublish;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
@@ -88,5 +99,7 @@ public class ServerConfig {
         "com.github.ambry.store.StoreKeyConverterFactoryImpl");
     serverMessageTransformer = verifiableProperties.getString("server.message.transformer",
         "com.github.ambry.messageformat.ValidatingTransformer");
+    serverStatsReportsToPublish =
+        Arrays.asList(verifiableProperties.getString("server.stats.reports.to.publish", "").split(","));
   }
 }
