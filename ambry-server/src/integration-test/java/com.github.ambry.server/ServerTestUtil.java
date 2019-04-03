@@ -21,7 +21,6 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
-import com.github.ambry.cloud.StaticVcrCluster;
 import com.github.ambry.cloud.VcrServer;
 import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
@@ -35,7 +34,6 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -43,7 +41,6 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
@@ -559,10 +556,11 @@ final class ServerTestUtil {
    * @param clientSSLSocketFactory the {@link SSLSocketFactory}.
    * @param testEncryption if encryption will be tested. Not used now.
    * @param notificationSystem the {@link MockNotificationSystem} to track blobs event in {@link MockCluster}.
+   * @param vcrSSLProps
    */
   static void endToEndCloudBackupTest(MockCluster cluster, DataNodeId dataNode, SSLConfig clientSSLConfig,
-      SSLSocketFactory clientSSLSocketFactory, boolean testEncryption, MockNotificationSystem notificationSystem)
-      throws Exception {
+      SSLSocketFactory clientSSLSocketFactory, boolean testEncryption, MockNotificationSystem notificationSystem,
+      Properties vcrSSLProps) throws Exception {
     // TODO: test encryption
     int blobBackupCount = 10;
     int blobSize = 100;
@@ -605,27 +603,25 @@ final class ServerTestUtil {
     props.setProperty("clustermap.resolve.hostnames", "false");
     props.setProperty("clustermap.cluster.name", "thisIsClusterName");
     props.setProperty("clustermap.datacenter.name", dataNode.getDatacenterName());
-    props.setProperty("clustermap.ssl.enabled.datacenters",
-        clientSSLConfig == null ? "" : dataNode.getDatacenterName());
     props.setProperty("clustermap.port", "12309");
-    if (clientSSLConfig != null) {
-      props.setProperty("vcr.ssl.port", "12310");
-    }
     props.setProperty("vcr.cluster.name", "VCRCluster");
+    if (vcrSSLProps == null) {
+      props.setProperty("clustermap.ssl.enabled.datacenters", "");
+    } else {
+      props.putAll(vcrSSLProps);
+      props.setProperty("vcr.ssl.port", "12310");
+      props.setProperty("clustermap.ssl.enabled.datacenters", dataNode.getDatacenterName());
+    }
     props.setProperty("vcr.assigned.partitions", String.join(",",
         clusterMap.getAllPartitionIds(null).stream().map(p -> p.toPathString()).collect(Collectors.toList())));
     VerifiableProperties vProps = new VerifiableProperties(props);
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
-    CloudConfig cloudConfig = new CloudConfig(vProps);
-    VirtualReplicatorCluster vcrCluster = new StaticVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIds);
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
 
     VcrServer vcrServer =
-        VcrTestUtil.createVcrServer(vProps, clusterAgentsFactory, notificationSystem, cloudDestinationFactory,
-            vcrCluster, clientSSLConfig);
+        VcrTestUtil.createVcrServer(vProps, clusterAgentsFactory, notificationSystem, cloudDestinationFactory);
     vcrServer.startup();
 
     // Waiting for backup done

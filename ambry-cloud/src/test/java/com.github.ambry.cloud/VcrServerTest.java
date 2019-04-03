@@ -64,8 +64,7 @@ public class VcrServerTest {
         new LatchBasedInMemoryCloudDestinationFactory(new LatchBasedInMemoryCloudDestination(Collections.emptyList()));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     VcrServer vcrServer =
-        new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory, null,
-            null);
+        new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory);
     vcrServer.startup();
     vcrServer.shutdown();
     mockClusterMap.cleanup();
