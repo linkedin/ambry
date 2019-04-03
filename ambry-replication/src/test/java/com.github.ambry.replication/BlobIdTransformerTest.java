@@ -485,7 +485,6 @@ public class BlobIdTransformerTest {
         blobStreamSize = byteBuffer.remaining();
         if (brokenMetadataChunk) {
           blobPropertiesSize = blobStreamSize;
-//          assertNotSame(COMPOSITE_BLOB_SIZE, blobPropertiesSize);
         } else {
           blobPropertiesSize = COMPOSITE_BLOB_SIZE;
         }
