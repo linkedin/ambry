@@ -51,17 +51,17 @@ class CloudBlobStore implements Store {
   private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
-  private final CloudBlobCryptoService cryptoService;
+  private final CloudBlobCryptoAgent cryptoService;
   private boolean started;
 
   /**
    * Constructor for CloudBlobStore
    * @param partitionId partition associated with BlobStore.
    * @param cloudDestination the {@link CloudDestination}.
-   * @param cryptoService the {@link CloudBlobCryptoService} to use for encryption.
+   * @param cryptoService the {@link CloudBlobCryptoAgent} to use for encryption.
    */
   CloudBlobStore(PartitionId partitionId, VerifiableProperties verProps, CloudDestination cloudDestination,
-      CloudBlobCryptoService cryptoService) {
+      CloudBlobCryptoAgent cryptoService) {
     this.cloudDestination = cloudDestination;
     this.partitionId = partitionId;
     this.cryptoService = cryptoService;
@@ -107,15 +107,20 @@ class CloudBlobStore implements Store {
     if (performUpload) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       // TODO: would be more efficient to call blobId.isEncrypted()
-      boolean usesCloudEncryption = false;
-      if (cryptoService != null && (blobId.getVersion() < 4 || !BlobId.isEncrypted(blobId.getID()))) {
+      String kmsContext = cryptoService.getEncryptionContext();
+      CloudBlobMetadata.EncryptionType encryptionType;
+      if (cryptoService != null && (blobId.getVersion() < BlobId.BLOB_ID_V4 || !BlobId.isEncrypted(blobId.getID()))) {
         // Need to encrypt the buffer before upload
         messageBuf = cryptoService.encrypt(messageBuf);
-        usesCloudEncryption = true;
+        encryptionType = CloudBlobMetadata.EncryptionType.VCR;
+      }
+      else {
+        kmsContext = blobId.getAccountId()+":"+blobId.getContainerId();
+        encryptionType = CloudBlobMetadata.EncryptionType.ROUTER;
       }
       CloudBlobMetadata blobMetadata =
           new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
-              messageInfo.getSize(), usesCloudEncryption);
+              messageInfo.getSize(), kmsContext, encryptionType, CloudBlobMetadata.VcrEncryptionFormat.DEFAULT);
       cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
     }
   }

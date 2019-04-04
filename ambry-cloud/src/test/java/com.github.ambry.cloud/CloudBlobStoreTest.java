@@ -49,7 +49,7 @@ import static org.mockito.Mockito.*;
  */
 public class CloudBlobStoreTest {
 
-  private final CloudBlobCryptoService cryptoService = new TestCloudBlobCryptoService();
+  private final CloudBlobCryptoAgent cryptoService = new TestCloudBlobCryptoAgent();
   private Store store;
   private CloudDestination dest;
   private PartitionId partitionId;
@@ -122,7 +122,8 @@ public class CloudBlobStoreTest {
       BlobId existentBlobId = getUniqueId(refAccountId, refContainerId);
       keys.add(existentBlobId);
       metadataMap.put(existentBlobId.getID(),
-          new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024, false));
+          new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024, null,
+              CloudBlobMetadata.EncryptionType.ROUTER, CloudBlobMetadata.VcrEncryptionFormat.DEFAULT));
       // Blob without metadata
       BlobId nonexistentBlobId = getUniqueId(refAccountId, refContainerId);
       keys.add(nonexistentBlobId);

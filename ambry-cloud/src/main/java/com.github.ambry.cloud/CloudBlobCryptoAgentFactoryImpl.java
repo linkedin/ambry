@@ -11,12 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud.azure;
+package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.CloudBlobCryptoService;
-import com.github.ambry.cloud.CloudBlobCryptoServiceFactory;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.CryptoServiceFactory;
 import com.github.ambry.router.KeyManagementServiceFactory;
@@ -25,27 +24,28 @@ import java.security.GeneralSecurityException;
 
 
 /**
- * Factory for constructing {@link AzureCloudBlobCryptoService} instances.
+ * Factory for constructing {@link CloudBlobCryptoAgentImpl} instances.
  */
-public class AzureCloudBlobCryptoServiceFactory implements CloudBlobCryptoServiceFactory {
+public class CloudBlobCryptoAgentFactoryImpl implements CloudBlobCryptoAgentFactory {
 
   private CryptoServiceFactory cryptoServiceFactory;
   private KeyManagementServiceFactory keyManagementServiceFactory;
   private String context;
 
-  public AzureCloudBlobCryptoServiceFactory(VerifiableProperties verifiableProperties, String clusterName,
+  public CloudBlobCryptoAgentFactoryImpl(VerifiableProperties verifiableProperties, String clusterName,
       MetricRegistry metricRegistry) throws ReflectiveOperationException {
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
-    cryptoServiceFactory = Utils.getObj(cloudConfig.cryptoServiceFactoryClass, verifiableProperties, metricRegistry);
+    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
+    cryptoServiceFactory = Utils.getObj(routerConfig.routerCryptoServiceFactory, verifiableProperties, metricRegistry);
     keyManagementServiceFactory =
-        Utils.getObj(cloudConfig.kmsServiceFactoryClass, verifiableProperties, clusterName, metricRegistry);
+        Utils.getObj(routerConfig.routerKeyManagementServiceFactory, verifiableProperties, clusterName, metricRegistry);
     context = cloudConfig.kmsServiceKeyContext;
   }
 
   @Override
-  public CloudBlobCryptoService getCloudBlobCryptoService() {
+  public CloudBlobCryptoAgent getCloudBlobCryptoAgent(CloudBlobMetadata.VcrEncryptionFormat vcrEncryptionFormat) {
     try {
-      return new AzureCloudBlobCryptoService(cryptoServiceFactory.getCryptoService(),
+      return new CloudBlobCryptoAgentImpl(cryptoServiceFactory.getCryptoService(),
           keyManagementServiceFactory.getKeyManagementService(), context);
     } catch (GeneralSecurityException e) {
       throw new IllegalStateException(e);

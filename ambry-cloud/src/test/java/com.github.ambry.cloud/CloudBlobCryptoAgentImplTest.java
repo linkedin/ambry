@@ -11,8 +11,9 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud.azure;
+package com.github.ambry.cloud;
 
+import com.github.ambry.cloud.CloudBlobCryptoAgentImpl;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -30,19 +31,19 @@ import static org.junit.Assert.*;
 
 
 /**
- * Tests AzureCloudBlobCryptoService
+ * Tests CloudBlobCryptoAgentImpl
  */
-public class AzureCloudBlobCryptoServiceTest {
+public class CloudBlobCryptoAgentImplTest {
 
-  private AzureCloudBlobCryptoService azureCloudBlobCryptoService;
+  private CloudBlobCryptoAgentImpl azureCloudBlobCryptoService;
   private static final int TWO_FIFTY_SIX_BITS_IN_BYTES = 32;
 
-  public AzureCloudBlobCryptoServiceTest() throws GeneralSecurityException {
+  public CloudBlobCryptoAgentImplTest() throws GeneralSecurityException {
     CryptoService cryptoService =
         new GCMCryptoService(new CryptoServiceConfig(new VerifiableProperties(new Properties())));
     KeyManagementService kms = new SingleKeyManagementService(new KMSConfig(new VerifiableProperties(new Properties())),
         TestUtils.getRandomKey(TWO_FIFTY_SIX_BITS_IN_BYTES));
-    azureCloudBlobCryptoService = new AzureCloudBlobCryptoService(cryptoService, kms, "any_context");
+    azureCloudBlobCryptoService = new CloudBlobCryptoAgentImpl(cryptoService, kms, "any_context");
   }
 
   /**
@@ -68,7 +69,7 @@ public class AzureCloudBlobCryptoServiceTest {
   public void testBadDecryptInput() throws GeneralSecurityException {
     byte[] garbage = TestUtils.getRandomBytes(10000);
     //zero out version, encrypted key size, encrypted data size fields
-    for (int i = 0; i < AzureCloudBlobCryptoService.EncryptedKeyAndEncryptedData.INITIAL_MESSAGE_LENGTH; i++) {
+    for (int i = 0; i < CloudBlobCryptoAgentImpl.EncryptedKeyAndEncryptedData.INITIAL_MESSAGE_LENGTH; i++) {
       garbage[i] = 0;
     }
     //Version check should fail

@@ -13,7 +13,10 @@
  */
 package com.github.ambry.cloud;
 
-public interface CloudBlobCryptoServiceFactory {
+/**
+ * Factory for constructing {@link CloudBlobCryptoAgent} instances.
+ */
+public interface CloudBlobCryptoAgentFactory {
 
-  CloudBlobCryptoService getCloudBlobCryptoService();
+  CloudBlobCryptoAgent getCloudBlobCryptoAgent(CloudBlobMetadata.VcrEncryptionFormat vcrEncryptionFormat);
 }

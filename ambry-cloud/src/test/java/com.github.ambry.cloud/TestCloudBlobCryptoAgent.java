@@ -20,7 +20,7 @@ import java.security.GeneralSecurityException;
 /**
  * Dummy implementation for testing.
  */
-class TestCloudBlobCryptoService implements CloudBlobCryptoService {
+class TestCloudBlobCryptoAgent implements CloudBlobCryptoAgent {
   @Override
   public ByteBuffer encrypt(ByteBuffer buffer) throws GeneralSecurityException {
     return buffer;
@@ -29,5 +29,10 @@ class TestCloudBlobCryptoService implements CloudBlobCryptoService {
   @Override
   public ByteBuffer decrypt(ByteBuffer buffer) throws GeneralSecurityException {
     return buffer;
+  }
+
+  @Override
+  public String getEncryptionContext() {
+    return null;
   }
 }

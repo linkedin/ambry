@@ -21,7 +21,7 @@ import java.security.GeneralSecurityException;
  * Crypto Service to assist in encrypting and decrypting blob chunks transferred between
  * Ambry and the cloud backup.
  */
-public interface CloudBlobCryptoService {
+public interface CloudBlobCryptoAgent {
 
   /**
    * Encrypts the blob buffer being uploaded to cloud storage.
@@ -38,4 +38,10 @@ public interface CloudBlobCryptoService {
    * @throws {@link GeneralSecurityException} on any exception with decryption
    */
   ByteBuffer decrypt(ByteBuffer buffer) throws GeneralSecurityException;
+
+  /**
+   * Returns the encryption context (if any)
+   * @return
+   */
+  String getEncryptionContext();
 }

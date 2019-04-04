@@ -28,7 +28,9 @@ public class CloudBlobMetadata {
   public static final String FIELD_EXPIRATION_TIME = "expirationTime";
   public static final String FIELD_ACCOUNT_ID = "accountId";
   public static final String FIELD_CONTAINER_ID = "containerId";
-  public static final String FIELD_USES_CLOUD_ENCRYPTION = "usesCloudEncryption";
+  public static final String FIELD_ENCRYPTION_TYPE = "encryptionType";
+  public static final String FIELD_KMS_CONTEXT = "kmsContext";
+  public static final String FIELD_ENCRYPTION_FORMAT = "vcrEncryptionFormat";
 
   private String id;
   private String partitionId;
@@ -39,7 +41,19 @@ public class CloudBlobMetadata {
   private int containerId;
   private long expirationTime;
   private long deletionTime;
-  private boolean usesCloudEncryption;
+  private String kmsContext;
+  private EncryptionType encryptionType;
+  private VcrEncryptionFormat vcrEncryptionFormat;
+
+  /**
+   * Different encryption types for cloud stored blobs
+   */
+  public enum EncryptionType {ROUTER, VCR, CLOUD;}
+
+  /**
+   * Different encryption formats for VCR encryption
+   */
+  public enum VcrEncryptionFormat {DEFAULT;}
 
   /**
    * Default constructor (for JSONSerializer).
@@ -53,9 +67,11 @@ public class CloudBlobMetadata {
    * @param creationTime The blob creation time.
    * @param expirationTime The blob expiration time.
    * @param size The blob size.
+   * @param kmsContext
+   * @param encryptionType
    */
-  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
-      boolean usesCloudEncryption) {
+  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size, String kmsContext,
+      EncryptionType encryptionType, VcrEncryptionFormat vcrEncryptionFormat) {
     this.id = blobId.getID();
     this.partitionId = blobId.getPartition().toPathString();
     this.accountId = blobId.getAccountId();
@@ -65,6 +81,9 @@ public class CloudBlobMetadata {
     this.uploadTime = System.currentTimeMillis();
     this.deletionTime = Utils.Infinite_Time;
     this.size = size;
+    this.kmsContext = kmsContext;
+    this.encryptionType = encryptionType;
+    this.vcrEncryptionFormat = vcrEncryptionFormat;
   }
 
   /**
@@ -217,19 +236,53 @@ public class CloudBlobMetadata {
   }
 
   /**
-   * @return whether the blob was cloud encrypted.
+   * @return the kms context
    */
-  public boolean getUsesCloudEncryption() {
-    return usesCloudEncryption;
+  public String getKmsContext() {
+    return kmsContext;
   }
 
   /**
-   * Set the encryption context.
-   * @param usesCloudEncryption whether {@link CloudBlobCryptoService} was used on the blob.
-   * @return this instance.
+   * Sets the kms context
+   * @param kmsContext
+   * @return
    */
-  public CloudBlobMetadata setUsesCloudEncryption(boolean usesCloudEncryption) {
-    this.usesCloudEncryption = usesCloudEncryption;
+  public CloudBlobMetadata setKmsContext(String kmsContext) {
+    this.kmsContext = kmsContext;
+    return this;
+  }
+
+  /**
+   * @return the encryption type
+   */
+  public EncryptionType getEncryptionType() {
+    return encryptionType;
+  }
+
+  /**
+   * Sets the encryption type
+   * @param encryptionType
+   * @return
+   */
+  public CloudBlobMetadata setEncryptionType(EncryptionType encryptionType) {
+    this.encryptionType = encryptionType;
+    return this;
+  }
+
+  /**
+   * @return the VCR encryption format
+   */
+  public VcrEncryptionFormat getVcrEncryptionFormat() {
+    return vcrEncryptionFormat;
+  }
+
+  /**
+   * Sets the VCR encryption format
+   * @param vcrEncryptionFormat
+   * @return
+   */
+  public CloudBlobMetadata setVcrEncryptionFormat(VcrEncryptionFormat vcrEncryptionFormat) {
+    this.vcrEncryptionFormat = vcrEncryptionFormat;
     return this;
   }
 

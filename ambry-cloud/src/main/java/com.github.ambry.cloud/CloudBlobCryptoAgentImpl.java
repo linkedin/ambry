@@ -11,9 +11,9 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud.azure;
+package com.github.ambry.cloud;
 
-import com.github.ambry.cloud.CloudBlobCryptoService;
+import com.github.ambry.cloud.CloudBlobCryptoAgent;
 import com.github.ambry.router.CryptoService;
 import com.github.ambry.router.KeyManagementService;
 import com.github.ambry.utils.Crc32;
@@ -22,7 +22,7 @@ import java.security.GeneralSecurityException;
 
 
 /**
- * Implementation of CloudBlobCryptoService, encrypts byte buffers by
+ * Implementation of CloudBlobCryptoAgent, encrypts byte buffers by
  * 1. generating a random encryption key
  * 2. encrypting that random key with a key from KeyManagementService
  *    that is associated with the given context string
@@ -31,14 +31,14 @@ import java.security.GeneralSecurityException;
  *    and encrypted data (see {@link EncryptedKeyAndEncryptedData} below
  *    for serialization description
  */
-public class AzureCloudBlobCryptoService implements CloudBlobCryptoService {
+public class CloudBlobCryptoAgentImpl implements CloudBlobCryptoAgent {
 
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
   //Use this context to look up encryption key for the data encryption key
   private final String context;
 
-  public AzureCloudBlobCryptoService(CryptoService cryptoService, KeyManagementService kms, String context) {
+  public CloudBlobCryptoAgentImpl(CryptoService cryptoService, KeyManagementService kms, String context) {
     this.cryptoService = cryptoService;
     this.kms = kms;
     this.context = context;
@@ -62,6 +62,11 @@ public class AzureCloudBlobCryptoService implements CloudBlobCryptoService {
     Object blobKeyKey = kms.getKey(context);
     Object key = cryptoService.decryptKey(encryptedKeyAndEncryptedData.encryptedKey, blobKeyKey);
     return cryptoService.decrypt(encryptedKeyAndEncryptedData.encryptedData, key);
+  }
+
+  @Override
+  public String getEncryptionContext() {
+    return context;
   }
 
   /**
@@ -150,7 +155,7 @@ public class AzureCloudBlobCryptoService implements CloudBlobCryptoService {
       long expectedCrc = buffer.getLong();
       long actualCrc = crc.getValue();
       if (actualCrc != expectedCrc) {
-        throw new GeneralSecurityException("Encrypted blob is corrupt");
+        throw new GeneralSecurityException("Encrypted blob is corrupt.  ExpectedCRC: "+expectedCrc+" ActualCRC: "+actualCrc);
       }
       return new EncryptedKeyAndEncryptedData(ByteBuffer.wrap(encryptedKey), ByteBuffer.wrap(encryptedData));
     }
