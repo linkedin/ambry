@@ -44,7 +44,6 @@ public class StaticVcrClusterFactory implements VirtualReplicatorClusterFactory 
     return virtualReplicatorCluster;
   }
 
-  @Override
   public void close() throws Exception {
 
   }
