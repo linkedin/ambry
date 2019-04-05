@@ -40,6 +40,9 @@ public class RestRequestMetrics {
   static final String OPERATION_RATE_SUFFIX = "Rate";
   static final String OPERATION_ERROR_SUFFIX = "Error";
 
+  static final String UNSATISFIED_REQUEST_COUNT_SUFFIX = "UnsatisfiedRequestCount";
+  static final String SATISFIED_REQUEST_COUNT_SUFFIX = "SatisfiedRequestCount";
+
   final Histogram nioRequestProcessingTimeInMs;
   final Histogram nioResponseProcessingTimeInMs;
   final Histogram nioRoundTripTimeInMs;
@@ -53,6 +56,8 @@ public class RestRequestMetrics {
 
   final Meter operationRate;
   final Counter operationError;
+  final Counter unsatisfiedRequestCount;
+  final Counter satisfiedRequestCount;
 
   /**
    * Creates an instance of RestRequestMetrics for {@code requestType} and attaches all the metrics related to the
@@ -90,5 +95,8 @@ public class RestRequestMetrics {
 
     operationRate = metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + OPERATION_RATE_SUFFIX));
     operationError = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + OPERATION_ERROR_SUFFIX));
+
+    unsatisfiedRequestCount = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + UNSATISFIED_REQUEST_COUNT_SUFFIX));
+    satisfiedRequestCount = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + SATISFIED_REQUEST_COUNT_SUFFIX));
   }
 }

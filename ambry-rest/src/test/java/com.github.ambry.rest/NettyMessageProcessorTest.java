@@ -18,6 +18,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
@@ -79,6 +80,8 @@ public class NettyMessageProcessorTest {
   private static final AtomicLong REQUEST_ID_GENERATOR = new AtomicLong(0);
   private static final NettyMetrics NETTY_METRICS = new NettyMetrics(new MetricRegistry());
   private static final NettyConfig NETTY_CONFIG = new NettyConfig(new VerifiableProperties(new Properties()));
+  private static final PerformanceConfig PERFORMANCE_CONFIG =
+      new PerformanceConfig(new VerifiableProperties(new Properties()));
 
   /**
    * Sets up the mock services that {@link NettyMessageProcessor} can use.
@@ -279,7 +282,8 @@ public class NettyMessageProcessorTest {
    * @return an {@link EmbeddedChannel} that incorporates an instance of {@link NettyMessageProcessor}.
    */
   private EmbeddedChannel createChannel() {
-    NettyMessageProcessor processor = new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, requestHandler);
+    NettyMessageProcessor processor =
+        new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, PERFORMANCE_CONFIG, requestHandler);
     return new EmbeddedChannel(new ChunkedWriteHandler(), processor);
   }
 

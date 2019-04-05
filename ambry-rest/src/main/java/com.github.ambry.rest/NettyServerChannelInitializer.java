@@ -15,6 +15,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.NettyConfig;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -32,6 +33,7 @@ import java.net.InetSocketAddress;
  */
 public class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
   private final NettyConfig nettyConfig;
+  private final PerformanceConfig performanceConfig;
   private final NettyMetrics nettyMetrics;
   private final ConnectionStatsHandler connectionStatsHandler;
   private final RestRequestHandler requestHandler;
@@ -42,6 +44,7 @@ public class NettyServerChannelInitializer extends ChannelInitializer<SocketChan
   /**
    * Construct a {@link NettyServerChannelInitializer}.
    * @param nettyConfig the config to use when instantiating certain handlers on this pipeline.
+   * @param performanceConfig the config to use when evaluating ambry service level objectives that include latency.
    * @param nettyMetrics the {@link NettyMetrics} object to use.
    * @param connectionStatsHandler the {@link ConnectionStatsHandler} to use.
    * @param requestHandler the {@link RestRequestHandler} to handle requests on this pipeline.
@@ -50,10 +53,11 @@ public class NettyServerChannelInitializer extends ChannelInitializer<SocketChan
    * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
    */
-  public NettyServerChannelInitializer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
+  public NettyServerChannelInitializer(NettyConfig nettyConfig, PerformanceConfig performanceConfig, NettyMetrics nettyMetrics,
       ConnectionStatsHandler connectionStatsHandler, RestRequestHandler requestHandler,
       PublicAccessLogger publicAccessLogger, RestServerState restServerState, SSLFactory sslFactory) {
     this.nettyConfig = nettyConfig;
+    this.performanceConfig = performanceConfig;
     this.nettyMetrics = nettyMetrics;
     this.connectionStatsHandler = connectionStatsHandler;
     this.requestHandler = requestHandler;
@@ -92,6 +96,6 @@ public class NettyServerChannelInitializer extends ChannelInitializer<SocketChan
         // for safe writing of chunks for responses
         .addLast("chunker", new ChunkedWriteHandler())
         // custom processing class that interfaces with a BlobStorageService.
-        .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
+        .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, performanceConfig, requestHandler));
   }
 }

@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
@@ -38,6 +39,7 @@ public class NettyServerFactory implements NioServerFactory {
   private static final Logger LOGGER = LoggerFactory.getLogger(NettyServerFactory.class);
 
   private final NettyConfig nettyConfig;
+  private final PerformanceConfig performanceConfig;
   private final NettyMetrics nettyMetrics;
   final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
 
@@ -63,15 +65,14 @@ public class NettyServerFactory implements NioServerFactory {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of NettyServerFactory");
     }
     nettyConfig = new NettyConfig(verifiableProperties);
-    if (nettyConfig.nettyServerEnableSSL) {
-    }
+    performanceConfig = new PerformanceConfig(verifiableProperties);
     nettyMetrics = new NettyMetrics(metricRegistry);
     ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
 
     Map<Integer, ChannelInitializer<SocketChannel>> initializers = new HashMap<>();
     initializers.put(nettyConfig.nettyServerPort,
-        new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
-            publicAccessLogger, restServerState, null));
+        new NettyServerChannelInitializer(nettyConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
+            requestHandler, publicAccessLogger, restServerState, null));
     if (nettyConfig.nettyServerEnableSSL) {
       SSLFactory sslFactoryToUse;
       if (nettyConfig.nettyServerSslFactory.isEmpty()) {
@@ -84,8 +85,8 @@ public class NettyServerFactory implements NioServerFactory {
         throw new IllegalArgumentException("NettyServer requires SSL, but sslFactory is null");
       }
       initializers.put(nettyConfig.nettyServerSSLPort,
-          new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
-              publicAccessLogger, restServerState, sslFactoryToUse));
+          new NettyServerChannelInitializer(nettyConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
+              requestHandler, publicAccessLogger, restServerState, sslFactoryToUse));
     }
     channelInitializers = Collections.unmodifiableMap(initializers);
   }

@@ -13,6 +13,9 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.commons.PerformanceIndex;
+import com.github.ambry.commons.Threshold;
+import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Utils;
@@ -46,9 +49,14 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -78,6 +86,7 @@ class NettyResponseChannel implements RestResponseChannel {
   private final NettyMetrics nettyMetrics;
   private final ChannelProgressivePromise writeFuture;
   private final ChunkedWriteHandler chunkedWriteHandler;
+  private final PerformanceConfig perfConfig;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final HttpResponse responseMetadata = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
@@ -91,6 +100,11 @@ class NettyResponseChannel implements RestResponseChannel {
   private final Queue<Chunk> chunksToWrite = new ConcurrentLinkedQueue<Chunk>();
   private final Queue<Chunk> chunksAwaitingCallback = new ConcurrentLinkedQueue<Chunk>();
   private final AtomicLong chunksToWriteCount = new AtomicLong(0);
+  // update endpoints in following two response sets when ResponseStatus is updated.
+  private final Set<ResponseStatus> successResponseSet =
+      EnumSet.range(ResponseStatus.Ok, ResponseStatus.PartialContent);
+  private final Set<ResponseStatus> nonSuccessResponseSet =
+      EnumSet.range(ResponseStatus.NotModified, ResponseStatus.TooManyRequests);
 
   private NettyRequest request = null;
   // marked as true if force close is required because close() was called.
@@ -107,10 +121,12 @@ class NettyResponseChannel implements RestResponseChannel {
    * Create an instance of NettyResponseChannel that will use {@code ctx} to return responses.
    * @param ctx the {@link ChannelHandlerContext} to use.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
+   * @param performanceConfig the configuration object to use for performance evaluation.
    */
-  NettyResponseChannel(ChannelHandlerContext ctx, NettyMetrics nettyMetrics) {
+  NettyResponseChannel(ChannelHandlerContext ctx, NettyMetrics nettyMetrics, PerformanceConfig performanceConfig) {
     this.ctx = ctx;
     this.nettyMetrics = nettyMetrics;
+    this.perfConfig = performanceConfig;
     chunkedWriteHandler = ctx.pipeline().get(ChunkedWriteHandler.class);
     writeFuture = ctx.newProgressivePromise();
     logger.trace("Instantiated NettyResponseChannel");
@@ -305,7 +321,56 @@ class NettyResponseChannel implements RestResponseChannel {
   private void closeRequest() {
     if (request != null && request.isOpen()) {
       request.close();
+      evaluatePerformanceAndUpdateMetrics();
     }
+  }
+
+  private void evaluatePerformanceAndUpdateMetrics() {
+    RestRequestMetricsTracker restRequestMetricsTracker = request.getMetricsTracker();
+    long roundTripTimeInMs = restRequestMetricsTracker.getRoundTripTimeInMs();
+    long timeToFirstBytesInMs = restRequestMetricsTracker.getTimeToFirstByteInMs();
+    long totalOutboundBytes = totalBytesReceived.get();
+    long totalInboundBytes = request.getBytesReceived();
+    RestMethod method = request.getRestMethod();
+    Map<PerformanceIndex, Long> requestPerfToCheck = new HashMap<>();
+    responseStatus = errorResponseStatus == null ? responseStatus : errorResponseStatus;
+    boolean shouldSkipCheck = false;
+    switch (method) {
+      case GET:
+        if (successResponseSet.contains(responseStatus)) {
+          requestPerfToCheck.put(PerformanceIndex.TimeToFirstByte, timeToFirstBytesInMs);
+          requestPerfToCheck.put(PerformanceIndex.AverageBandwidth, totalOutboundBytes * 1000L / roundTripTimeInMs);
+        } else if (nonSuccessResponseSet.contains(responseStatus)) {
+          requestPerfToCheck.put(PerformanceIndex.RoundTripTime, roundTripTimeInMs);
+        }
+        break;
+      case POST:
+        if (successResponseSet.contains(responseStatus)) {
+          requestPerfToCheck.put(PerformanceIndex.AverageBandwidth, totalInboundBytes * 1000L / roundTripTimeInMs);
+        } else if (nonSuccessResponseSet.contains(responseStatus)) {
+          requestPerfToCheck.put(PerformanceIndex.RoundTripTime, roundTripTimeInMs);
+        }
+        break;
+      case PUT:
+      case HEAD:
+      case DELETE:
+        if (successResponseSet.contains(responseStatus) || nonSuccessResponseSet.contains(responseStatus)) {
+          requestPerfToCheck.put(PerformanceIndex.RoundTripTime, roundTripTimeInMs);
+        }
+        break;
+      default:
+        shouldSkipCheck = true;
+        logger.warn("Temporarily no evaluation criteria for " + method + " request. Mark as satisfied directly");
+    }
+    EnumMap<RestMethod, Threshold> thresholdsByMethod =
+        successResponseSet.contains(responseStatus) ? perfConfig.successRequestThresholds
+            : perfConfig.nonSuccessRequestThresholds;
+    if (!shouldSkipCheck && (requestPerfToCheck.isEmpty() || !thresholdsByMethod.get(method)
+        .checkThresholds(requestPerfToCheck))) {
+      // this means either response is 5xx or request missed one of thresholds, the request should be unsatisfied
+      restRequestMetricsTracker.markUnsatisfied();
+    }
+    restRequestMetricsTracker.recordMetrics();
   }
 
   /**
