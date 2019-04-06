@@ -35,6 +35,7 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -52,8 +53,8 @@ public class CloudBackupManager extends ReplicationEngine {
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
 
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
-        virtualReplicatorCluster.getCurrentDataNodeId(), connectionPool, metricRegistry, requestNotification,
-        storeKeyConverterFactory, transformerClassName);
+        virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool, metricRegistry,
+        requestNotification, storeKeyConverterFactory, transformerClassName);
     CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
     List<? extends PartitionId> partitionIds = virtualReplicatorCluster.getAssignedPartitionIds();
     for (PartitionId partitionId : partitionIds) {

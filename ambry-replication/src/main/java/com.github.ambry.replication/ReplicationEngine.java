@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -89,8 +90,9 @@ public abstract class ReplicationEngine {
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, ScheduledExecutorService scheduler, DataNodeId dataNode,
-      ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification,
-      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
+      List<? extends ReplicaId> replicaIds, ConnectionPool connectionPool, MetricRegistry metricRegistry,
+      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
+      String transformerClassName) throws ReplicationException {
     this.replicationConfig = replicationConfig;
     this.storeKeyFactory = storeKeyFactory;
     try {
@@ -100,7 +102,7 @@ public abstract class ReplicationEngine {
       throw new ReplicationException("Error on getting replicationTokenFactory");
     }
     this.replicaThreadPools = new HashMap<>();
-    this.replicationMetrics = new ReplicationMetrics(metricRegistry, clusterMap.getReplicaIds(dataNode));
+    this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaIds);
     this.partitionGroupedByMountPath = new HashMap<>();
     this.partitionsToReplicate = new HashMap<>();
     this.clusterMap = clusterMap;
@@ -251,7 +253,9 @@ public abstract class ReplicationEngine {
       }
 
       // persist replica tokens
-      persistor.write(true);
+      if (persistor != null) {
+        persistor.write(true);
+      }
     } catch (Exception e) {
       logger.error("Error shutting down replica manager {}", e);
       throw new ReplicationException("Error shutting down replica manager");
@@ -452,7 +456,11 @@ public abstract class ReplicationEngine {
       // We must ensure that the the token file is persisted if any of the tokens in the file got reset. We need to do
       // this before an associated store takes any writes, to avoid the case where a store takes writes and persists it,
       // before the replica token file is persisted after the reset.
-      persistor.write(mountPath, false);
+      if (persistor != null) {
+        persistor.write(mountPath, false);
+      } else {
+        logger.warn("Unable to persist after token reset, persistor is null");
+      }
     }
   }
 
