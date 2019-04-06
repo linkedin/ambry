@@ -15,6 +15,7 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.IOException;
@@ -47,7 +48,7 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   }
 
   @Override
-  public long writeTo(Write writeChannel) throws IOException {
+  public long writeTo(Write writeChannel) throws StoreException {
     ReadableByteChannel readableByteChannel = Channels.newChannel(streamToWrite);
     long sizeWritten = 0;
     for (MessageInfo info : streamInfo) {

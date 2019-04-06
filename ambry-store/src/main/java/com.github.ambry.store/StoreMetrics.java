@@ -73,6 +73,7 @@ public class StoreMetrics {
   public final Counter ttlUpdateAuthorizationFailureCount;
   public final Counter keyInFindEntriesAbsent;
   public final Counter duplicateKeysInBatch;
+  public final Counter storeIoErrorTriggeredShutdownCount;
 
   // Compaction related metrics
   public final Counter compactionFixStateCount;
@@ -164,6 +165,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStore.class, name + "TtlUpdateAuthorizationFailureCount"));
     keyInFindEntriesAbsent = registry.counter(MetricRegistry.name(BlobStore.class, name + "KeyInFindEntriesAbsent"));
     duplicateKeysInBatch = registry.counter(MetricRegistry.name(BlobStore.class, name + "DuplicateKeysInBatch"));
+    storeIoErrorTriggeredShutdownCount =
+        registry.counter(MetricRegistry.name(BlobStore.class, name + "StoreIoErrorTriggeredShutdownCount"));
     compactionFixStateCount = registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "FixStateCount"));
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));
     compactionBytesReclaimedCount =

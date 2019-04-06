@@ -562,9 +562,10 @@ public class AmbryRequestsTest {
    * @throws InterruptedException
    * @throws IOException
    * @throws MessageFormatException
+   * @throws StoreException
    */
   @Test
-  public void ttlUpdateTest() throws InterruptedException, IOException, MessageFormatException {
+  public void ttlUpdateTest() throws InterruptedException, IOException, MessageFormatException, StoreException {
     MockPartitionId id =
         (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
@@ -724,9 +725,9 @@ public class AmbryRequestsTest {
    * @param size the size of data to read. If this size is greater than the amount of data in {@code messageWriteSet},
    *             then this function will loop infinitely
    * @return a {@link ByteBuffer} containing data of size {@code size} from {@code messageWriteSet}
-   * @throws IOException
+   * @throws StoreException
    */
-  private ByteBuffer getDataInWriteSet(MessageWriteSet messageWriteSet, int size) throws IOException {
+  private ByteBuffer getDataInWriteSet(MessageWriteSet messageWriteSet, int size) throws StoreException {
     MockWrite write = new MockWrite(size);
     long sizeWritten = 0;
     while (sizeWritten < size) {
@@ -1051,7 +1052,8 @@ public class AmbryRequestsTest {
    * @throws MessageFormatException
    */
   private void doTtlUpdate(int correlationId, String clientId, BlobId blobId, long expiresAtMs, long opTimeMs,
-      ServerErrorCode expectedErrorCode) throws InterruptedException, IOException, MessageFormatException {
+      ServerErrorCode expectedErrorCode)
+      throws InterruptedException, IOException, MessageFormatException, StoreException {
     TtlUpdateRequest request = new TtlUpdateRequest(correlationId, clientId, blobId, expiresAtMs, opTimeMs);
     sendAndVerifyOperationRequest(request, expectedErrorCode, true);
     if (expectedErrorCode == ServerErrorCode.No_Error) {
@@ -1103,9 +1105,10 @@ public class AmbryRequestsTest {
    * @param messageWriteSet the {@link MessageWriteSet} received at the {@link Store}
    * @throws IOException
    * @throws MessageFormatException
+   * @throws StoreException
    */
   private void verifyTtlUpdate(BlobId blobId, long expiresAtMs, long opTimeMs, MessageWriteSet messageWriteSet)
-      throws IOException, MessageFormatException {
+      throws IOException, MessageFormatException, StoreException {
     BlobId key = (BlobId) conversionMap.getOrDefault(blobId, blobId);
     assertEquals("There should be one message in the write set", 1, messageWriteSet.getMessageSetInfo().size());
     MessageInfo info = messageWriteSet.getMessageSetInfo().get(0);
@@ -1277,9 +1280,8 @@ public class AmbryRequestsTest {
 
           @Override
           public void doPrefetch(int index, long relativeOffset, long size) {
-            return;
           }
-        }, Collections.EMPTY_LIST);
+        }, Collections.emptyList());
       }
 
       @Override

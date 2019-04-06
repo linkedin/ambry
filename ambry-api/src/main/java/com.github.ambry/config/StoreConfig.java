@@ -258,6 +258,13 @@ public class StoreConfig {
   public final IndexMemState storeIndexMemState;
   public static final String storeIndexMemStateName = "store.index.mem.state";
 
+  /**
+   * Specifies the threshold I/O error count of store to trigger shutdown operation on the store.
+   */
+  @Config("store.io.error.count.to.trigger.shutdown")
+  @Default("Integer.MAX_VALUE")
+  public final int storeIoErrorCountToTriggerShutdown;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -312,6 +319,9 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeTtlUpdateBufferTimeSecondsName, 60 * 60 * 24, 0, Integer.MAX_VALUE);
     storeIndexMemState =
         IndexMemState.valueOf(verifiableProperties.getString(storeIndexMemStateName, IndexMemState.NOT_IN_MEM.name()));
+    storeIoErrorCountToTriggerShutdown =
+        verifiableProperties.getIntInRange("store.io.error.count.to.trigger.shutdown", Integer.MAX_VALUE, 1,
+            Integer.MAX_VALUE);
   }
 }
 

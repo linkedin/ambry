@@ -32,8 +32,12 @@ import java.util.List;
 import java.util.Set;
 import org.junit.After;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -44,7 +48,7 @@ public class LogTest {
   private static final long LOG_CAPACITY = 12 * SEGMENT_CAPACITY;
   private static final Appender BUFFER_APPENDER = new Appender() {
     @Override
-    public void append(Log log, ByteBuffer buffer) throws IOException {
+    public void append(Log log, ByteBuffer buffer) throws StoreException {
       int writeSize = buffer.remaining();
       int written = log.appendFrom(buffer);
       assertEquals("Size written did not match size of buffer provided", writeSize, written);
@@ -52,7 +56,7 @@ public class LogTest {
   };
   private static final Appender CHANNEL_APPENDER = new Appender() {
     @Override
-    public void append(Log log, ByteBuffer buffer) throws IOException {
+    public void append(Log log, ByteBuffer buffer) throws StoreException {
       int writeSize = buffer.remaining();
       log.appendFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), writeSize);
       assertFalse("The buffer was not completely written", buffer.hasRemaining());
@@ -95,7 +99,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void comprehensiveTest() throws IOException {
+  public void comprehensiveTest() throws IOException, StoreException {
     Appender[] appenders = {BUFFER_APPENDER, CHANNEL_APPENDER};
     for (Appender appender : appenders) {
       // for single segment log
@@ -107,11 +111,11 @@ public class LogTest {
   }
 
   /**
-   * Tests cases where bad arguments are provided to the {@link Log} constructor.
+   * Tests cases where construction of {@link Log} failed either because of bad arguments or because of store exception.
    * @throws IOException
    */
   @Test
-  public void constructionBadArgsTest() throws IOException {
+  public void constructionFailureTest() throws IOException, StoreException {
     List<Pair<Long, Long>> logAndSegmentSizes = new ArrayList<>();
     // <=0 values for capacities
     logAndSegmentSizes.add(new Pair<>(-1L, SEGMENT_CAPACITY));
@@ -136,17 +140,30 @@ public class LogTest {
     try {
       new Log(file.getAbsolutePath(), 1, 1, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, metrics);
       fail("Construction should have failed");
-    } catch (IOException e) {
+    } catch (StoreException e) {
       // expected. Nothing to do.
+    }
+
+    // Store exception occurred during construction
+    DiskSpaceAllocator mockDiskAllocator = Mockito.mock(DiskSpaceAllocator.class);
+    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockDiskAllocator).allocate(any(File.class), anyLong());
+    List<LogSegment> segmentsToLoad = Collections.emptyList();
+    try {
+      new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, mockDiskAllocator, metrics, true,
+          segmentsToLoad, Collections.EMPTY_LIST.iterator());
+      fail("Should have failed to when constructing log");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
     }
   }
 
   /**
    * Tests cases where bad arguments are provided to the append operations.
    * @throws IOException
+   * @throws StoreException
    */
   @Test
-  public void appendErrorCasesTest() throws IOException {
+  public void appendErrorCasesTest() throws IOException, StoreException {
     Log log =
         new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
             metrics);
@@ -178,7 +195,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void setActiveSegmentBadArgsTest() throws IOException {
+  public void setActiveSegmentBadArgsTest() throws IOException, StoreException {
     Log log =
         new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
             metrics);
@@ -199,7 +216,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void getNextSegmentBadArgsTest() throws IOException {
+  public void getNextSegmentBadArgsTest() throws IOException, StoreException {
     Log log =
         new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
             metrics);
@@ -220,7 +237,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void getPrevSegmentBadArgsTest() throws IOException {
+  public void getPrevSegmentBadArgsTest() throws IOException, StoreException {
     Log log =
         new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
             metrics);
@@ -241,7 +258,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void getFileSpanForMessageBadArgsTest() throws IOException {
+  public void getFileSpanForMessageBadArgsTest() throws IOException, StoreException {
     Log log =
         new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
             metrics);
@@ -276,7 +293,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void addAndDropSegmentTest() throws IOException {
+  public void addAndDropSegmentTest() throws IOException, StoreException {
     // start with a segment that has a high position to allow for addition of segments
     long activeSegmentPos = 2 * LOG_CAPACITY / SEGMENT_CAPACITY;
     LogSegment loadedSegment = getLogSegment(LogSegmentNameHelper.getName(activeSegmentPos, 0), SEGMENT_CAPACITY, true);
@@ -348,6 +365,21 @@ public class LogTest {
     // should be able to write now
     buffer = ByteBuffer.allocate(1);
     CHANNEL_APPENDER.append(log, buffer);
+
+    // verify that dropSegment method can catch IOException and correctly convert it to StoreException.
+    DiskSpaceAllocator mockDiskAllocator = Mockito.mock(DiskSpaceAllocator.class);
+    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockDiskAllocator).free(any(File.class), anyLong());
+    segmentsToLoad = Collections.singletonList(
+        getLogSegment(LogSegmentNameHelper.getName(activeSegmentPos, 0), SEGMENT_CAPACITY, true));
+    Log mockLog = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, mockDiskAllocator, metrics, true,
+        segmentsToLoad, Collections.EMPTY_LIST.iterator());
+    mockLog.addSegment(getLogSegment(LogSegmentNameHelper.getName(1, 0), SEGMENT_CAPACITY, true), true);
+    try {
+      mockLog.dropSegment(mockLog.getFirstSegment().getName(), true);
+      fail("Should have failed to drop segment");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
   }
 
   /**
@@ -357,7 +389,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void logSegmentCustomNamesTest() throws IOException {
+  public void logSegmentCustomNamesTest() throws IOException, StoreException {
     int numSegments = (int) (LOG_CAPACITY / SEGMENT_CAPACITY);
     LogSegment segment = getLogSegment(LogSegmentNameHelper.getName(0, 0), SEGMENT_CAPACITY, true);
     long startPos = 2 * numSegments;
@@ -421,7 +453,8 @@ public class LogTest {
    * @return a {@link LogSegment} instance with name {@code name} and capacity {@code capacityInBytes}.
    * @throws IOException
    */
-  private LogSegment getLogSegment(String name, long capacityInBytes, boolean writeHeader) throws IOException {
+  private LogSegment getLogSegment(String name, long capacityInBytes, boolean writeHeader)
+      throws IOException, StoreException {
     File file = create(LogSegmentNameHelper.nameToFilename(name));
     return new LogSegment(name, file, capacityInBytes, metrics, writeHeader);
   }
@@ -436,7 +469,7 @@ public class LogTest {
    * @throws IOException
    */
   private void setupAndDoComprehensiveTest(long logCapacity, long segmentCapacity, Appender appender)
-      throws IOException {
+      throws IOException, StoreException {
     long numSegments = (logCapacity - 1) / segmentCapacity + 1;
     long maxWriteSize = Math.min(logCapacity, segmentCapacity);
     if (numSegments > 1) {
@@ -477,7 +510,7 @@ public class LogTest {
    * @throws IOException
    */
   private List<String> createSegmentFiles(int numToCreate, long numFinalSegments, long segmentCapacity)
-      throws IOException {
+      throws IOException, StoreException {
     if (numToCreate > numFinalSegments) {
       throw new IllegalArgumentException("num segments to create cannot be more than num final segments");
     }
@@ -538,7 +571,8 @@ public class LogTest {
    * @throws IOException
    */
   private void doComprehensiveTest(long logCapacity, long segmentCapacity, long writeSize,
-      List<String> expectedSegmentNames, int segmentIdxToMarkActive, Appender appender) throws IOException {
+      List<String> expectedSegmentNames, int segmentIdxToMarkActive, Appender appender)
+      throws IOException, StoreException {
     long numSegments = (logCapacity - 1) / segmentCapacity + 1;
     Log log =
         new Log(tempDir.getAbsolutePath(), logCapacity, segmentCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
@@ -572,9 +606,8 @@ public class LogTest {
    * @param log the {@link Log} instance to check.
    * @param expectedSegmentCapacity the expected capacity of each segment.
    * @param expectedSegmentNames the expected names of all segments that should have been created in the {@code log}.
-   * @throws IOException
    */
-  private void checkLog(Log log, long expectedSegmentCapacity, List<String> expectedSegmentNames) throws IOException {
+  private void checkLog(Log log, long expectedSegmentCapacity, List<String> expectedSegmentNames) {
     LogSegment nextSegment = log.getFirstSegment();
     assertNull("Prev segment should be null", log.getPrevSegment(nextSegment));
     for (String segmentName : expectedSegmentNames) {
@@ -617,10 +650,10 @@ public class LogTest {
    * @param activeSegmentIdx the index of the name of the active segment in {@code segmentNames}. Also its absolute
    *                         index in the {@link Log}.
    * @param appender the {@link Appender} to use.
-   * @throws IOException
+   * @throws StoreException
    */
   private void writeAndCheckLog(Log log, long logCapacity, long segmentCapacity, long segmentsLeft, long writeSize,
-      List<String> segmentNames, int activeSegmentIdx, Appender appender) throws IOException {
+      List<String> segmentNames, int activeSegmentIdx, Appender appender) throws StoreException {
     byte[] buf = TestUtils.getRandomBytes((int) writeSize);
     long expectedUsedCapacity = logCapacity - segmentCapacity * segmentsLeft;
     int nextSegmentIdx = activeSegmentIdx + 1;
@@ -703,7 +736,7 @@ public class LogTest {
    * @throws IOException
    */
   private void checkLogReload(long originalLogCapacity, long originalSegmentCapacity, List<String> allSegmentNames)
-      throws IOException {
+      throws IOException, StoreException {
     // modify the segment capacity (mimics modifying the config)
     long[] newConfigs = {originalSegmentCapacity - 1, originalSegmentCapacity + 1};
     for (long newConfig : newConfigs) {
@@ -743,8 +776,8 @@ public class LogTest {
      * Appends the data of {@code buffer} to {@code log}.
      * @param log the {@link Log} to append {@code buffer} to.
      * @param buffer the data to append to {@code log}.
-     * @throws IOException
+     * @throws StoreException
      */
-    void append(Log log, ByteBuffer buffer) throws IOException;
+    void append(Log log, ByteBuffer buffer) throws StoreException;
   }
 }

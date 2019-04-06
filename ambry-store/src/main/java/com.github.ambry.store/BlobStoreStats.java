@@ -20,7 +20,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -503,14 +502,14 @@ class BlobStoreStats implements StoreStats, Closeable {
           false);
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID,
           indexEntries.size());
-    } catch (IOException e) {
+      addPutEntriesForDelete(indexSegment.getStartOffset().getOffset(), indexEntries);
+      indexEntries.sort(KEY_OFFSET_COMPARATOR);
+      updateExpiryTimeForAllPuts(indexEntries);
+    } catch (StoreException e) {
       throw new StoreException(
-          String.format("I/O exception while getting entries from index segment for store %s", storeId), e,
-          StoreErrorCodes.IOError);
+          String.format("Exception while getting entries from index segment for store %s : %s", storeId,
+              e.getMessage()), e, e.getErrorCode());
     }
-    addPutEntriesForDelete(indexSegment.getStartOffset().getOffset(), indexEntries);
-    indexEntries.sort(KEY_OFFSET_COMPARATOR);
-    updateExpiryTimeForAllPuts(indexEntries);
     return indexEntries;
   }
 

@@ -93,12 +93,12 @@ public class ServerPlaintextTest {
   }
 
   /**
-   * Do endToEndTest with backup manager.
+   * Do end to end cloud backup test.
    */
   @Test
-  public void endToEndBackupManagerTest() throws Exception {
+  public void endToEndCloudBackupTest() throws Exception {
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndBackupManagerTest(plaintextCluster, dataNode, null, null, testEncryption,
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, testEncryption,
         notificationSystem);
   }
 

@@ -76,7 +76,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void basicWriteAndReadTest() throws IOException {
+  public void basicWriteAndReadTest() throws IOException, StoreException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     segment.initBufferForAppend();
@@ -105,7 +105,7 @@ public class LogSegmentTest {
         segment.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.allocate(writeSize))),
             writeSize + 1);
         fail("Should throw exception.");
-      } catch (IOException e) {
+      } catch (StoreException e) {
       }
 
       // use writeFrom
@@ -139,7 +139,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void viewAndRefCountTest() throws IOException {
+  public void viewAndRefCountTest() throws IOException, StoreException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
@@ -166,7 +166,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void endOffsetTest() throws IOException {
+  public void endOffsetTest() throws IOException, StoreException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
@@ -204,11 +204,11 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void appendTest() throws IOException {
+  public void appendTest() throws IOException, StoreException {
     // buffer append
     doAppendTest(new Appender() {
       @Override
-      public void append(LogSegment segment, ByteBuffer buffer) throws IOException {
+      public void append(LogSegment segment, ByteBuffer buffer) throws StoreException {
         int writeSize = buffer.remaining();
         int written = segment.appendFrom(buffer);
         assertEquals("Size written did not match size of buffer provided", writeSize, written);
@@ -218,7 +218,7 @@ public class LogSegmentTest {
     // channel append
     doAppendTest(new Appender() {
       @Override
-      public void append(LogSegment segment, ByteBuffer buffer) throws IOException {
+      public void append(LogSegment segment, ByteBuffer buffer) throws StoreException {
         int writeSize = buffer.remaining();
         segment.appendFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), writeSize);
         assertFalse("The buffer was not completely written", buffer.hasRemaining());
@@ -229,7 +229,7 @@ public class LogSegmentTest {
     if (Utils.isLinux()) {
       doAppendTest(new Appender() {
         @Override
-        public void append(LogSegment segment, ByteBuffer buffer) throws IOException {
+        public void append(LogSegment segment, ByteBuffer buffer) throws StoreException {
           int writeSize = buffer.remaining();
           segment.appendFromDirectly(buffer.array(), 0, writeSize);
         }
@@ -243,7 +243,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void readTest() throws IOException {
+  public void readTest() throws IOException, StoreException {
     Random random = new Random();
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
@@ -346,7 +346,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void writeFromTest() throws IOException {
+  public void writeFromTest() throws IOException, StoreException {
     String currSegmentName = "log_current";
     LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE, true);
     try {
@@ -427,7 +427,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void constructorTest() throws IOException {
+  public void constructorTest() throws IOException, StoreException {
     LogSegment segment = getSegment("log_current", STANDARD_SEGMENT_SIZE, false);
     assertEquals("Start offset should be 0 when no headers are written", 0, segment.getStartOffset());
   }
@@ -437,7 +437,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void badConstructionTest() throws IOException {
+  public void badConstructionTest() throws IOException, StoreException {
     // try to construct with a file that does not exist.
     String name = "log_non_existent";
     File file = new File(tempDir, name);
@@ -530,7 +530,8 @@ public class LogSegmentTest {
    * {@code capacityInBytes}.
    * @throws IOException
    */
-  private LogSegment getSegment(String segmentName, long capacityInBytes, boolean writeHeaders) throws IOException {
+  private LogSegment getSegment(String segmentName, long capacityInBytes, boolean writeHeaders)
+      throws IOException, StoreException {
     File file = new File(tempDir, segmentName);
     if (file.exists()) {
       assertTrue(file.getAbsolutePath() + " already exists and could not be deleted", file.delete());
@@ -547,9 +548,9 @@ public class LogSegmentTest {
    * @param segment the {@link LogSegment} to append data to.
    * @param size the size of the data that should be appended.
    * @return the data that was appended.
-   * @throws IOException
+   * @throws StoreException
    */
-  private byte[] appendRandomData(LogSegment segment, int size) throws IOException {
+  private byte[] appendRandomData(LogSegment segment, int size) throws StoreException {
     byte[] buf = TestUtils.getRandomBytes(size);
     segment.appendFrom(ByteBuffer.wrap(buf));
     return buf;
@@ -631,7 +632,7 @@ public class LogSegmentTest {
    * @param appender the {@link Appender} to use
    * @throws IOException
    */
-  private void doAppendTest(Appender appender) throws IOException {
+  private void doAppendTest(Appender appender) throws IOException, StoreException {
     String currSegmentName = "log_current";
     LogSegment segment = getSegment(currSegmentName, BIG_SEGMENT_SIZE, true);
     segment.initBufferForAppend();
@@ -678,7 +679,7 @@ public class LogSegmentTest {
       try {
         appender.append(segment, buffer);
         fail("Append should have failed because segments are closed");
-      } catch (ClosedChannelException e) {
+      } catch (StoreException e) {
         assertEquals("Position of buffer has changed", 0, buffer.position());
       }
     } finally {
@@ -694,9 +695,9 @@ public class LogSegmentTest {
      * Appends the data of {@code buffer} to {@code segment}.
      * @param segment the {@link LogSegment} to append {@code buffer} to.
      * @param buffer the data to append to {@code segment}.
-     * @throws IOException
+     * @throws StoreException
      */
-    void append(LogSegment segment, ByteBuffer buffer) throws IOException;
+    void append(LogSegment segment, ByteBuffer buffer) throws StoreException;
   }
 }
 

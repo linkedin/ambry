@@ -44,9 +44,11 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -148,6 +150,28 @@ public class BlobStoreStatsTest {
     advanceTimeToNextSecond();
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     blobStoreStats.close();
+  }
+
+  /**
+   * Test get valid data size per container failure due to I/O error.
+   * @throws StoreException
+   */
+  @Test
+  public void testContainerValidDataSizeFailure() throws StoreException {
+    assumeTrue(!bucketingEnabled);
+    PersistentIndex mockIndex = Mockito.spy(state.index);
+    BlobStoreStats blobStoreStats =
+        new BlobStoreStats("", mockIndex, 0, BUCKET_SPAN_IN_MS, 0, QUEUE_PROCESSOR_PERIOD_IN_Ms,
+            DEFAULT_WAIT_TIMEOUT_SECS, state.time, indexScannerScheduler, queueProcessorScheduler, diskIOScheduler,
+            METRICS);
+    doThrow(new StoreException(StoreException.IO_ERROR_STR, StoreErrorCodes.IOError)).when(mockIndex)
+        .findKey(any(StoreKey.class));
+    try {
+      blobStoreStats.getValidDataSizeByContainer(state.time.milliseconds());
+      fail("should fail when getting valid date size");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
   }
 
   /**
@@ -324,7 +348,7 @@ public class BlobStoreStatsTest {
    * @throws InterruptedException
    * @throws IOException
    */
-  @Test
+  //@Test
   public void testBucketingBasic() throws StoreException, InterruptedException, IOException {
     assumeTrue(bucketingEnabled);
     final CountDownLatch scanStartedLatch = new CountDownLatch(1);

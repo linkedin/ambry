@@ -56,13 +56,13 @@ class Log implements Write {
    * @param segmentCapacityInBytes the capacity of a single segment in the log.
    * @param diskSpaceAllocator the {@link DiskSpaceAllocator} to use to allocate new log segments.
    * @param metrics the {@link StoreMetrics} instance to use.
-   * @throws IOException if there is any I/O error loading the segment files.
+   * @throws StoreException if there is any store exception loading the segment files.
    * @throws IllegalArgumentException if {@code totalCapacityInBytes} or {@code segmentCapacityInBytes} <= 0 or if
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
   Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator,
-      StoreMetrics metrics) throws IOException {
+      StoreMetrics metrics) throws StoreException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = totalCapacityInBytes > segmentCapacityInBytes;
@@ -73,7 +73,7 @@ class Log implements Write {
     File dir = new File(dataDir);
     File[] segmentFiles = dir.listFiles(LogSegmentNameHelper.LOG_FILE_FILTER);
     if (segmentFiles == null) {
-      throw new IOException("Could not read from directory: " + dataDir);
+      throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.File_Not_Found);
     } else {
       initialize(getSegmentsToLoad(segmentFiles), segmentCapacityInBytes);
       this.isLogSegmented = isExistingLogSegmented();
@@ -92,14 +92,14 @@ class Log implements Write {
    * @param segmentNameAndFileNameIterator an {@link Iterator} that provides the name and filename for newly allocated
    *                                       log segments. Once the iterator ends, the active segment name is used to
    *                                       generate the names of the subsequent segments.
-   * @throws IOException if there is any I/O error loading the segment files.
+   * @throws StoreException if there is any store exception loading the segment files.
    * @throws IllegalArgumentException if {@code totalCapacityInBytes} or {@code segmentCapacityInBytes} <= 0 or if
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
   Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator,
       StoreMetrics metrics, boolean isLogSegmented, List<LogSegment> segmentsToLoad,
-      Iterator<Pair<String, String>> segmentNameAndFileNameIterator) throws IOException {
+      Iterator<Pair<String, String>> segmentNameAndFileNameIterator) throws StoreException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = isLogSegmented;
@@ -119,10 +119,10 @@ class Log implements Write {
    * @return the number of bytes written.
    * @throws IllegalArgumentException if the {@code buffer.remaining()} is greater than a single segment's size.
    * @throws IllegalStateException if there no more capacity in the log.
-   * @throws IOException if there was an I/O error while writing.
+   * @throws StoreException if there was a store exception while writing.
    */
   @Override
-  public int appendFrom(ByteBuffer buffer) throws IOException {
+  public int appendFrom(ByteBuffer buffer) throws StoreException {
     rollOverIfRequired(buffer.remaining());
     return activeSegment.appendFrom(buffer);
   }
@@ -134,9 +134,9 @@ class Log implements Write {
    * @return the number of bytes written.
    * @throws IllegalArgumentException if the {@code byteArray.length} is greater than a single segment's size.
    * @throws IllegalStateException if there no more capacity in the log.
-   * @throws IOException if there was an I/O error while writing.
+   * @throws StoreException if there was an I/O error while writing.
    */
-  int appendFromDirectly(byte[] byteArray, int offset, int length) throws IOException {
+  int appendFromDirectly(byte[] byteArray, int offset, int length) throws StoreException {
     rollOverIfRequired(length);
     return activeSegment.appendFromDirectly(byteArray, offset, length);
   }
@@ -148,10 +148,10 @@ class Log implements Write {
    * @param size The amount of data in bytes to be written from the channel
    * @throws IllegalArgumentException if the {@code size} is greater than a single segment's size.
    * @throws IllegalStateException if there no more capacity in the log.
-   * @throws IOException if there was an I/O error while writing.
+   * @throws StoreException if there was a store exception while writing.
    */
   @Override
-  public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
+  public void appendFrom(ReadableByteChannel channel, long size) throws StoreException {
     rollOverIfRequired(size);
     activeSegment.appendFrom(channel, size);
   }
@@ -163,9 +163,9 @@ class Log implements Write {
    * used only after the active segment is conclusively determined.
    * @param name the name of the log segment that is to be marked active.
    * @throws IllegalArgumentException if there no segment with name {@code name}.
-   * @throws IOException if there is any I/O error freeing segments.
+   * @throws StoreException if there is any store exception while freeing segments.
    */
-  void setActiveSegment(String name) throws IOException {
+  void setActiveSegment(String name) throws StoreException {
     if (!segmentsByName.containsKey(name)) {
       throw new IllegalArgumentException("There is no log segment with name: " + name);
     }
@@ -297,9 +297,9 @@ class Log implements Write {
    * {@link LogSegment} instance for it.
    * @param segmentCapacity the intended capacity of each segment of the log.
    * @return the {@link LogSegment} instance that is created.
-   * @throws IOException if there is an I/O error creating the segment files or creating {@link LogSegment} instances.
+   * @throws StoreException if there is store exception when creating the segment files or creating {@link LogSegment} instances.
    */
-  private LogSegment checkArgsAndGetFirstSegment(long segmentCapacity) throws IOException {
+  private LogSegment checkArgsAndGetFirstSegment(long segmentCapacity) throws StoreException {
     if (capacityInBytes <= 0 || segmentCapacity <= 0) {
       throw new IllegalArgumentException(
           "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes [" + segmentCapacity
@@ -328,7 +328,7 @@ class Log implements Write {
    * @return {@code List} of {@link LogSegment} instances corresponding to {@code segmentFiles}.
    * @throws IOException if there is an I/O error loading the segment files or creating {@link LogSegment} instances.
    */
-  private List<LogSegment> getSegmentsToLoad(File[] segmentFiles) throws IOException {
+  private List<LogSegment> getSegmentsToLoad(File[] segmentFiles) throws StoreException {
     List<LogSegment> segments = new ArrayList<>(segmentFiles.length);
     for (File segmentFile : segmentFiles) {
       String name = LogSegmentNameHelper.nameFromFilename(segmentFile.getName());
@@ -359,9 +359,9 @@ class Log implements Write {
    * Initializes the log.
    * @param segmentsToLoad the {@link LogSegment} instances to include as a part of the log. These are not in any order
    * @param segmentCapacityInBytes the capacity of a single {@link LogSegment}.
-   * @throws IOException if there is any I/O error during initialization.
+   * @throws StoreException if there is any store exception during initialization.
    */
-  private void initialize(List<LogSegment> segmentsToLoad, long segmentCapacityInBytes) throws IOException {
+  private void initialize(List<LogSegment> segmentsToLoad, long segmentCapacityInBytes) throws StoreException {
     if (segmentsToLoad.size() == 0) {
       // bootstrapping log.
       segmentsToLoad = Collections.singletonList(checkArgsAndGetFirstSegment(segmentCapacityInBytes));
@@ -383,12 +383,18 @@ class Log implements Write {
    * @param filename the intended filename of the file.
    * @param size the intended size of the file.
    * @return a {@link File} instance that points to the created file named {@code filename} and capacity {@code size}.
-   * @throws IOException if the there is any I/O error in allocating the file.
+   * @throws StoreException if the there is any store exception while allocating the file.
    */
-  private File allocate(String filename, long size) throws IOException {
+  private File allocate(String filename, long size) throws StoreException {
     File segmentFile = new File(dataDir, filename);
     if (!segmentFile.exists()) {
-      diskSpaceAllocator.allocate(segmentFile, size);
+      try {
+        diskSpaceAllocator.allocate(segmentFile, size);
+      } catch (IOException e) {
+        StoreErrorCodes errorCode = e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+            : StoreErrorCodes.Unknown_Error;
+        throw new StoreException(errorCode.toString() + " while allocating the file", e, errorCode);
+      }
     }
     return segmentFile;
   }
@@ -396,12 +402,18 @@ class Log implements Write {
   /**
    * Frees the given {@link LogSegment} and its backing segment file.
    * @param logSegment the {@link LogSegment} instance whose backing file needs to be freed.
-   * @throws IOException if there is any I/O error freeing the log segment.
+   * @throws StoreException if there is any store exception when freeing the log segment.
    */
-  private void free(LogSegment logSegment) throws IOException {
+  private void free(LogSegment logSegment) throws StoreException {
     File segmentFile = logSegment.getView().getFirst();
-    logSegment.close();
-    diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
+    try {
+      logSegment.close();
+      diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
+    } catch (IOException e) {
+      StoreErrorCodes errorCode =
+          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      throw new StoreException(errorCode.toString() + " while freeing log segment", e, errorCode);
+    }
   }
 
   /**
@@ -409,10 +421,10 @@ class Log implements Write {
    * @param writeSize the size of the incoming write.
    * @throws IllegalArgumentException if the {@code writeSize} is greater than a single segment's size
    * @throws IllegalStateException if there is no more capacity in the log.
-   * @throws IOException if any I/O error occurred as part of ensuring capacity.
+   * @throws StoreException if any store exception occurred as part of ensuring capacity.
    *
    */
-  private void rollOverIfRequired(long writeSize) throws IOException {
+  private void rollOverIfRequired(long writeSize) throws StoreException {
     if (activeSegment.getCapacityInBytes() - activeSegment.getEndOffset() < writeSize) {
       ensureCapacity(writeSize);
       // this cannot be null since capacity has either been ensured or has thrown.
@@ -432,9 +444,9 @@ class Log implements Write {
    * @param writeSize the size of a subsequent write on the active log segment.
    * @throws IllegalArgumentException if the {@code writeSize} is greater than a single segment's size
    * @throws IllegalStateException if there no more capacity in the log.
-   * @throws IOException if any I/O error occurred as a part of ensuring capacity.
+   * @throws StoreException if any store exception occurred as a part of ensuring capacity.
    */
-  private void ensureCapacity(long writeSize) throws IOException {
+  private void ensureCapacity(long writeSize) throws StoreException {
     // all segments are (should be) the same size.
     long segmentCapacity = activeSegment.getCapacityInBytes();
     if (writeSize > segmentCapacity - LogSegment.HEADER_SIZE) {
@@ -500,9 +512,9 @@ class Log implements Write {
    * @param decreaseUsedSegmentCount {@code true} if the number of segments used has to be decremented, {@code false}
    *                                             otherwise.
    * @throws IllegalArgumentException if {@code segmentName} is not a part of the log.
-   * @throws IOException if there is any I/O error cleaning up the log segment.
+   * @throws StoreException if there is any store exception while cleaning up the log segment.
    */
-  void dropSegment(String segmentName, boolean decreaseUsedSegmentCount) throws IOException {
+  void dropSegment(String segmentName, boolean decreaseUsedSegmentCount) throws StoreException {
     LogSegment segment = segmentsByName.get(segmentName);
     if (segment == null || segment == activeSegment) {
       throw new IllegalArgumentException("Segment does not exist or is the active segment: " + segmentName);

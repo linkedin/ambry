@@ -15,6 +15,7 @@ package com.github.ambry.server;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
@@ -115,8 +116,18 @@ public class MockCluster {
     return clusterMap.getDataNodes().get(prefetchDataNodeIndex);
   }
 
+  /**
+   * @return the {@link ClusterMap}.
+   */
   public MockClusterMap getClusterMap() {
     return clusterMap;
+  }
+
+  /**
+   * @return the {@link ClusterAgentsFactory}.
+   */
+  public ClusterAgentsFactory getClusterAgentsFactory() {
+    return mockClusterAgentsFactory;
   }
 
   private void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,

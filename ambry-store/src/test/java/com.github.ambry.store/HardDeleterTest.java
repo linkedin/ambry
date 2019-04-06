@@ -56,6 +56,7 @@ public class HardDeleterTest {
     private Log log;
     private String logSegmentName;
     HashMap<Long, MessageInfo> offsetMap;
+    IOException exception;
 
     HardDeleteTestHelper(long offset, long size) {
       nextOffset = offset;
@@ -95,7 +96,10 @@ public class HardDeleterTest {
 
     @Override
     public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
-        List<byte[]> recoveryInfoList) {
+        List<byte[]> recoveryInfoList) throws IOException {
+      if (exception != null) {
+        throw exception;
+      }
       class MockMessageStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
         int count;
         MessageReadSet readSet;
@@ -184,6 +188,46 @@ public class HardDeleterTest {
     scheduler.shutdown();
     index.close();
     log.close();
+  }
+
+  /**
+   * Test hard delete and recovery failure due to IOExceptions.
+   * @throws Exception
+   */
+  @Test
+  public void performHardDeleteAndRecoveryFailureTest() throws Exception {
+    MockId blobId01 = new MockId("id01");
+    MockId blobId02 = new MockId("id02");
+    MockId blobId03 = new MockId("id03");
+    MockId blobId04 = new MockId("id04");
+
+    helper.add(blobId01);
+    helper.add(blobId02);
+    helper.add(blobId03);
+    helper.add(blobId04);
+    helper.delete(blobId03);
+    time.sleep(TimeUnit.DAYS.toMillis(2));
+    helper.exception = new IOException(StoreException.IO_ERROR_STR);
+    try {
+      index.hardDelete();
+      index.persistAndAdvanceStartTokenSafeToPersist();
+      index.hardDelete();
+      index.hardDelete();
+      fail("Hard delete should fail due to I/O error");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    helper.exception = null;
+    index.hardDelete();
+    index.persistAndAdvanceStartTokenSafeToPersist();
+    index.pruneHardDeleteRecoveryRange();
+    helper.exception = new IOException(StoreException.IO_ERROR_STR);
+    try {
+      index.performHardDeleteRecovery();
+      fail("Recovery should fail due to I/O error");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
   }
 
   @Test

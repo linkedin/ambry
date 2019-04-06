@@ -126,6 +126,8 @@ class CuratedLogIndexState {
   UUID incarnationId = UUID.randomUUID();
   // The MetricRegistry that is used with the index
   MetricRegistry metricRegistry = new MetricRegistry();
+  // The deleted key with associated PUT record in the same log segment
+  MockId deletedKeyWithPutInSameSegment = null;
 
   // Variables that represent the folder where the data resides
   private final File tempDir;
@@ -255,10 +257,9 @@ class CuratedLogIndexState {
    * @param forcePut if {@code true}, forces a ttl update record to be created even if a PUT isn't present. Does NOT
    *                 force if a ttl update or delete is present.
    * @return the {@link FileSpan} at which the update record was added
-   * @throws IOException
    * @throws StoreException
    */
-  FileSpan makePermanent(MockId id, boolean forcePut) throws IOException, StoreException {
+  FileSpan makePermanent(MockId id, boolean forcePut) throws StoreException {
     IndexValue value = getExpectedValue(id, false);
     if (!forcePut && value == null) {
       throw new IllegalArgumentException(id + " does not exist in the index");
@@ -323,10 +324,9 @@ class CuratedLogIndexState {
    * @param idToDelete the id to be deleted.
    * @param info the {@link MessageInfo} to use incase of recovery to fetch accountId, containerId and operationTime.
    * @return the {@link FileSpan} of the added entries.
-   * @throws IOException
    * @throws StoreException
    */
-  FileSpan addDeleteEntry(MockId idToDelete, MessageInfo info) throws IOException, StoreException {
+  FileSpan addDeleteEntry(MockId idToDelete, MessageInfo info) throws StoreException {
     IndexValue value = getExpectedValue(idToDelete, false);
     if (value == null && !allKeys.containsKey(idToDelete) && info == null) {
       throw new IllegalArgumentException(idToDelete + " does not exist in the index");
@@ -408,9 +408,9 @@ class CuratedLogIndexState {
    * Appends random data of size {@code size} to the {@link #log}.
    * @param size the size of data that needs to be appended.
    * @return the data that was appended.
-   * @throws IOException
+   * @throws StoreException
    */
-  byte[] appendToLog(long size) throws IOException {
+  byte[] appendToLog(long size) throws StoreException {
     byte[] bytes = TestUtils.getRandomBytes((int) size);
     if (size > CuratedLogIndexState.HARD_DELETE_START_OFFSET) {
       // ensure at least one byte is set to 1 for hard delete verification purposes
@@ -742,9 +742,9 @@ class CuratedLogIndexState {
    * 1. It contains no duplicate entries.
    * 2. The ordering of PUT and DELETE entries is correct.
    * 3. There are no offsets in the log not accounted for in the index.
-   * @throws IOException
+   * @throws StoreException
    */
-  void verifyRealIndexSanity() throws IOException {
+  void verifyRealIndexSanity() throws StoreException {
     IndexSegment prevIndexSegment = null;
     for (IndexSegment indexSegment : index.getIndexSegments().values()) {
       Offset indexSegmentStartOffset = indexSegment.getStartOffset();
@@ -1029,6 +1029,11 @@ class CuratedLogIndexState {
     // 1 DELETE for a PUT in the same index segment
     MockId idToDelete = getIdToDeleteFromIndexSegment(referenceIndex.lastKey(), false);
     addDeleteEntry(idToDelete);
+    // Maintain one deleted key whose PUT record is in the same log segment. This is used for getBlobReadInfoTest() in IndexTest.
+    // The intention is to ensure that hardDelete invokes getMessageInfo() in getDeletedBlobReadOptions() method and successfully
+    // throw I/O exception with curated error message. Thus, we can verify disk I/O error can be correctly captured.
+    deletedKeyWithPutInSameSegment =
+        deletedKeyWithPutInSameSegment == null ? idToDelete : deletedKeyWithPutInSameSegment;
     // 1 DELETE for a PUT in the first index segment
     Offset firstIndexSegmentStartOffset = referenceIndex.lowerKey(referenceIndex.lastKey());
     idToDelete = getIdToDeleteFromIndexSegment(firstIndexSegmentStartOffset, false);
@@ -1160,10 +1165,9 @@ class CuratedLogIndexState {
   /**
    * Verifies that the state in {@link PersistentIndex} is the same as the one in {@link #referenceIndex}.
    * @param isLogSegmented {@code true} if segmented. {@code false} otherwise.
-   * @throws IOException
    * @throws StoreException
    */
-  private void verifyState(boolean isLogSegmented) throws IOException, StoreException {
+  private void verifyState(boolean isLogSegmented) throws StoreException {
     verifyRealIndexSanity();
     assertEquals("Incorrect log segment count", isLogSegmented ? 3 : 1, index.getLogSegmentCount());
     NavigableMap<Offset, IndexSegment> realIndex = index.getIndexSegments();

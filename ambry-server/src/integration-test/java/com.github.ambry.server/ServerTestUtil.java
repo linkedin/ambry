@@ -19,11 +19,13 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.CloudBackupManager;
 import com.github.ambry.cloud.CloudBlobCryptoAgentFactory;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudDataNode;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
-import com.github.ambry.cloud.MockVirtualReplicatorCluster;
+import com.github.ambry.cloud.StaticVcrCluster;
+import com.github.ambry.cloud.VcrServer;
+import com.github.ambry.cloud.VcrTestUtil;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HardwareState;
@@ -45,10 +47,7 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
-import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
-import com.github.ambry.config.ServerConfig;
-import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobAll;
 import com.github.ambry.messageformat.BlobData;
@@ -91,7 +90,6 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
-import com.github.ambry.store.StoreKeyConverterFactoryImpl;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.SystemTime;
@@ -118,11 +116,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import javax.net.ssl.SSLSocketFactory;
 import org.junit.Assert;
 
@@ -563,7 +561,7 @@ final class ServerTestUtil {
    * @param testEncryption if encryption will be tested. Not used now.
    * @param notificationSystem the {@link MockNotificationSystem} to track blobs event in {@link MockCluster}.
    */
-  static void endToEndBackupManagerTest(MockCluster cluster, DataNodeId dataNode, SSLConfig clientSSLConfig,
+  static void endToEndCloudBackupTest(MockCluster cluster, DataNodeId dataNode, SSLConfig clientSSLConfig,
       SSLSocketFactory clientSSLSocketFactory, boolean testEncryption, MockNotificationSystem notificationSystem)
       throws Exception {
     // TODO: test encryption
@@ -571,6 +569,7 @@ final class ServerTestUtil {
     int blobSize = 100;
     int userMetaDataSize = 100;
     ClusterMap clusterMap = cluster.getClusterMap();
+    ClusterAgentsFactory clusterAgentsFactory = cluster.getClusterAgentsFactory();
     // Send blobs to DataNode
     byte[] userMetadata = new byte[userMetaDataSize];
     byte[] data = new byte[blobSize];
@@ -598,10 +597,11 @@ final class ServerTestUtil {
       notificationSystem.awaitBlobCreations(blobId.getID());
     }
 
-    // Set up backup manager.
-    // TODO: start VCR instead of backupManger itself.
+    // Start the VCR and CloudBackupManager
     Properties props = new Properties();
     props.setProperty("connectionpool.read.timeout.ms", "15000");
+    props.setProperty("server.scheduler.num.of.threads", "1");
+    props.setProperty("num.io.threads", "1");
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("clustermap.resolve.hostnames", "false");
     props.setProperty("clustermap.cluster.name", "thisIsClusterName");
@@ -609,37 +609,27 @@ final class ServerTestUtil {
     props.setProperty("clustermap.ssl.enabled.datacenters",
         clientSSLConfig == null ? "" : dataNode.getDatacenterName());
     props.setProperty("clustermap.port", "12309");
-    props.setProperty("vcr.ssl.port", "12310");
+    if (clientSSLConfig != null) {
+      props.setProperty("vcr.ssl.port", "12310");
+    }
     props.setProperty("vcr.cluster.name", "VCRCluster");
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
+    props.setProperty("vcr.assigned.partitions", String.join(",",
+        clusterMap.getAllPartitionIds(null).stream().map(p -> p.toPathString()).collect(Collectors.toList())));
     VerifiableProperties vProps = new VerifiableProperties(props);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
     CloudConfig cloudConfig = new CloudConfig(vProps);
-    ReplicationConfig replicationConfig = new ReplicationConfig(vProps);
-    ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(vProps);
-    StoreConfig storeConfig = new StoreConfig(vProps);
-    ServerConfig serverConfig = new ServerConfig(vProps);
-
-    DataNodeId vcr = new CloudDataNode(cloudConfig, clusterMapConfig);
-    VirtualReplicatorCluster virtualReplicatorCluster = new MockVirtualReplicatorCluster(vcr, clusterMap);
+    VirtualReplicatorCluster vcrCluster = new StaticVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIds);
-    CloudDestinationFactory mockCloudDestinationFactory =
+    CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
-    ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-    ConnectionPool connectionPool =
-        new BlockingChannelConnectionPool(connectionPoolConfig, clientSSLConfig, clusterMapConfig,
-            clusterMap.getMetricRegistry());
-    connectionPool.start();
-    CloudBlobCryptoAgentFactory cloudBlobCryptoAgentFactory =
-        Utils.getObj(cloudConfig.cloudBlobCryptoServiceFactoryClass, vProps, "ambry", clusterMap.getMetricRegistry());
-    CloudBackupManager cloudBackupManager =
-        new CloudBackupManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
-            Utils.getObj(storeConfig.storeKeyFactory, clusterMap), clusterMap, virtualReplicatorCluster,
-            mockCloudDestinationFactory, scheduler, connectionPool, clusterMap.getMetricRegistry(), null,
-            new StoreKeyConverterFactoryImpl(null, null), serverConfig.serverMessageTransformer,
-            cloudBlobCryptoAgentFactory);
-    cloudBackupManager.start();
+
+    VcrServer vcrServer =
+        VcrTestUtil.createVcrServer(vProps, clusterAgentsFactory, notificationSystem, cloudDestinationFactory,
+            vcrCluster, clientSSLConfig);
+    vcrServer.startup();
+
     // Waiting for backup done
     assertTrue("Did not backup all blobs in 2 minutes", latchBasedInMemoryCloudDestination.await(2, TimeUnit.MINUTES));
     Map<String, CloudBlobMetadata> cloudBlobMetadataMap = latchBasedInMemoryCloudDestination.getBlobMetadata(blobIds);
@@ -651,8 +641,7 @@ final class ServerTestUtil {
       assertEquals("Expiration time mismatch", Utils.Infinite_Time, cloudBlobMetadata.getExpirationTime());
       // TODO: verify other metadata and blob data
     }
-    connectionPool.shutdown();
-    cloudBackupManager.shutdown();
+    vcrServer.shutdown();
   }
 
   static void endToEndReplicationWithMultiNodeMultiPartitionTest(int interestedDataNodePortNumber, Port dataNode1Port,

@@ -15,7 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
@@ -37,7 +37,9 @@ import java.security.GeneralSecurityException;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,18 +54,24 @@ class CloudBlobStore implements Store {
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
   private final CloudBlobCryptoAgent cryptoService;
+  private final CloudConfig cloudConfig;
+  private final long minTtlMillis;
   private boolean started;
 
   /**
    * Constructor for CloudBlobStore
    * @param partitionId partition associated with BlobStore.
    * @param cloudDestination the {@link CloudDestination}.
+   * @param cloudConfig the {@link CloudConfig} to use.
+   * @param cloudDestination the {@link CloudDestination} to use.
    * @param cryptoService the {@link CloudBlobCryptoAgent} to use for encryption.
    */
-  CloudBlobStore(PartitionId partitionId, VerifiableProperties verProps, CloudDestination cloudDestination,
+  CloudBlobStore(PartitionId partitionId, CloudConfig cloudConfig, CloudDestination cloudDestination,
       CloudBlobCryptoAgent cryptoService) {
-    this.cloudDestination = cloudDestination;
-    this.partitionId = partitionId;
+    this.cloudDestination = Objects.requireNonNull(cloudDestination, "cloudDestination is required");
+    this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
+    this.cloudConfig = Objects.requireNonNull(cloudConfig, "cloudConfig is required");
+    minTtlMillis = TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays);
     this.cryptoService = cryptoService;
   }
 
@@ -87,11 +95,7 @@ class CloudBlobStore implements Store {
 
     // Write the blobs in the message set
     CloudWriteChannel cloudWriter = new CloudWriteChannel(this, messageSetToWrite.getMessageSetInfo());
-    try {
-      messageSetToWrite.writeTo(cloudWriter);
-    } catch (IOException ex) {
-      throw new StoreException(ex, StoreErrorCodes.IOError);
-    }
+    messageSetToWrite.writeTo(cloudWriter);
   }
 
   /**
@@ -103,13 +107,12 @@ class CloudBlobStore implements Store {
    */
   private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size)
       throws CloudStorageException, IOException, GeneralSecurityException {
-    boolean performUpload = messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time && !messageInfo.isDeleted();
-    if (performUpload) {
+    if (shouldUpload(messageInfo)) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       // TODO: would be more efficient to call blobId.isEncrypted()
       String kmsContext = cryptoService.getEncryptionContext();
       CloudBlobMetadata.EncryptionType encryptionType;
-      if (cryptoService != null && (blobId.getVersion() < BlobId.BLOB_ID_V4 || !BlobId.isEncrypted(blobId.getID()))) {
+      if (cloudConfig.vcrRequireEncryption && cryptoService != null && (blobId.getVersion() < BlobId.BLOB_ID_V4 || !BlobId.isEncrypted(blobId.getID()))) {
         // Need to encrypt the buffer before upload
         messageBuf = cryptoService.encrypt(messageBuf);
         encryptionType = CloudBlobMetadata.EncryptionType.VCR;
@@ -123,6 +126,21 @@ class CloudBlobStore implements Store {
               messageInfo.getSize(), kmsContext, encryptionType, CloudBlobMetadata.VcrEncryptionFormat.DEFAULT);
       cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
     }
+  }
+
+  /**
+   * Utility to decide whether a blob should be uploaded.
+   * @param messageInfo The {@link MessageInfo} containing the blob metadata.
+   * @return {@code true} is the blob should be upload, {@code false} otherwise.
+   */
+  private boolean shouldUpload(MessageInfo messageInfo) {
+    if (messageInfo.isDeleted()) {
+      return false;
+    }
+
+    // expiration time above threshold
+    return (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time
+        || messageInfo.getExpirationTimeInMs() - messageInfo.getOperationTimeMs() >= minTtlMillis);
   }
 
   @Override
@@ -247,12 +265,12 @@ class CloudBlobStore implements Store {
     }
 
     @Override
-    public int appendFrom(ByteBuffer buffer) throws IOException {
+    public int appendFrom(ByteBuffer buffer) throws StoreException {
       throw new UnsupportedOperationException("Method not supported");
     }
 
     @Override
-    public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
+    public void appendFrom(ReadableByteChannel channel, long size) throws StoreException {
       // Upload the blob corresponding to the current message index
       MessageInfo messageInfo = messageInfoList.get(messageIndex);
       if (messageInfo.getSize() != size) {
@@ -260,21 +278,20 @@ class CloudBlobStore implements Store {
       }
       ByteBuffer messageBuf = ByteBuffer.allocate((int) size);
       int bytesRead = 0;
-      while (bytesRead < size) {
-        int readResult = channel.read(messageBuf);
-        if (readResult == -1) {
-          throw new IOException(
-              "Channel read returned -1 before reading expected number of bytes, blobId=" + messageInfo.getStoreKey()
-                  .getID());
-        }
-        bytesRead += readResult;
-      }
-
       try {
+        while (bytesRead < size) {
+          int readResult = channel.read(messageBuf);
+          if (readResult == -1) {
+            throw new IOException(
+                "Channel read returned -1 before reading expected number of bytes, blobId=" + messageInfo.getStoreKey()
+                    .getID());
+          }
+          bytesRead += readResult;
+        }
         cloudBlobStore.putBlob(messageInfo, messageBuf, size);
         messageIndex++;
-      } catch (Exception e) {
-        throw new IOException(e);
+      } catch (IOException | CloudStorageException | GeneralSecurityException e) {
+        throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
       }
     }
   }
