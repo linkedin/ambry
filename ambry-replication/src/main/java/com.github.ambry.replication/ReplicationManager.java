@@ -43,8 +43,9 @@ public class ReplicationManager extends ReplicationEngine {
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
-    super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode, connectionPool,
-        metricRegistry, requestNotification, storeKeyConverterFactory, transformerClassName);
+    super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
+        clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
+        storeKeyConverterFactory, transformerClassName);
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
     // initialize all partitions
     for (ReplicaId replicaId : replicaIds) {
