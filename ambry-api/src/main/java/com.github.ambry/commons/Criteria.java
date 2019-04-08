@@ -13,6 +13,9 @@
  */
 package com.github.ambry.commons;
 
+/**
+ * The criteria used to check if certain threshold is satisfied.
+ */
 public class Criteria {
   long threshold;
   boolean shouldBelowThreshold;

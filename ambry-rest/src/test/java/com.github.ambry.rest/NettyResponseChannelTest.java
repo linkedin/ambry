@@ -1011,67 +1011,54 @@ enum TestingUri {
   /**
    * When this request is received, {@link NettyResponseChannel#close()} is called immediately.
    */
-  Close,
-  /**
+  Close, /**
    * When this request is received, headers from the request are copied into the response channel.
    */
-  CopyHeaders,
-  /**
+  CopyHeaders, /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with null {@code cause}.
    */
-  ImmediateResponseComplete,
-  /**
+  ImmediateResponseComplete, /**
    * Reduces the write buffer low and high watermarks to 1 and 2 bytes respectively in
    * {@link io.netty.channel.ChannelConfig} so that data is written to the channel byte by byte. This simulates filling
    * up of write buffer (but does not test async writing and flushing since {@link EmbeddedChannel} is blocking).
    */
-  FillWriteBuffer,
-  /**
+  FillWriteBuffer, /**
    * When this request is received, some data is initially written to the channel via
    * {@link NettyResponseChannel#write(ByteBuffer, Callback)} . An attempt to modify response headers (metadata) is made
    * after this.
    */
-  ModifyResponseMetadataAfterWrite,
-  /**
+  ModifyResponseMetadataAfterWrite, /**
    * When this request is received, {@link NettyResponseChannel#close()} is called multiple times.
    */
-  MultipleClose,
-  /**
+  MultipleClose, /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * multiple times.
    */
-  MultipleOnResponseComplete,
-  /**
+  MultipleOnResponseComplete, /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with a {@link RestServiceException} as {@code cause}. The exception message and error code is the
    * {@link RestServiceErrorCode} passed in as the value of the header
    * {@link MockNettyMessageProcessor#REST_SERVICE_ERROR_CODE_HEADER_NAME}.
    */
-  OnResponseCompleteWithRestException,
-  /**
+  OnResponseCompleteWithRestException, /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with a {@link RuntimeException} as {@code cause}. The exception message is the URI string.
    */
-  OnResponseCompleteWithNonRestException,
-  /**
+  OnResponseCompleteWithNonRestException, /**
    * When this request is received tracking headers are copied over and then behaviors of OnResponseCompleteWithRestException is applied.
    */
-  CopyHeadersAndOnResponseCompleteWithRestException,
-  /**
+  CopyHeadersAndOnResponseCompleteWithRestException, /**
    * When this request is received tracking headers are copied over and then behaviors of OnResponseCompleteWithNonRestException is applied.
    */
-  CopyHeadersAndOnResponseCompleteWithNonRestException,
-  /**
+  CopyHeadersAndOnResponseCompleteWithNonRestException, /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with an {@link IOException} with message {@link Utils#CLIENT_RESET_EXCEPTION_MSG}.
    */
-  OnResponseCompleteWithEarlyClientTermination,
-  /**
+  OnResponseCompleteWithEarlyClientTermination, /**
    * Response sending fails midway through a write.
    */
-  ResponseFailureMidway,
-  /**
+  ResponseFailureMidway, /**
    * When this request is received, a response with {@link RestUtils.Headers#CONTENT_LENGTH} set is returned.
    * The value of the header {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} is used to determine the number
    * of chunks (each equal to {@link MockNettyMessageProcessor#CHUNK}) to return.
@@ -1080,29 +1067,23 @@ enum TestingUri {
    * {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} times the length of
    * {@link MockNettyMessageProcessor#CHUNK}
    */
-  ResponseWithContentLength,
-  /**
+  ResponseWithContentLength, /**
    * When this request is received, {@link NettyResponseChannel#setHeader(String, Object)} is attempted with null
    * arguments. If these calls don't fail, we report an error.
    */
-  SetNullHeader,
-  /**
+  SetNullHeader, /**
    * Tests setting of a {@link NettyRequest} in {@link NettyResponseChannel}.
    */
-  SetRequest,
-  /**
+  SetRequest, /**
    * Requests a certain status to be set.
    */
-  SetStatus,
-  /**
+  SetStatus, /**
    * When this request is received, the {@link NettyResponseChannel} is closed and then a write operation is attempted.
    */
-  WriteAfterClose,
-  /**
+  WriteAfterClose, /**
    * Fail a write with a {@link Throwable} to test reactions.
    */
-  WriteFailureWithThrowable,
-  /**
+  WriteFailureWithThrowable, /**
    * When this request is received, a response with {@link RestUtils.Headers#CONTENT_LENGTH} set is returned.
    * The value of the header {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} is used to determine the number
    * of chunks (each equal to {@link MockNettyMessageProcessor#CHUNK}) to add to the response channel. The chunks added
@@ -1113,8 +1094,7 @@ enum TestingUri {
    * {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} times the length of
    * {@link MockNettyMessageProcessor#CHUNK}
    */
-  WriteMoreThanContentLength,
-  /**
+  WriteMoreThanContentLength, /**
    * Catch all TestingUri.
    */
   Unknown;
@@ -1130,7 +1110,8 @@ enum TestingUri {
     } catch (IllegalArgumentException e) {
       return TestingUri.Unknown;
     }
-  }}
+  }
+}
 
 /**
  * A test handler that forms the pipeline of the {@link EmbeddedChannel} used in tests.
@@ -1535,6 +1516,9 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   }
 }
 
+/**
+ * Mock {@link NettyRequest} to help rest request performance evaluation test
+ */
 class MockNettyRequest extends NettyRequest {
   static long inboundBytes = 0L;
   static MockRestRequestMetricsTracker mockTracker;
@@ -1555,6 +1539,9 @@ class MockNettyRequest extends NettyRequest {
   }
 }
 
+/**
+ * Mock {@link RestRequestMetricsTracker} to help rest request performance evaluation test
+ */
 class MockRestRequestMetricsTracker extends RestRequestMetricsTracker {
   static long rountTripTime;
   static long timeToFirstByte;

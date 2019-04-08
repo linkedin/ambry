@@ -16,6 +16,9 @@ package com.github.ambry.commons;
 import java.util.Map;
 
 
+/**
+ * A data structure holding various thresholds based on different criteria.
+ */
 public class Threshold {
   final Map<PerformanceIndex, Criteria> perfIndexAndCriteria;
 
@@ -23,6 +26,11 @@ public class Threshold {
     perfIndexAndCriteria = map;
   }
 
+  /**
+   * Check if input data satisfy all thresholds.
+   * @param dataToCheck a map whose key is {@link PerformanceIndex} and value is corresponding measured number.
+   * @return {@code true} if thresholds are satisfied. {@code false} otherwise.
+   */
   public boolean checkThresholds(Map<PerformanceIndex, Long> dataToCheck) {
     for (Map.Entry<PerformanceIndex, Criteria> indexAndCriteria : perfIndexAndCriteria.entrySet()) {
       PerformanceIndex perfIndex = indexAndCriteria.getKey();

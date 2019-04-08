@@ -195,11 +195,18 @@ public class RestRequestMetricsTracker {
     failed = true;
   }
 
+  /**
+   * Marks that the request is unsatisfied so that metrics can be tracked.
+   */
   public void markUnsatisfied() {
     satisfied = false;
   }
 
-  public boolean isSatisfied(){
+  /**
+   * Return whether the rest request is satisfied or not.
+   * @return {@code true} if request is satisfied.
+   */
+  public boolean isSatisfied() {
     return satisfied;
   }
 
@@ -251,10 +258,16 @@ public class RestRequestMetricsTracker {
     }
   }
 
+  /**
+   * @return round trip time of this request in milliseconds
+   */
   public long getRoundTripTimeInMs() {
     return nioMetricsTracker.roundTripTimeInMs;
   }
 
+  /**
+   * @return time to first byte of this request in milliseconds
+   */
   public long getTimeToFirstByteInMs() {
     return nioMetricsTracker.timeToFirstByteInMs;
   }
