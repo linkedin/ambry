@@ -37,7 +37,7 @@ public class StaticVcrClusterFactory implements VirtualReplicatorClusterFactory 
   }
 
   @Override
-  public VirtualReplicatorCluster getVirtualReplicatorCluster() {
+  synchronized public VirtualReplicatorCluster getVirtualReplicatorCluster() {
     if (virtualReplicatorCluster == null) {
       virtualReplicatorCluster = new StaticVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
     }
