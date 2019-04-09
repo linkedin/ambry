@@ -183,7 +183,7 @@ class AzureCloudDestination implements CloudDestination {
       documentClient.createDocument(cosmosCollectionLink, cloudBlobMetadata, defaultRequestOptions, true);
       docTimer.stop();
       logger.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
-      azureMetrics.blobUploadedCount.inc();
+      azureMetrics.blobUploadSuccessCount.inc();
       return true;
     } catch (URISyntaxException | StorageException | DocumentClientException | IOException e) {
       azureMetrics.blobUploadErrorCount.inc();

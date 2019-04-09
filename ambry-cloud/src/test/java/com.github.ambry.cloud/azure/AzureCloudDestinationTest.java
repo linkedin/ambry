@@ -116,7 +116,7 @@ public class AzureCloudDestinationTest {
   public void testUpload() throws Exception {
     assertTrue("Expected success", uploadDefaultBlob());
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
-    assertEquals(1, azureMetrics.blobUploadedCount.getCount());
+    assertEquals(1, azureMetrics.blobUploadSuccessCount.getCount());
     assertEquals(0, azureMetrics.blobUploadSkippedCount.getCount());
     assertEquals(0, azureMetrics.blobUploadErrorCount.getCount());
     assertEquals(1, azureMetrics.blobUploadTime.getCount());
@@ -151,7 +151,7 @@ public class AzureCloudDestinationTest {
     when(mockBlob.exists()).thenReturn(true);
     assertFalse("Upload of existing blob should return false", uploadDefaultBlob());
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
-    assertEquals(0, azureMetrics.blobUploadedCount.getCount());
+    assertEquals(0, azureMetrics.blobUploadSuccessCount.getCount());
     assertEquals(1, azureMetrics.blobUploadSkippedCount.getCount());
     assertEquals(0, azureMetrics.blobUploadErrorCount.getCount());
     assertEquals(0, azureMetrics.blobUploadTime.getCount());
@@ -316,7 +316,7 @@ public class AzureCloudDestinationTest {
    */
   private void verifyUploadErrorMetrics(boolean isDocument) {
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
-    assertEquals(0, azureMetrics.blobUploadedCount.getCount());
+    assertEquals(0, azureMetrics.blobUploadSuccessCount.getCount());
     assertEquals(0, azureMetrics.blobUploadSkippedCount.getCount());
     assertEquals(1, azureMetrics.blobUploadErrorCount.getCount());
     assertEquals(isDocument ? 1 : 0, azureMetrics.blobUploadTime.getCount());

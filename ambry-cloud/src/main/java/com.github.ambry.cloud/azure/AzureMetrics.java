@@ -23,7 +23,9 @@ public class AzureMetrics {
 
   // Metric name constants
   public static final String BLOB_UPLOAD_REQUEST_COUNT = "BlobUploadRequestCount";
-  public static final String BLOB_UPLOADED_COUNT = "BlobUploadedCount";
+  public static final String BLOB_UPLOAD_SUCCESS_COUNT = "BlobUploadSuccessCount";
+  public static final String BLOB_UPLOAD_SKIPPED_COUNT = "BlobUploadSkippedCount";
+  public static final String BLOB_UPLOAD_ERROR_COUNT = "BlobUploadErrorCount";
   public static final String BLOB_UPLOAD_TIME = "BlobUploadTime";
   public static final String BLOB_UPDATE_TIME = "BlobUpdateTime";
   public static final String BLOB_UPDATED_COUNT = "BlobUpdatedCount";
@@ -31,8 +33,6 @@ public class AzureMetrics {
   public static final String DOCUMENT_UPDATE_TIME = "DocumentUpdateTime";
   public static final String DOCUMENT_QUERY_TIME = "DocumentQueryTime";
   public static final String DOCUMENT_QUERY_COUNT = "DocumentErrorCount";
-  public static final String BLOB_UPLOAD_SKIPPED_COUNT = "BlobUploadSkippedCount";
-  public static final String BLOB_UPLOAD_ERROR_COUNT = "BlobUploadErrorCount";
   public static final String BLOB_UPDATE_ERROR_COUNT = "BlobUpdateErrorCount";
   public static final String STORAGE_ERROR_COUNT = "StorageErrorCount";
   public static final String DOCUMENT_ERROR_COUNT = "DocumentErrorCount";
@@ -45,7 +45,9 @@ public class AzureMetrics {
 
   // Metrics
   public final Counter blobUploadRequestCount;
-  public final Counter blobUploadedCount;
+  public final Counter blobUploadSuccessCount;
+  public final Counter blobUploadSkippedCount;
+  public final Counter blobUploadErrorCount;
   public final Counter blobUpdatedCount;
   public final Timer blobUploadTime;
   public final Timer blobUpdateTime;
@@ -53,8 +55,6 @@ public class AzureMetrics {
   public final Timer documentUpdateTime;
   public final Timer documentQueryTime;
   public final Counter documentQueryCount;
-  public final Counter blobUploadSkippedCount;
-  public final Counter blobUploadErrorCount;
   public final Counter blobUpdateErrorCount;
   public final Counter storageErrorCount;
   public final Counter documentErrorCount;
@@ -68,7 +68,11 @@ public class AzureMetrics {
   public AzureMetrics(MetricRegistry registry) {
     blobUploadRequestCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_REQUEST_COUNT));
-    blobUploadedCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOADED_COUNT));
+    blobUploadSuccessCount =
+        registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_SUCCESS_COUNT));
+    blobUploadSkippedCount =
+        registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_SKIPPED_COUNT));
+    blobUploadErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_ERROR_COUNT));
     blobUpdatedCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATED_COUNT));
     blobUploadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_TIME));
     blobUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TIME));
@@ -76,7 +80,6 @@ public class AzureMetrics {
     documentUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_UPDATE_TIME));
     documentQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_QUERY_TIME));
     documentQueryCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_QUERY_COUNT));
-    blobUploadErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_ERROR_COUNT));
     blobUpdateErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_ERROR_COUNT));
     storageErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, STORAGE_ERROR_COUNT));
     documentErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_ERROR_COUNT));
@@ -85,8 +88,6 @@ public class AzureMetrics {
     blobDeletedCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DELETED_COUNT));
     blobDeletionTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_DELETION_TIME));
     blobDeleteErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DELETE_ERROR_COUNT));
-    blobUploadSkippedCount =
-        registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_SKIPPED_COUNT));
     configErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, CONFIG_ERROR_COUNT));
     blobUploadRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_RATE));
   }
