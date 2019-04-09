@@ -24,6 +24,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
@@ -116,7 +117,7 @@ public class AzureCloudDestinationTest {
     assertTrue("Expected success", uploadDefaultBlob());
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
     assertEquals(1, azureMetrics.blobUploadedCount.getCount());
-    assertEquals(0, azureMetrics.blobSkippedCount.getCount());
+    assertEquals(0, azureMetrics.blobUploadSkippedCount.getCount());
     assertEquals(0, azureMetrics.blobUploadErrorCount.getCount());
     assertEquals(1, azureMetrics.blobUploadTime.getCount());
     assertEquals(1, azureMetrics.documentCreateTime.getCount());
@@ -151,7 +152,7 @@ public class AzureCloudDestinationTest {
     assertFalse("Upload of existing blob should return false", uploadDefaultBlob());
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
     assertEquals(0, azureMetrics.blobUploadedCount.getCount());
-    assertEquals(1, azureMetrics.blobSkippedCount.getCount());
+    assertEquals(1, azureMetrics.blobUploadSkippedCount.getCount());
     assertEquals(0, azureMetrics.blobUploadErrorCount.getCount());
     assertEquals(0, azureMetrics.blobUploadTime.getCount());
     assertEquals(0, azureMetrics.documentCreateTime.getCount());
@@ -224,6 +225,38 @@ public class AzureCloudDestinationTest {
     }
   }
 
+  /** Test setting connection policy with proxy from system properties */
+  @Test
+  public void testDocumentClientConnectionPolicy() throws Exception {
+    String proxyHost = "zwus2-proxy.azure.linkedin.com";
+    int proxyPort = 3128;
+    String[] schemes = {"http", "https"};
+    for (String scheme : schemes) {
+      String endpoint = scheme + "://mycosmosdb.documents.azure.com/";
+      String proxyHostProperty = scheme + "." + "proxyHost";
+      String proxyPortProperty = scheme + "." + "proxyPort";
+      // Test with no proxy
+      System.clearProperty(proxyHostProperty);
+      System.clearProperty(proxyPortProperty);
+      ConnectionPolicy policy = AzureCloudDestination.getProxyWiseConnectionPolicy(endpoint);
+      assertNull("Expected null proxy", policy.getProxy());
+      // Test with host but no port
+      System.setProperty(proxyHostProperty, proxyHost);
+      policy = AzureCloudDestination.getProxyWiseConnectionPolicy(endpoint);
+      assertNotNull("Expected proxy", policy.getProxy());
+      assertEquals("Wrong host", proxyHost, policy.getProxy().getHostName());
+      assertEquals("Wrong scheme", scheme, policy.getProxy().getSchemeName());
+      assertEquals("Expected default port", -1, policy.getProxy().getPort());
+      // Test with host and port
+      System.setProperty(proxyPortProperty, String.valueOf(proxyPort));
+      policy = AzureCloudDestination.getProxyWiseConnectionPolicy(endpoint);
+      assertNotNull("Expected proxy", policy.getProxy());
+      assertEquals("Wrong host", proxyHost, policy.getProxy().getHostName());
+      assertEquals("Wrong scheme", scheme, policy.getProxy().getSchemeName());
+      assertEquals("Wrong port", proxyPort, policy.getProxy().getPort());
+    }
+  }
+
   /** Test upload when client throws exception. */
   @Test
   public void testUploadContainerReferenceException() throws Exception {
@@ -284,7 +317,7 @@ public class AzureCloudDestinationTest {
   private void verifyUploadErrorMetrics(boolean isDocument) {
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
     assertEquals(0, azureMetrics.blobUploadedCount.getCount());
-    assertEquals(0, azureMetrics.blobSkippedCount.getCount());
+    assertEquals(0, azureMetrics.blobUploadSkippedCount.getCount());
     assertEquals(1, azureMetrics.blobUploadErrorCount.getCount());
     assertEquals(isDocument ? 1 : 0, azureMetrics.blobUploadTime.getCount());
     assertEquals(0, azureMetrics.documentCreateTime.getCount());

@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
@@ -48,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.apache.http.HttpHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +66,12 @@ class AzureCloudDestination implements CloudDestination {
   private final RequestOptions defaultRequestOptions = new RequestOptions();
   private final AzureMetrics azureMetrics;
 
+  // TODO: these constants should live somewhere else, but where?
+  private static final String HTTP = "http";
+  private static final String HTTPS = "https";
+  private static final String PROXY_HOST = "proxyHost";
+  private static final String PROXY_PORT = "proxyPort";
+
   /**
    * Construct an Azure cloud destination from config properties.
    * @param azureCloudConfig the {@link AzureCloudConfig} to use.
@@ -79,9 +85,9 @@ class AzureCloudDestination implements CloudDestination {
     azureAccount = CloudStorageAccount.parse(azureCloudConfig.storageConnectionString);
     azureBlobClient = azureAccount.createCloudBlobClient();
     cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
-    documentClient =
-        new DocumentClient(azureCloudConfig.cosmosEndpoint, azureCloudConfig.cosmosKey, ConnectionPolicy.GetDefault(),
-            ConsistencyLevel.Session);
+    ConnectionPolicy connectionPolicy = getProxyWiseConnectionPolicy(azureCloudConfig.cosmosEndpoint);
+    documentClient = new DocumentClient(azureCloudConfig.cosmosEndpoint, azureCloudConfig.cosmosKey, connectionPolicy,
+        ConsistencyLevel.Session);
     // check that it works
     try {
       ResourceResponse<DocumentCollection> response =
@@ -114,6 +120,29 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   /**
+   * @return a {@link ConnectionPolicy} including system proxy settings, if specified.
+   * @param endpoint the CosmosDB endpoint.
+   */
+  static ConnectionPolicy getProxyWiseConnectionPolicy(String endpoint) {
+    ConnectionPolicy connectionPolicy = new ConnectionPolicy();
+    String scheme = endpoint.toLowerCase().startsWith(HTTPS) ? HTTPS : HTTP;
+    String proxyHostProperty = scheme + "." + PROXY_HOST;
+    String proxyPortProperty = scheme + "." + PROXY_PORT;
+    String proxyHost = System.getProperty(proxyHostProperty);
+    if (proxyHost != null) {
+      logger.info("Found proxy host: " + proxyHost);
+      int proxyPort = -1;
+      try {
+        proxyPort = Integer.valueOf(System.getProperty(proxyPortProperty));
+      } catch (NumberFormatException e) {
+        logger.warn("Missing or invalid value for " + proxyPortProperty);
+      }
+      connectionPolicy.setProxy(new HttpHost(proxyHost, proxyPort, scheme));
+    }
+    return connectionPolicy;
+  }
+
+  /**
    * For integration test
    * @return the CosmosDB DocumentClient.
    */
@@ -140,7 +169,7 @@ class AzureCloudDestination implements CloudDestination {
       if (azureBlob.exists()) {
         logger.debug("Skipping upload of blob {} as it already exists in Azure container {}.", blobId,
             azureContainer.getName());
-        azureMetrics.blobSkippedCount.inc();
+        azureMetrics.blobUploadSkippedCount.inc();
         return false;
       }
 
@@ -300,7 +329,7 @@ class AzureCloudDestination implements CloudDestination {
    */
   private String getAzureBlobName(BlobId blobId) {
     // Prefix to assist in blob data sharding, since beginning of blobId has little variation.
-    String prefix = blobId.getUuid().substring(0,4) + "-";
+    String prefix = blobId.getUuid().substring(0, 4) + "-";
     return prefix + blobId.getID();
   }
 

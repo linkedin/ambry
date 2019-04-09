@@ -28,12 +28,10 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationFactory.class);
   private final AzureCloudConfig azureCloudConfig;
-  private final MetricRegistry metricRegistry;
   private final AzureMetrics azureMetrics;
 
   public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
-    this.metricRegistry = metricRegistry;
     azureMetrics = new AzureMetrics(metricRegistry);
   }
 
