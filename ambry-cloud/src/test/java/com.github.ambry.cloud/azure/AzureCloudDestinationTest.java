@@ -228,7 +228,7 @@ public class AzureCloudDestinationTest {
   /** Test setting connection policy with proxy from system properties */
   @Test
   public void testDocumentClientConnectionPolicy() throws Exception {
-    String proxyHost = "zwus2-proxy.azure.linkedin.com";
+    String proxyHost = "azure-proxy.github.com";
     int proxyPort = 3128;
     String[] schemes = {"http", "https"};
     for (String scheme : schemes) {
@@ -245,14 +245,12 @@ public class AzureCloudDestinationTest {
       policy = AzureCloudDestination.getProxyWiseConnectionPolicy(endpoint);
       assertNotNull("Expected proxy", policy.getProxy());
       assertEquals("Wrong host", proxyHost, policy.getProxy().getHostName());
-      assertEquals("Wrong scheme", scheme, policy.getProxy().getSchemeName());
       assertEquals("Expected default port", -1, policy.getProxy().getPort());
       // Test with host and port
       System.setProperty(proxyPortProperty, String.valueOf(proxyPort));
       policy = AzureCloudDestination.getProxyWiseConnectionPolicy(endpoint);
       assertNotNull("Expected proxy", policy.getProxy());
       assertEquals("Wrong host", proxyHost, policy.getProxy().getHostName());
-      assertEquals("Wrong scheme", scheme, policy.getProxy().getSchemeName());
       assertEquals("Wrong port", proxyPort, policy.getProxy().getPort());
     }
   }

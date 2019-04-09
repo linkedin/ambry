@@ -130,14 +130,16 @@ class AzureCloudDestination implements CloudDestination {
     String proxyPortProperty = scheme + "." + PROXY_PORT;
     String proxyHost = System.getProperty(proxyHostProperty);
     if (proxyHost != null) {
-      logger.info("Found proxy host: " + proxyHost);
+      logger.info("Using proxy host: " + proxyHost);
       int proxyPort = -1;
       try {
         proxyPort = Integer.valueOf(System.getProperty(proxyPortProperty));
+        logger.info("Using proxy port: " + proxyPort);
       } catch (NumberFormatException e) {
         logger.warn("Missing or invalid value for " + proxyPortProperty);
       }
-      connectionPolicy.setProxy(new HttpHost(proxyHost, proxyPort, scheme));
+      connectionPolicy.setProxy(new HttpHost(proxyHost, proxyPort));
+      connectionPolicy.setHandleServiceUnavailableFromProxy(true);
     }
     return connectionPolicy;
   }
