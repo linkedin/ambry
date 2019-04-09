@@ -460,6 +460,8 @@ public abstract class ReplicationEngine {
       // before the replica token file is persisted after the reset.
       if (persistor != null) {
         persistor.write(mountPath, false);
+      } else {
+        logger.warn("Unable to persist after token reset, persistor is null");
       }
     }
   }
