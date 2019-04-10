@@ -62,5 +62,8 @@ public class CloudReplicaTest {
     assertEquals("Wrong dataNodeId", cloudDataNode, cloudReplica.getDataNodeId());
     assertEquals("Wrong partitionId", mockPartitionId, cloudReplica.getPartitionId());
     assertEquals("Wrong peer replicaIds", mockPartitionId.getReplicaIds(), cloudReplica.getPeerReplicaIds());
+    String snapshot = cloudReplica.getSnapshot().toString();
+    assertTrue("Expected hostname in snapshot", snapshot.contains(cloudReplica.getDataNodeId().getHostname()));
+    assertTrue("Expected partitionId in snapshot", snapshot.contains(cloudReplica.getPartitionId().toPathString()));
   }
 }

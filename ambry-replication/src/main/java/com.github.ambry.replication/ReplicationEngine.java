@@ -148,9 +148,11 @@ public abstract class ReplicationEngine {
       }
 
       // start background persistent thread
-      // start scheduler thread to persist index in the background
-      this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
-          replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
+      // start scheduler thread to persist replica token in the background
+      if (persistor != null) {
+        this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
+            replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
+      }
     } catch (IOException e) {
       logger.error("IO error while starting replication", e);
     }

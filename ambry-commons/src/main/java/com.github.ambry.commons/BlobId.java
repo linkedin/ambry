@@ -437,7 +437,7 @@ public class BlobId extends StoreKey {
   /**
    * @return the uuid string associated with this BlobId
    */
-  protected String getUuid() {
+  public String getUuid() {
     return uuid != null ? uuid.toString() : uuidStr;
   }
 

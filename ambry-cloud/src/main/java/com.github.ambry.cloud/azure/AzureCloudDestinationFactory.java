@@ -28,17 +28,17 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationFactory.class);
   private final AzureCloudConfig azureCloudConfig;
-  private final MetricRegistry metricRegistry;
+  private final AzureMetrics azureMetrics;
 
   public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
-    this.metricRegistry = metricRegistry;
+    azureMetrics = new AzureMetrics(metricRegistry);
   }
 
   @Override
   public CloudDestination getCloudDestination() throws IllegalStateException {
     try {
-      return new AzureCloudDestination(azureCloudConfig, metricRegistry);
+      return new AzureCloudDestination(azureCloudConfig, azureMetrics);
     } catch (Exception e) {
       logger.error("Initializing Azure destination", e.getMessage());
       throw new IllegalStateException(e);

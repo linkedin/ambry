@@ -56,5 +56,8 @@ public class CloudDataNodeTest {
     assertEquals("Wrong ssl port", cloudConfig.vcrSslPort.intValue(), cloudDataNode.getSSLPort());
     assertEquals("Wrong connect to port", PortType.SSL, cloudDataNode.getPortToConnectTo().getPortType());
     assertTrue("Should have SSL port", cloudDataNode.hasSSLPort());
+    String snapshot = cloudDataNode.getSnapshot().toString();
+    assertTrue("Expected hostname in snapshot", snapshot.contains(clusterMapConfig.clusterMapHostName));
+    assertTrue("Expected datacenter name in snapshot", snapshot.contains(clusterMapConfig.clusterMapDatacenterName));
   }
 }
