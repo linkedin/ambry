@@ -13,10 +13,10 @@
  */
 package com.github.ambry.config;
 
-import com.github.ambry.commons.Criteria;
 import com.github.ambry.commons.PerformanceIndex;
 import com.github.ambry.commons.Threshold;
 import com.github.ambry.rest.RestMethod;
+import com.github.ambry.utils.Pair;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -99,22 +99,21 @@ public class PerformanceConfig {
 
     for (RestMethod method : EnumSet.of(RestMethod.GET, RestMethod.POST, RestMethod.DELETE, RestMethod.HEAD,
         RestMethod.PUT)) {
-      Map<PerformanceIndex, Criteria> successPerfIndexMap = new HashMap<>();
-      Map<PerformanceIndex, Criteria> nonSuccessPerfIndexMap = new HashMap<>();
+      Map<PerformanceIndex, Pair<Long, Boolean>> successPerfIndexMap = new HashMap<>();
+      Map<PerformanceIndex, Pair<Long, Boolean>> nonSuccessPerfIndexMap = new HashMap<>();
       if (method == RestMethod.GET) {
         successPerfIndexMap.put(PerformanceIndex.AverageBandwidth,
-            new Criteria(successGetAverageBandwidthThreshold, false));
-        successPerfIndexMap.put(PerformanceIndex.TimeToFirstByte,
-            new Criteria(successGetTimeToFirstByteThreshold, true));
+            new Pair<>(successGetAverageBandwidthThreshold, false));
+        successPerfIndexMap.put(PerformanceIndex.TimeToFirstByte, new Pair<>(successGetTimeToFirstByteThreshold, true));
       } else if (method == RestMethod.POST) {
         successPerfIndexMap.put(PerformanceIndex.AverageBandwidth,
-            new Criteria(successPostAverageBandwidthThreshold, false));
+            new Pair<>(successPostAverageBandwidthThreshold, false));
       } else {
         successPerfIndexMap.put(PerformanceIndex.RoundTripTime,
-            new Criteria(successThresholdObject.optLong(method.name(), Long.MAX_VALUE), true));
+            new Pair<>(successThresholdObject.optLong(method.name(), Long.MAX_VALUE), true));
       }
       nonSuccessPerfIndexMap.put(PerformanceIndex.RoundTripTime,
-          new Criteria(nonSuccessThresholdObject.optLong(method.name(), Long.MAX_VALUE), true));
+          new Pair<>(nonSuccessThresholdObject.optLong(method.name(), Long.MAX_VALUE), true));
       successRequestThresholds.put(method, new Threshold(successPerfIndexMap));
       nonSuccessRequestThresholds.put(method, new Threshold(nonSuccessPerfIndexMap));
     }

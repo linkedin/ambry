@@ -13,6 +13,7 @@
  */
 package com.github.ambry.commons;
 
+import com.github.ambry.utils.Pair;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
@@ -22,7 +23,7 @@ import static org.junit.Assert.*;
 
 
 /**
- * Test both {@link Threshold} and {@link Criteria}.
+ * Test {@link Threshold}.
  */
 public class ThresholdTest {
   private static final long ROUND_TRIP_TIME_THRESHOLD = 500;
@@ -31,10 +32,10 @@ public class ThresholdTest {
   private Threshold threshold;
 
   public ThresholdTest() {
-    Map<PerformanceIndex, Criteria> perfIndexAndCriteria = new HashMap<>();
-    perfIndexAndCriteria.put(PerformanceIndex.RoundTripTime, new Criteria(ROUND_TRIP_TIME_THRESHOLD, true));
-    perfIndexAndCriteria.put(PerformanceIndex.TimeToFirstByte, new Criteria(TIME_TO_FIRST_THRESHOLD, true));
-    perfIndexAndCriteria.put(PerformanceIndex.AverageBandwidth, new Criteria(AVERAGE_BANDWIDTH_THRESHOLD, false));
+    Map<PerformanceIndex, Pair<Long, Boolean>> perfIndexAndCriteria = new HashMap<>();
+    perfIndexAndCriteria.put(PerformanceIndex.RoundTripTime, new Pair<>(ROUND_TRIP_TIME_THRESHOLD, true));
+    perfIndexAndCriteria.put(PerformanceIndex.TimeToFirstByte, new Pair<>(TIME_TO_FIRST_THRESHOLD, true));
+    perfIndexAndCriteria.put(PerformanceIndex.AverageBandwidth, new Pair<>(AVERAGE_BANDWIDTH_THRESHOLD, false));
     threshold = new Threshold(perfIndexAndCriteria);
   }
 
