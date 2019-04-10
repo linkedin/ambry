@@ -103,7 +103,7 @@ public class RequestPath {
   }
 
   /**
-   * @returno the cluster name, or an empty string if the path did not include the recognized cluster name.
+   * @return the cluster name, or an empty string if the path did not include the recognized cluster name.
    */
   public String getClusterName() {
     return clusterName;

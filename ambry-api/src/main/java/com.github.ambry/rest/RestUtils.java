@@ -313,7 +313,8 @@ public class RestUtils {
      * "replicas" here means the string representation of all the replicas (i.e. host:port/path) where the blob might
      * reside.
      */
-    Replicas}
+    Replicas
+  }
 
   public static final class MultipartPost {
     public final static String BLOB_PART = "Blob";

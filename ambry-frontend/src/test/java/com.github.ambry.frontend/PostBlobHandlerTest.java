@@ -502,6 +502,14 @@ public class PostBlobHandlerTest {
     }
   }
 
+  /**
+   * Method to easily create a POST {@link RestRequest}. This will set {@link RestUtils.InternalKeys#REQUEST_PATH} to a
+   * valid {@link RequestPath} object.
+   * @param headers any associated headers as a {@link JSONObject}.
+   * @param path the path for the request.
+   * @param requestBody the body of the request.
+   * @return A {@link RestRequest} object that defines the request required by the input.
+   */
   private RestRequest getRestRequest(JSONObject headers, String path, byte[] requestBody)
       throws UnsupportedEncodingException, URISyntaxException {
     RestRequest request = AmbryBlobStorageServiceTest.createRestRequest(RestMethod.POST, path, headers,

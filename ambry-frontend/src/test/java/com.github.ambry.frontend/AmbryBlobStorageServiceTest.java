@@ -1189,7 +1189,6 @@ public class AmbryBlobStorageServiceTest {
    * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
-
   static RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers, List<ByteBuffer> contents)
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
     JSONObject request = new JSONObject();
@@ -2578,7 +2577,8 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     /**
      * Works in {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}.
      */
-    ProcessResponse}
+    ProcessResponse
+  }
 
   /**
    * The exception to return via future/callback.
@@ -2810,7 +2810,8 @@ class FrontendTestRouter implements Router {
     GetBlob,
     PutBlob,
     StitchBlob,
-    UpdateBlobTtl}
+    UpdateBlobTtl
+  }
 
   OpType exceptionOpType = null;
   Exception exceptionToReturn = null;
