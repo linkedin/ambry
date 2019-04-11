@@ -52,7 +52,8 @@ public class RequestPathTest {
     clusterNameSegmentsToTest.put("/" + clusterName.toLowerCase(), clusterName);
     clusterNameSegmentsToTest.put("/" + clusterName.toUpperCase(), clusterName);
     List<String> opsOrIdsToTest = Arrays.asList("/", "/" + baseId, "/" + baseId + "/random/extra",
-        "/" + RestUtils.SIGNED_ID_PREFIX + "/" + baseId, "/media" + baseId, "/" + RestUtils.SubResource.BlobInfo);
+        "/" + RestUtils.SIGNED_ID_PREFIX + "/" + baseId, "/media" + baseId, "/" + clusterName + baseId,
+        "/" + RestUtils.SubResource.BlobInfo);
     // construct test cases
     prefixesToTest.forEach((prefixToUse, expectedPrefix) -> {
       clusterNameSegmentsToTest.forEach((clusterNameToUse, expectedClusterName) -> {
@@ -60,24 +61,24 @@ public class RequestPathTest {
           String path = prefixToUse + clusterNameToUse + opOrId;
           // the uri as is (e.g. "/expectedOp).
           parseRequestPathAndVerify(path, prefixesToRemove, clusterName,
-              new RequestPath(expectedPrefix, expectedClusterName, opOrId, null));
+              new RequestPath(expectedPrefix, expectedClusterName, opOrId, opOrId, null));
 
           // the uri with a query string (e.g. "/expectedOp?param=value").
           parseRequestPathAndVerify(path + queryString, prefixesToRemove, clusterName,
-              new RequestPath(expectedPrefix, expectedClusterName, opOrId, null));
+              new RequestPath(expectedPrefix, expectedClusterName, opOrId, opOrId, null));
           if (opOrId.length() > 1) {
             for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
               String subResourceStr = "/" + subResource.name();
               parseRequestPathAndVerify(path + subResourceStr, prefixesToRemove, clusterName,
-                  new RequestPath(expectedPrefix, expectedClusterName, opOrId, subResource));
+                  new RequestPath(expectedPrefix, expectedClusterName, opOrId + subResourceStr, opOrId, subResource));
               parseRequestPathAndVerify(path + subResourceStr + queryString, prefixesToRemove, clusterName,
-                  new RequestPath(expectedPrefix, expectedClusterName, opOrId, subResource));
+                  new RequestPath(expectedPrefix, expectedClusterName, opOrId + subResourceStr, opOrId, subResource));
             }
           } else {
             parseRequestPathAndVerify(path + "?" + blobIdQuery, prefixesToRemove, clusterName,
-                new RequestPath(expectedPrefix, expectedClusterName, blobId, null));
+                new RequestPath(expectedPrefix, expectedClusterName, opOrId, blobId, null));
             parseRequestPathAndVerify(path + queryString + "&" + blobIdQuery, prefixesToRemove, clusterName,
-                new RequestPath(expectedPrefix, expectedClusterName, blobId, null));
+                new RequestPath(expectedPrefix, expectedClusterName, opOrId, blobId, null));
           }
         });
       });
@@ -90,15 +91,14 @@ public class RequestPathTest {
   @Test
   public void testOperationMatching() {
     String operation = "opToMatch";
-    Stream.of(new RequestPath("", "", "/" + operation + "/abc/def", null),
-        new RequestPath("", "", "/" + operation, null), new RequestPath("", "", "/" + operation + "/", null))
+    Stream.of(new RequestPath("", "", "", "/" + operation + "/abc/def", null),
+        new RequestPath("", "", "", "/" + operation, null), new RequestPath("", "", "", "/" + operation + "/", null))
         .forEach(requestPath -> {
           assertTrue("Operation should match", requestPath.matchesOperation(operation));
           assertTrue("Operation should match", requestPath.matchesOperation("/" + operation));
           assertTrue("Operation should match", requestPath.matchesOperation("/" + operation + "/"));
           assertFalse("Operation should not match", requestPath.matchesOperation("notOpToMatch"));
         });
-
   }
 
   /**
@@ -106,7 +106,7 @@ public class RequestPathTest {
    */
   @Test
   public void testStripLeadingSlash() {
-    RequestPath requestPath = new RequestPath("", "", "/opToMatch/abc", null);
+    RequestPath requestPath = new RequestPath("", "", "", "/opToMatch/abc", null);
     assertEquals("Should strip leading slash", "opToMatch/abc", requestPath.getOperationOrBlobId(true));
     assertEquals("Should not strip leading slash", "/opToMatch/abc", requestPath.getOperationOrBlobId(false));
   }

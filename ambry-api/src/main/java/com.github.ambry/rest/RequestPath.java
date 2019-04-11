@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import java.util.List;
+import java.util.Map;
 
 
 public class RequestPath {
@@ -21,6 +22,7 @@ public class RequestPath {
   private final String clusterName;
   private final String operationOrBlobId;
   private final RestUtils.SubResource subResource;
+  private final String pathAfterPrefixes;
   private String operationOrBlobIdWithoutLeadingSlash = null;
 
   /**
@@ -39,7 +41,24 @@ public class RequestPath {
    * @return a {@link RequestPath} object.
    */
   public static RequestPath parse(RestRequest restRequest, List<String> prefixesToRemove, String clusterName) {
-    String path = restRequest.getPath();
+    return parse(restRequest.getPath(), restRequest.getArgs(), prefixesToRemove, clusterName);
+  }
+
+  /**
+   * This is similar to {@link #parse(RestRequest, List, String)} but allows usage with arbitrary paths that are not
+   * part of a {@link RestRequest}.
+   *
+   * @param path the path
+   * @param args a map containing any request arguments. This might be used to look for blob IDs supplied via query
+   *             parameters or headers.
+   * @param prefixesToRemove the list of prefixes that could precede the other parts of the URL. Removal of
+   *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
+   * @param clusterName the cluster name to recognize and handle when parsing the URL. Case is ignored when matching
+   *                    this path segment.
+   * @return
+   */
+  public static RequestPath parse(String path, Map<String, Object> args, List<String> prefixesToRemove,
+      String clusterName) {
     int offset = 0;
 
     // remove prefix.
@@ -65,6 +84,9 @@ public class RequestPath {
       }
     }
 
+    // some use cases just require the path with the prefix and cluster name removed.
+    String pathAfterPrefixes = path.substring(offset);
+
     // if there are at least 2 path segments (*/*) after the current position,
     // test if the last segment is a sub-resource
     RestUtils.SubResource subResource = null;
@@ -80,17 +102,18 @@ public class RequestPath {
     // the operationOrBlobId is the part in between the prefix/cluster and sub-resource,
     // if these optional path segments exist.
     String operationOrBlobId = path.substring(offset, subResource == null ? path.length() : lastSlashOffset);
-    if ((operationOrBlobId.isEmpty() || operationOrBlobId.equals("/")) && restRequest.getArgs()
-        .containsKey(RestUtils.Headers.BLOB_ID)) {
-      operationOrBlobId = restRequest.getArgs().get(RestUtils.Headers.BLOB_ID).toString();
+    if ((operationOrBlobId.isEmpty() || operationOrBlobId.equals("/")) && args.containsKey(RestUtils.Headers.BLOB_ID)) {
+      operationOrBlobId = args.get(RestUtils.Headers.BLOB_ID).toString();
     }
 
-    return new RequestPath(prefixFound, clusterNameFound, operationOrBlobId, subResource);
+    return new RequestPath(prefixFound, clusterNameFound, pathAfterPrefixes, operationOrBlobId, subResource);
   }
 
-  RequestPath(String prefix, String clusterName, String operationOrBlobId, RestUtils.SubResource subResource) {
+  RequestPath(String prefix, String clusterName, String pathAfterPrefixes, String operationOrBlobId,
+      RestUtils.SubResource subResource) {
     this.prefix = prefix;
     this.clusterName = clusterName;
+    this.pathAfterPrefixes = pathAfterPrefixes;
     this.operationOrBlobId = operationOrBlobId;
     this.subResource = subResource;
   }
@@ -107,6 +130,15 @@ public class RequestPath {
    */
   public String getClusterName() {
     return clusterName;
+  }
+
+  /**
+   * For use cases that only require prefixes to be removed from a request path but do not need special handling for
+   * blob IDs and sub-resources.
+   * @return the path segments starting after the prefix and cluster name, if either is present.
+   */
+  public String getPathAfterPrefixes() {
+    return pathAfterPrefixes;
   }
 
   /**
