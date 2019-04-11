@@ -64,6 +64,7 @@ class AzureCloudDestination implements CloudDestination {
   private final DocumentClient documentClient;
   private final String cosmosCollectionLink; // eg "/dbs/ambry-metadata/colls/blob-metadata"
   private final RequestOptions defaultRequestOptions = new RequestOptions();
+  private final OperationContext blobOpContext = new OperationContext();
   private final AzureMetrics azureMetrics;
 
   // TODO: these constants should live somewhere else, but where?
@@ -84,6 +85,15 @@ class AzureCloudDestination implements CloudDestination {
     this.azureMetrics = azureMetrics;
     azureAccount = CloudStorageAccount.parse(azureCloudConfig.storageConnectionString);
     azureBlobClient = azureAccount.createCloudBlobClient();
+    // For debugging only, very verbose!
+    // blobOpContext.setLoggingEnabled(true);
+    // blobOpContext.setLogger(logger);
+    // Test basic operation on client
+    try {
+      azureBlobClient.getContainerReference("partition-0").exists(null, null, blobOpContext);
+    } catch (StorageException ex) {
+      throw new IllegalArgumentException("Could not list containers", ex);
+    }
     cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
     ConnectionPolicy connectionPolicy = getProxyWiseConnectionPolicy(azureCloudConfig.cosmosEndpoint);
     documentClient = new DocumentClient(azureCloudConfig.cosmosEndpoint, azureCloudConfig.cosmosKey, connectionPolicy,
@@ -160,7 +170,6 @@ class AzureCloudDestination implements CloudDestination {
     Objects.requireNonNull(blobInputStream, "Input stream cannot be null");
 
     BlobRequestOptions options = null; // may want to set BlobEncryptionPolicy here
-    OperationContext opContext = null;
     azureMetrics.blobUploadRequestCount.inc();
     try {
       Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
@@ -176,7 +185,7 @@ class AzureCloudDestination implements CloudDestination {
       }
 
       azureBlob.setMetadata(getMetadataMap(cloudBlobMetadata));
-      azureBlob.upload(blobInputStream, blobSize, null, options, opContext);
+      azureBlob.upload(blobInputStream, blobSize, null, options, blobOpContext);
       // Note: not calling this in finally block because don't want exceptions to manufacture
       // short times that make the system look artificially fast
       storageTimer.stop();
@@ -319,7 +328,7 @@ class AzureCloudDestination implements CloudDestination {
     CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(partitionPath);
     if (autoCreate) {
       azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
-          new OperationContext());
+          blobOpContext);
     }
     return azureContainer;
   }
