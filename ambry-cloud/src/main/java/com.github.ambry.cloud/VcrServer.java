@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
+import com.github.ambry.clustermap.VirtualReplicatorClusterFactory;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -70,7 +71,6 @@ public class VcrServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private CloudDestinationFactory cloudDestinationFactory;
-  private SSLConfig sslConfig;
   private VcrMetrics metrics = null;
 
   /**
@@ -92,16 +92,11 @@ public class VcrServer {
    * @param clusterAgentsFactory the {@link ClusterAgentsFactory} to use.
    * @param notificationSystem the {@link NotificationSystem} to use.
    * @param cloudDestinationFactory the {@link CloudDestinationFactory} to use.
-   * @param virtualReplicatorCluster the {@link VirtualReplicatorCluster} to use.
-   * @param sslConfig the {@link SSLConfig} to use.
    */
   VcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory,
-      VirtualReplicatorCluster virtualReplicatorCluster, SSLConfig sslConfig) {
+      NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory) {
     this(properties, clusterAgentsFactory, notificationSystem);
     this.cloudDestinationFactory = cloudDestinationFactory;
-    this.virtualReplicatorCluster = virtualReplicatorCluster;
-    this.sslConfig = sslConfig;
   }
 
   /**
@@ -129,18 +124,13 @@ public class VcrServer {
       CloudConfig cloudConfig = new CloudConfig(properties);
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
-      if (sslConfig == null) {
-        sslConfig = new SSLConfig(properties);
-      }
+      SSLConfig sslConfig = new SSLConfig(properties);
       // verify the configs
       properties.verify();
 
-      // Note: using static cluster until Helix version implemented
-      if (virtualReplicatorCluster == null) {
-        // TODO: obtain factory from config property
-        // Participate in vcr cluster?
-        virtualReplicatorCluster = new StaticVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
-      }
+      virtualReplicatorCluster =
+          ((VirtualReplicatorClusterFactory) Utils.getObj(cloudConfig.virtualReplicatorClusterFactoryClass, cloudConfig,
+              clusterMapConfig, clusterMap)).getVirtualReplicatorCluster();
 
       // initialize cloud destination
       if (cloudDestinationFactory == null) {

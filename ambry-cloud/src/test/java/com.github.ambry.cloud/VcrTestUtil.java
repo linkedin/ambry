@@ -14,8 +14,6 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterAgentsFactory;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
-import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 
@@ -31,14 +29,10 @@ public class VcrTestUtil {
    * @param clusterAgentsFactory the {@link ClusterAgentsFactory} to use.
    * @param notificationSystem the {@link NotificationSystem} to use.
    * @param cloudDestinationFactory the {@link CloudDestinationFactory} to use.
-   * @param virtualReplicatorCluster the {@link VirtualReplicatorCluster} to use.
-   * @param sslConfig the {@link SSLConfig} to use.
    * @return the created VCR server.
    */
   public static VcrServer createVcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory,
-      VirtualReplicatorCluster virtualReplicatorCluster, SSLConfig sslConfig) {
-    return new VcrServer(properties, clusterAgentsFactory, notificationSystem, cloudDestinationFactory,
-        virtualReplicatorCluster, sslConfig);
+      NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory) {
+    return new VcrServer(properties, clusterAgentsFactory, notificationSystem, cloudDestinationFactory);
   }
 }

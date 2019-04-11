@@ -99,7 +99,7 @@ public class ServerPlaintextTest {
   public void endToEndCloudBackupTest() throws Exception {
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, testEncryption,
-        notificationSystem);
+        notificationSystem, null);
   }
 
   @Test
