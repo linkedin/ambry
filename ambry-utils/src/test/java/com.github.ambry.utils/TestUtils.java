@@ -16,6 +16,7 @@ package com.github.ambry.utils;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collections;
@@ -24,9 +25,14 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import org.I0Itec.zkclient.IDefaultNameSpace;
 import org.I0Itec.zkclient.ZkServer;
+import org.I0Itec.zkclient.exception.ZkException;
+import org.I0Itec.zkclient.exception.ZkInterruptedException;
+import org.apache.zookeeper.server.NIOServerCnxnFactory;
+import org.apache.zookeeper.server.ZooKeeperServer;
 import org.junit.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.*;
 
@@ -224,6 +230,60 @@ public class TestUtils {
   }
 
   /**
+   * A wrapper class to start and shutdown {@link ZooKeeperServer}.
+   */
+  static class ZkServerWrapper {
+    private static final Logger logger = LoggerFactory.getLogger(ZkServerWrapper.class);
+    private ZooKeeperServer zk;
+    private NIOServerCnxnFactory nioFactory;
+    private int port;
+    private File dataDir;
+    private File dataLogDir;
+
+    public ZkServerWrapper(String dataDir, String logDir, int port) {
+      this.dataDir = new File(dataDir);
+      this.dataLogDir = new File(logDir);
+      this.dataDir.mkdirs();
+      this.dataLogDir.mkdirs();
+      this.port = port;
+    }
+
+    public void start() {
+      try {
+        zk = new ZooKeeperServer(dataDir, dataLogDir, ZkServer.DEFAULT_TICK_TIME);
+        zk.setMinSessionTimeout(ZkServer.DEFAULT_MIN_SESSION_TIMEOUT);
+        nioFactory = new NIOServerCnxnFactory();
+        int maxClientConnections = 0; // 0 means unlimited
+        nioFactory.configure(new InetSocketAddress(port), maxClientConnections);
+        nioFactory.startup(zk);
+      } catch (IOException e) {
+        throw new ZkException("Unable to start single ZooKeeper server.", e);
+      } catch (InterruptedException e) {
+        throw new ZkInterruptedException(e);
+      }
+      logger.info("ZooKeeperServer started successfully.");
+    }
+
+    public void shutdown() {
+      logger.info("Shutting down ZkServer...");
+      if (nioFactory != null) {
+        nioFactory.shutdown();
+        try {
+          nioFactory.join();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+        nioFactory = null;
+      }
+      if (zk != null) {
+        zk.shutdown();
+        zk = null;
+      }
+      logger.info("Shutting down ZooKeeperServer...done");
+    }
+  }
+
+  /**
    * A class to initialize and hold information about each Zk Server.
    */
   public static class ZkInfo {
@@ -232,7 +292,7 @@ public class TestUtils {
     private int port;
     private String dataDir;
     private String logDir;
-    private ZkServer zkServer;
+    private ZkServerWrapper zkServer;
 
     /**
      * Instantiate by starting a Zk server.
@@ -254,10 +314,8 @@ public class TestUtils {
     }
 
     private void startZkServer(int port, String dataDir, String logDir) {
-      IDefaultNameSpace defaultNameSpace = zkClient -> {
-      };
       // start zookeeper
-      zkServer = new ZkServer(dataDir, logDir, defaultNameSpace, port);
+      zkServer = new ZkServerWrapper(dataDir, logDir, port);
       zkServer.start();
     }
 
@@ -295,3 +353,4 @@ public class TestUtils {
     void run() throws Exception;
   }
 }
+
