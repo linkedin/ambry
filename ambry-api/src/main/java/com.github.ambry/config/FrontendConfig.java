@@ -254,8 +254,6 @@ public class FrontendConfig {
    * @return the string with the leading and trailing slash remove.
    */
   private String stripLeadingAndTrailingSlash(String string) {
-    int startIndex = string.startsWith("/") ? 1 : 0;
-    int endIndex = Math.max(string.length() - (string.endsWith("/") ? 1 : 0), startIndex);
-    return string.substring(startIndex, endIndex);
+    return string.replaceAll("^/|/$", "");
   }
 }

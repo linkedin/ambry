@@ -55,7 +55,7 @@ public class RequestPath {
    *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
    * @param clusterName the cluster name to recognize and handle when parsing the URL. Case is ignored when matching
    *                    this path segment.
-   * @return
+   * @return a {@link RequestPath} object.
    */
   public static RequestPath parse(String path, Map<String, Object> args, List<String> prefixesToRemove,
       String clusterName) {
