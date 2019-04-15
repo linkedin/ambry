@@ -68,14 +68,13 @@ public class SSLBlockingChannel extends BlockingChannel {
         sslSocket = (SSLSocket) sslSocketFactory.createSocket(socket, host, port, true);
 
         ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
-        if (protocolsList != null && protocolsList.size() > 0) {
+        if (!protocolsList.isEmpty()) {
           String[] enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
           sslSocket.setEnabledProtocols(enabledProtocols);
         }
 
         ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
-        if (cipherSuitesList != null && cipherSuitesList.size() > 0 && !(cipherSuitesList.size() == 1
-            && cipherSuitesList.get(0).equals(""))) {
+        if (!cipherSuitesList.isEmpty()) {
           String[] cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
           sslSocket.setEnabledCipherSuites(cipherSuites);
         }

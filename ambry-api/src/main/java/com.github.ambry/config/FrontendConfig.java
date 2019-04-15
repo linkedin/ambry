@@ -15,9 +15,11 @@ package com.github.ambry.config;
 
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.GetBlobOptions;
-import java.util.Arrays;
+import com.github.ambry.utils.Utils;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 
 /**
@@ -101,6 +103,13 @@ public class FrontendConfig {
   @Config("frontend.path.prefixes.to.remove")
   @Default("")
   public final List<String> pathPrefixesToRemove;
+
+  /**
+   * The secure path to validate if required for certain container.
+   */
+  @Config("frontend.secure.path.prefix")
+  @Default("")
+  public final String securePathPrefix;
 
   /**
    * Specifies the blob size in bytes beyond which chunked response will be sent for a getBlob() call
@@ -192,13 +201,6 @@ public class FrontendConfig {
   @Default("20 * 1024 * 1024")
   public final long maxJsonRequestSizeBytes;
 
-  /**
-   * The secure path to validate if required for certain container.
-   */
-  @Config("frontend.secure.path.prefix")
-  @Default("")
-  public final String securePathPrefix;
-
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
@@ -213,9 +215,13 @@ public class FrontendConfig {
     idSigningServiceFactory = verifiableProperties.getString(ID_SIGNING_SERVICE_FACTORY_KEY,
         "com.github.ambry.frontend.AmbryIdSigningServiceFactory");
     securePathPrefix = verifiableProperties.getString("frontend.secure.path.prefix", "");
-    pathPrefixesToRemove = Arrays.asList(
-        ((securePathPrefix.isEmpty() ? "" : "/" + securePathPrefix + ",") + verifiableProperties.getString(
-            "frontend.path.prefixes.to.remove", "")).split(","));
+    List<String> pathPrefixesFromConfig =
+        Utils.splitString(verifiableProperties.getString("frontend.path.prefixes.to.remove", ""), ",");
+    if (!securePathPrefix.isEmpty()) {
+      pathPrefixesFromConfig.add(securePathPrefix);
+    }
+    pathPrefixesToRemove = Collections.unmodifiableList(
+        pathPrefixesFromConfig.stream().map(this::stripLeadingAndTrailingSlash).collect(Collectors.toList()));
     chunkedGetResponseThresholdInBytes =
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
     allowServiceIdBasedPostRequest =
@@ -240,5 +246,14 @@ public class FrontendConfig {
         (int) TimeUnit.DAYS.toSeconds(30), 0, Integer.MAX_VALUE);
     maxJsonRequestSizeBytes =
         verifiableProperties.getLongInRange(MAX_JSON_REQUEST_SIZE_BYTES_KEY, 20 * 1024 * 1024, 0, Long.MAX_VALUE);
+  }
+
+  /**
+   * If the string starts or ends with a slash, remove them.
+   * @param string the string to strip.
+   * @return the string with the leading and trailing slash remove.
+   */
+  private String stripLeadingAndTrailingSlash(String string) {
+    return string.replaceAll("^/|/$", "");
   }
 }

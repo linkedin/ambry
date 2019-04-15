@@ -13,7 +13,7 @@
  */
 package com.github.ambry.config;
 
-import java.util.Arrays;
+import com.github.ambry.utils.Utils;
 import java.util.List;
 
 
@@ -100,6 +100,6 @@ public class ServerConfig {
     serverMessageTransformer = verifiableProperties.getString("server.message.transformer",
         "com.github.ambry.messageformat.ValidatingTransformer");
     serverStatsReportsToPublish =
-        Arrays.asList(verifiableProperties.getString("server.stats.reports.to.publish", "").split(","));
+        Utils.splitString(verifiableProperties.getString("server.stats.reports.to.publish", ""), ",");
   }
 }

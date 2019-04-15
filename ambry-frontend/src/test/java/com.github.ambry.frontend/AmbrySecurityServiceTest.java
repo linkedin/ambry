@@ -24,6 +24,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -73,6 +74,7 @@ public class AmbrySecurityServiceTest {
   private static final FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
   private static final String SERVICE_ID = "AmbrySecurityService";
   private static final String OWNER_ID = SERVICE_ID;
+  private static final String CLUSTER_NAME = "ambry-test";
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
   private static final QuotaManager quotaManager = new QuotaManager(FRONTEND_CONFIG);
@@ -121,7 +123,8 @@ public class AmbrySecurityServiceTest {
   @Test
   public void preProcessRequestTest() throws Exception {
     RestMethod[] methods =
-        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS, RestMethod.PUT};
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS,
+            RestMethod.PUT};
     for (RestMethod restMethod : methods) {
       // add a header that is prohibited
       JSONObject headers = new JSONObject();
@@ -168,7 +171,8 @@ public class AmbrySecurityServiceTest {
 
     // without callbacks
     RestMethod[] methods =
-        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS, RestMethod.PUT};
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS,
+            RestMethod.PUT};
     for (RestMethod restMethod : methods) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
       securityService.preProcessRequest(restRequest).get();
@@ -432,7 +436,10 @@ public class AmbrySecurityServiceTest {
     if (headers != null) {
       request.put(MockRestRequest.HEADERS_KEY, headers);
     }
-    return new MockRestRequest(request, null);
+    RestRequest restRequest = new MockRestRequest(request, null);
+    restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse(restRequest, FRONTEND_CONFIG.pathPrefixesToRemove, CLUSTER_NAME));
+    return restRequest;
   }
 
   /**

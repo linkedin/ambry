@@ -26,7 +26,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
-import java.util.ArrayList;
+import java.util.List;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -166,9 +166,8 @@ public class NettySslFactory implements SSLFactory {
    * @return the list of supported cipher suites, or {@code null} if the configs did not specify any
    */
   private static Iterable<String> getCipherSuites(SSLConfig config) {
-    ArrayList<String> cipherSuitesList = Utils.splitString(config.sslCipherSuites, ",");
-    return (cipherSuitesList.size() > 0 && !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).isEmpty()))
-        ? cipherSuitesList : null;
+    List<String> cipherSuitesList = Utils.splitString(config.sslCipherSuites, ",");
+    return cipherSuitesList.size() > 0 ? cipherSuitesList : null;
   }
 
   /**
@@ -176,9 +175,8 @@ public class NettySslFactory implements SSLFactory {
    * @return the list of supported cipher suites, or {@code null} if the configs did not specify any
    */
   private static String[] getEnabledProtocols(SSLConfig config) {
-    String[] enabledProtocols = config.sslEnabledProtocols.split(",");
-    return enabledProtocols.length > 0 && !(enabledProtocols.length == 1 && enabledProtocols[0].isEmpty())
-        ? enabledProtocols : null;
+    List<String> enabledProtocols = Utils.splitString(config.sslEnabledProtocols, ",");
+    return !enabledProtocols.isEmpty() ? enabledProtocols.toArray(new String[0]) : null;
   }
 
   /**

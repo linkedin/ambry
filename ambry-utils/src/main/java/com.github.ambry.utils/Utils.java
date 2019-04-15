@@ -733,16 +733,20 @@ public class Utils {
   }
 
   /**
-   * Split the input string "data" using the delimiter and return as list of strings for the slices obtained
-   * @param data
-   * @param delimiter
-   * @return
+   * Split the input string "data" using the delimiter and return as list of strings for the slices obtained.
+   * This method will ignore empty segments. That is, a call like {@code splitString(",a1,,b2,c3,", ","}} will return
+   * {@code ["a1","b2","c3]}. Since this is used for reading list-style configs, this is usually the desired behavior.
+   * @param data the string to split.
+   * @param delimiter the delimiter for splitting.
+   * @return a mutable list of items.
    */
   public static ArrayList<String> splitString(String data, String delimiter) {
     if (data == null) {
       throw new IllegalArgumentException("Passed in string is null ");
     }
-    return new ArrayList<>(Arrays.asList(data.split(delimiter)));
+    return Arrays.stream(data.split(delimiter))
+        .filter(s -> !s.isEmpty())
+        .collect(Collectors.toCollection(ArrayList::new));
   }
 
   /**
