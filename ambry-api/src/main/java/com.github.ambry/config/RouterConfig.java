@@ -220,6 +220,16 @@ public class RouterConfig {
   public final int routerTtlUpdateSuccessTarget;
 
   /**
+   * If this config is set to {@code true} the router will use {@code GetBlobOperation} instead of
+   * {@code GetBlobInfoOperation} for {@code getBlobInfo} calls. This allows the router to correct some blob size
+   * corruptions that may have arisen from using older versions of {@code BlobIdTransformer} with the downside of
+   * requiring more data to be fetched from storage. For most ambry deployments this is not necessary.
+   */
+  @Config("router.use.get.blob.operation.for.blob.info")
+  @Default("false")
+  public final boolean routerUseGetBlobOperationForBlobInfo;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -274,5 +284,7 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.ttl.update.request.parallelism", 3, 1, Integer.MAX_VALUE);
     routerTtlUpdateSuccessTarget =
         verifiableProperties.getIntInRange("router.ttl.update.success.target", 2, 1, Integer.MAX_VALUE);
+    routerUseGetBlobOperationForBlobInfo =
+        verifiableProperties.getBoolean("router.use.get.blob.operation.for.blob.info", false);
   }
 }
