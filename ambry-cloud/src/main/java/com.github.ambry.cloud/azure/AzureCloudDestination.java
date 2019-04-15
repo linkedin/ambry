@@ -358,9 +358,8 @@ class AzureCloudDestination implements CloudDestination {
     map.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, String.valueOf(cloudBlobMetadata.getExpirationTime()));
     map.put(CloudBlobMetadata.FIELD_ACCOUNT_ID, String.valueOf(cloudBlobMetadata.getAccountId()));
     map.put(CloudBlobMetadata.FIELD_CONTAINER_ID, String.valueOf(cloudBlobMetadata.getContainerId()));
-    map.put(CloudBlobMetadata.FIELD_ENCRYPTION_TYPE, cloudBlobMetadata.getEncryptionType().name());
+    map.put(CloudBlobMetadata.FIELD_ENCRYPTION_ORIGIN, cloudBlobMetadata.getEncryptionOrigin().name());
     map.put(CloudBlobMetadata.FIELD_KMS_CONTEXT, String.valueOf(cloudBlobMetadata.getKmsContext()));
-    map.put(CloudBlobMetadata.FIELD_ENCRYPTION_FORMAT, cloudBlobMetadata.getVcrEncryptionFormat().name());
     return map;
   }
 }

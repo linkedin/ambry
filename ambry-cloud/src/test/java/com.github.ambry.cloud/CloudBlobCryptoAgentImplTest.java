@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.cloud.CloudBlobCryptoAgentImpl;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -35,7 +34,7 @@ import static org.junit.Assert.*;
  */
 public class CloudBlobCryptoAgentImplTest {
 
-  private CloudBlobCryptoAgentImpl azureCloudBlobCryptoService;
+  private CloudBlobCryptoAgentImpl cryptoAgent;
   private static final int TWO_FIFTY_SIX_BITS_IN_BYTES = 32;
 
   public CloudBlobCryptoAgentImplTest() throws GeneralSecurityException {
@@ -43,7 +42,7 @@ public class CloudBlobCryptoAgentImplTest {
         new GCMCryptoService(new CryptoServiceConfig(new VerifiableProperties(new Properties())));
     KeyManagementService kms = new SingleKeyManagementService(new KMSConfig(new VerifiableProperties(new Properties())),
         TestUtils.getRandomKey(TWO_FIFTY_SIX_BITS_IN_BYTES));
-    azureCloudBlobCryptoService = new CloudBlobCryptoAgentImpl(cryptoService, kms, "any_context");
+    cryptoAgent = new CloudBlobCryptoAgentImpl(cryptoService, kms, "any_context");
   }
 
   /**
@@ -53,10 +52,10 @@ public class CloudBlobCryptoAgentImplTest {
   @Test
   public void testBasicFunctionality() throws Exception {
     byte[] payload = TestUtils.getRandomBytes(10000);
-    byte[] encryptedPayload = azureCloudBlobCryptoService.encrypt(ByteBuffer.wrap(payload)).array();
+    byte[] encryptedPayload = cryptoAgent.encrypt(ByteBuffer.wrap(payload)).array();
     assertFalse(payload.length == encryptedPayload.length);
     assertNotSubset("Payload is a subset of the 'encrypted' payload", encryptedPayload, payload);
-    byte[] decryptedPayload = azureCloudBlobCryptoService.decrypt(ByteBuffer.wrap(encryptedPayload)).array();
+    byte[] decryptedPayload = cryptoAgent.decrypt(ByteBuffer.wrap(encryptedPayload)).array();
     assertNotSame("Payload and decrypted payload are the same array instance", payload, decryptedPayload);
     assertArrayEquals("Decrypted payload different from original payload", payload, decryptedPayload);
   }
@@ -69,12 +68,12 @@ public class CloudBlobCryptoAgentImplTest {
   public void testBadDecryptInput() throws GeneralSecurityException {
     byte[] garbage = TestUtils.getRandomBytes(10000);
     //zero out version, encrypted key size, encrypted data size fields
-    for (int i = 0; i < CloudBlobCryptoAgentImpl.EncryptedKeyAndEncryptedData.INITIAL_MESSAGE_LENGTH; i++) {
+    for (int i = 0; i < CloudBlobCryptoAgentImpl.EncryptedDataPayload.INITIAL_MESSAGE_LENGTH; i++) {
       garbage[i] = 0;
     }
     //Version check should fail
     try {
-      azureCloudBlobCryptoService.decrypt(ByteBuffer.wrap(garbage)).array();
+      cryptoAgent.decrypt(ByteBuffer.wrap(garbage)).array();
       fail("Should have thrown exception");
     } catch (GeneralSecurityException e) {
       //expected
@@ -83,7 +82,7 @@ public class CloudBlobCryptoAgentImplTest {
     garbage[1] = 1;
     garbage[2] = -128;
     try {
-      azureCloudBlobCryptoService.decrypt(ByteBuffer.wrap(garbage)).array();
+      cryptoAgent.decrypt(ByteBuffer.wrap(garbage)).array();
       fail("Should have thrown exception");
     } catch (GeneralSecurityException e) {
       //expected
@@ -94,7 +93,7 @@ public class CloudBlobCryptoAgentImplTest {
     garbage[6] = -128;
     garbage[10] = -128;
     try {
-      azureCloudBlobCryptoService.decrypt(ByteBuffer.wrap(garbage)).array();
+      cryptoAgent.decrypt(ByteBuffer.wrap(garbage)).array();
       fail("Should have thrown exception");
     } catch (GeneralSecurityException e) {
       //expected
@@ -105,7 +104,7 @@ public class CloudBlobCryptoAgentImplTest {
     garbage[10] = 0;
     garbage[13] = 79;
     try {
-      azureCloudBlobCryptoService.decrypt(ByteBuffer.wrap(garbage)).array();
+      cryptoAgent.decrypt(ByteBuffer.wrap(garbage)).array();
       fail("Should have thrown exception");
     } catch (GeneralSecurityException e) {
       //expected

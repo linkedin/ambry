@@ -13,8 +13,10 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 
 
 public class VcrMetrics {
@@ -22,9 +24,21 @@ public class VcrMetrics {
   public final Histogram vcrStartTimeInMs;
   public final Histogram vcrShutdownTimeInMs;
 
+  // Encryption metrics
+  public final Counter blobEncryptionCount;
+  public final Counter blobDecryptionCount;
+  public final Timer blobEncryptionTime;
+  public final Timer blobDecryptionTime;
+  public final Counter skipUnencryptedBlobsCount;
+
   public VcrMetrics(MetricRegistry registry) {
-    // TODO: add metrics to registry
     vcrStartTimeInMs = registry.histogram(MetricRegistry.name(VcrServer.class, "VcrStartTimeInMs"));
     vcrShutdownTimeInMs = registry.histogram(MetricRegistry.name(VcrServer.class, "VcrShutdownTimeInMs"));
+    blobEncryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionCount"));
+    blobDecryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobDet4acryptionCount"));
+    blobEncryptionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionTime"));
+    blobDecryptionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobDecryptionTime"));
+    skipUnencryptedBlobsCount =
+        registry.counter(MetricRegistry.name(CloudBlobStore.class, "SkipUnencryptedBlobsCount"));
   }
 }

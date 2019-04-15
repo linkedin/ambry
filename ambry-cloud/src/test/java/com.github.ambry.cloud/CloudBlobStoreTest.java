@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -52,11 +53,12 @@ import static org.mockito.Mockito.*;
  */
 public class CloudBlobStoreTest {
 
-  private final CloudBlobCryptoAgent cryptoService = new TestCloudBlobCryptoAgent();
+  private final CloudBlobCryptoAgent cryptoAgent = new TestCloudBlobCryptoAgent();
   private Store store;
   private CloudDestination dest;
   private PartitionId partitionId;
   private CloudConfig cloudConfig;
+  private VcrMetrics vcrMetrics;
   private Random random = new Random();
   private short refAccountId = 50;
   private short refContainerId = 100;
@@ -64,40 +66,79 @@ public class CloudBlobStoreTest {
 
   @Before
   public void setup() throws Exception {
-    dest = mock(CloudDestination.class);
     partitionId = new MockPartitionId();
+  }
+
+  /**
+   * Setup the cloud blobstore.
+   * @param requireEncryption value of requireEncryption flag in CloudConfig.
+   * @param withCryptoAgent whether to set a {@link CloudBlobCryptoAgent} in the cloud store.
+   * @param start whether to start the store.
+   */
+  private void setupCloudStore(boolean requireEncryption, boolean withCryptoAgent, boolean start) throws Exception {
     Properties props = new Properties();
     // Require encryption for uploading
-    props.setProperty(CloudConfig.VCR_REQUIRE_ENCRYPTION, "true");
+    props.setProperty(CloudConfig.VCR_REQUIRE_ENCRYPTION, Boolean.toString(requireEncryption));
     cloudConfig = new CloudConfig(new VerifiableProperties(props));
-    store = new CloudBlobStore(partitionId, cloudConfig, dest, cryptoService);
-    store.start();
+    dest = mock(CloudDestination.class);
+    vcrMetrics = new VcrMetrics(new MetricRegistry());
+    store = new CloudBlobStore(partitionId, cloudConfig, dest, withCryptoAgent ? cryptoAgent : null, vcrMetrics);
+    if (start) {
+      store.start();
+    }
   }
 
   /** Test the CloudBlobStore put method. */
   @Test
   public void testStorePuts() throws Exception {
+    testStorePuts(false, false);
+    testStorePuts(false, true);
+    testStorePuts(true, false);
+    testStorePuts(true, true);
+  }
+
+  private void testStorePuts(boolean requireEncryption, boolean withCryptoAgent) throws Exception {
+    setupCloudStore(requireEncryption, withCryptoAgent, true);
     // Put blobs with and without expiration and encryption
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    int count = 10;
+    int count = 1;
     long expireTime = System.currentTimeMillis() + 10000;
+    int expectedUploads = 0;
+    int expectedEncryptions = 0;
+    int expectedUnencryptedSkips = 0;
     for (int j = 0; j < count; j++) {
       long size = Math.abs(random.nextLong()) % 10000;
-      // Permanent and encrypted, should be uploaded
+      // Permanent and encrypted, should be uploaded and not reencrypted
       addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, true);
-      // Permanent and unencrypted, should not be uploaded
+      expectedUploads++;
+      // Permanent and unencrypted
       addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, false);
-      // Short TTL and encrypted, should not be uploaded
+      if (withCryptoAgent) {
+        expectedUploads++;
+        if (requireEncryption) {
+          expectedEncryptions++;
+        }
+      } else {
+        if (requireEncryption) {
+          expectedUnencryptedSkips++;
+        } else {
+          expectedUploads++;
+        }
+      }
+      // Short TTL and encrypted, should not be uploaded nor encrypted
       addBlobToSet(messageWriteSet, size, expireTime, refAccountId, refContainerId, true);
     }
     store.put(messageWriteSet);
-    verify(dest, times(count)).uploadBlob(any(BlobId.class), anyLong(), any(CloudBlobMetadata.class),
+    verify(dest, times(expectedUploads)).uploadBlob(any(BlobId.class), anyLong(), any(CloudBlobMetadata.class),
         any(InputStream.class));
+    assertEquals("Unexpected encryption count", expectedEncryptions, vcrMetrics.blobEncryptionCount.getCount());
+    assertEquals("Unexpected skip count", expectedUnencryptedSkips, vcrMetrics.skipUnencryptedBlobsCount.getCount());
   }
 
   /** Test the CloudBlobStore delete method. */
   @Test
   public void testStoreDeletes() throws Exception {
+    setupCloudStore(true, true, true);
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
@@ -111,6 +152,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore updateTtl method. */
   @Test
   public void testStoreTtlUpdates() throws Exception {
+    setupCloudStore(true, true, true);
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
@@ -125,6 +167,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore findMissingKeys method. */
   @Test
   public void testFindMissingKeys() throws Exception {
+    setupCloudStore(true, true, true);
     int count = 10;
     List<StoreKey> keys = new ArrayList<>();
     Map<String, CloudBlobMetadata> metadataMap = new HashMap<>();
@@ -133,8 +176,8 @@ public class CloudBlobStoreTest {
       BlobId existentBlobId = getUniqueId();
       keys.add(existentBlobId);
       metadataMap.put(existentBlobId.getID(),
-          new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024, null,
-              CloudBlobMetadata.EncryptionType.ROUTER, CloudBlobMetadata.VcrEncryptionFormat.DEFAULT));
+          new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024,
+              CloudBlobMetadata.EncryptionOrigin.ROUTER, null));
       // Blob without metadata
       BlobId nonexistentBlobId = getUniqueId();
       keys.add(nonexistentBlobId);
@@ -149,24 +192,24 @@ public class CloudBlobStoreTest {
   @Test
   public void testStoreNotStarted() throws Exception {
     // Create store and don't start it.
-    CloudBlobStore idleStore = new CloudBlobStore(partitionId, cloudConfig, dest, cryptoService);
+    setupCloudStore(true, true, false);
     List<StoreKey> keys = Collections.singletonList(getUniqueId());
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     addBlobToSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId, true);
     try {
-      idleStore.put(messageWriteSet);
+      store.put(messageWriteSet);
       fail("Store put should have failed.");
     } catch (StoreException e) {
       assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
     try {
-      idleStore.delete(messageWriteSet);
+      store.delete(messageWriteSet);
       fail("Store delete should have failed.");
     } catch (StoreException e) {
       assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
     try {
-      idleStore.findMissingKeys(keys);
+      store.findMissingKeys(keys);
       fail("Store findMissingKeys should have failed.");
     } catch (StoreException e) {
       assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
@@ -181,7 +224,11 @@ public class CloudBlobStoreTest {
         new CloudStorageException("ouch"));
     when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(new CloudStorageException("ouch"));
     when(exDest.getBlobMetadata(anyList())).thenThrow(new CloudStorageException("ouch"));
-    CloudBlobStore exStore = new CloudBlobStore(partitionId, cloudConfig, exDest, cryptoService);
+    Properties props = new Properties();
+    props.setProperty(CloudConfig.VCR_REQUIRE_ENCRYPTION, "false");
+    cloudConfig = new CloudConfig(new VerifiableProperties(props));
+    vcrMetrics = new VcrMetrics(new MetricRegistry());
+    CloudBlobStore exStore = new CloudBlobStore(partitionId, cloudConfig, exDest, cryptoAgent, vcrMetrics);
     exStore.start();
     List<StoreKey> keys = Collections.singletonList(getUniqueId());
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();

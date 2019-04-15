@@ -18,5 +18,5 @@ package com.github.ambry.cloud;
  */
 public interface CloudBlobCryptoAgentFactory {
 
-  CloudBlobCryptoAgent getCloudBlobCryptoAgent(CloudBlobMetadata.VcrEncryptionFormat vcrEncryptionFormat);
+  CloudBlobCryptoAgent getCloudBlobCryptoAgent();
 }

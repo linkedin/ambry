@@ -21,6 +21,9 @@ package com.github.ambry.config;
  */
 public class RouterConfig {
 
+  public static final String DEFAULT_KMS_FACTORY = "com.github.ambry.router.SingleKeyManagementServiceFactory";
+  public static final String DEFAULT_CRYPTO_SERVICE_FACTORY = "com.github.ambry.router.GCMCryptoServiceFactory";
+
   /**
    * Number of independent scaling units for the router.
    */
@@ -188,14 +191,14 @@ public class RouterConfig {
    * The KeyManagementServiceFactory that will be used to fetch {@link com.github.ambry.router.KeyManagementService}
    */
   @Config("router.key.management.service.factory")
-  @Default("com.github.ambry.router.SingleKeyManagementServiceFactory")
+  @Default(DEFAULT_KMS_FACTORY)
   public final String routerKeyManagementServiceFactory;
 
   /**
    * The CryptoServiceFactory that will be used to fetch {@link com.github.ambry.router.CryptoService}
    */
   @Config("router.crypto.service.factory")
-  @Default("com.github.ambry.router.GCMCryptoServiceFactory")
+  @Default(DEFAULT_CRYPTO_SERVICE_FACTORY)
   public final String routerCryptoServiceFactory;
 
   /**
@@ -264,10 +267,10 @@ public class RouterConfig {
     routerBlobidCurrentVersion =
         verifiableProperties.getShortFromAllowedValues("router.blobid.current.version", (short) 6,
             new Short[]{1, 2, 3, 4, 5, 6});
-    routerKeyManagementServiceFactory = verifiableProperties.getString("router.key.management.service.factory",
-        "com.github.ambry.router.SingleKeyManagementServiceFactory");
-    routerCryptoServiceFactory = verifiableProperties.getString("router.crypto.service.factory",
-        "com.github.ambry.router.GCMCryptoServiceFactory");
+    routerKeyManagementServiceFactory =
+        verifiableProperties.getString("router.key.management.service.factory", DEFAULT_KMS_FACTORY);
+    routerCryptoServiceFactory =
+        verifiableProperties.getString("router.crypto.service.factory", DEFAULT_CRYPTO_SERVICE_FACTORY);
     routerCryptoJobsWorkerCount =
         verifiableProperties.getIntInRange("router.crypto.jobs.worker.count", 1, 1, Integer.MAX_VALUE);
     routerTtlUpdateRequestParallelism =

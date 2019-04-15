@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
@@ -44,6 +45,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.cloud.CloudBlobMetadata.EncryptionOrigin;
 
 /**
  * The blob store that reflects data in a cloud storage.
@@ -53,8 +55,9 @@ class CloudBlobStore implements Store {
   private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
-  private final CloudBlobCryptoAgent cryptoService;
   private final CloudConfig cloudConfig;
+  private final CloudBlobCryptoAgent cryptoAgent;
+  private final VcrMetrics vcrMetrics;
   private final long minTtlMillis;
   private boolean started;
 
@@ -64,15 +67,17 @@ class CloudBlobStore implements Store {
    * @param cloudDestination the {@link CloudDestination}.
    * @param cloudConfig the {@link CloudConfig} to use.
    * @param cloudDestination the {@link CloudDestination} to use.
-   * @param cryptoService the {@link CloudBlobCryptoAgent} to use for encryption.
+   * @param cryptoAgent the {@link CloudBlobCryptoAgent} to use for encryption.
+   * @param vcrMetrics the {@link VcrMetrics} to use.
    */
   CloudBlobStore(PartitionId partitionId, CloudConfig cloudConfig, CloudDestination cloudDestination,
-      CloudBlobCryptoAgent cryptoService) {
+      CloudBlobCryptoAgent cryptoAgent, VcrMetrics vcrMetrics) {
     this.cloudDestination = Objects.requireNonNull(cloudDestination, "cloudDestination is required");
     this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
     this.cloudConfig = Objects.requireNonNull(cloudConfig, "cloudConfig is required");
+    this.vcrMetrics = Objects.requireNonNull(vcrMetrics, "vcrMetrics is required");
     minTtlMillis = TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays);
-    this.cryptoService = cryptoService;
+    this.cryptoAgent = cryptoAgent;
   }
 
   @Override
@@ -109,23 +114,45 @@ class CloudBlobStore implements Store {
       throws CloudStorageException, IOException, GeneralSecurityException {
     if (shouldUpload(messageInfo)) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
-      // TODO: would be more efficient to call blobId.isEncrypted()
-      String kmsContext = cryptoService.getEncryptionContext();
-      CloudBlobMetadata.EncryptionType encryptionType;
-      if (cloudConfig.vcrRequireEncryption && cryptoService != null && (blobId.getVersion() < BlobId.BLOB_ID_V4 || !BlobId.isEncrypted(blobId.getID()))) {
-        // Need to encrypt the buffer before upload
-        messageBuf = cryptoService.encrypt(messageBuf);
-        encryptionType = CloudBlobMetadata.EncryptionType.VCR;
-      }
-      else {
-        kmsContext = blobId.getAccountId()+":"+blobId.getContainerId();
-        encryptionType = CloudBlobMetadata.EncryptionType.ROUTER;
+      boolean isRouterEncrypted = isRouterEncrypted(blobId);
+      String kmsContext = null;
+      EncryptionOrigin encryptionOrigin = isRouterEncrypted ? EncryptionOrigin.ROUTER : EncryptionOrigin.NONE;
+      if (cloudConfig.vcrRequireEncryption) {
+        if (isRouterEncrypted) {
+          // Nothing further needed
+        } else {
+          // Need to encrypt the buffer before upload
+          if (cryptoAgent != null) {
+            Timer.Context encryptionTimer = vcrMetrics.blobEncryptionTime.time();
+            messageBuf = cryptoAgent.encrypt(messageBuf);
+            encryptionTimer.stop();
+            vcrMetrics.blobEncryptionCount.inc();
+            encryptionOrigin = EncryptionOrigin.VCR;
+            kmsContext = cryptoAgent.getEncryptionContext();
+          } else {
+            // Cannot upload this blob since we can't satisfy encryption requirements
+            vcrMetrics.skipUnencryptedBlobsCount.inc();
+            return;
+          }
+        }
+      } else {
+        // encryption not required, upload as is
       }
       CloudBlobMetadata blobMetadata =
           new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
-              messageInfo.getSize(), kmsContext, encryptionType, CloudBlobMetadata.VcrEncryptionFormat.DEFAULT);
+              messageInfo.getSize(), encryptionOrigin, kmsContext);
       cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
     }
+  }
+
+  /**
+   * Utility to check whether a blob was already encrypted by the router.
+   * @param blobId the blob to check.
+   * @return True if the blob is encrypted, otherwise false.
+   */
+  private static boolean isRouterEncrypted(BlobId blobId) throws IOException {
+    // TODO: would be more efficient to call blobId.isEncrypted()
+    return blobId.getVersion() >= BlobId.BLOB_ID_V4 && BlobId.isEncrypted(blobId.getID());
   }
 
   /**

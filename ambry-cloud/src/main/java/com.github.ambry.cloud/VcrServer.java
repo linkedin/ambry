@@ -151,7 +151,7 @@ public class VcrServer {
       cloudBackupManager =
           new CloudBackupManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory,
               clusterMap, virtualReplicatorCluster, cloudDestinationFactory, scheduler, connectionPool, registry,
-              notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer, cloudBlobCryptoAgentFactory);
+              notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer, cloudBlobCryptoAgentFactory, metrics);
       cloudBackupManager.start();
 
       DataNodeId currentNode = virtualReplicatorCluster.getCurrentDataNodeId();

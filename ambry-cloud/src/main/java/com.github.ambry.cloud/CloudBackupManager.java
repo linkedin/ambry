@@ -51,7 +51,7 @@ public class CloudBackupManager extends ReplicationEngine {
       CloudDestinationFactory cloudDestinationFactory, ScheduledExecutorService scheduler,
       ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      CloudBlobCryptoAgentFactory cloudBlobCryptoAgentFactory) throws ReplicationException {
+      CloudBlobCryptoAgentFactory cloudBlobCryptoAgentFactory, VcrMetrics vcrMetrics) throws ReplicationException {
 
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
         virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool, metricRegistry,
@@ -63,8 +63,7 @@ public class CloudBackupManager extends ReplicationEngine {
       ReplicaId cloudReplica =
           new CloudReplica(cloudConfig, partitionId, virtualReplicatorCluster.getCurrentDataNodeId());
       Store cloudStore = new CloudBlobStore(partitionId, cloudConfig, cloudDestination,
-          cloudBlobCryptoAgentFactory.getCloudBlobCryptoAgent(
-              CloudBlobMetadata.VcrEncryptionFormat.valueOf(cloudConfig.vcrEncryptionFormat)));
+          cloudBlobCryptoAgentFactory.getCloudBlobCryptoAgent(), vcrMetrics);
       try {
         cloudStore.start();
       } catch (StoreException e) {

@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.CryptoServiceFactory;
 import com.github.ambry.router.KeyManagementServiceFactory;
@@ -35,15 +34,14 @@ public class CloudBlobCryptoAgentFactoryImpl implements CloudBlobCryptoAgentFact
   public CloudBlobCryptoAgentFactoryImpl(VerifiableProperties verifiableProperties, String clusterName,
       MetricRegistry metricRegistry) throws ReflectiveOperationException {
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
-    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
-    cryptoServiceFactory = Utils.getObj(routerConfig.routerCryptoServiceFactory, verifiableProperties, metricRegistry);
+    cryptoServiceFactory = Utils.getObj(cloudConfig.vcrCryptoServiceFactory, verifiableProperties, metricRegistry);
     keyManagementServiceFactory =
-        Utils.getObj(routerConfig.routerKeyManagementServiceFactory, verifiableProperties, clusterName, metricRegistry);
+        Utils.getObj(cloudConfig.vcrKeyManagementServiceFactory, verifiableProperties, clusterName, metricRegistry);
     context = cloudConfig.kmsServiceKeyContext;
   }
 
   @Override
-  public CloudBlobCryptoAgent getCloudBlobCryptoAgent(CloudBlobMetadata.VcrEncryptionFormat vcrEncryptionFormat) {
+  public CloudBlobCryptoAgent getCloudBlobCryptoAgent() {
     try {
       return new CloudBlobCryptoAgentImpl(cryptoServiceFactory.getCryptoService(),
           keyManagementServiceFactory.getKeyManagementService(), context);

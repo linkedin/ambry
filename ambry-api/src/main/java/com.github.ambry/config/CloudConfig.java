@@ -25,6 +25,9 @@ public class CloudConfig {
   public static final String VCR_SSL_PORT = "vcr.ssl.port";
   public static final String VCR_REPLICA_MOUNT_PATH_PREFIX = "vcr.replica.mount.path.prefix";
   public static final String VCR_REQUIRE_ENCRYPTION = "vcr.require.encryption";
+  public static final String VCR_KMS_FACTORY = "vcr.key.management.service.factory";
+  public static final String VCR_CRYPTO_SERVICE_FACTORY = "vcr.crypto.service.factory";
+
   public static final String VCR_MIN_TTL_DAYS = "vcr.min.ttl.days";
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
 
@@ -87,14 +90,14 @@ public class CloudConfig {
   public final String vcrReplicaMountPathPrefix;
 
   /**
-   * The cloud destination factory class name.
+   * Require blobs to be encrypted prior to cloud upload?
    */
-  @Config(CLOUD_DESTINATION_FACTORY_CLASS)
-  @Default(DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS)
-  public final String cloudDestinationFactoryClass;
+  @Config(VCR_REQUIRE_ENCRYPTION)
+  @Default("false")
+  public final boolean vcrRequireEncryption;
 
   /**
-   * The kms destination factory class name.
+   * The kms service factory class name.
    */
   @Config(KMS_SERVICE_KEY_CONTEXT)
   @Default(DEFAULT_KMS_SERVICE_KEY_CONTEXT)
@@ -108,18 +111,18 @@ public class CloudConfig {
   public final String cloudBlobCryptoAgentFactoryClass;
 
   /**
-   * VCR Encryption format
+   * The KeyManagementServiceFactory that will be used to fetch {@link com.github.ambry.router.KeyManagementService}
    */
-  @Config(VCR_ENCRYPTION_FORMAT)
-  @Default(DEFAULT_VCR_ENCRYPTION_FORMAT)
-  public final String vcrEncryptionFormat;
+  @Config(VCR_KMS_FACTORY)
+  @Default(RouterConfig.DEFAULT_KMS_FACTORY)
+  public final String vcrKeyManagementServiceFactory;
 
   /**
-   * Require blobs to be encrypted prior to cloud upload?
+   * The CryptoServiceFactory that will be used to fetch {@link com.github.ambry.router.CryptoService}
    */
-  @Config(VCR_REQUIRE_ENCRYPTION)
-  @Default("false")
-  public final boolean vcrRequireEncryption;
+  @Config(VCR_CRYPTO_SERVICE_FACTORY)
+  @Default(RouterConfig.DEFAULT_CRYPTO_SERVICE_FACTORY)
+  public final String vcrCryptoServiceFactory;
 
   /**
    * Minimum TTL in days required for blobs to be uploaded to cloud.
@@ -141,10 +144,6 @@ public class CloudConfig {
         DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS);
     cloudDestinationFactoryClass =
         verifiableProperties.getString(CLOUD_DESTINATION_FACTORY_CLASS, DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS);
-    kmsServiceKeyContext = verifiableProperties.getString(KMS_SERVICE_KEY_CONTEXT, DEFAULT_KMS_SERVICE_KEY_CONTEXT);
-    cloudBlobCryptoAgentFactoryClass = verifiableProperties.getString(CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
-        DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS);
-    vcrEncryptionFormat = verifiableProperties.getString(VCR_ENCRYPTION_FORMAT, DEFAULT_VCR_ENCRYPTION_FORMAT);
     vcrAssignedPartitions = verifiableProperties.getString(VCR_ASSIGNED_PARTITIONS, null);
     vcrClusterZkConnectString =
         verifiableProperties.getString(VCR_CLUSTER_ZK_CONNECT_STRING, DEFAULT_VCR_CLUSTER_ZK_CONNECT_STRING);
@@ -153,7 +152,12 @@ public class CloudConfig {
     vcrReplicaMountPathPrefix =
         verifiableProperties.getString(VCR_REPLICA_MOUNT_PATH_PREFIX, DEFAULT_VCR_REPLICA_MOUNT_PATH_PREFIX);
     vcrRequireEncryption = verifiableProperties.getBoolean(VCR_REQUIRE_ENCRYPTION, false);
+    vcrKeyManagementServiceFactory = verifiableProperties.getString(VCR_KMS_FACTORY, RouterConfig.DEFAULT_KMS_FACTORY);
+    vcrCryptoServiceFactory =
+        verifiableProperties.getString(VCR_CRYPTO_SERVICE_FACTORY, RouterConfig.DEFAULT_CRYPTO_SERVICE_FACTORY);
+    kmsServiceKeyContext = verifiableProperties.getString(KMS_SERVICE_KEY_CONTEXT, DEFAULT_KMS_SERVICE_KEY_CONTEXT);
+    cloudBlobCryptoAgentFactoryClass = verifiableProperties.getString(CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
+        DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS);
     vcrMinTtlDays = verifiableProperties.getInt(VCR_MIN_TTL_DAYS, DEFAULT_MIN_TTL_DAYS);
-    vcrAssignedPartitions = verifiableProperties.getString(VCR_ASSIGNED_PARTITIONS, null);
   }
 }
