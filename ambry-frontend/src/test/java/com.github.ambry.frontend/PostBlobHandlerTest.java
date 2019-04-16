@@ -28,6 +28,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.MockRestResponseChannel;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -38,7 +39,6 @@ import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.PutBlobOptionsBuilder;
-import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.MockTime;
@@ -47,6 +47,8 @@ import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -86,6 +88,7 @@ public class PostBlobHandlerTest {
   private static final String CONTENT_TYPE = "text/plain";
   private static final String OWNER_ID = "tester";
   private static final String CONVERTED_ID = "/abcdef";
+  private static final String CLUSTER_NAME = "ambry-test";
 
   static {
     try {
@@ -282,9 +285,8 @@ public class PostBlobHandlerTest {
     JSONObject headers = new JSONObject();
     AmbryBlobStorageServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !container.isCacheable(), SERVICE_ID,
         CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), container.getName());
-    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(1024));
-    RestRequest request = AmbryBlobStorageServiceTest.createRestRequest(RestMethod.POST, "/", headers,
-        new LinkedList<>(Arrays.asList(content, null)));
+    byte[] content = TestUtils.getRandomBytes(1024);
+    RestRequest request = getRestRequest(headers, "/", content);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> future = new FutureResult<>();
     postBlobHandler.handle(request, restResponseChannel, future::done);
@@ -316,15 +318,15 @@ public class PostBlobHandlerTest {
    * @param expectWarning {@code true} if a warning header for non compliance is expected. {@code false} otherwise.
    * @throws Exception
    */
-  private void verifySuccessResponseOnTtlEnforcement(FutureResult<Void> postFuture, ByteBuffer content,
-      long blobTtlSecs, RestResponseChannel restResponseChannel, boolean expectWarning) throws Exception {
+  private void verifySuccessResponseOnTtlEnforcement(FutureResult<Void> postFuture, byte[] content, long blobTtlSecs,
+      RestResponseChannel restResponseChannel, boolean expectWarning) throws Exception {
     postFuture.get(TIMEOUT_SECS, TimeUnit.SECONDS);
 
     String id = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
     assertNotNull("There should be a blob ID returned", id);
     InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(id);
     assertNotNull("No blob with ID " + id, blob);
-    assertEquals("Unexpected blob content stored", content.rewind(), blob.getBlob());
+    assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
     assertEquals("Unexpected ttl stored", blobTtlSecs, blob.getBlobProperties().getTimeToLiveInSeconds());
 
     if (expectWarning) {
@@ -362,9 +364,8 @@ public class PostBlobHandlerTest {
     if (maxUploadSize != null) {
       headers.put(RestUtils.Headers.MAX_UPLOAD_SIZE, maxUploadSize);
     }
-    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentLength));
-    RestRequest request = AmbryBlobStorageServiceTest.createRestRequest(RestMethod.POST, "/", headers,
-        new LinkedList<>(Arrays.asList(content, null)));
+    byte[] content = TestUtils.getRandomBytes(contentLength);
+    RestRequest request = getRestRequest(headers, "/", content);
     long creationTimeMs = System.currentTimeMillis();
     time.setCurrentMilliseconds(creationTimeMs);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -386,7 +387,7 @@ public class PostBlobHandlerTest {
         assertNull("Signed id metadata should not be set on non-chunk uploads", metadata);
       }
       InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
-      assertEquals("Unexpected blob content stored", content.flip(), blob.getBlob());
+      assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
       assertEquals("Unexpected ttl stored", blobTtlSecs, blob.getBlobProperties().getTimeToLiveInSeconds());
     } else {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
@@ -480,9 +481,7 @@ public class PostBlobHandlerTest {
     JSONObject headers = new JSONObject();
     AmbryBlobStorageServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(),
         SERVICE_ID, CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), REF_CONTAINER.getName());
-    RestRequest request =
-        AmbryBlobStorageServiceTest.createRestRequest(RestMethod.POST, "/" + Operations.STITCH, headers,
-            new LinkedList<>(Arrays.asList(ByteBuffer.wrap(requestBody), null)));
+    RestRequest request = getRestRequest(headers, "/" + Operations.STITCH, requestBody);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> future = new FutureResult<>();
     idConverterFactory.lastInput = null;
@@ -501,5 +500,22 @@ public class PostBlobHandlerTest {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
           errorChecker);
     }
+  }
+
+  /**
+   * Method to easily create a POST {@link RestRequest}. This will set {@link RestUtils.InternalKeys#REQUEST_PATH} to a
+   * valid {@link RequestPath} object.
+   * @param headers any associated headers as a {@link JSONObject}.
+   * @param path the path for the request.
+   * @param requestBody the body of the request.
+   * @return A {@link RestRequest} object that defines the request required by the input.
+   */
+  private RestRequest getRestRequest(JSONObject headers, String path, byte[] requestBody)
+      throws UnsupportedEncodingException, URISyntaxException {
+    RestRequest request = AmbryBlobStorageServiceTest.createRestRequest(RestMethod.POST, path, headers,
+        new LinkedList<>(Arrays.asList(ByteBuffer.wrap(requestBody), null)));
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    return request;
   }
 }

@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -511,8 +513,8 @@ public class UtilsTest {
   @Test
   public void getTtlInSecsFromExpiryMsTest() {
     long creationTimeMs = SystemTime.getInstance().milliseconds();
-    for (long ttlInSecs : new long[]{1, 20, 1000, Integer.MAX_VALUE, Utils.Infinite_Time, -100, -(
-        TimeUnit.MILLISECONDS.toSeconds(creationTimeMs) + 1)}) {
+    for (long ttlInSecs : new long[]{1, 20, 1000, Integer.MAX_VALUE, Utils.Infinite_Time, -100,
+        -(TimeUnit.MILLISECONDS.toSeconds(creationTimeMs) + 1)}) {
       long expectedTtlSecs = ttlInSecs;
       if (ttlInSecs == Utils.Infinite_Time) {
         expectedTtlSecs = Utils.Infinite_Time;
@@ -551,6 +553,17 @@ public class UtilsTest {
     assertEquals("Wrong comparison result for finite times", 0, Utils.compareTimes(25, 25));
     assertEquals("Wrong comparison result for finite times", -1, Utils.compareTimes(24, 25));
     assertEquals("Wrong comparison result for finite times", 1, Utils.compareTimes(25, 24));
+  }
+
+  /**
+   * Tests for {@link Utils#splitString(String, String)}.
+   */
+  @Test
+  public void splitStringTest() {
+    assertEquals("Unexpected result", new ArrayList<>(Arrays.asList("a", "b", "c")), Utils.splitString("a,b,c", ","));
+    assertEquals("Empty string should return empty list", new ArrayList<>(), Utils.splitString("", ","));
+    assertEquals("Empty segments should be ignored", new ArrayList<>(Arrays.asList("a", "b-extra", "c")),
+        Utils.splitString(",a,,b-extra,c,,", ","));
   }
 
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";

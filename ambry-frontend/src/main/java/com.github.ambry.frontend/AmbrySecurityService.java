@@ -19,6 +19,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -124,15 +125,12 @@ class AmbrySecurityService implements SecurityService {
         exception = e;
       }
     } else if (restRequest.getRestMethod() == RestMethod.GET) {
-      SubResource subresource = getBlobSubResource(restRequest);
-      Pair<String, String> prefixAndResource =
-          getPrefixAndResourceFromUri(restRequest, subresource, frontendConfig.pathPrefixesToRemove);
-      String operationOrBlobId = prefixAndResource.getSecond();
-      operationOrBlobId = operationOrBlobId.startsWith("/") ? operationOrBlobId.substring(1) : operationOrBlobId;
+      RequestPath requestPath = getRequestPath(restRequest);
+      String operationOrBlobId = requestPath.getOperationOrBlobId(true);
       // ensure that secure path validation is only performed when getting blobs rather than other operations.
       if (!operationOrBlobId.isEmpty() && !OPERATIONS.contains(operationOrBlobId)) {
         try {
-          validateSecurePathIfRequired(restRequest, prefixAndResource.getFirst(), frontendConfig.securePathPrefix);
+          validateSecurePathIfRequired(restRequest, requestPath.getPrefix(), frontendConfig.securePathPrefix);
         } catch (Exception e) {
           exception = e;
         }
@@ -154,15 +152,10 @@ class AmbrySecurityService implements SecurityService {
       if (restRequest == null || responseChannel == null) {
         throw new IllegalArgumentException("One of the required params is null");
       }
-      String operationOrBlobId =
-          RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
-              frontendConfig.pathPrefixesToRemove);
-      if (operationOrBlobId.startsWith("/")) {
-        operationOrBlobId = operationOrBlobId.substring(1);
-      }
+      RequestPath requestPath = RestUtils.getRequestPath(restRequest);
       RestMethod restMethod = restRequest.getRestMethod();
       if (blobInfo == null && !restMethod.equals(RestMethod.OPTIONS) && !restMethod.equals(RestMethod.PUT)) {
-        if (!operationOrBlobId.equals(Operations.GET_SIGNED_URL)) {
+        if (!requestPath.matchesOperation(Operations.GET_SIGNED_URL)) {
           throw new IllegalArgumentException("BlobInfo is null");
         }
       }
@@ -178,9 +171,9 @@ class AmbrySecurityService implements SecurityService {
             setHeadResponseHeaders(blobInfo, options, restRequest, responseChannel);
             break;
           case GET:
-            if (!operationOrBlobId.equals(Operations.GET_SIGNED_URL)) {
+            if (!requestPath.matchesOperation(Operations.GET_SIGNED_URL)) {
               responseChannel.setStatus(ResponseStatus.Ok);
-              RestUtils.SubResource subResource = RestUtils.getBlobSubResource(restRequest);
+              RestUtils.SubResource subResource = RestUtils.getRequestPath(restRequest).getSubResource();
               responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                   new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
               if (subResource == null) {

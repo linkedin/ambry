@@ -91,7 +91,8 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
               urlSigningService, idSigningService, accountAndContainerInjector);
       return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
           idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-          accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName);
+          accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
+          clusterMapConfig.clusterMapClusterName);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate AmbryBlobStorageService", e);
     }

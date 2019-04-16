@@ -128,6 +128,7 @@ public class AmbryBlobStorageServiceTest {
   private final IdSigningService idSigningService;
   private final String datacenterName = "Data-Center";
   private final String hostname = "localhost";
+  private final String clusterName = "ambry-test";
   private FrontendConfig frontendConfig;
   private VerifiableProperties verifiableProperties;
   private boolean shouldAllowServiceIdBasedPut = true;
@@ -758,7 +759,7 @@ public class AmbryBlobStorageServiceTest {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-            accountAndContainerInjector, datacenterName, hostname);
+            accountAndContainerInjector, datacenterName, hostname, clusterName);
     ambryBlobStorageService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
@@ -780,7 +781,7 @@ public class AmbryBlobStorageServiceTest {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-            accountAndContainerInjector, datacenterName, hostname);
+            accountAndContainerInjector, datacenterName, hostname, clusterName);
     ambryBlobStorageService.start();
     // test good requests
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
@@ -1043,7 +1044,7 @@ public class AmbryBlobStorageServiceTest {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-            accountAndContainerInjector, datacenterName, hostname);
+            accountAndContainerInjector, datacenterName, hostname, clusterName);
     ambryBlobStorageService.start();
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getAllPartitionIds(null).get(0), false,
@@ -1141,25 +1142,22 @@ public class AmbryBlobStorageServiceTest {
     try {
       getBlobAndVerify(blobId, null, null, headers, content, account, signedPathRequiredContainer);
       fail("get blob should fail because secure path is missing");
-    } catch (Exception e) {
-      assertEquals("Mismatch in error code", RestServiceErrorCode.AccessDenied,
-          ((RestServiceException) e).getErrorCode());
+    } catch (RestServiceException e) {
+      assertEquals("Mismatch in error code", RestServiceErrorCode.AccessDenied, e.getErrorCode());
     }
     // test that secure path equals other prefix should fail (return AccessDenied)
     try {
       getBlobAndVerify("/media" + blobId, null, null, headers, content, account, signedPathRequiredContainer);
       fail("get blob should fail because secure path equals other prefix and doesn't match expected one");
-    } catch (Exception e) {
-      assertEquals("Mismatch in error code", RestServiceErrorCode.AccessDenied,
-          ((RestServiceException) e).getErrorCode());
+    } catch (RestServiceException e) {
+      assertEquals("Mismatch in error code", RestServiceErrorCode.AccessDenied, e.getErrorCode());
     }
     // test that incorrect path should fail (return BadRequest)
     try {
       getBlobAndVerify("/incorrect-path" + blobId, null, null, headers, content, account, signedPathRequiredContainer);
       fail("get blob should fail because secure path is incorrect");
-    } catch (Exception e) {
-      assertEquals("Mismatch in error code", RestServiceErrorCode.BadRequest,
-          ((RestServiceException) e).getErrorCode());
+    } catch (RestServiceException e) {
+      assertEquals("Mismatch in error code", RestServiceErrorCode.BadRequest, e.getErrorCode());
     }
     // test container with no validation
     setAmbryHeadersForPut(headers, TTL_SECS, false, refAccountName, contentType, ownerId, refAccountName,
@@ -1170,9 +1168,8 @@ public class AmbryBlobStorageServiceTest {
     try {
       getBlobAndVerify("/incorrect-path" + blobId, null, null, headers, content, account, noValidationContainer);
       fail("get blob should fail because there is invalid path in uri");
-    } catch (Exception e) {
-      assertEquals("Mismatch in error code", RestServiceErrorCode.BadRequest,
-          ((RestServiceException) e).getErrorCode());
+    } catch (RestServiceException e) {
+      assertEquals("Mismatch in error code", RestServiceErrorCode.BadRequest, e.getErrorCode());
     }
     // test container with no validation should succeed if URI is correct
     getBlobAndVerify(blobId, null, null, headers, content, account, noValidationContainer);
@@ -1192,7 +1189,6 @@ public class AmbryBlobStorageServiceTest {
    * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
-
   static RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers, List<ByteBuffer> contents)
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
     JSONObject request = new JSONObject();
@@ -1360,7 +1356,7 @@ public class AmbryBlobStorageServiceTest {
   private AmbryBlobStorageService getAmbryBlobStorageService() {
     return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
         idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-        accountAndContainerInjector, datacenterName, hostname);
+        accountAndContainerInjector, datacenterName, hostname, clusterName);
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -1986,7 +1982,7 @@ public class AmbryBlobStorageServiceTest {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
             converterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-            accountAndContainerInjector, datacenterName, hostname);
+            accountAndContainerInjector, datacenterName, hostname, clusterName);
     ambryBlobStorageService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     doExternalServicesBadInputTest(restMethods, expectedExceptionMsg, false);
@@ -2017,7 +2013,7 @@ public class AmbryBlobStorageServiceTest {
       ambryBlobStorageService =
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
               clusterMap, idConverterFactory, securityFactory, urlSigningService, idSigningService, accountService,
-              accountAndContainerInjector, datacenterName, hostname);
+              accountAndContainerInjector, datacenterName, hostname, clusterName);
       ambryBlobStorageService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg,
           mode == FrontendTestSecurityServiceFactory.Mode.ProcessResponse);
@@ -2074,7 +2070,7 @@ public class AmbryBlobStorageServiceTest {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-            accountAndContainerInjector, datacenterName, hostname);
+            accountAndContainerInjector, datacenterName, hostname, clusterName);
     ambryBlobStorageService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {
@@ -2562,10 +2558,11 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
   /**
    * Defines the API in which {@link #exceptionToThrow} and {@link #exceptionToReturn} will work.
    */
-  protected enum Mode {/**
-   * Works in {@link SecurityService#preProcessRequest(RestRequest, Callback)}.
-   */
-  PreProcessRequest,
+  protected enum Mode {
+    /**
+     * Works in {@link SecurityService#preProcessRequest(RestRequest, Callback)}.
+     */
+    PreProcessRequest,
 
     /**
      * Works in {@link SecurityService#processRequest(RestRequest, Callback)}.
@@ -2580,7 +2577,8 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     /**
      * Works in {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}.
      */
-    ProcessResponse}
+    ProcessResponse
+  }
 
   /**
    * The exception to return via future/callback.
@@ -2807,7 +2805,13 @@ class FrontendTestRouter implements Router {
   /**
    * Enumerates the different operation types in the router.
    */
-  enum OpType {DeleteBlob, GetBlob, PutBlob, StitchBlob, UpdateBlobTtl}
+  enum OpType {
+    DeleteBlob,
+    GetBlob,
+    PutBlob,
+    StitchBlob,
+    UpdateBlobTtl
+  }
 
   OpType exceptionOpType = null;
   Exception exceptionToReturn = null;

@@ -323,7 +323,7 @@ class CloudBlobStore implements Store {
         cloudBlobStore.putBlob(messageInfo, messageBuf, size);
         messageIndex++;
       } catch (IOException | CloudStorageException | GeneralSecurityException e) {
-        throw new StoreException(e.getMessage(), StoreErrorCodes.IOError);
+        throw new StoreException(e, StoreErrorCodes.IOError);
       }
     }
   }

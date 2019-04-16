@@ -135,9 +135,17 @@ class GetManager {
       routerMetrics.getBlobNotOriginateLocalOperationRate.mark();
     }
     trackGetBlobRateMetrics(options.getBlobOptions, isEncrypted);
-    getOperation =
-        new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-            routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
+
+    if (!routerConfig.routerUseGetBlobOperationForBlobInfo
+        && options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      getOperation =
+          new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
+              routerCallback, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
+    } else {
+      getOperation =
+          new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
+              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
+    }
     getOperations.add(getOperation);
   }
 

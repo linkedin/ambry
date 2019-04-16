@@ -169,7 +169,7 @@ class PostBlobHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        if (getOperation().equalsIgnoreCase(Operations.STITCH)) {
+        if (RestUtils.getRequestPath(restRequest).matchesOperation(Operations.STITCH)) {
           CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
@@ -331,19 +331,6 @@ class PostBlobHandler {
           throw new RestServiceException("Invalid chunk upload TTL: " + chunkTtl, RestServiceErrorCode.InvalidArgs);
         }
       }
-    }
-
-    /**
-     * @return the operation parsed from the {@link RestRequest}.
-     */
-    private String getOperation() {
-      RestUtils.SubResource subResource = RestUtils.getBlobSubResource(restRequest);
-      String operation =
-          RestUtils.getOperationOrBlobIdFromUri(restRequest, subResource, frontendConfig.pathPrefixesToRemove);
-      if (operation.startsWith("/")) {
-        operation = operation.substring(1);
-      }
-      return operation;
     }
 
     /**
