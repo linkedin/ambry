@@ -519,7 +519,7 @@ class HelixClusterManager implements ClusterMap {
             AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceName);
             if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
               if (node == null) {
-                logger.info("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
+                logger.trace("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
                     instanceConfig);
               } else {
                 Set<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
