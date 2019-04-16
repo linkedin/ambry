@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,10 +28,12 @@ import org.slf4j.LoggerFactory;
 public class AzureCloudDestinationFactory implements CloudDestinationFactory {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationFactory.class);
+  private final CloudConfig cloudConfig;
   private final AzureCloudConfig azureCloudConfig;
   private final AzureMetrics azureMetrics;
 
   public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+    this.cloudConfig = new CloudConfig(verifiableProperties);
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
     azureMetrics = new AzureMetrics(metricRegistry);
   }
@@ -38,10 +41,12 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
   @Override
   public CloudDestination getCloudDestination() throws IllegalStateException {
     try {
-      return new AzureCloudDestination(azureCloudConfig, azureMetrics);
+      AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureCloudConfig, azureMetrics);
+      dest.testAzureConnectivity();
+      return dest;
     } catch (Exception e) {
       logger.error("Initializing Azure destination", e.getMessage());
-      throw new IllegalStateException(e);
+      throw (e instanceof IllegalStateException) ? (IllegalStateException) e : new IllegalStateException(e);
     }
   }
 }
