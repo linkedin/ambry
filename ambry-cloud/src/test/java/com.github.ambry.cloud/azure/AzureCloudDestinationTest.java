@@ -260,8 +260,8 @@ public class AzureCloudDestinationTest {
     // Test with proxy
     String proxyHost = "azure-proxy.randomcompany.com";
     int proxyPort = 80;
-    configProps.setProperty(CloudConfig.CLOUD_PROXY_HOST, proxyHost);
-    configProps.setProperty(CloudConfig.CLOUD_PROXY_PORT, String.valueOf(proxyPort));
+    configProps.setProperty(CloudConfig.VCR_PROXY_HOST, proxyHost);
+    configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     dest = new AzureCloudDestination(cloudConfig, azureConfig, azureMetrics);
     assertNotNull("Expected proxy in blob op context", dest.getBlobOpContext().getDefaultProxy());

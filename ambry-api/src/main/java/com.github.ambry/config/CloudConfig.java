@@ -27,8 +27,8 @@ public class CloudConfig {
   public static final String VCR_REQUIRE_ENCRYPTION = "vcr.require.encryption";
   public static final String VCR_MIN_TTL_DAYS = "vcr.min.ttl.days";
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
-  public static final String CLOUD_PROXY_HOST = "cloud.proxy.host";
-  public static final String CLOUD_PROXY_PORT = "cloud.proxy.port";
+  public static final String VCR_PROXY_HOST = "vcr.proxy.host";
+  public static final String VCR_PROXY_PORT = "vcr.proxy.port";
 
   private static final String DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS =
       "com.github.ambry.cloud.StaticVcrClusterFactory";
@@ -38,7 +38,7 @@ public class CloudConfig {
   private static final String DEFAULT_VCR_CLUSTER_NAME = "VCRCluster";
   private static final String DEFAULT_VCR_REPLICA_MOUNT_PATH_PREFIX = "/tmp/vcr/";
   private static final int DEFAULT_MIN_TTL_DAYS = 14;
-  public static final int DEFAULT_CLOUD_PROXY_PORT = 3128;
+  public static final int DEFAULT_VCR_PROXY_PORT = 3128;
 
   /**
    * The virtual replicator cluster factory class name.
@@ -106,16 +106,16 @@ public class CloudConfig {
   /**
    * The proxy host, if any, providing network path to cloud services.
    */
-  @Config(CLOUD_PROXY_HOST)
+  @Config(VCR_PROXY_HOST)
   @Default("null")
-  public final String proxyHost;
+  public final String vcrProxyHost;
 
   /**
-   * The proxy port (used only proxyHost is non-null.
+   * The proxy port (used only vcrProxyHost is non-null.
    */
-  @Config(CLOUD_PROXY_PORT)
+  @Config(VCR_PROXY_PORT)
   @Default("3128")
-  public final int proxyPort;
+  public final int vcrProxyPort;
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
@@ -134,7 +134,7 @@ public class CloudConfig {
     vcrAssignedPartitions = verifiableProperties.getString(VCR_ASSIGNED_PARTITIONS, null);
 
     // Proxy settings
-    proxyHost = verifiableProperties.getString(CLOUD_PROXY_HOST, null);
-    proxyPort = verifiableProperties.getInt(CLOUD_PROXY_PORT, DEFAULT_CLOUD_PROXY_PORT);
+    vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);
+    vcrProxyPort = verifiableProperties.getInt(VCR_PROXY_PORT, DEFAULT_VCR_PROXY_PORT);
   }
 }

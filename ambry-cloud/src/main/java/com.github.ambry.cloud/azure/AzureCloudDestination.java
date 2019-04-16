@@ -84,16 +84,16 @@ class AzureCloudDestination implements CloudDestination {
     azureAccount = CloudStorageAccount.parse(azureCloudConfig.azureStorageConnectionString);
     azureBlobClient = azureAccount.createCloudBlobClient();
     // Check for proxy
-    if (cloudConfig.proxyHost != null) {
-      logger.info("Using proxy: {}:{}", cloudConfig.proxyHost, cloudConfig.proxyPort);
+    if (cloudConfig.vcrProxyHost != null) {
+      logger.info("Using proxy: {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
       blobOpContext.setDefaultProxy(
-          new Proxy(Proxy.Type.HTTP, new InetSocketAddress(cloudConfig.proxyHost, cloudConfig.proxyPort)));
+          new Proxy(Proxy.Type.HTTP, new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort)));
     }
     // Set up CosmosDB connection, including any proxy setting
     cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-    if (cloudConfig.proxyHost != null) {
-      connectionPolicy.setProxy(new HttpHost(cloudConfig.proxyHost, cloudConfig.proxyPort));
+    if (cloudConfig.vcrProxyHost != null) {
+      connectionPolicy.setProxy(new HttpHost(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
       connectionPolicy.setHandleServiceUnavailableFromProxy(true);
     }
     documentClient = new DocumentClient(azureCloudConfig.cosmosEndpoint, azureCloudConfig.cosmosKey, connectionPolicy,
