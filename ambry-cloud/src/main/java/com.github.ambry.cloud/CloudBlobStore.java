@@ -47,7 +47,6 @@ import org.slf4j.LoggerFactory;
 /**
  * The blob store that reflects data in a cloud storage.
  */
-@SuppressWarnings("MagicConstant")
 class CloudBlobStore implements Store {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
