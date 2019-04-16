@@ -39,6 +39,7 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -56,6 +57,7 @@ class CloudBlobStore implements Store {
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
   private final CloudConfig cloudConfig;
+  private final CloudBlobCryptoAgentFactory cryptoAgentFactory;
   private final CloudBlobCryptoAgent cryptoAgent;
   private final VcrMetrics vcrMetrics;
   private final long minTtlMillis;
@@ -67,17 +69,18 @@ class CloudBlobStore implements Store {
    * @param cloudDestination the {@link CloudDestination}.
    * @param cloudConfig the {@link CloudConfig} to use.
    * @param cloudDestination the {@link CloudDestination} to use.
-   * @param cryptoAgent the {@link CloudBlobCryptoAgent} to use for encryption.
+   * @param cryptoAgentFactory the {@link CloudBlobCryptoAgentFactory} to use for encryption.
    * @param vcrMetrics the {@link VcrMetrics} to use.
    */
   CloudBlobStore(PartitionId partitionId, CloudConfig cloudConfig, CloudDestination cloudDestination,
-      CloudBlobCryptoAgent cryptoAgent, VcrMetrics vcrMetrics) {
+      CloudBlobCryptoAgentFactory cryptoAgentFactory, VcrMetrics vcrMetrics) {
     this.cloudDestination = Objects.requireNonNull(cloudDestination, "cloudDestination is required");
     this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
     this.cloudConfig = Objects.requireNonNull(cloudConfig, "cloudConfig is required");
     this.vcrMetrics = Objects.requireNonNull(vcrMetrics, "vcrMetrics is required");
     minTtlMillis = TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays);
-    this.cryptoAgent = cryptoAgent;
+    this.cryptoAgentFactory = cryptoAgentFactory;
+    this.cryptoAgent = cryptoAgentFactory != null ? cryptoAgentFactory.getCloudBlobCryptoAgent() : null;
   }
 
   @Override
@@ -116,6 +119,7 @@ class CloudBlobStore implements Store {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       boolean isRouterEncrypted = isRouterEncrypted(blobId);
       String kmsContext = null;
+      String cryptoAgentFactoryClass = null;
       EncryptionOrigin encryptionOrigin = isRouterEncrypted ? EncryptionOrigin.ROUTER : EncryptionOrigin.NONE;
       if (cloudConfig.vcrRequireEncryption) {
         if (isRouterEncrypted) {
@@ -129,6 +133,7 @@ class CloudBlobStore implements Store {
             vcrMetrics.blobEncryptionCount.inc();
             encryptionOrigin = EncryptionOrigin.VCR;
             kmsContext = cryptoAgent.getEncryptionContext();
+            cryptoAgentFactoryClass = this.cryptoAgentFactory.getClass().getName();
           } else {
             // Cannot upload this blob since we can't satisfy encryption requirements
             vcrMetrics.skipUnencryptedBlobsCount.inc();
@@ -140,7 +145,7 @@ class CloudBlobStore implements Store {
       }
       CloudBlobMetadata blobMetadata =
           new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
-              messageInfo.getSize(), encryptionOrigin, kmsContext);
+              messageInfo.getSize(), encryptionOrigin, kmsContext, cryptoAgentFactoryClass);
       cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
     }
   }

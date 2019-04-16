@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -59,6 +60,8 @@ import static org.junit.Assert.*;
 public class AzureIntegrationTest {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureIntegrationTest.class);
+  private final String vcrKmsContext = "backup-default";
+  private final String cryptoAgentFactory = CloudConfig.DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS;
   private AzureCloudDestination azureDest;
   private int blobSize = 1024;
   private byte dataCenterId = 66;
@@ -86,7 +89,7 @@ public class AzureIntegrationTest {
     InputStream inputStream = getBlobInputStream(blobSize);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
-            CloudBlobMetadata.EncryptionOrigin.NONE, null);
+            CloudBlobMetadata.EncryptionOrigin.NONE, vcrKmsContext, cryptoAgentFactory);
     assertTrue("Expected upload to return true",
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     // Try to upload same blob again
@@ -121,7 +124,7 @@ public class AzureIntegrationTest {
       InputStream inputStream = getBlobInputStream(blobSize);
       CloudBlobMetadata cloudBlobMetadata =
           new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-              CloudBlobMetadata.EncryptionOrigin.NONE, null);
+              CloudBlobMetadata.EncryptionOrigin.NONE, vcrKmsContext, cryptoAgentFactory);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     }
@@ -136,6 +139,8 @@ public class AzureIntegrationTest {
       assertEquals("Unexpected metadata containerId", containerId, metadata.getContainerId());
       assertEquals("Unexpected metadata partitionId", partitionId.toPathString(), metadata.getPartitionId());
       assertEquals("Unexpected metadata creationTime", creationTime, metadata.getCreationTime());
+      assertEquals("Unexpected metadata vcrKmsContext", vcrKmsContext, metadata.getVcrKmsContext());
+      assertEquals("Unexpected metadata cryptoAgentFactory", vcrKmsContext, metadata.getCryptoAgentFactory());
     }
 
     // Cleanup

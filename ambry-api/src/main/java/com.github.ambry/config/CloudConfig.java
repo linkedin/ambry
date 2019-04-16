@@ -104,7 +104,7 @@ public class CloudConfig {
   public final String kmsServiceKeyContext;
 
   /**
-   * The cloud blob crypto service factory class name.
+   * The cloud blob crypto agent factory class name.
    */
   @Config(CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS)
   @Default(DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS)

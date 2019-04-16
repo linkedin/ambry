@@ -63,7 +63,7 @@ public class CloudBackupManager extends ReplicationEngine {
       ReplicaId cloudReplica =
           new CloudReplica(cloudConfig, partitionId, virtualReplicatorCluster.getCurrentDataNodeId());
       Store cloudStore = new CloudBlobStore(partitionId, cloudConfig, cloudDestination,
-          cloudBlobCryptoAgentFactory.getCloudBlobCryptoAgent(), vcrMetrics);
+          cloudBlobCryptoAgentFactory, vcrMetrics);
       try {
         cloudStore.start();
       } catch (StoreException e) {

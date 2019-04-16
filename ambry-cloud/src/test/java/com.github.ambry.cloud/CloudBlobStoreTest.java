@@ -54,6 +54,7 @@ import static org.mockito.Mockito.*;
 public class CloudBlobStoreTest {
 
   private final CloudBlobCryptoAgent cryptoAgent = new TestCloudBlobCryptoAgent();
+  private final CloudBlobCryptoAgentFactory cryptoAgentFactory = new TestCryptoAgentFactory();
   private Store store;
   private CloudDestination dest;
   private PartitionId partitionId;
@@ -82,7 +83,7 @@ public class CloudBlobStoreTest {
     cloudConfig = new CloudConfig(new VerifiableProperties(props));
     dest = mock(CloudDestination.class);
     vcrMetrics = new VcrMetrics(new MetricRegistry());
-    store = new CloudBlobStore(partitionId, cloudConfig, dest, withCryptoAgent ? cryptoAgent : null, vcrMetrics);
+    store = new CloudBlobStore(partitionId, cloudConfig, dest, withCryptoAgent ? cryptoAgentFactory : null, vcrMetrics);
     if (start) {
       store.start();
     }
@@ -177,7 +178,7 @@ public class CloudBlobStoreTest {
       keys.add(existentBlobId);
       metadataMap.put(existentBlobId.getID(),
           new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024,
-              CloudBlobMetadata.EncryptionOrigin.ROUTER, null));
+              CloudBlobMetadata.EncryptionOrigin.ROUTER, null, null));
       // Blob without metadata
       BlobId nonexistentBlobId = getUniqueId();
       keys.add(nonexistentBlobId);
@@ -228,7 +229,7 @@ public class CloudBlobStoreTest {
     props.setProperty(CloudConfig.VCR_REQUIRE_ENCRYPTION, "false");
     cloudConfig = new CloudConfig(new VerifiableProperties(props));
     vcrMetrics = new VcrMetrics(new MetricRegistry());
-    CloudBlobStore exStore = new CloudBlobStore(partitionId, cloudConfig, exDest, cryptoAgent, vcrMetrics);
+    CloudBlobStore exStore = new CloudBlobStore(partitionId, cloudConfig, exDest, cryptoAgentFactory, vcrMetrics);
     exStore.start();
     List<StoreKey> keys = Collections.singletonList(getUniqueId());
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
@@ -293,5 +294,15 @@ public class CloudBlobStoreTest {
     byte dataCenterId = 66;
     return new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, encrypted,
         BlobDataType.DATACHUNK);
+  }
+
+  /**
+   * Factory to create TestCloudBlobCryptoAgent
+   */
+  private class TestCryptoAgentFactory implements CloudBlobCryptoAgentFactory {
+    @Override
+    public CloudBlobCryptoAgent getCloudBlobCryptoAgent() {
+      return cryptoAgent;
+    }
   }
 }
