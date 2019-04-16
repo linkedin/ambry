@@ -22,7 +22,7 @@ import com.github.ambry.config.VerifiableProperties;
  */
 public class AzureCloudConfig {
 
-  public static final String STORAGE_CONNECTION_STRING = "storage.connection.string";
+  public static final String AZURE_STORAGE_CONNECTION_STRING = "azure.storage.connection.string";
   public static final String COSMOS_ENDPOINT = "cosmos.endpoint";
   public static final String COSMOS_COLLECTION_LINK = "cosmos.collection.link";
   public static final String COSMOS_KEY = "cosmos.key";
@@ -30,8 +30,8 @@ public class AzureCloudConfig {
   /**
    * The Azure Blob Storage connection string.
    */
-  @Config(STORAGE_CONNECTION_STRING)
-  public final String storageConnectionString;
+  @Config(AZURE_STORAGE_CONNECTION_STRING)
+  public final String azureStorageConnectionString;
 
   /**
    * The Cosmos DB endpoint.
@@ -52,7 +52,7 @@ public class AzureCloudConfig {
   public final String cosmosKey;
 
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
-    storageConnectionString = verifiableProperties.getString(STORAGE_CONNECTION_STRING);
+    azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING);
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
     cosmosCollectionLink = verifiableProperties.getString(COSMOS_COLLECTION_LINK);
     cosmosKey = verifiableProperties.getString(COSMOS_KEY);

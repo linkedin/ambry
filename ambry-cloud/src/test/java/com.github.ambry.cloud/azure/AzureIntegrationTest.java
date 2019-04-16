@@ -29,11 +29,13 @@ import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.PartitionKey;
 import com.microsoft.azure.documentdb.RequestOptions;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -48,11 +50,7 @@ import static org.junit.Assert.*;
 
 /**
  * Integration Test cases for {@link AzureCloudDestination}
- * Must be supplied with valid system property values for:
- *   "storage.connection.string" (Azure Blob Storage connection string)
- *   "cosmos.endpoint"
- *   "cosmos.collection.link"
- *   "cosmos.key"
+ * Must supply file azure-test.properties in classpath with valid config property values.
  */
 @RunWith(MockitoJUnitRunner.class)
 @Ignore
@@ -68,7 +66,17 @@ public class AzureIntegrationTest {
 
   @Before
   public void setup() throws Exception {
-    VerifiableProperties verProps = new VerifiableProperties(System.getProperties());
+    String propFileName = "azure-test.properties";
+    Properties props = new Properties();
+    try (InputStream input = this.getClass().getClassLoader().getResourceAsStream(propFileName)) {
+      if (input == null) {
+        throw new IllegalStateException("Could not find resource: " + propFileName);
+      }
+      props.load(input);
+    } catch (IOException ex) {
+      throw new IllegalStateException("Could not load properties from resource: " + propFileName);
+    }
+    VerifiableProperties verProps = new VerifiableProperties(props);
     azureDest =
         (AzureCloudDestination) new AzureCloudDestinationFactory(verProps, new MetricRegistry()).getCloudDestination();
     cosmosCollectionLink = verProps.getString(AzureCloudConfig.COSMOS_COLLECTION_LINK);

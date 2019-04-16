@@ -18,6 +18,7 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.CloudConfig;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.Document;
@@ -39,6 +40,8 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 import java.util.Collections;
@@ -62,42 +65,39 @@ class AzureCloudDestination implements CloudDestination {
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
   private final DocumentClient documentClient;
-  private final String cosmosCollectionLink; // eg "/dbs/ambry-metadata/colls/blob-metadata"
+  private final String cosmosCollectionLink;
   private final RequestOptions defaultRequestOptions = new RequestOptions();
+  private final OperationContext blobOpContext = new OperationContext();
   private final AzureMetrics azureMetrics;
-
-  // TODO: these constants should live somewhere else, but where?
-  private static final String HTTP = "http";
-  private static final String HTTPS = "https";
-  private static final String PROXY_HOST = "proxyHost";
-  private static final String PROXY_PORT = "proxyPort";
 
   /**
    * Construct an Azure cloud destination from config properties.
+   * @param cloudConfig the {@link CloudConfig} to use.
    * @param azureCloudConfig the {@link AzureCloudConfig} to use.
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @throws InvalidKeyException if credentials in the connection string contain an invalid key.
    * @throws URISyntaxException if the connection string specifies an invalid URI.
    */
-  AzureCloudDestination(AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics)
+  AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics)
       throws URISyntaxException, InvalidKeyException {
     this.azureMetrics = azureMetrics;
-    azureAccount = CloudStorageAccount.parse(azureCloudConfig.storageConnectionString);
+    azureAccount = CloudStorageAccount.parse(azureCloudConfig.azureStorageConnectionString);
     azureBlobClient = azureAccount.createCloudBlobClient();
+    // Check for proxy
+    if (cloudConfig.vcrProxyHost != null) {
+      logger.info("Using proxy: {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
+      blobOpContext.setDefaultProxy(
+          new Proxy(Proxy.Type.HTTP, new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort)));
+    }
+    // Set up CosmosDB connection, including any proxy setting
     cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
-    ConnectionPolicy connectionPolicy = getProxyWiseConnectionPolicy(azureCloudConfig.cosmosEndpoint);
+    ConnectionPolicy connectionPolicy = new ConnectionPolicy();
+    if (cloudConfig.vcrProxyHost != null) {
+      connectionPolicy.setProxy(new HttpHost(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
+      connectionPolicy.setHandleServiceUnavailableFromProxy(true);
+    }
     documentClient = new DocumentClient(azureCloudConfig.cosmosEndpoint, azureCloudConfig.cosmosKey, connectionPolicy,
         ConsistencyLevel.Session);
-    // check that it works
-    try {
-      ResourceResponse<DocumentCollection> response =
-          documentClient.readCollection(cosmosCollectionLink, defaultRequestOptions);
-      if (response.getResource() == null) {
-        throw new IllegalArgumentException("CosmosDB collection not found: " + cosmosCollectionLink);
-      }
-    } catch (DocumentClientException ex) {
-      throw new IllegalArgumentException("Invalid CosmosDB properties", ex);
-    }
     logger.info("Created Azure destination");
   }
 
@@ -120,36 +120,62 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   /**
-   * @return a {@link ConnectionPolicy} including system proxy settings, if specified.
-   * @param endpoint the CosmosDB endpoint.
+   * Test connectivity to Azure endpoints
    */
-  static ConnectionPolicy getProxyWiseConnectionPolicy(String endpoint) {
-    ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-    String scheme = endpoint.toLowerCase().startsWith(HTTPS) ? HTTPS : HTTP;
-    String proxyHostProperty = scheme + "." + PROXY_HOST;
-    String proxyPortProperty = scheme + "." + PROXY_PORT;
-    String proxyHost = System.getProperty(proxyHostProperty);
-    if (proxyHost != null) {
-      logger.info("Using proxy host: " + proxyHost);
-      int proxyPort = -1;
-      try {
-        proxyPort = Integer.valueOf(System.getProperty(proxyPortProperty));
-        logger.info("Using proxy port: " + proxyPort);
-      } catch (NumberFormatException e) {
-        logger.warn("Missing or invalid value for " + proxyPortProperty);
-      }
-      connectionPolicy.setProxy(new HttpHost(proxyHost, proxyPort));
-      connectionPolicy.setHandleServiceUnavailableFromProxy(true);
-    }
-    return connectionPolicy;
+  void testAzureConnectivity() {
+    testStorageConnectivity();
+    testCosmosConnectivity();
   }
 
   /**
-   * For integration test
+   * Test connectivity to Azure Blob Storage
+   */
+  void testStorageConnectivity() {
+    try {
+      // Turn on verbose logging just for this call
+      blobOpContext.setLoggingEnabled(true);
+      blobOpContext.setLogger(logger);
+      azureBlobClient.getContainerReference("partition-0").exists(null, null, blobOpContext);
+      logger.info("Blob storage connection test succeeded.");
+    } catch (StorageException | URISyntaxException ex) {
+      throw new IllegalStateException("Blob storage connection test failed", ex);
+    } finally {
+      // Disable logging for future requests
+      blobOpContext.setLoggingEnabled(false);
+      blobOpContext.setLogger(null);
+    }
+  }
+
+  /**
+   * Test connectivity to Azure CosmosDB
+   */
+  void testCosmosConnectivity() {
+    try {
+      ResourceResponse<DocumentCollection> response =
+          documentClient.readCollection(cosmosCollectionLink, defaultRequestOptions);
+      if (response.getResource() == null) {
+        throw new IllegalStateException("CosmosDB collection not found: " + cosmosCollectionLink);
+      }
+      logger.info("CosmosDB connection test succeeded.");
+    } catch (DocumentClientException ex) {
+      throw new IllegalStateException("CosmosDB connection test failed", ex);
+    }
+  }
+
+  /**
+   * Visible for test.
    * @return the CosmosDB DocumentClient.
    */
   DocumentClient getDocumentClient() {
     return documentClient;
+  }
+
+  /**
+   * Visible for test.
+   * @return the blob storage operation context.
+   */
+  OperationContext getBlobOpContext() {
+    return blobOpContext;
   }
 
   @Override
@@ -160,7 +186,6 @@ class AzureCloudDestination implements CloudDestination {
     Objects.requireNonNull(blobInputStream, "Input stream cannot be null");
 
     BlobRequestOptions options = null; // may want to set BlobEncryptionPolicy here
-    OperationContext opContext = null;
     azureMetrics.blobUploadRequestCount.inc();
     try {
       Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
@@ -176,7 +201,7 @@ class AzureCloudDestination implements CloudDestination {
       }
 
       azureBlob.setMetadata(getMetadataMap(cloudBlobMetadata));
-      azureBlob.upload(blobInputStream, blobSize, null, options, opContext);
+      azureBlob.upload(blobInputStream, blobSize, null, options, blobOpContext);
       // Note: not calling this in finally block because don't want exceptions to manufacture
       // short times that make the system look artificially fast
       storageTimer.stop();
@@ -319,7 +344,7 @@ class AzureCloudDestination implements CloudDestination {
     CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(partitionPath);
     if (autoCreate) {
       azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
-          new OperationContext());
+          blobOpContext);
     }
     return azureContainer;
   }

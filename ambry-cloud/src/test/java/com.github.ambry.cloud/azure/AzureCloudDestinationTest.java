@@ -21,10 +21,10 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
@@ -40,12 +40,13 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.security.InvalidKeyException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.http.HttpHost;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -62,8 +63,11 @@ import static org.mockito.Mockito.*;
 @RunWith(MockitoJUnitRunner.class)
 public class AzureCloudDestinationTest {
 
-  private final String configSpec = "AccountName=ambry;AccountKey=ambry-kay";
+  private final String base64key = Base64.encodeBase64String("ambrykey".getBytes());
+  private final String storageConnection =
+      "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
   private final ObjectMapper objectMapper = new ObjectMapper();
+  private Properties configProps = new Properties();
   private AzureCloudDestination azureDest;
   private CloudStorageAccount mockAzureAccount;
   private CloudBlobClient mockAzureClient;
@@ -103,6 +107,11 @@ public class AzureCloudDestinationTest {
     PartitionId partitionId = new MockPartitionId();
     blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
+
+    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
+    configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");
+    configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
+    configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
 
     azureMetrics = new AzureMetrics(new MetricRegistry());
     azureDest = new AzureCloudDestination(mockAzureAccount, mockumentClient, "foo", azureMetrics);
@@ -210,49 +219,56 @@ public class AzureCloudDestinationTest {
   /** Test constructor with invalid connection string. */
   @Test
   public void testInitClientException() throws Exception {
-    Properties props = new Properties();
-    props.setProperty(AzureCloudConfig.STORAGE_CONNECTION_STRING, configSpec);
-    props.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.cosmos.com");
-    props.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
-    props.setProperty(AzureCloudConfig.COSMOS_KEY, "dummykey");
     CloudDestinationFactory factory =
-        new AzureCloudDestinationFactory(new VerifiableProperties(props), new MetricRegistry());
+        new AzureCloudDestinationFactory(new VerifiableProperties(configProps), new MetricRegistry());
     try {
       factory.getCloudDestination();
-      fail("Expected exception to be thrown");
+      fail("Expected exception");
     } catch (IllegalStateException ex) {
-      assertEquals("Unexpected exception", InvalidKeyException.class, ex.getCause().getClass());
     }
   }
 
-  /** Test setting connection policy with proxy from system properties */
   @Test
-  public void testDocumentClientConnectionPolicy() throws Exception {
-    String proxyHost = "azure-proxy.github.com";
-    int proxyPort = 3128;
-    String[] schemes = {"http", "https"};
-    for (String scheme : schemes) {
-      String endpoint = scheme + "://mycosmosdb.documents.azure.com/";
-      String proxyHostProperty = scheme + "." + "proxyHost";
-      String proxyPortProperty = scheme + "." + "proxyPort";
-      // Test with no proxy
-      System.clearProperty(proxyHostProperty);
-      System.clearProperty(proxyPortProperty);
-      ConnectionPolicy policy = AzureCloudDestination.getProxyWiseConnectionPolicy(endpoint);
-      assertNull("Expected null proxy", policy.getProxy());
-      // Test with host but no port
-      System.setProperty(proxyHostProperty, proxyHost);
-      policy = AzureCloudDestination.getProxyWiseConnectionPolicy(endpoint);
-      assertNotNull("Expected proxy", policy.getProxy());
-      assertEquals("Wrong host", proxyHost, policy.getProxy().getHostName());
-      assertEquals("Expected default port", -1, policy.getProxy().getPort());
-      // Test with host and port
-      System.setProperty(proxyPortProperty, String.valueOf(proxyPort));
-      policy = AzureCloudDestination.getProxyWiseConnectionPolicy(endpoint);
-      assertNotNull("Expected proxy", policy.getProxy());
-      assertEquals("Wrong host", proxyHost, policy.getProxy().getHostName());
-      assertEquals("Wrong port", proxyPort, policy.getProxy().getPort());
+  public void testAzureConnection() throws Exception {
+    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
+    AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
+    AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, azureMetrics);
+    try {
+      dest.testStorageConnectivity();
+      fail("Expected exception");
+    } catch (IllegalStateException expected) {
     }
+    try {
+      dest.testCosmosConnectivity();
+      fail("Expected exception");
+    } catch (IllegalStateException expected) {
+    }
+  }
+
+  /** Test initializing AzureCloudDestination with a proxy */
+  @Test
+  public void testProxy() throws Exception {
+
+    // Test without proxy
+    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
+    AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
+    AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, azureMetrics);
+    // check operation context proxy
+    assertNull("Expected null proxy in blob op context", dest.getBlobOpContext().getDefaultProxy());
+    assertNull("Expected null proxy in doc client", dest.getDocumentClient().getConnectionPolicy().getProxy());
+
+    // Test with proxy
+    String proxyHost = "azure-proxy.randomcompany.com";
+    int proxyPort = 80;
+    configProps.setProperty(CloudConfig.VCR_PROXY_HOST, proxyHost);
+    configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
+    cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
+    dest = new AzureCloudDestination(cloudConfig, azureConfig, azureMetrics);
+    assertNotNull("Expected proxy in blob op context", dest.getBlobOpContext().getDefaultProxy());
+    HttpHost policyProxy = dest.getDocumentClient().getConnectionPolicy().getProxy();
+    assertNotNull("Expected proxy in doc client", policyProxy);
+    assertEquals("Wrong host", proxyHost, policyProxy.getHostName());
+    assertEquals("Wrong port", proxyPort, policyProxy.getPort());
   }
 
   /** Test upload when client throws exception. */
