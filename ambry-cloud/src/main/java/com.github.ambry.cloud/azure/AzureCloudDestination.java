@@ -65,7 +65,7 @@ class AzureCloudDestination implements CloudDestination {
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
   private final DocumentClient documentClient;
-  private final String cosmosCollectionLink; // eg "/dbs/ambry-metadata/colls/blob-metadata"
+  private final String cosmosCollectionLink;
   private final RequestOptions defaultRequestOptions = new RequestOptions();
   private final OperationContext blobOpContext = new OperationContext();
   private final AzureMetrics azureMetrics;

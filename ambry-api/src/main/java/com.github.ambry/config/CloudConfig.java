@@ -38,7 +38,7 @@ public class CloudConfig {
   private static final String DEFAULT_VCR_CLUSTER_NAME = "VCRCluster";
   private static final String DEFAULT_VCR_REPLICA_MOUNT_PATH_PREFIX = "/tmp/vcr/";
   private static final int DEFAULT_MIN_TTL_DAYS = 14;
-  public static final int DEFAULT_VCR_PROXY_PORT = 3128;
+  private static final int DEFAULT_VCR_PROXY_PORT = 3128;
 
   /**
    * The virtual replicator cluster factory class name.

@@ -50,7 +50,7 @@ import static org.junit.Assert.*;
 
 /**
  * Integration Test cases for {@link AzureCloudDestination}
- * Must supply file test.properties in classpath with valid config property values.
+ * Must supply file azure-test.properties in classpath with valid config property values.
  */
 @RunWith(MockitoJUnitRunner.class)
 @Ignore
@@ -66,7 +66,7 @@ public class AzureIntegrationTest {
 
   @Before
   public void setup() throws Exception {
-    String propFileName = "test.properties";
+    String propFileName = "azure-test.properties";
     Properties props = new Properties();
     try (InputStream input = this.getClass().getClassLoader().getResourceAsStream(propFileName)) {
       if (input == null) {
