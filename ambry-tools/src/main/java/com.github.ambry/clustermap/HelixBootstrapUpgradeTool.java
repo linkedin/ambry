@@ -158,6 +158,9 @@ public class HelixBootstrapUpgradeTool {
     OptionSpecBuilder dryRun =
         parser.accepts("dryRun", "(Optional argument) Dry run, do not modify the cluster map in Helix.");
 
+    OptionSpecBuilder disableValidatingClusterManager = parser.accepts("disableVCM",
+        "(Optional argument) whether to disable validating cluster manager(VCM) in Helix bootstrap tool.");
+
     OptionSet options = parser.parse(args);
     String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
     String partitionLayoutPath = options.valueOf(partitionLayoutPathOpt);
@@ -207,7 +210,7 @@ public class HelixBootstrapUpgradeTool {
           clusterNamePrefix, dcs,
           options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
               : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt)), options.has(dryRun),
-          options.has(forceRemove), new HelixAdminFactory(), true);
+          options.has(forceRemove), new HelixAdminFactory(), !options.has(disableValidatingClusterManager));
     }
   }
 }

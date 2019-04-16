@@ -228,6 +228,7 @@ public abstract class ReplicationEngine {
           .getHostname()
           .equals(hostName)) {
         foundRemoteReplicaInfo = remoteReplicaInfo;
+        break;
       }
     }
     // TODO: replace replicaPath.contains("vcr").

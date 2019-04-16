@@ -178,6 +178,8 @@ class HelixBootstrapUpgradeUtil {
       clusterMapToHelixMapper.validateAndClose();
     }
     clusterMapToHelixMapper.logSummary();
+    info("========Bootstrap or upgrade completed! (if program doesn't exit, please use Ctrl-c to terminate)========");
+    System.exit(0);
   }
 
   /**
@@ -421,7 +423,7 @@ class HelixBootstrapUpgradeUtil {
   private void updateClusterMapInHelix(boolean startValidatingClusterManager) throws IOException {
     info("Initializing admins and possibly adding cluster in Helix (if non-existent)");
     maybeAddCluster();
-    info("Initialized, starting validating cluster manager");
+    info("Validating cluster manager is {}", startValidatingClusterManager ? "ENABLED" : "DISABLED");
     if (startValidatingClusterManager) {
       startClusterManager();
     }
@@ -1006,6 +1008,13 @@ class HelixBootstrapUpgradeUtil {
       info("Existing resources dropped: {}", resourcesDropped);
     } else {
       info("========No updates were done to the cluster in Helix========");
+    }
+    if (validatingHelixClusterManager != null) {
+      info("========Validating HelixClusterManager metrics========");
+      info("Instance config change count: {}",
+          validatingHelixClusterManager.helixClusterManagerMetrics.instanceConfigChangeTriggerCount.getCount());
+      info("Instance config update ignored count: {}",
+          validatingHelixClusterManager.helixClusterManagerMetrics.ignoredUpdatesCount.getCount());
     }
   }
 }

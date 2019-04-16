@@ -1840,6 +1840,7 @@ public class ReplicationTest {
                 new RemoteReplicaInfo(peerReplicaId, replicaId, store, new MockFindToken(0, 0), Long.MAX_VALUE,
                     SystemTime.getInstance(), new Port(peerReplicaId.getDataNodeId().getPort(), PortType.PLAINTEXT));
             remoteReplicaInfos.add(remoteReplicaInfo);
+            break;
           }
         }
       }
