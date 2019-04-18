@@ -212,6 +212,9 @@ public class HelixBootstrapUpgradeTool {
               : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt)), options.has(dryRun),
           options.has(forceRemove), new HelixAdminFactory(), !options.has(disableValidatingClusterManager));
     }
+    System.out.println("======== HelixBootstrapUpgradeTool completed successfully! ========");
+    System.out.println("( If program doesn't exit, please use Ctrl-c to terminate. )");
+    System.exit(0);
   }
 }
 

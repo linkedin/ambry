@@ -178,8 +178,6 @@ class HelixBootstrapUpgradeUtil {
       clusterMapToHelixMapper.validateAndClose();
     }
     clusterMapToHelixMapper.logSummary();
-    info("========Bootstrap or upgrade completed! (if program doesn't exit, please use Ctrl-c to terminate)========");
-    System.exit(0);
   }
 
   /**
