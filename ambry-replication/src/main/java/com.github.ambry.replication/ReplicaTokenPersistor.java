@@ -14,12 +14,13 @@
 package com.github.ambry.replication;
 
 import java.io.IOException;
+import java.util.List;
 
 
 /**
  * {@link ReplicaTokenPersistor} is used in {@link ReplicationEngine} to persist replication token.
  */
-interface ReplicaTokenPersistor extends Runnable {
+public interface ReplicaTokenPersistor extends Runnable {
   /**
    * Method to persist the token of partition(s) under the same mountPath.
    * @param mountPath The mouth path of the partition(s).
@@ -33,5 +34,12 @@ interface ReplicaTokenPersistor extends Runnable {
    * @param shuttingDown indicates whether this is being called as part of shut down.
    */
   void write(boolean shuttingDown) throws IOException, ReplicationException;
+
+  /**
+   * Read the tokens under the same mountPath.
+   * @param mountPath The mouth path of the partition(s).
+   * @return A list of {@link ReplicaTokenInfo}.
+   */
+  List<ReplicaTokenInfo> read(String mountPath) throws IOException, ReplicationException;
 }
 

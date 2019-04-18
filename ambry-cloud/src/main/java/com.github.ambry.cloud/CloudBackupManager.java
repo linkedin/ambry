@@ -95,6 +95,7 @@ public class CloudBackupManager extends ReplicationEngine {
       }
     }
     replicationMetrics.populatePerColoMetrics(numberOfReplicaThreads.keySet());
-    persistor = new DiskTokenPersistor(replicaTokenFileName, partitionGroupedByMountPath, replicationMetrics);
+    // TODO: make CloudTokenPersistor to store tokens in the cloud
+    persistor = new CloudTokenPersistor(replicaTokenFileName, partitionGroupedByMountPath, replicationMetrics, cloudDestination);
   }
 }

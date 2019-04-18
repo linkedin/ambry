@@ -11,9 +11,16 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.replication;
+package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.replication.PartitionInfo;
+import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicaTokenInfo;
+import com.github.ambry.replication.ReplicaTokenPersistor;
+import com.github.ambry.replication.ReplicaTokenSerde;
+import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.utils.SystemTime;
 import java.io.File;
@@ -29,28 +36,30 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * {@link DiskTokenPersistor} persists replication token to disk.
+ * {@link CloudTokenPersistor} persists replication token to a cloud storage.
  */
-public class DiskTokenPersistor implements ReplicaTokenPersistor {
+public class CloudTokenPersistor implements ReplicaTokenPersistor {
 
-  private static final Logger logger = LoggerFactory.getLogger(DiskTokenPersistor.class);
+  private static final Logger logger = LoggerFactory.getLogger(CloudTokenPersistor.class);
   private final String replicaTokenFileName;
   private final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
   private final ReplicationMetrics replicationMetrics;
   private final ReplicaTokenSerde replicaTokenSerde;
+  private final CloudDestination cloudDestination;
 
   /**
-   * Constructor for {@link DiskTokenPersistor}.
+   * Constructor for {@link CloudTokenPersistor}.
    * @param replicaTokenFileName the token's file name.
    * @param partitionGroupedByMountPath A map between mount path and list of partitions under this mount path.
    * @param replicationMetrics metrics including token persist time.
    */
-  public DiskTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ReplicaTokenSerde replicaTokenSerde) {
+  public CloudTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
+      ReplicationMetrics replicationMetrics, ReplicaTokenSerde replicaTokenSerde, CloudDestination cloudDestination) {
     this.replicaTokenFileName = replicaTokenFileName;
     this.partitionGroupedByMountPath = partitionGroupedByMountPath;
     this.replicationMetrics = replicationMetrics;
     this.replicaTokenSerde = replicaTokenSerde;
+    this.cloudDestination = cloudDestination;
   }
 
   @Override
@@ -78,6 +87,8 @@ public class DiskTokenPersistor implements ReplicaTokenPersistor {
 
     try {
       replicaTokenSerde.write(tokenInfoList, fileStream);
+
+      //TODO: cloudDestination.uploadTokenFile(partitionId, tokenFileName, inputStream);
 
       // flush and overwrite old file
       fileStream.getChannel().force(true);
