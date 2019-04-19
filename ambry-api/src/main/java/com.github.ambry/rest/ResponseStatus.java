@@ -21,99 +21,137 @@ public enum ResponseStatus {
   /**
    * 200 OK - Resource found and all good.
    */
-  Ok,
+  Ok(200),
 
   /**
    * 201 - Resource was created.
    */
-  Created,
+  Created(201),
 
   /**
    * 202 - Request was accepted.
    */
-  Accepted,
+  Accepted(202),
 
   /**
    * 206 - Partial content.
    */
-  PartialContent,
+  PartialContent(206),
   // 3xx
   /**
    * 304 Not Modified
    */
-  NotModified,
+  NotModified(304),
 
   // 4xx
   /**
    * 400 - Request was not correct.
    */
-  BadRequest,
+  BadRequest(400),
 
   /**
    * 401 - Request Unauthorized
    */
-  Unauthorized,
+  Unauthorized(401),
 
   /**
    * 403 - Request forbidden
    */
-  Forbidden,
+  Forbidden(403),
 
   /**
    * 404 Not Found - Resource was not found.
    */
-  NotFound,
+  NotFound(404),
 
   /**
    * 405 Method Not Allowed - Method in request is not allowed on the resource
    */
-  MethodNotAllowed,
+  MethodNotAllowed(405),
 
   /**
    * 407 - Proxy authentication required
    */
-  ProxyAuthenticationRequired,
+  ProxyAuthenticationRequired(407),
 
   /**
    * 410 Gone - Resource has been deleted or has expired.
    */
-  Gone,
+  Gone(410),
 
   /**
    * 412 Precondition Failed - The conditions given in the request header fields evaluated to false
    */
-  PreconditionFailed,
+  PreconditionFailed(412),
 
   /**
    * 413 Request Entity Too Large - The request is larger than what the server is willing to accept
    */
-  RequestTooLarge,
+  RequestTooLarge(413),
 
   /**
    * 416 Range Not Satisfiable - A range request is invalid or outside of the bounds of an object.
    */
-  RangeNotSatisfiable,
+  RangeNotSatisfiable(416),
 
   /**
    * 429 Application rate limit exceeded/Application quota limit exceeded.
    */
-  TooManyRequests,
+  TooManyRequests(429),
 
   // 5xx
   /**
    * 500 - Internal server failure resulted in request not being honored.
    */
-  InternalServerError,
+  InternalServerError(500),
 
   /**
    * 503 - Service is unavailable
    */
-  ServiceUnavailable,
+  ServiceUnavailable(503),
 
   /**
    * 507 - Insufficient capacity to complete the request.
    */
-  InsufficientCapacity;
+  InsufficientCapacity(507);
+
+  private final int statusCode;
+
+  /**
+   * ResponseStatus ctor.
+   * @param statusCode the status code associated with this ResponseStatus
+   */
+  ResponseStatus(int statusCode) {
+    this.statusCode = statusCode;
+  }
+
+  /**
+   * @return {@code true} if status code is 2xx which means success. {@code false} otherwise.
+   */
+  boolean isSuccess() {
+    return statusCode >= 200 && statusCode < 300;
+  }
+
+  /**
+   * @return {@code true} if status code is 3xx which means redirection. {@code false} otherwise.
+   */
+  boolean isRedirection() {
+    return statusCode >= 300 && statusCode < 400;
+  }
+
+  /**
+   * @return {@code true} if status code is 4xx which means client error. {@code false} otherwise.
+   */
+  boolean isClientError() {
+    return statusCode >= 400 && statusCode < 500;
+  }
+
+  /**
+   * @return {@code true} if status code is 5xx which means server error. {@code false} otherwise.
+   */
+  boolean isServerError() {
+    return statusCode >= 500;
+  }
 
   /**
    * Gets the ResponseStatus that corresponds to the {@code restServiceErrorCode}.

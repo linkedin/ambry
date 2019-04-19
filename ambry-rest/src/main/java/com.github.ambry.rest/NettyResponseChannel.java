@@ -14,7 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.commons.PerformanceIndex;
-import com.github.ambry.commons.Threshold;
+import com.github.ambry.commons.Thresholds;
 import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
@@ -50,13 +50,11 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -100,11 +98,6 @@ class NettyResponseChannel implements RestResponseChannel {
   private final Queue<Chunk> chunksToWrite = new ConcurrentLinkedQueue<Chunk>();
   private final Queue<Chunk> chunksAwaitingCallback = new ConcurrentLinkedQueue<Chunk>();
   private final AtomicLong chunksToWriteCount = new AtomicLong(0);
-  // update endpoints in following two response sets when ResponseStatus is updated.
-  private final Set<ResponseStatus> successResponseSet =
-      EnumSet.range(ResponseStatus.Ok, ResponseStatus.PartialContent);
-  private final Set<ResponseStatus> nonSuccessResponseSet =
-      EnumSet.range(ResponseStatus.NotModified, ResponseStatus.TooManyRequests);
 
   private NettyRequest request = null;
   // marked as true if force close is required because close() was called.
@@ -325,6 +318,9 @@ class NettyResponseChannel implements RestResponseChannel {
     }
   }
 
+  /**
+   * Evaluate performance of the request based on its associated {@link PerformanceIndex} and then update the metrics accordingly.
+   */
   private void evaluatePerformanceAndUpdateMetrics() {
     RestRequestMetricsTracker restRequestMetricsTracker = request.getMetricsTracker();
     long roundTripTimeInMs = restRequestMetricsTracker.getRoundTripTimeInMs();
@@ -333,39 +329,42 @@ class NettyResponseChannel implements RestResponseChannel {
     long totalInboundBytes = request.getBytesReceived();
     RestMethod method = request.getRestMethod();
     Map<PerformanceIndex, Long> requestPerfToCheck = new HashMap<>();
-    responseStatus = errorResponseStatus == null ? responseStatus : errorResponseStatus;
+    if (errorResponseStatus != null) {
+      responseStatus = errorResponseStatus;
+    }
     boolean shouldSkipCheck = false;
     switch (method) {
       case GET:
-        if (successResponseSet.contains(responseStatus)) {
+        if (responseStatus.isSuccess()) {
           requestPerfToCheck.put(PerformanceIndex.TimeToFirstByte, timeToFirstBytesInMs);
-          requestPerfToCheck.put(PerformanceIndex.AverageBandwidth, totalOutboundBytes * 1000L / roundTripTimeInMs);
-        } else if (nonSuccessResponseSet.contains(responseStatus)) {
+          requestPerfToCheck.put(PerformanceIndex.AverageBandwidth,
+              roundTripTimeInMs == 0L ? Long.MAX_VALUE : totalOutboundBytes * 1000L / roundTripTimeInMs);
+        } else if (responseStatus.isClientError() || responseStatus.isRedirection()) {
           requestPerfToCheck.put(PerformanceIndex.RoundTripTime, roundTripTimeInMs);
         }
         break;
       case POST:
-        if (successResponseSet.contains(responseStatus)) {
-          requestPerfToCheck.put(PerformanceIndex.AverageBandwidth, totalInboundBytes * 1000L / roundTripTimeInMs);
-        } else if (nonSuccessResponseSet.contains(responseStatus)) {
+        if (responseStatus.isSuccess()) {
+          requestPerfToCheck.put(PerformanceIndex.AverageBandwidth,
+              roundTripTimeInMs == 0L ? Long.MAX_VALUE : totalInboundBytes * 1000L / roundTripTimeInMs);
+        } else if (responseStatus.isClientError() || responseStatus.isRedirection()) {
           requestPerfToCheck.put(PerformanceIndex.RoundTripTime, roundTripTimeInMs);
         }
         break;
       case PUT:
       case HEAD:
       case DELETE:
-        if (successResponseSet.contains(responseStatus) || nonSuccessResponseSet.contains(responseStatus)) {
+        if (!responseStatus.isServerError()) {
           requestPerfToCheck.put(PerformanceIndex.RoundTripTime, roundTripTimeInMs);
         }
         break;
       default:
         shouldSkipCheck = true;
-        logger.warn("Temporarily no evaluation criteria for " + method + " request. Mark as satisfied directly");
+        logger.debug("Temporarily no evaluation criteria for " + method + " request. Mark as satisfied directly");
     }
-    EnumMap<RestMethod, Threshold> thresholdsByMethod =
-        successResponseSet.contains(responseStatus) ? perfConfig.successRequestThresholds
-            : perfConfig.nonSuccessRequestThresholds;
-    if (!shouldSkipCheck && (requestPerfToCheck.isEmpty() || !thresholdsByMethod.get(method)
+    EnumMap<RestMethod, Thresholds> thresholdsByMethod =
+        responseStatus.isSuccess() ? perfConfig.successRequestThresholds : perfConfig.nonSuccessRequestThresholds;
+    if (!shouldSkipCheck && (responseStatus.isServerError() || !thresholdsByMethod.get(method)
         .checkThresholds(requestPerfToCheck))) {
       // this means either response is 5xx or request missed one of thresholds, the request should be unsatisfied
       restRequestMetricsTracker.markUnsatisfied();

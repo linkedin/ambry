@@ -13,6 +13,9 @@
  */
 package com.github.ambry.commons;
 
+/**
+ * The indices used to evaluate performance of single request.
+ */
 public enum PerformanceIndex {
   TimeToFirstByte, RoundTripTime, AverageBandwidth
 }

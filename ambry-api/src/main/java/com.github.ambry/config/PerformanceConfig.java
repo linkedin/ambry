@@ -13,10 +13,10 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.commons.Criteria;
 import com.github.ambry.commons.PerformanceIndex;
-import com.github.ambry.commons.Threshold;
+import com.github.ambry.commons.Thresholds;
 import com.github.ambry.rest.RestMethod;
-import com.github.ambry.utils.Pair;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -34,7 +34,8 @@ public class PerformanceConfig {
   public static final String SUCCESS_REST_REQUEST_TOTAL_TIME_THRESHOLD_STR =
       "performance.success.rest.request.total.time.threshold";
   private static final String DEFAULT_REST_REQUEST_TOTAL_TIME_THRESHOLD_STR =
-      "{\"PUT\": \"Long.MAX_VALUE\",\"GET\": \"Long.MAX_VALUE\",\"POST\": \"Long.MAX_VALUE\",\"HEAD\": \"Long.MAX_VALUE\",\"DELETE\": \"Long.MAX_VALUE\"}";
+      "{\"PUT\": " + Long.MAX_VALUE + ",\"GET\": " + Long.MAX_VALUE + ",\"POST\": " + Long.MAX_VALUE + ",\"HEAD\": "
+          + Long.MAX_VALUE + ",\"DELETE\": " + Long.MAX_VALUE + "}";
 
   /**
    * The round trip time (millisecond) threshold for each type of rest request with non-success response(3xx or 4xx status code).
@@ -76,8 +77,8 @@ public class PerformanceConfig {
   @Default("0")
   public final long successPostAverageBandwidthThreshold;
 
-  public final EnumMap<RestMethod, Threshold> successRequestThresholds = new EnumMap<>(RestMethod.class);
-  public final EnumMap<RestMethod, Threshold> nonSuccessRequestThresholds = new EnumMap<>(RestMethod.class);
+  public final EnumMap<RestMethod, Thresholds> successRequestThresholds = new EnumMap<>(RestMethod.class);
+  public final EnumMap<RestMethod, Thresholds> nonSuccessRequestThresholds = new EnumMap<>(RestMethod.class);
 
   public PerformanceConfig(VerifiableProperties verifiableProperties) {
     // Get related thresholds
@@ -99,23 +100,24 @@ public class PerformanceConfig {
 
     for (RestMethod method : EnumSet.of(RestMethod.GET, RestMethod.POST, RestMethod.DELETE, RestMethod.HEAD,
         RestMethod.PUT)) {
-      Map<PerformanceIndex, Pair<Long, Boolean>> successPerfIndexMap = new HashMap<>();
-      Map<PerformanceIndex, Pair<Long, Boolean>> nonSuccessPerfIndexMap = new HashMap<>();
+      Map<PerformanceIndex, Criteria> successPerfIndexMap = new HashMap<>();
+      Map<PerformanceIndex, Criteria> nonSuccessPerfIndexMap = new HashMap<>();
       if (method == RestMethod.GET) {
         successPerfIndexMap.put(PerformanceIndex.AverageBandwidth,
-            new Pair<>(successGetAverageBandwidthThreshold, false));
-        successPerfIndexMap.put(PerformanceIndex.TimeToFirstByte, new Pair<>(successGetTimeToFirstByteThreshold, true));
+            new Criteria(successGetAverageBandwidthThreshold, Criteria.BoundType.LowerBound));
+        successPerfIndexMap.put(PerformanceIndex.TimeToFirstByte,
+            new Criteria(successGetTimeToFirstByteThreshold, Criteria.BoundType.UpperBound));
       } else if (method == RestMethod.POST) {
         successPerfIndexMap.put(PerformanceIndex.AverageBandwidth,
-            new Pair<>(successPostAverageBandwidthThreshold, false));
+            new Criteria(successPostAverageBandwidthThreshold, Criteria.BoundType.LowerBound));
       } else {
         successPerfIndexMap.put(PerformanceIndex.RoundTripTime,
-            new Pair<>(successThresholdObject.optLong(method.name(), Long.MAX_VALUE), true));
+            new Criteria(successThresholdObject.optLong(method.name(), Long.MAX_VALUE), Criteria.BoundType.UpperBound));
       }
       nonSuccessPerfIndexMap.put(PerformanceIndex.RoundTripTime,
-          new Pair<>(nonSuccessThresholdObject.optLong(method.name(), Long.MAX_VALUE), true));
-      successRequestThresholds.put(method, new Threshold(successPerfIndexMap));
-      nonSuccessRequestThresholds.put(method, new Threshold(nonSuccessPerfIndexMap));
+          new Criteria(nonSuccessThresholdObject.optLong(method.name(), Long.MAX_VALUE), Criteria.BoundType.UpperBound));
+      successRequestThresholds.put(method, new Thresholds(successPerfIndexMap));
+      nonSuccessRequestThresholds.put(method, new Thresholds(nonSuccessPerfIndexMap));
     }
   }
 }
