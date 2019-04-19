@@ -52,6 +52,7 @@ public class CloudBlobCryptoAgentImpl implements CloudBlobCryptoAgent {
     ByteBuffer output = ByteBuffer.allocate(
         EncryptedDataPayload.OVERHEAD_LENGTH + encryptedKey.array().length + encryptedDataBuffer.array().length);
     EncryptedDataPayload.serialize(output, new EncryptedDataPayload(encryptedKey, encryptedDataBuffer));
+    output.flip();
     return output;
   }
 
@@ -105,10 +106,10 @@ public class CloudBlobCryptoAgentImpl implements CloudBlobCryptoAgent {
     static int INITIAL_MESSAGE_LENGTH =
         VERSION_FIELD_SIZE + ENCRYPTED_KEY_SIZE_FIELD_SIZE + ENCRYPTED_DATA_SIZE_FIELD_SIZE;
     private static int CRC_FIELD_LENGTH = 8;
-    static int OVERHEAD_LENGTH = INITIAL_MESSAGE_LENGTH + CRC_FIELD_LENGTH;
+    private static int OVERHEAD_LENGTH = INITIAL_MESSAGE_LENGTH + CRC_FIELD_LENGTH;
 
-    private ByteBuffer encryptedKey;
-    private ByteBuffer encryptedData;
+    private final ByteBuffer encryptedKey;
+    private final ByteBuffer encryptedData;
 
     /**
      * Constructor.
@@ -122,7 +123,7 @@ public class CloudBlobCryptoAgentImpl implements CloudBlobCryptoAgent {
 
     /**
      * Serialize the {@link EncryptedDataPayload} into an output buffer.
-     * @param outputBuffer the {@link ByteBuffer} to write to.
+     * @param outputBuffer the {@link ByteBuffer} to write to.  Currently, only HeapByteBuffer is supported.
      * @param encryptedDataPayload the {@link EncryptedDataPayload} to serialize.
      */
     static void serialize(ByteBuffer outputBuffer, EncryptedDataPayload encryptedDataPayload) {
@@ -141,49 +142,41 @@ public class CloudBlobCryptoAgentImpl implements CloudBlobCryptoAgent {
 
     /**
      * Deserialize an {@link EncryptedDataPayload} from an input buffer.
-     * @param inputBuffer the {@link ByteBuffer} to read from.
+     * @param inputBuffer the {@link ByteBuffer} to read from.  Currently, only HeapByteBuffer is supported.
      * @return the deserialized {@link EncryptedDataPayload}.
+     * @throws GeneralSecurityException if the buffer does not have the expected size or format.
      */
     static EncryptedDataPayload deserialize(ByteBuffer inputBuffer) throws GeneralSecurityException {
       int startOffset = inputBuffer.position();
       Crc32 crc = new Crc32();
-      short version = inputBuffer.getShort();
-      if (version != 1) {
-        throw new GeneralSecurityException("Unrecognized version: " + version);
-      }
-      int encryptedKeySize = inputBuffer.getInt();
-      int encryptedDataSize = (int) inputBuffer.getLong();
-      if (encryptedKeySize < 0) {
-        throw new GeneralSecurityException("Encrypted key size is less than 0");
-      }
-      if (encryptedDataSize < 0) {
-        throw new GeneralSecurityException("Encrypted data size is less than 0");
-      }
-      byte[] encryptedKey = new byte[encryptedKeySize];
-      byte[] encryptedData = new byte[encryptedDataSize];
       try {
+        short version = inputBuffer.getShort();
+        if (version != 1) {
+          throw new GeneralSecurityException("Unrecognized version: " + version);
+        }
+        int encryptedKeySize = inputBuffer.getInt();
+        int encryptedDataSize = (int) inputBuffer.getLong();
+        if (encryptedKeySize < 0) {
+          throw new GeneralSecurityException("Encrypted key size is less than 0");
+        }
+        if (encryptedDataSize < 0) {
+          throw new GeneralSecurityException("Encrypted data size is less than 0");
+        }
+        byte[] encryptedKey = new byte[encryptedKeySize];
+        byte[] encryptedData = new byte[encryptedDataSize];
         inputBuffer.get(encryptedKey);
-      } catch (Exception e) {
-        throw new GeneralSecurityException("Reading encrypted key from buffer", e);
-      }
-      try {
         inputBuffer.get(encryptedData);
-      } catch (Exception e) {
-        throw new GeneralSecurityException("Reading encrypted data from buffer", e);
+        crc.update(inputBuffer.array(), startOffset, INITIAL_MESSAGE_LENGTH + encryptedKeySize + encryptedDataSize);
+        long expectedCrc = inputBuffer.getLong();
+        long actualCrc = crc.getValue();
+        if (actualCrc != expectedCrc) {
+          throw new GeneralSecurityException(
+              "Encrypted blob is corrupt.  ExpectedCRC: " + expectedCrc + " ActualCRC: " + actualCrc);
+        }
+        return new EncryptedDataPayload(ByteBuffer.wrap(encryptedKey), ByteBuffer.wrap(encryptedData));
+      } catch (RuntimeException rex) {
+        throw new GeneralSecurityException("Reading payload from buffer", rex);
       }
-      crc.update(inputBuffer.array(), startOffset, INITIAL_MESSAGE_LENGTH + encryptedKeySize + encryptedDataSize);
-      long expectedCrc;
-      try {
-        expectedCrc = inputBuffer.getLong();
-      } catch (Exception e) {
-        throw new GeneralSecurityException("Reading crc from buffer", e);
-      }
-      long actualCrc = crc.getValue();
-      if (actualCrc != expectedCrc) {
-        throw new GeneralSecurityException(
-            "Encrypted blob is corrupt.  ExpectedCRC: " + expectedCrc + " ActualCRC: " + actualCrc);
-      }
-      return new EncryptedDataPayload(ByteBuffer.wrap(encryptedKey), ByteBuffer.wrap(encryptedData));
     }
   }
 }

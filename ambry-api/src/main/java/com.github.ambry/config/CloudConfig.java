@@ -42,8 +42,6 @@ public class CloudConfig {
   public static final String CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS = "cloud.blob.crypto.agent.factory.class";
   public static final String DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS =
       "com.github.ambry.cloud.CloudBlobCryptoAgentFactoryImpl";
-  public static final String VCR_ENCRYPTION_FORMAT = "vcr.encryption.format";
-  public static final String DEFAULT_VCR_ENCRYPTION_FORMAT = "DEFAULT";
   private static final String DEFAULT_VCR_CLUSTER_ZK_CONNECT_STRING = "localhost:2181";
   private static final String DEFAULT_VCR_CLUSTER_NAME = "VCRCluster";
   private static final String DEFAULT_VCR_REPLICA_MOUNT_PATH_PREFIX = "/tmp/vcr/";

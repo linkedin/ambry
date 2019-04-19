@@ -22,6 +22,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.DiskTokenPersistor;
@@ -45,13 +46,13 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public class CloudBackupManager extends ReplicationEngine {
 
-  public CloudBackupManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
-      ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreKeyFactory storeKeyFactory,
-      ClusterMap clusterMap, VirtualReplicatorCluster virtualReplicatorCluster,
+  public CloudBackupManager(VerifiableProperties properties, CloudConfig cloudConfig,
+      ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
+      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VirtualReplicatorCluster virtualReplicatorCluster,
       CloudDestinationFactory cloudDestinationFactory, ScheduledExecutorService scheduler,
       ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification,
-      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      CloudBlobCryptoAgentFactory cloudBlobCryptoAgentFactory, VcrMetrics vcrMetrics) throws ReplicationException {
+      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName, VcrMetrics vcrMetrics)
+      throws ReplicationException {
 
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
         virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool, metricRegistry,
@@ -62,8 +63,7 @@ public class CloudBackupManager extends ReplicationEngine {
     for (PartitionId partitionId : partitionIds) {
       ReplicaId cloudReplica =
           new CloudReplica(cloudConfig, partitionId, virtualReplicatorCluster.getCurrentDataNodeId());
-      Store cloudStore = new CloudBlobStore(partitionId, cloudConfig, cloudDestination,
-          cloudBlobCryptoAgentFactory, vcrMetrics);
+      Store cloudStore = new CloudBlobStore(properties, partitionId, cloudDestination, vcrMetrics);
       try {
         cloudStore.start();
       } catch (StoreException e) {

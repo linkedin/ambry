@@ -17,6 +17,8 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
@@ -39,14 +41,14 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.cloud.CloudBlobMetadata.EncryptionOrigin;
+import static com.github.ambry.cloud.CloudBlobMetadata.*;
+
 
 /**
  * The blob store that reflects data in a cloud storage.
@@ -56,31 +58,40 @@ class CloudBlobStore implements Store {
   private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
-  private final CloudConfig cloudConfig;
   private final CloudBlobCryptoAgentFactory cryptoAgentFactory;
   private final CloudBlobCryptoAgent cryptoAgent;
   private final VcrMetrics vcrMetrics;
   private final long minTtlMillis;
+  private final boolean requireEncryption;
   private boolean started;
 
   /**
    * Constructor for CloudBlobStore
+   * @param properties the {@link VerifiableProperties} to use.
    * @param partitionId partition associated with BlobStore.
-   * @param cloudDestination the {@link CloudDestination}.
-   * @param cloudConfig the {@link CloudConfig} to use.
    * @param cloudDestination the {@link CloudDestination} to use.
-   * @param cryptoAgentFactory the {@link CloudBlobCryptoAgentFactory} to use for encryption.
    * @param vcrMetrics the {@link VcrMetrics} to use.
+   * @throws IllegalStateException if construction failed.
    */
-  CloudBlobStore(PartitionId partitionId, CloudConfig cloudConfig, CloudDestination cloudDestination,
-      CloudBlobCryptoAgentFactory cryptoAgentFactory, VcrMetrics vcrMetrics) {
+  CloudBlobStore(VerifiableProperties properties, PartitionId partitionId, CloudDestination cloudDestination,
+      VcrMetrics vcrMetrics) throws IllegalStateException {
+
+    CloudConfig cloudConfig = new CloudConfig(properties);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
     this.cloudDestination = Objects.requireNonNull(cloudDestination, "cloudDestination is required");
     this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
-    this.cloudConfig = Objects.requireNonNull(cloudConfig, "cloudConfig is required");
     this.vcrMetrics = Objects.requireNonNull(vcrMetrics, "vcrMetrics is required");
     minTtlMillis = TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays);
-    this.cryptoAgentFactory = cryptoAgentFactory;
-    this.cryptoAgent = cryptoAgentFactory != null ? cryptoAgentFactory.getCloudBlobCryptoAgent() : null;
+    requireEncryption = cloudConfig.vcrRequireEncryption;
+
+    String cryptoAgentFactoryClass = cloudConfig.cloudBlobCryptoAgentFactoryClass;
+    try {
+      cryptoAgentFactory = Utils.getObj(cryptoAgentFactoryClass, properties, clusterMapConfig.clusterMapClusterName,
+          vcrMetrics.getMetricRegistry());
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("Unable to construct factory " + cryptoAgentFactoryClass, e);
+    }
+    this.cryptoAgent = cryptoAgentFactory.getCloudBlobCryptoAgent();
   }
 
   @Override
@@ -121,24 +132,18 @@ class CloudBlobStore implements Store {
       String kmsContext = null;
       String cryptoAgentFactoryClass = null;
       EncryptionOrigin encryptionOrigin = isRouterEncrypted ? EncryptionOrigin.ROUTER : EncryptionOrigin.NONE;
-      if (cloudConfig.vcrRequireEncryption) {
+      if (requireEncryption) {
         if (isRouterEncrypted) {
           // Nothing further needed
         } else {
           // Need to encrypt the buffer before upload
-          if (cryptoAgent != null) {
-            Timer.Context encryptionTimer = vcrMetrics.blobEncryptionTime.time();
-            messageBuf = cryptoAgent.encrypt(messageBuf);
-            encryptionTimer.stop();
-            vcrMetrics.blobEncryptionCount.inc();
-            encryptionOrigin = EncryptionOrigin.VCR;
-            kmsContext = cryptoAgent.getEncryptionContext();
-            cryptoAgentFactoryClass = this.cryptoAgentFactory.getClass().getName();
-          } else {
-            // Cannot upload this blob since we can't satisfy encryption requirements
-            vcrMetrics.skipUnencryptedBlobsCount.inc();
-            return;
-          }
+          Timer.Context encryptionTimer = vcrMetrics.blobEncryptionTime.time();
+          messageBuf = cryptoAgent.encrypt(messageBuf);
+          encryptionTimer.stop();
+          vcrMetrics.blobEncryptionCount.inc();
+          encryptionOrigin = EncryptionOrigin.VCR;
+          kmsContext = cryptoAgent.getEncryptionContext();
+          cryptoAgentFactoryClass = this.cryptoAgentFactory.getClass().getName();
         }
       } else {
         // encryption not required, upload as is

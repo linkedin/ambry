@@ -27,9 +27,9 @@ import java.security.GeneralSecurityException;
  */
 public class CloudBlobCryptoAgentFactoryImpl implements CloudBlobCryptoAgentFactory {
 
-  private CryptoServiceFactory cryptoServiceFactory;
-  private KeyManagementServiceFactory keyManagementServiceFactory;
-  private String context;
+  private final CryptoServiceFactory cryptoServiceFactory;
+  private final KeyManagementServiceFactory keyManagementServiceFactory;
+  private final String context;
 
   public CloudBlobCryptoAgentFactoryImpl(VerifiableProperties verifiableProperties, String clusterName,
       MetricRegistry metricRegistry) throws ReflectiveOperationException {

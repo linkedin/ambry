@@ -147,11 +147,12 @@ public class VcrServer {
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
       CloudBlobCryptoAgentFactory cloudBlobCryptoAgentFactory =
-          Utils.getObj(cloudConfig.cloudBlobCryptoAgentFactoryClass, properties, clusterMapConfig.clusterMapClusterName, clusterMap.getMetricRegistry());
+          Utils.getObj(cloudConfig.cloudBlobCryptoAgentFactoryClass, properties, clusterMapConfig.clusterMapClusterName,
+              clusterMap.getMetricRegistry());
       cloudBackupManager =
-          new CloudBackupManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory,
-              clusterMap, virtualReplicatorCluster, cloudDestinationFactory, scheduler, connectionPool, registry,
-              notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer, cloudBlobCryptoAgentFactory, metrics);
+          new CloudBackupManager(properties, cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
+              storeKeyFactory, clusterMap, virtualReplicatorCluster, cloudDestinationFactory, scheduler, connectionPool,
+              registry, notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer, metrics);
       cloudBackupManager.start();
 
       DataNodeId currentNode = virtualReplicatorCluster.getCurrentDataNodeId();
