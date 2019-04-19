@@ -232,7 +232,7 @@ public class TestUtils {
   /**
    * A wrapper class to start and shutdown {@link ZooKeeperServer}.
    * We maintain this class because {@link org.I0Itec.zkclient.ZkServer} calls NetworkUtil.getLocalHostNames()
-   * which takes time in Max OS.
+   * which takes time in Mac OS.
    */
   static class ZkServerWrapper {
     private static final Logger logger = LoggerFactory.getLogger(ZkServerWrapper.class);
