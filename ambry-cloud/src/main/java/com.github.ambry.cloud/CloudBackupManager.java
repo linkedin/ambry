@@ -51,14 +51,15 @@ public class CloudBackupManager extends ReplicationEngine {
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VirtualReplicatorCluster virtualReplicatorCluster,
       CloudDestinationFactory cloudDestinationFactory, ScheduledExecutorService scheduler,
       ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification,
-      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName, VcrMetrics vcrMetrics)
-      throws ReplicationException {
+      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
 
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
         virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool, metricRegistry,
         requestNotification, storeKeyConverterFactory, transformerClassName);
+
     CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
     List<? extends PartitionId> partitionIds = virtualReplicatorCluster.getAssignedPartitionIds();
+    VcrMetrics vcrMetrics = new VcrMetrics(metricRegistry);
 
     for (PartitionId partitionId : partitionIds) {
       ReplicaId cloudReplica =

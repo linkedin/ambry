@@ -23,9 +23,6 @@ public class VcrMetrics {
 
   private final MetricRegistry registry;
 
-  public final Histogram vcrStartTimeInMs;
-  public final Histogram vcrShutdownTimeInMs;
-
   // Encryption metrics
   public final Counter blobEncryptionCount;
   public final Counter blobDecryptionCount;
@@ -34,8 +31,6 @@ public class VcrMetrics {
 
   public VcrMetrics(MetricRegistry registry) {
     this.registry = registry;
-    vcrStartTimeInMs = registry.histogram(MetricRegistry.name(VcrServer.class, "VcrStartTimeInMs"));
-    vcrShutdownTimeInMs = registry.histogram(MetricRegistry.name(VcrServer.class, "VcrShutdownTimeInMs"));
     blobEncryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionCount"));
     blobDecryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobDet4acryptionCount"));
     blobEncryptionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionTime"));

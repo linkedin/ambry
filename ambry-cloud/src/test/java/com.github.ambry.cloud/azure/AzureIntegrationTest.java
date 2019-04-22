@@ -97,7 +97,7 @@ public class AzureIntegrationTest {
     InputStream inputStream = getBlobInputStream(blobSize);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
-            CloudBlobMetadata.EncryptionOrigin.NONE, vcrKmsContext, cryptoAgentFactory);
+            CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
     assertTrue("Expected upload to return true",
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     // Try to upload same blob again
@@ -130,9 +130,8 @@ public class AzureIntegrationTest {
               BlobDataType.DATACHUNK);
       blobIdList.add(blobId);
       InputStream inputStream = getBlobInputStream(blobSize);
-      CloudBlobMetadata cloudBlobMetadata =
-          new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-              CloudBlobMetadata.EncryptionOrigin.NONE, vcrKmsContext, cryptoAgentFactory);
+      CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     }
@@ -147,8 +146,10 @@ public class AzureIntegrationTest {
       assertEquals("Unexpected metadata containerId", containerId, metadata.getContainerId());
       assertEquals("Unexpected metadata partitionId", partitionId.toPathString(), metadata.getPartitionId());
       assertEquals("Unexpected metadata creationTime", creationTime, metadata.getCreationTime());
+      assertEquals("Unexpected metadata encryption origin", CloudBlobMetadata.EncryptionOrigin.VCR,
+          metadata.getEncryptionOrigin());
       assertEquals("Unexpected metadata vcrKmsContext", vcrKmsContext, metadata.getVcrKmsContext());
-      assertEquals("Unexpected metadata cryptoAgentFactory", vcrKmsContext, metadata.getCryptoAgentFactory());
+      assertEquals("Unexpected metadata cryptoAgentFactory", cryptoAgentFactory, metadata.getCryptoAgentFactory());
     }
 
     // Cleanup
