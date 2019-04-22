@@ -230,9 +230,11 @@ public class TestUtils {
   }
 
   /**
-   * A wrapper class to start and shutdown {@link ZooKeeperServer}.
-   * We maintain this class because {@link org.I0Itec.zkclient.ZkServer} calls NetworkUtil.getLocalHostNames()
-   * which takes time in Mac OS.
+   * A wrapper class to start and shutdown {@link ZooKeeperServer}. The code is from {@link org.I0Itec.zkclient.ZkServer}.
+   * We maintain this class to speed up tests because function calls to NetworkUtil.getLocalHostNames() in
+   * {@link org.I0Itec.zkclient.ZkServer} takes time in Mac OS.
+   * {@link org.I0Itec.zkclient.ZkServer} calls NetworkUtil.getLocalHostNames() to log and make sure "localhost" is in
+   * the list of NetworkUtil.getLocalHostNames(), which are not necessary in tests.
    */
   static class ZkServerWrapper {
     private static final Logger logger = LoggerFactory.getLogger(ZkServerWrapper.class);
