@@ -46,18 +46,17 @@ public class CloudBlobMetadata {
   private String cryptoAgentFactory;
 
   /**
-   * Different encryption types for cloud stored blobs
+   * Possible values of encryption origin for cloud stored blobs.
+   * Only considers encryption initiated by Ambry.
    */
   public enum EncryptionOrigin {
 
-    /** No encryption */
+    /** Not encrypted by Ambry */
     NONE,
     /** Encrypted by Router */
     ROUTER,
     /** Encrypted by VCR */
-    VCR,
-    /** Encrypted by Cloud Data Store */
-    CLOUD
+    VCR
 
   }
 
