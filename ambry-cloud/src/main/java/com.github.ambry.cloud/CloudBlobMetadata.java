@@ -28,6 +28,9 @@ public class CloudBlobMetadata {
   public static final String FIELD_EXPIRATION_TIME = "expirationTime";
   public static final String FIELD_ACCOUNT_ID = "accountId";
   public static final String FIELD_CONTAINER_ID = "containerId";
+  public static final String FIELD_ENCRYPTION_ORIGIN = "encryptionOrigin";
+  public static final String FIELD_VCR_KMS_CONTEXT = "vcrKmsContext";
+  public static final String FIELD_CRYPTO_AGENT_FACTORY = "cryptoAgentFactory";
 
   private String id;
   private String partitionId;
@@ -38,6 +41,24 @@ public class CloudBlobMetadata {
   private int containerId;
   private long expirationTime;
   private long deletionTime;
+  private EncryptionOrigin encryptionOrigin;
+  private String vcrKmsContext;
+  private String cryptoAgentFactory;
+
+  /**
+   * Possible values of encryption origin for cloud stored blobs.
+   * Only considers encryption initiated by Ambry.
+   */
+  public enum EncryptionOrigin {
+
+    /** Not encrypted by Ambry */
+    NONE,
+    /** Encrypted by Router */
+    ROUTER,
+    /** Encrypted by VCR */
+    VCR
+
+  }
 
   /**
    * Default constructor (for JSONSerializer).
@@ -51,8 +72,13 @@ public class CloudBlobMetadata {
    * @param creationTime The blob creation time.
    * @param expirationTime The blob expiration time.
    * @param size The blob size.
+   * @param encryptionOrigin The blob's encryption origin.
+   * @param vcrKmsContext The KMS context used to encrypt the blob.  Only used when encryptionOrigin = VCR.
+   * @param cryptoAgentFactory The class name of the {@link CloudBlobCryptoAgentFactory} used to encrypt the blob.
+   *                         Only used when encryptionOrigin = VCR.
    */
-  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size) {
+  public CloudBlobMetadata(BlobId blobId, long creationTime, long expirationTime, long size,
+      EncryptionOrigin encryptionOrigin, String vcrKmsContext, String cryptoAgentFactory) {
     this.id = blobId.getID();
     this.partitionId = blobId.getPartition().toPathString();
     this.accountId = blobId.getAccountId();
@@ -62,6 +88,9 @@ public class CloudBlobMetadata {
     this.uploadTime = System.currentTimeMillis();
     this.deletionTime = Utils.Infinite_Time;
     this.size = size;
+    this.encryptionOrigin = encryptionOrigin;
+    this.vcrKmsContext = vcrKmsContext;
+    this.cryptoAgentFactory = cryptoAgentFactory;
   }
 
   /**
@@ -210,6 +239,57 @@ public class CloudBlobMetadata {
    */
   public CloudBlobMetadata setContainerId(int containerId) {
     this.containerId = containerId;
+    return this;
+  }
+
+  /**
+   * @return the {@link EncryptionOrigin}.
+   */
+  public EncryptionOrigin getEncryptionOrigin() {
+    return encryptionOrigin;
+  }
+
+  /**
+   * Sets the encryption origin.
+   * @param encryptionOrigin the {@link EncryptionOrigin}.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setEncryptionOrigin(EncryptionOrigin encryptionOrigin) {
+    this.encryptionOrigin = encryptionOrigin;
+    return this;
+  }
+
+  /**
+   * @return the VCR KMS context.
+   */
+  public String getVcrKmsContext() {
+    return vcrKmsContext;
+  }
+
+  /**
+   * Sets the VCR KMS context.
+   * @param vcrKmsContext the KMS context used for encryption.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setVcrKmsContext(String vcrKmsContext) {
+    this.vcrKmsContext = vcrKmsContext;
+    return this;
+  }
+
+  /**
+   * @return the VCR crypto agent factory class name.
+   */
+  public String getCryptoAgentFactory() {
+    return cryptoAgentFactory;
+  }
+
+  /**
+   * Sets the VCR crypto agent factory class name.
+   * @param cryptoAgentFactory the class name of the {@link CloudBlobCryptoAgentFactory} used for encryption.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setCryptoAgentFactory(String cryptoAgentFactory) {
+    this.cryptoAgentFactory = cryptoAgentFactory;
     return this;
   }
 

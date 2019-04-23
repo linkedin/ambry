@@ -38,7 +38,7 @@ import org.slf4j.LoggerFactory;
  * {@link CryptoService} which is capable of encrypting or decrypting bytes based on the given key.
  * This implementation uses GCM for encryption and decryption
  */
-class GCMCryptoService implements CryptoService<SecretKeySpec> {
+public class GCMCryptoService implements CryptoService<SecretKeySpec> {
 
   private static final int VERSION_FIELD_SIZE_IN_BYTES = Short.BYTES;
   private static final short KEY_RECORD_VERSION_V_1 = 1;
@@ -50,7 +50,7 @@ class GCMCryptoService implements CryptoService<SecretKeySpec> {
 
   private static final Logger logger = LoggerFactory.getLogger(GCMCryptoService.class);
 
-  GCMCryptoService(CryptoServiceConfig cryptoServiceConfig) {
+  public GCMCryptoService(CryptoServiceConfig cryptoServiceConfig) {
     config = cryptoServiceConfig;
     ivValSize = cryptoServiceConfig.cryptoServiceIvSizeInBytes;
     Security.addProvider(new BouncyCastleProvider());

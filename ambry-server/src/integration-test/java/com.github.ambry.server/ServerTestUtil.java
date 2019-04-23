@@ -612,6 +612,8 @@ final class ServerTestUtil {
       props.setProperty("vcr.ssl.port", "12310");
       props.setProperty("clustermap.ssl.enabled.datacenters", dataNode.getDatacenterName());
     }
+    props.setProperty("vcr.cluster.name", "VCRCluster");
+    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     props.setProperty("vcr.assigned.partitions", String.join(",",
         clusterMap.getAllPartitionIds(null).stream().map(p -> p.toPathString()).collect(Collectors.toList())));
     VerifiableProperties vProps = new VerifiableProperties(props);

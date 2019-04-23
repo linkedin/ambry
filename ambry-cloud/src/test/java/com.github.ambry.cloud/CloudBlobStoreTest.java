@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -55,7 +56,7 @@ public class CloudBlobStoreTest {
   private Store store;
   private CloudDestination dest;
   private PartitionId partitionId;
-  private CloudConfig cloudConfig;
+  private VcrMetrics vcrMetrics;
   private Random random = new Random();
   private short refAccountId = 50;
   private short refContainerId = 100;
@@ -63,40 +64,81 @@ public class CloudBlobStoreTest {
 
   @Before
   public void setup() throws Exception {
-    dest = mock(CloudDestination.class);
     partitionId = new MockPartitionId();
-    Properties props = new Properties();
+  }
+
+  /**
+   * Setup the cloud blobstore.
+   * @param requireEncryption value of requireEncryption flag in CloudConfig.
+   * @param start whether to start the store.
+   */
+  private void setupCloudStore(boolean requireEncryption, boolean start) throws Exception {
+    Properties properties = new Properties();
+    // Required clustermap properties
+    setBasicProperties(properties);
     // Require encryption for uploading
-    props.setProperty(CloudConfig.VCR_REQUIRE_ENCRYPTION, "true");
-    cloudConfig = new CloudConfig(new VerifiableProperties(props));
-    store = new CloudBlobStore(partitionId, cloudConfig, dest);
-    store.start();
+    properties.setProperty(CloudConfig.VCR_REQUIRE_ENCRYPTION, Boolean.toString(requireEncryption));
+    properties.setProperty(CloudConfig.CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
+        TestCloudBlobCryptoAgentFactory.class.getName());
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    dest = mock(CloudDestination.class);
+    vcrMetrics = new VcrMetrics(new MetricRegistry());
+    store = new CloudBlobStore(verifiableProperties, partitionId, dest, vcrMetrics);
+    if (start) {
+      store.start();
+    }
+  }
+
+  /**
+   * Method to set basic required properties
+   * @param properties the Properties to set
+   */
+  private void setBasicProperties(Properties properties) {
+    properties.setProperty("clustermap.cluster.name", "dev");
+    properties.setProperty("clustermap.datacenter.name", "DC1");
+    properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(64));
   }
 
   /** Test the CloudBlobStore put method. */
   @Test
   public void testStorePuts() throws Exception {
+    testStorePuts(false);
+    testStorePuts(true);
+  }
+
+  private void testStorePuts(boolean requireEncryption) throws Exception {
+    setupCloudStore(requireEncryption, true);
     // Put blobs with and without expiration and encryption
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    int count = 10;
+    int count = 5;
     long expireTime = System.currentTimeMillis() + 10000;
+    int expectedUploads = 0;
+    int expectedEncryptions = 0;
     for (int j = 0; j < count; j++) {
       long size = Math.abs(random.nextLong()) % 10000;
-      // Permanent and encrypted, should be uploaded
+      // Permanent and encrypted, should be uploaded and not reencrypted
       addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, true);
-      // Permanent and unencrypted, should not be uploaded
+      expectedUploads++;
+      // Permanent and unencrypted
       addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, false);
-      // Short TTL and encrypted, should not be uploaded
+      expectedUploads++;
+      if (requireEncryption) {
+        expectedEncryptions++;
+      }
+      // Short TTL and encrypted, should not be uploaded nor encrypted
       addBlobToSet(messageWriteSet, size, expireTime, refAccountId, refContainerId, true);
     }
     store.put(messageWriteSet);
-    verify(dest, times(count)).uploadBlob(any(BlobId.class), anyLong(), any(CloudBlobMetadata.class),
+    verify(dest, times(expectedUploads)).uploadBlob(any(BlobId.class), anyLong(), any(CloudBlobMetadata.class),
         any(InputStream.class));
+    assertEquals("Unexpected encryption count", expectedEncryptions, vcrMetrics.blobEncryptionCount.getCount());
   }
 
   /** Test the CloudBlobStore delete method. */
   @Test
   public void testStoreDeletes() throws Exception {
+    setupCloudStore(true, true);
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
@@ -110,6 +152,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore updateTtl method. */
   @Test
   public void testStoreTtlUpdates() throws Exception {
+    setupCloudStore(true, true);
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
@@ -124,6 +167,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore findMissingKeys method. */
   @Test
   public void testFindMissingKeys() throws Exception {
+    setupCloudStore(true, true);
     int count = 10;
     List<StoreKey> keys = new ArrayList<>();
     Map<String, CloudBlobMetadata> metadataMap = new HashMap<>();
@@ -132,7 +176,8 @@ public class CloudBlobStoreTest {
       BlobId existentBlobId = getUniqueId();
       keys.add(existentBlobId);
       metadataMap.put(existentBlobId.getID(),
-          new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024));
+          new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024,
+              CloudBlobMetadata.EncryptionOrigin.ROUTER, null, null));
       // Blob without metadata
       BlobId nonexistentBlobId = getUniqueId();
       keys.add(nonexistentBlobId);
@@ -147,24 +192,24 @@ public class CloudBlobStoreTest {
   @Test
   public void testStoreNotStarted() throws Exception {
     // Create store and don't start it.
-    CloudBlobStore idleStore = new CloudBlobStore(partitionId, cloudConfig, dest);
+    setupCloudStore(true, false);
     List<StoreKey> keys = Collections.singletonList(getUniqueId());
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     addBlobToSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId, true);
     try {
-      idleStore.put(messageWriteSet);
+      store.put(messageWriteSet);
       fail("Store put should have failed.");
     } catch (StoreException e) {
       assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
     try {
-      idleStore.delete(messageWriteSet);
+      store.delete(messageWriteSet);
       fail("Store delete should have failed.");
     } catch (StoreException e) {
       assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
     try {
-      idleStore.findMissingKeys(keys);
+      store.findMissingKeys(keys);
       fail("Store findMissingKeys should have failed.");
     } catch (StoreException e) {
       assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
@@ -179,7 +224,13 @@ public class CloudBlobStoreTest {
         new CloudStorageException("ouch"));
     when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(new CloudStorageException("ouch"));
     when(exDest.getBlobMetadata(anyList())).thenThrow(new CloudStorageException("ouch"));
-    CloudBlobStore exStore = new CloudBlobStore(partitionId, cloudConfig, exDest);
+    Properties props = new Properties();
+    setBasicProperties(props);
+    props.setProperty(CloudConfig.VCR_REQUIRE_ENCRYPTION, "false");
+    props.setProperty(CloudConfig.CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
+        TestCloudBlobCryptoAgentFactory.class.getName());
+    vcrMetrics = new VcrMetrics(new MetricRegistry());
+    CloudBlobStore exStore = new CloudBlobStore(new VerifiableProperties(props), partitionId, exDest, vcrMetrics);
     exStore.start();
     List<StoreKey> keys = Collections.singletonList(getUniqueId());
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();

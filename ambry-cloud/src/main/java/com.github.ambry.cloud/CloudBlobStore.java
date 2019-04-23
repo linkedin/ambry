@@ -13,9 +13,12 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
@@ -33,6 +36,7 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+import java.security.GeneralSecurityException;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -43,30 +47,51 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.cloud.CloudBlobMetadata.*;
+
 
 /**
  * The blob store that reflects data in a cloud storage.
  */
 class CloudBlobStore implements Store {
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
-  private final CloudConfig cloudConfig;
+  private final CloudBlobCryptoAgentFactory cryptoAgentFactory;
+  private final CloudBlobCryptoAgent cryptoAgent;
+  private final VcrMetrics vcrMetrics;
   private final long minTtlMillis;
+  private final boolean requireEncryption;
   private boolean started;
 
   /**
    * Constructor for CloudBlobStore
+   * @param properties the {@link VerifiableProperties} to use.
    * @param partitionId partition associated with BlobStore.
-   * @param cloudConfig the {@link CloudConfig} to use.
    * @param cloudDestination the {@link CloudDestination} to use.
+   * @param vcrMetrics the {@link VcrMetrics} to use.
+   * @throws IllegalStateException if construction failed.
    */
-  CloudBlobStore(PartitionId partitionId, CloudConfig cloudConfig, CloudDestination cloudDestination) {
-    this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
-    this.cloudConfig = Objects.requireNonNull(cloudConfig, "cloudConfig is required");
+  CloudBlobStore(VerifiableProperties properties, PartitionId partitionId, CloudDestination cloudDestination,
+      VcrMetrics vcrMetrics) throws IllegalStateException {
+
+    CloudConfig cloudConfig = new CloudConfig(properties);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
     this.cloudDestination = Objects.requireNonNull(cloudDestination, "cloudDestination is required");
+    this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
+    this.vcrMetrics = Objects.requireNonNull(vcrMetrics, "vcrMetrics is required");
     minTtlMillis = TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays);
+    requireEncryption = cloudConfig.vcrRequireEncryption;
+
+    String cryptoAgentFactoryClass = cloudConfig.cloudBlobCryptoAgentFactoryClass;
+    try {
+      cryptoAgentFactory = Utils.getObj(cryptoAgentFactoryClass, properties, clusterMapConfig.clusterMapClusterName,
+          vcrMetrics.getMetricRegistry());
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("Unable to construct factory " + cryptoAgentFactoryClass, e);
+    }
+    this.cryptoAgent = cryptoAgentFactory.getCloudBlobCryptoAgent();
   }
 
   @Override
@@ -100,18 +125,44 @@ class CloudBlobStore implements Store {
    * @throws CloudStorageException if the upload failed.
    */
   private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size)
-      throws CloudStorageException, IOException {
+      throws CloudStorageException, IOException, GeneralSecurityException {
     if (shouldUpload(messageInfo)) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
-      if (cloudConfig.vcrRequireEncryption && !BlobId.isEncrypted(blobId.getID())) {
-        // TODO: encrypt on demand before uploading, skip for now
-        return;
+      boolean isRouterEncrypted = isRouterEncrypted(blobId);
+      String kmsContext = null;
+      String cryptoAgentFactoryClass = null;
+      EncryptionOrigin encryptionOrigin = isRouterEncrypted ? EncryptionOrigin.ROUTER : EncryptionOrigin.NONE;
+      if (requireEncryption) {
+        if (isRouterEncrypted) {
+          // Nothing further needed
+        } else {
+          // Need to encrypt the buffer before upload
+          Timer.Context encryptionTimer = vcrMetrics.blobEncryptionTime.time();
+          messageBuf = cryptoAgent.encrypt(messageBuf);
+          encryptionTimer.stop();
+          vcrMetrics.blobEncryptionCount.inc();
+          encryptionOrigin = EncryptionOrigin.VCR;
+          kmsContext = cryptoAgent.getEncryptionContext();
+          cryptoAgentFactoryClass = this.cryptoAgentFactory.getClass().getName();
+        }
+      } else {
+        // encryption not required, upload as is
       }
       CloudBlobMetadata blobMetadata =
           new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
-              messageInfo.getSize());
+              messageInfo.getSize(), encryptionOrigin, kmsContext, cryptoAgentFactoryClass);
       cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
     }
+  }
+
+  /**
+   * Utility to check whether a blob was already encrypted by the router.
+   * @param blobId the blob to check.
+   * @return True if the blob is encrypted, otherwise false.
+   */
+  private static boolean isRouterEncrypted(BlobId blobId) throws IOException {
+    // TODO: would be more efficient to call blobId.isEncrypted()
+    return blobId.getVersion() >= BlobId.BLOB_ID_V4 && BlobId.isEncrypted(blobId.getID());
   }
 
   /**
@@ -276,7 +327,7 @@ class CloudBlobStore implements Store {
         }
         cloudBlobStore.putBlob(messageInfo, messageBuf, size);
         messageIndex++;
-      } catch (IOException | CloudStorageException e) {
+      } catch (IOException | CloudStorageException | GeneralSecurityException e) {
         throw new StoreException(e, StoreErrorCodes.IOError);
       }
     }

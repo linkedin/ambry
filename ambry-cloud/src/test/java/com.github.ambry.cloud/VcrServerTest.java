@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.utils.TestUtils;
 import java.util.Collections;
 import java.util.Properties;
 import org.junit.Before;
@@ -60,6 +61,7 @@ public class VcrServerTest {
     props.setProperty("server.scheduler.num.of.threads", "1");
     props.setProperty("num.io.threads", "1");
     props.setProperty("vcr.assigned.partitions", "0,1");
+    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(16));
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(new LatchBasedInMemoryCloudDestination(Collections.emptyList()));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
