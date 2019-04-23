@@ -17,5 +17,16 @@ package com.github.ambry.commons;
  * The indices used to evaluate performance of single request.
  */
 public enum PerformanceIndex {
-  TimeToFirstByte, RoundTripTime, AverageBandwidth
+  /**
+   * Time duration in milliseconds from request arrival to the first byte of response being received.
+   */
+  TimeToFirstByte,
+  /**
+   * Time duration in milliseconds from request arrival to its fully completion.
+   */
+  RoundTripTime,
+  /**
+   * Average speed of data being transmitted (bytes/sec).
+   */
+  AverageBandwidth
 }

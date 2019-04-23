@@ -360,7 +360,7 @@ class NettyResponseChannel implements RestResponseChannel {
         break;
       default:
         shouldSkipCheck = true;
-        logger.debug("Temporarily no evaluation criteria for " + method + " request. Mark as satisfied directly");
+        logger.debug("Temporarily no evaluation criteria for {} request. Mark as satisfied directly", method);
     }
     EnumMap<RestMethod, Thresholds> thresholdsByMethod =
         responseStatus.isSuccess() ? perfConfig.successRequestThresholds : perfConfig.nonSuccessRequestThresholds;
