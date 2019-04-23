@@ -38,6 +38,13 @@ public interface KeyManagementService<T> extends Closeable {
   void register(short accountId, short containerId) throws GeneralSecurityException;
 
   /**
+   * Registers with KMS to create key for a unique context.
+   * @param context refers to the key context to register
+   * @throws {@link GeneralSecurityException} on KMS unavailability or duplicate registration
+   */
+  void register(String context) throws GeneralSecurityException;
+
+  /**
    * Fetches the key associated with the pair of AccountId and ContainerId. User is expected to have
    * registered using {@link #register(short, short)} for this pair before fetching keys.
    * @param accountId refers to the id of the {@link Account} for which key is expected
@@ -46,6 +53,15 @@ public interface KeyManagementService<T> extends Closeable {
    * @throws {@link GeneralSecurityException} on KMS unavailability or if key is not registered
    */
   T getKey(short accountId, short containerId) throws GeneralSecurityException;
+
+  /**
+   * Fetches the key associated with the specified context. User is expected to have
+   * registered using {@link #register(String)} for this context before fetching keys.
+   * @param context refers to the context for which key is expected
+   * @return T the key associated with the context
+   * @throws {@link GeneralSecurityException} on KMS unavailability or if key is not registered
+   */
+  T getKey(String context) throws GeneralSecurityException;
 
   /**
    * Generate and return a random key (of type T)

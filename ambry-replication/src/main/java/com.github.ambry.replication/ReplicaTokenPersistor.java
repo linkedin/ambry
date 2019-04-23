@@ -23,6 +23,8 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -160,6 +162,10 @@ public abstract class ReplicaTokenPersistor implements Runnable {
         logger.error("IO error while serializing replica tokens");
         throw e;
       } finally {
+        if (outputStream instanceof FileOutputStream) {
+          // flush and overwrite file
+          ((FileOutputStream) outputStream).getChannel().force(true);
+        }
         writer.close();
       }
     }

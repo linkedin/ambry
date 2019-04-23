@@ -71,7 +71,6 @@ public class VcrServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private CloudDestinationFactory cloudDestinationFactory;
-  private VcrMetrics metrics = null;
 
   /**
    * VcrServer constructor.
@@ -112,7 +111,6 @@ public class VcrServer {
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
-      this.metrics = new VcrMetrics(registry);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -146,11 +144,10 @@ public class VcrServer {
 
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
-
       cloudBackupManager =
-          new CloudBackupManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory,
-              clusterMap, virtualReplicatorCluster, cloudDestinationFactory, scheduler, connectionPool, registry,
-              notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer);
+          new CloudBackupManager(properties, cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
+              storeKeyFactory, clusterMap, virtualReplicatorCluster, cloudDestinationFactory, scheduler, connectionPool,
+              registry, notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer);
       cloudBackupManager.start();
 
       DataNodeId currentNode = virtualReplicatorCluster.getCurrentDataNodeId();
@@ -165,7 +162,6 @@ public class VcrServer {
       // TODO: for recovery, need AmbryRequests and RequestHandlerPool
 
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
-      metrics.vcrStartTimeInMs.update(processingTime);
       logger.info("VCR startup time in Ms " + processingTime);
     } catch (Exception e) {
       logger.error("Error during VCR startup", e);
@@ -215,7 +211,6 @@ public class VcrServer {
     } finally {
       shutdownLatch.countDown();
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
-      metrics.vcrShutdownTimeInMs.update(processingTime);
       logger.info("VCR shutdown time in Ms " + processingTime);
     }
   }

@@ -192,7 +192,8 @@ public class AzureCloudDestinationTest {
   @Test
   public void testQueryMetadata() throws Exception {
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
-    CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize);
+    CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
+        CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
     List<Document> docList = Collections.singletonList(new Document(objectMapper.writeValueAsString(inputMetadata)));
     when(mockIterable.iterator()).thenReturn(docList.iterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
@@ -360,7 +361,8 @@ public class AzureCloudDestinationTest {
    */
   private boolean uploadDefaultBlob() throws CloudStorageException {
     InputStream inputStream = getBlobInputStream(blobSize);
-    CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize);
+    CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
+        CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
     return azureDest.uploadBlob(blobId, blobSize, metadata, inputStream);
   }
 

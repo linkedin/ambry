@@ -40,7 +40,7 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
    * @param defaultContainerKey the default container key that will be returned for all {@link #getKey(short, short)} calls
    * @throws GeneralSecurityException
    */
-  SingleKeyManagementService(KMSConfig config, String defaultContainerKey) throws GeneralSecurityException {
+  public SingleKeyManagementService(KMSConfig config, String defaultContainerKey) throws GeneralSecurityException {
     byte[] key = Hex.decode(defaultContainerKey);
     keyGenAlgo = config.kmsKeyGenAlgo;
     secretKeySpec = new SecretKeySpec(key, keyGenAlgo);
@@ -58,6 +58,11 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
     // no op
   }
 
+  @Override
+  public void register(String context) throws GeneralSecurityException {
+    // no op
+  }
+
   /**
    * Fetches the key associated with the pair of AccountId and ContainerId. {@link SingleKeyManagementService} returns
    * the default key for all {@link #getKey(short, short)}}
@@ -67,6 +72,11 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
    */
   @Override
   public SecretKeySpec getKey(short accountId, short containerId) throws GeneralSecurityException {
+    return getKey(accountId + ":" + containerId);
+  }
+
+  @Override
+  public SecretKeySpec getKey(String context) throws GeneralSecurityException {
     if (enabled) {
       return secretKeySpec;
     } else {

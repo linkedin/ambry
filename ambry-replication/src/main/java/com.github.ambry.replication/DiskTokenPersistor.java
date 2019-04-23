@@ -57,7 +57,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
       replicaTokenSerde.serializeTokens(tokenInfoList, fileStream);
 
       // flush and overwrite old file
-      fileStream.getChannel().force(true);
+      //fileStream.getChannel().force(true);
       // swap temp file with the original file
       temp.renameTo(actual);
       logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());

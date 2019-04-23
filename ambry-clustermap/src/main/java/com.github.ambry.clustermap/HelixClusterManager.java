@@ -38,11 +38,11 @@ import java.util.stream.Collectors;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
-import org.apache.helix.InstanceConfigChangeListener;
 import org.apache.helix.InstanceType;
-import org.apache.helix.LiveInstanceChangeListener;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.ZNRecord;
+import org.apache.helix.api.listeners.InstanceConfigChangeListener;
+import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
@@ -519,7 +519,7 @@ class HelixClusterManager implements ClusterMap {
             AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceName);
             if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
               if (node == null) {
-                logger.info("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
+                logger.trace("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
                     instanceConfig);
               } else {
                 Set<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
@@ -531,6 +531,7 @@ class HelixClusterManager implements ClusterMap {
                     logger.trace(
                         "Ignoring instanceConfig change for partition {} on instance {} because partition override is enabled",
                         partitionId, instanceName);
+                    helixClusterManagerMetrics.ignoredUpdatesCount.inc();
                   } else {
                     replica.setSealedState(sealedReplicas.contains(partitionId));
                     replica.setStoppedState(stoppedReplicas.contains(partitionId));

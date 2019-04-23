@@ -87,5 +87,3 @@ public class ReplicationManager extends ReplicationEngine {
             factory);
   }
 }
-
-
