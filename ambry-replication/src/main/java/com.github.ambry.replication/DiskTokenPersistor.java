@@ -13,14 +13,12 @@
  */
 package com.github.ambry.replication;
 
-import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.utils.SystemTime;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.store.FindTokenFactory;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -31,104 +29,55 @@ import org.slf4j.LoggerFactory;
 /**
  * {@link DiskTokenPersistor} persists replication token to disk.
  */
-public class DiskTokenPersistor implements ReplicaTokenPersistor {
+public class DiskTokenPersistor extends ReplicaTokenPersistor {
 
   private static final Logger logger = LoggerFactory.getLogger(DiskTokenPersistor.class);
   private final String replicaTokenFileName;
-  private final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
-  private final ReplicationMetrics replicationMetrics;
-  private final ReplicaTokenSerde replicaTokenSerde;
 
   /**
    * Constructor for {@link DiskTokenPersistor}.
    * @param replicaTokenFileName the token's file name.
    * @param partitionGroupedByMountPath A map between mount path and list of partitions under this mount path.
    * @param replicationMetrics metrics including token persist time.
+   * @param clusterMap the {@link ClusterMap} to deserialize tokens.
+   * @param tokenfactory the {@link FindTokenFactory} to deserialize tokens.
    */
   public DiskTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ReplicaTokenSerde replicaTokenSerde) {
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactory tokenfactory) {
+    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenfactory);
     this.replicaTokenFileName = replicaTokenFileName;
-    this.partitionGroupedByMountPath = partitionGroupedByMountPath;
-    this.replicationMetrics = replicationMetrics;
-    this.replicaTokenSerde = replicaTokenSerde;
   }
 
   @Override
-  public void write(String mountPath, boolean shuttingDown) throws IOException, ReplicationException {
-    long writeStartTimeMs = SystemTime.getInstance().milliseconds();
+  protected void persistTokens(String mountPath, List<ReplicaTokenInfo> tokenInfoList) throws IOException {
     File temp = new File(mountPath, replicaTokenFileName + ".tmp");
     File actual = new File(mountPath, replicaTokenFileName);
     FileOutputStream fileStream = new FileOutputStream(temp);
-
-    // Get all partitions for the mount path and persist the tokens for them
-    List<RemoteReplicaInfo> replicasWithTokensPersisted = new ArrayList<>();
-    List<ReplicaTokenInfo> tokenInfoList = new ArrayList<>();
-    for (PartitionInfo info : partitionGroupedByMountPath.get(mountPath)) {
-      for (RemoteReplicaInfo remoteReplica : info.getRemoteReplicaInfos()) {
-        FindToken tokenToPersist = remoteReplica.getTokenToPersist();
-        if (tokenToPersist != null) {
-          replicasWithTokensPersisted.add(remoteReplica);
-          DataNodeId dataNodeId = remoteReplica.getReplicaId().getDataNodeId();
-          tokenInfoList.add(new ReplicaTokenInfo(info.getPartitionId(), dataNodeId.getHostname(),
-              remoteReplica.getReplicaId().getReplicaPath(), dataNodeId.getPort(),
-              remoteReplica.getTotalBytesReadFromLocalStore(), tokenToPersist));
-        }
-      }
-    }
-
     try {
-      replicaTokenSerde.write(tokenInfoList, fileStream);
+      replicaTokenSerde.serializeTokens(tokenInfoList, fileStream);
 
       // flush and overwrite old file
       fileStream.getChannel().force(true);
       // swap temp file with the original file
       temp.renameTo(actual);
+      logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
     } catch (IOException e) {
       logger.error("IO error while persisting tokens to disk {}", temp.getAbsoluteFile());
-      throw new ReplicationException("IO error while persisting replica tokens to disk ");
-    } finally {
-      // TODO: could move this out
-      replicationMetrics.remoteReplicaTokensPersistTime.update(
-          SystemTime.getInstance().milliseconds() - writeStartTimeMs);
-    }
-    logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
-
-    if (shuttingDown) {
-      for (RemoteReplicaInfo remoteReplica : replicasWithTokensPersisted) {
-        logger.info("Persisted token {}", remoteReplica.getTokenToPersist());
-        remoteReplica.onTokenPersisted();
-      }
+      throw e;
     }
   }
 
   @Override
-  public void write(boolean shuttingDown) throws IOException, ReplicationException {
-    for (String mountPath : partitionGroupedByMountPath.keySet()) {
-      write(mountPath, shuttingDown);
-    }
-  }
-
-  @Override
-  public List<ReplicaTokenInfo> read(String mountPath) throws IOException, ReplicationException {
+  public List<ReplicaTokenInfo> retrieveTokens(String mountPath) throws IOException, ReplicationException {
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
     if (replicaTokenFile.exists()) {
-      List<ReplicaTokenInfo> tokenInfoList;
       try {
-        return replicaTokenSerde.read(new FileInputStream(replicaTokenFile));
+        return replicaTokenSerde.deserializeTokens(new FileInputStream(replicaTokenFile));
       } catch (IOException e) {
         throw new ReplicationException("IO error while reading from replica token file at mount path " + mountPath, e);
       }
     } else {
       return Collections.emptyList();
-    }
-  }
-
-  @Override
-  public void run() {
-    try {
-      write(false);
-    } catch (Exception e) {
-      logger.error("Error while persisting the replica tokens {}", e);
     }
   }
 }

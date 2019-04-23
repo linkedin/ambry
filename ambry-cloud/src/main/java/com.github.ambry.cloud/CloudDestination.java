@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -64,9 +65,26 @@ public interface CloudDestination {
 
   /**
    * Checks whether the blob exists in the cloud destination.
-   * @param blobId id of the Ambry blob to check
+   * @param blobId id of the Ambry blob to check.
    * @return {@code true} if the blob exists, otherwise {@code false}.
    * @throws CloudStorageException if the existence check encounters an error.
    */
   boolean doesBlobExist(BlobId blobId) throws CloudStorageException;
+
+  /**
+   * Upload and persist the replica tokens for the specified Ambry partition in cloud storage.
+   * @param partitionPath the string form of the partitionId
+   * @param inputStream the InputStream containing the replica tokens.
+   * @throws CloudStorageException if the upload encounters an error.
+   */
+  public void persistTokens(String partitionPath, InputStream inputStream) throws CloudStorageException;
+
+  /**
+   * Retrieve the persisted replica tokens, if any, for the specified Ambry partition.
+   * @param partitionPath the string form of the partitionId
+   * @param outputStream the OutputStream to which the replica tokens are written.
+   * @throws CloudStorageException if the upload encounters an error.
+   * @return {@code true} if tokens were found, otherwise {@code false}.
+   */
+  public boolean retrieveTokens(String partitionPath, OutputStream outputStream) throws CloudStorageException;
 }

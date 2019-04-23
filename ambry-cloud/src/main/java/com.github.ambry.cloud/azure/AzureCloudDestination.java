@@ -40,6 +40,7 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URISyntaxException;
@@ -337,16 +338,48 @@ class AzureCloudDestination implements CloudDestination {
    */
   private CloudBlobContainer getContainer(BlobId blobId, boolean autoCreate)
       throws URISyntaxException, StorageException {
-    // Need clustermap to construct BlobId and partitionId
-    // Either pass to our constructor or pass BlobId to methods
-    // TODO: "clustername-<pid>"
-    String partitionPath = "partition-" + blobId.getPartition().toPathString();
-    CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(partitionPath);
+    String containerName = getAzureContainerName(blobId.getPartition().toPathString());
+    CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
     if (autoCreate) {
       azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
           blobOpContext);
     }
     return azureContainer;
+  }
+
+  @Override
+  public void persistTokens(String partitionPath, InputStream inputStream) throws CloudStorageException {
+    // Path is partitionId path string
+    // Write to container partitionPath, blob filename "replicaTokens"
+    try {
+      String containerName = getAzureContainerName(partitionPath);
+      CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
+      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference("replicaTokens");
+      azureBlob.upload(inputStream, -1, null, null, blobOpContext);
+    } catch (IOException | URISyntaxException | StorageException e) {
+      throw new CloudStorageException("Could not persist token: " + partitionPath, e);
+    }
+  }
+
+  @Override
+  public boolean retrieveTokens(String partitionPath, OutputStream outputStream) throws CloudStorageException {
+    try {
+      String containerName = getAzureContainerName(partitionPath);
+      CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
+      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference("replicaTokens");
+      if (!azureBlob.exists()) {
+        return false;
+      }
+      azureBlob.download(outputStream, null, null, blobOpContext);
+      return true;
+    } catch (URISyntaxException | StorageException e) {
+      throw new CloudStorageException("Could not retrieve token: " + partitionPath, e);
+    }
+  }
+
+  private String getAzureContainerName(String partitionPath) {
+    // TODO: "clustername-<pid>"
+    return "partition-" + partitionPath;
   }
 
   /**

@@ -24,7 +24,6 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.replication.DiskTokenPersistor;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationEngine;
@@ -95,7 +94,8 @@ public class CloudBackupManager extends ReplicationEngine {
       }
     }
     replicationMetrics.populatePerColoMetrics(numberOfReplicaThreads.keySet());
-    // TODO: make CloudTokenPersistor to store tokens in the cloud
-    persistor = new CloudTokenPersistor(replicaTokenFileName, partitionGroupedByMountPath, replicationMetrics, cloudDestination);
+    persistor =
+        new CloudTokenPersistor(replicaTokenFileName, partitionGroupedByMountPath, replicationMetrics, clusterMap,
+            factory, cloudDestination);
   }
 }
