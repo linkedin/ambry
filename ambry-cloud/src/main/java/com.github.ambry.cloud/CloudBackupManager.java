@@ -52,7 +52,6 @@ public class CloudBackupManager extends ReplicationEngine {
       CloudDestinationFactory cloudDestinationFactory, ScheduledExecutorService scheduler,
       ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
-
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
         virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool, metricRegistry,
         requestNotification, storeKeyConverterFactory, transformerClassName);

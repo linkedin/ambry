@@ -32,7 +32,7 @@ public class VcrMetrics {
   public VcrMetrics(MetricRegistry registry) {
     this.registry = registry;
     blobEncryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionCount"));
-    blobDecryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobDet4acryptionCount"));
+    blobDecryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobDecryptionCount"));
     blobEncryptionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionTime"));
     blobDecryptionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobDecryptionTime"));
   }
