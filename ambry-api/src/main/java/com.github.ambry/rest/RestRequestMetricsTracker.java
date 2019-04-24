@@ -55,6 +55,7 @@ public class RestRequestMetricsTracker {
   private final AtomicBoolean metricsRecorded = new AtomicBoolean(false);
   private RestRequestMetrics metrics = defaultMetrics;
   private boolean failed = false;
+  private boolean satisfied = true;
 
   /**
    * Tracker for updating NIO related metrics.
@@ -195,6 +196,21 @@ public class RestRequestMetricsTracker {
   }
 
   /**
+   * Marks that the request is unsatisfied so that metrics can be tracked.
+   */
+  public void markUnsatisfied() {
+    satisfied = false;
+  }
+
+  /**
+   * Return whether the rest request is satisfied or not.
+   * @return {@code true} if request is satisfied.
+   */
+  public boolean isSatisfied() {
+    return satisfied;
+  }
+
+  /**
    * Injects a {@link RestRequestMetrics} that can be used to track the metrics of the {@link RestRequest} that this
    * instance of RestRequestMetricsTracker is attached to.
    * @param restRequestMetrics the {@link RestRequestMetrics} instance to use to track the metrics of the
@@ -231,10 +247,29 @@ public class RestRequestMetricsTracker {
         if (failed) {
           metrics.operationError.inc();
         }
+        if (satisfied) {
+          metrics.satisfiedRequestCount.inc();
+        } else {
+          metrics.unsatisfiedRequestCount.inc();
+        }
       }
     } else {
       throw new IllegalStateException("Could not record metrics because there is no metrics tracker");
     }
+  }
+
+  /**
+   * @return round trip time of this request in milliseconds
+   */
+  public long getRoundTripTimeInMs() {
+    return nioMetricsTracker.roundTripTimeInMs;
+  }
+
+  /**
+   * @return time to first byte of this request in milliseconds
+   */
+  public long getTimeToFirstByteInMs() {
+    return nioMetricsTracker.timeToFirstByteInMs;
   }
 
   /**

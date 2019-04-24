@@ -281,7 +281,6 @@ class NettyRequest implements RestRequest {
       } finally {
         contentLock.unlock();
         restRequestMetricsTracker.nioMetricsTracker.markRequestCompleted();
-        restRequestMetricsTracker.recordMetrics();
         if (digestCalculationTimeInMs >= 0) {
           nettyMetrics.digestCalculationTimeInMs.update(digestCalculationTimeInMs);
         }
