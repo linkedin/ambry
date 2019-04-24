@@ -47,7 +47,7 @@ public class Criteria {
    */
   boolean meetRequirement(Long value) throws NullPointerException {
     Objects.requireNonNull(value, "Input value is empty which cannot be applied to threshold check.");
-    return boundType == BoundType.UpperBound ? value < threshold : value > threshold;
+    return boundType == BoundType.UpperBound ? value <= threshold : value >= threshold;
   }
 
   /**
