@@ -99,9 +99,8 @@ class DeleteOperation {
     byte blobDcId = blobId.getDatacenterId();
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
-        new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true, originatingDcName,
-            true, Integer.MAX_VALUE, routerConfig.routerDeleteSuccessTarget,
-            routerConfig.routerDeleteRequestParallelism, false);
+        new SimpleOperationTracker(routerConfig, DeleteOperation.class, blobId.getPartition(), originatingDcName,
+            false);
   }
 
   /**

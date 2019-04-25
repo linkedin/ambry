@@ -16,10 +16,13 @@ package com.github.ambry.router;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.MockTime;
@@ -27,10 +30,13 @@ import com.github.ambry.utils.Time;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -70,6 +76,7 @@ public class OperationTrackerTest {
   private final Set<ReplicaId> repetitionTracker = new HashSet<>();
 
   // for AdaptiveOperationTracker
+  private final NonBlockingRouterMetrics routerMetrics;
   private final Time time = new MockTime();
   private final MetricRegistry registry = new MetricRegistry();
   private final Histogram localColoTracker = registry.histogram("LocalColoTracker");
@@ -88,8 +95,13 @@ public class OperationTrackerTest {
   /**
    * @param operationTrackerType the type of {@link OperationTracker} that needs to be used in tests
    */
-  public OperationTrackerTest(String operationTrackerType) {
+  public OperationTrackerTest(String operationTrackerType) throws Exception {
     this.operationTrackerType = operationTrackerType;
+    if (operationTrackerType.equals(ADAPTIVE_OP_TRACKER)) {
+      routerMetrics = new NonBlockingRouterMetrics(new MockClusterMap());
+    } else {
+      routerMetrics = null;
+    }
   }
 
   /**
@@ -154,7 +166,6 @@ public class OperationTrackerTest {
 
   /**
    * crossColoEnabled = true, successTarget = 1, parallelism = 2.
-
    * <p/>
    * 1. Get 2 local replicas to send request (and send requests);
    * 2. 1 fails， 1 pending.
@@ -185,7 +196,6 @@ public class OperationTrackerTest {
 
   /**
    * crossColoEnabled = true, successTarget = 1, parallelism = 2.
-
    * <p/>
    * 1. Get 2 local replicas to send request (and send requests);
    * 2. 1 local replica fails, 1 pending.
@@ -459,16 +469,66 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Test that operation tracker correctly populate parameters(i.e. successTarget) according to passed in operation class.
+   */
+  @Test
+  public void operationClassTest() {
+    Properties props = new Properties();
+    props.setProperty("router.hostname", "localhost");
+    props.setProperty("router.datacenter.name", "dc-0");
+    props.setProperty("router.get.success.target", "1");
+    props.setProperty("router.put.success.target", "2");
+    props.setProperty("router.delete.success.target", "3");
+    props.setProperty("router.ttl.update.success.target", "4");
+    RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
+    initialize();
+    try {
+      switch (operationTrackerType) {
+        case SIMPLE_OP_TRACKER:
+          new SimpleOperationTracker(routerConfig, getClass(), mockPartition, originatingDcName, true);
+          break;
+        case ADAPTIVE_OP_TRACKER:
+          new AdaptiveOperationTracker(routerConfig, getClass(), mockPartition, originatingDcName, localColoTracker,
+              crossColoTracker, pastDueCounter, routerMetrics, time);
+          break;
+      }
+      fail("Instantiation should fail because of unrecognized operation class");
+    } catch (Exception e) {
+      //expected
+    }
+    Map<Class, Integer> operationAndSuccessTarget = new HashMap<>();
+    operationAndSuccessTarget.put(GetOperation.class, 1);
+    operationAndSuccessTarget.put(PutOperation.class, 2);
+    operationAndSuccessTarget.put(DeleteOperation.class, 3);
+    operationAndSuccessTarget.put(TtlUpdateOperation.class, 4);
+    for (Map.Entry<Class, Integer> entry : operationAndSuccessTarget.entrySet()) {
+      SimpleOperationTracker operationTracker = null;
+      switch (operationTrackerType) {
+        case SIMPLE_OP_TRACKER:
+          operationTracker =
+              new SimpleOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName, true);
+          break;
+        case ADAPTIVE_OP_TRACKER:
+          operationTracker =
+              new AdaptiveOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName,
+                  localColoTracker, crossColoTracker, pastDueCounter, routerMetrics, time);
+          break;
+      }
+      // ensure the success target matches the number specified for each type of operaiton
+      assertEquals("The suggest target doesn't match", (long) entry.getValue(), (operationTracker).getSuccessTarget());
+    }
+  }
+
+  /**
    * Initialize 4 DCs, each DC has 1 data node, which has 3 replicas.
    */
   private void initialize() {
     int replicaCount = 12;
     List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
     List<String> mountPaths = Collections.singletonList("mockMountPath");
-    datanodes = new ArrayList<>(Arrays.asList(
-        new MockDataNodeId[]{new MockDataNodeId(portList, mountPaths, "dc-0"), new MockDataNodeId(portList, mountPaths,
-            "dc-1"), new MockDataNodeId(portList, mountPaths, "dc-2"), new MockDataNodeId(portList, mountPaths,
-            "dc-3")}));
+    datanodes = new ArrayList<>(Arrays.asList(new MockDataNodeId(portList, mountPaths, "dc-0"),
+        new MockDataNodeId(portList, mountPaths, "dc-1"), new MockDataNodeId(portList, mountPaths, "dc-2"),
+        new MockDataNodeId(portList, mountPaths, "dc-3")));
     mockPartition = new MockPartitionId();
     populateReplicaList(replicaCount);
     localDcName = datanodes.get(0).getDatacenterName();
@@ -495,16 +555,25 @@ public class OperationTrackerTest {
    */
   private OperationTracker getOperationTracker(boolean crossColoEnabled, int successTarget, int parallelism,
       boolean includeNonOriginatingDcReplicas, int replicasRequired) {
+    Properties props = new Properties();
+    props.setProperty("router.hostname", "localhost");
+    props.setProperty("router.datacenter.name", localDcName);
+    props.setProperty("router.get.cross.dc.enabled", Boolean.toString(crossColoEnabled));
+    props.setProperty("router.get.success.target", Integer.toString(successTarget));
+    props.setProperty("router.get.request.parallelism", Integer.toString(parallelism));
+    props.setProperty("router.get.include.non.originating.dc.replicas",
+        Boolean.toString(includeNonOriginatingDcReplicas));
+    props.setProperty("router.get.replicas.required", Integer.toString(replicasRequired));
+    props.setProperty("router.latency.tolerance.quantile", Double.toString(QUANTILE));
+    RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
     OperationTracker tracker;
     switch (operationTrackerType) {
       case SIMPLE_OP_TRACKER:
-        tracker = new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, originatingDcName,
-            includeNonOriginatingDcReplicas, replicasRequired, successTarget, parallelism);
+        tracker = new SimpleOperationTracker(routerConfig, GetOperation.class, mockPartition, originatingDcName, true);
         break;
       case ADAPTIVE_OP_TRACKER:
-        tracker = new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, originatingDcName,
-            includeNonOriginatingDcReplicas, replicasRequired, successTarget, parallelism, time, localColoTracker,
-            crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
+        tracker = new AdaptiveOperationTracker(routerConfig, GetOperation.class, mockPartition, originatingDcName,
+            localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, routerMetrics, time);
         break;
       default:
         throw new IllegalArgumentException("Unrecognized operation tracker type - " + operationTrackerType);

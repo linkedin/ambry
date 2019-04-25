@@ -13,6 +13,12 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.utils.Utils;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
+
 /**
  * Configuration parameters required by a {@link com.github.ambry.router.Router}.
  * <p/>
@@ -233,6 +239,15 @@ public class RouterConfig {
   public final boolean routerUseGetBlobOperationForBlobInfo;
 
   /**
+   * The custom percentiles of Histogram in operation tracker to be reported. This allows router to emit metrics of
+   * arbitrary percentiles (i.e. 97th, 93th etc). An example of this config is "0.91,0.93,0.97"(comma separated), each
+   * value should fall in {@code [0..1]}.
+   */
+  @Config("router.operation.tracker.custom.percentiles")
+  @Default("")
+  public final List<Double> routerOperationTrackerCustomPercentiles;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -289,5 +304,9 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.ttl.update.success.target", 2, 1, Integer.MAX_VALUE);
     routerUseGetBlobOperationForBlobInfo =
         verifiableProperties.getBoolean("router.use.get.blob.operation.for.blob.info", false);
+    List<String> customPercentiles =
+        Utils.splitString(verifiableProperties.getString("router.operation.tracker.custom.percentiles", ""), ",");
+    routerOperationTrackerCustomPercentiles =
+        Collections.unmodifiableList(customPercentiles.stream().map(Double::valueOf).collect(Collectors.toList()));
   }
 }

@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.utils.SystemTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -408,6 +409,21 @@ public class NonBlockingRouterMetrics {
   }
 
   /**
+   * Register {@link Gauge} metric for each custom percentile of given {@link Histogram} with given class and name.
+   * @param ownerClass the {@link Class} that is supposed to own the metrics.
+   * @param name the name of metric that all percentiles belong to.
+   * @param histogram the {@link Histogram} to use.
+   * @param percentiles a list of interested percentiles (double value).
+   */
+  public void registerCustomPercentiles(Class ownerClass, String name, Histogram histogram, List<Double> percentiles) {
+    percentiles.forEach(p -> {
+      Gauge<Double> customPercentile = () -> histogram.getSnapshot().getValue(p);
+      metricRegistry.register(MetricRegistry.name(ownerClass, name, String.valueOf(p * 100), "thPercentile"),
+          customPercentile);
+    });
+  }
+
+  /**
    * Initializes a {@link Gauge} metric for the status of {@code RequestResponseHandlerThread} of an
    * {@link com.github.ambry.router.NonBlockingRouter.OperationController}, to indicate if it is running
    * or not.
@@ -415,12 +431,7 @@ public class NonBlockingRouterMetrics {
    *                                     to be monitored.
    */
   public void initializeOperationControllerMetrics(final Thread requestResponseHandlerThread) {
-    requestResponseHandlerThreadRunning = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return requestResponseHandlerThread.isAlive() ? 1L : 0L;
-      }
-    };
+    requestResponseHandlerThreadRunning = () -> requestResponseHandlerThread.isAlive() ? 1L : 0L;
     metricRegistry.register(
         MetricRegistry.name(NonBlockingRouter.class, requestResponseHandlerThread.getName() + "Running"),
         requestResponseHandlerThreadRunning);
@@ -432,12 +443,7 @@ public class NonBlockingRouterMetrics {
    * @param chunkFillerThread The {@code ChunkFillerThread} of which the status is to be monitored.
    */
   public void initializePutManagerMetrics(final Thread chunkFillerThread) {
-    chunkFillerThreadRunning = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return chunkFillerThread.isAlive() ? 1L : 0L;
-      }
-    };
+    chunkFillerThreadRunning = () -> chunkFillerThread.isAlive() ? 1L : 0L;
     metricRegistry.register(MetricRegistry.name(PutManager.class, chunkFillerThread.getName() + "Running"),
         chunkFillerThreadRunning);
   }
@@ -462,6 +468,13 @@ public class NonBlockingRouterMetrics {
             return currentBackgroundOperationsCount.get();
           }
         });
+  }
+
+  /**
+   * @return the MetricRegistry being used in {@link NonBlockingRouterMetrics}
+   */
+  MetricRegistry getMetricRegistry() {
+    return metricRegistry;
   }
 
   /**

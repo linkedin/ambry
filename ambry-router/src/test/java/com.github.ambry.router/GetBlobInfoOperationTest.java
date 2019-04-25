@@ -120,8 +120,8 @@ public class GetBlobInfoOperationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false}, {SimpleOperationTracker.class.getSimpleName(), true}, {AdaptiveOperationTracker.class.getSimpleName(), false}});
+    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false},
+        {SimpleOperationTracker.class.getSimpleName(), true}, {AdaptiveOperationTracker.class.getSimpleName(), false}});
   }
 
   /**
@@ -212,7 +212,6 @@ public class GetBlobInfoOperationTest {
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options,
             getOperationCallback, routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
-
     Assert.assertEquals("Callback must match", getOperationCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobId.getID(), op.getBlobIdStr());
 
