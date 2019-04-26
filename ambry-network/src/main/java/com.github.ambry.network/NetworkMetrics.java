@@ -156,41 +156,32 @@ public class NetworkMetrics {
     selectorUnreadyConnectionsList = new ArrayList<>();
     networkClientPendingRequestList = new ArrayList<>();
 
-    final Gauge<Long> selectorActiveConnectionsCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        long activeConnectionsCount = 0;
-        for (AtomicLong activeConnection : selectorActiveConnectionsList) {
-          activeConnectionsCount += activeConnection.get();
-        }
-        return activeConnectionsCount;
+    final Gauge<Long> selectorActiveConnectionsCount = () -> {
+      long activeConnectionsCount = 0;
+      for (AtomicLong activeConnection : selectorActiveConnectionsList) {
+        activeConnectionsCount += activeConnection.get();
       }
+      return activeConnectionsCount;
     };
     registry.register(MetricRegistry.name(Selector.class, "SelectorActiveConnectionsCount"),
         selectorActiveConnectionsCount);
 
-    final Gauge<Long> selectorUnreadyConnectionsCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        long unreadyConnectionCount = 0;
-        for (Set<String> unreadyConnection : selectorUnreadyConnectionsList) {
-          unreadyConnectionCount += unreadyConnection.size();
-        }
-        return unreadyConnectionCount;
+    final Gauge<Long> selectorUnreadyConnectionsCount = () -> {
+      long unreadyConnectionCount = 0;
+      for (Set<String> unreadyConnection : selectorUnreadyConnectionsList) {
+        unreadyConnectionCount += unreadyConnection.size();
       }
+      return unreadyConnectionCount;
     };
     registry.register(MetricRegistry.name(Selector.class, "SelectorUnreadyConnectionsCount"),
         selectorUnreadyConnectionsCount);
 
-    final Gauge<Long> networkClientPendingRequestsCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        long pendingRequestsCount = 0;
-        for (AtomicLong pendingRequest : networkClientPendingRequestList) {
-          pendingRequestsCount += pendingRequest.get();
-        }
-        return pendingRequestsCount;
+    final Gauge<Long> networkClientPendingRequestsCount = () -> {
+      long pendingRequestsCount = 0;
+      for (AtomicLong pendingRequest : networkClientPendingRequestList) {
+        pendingRequestsCount += pendingRequest.get();
       }
+      return pendingRequestsCount;
     };
     registry.register(MetricRegistry.name(NetworkClient.class, "NetworkClientPendingConnectionsCount"),
         networkClientPendingRequestsCount);
@@ -236,32 +227,17 @@ class ServerNetworkMetrics extends NetworkMetrics {
   public ServerNetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry,
       final List<Processor> processorThreads) {
     super(registry);
-    requestQueueSize = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return channel.getRequestQueueSize();
-      }
-    };
+    requestQueueSize = channel::getRequestQueueSize;
     registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, "RequestQueueSize"), requestQueueSize);
     responseQueueSize = new ArrayList<Gauge<Integer>>(channel.getNumberOfProcessors());
 
     for (int i = 0; i < channel.getNumberOfProcessors(); i++) {
       final int index = i;
-      responseQueueSize.add(i, new Gauge<Integer>() {
-        @Override
-        public Integer getValue() {
-          return channel.getResponseQueueSize(index);
-        }
-      });
+      responseQueueSize.add(i, () -> channel.getResponseQueueSize(index));
       registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, i + "-ResponseQueueSize"),
           responseQueueSize.get(i));
     }
-    numberOfProcessorThreads = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return getLiveThreads(processorThreads);
-      }
-    };
+    numberOfProcessorThreads = () -> getLiveThreads(processorThreads);
     registry.register(MetricRegistry.name(SocketServer.class, "NumberOfProcessorThreads"), numberOfProcessorThreads);
 
     acceptConnectionErrorCount =

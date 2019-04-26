@@ -237,7 +237,7 @@ abstract class GetOperation {
   /**
    * Gets an {@link OperationTracker} based on the config and {@code partitionId}.
    * @param partitionId the {@link PartitionId} for which a tracker is required.
-   * @param operationClass
+   * @param operationClass The operation class in which operation tracker is used.
    * @return an {@link OperationTracker} based on the config and {@code partitionId}.
    */
   protected OperationTracker getOperationTracker(PartitionId partitionId, byte datacenterId, Class operationClass) {

@@ -452,22 +452,15 @@ public class NonBlockingRouterMetrics {
    * Initializes a {@link Gauge} metric to monitor the number of running
    * {@link com.github.ambry.router.NonBlockingRouter.OperationController} of a {@link NonBlockingRouter}.
    * @param currentOperationsCount The counter of {@link com.github.ambry.router.NonBlockingRouter.OperationController}.
+   * @param currentBackgroundOperationsCount The counter of background operations submitted to the router that are not
+   *                                         yet completed.
    */
   public void initializeNumActiveOperationsMetrics(final AtomicInteger currentOperationsCount,
       final AtomicInteger currentBackgroundOperationsCount) {
-    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveOperations"), new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return currentOperationsCount.get();
-      }
-    });
+    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveOperations"),
+        (Gauge<Integer>) currentOperationsCount::get);
     metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveBackgroundOperations"),
-        new Gauge<Integer>() {
-          @Override
-          public Integer getValue() {
-            return currentBackgroundOperationsCount.get();
-          }
-        });
+        (Gauge<Integer>) currentBackgroundOperationsCount::get);
   }
 
   /**

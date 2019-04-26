@@ -251,12 +251,7 @@ class RequestResponseHandlerMetrics {
    */
   public void registerRequestWorker(final AsyncRequestWorker asyncRequestWorker) {
     int pos = asyncRequestWorkerIndex.getAndIncrement();
-    Gauge<Integer> gauge = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return asyncRequestWorker.getRequestQueueSize();
-      }
-    };
+    Gauge<Integer> gauge = asyncRequestWorker::getRequestQueueSize;
     metricRegistry.register(MetricRegistry.name(AsyncRequestWorker.class, pos + "-RequestQueueSize"), gauge);
   }
 
@@ -265,30 +260,15 @@ class RequestResponseHandlerMetrics {
    * @param asyncRequestResponseHandler the {@link AsyncRequestResponseHandler} whose key metrics have to be tracked.
    */
   public void trackAsyncRequestResponseHandler(final AsyncRequestResponseHandler asyncRequestResponseHandler) {
-    Gauge<Integer> totalRequestQueueSize = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return asyncRequestResponseHandler.getRequestQueueSize();
-      }
-    };
+    Gauge<Integer> totalRequestQueueSize = asyncRequestResponseHandler::getRequestQueueSize;
     metricRegistry.register(MetricRegistry.name(AsyncRequestResponseHandler.class, "TotalRequestQueueSize"),
         totalRequestQueueSize);
 
-    Gauge<Integer> totalResponseSetSize = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return asyncRequestResponseHandler.getResponseSetSize();
-      }
-    };
+    Gauge<Integer> totalResponseSetSize = asyncRequestResponseHandler::getResponseSetSize;
     metricRegistry.register(MetricRegistry.name(AsyncRequestResponseHandler.class, "TotalResponseSetSize"),
         totalResponseSetSize);
 
-    Gauge<Integer> asyncHandlerWorkersAlive = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return asyncRequestResponseHandler.getWorkersAlive();
-      }
-    };
+    Gauge<Integer> asyncHandlerWorkersAlive = asyncRequestResponseHandler::getWorkersAlive;
     metricRegistry.register(MetricRegistry.name(AsyncRequestResponseHandler.class, "AsyncHandlerWorkersAlive"),
         asyncHandlerWorkersAlive);
   }

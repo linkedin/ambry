@@ -136,12 +136,7 @@ public class RestServer {
       accountServiceCloseTimeInMs =
           metricRegistry.histogram(MetricRegistry.name(RestServer.class, "AccountServiceCloseTimeInMs"));
 
-      Gauge<Integer> restServerStatus = new Gauge<Integer>() {
-        @Override
-        public Integer getValue() {
-          return restServerState.isServiceUp() ? 1 : 0;
-        }
-      };
+      Gauge<Integer> restServerStatus = () -> restServerState.isServiceUp() ? 1 : 0;
       metricRegistry.register(MetricRegistry.name(RestServer.class, "RestServerState"), restServerStatus);
     }
   }
