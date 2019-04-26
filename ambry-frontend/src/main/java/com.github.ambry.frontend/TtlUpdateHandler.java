@@ -96,7 +96,7 @@ class TtlUpdateHandler {
      */
     private void start() {
       RestRequestMetrics requestMetrics =
-          restRequest.getSSLSession() != null ? metrics.updateBlobTtlSSLMetrics : metrics.updateBlobTtlMetrics;
+          metrics.updateBlobTtlMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       restRequest.setArg(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, true);
       securityService.processRequest(restRequest, securityProcessRequestCallback());
@@ -122,7 +122,8 @@ class TtlUpdateHandler {
     private Callback<String> idConverterCallback() {
       return buildCallback(metrics.updateBlobTtlIdConversionMetrics, convertedBlobId -> {
         BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
-        accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
+        accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
+            metrics.updateBlobTtlMetricsGroup);
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }

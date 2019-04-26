@@ -17,7 +17,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.utils.AsyncOperationTracker;
 
 
@@ -27,44 +26,28 @@ import com.github.ambry.utils.AsyncOperationTracker;
  * Exports metrics that are triggered by the Ambry frontend to the provided {@link MetricRegistry}.
  */
 public class FrontendMetrics {
-  private static final String BLOB = "Blob";
-  private static final String BLOB_INFO = "BlobInfo";
-  private static final String USER_METADATA = "UserMetadata";
-  private static final String SSL_SUFFIX = "Ssl";
-  private static final String ENCRYPTED = "Encrypted";
-  private final MetricRegistry metricRegistry;
-
-  // RestRequestMetrics instances
-  // DELETE
-  public final RestRequestMetrics deleteBlobMetrics;
-  public final RestRequestMetrics deleteBlobSSLMetrics;
-  // GET
-  public final RestRequestMetrics getPeersMetrics;
-  public final RestRequestMetrics getPeersSSLMetrics;
-  public final RestRequestMetrics getReplicasMetrics;
-  public final RestRequestMetrics getReplicasSSLMetrics;
-  public final RestRequestMetrics getSignedUrlMetrics;
-  public final RestRequestMetrics getSignedUrlSSLMetrics;
-  public final RestRequestMetrics getClusterMapSnapshotMetrics;
-  public final RestRequestMetrics getClusterMapSnapshotSSLMetrics;
-  public final RestRequestMetrics getAccountsMetrics;
-  public final RestRequestMetrics getAccountsSSLMetrics;
-  // OPTIONS
-  public final RestRequestMetrics optionsMetrics;
-  public final RestRequestMetrics optionsSSLMetrics;
-  // POST
-  public final RestRequestMetrics postAccountsMetrics;
-  public final RestRequestMetrics postAccountsSSLMetrics;
-  // PUT
-  public final RestRequestMetrics updateBlobTtlMetrics;
-  public final RestRequestMetrics updateBlobTtlSSLMetrics;
 
   // RestRequestMetricsGroup
-  public final RestRequestMetricsGroup postRequestMetricsGroup;
-  public final RestRequestMetricsGroup getBlobRequestMetricsGroup;
-  public final RestRequestMetricsGroup getBlobInfoRequestMetricsGroup;
-  public final RestRequestMetricsGroup getUserMetadataRequestMetricsGroup;
-  public final RestRequestMetricsGroup headRequestMetricsGroup;
+  // DELETE
+  public final RestRequestMetricsGroup deleteBlobMetricsGroup;
+  // GET
+  public final RestRequestMetricsGroup getBlobMetricsGroup;
+  public final RestRequestMetricsGroup getBlobInfoMetricsGroup;
+  public final RestRequestMetricsGroup getUserMetadataMetricsGroup;
+  public final RestRequestMetricsGroup getPeersMetricsGroup;
+  public final RestRequestMetricsGroup getReplicasMetricsGroup;
+  public final RestRequestMetricsGroup getSignedUrlMetricsGroup;
+  public final RestRequestMetricsGroup getClusterMapSnapshotMetricsGroup;
+  public final RestRequestMetricsGroup getAccountsMetricsGroup;
+  // HEAD
+  public final RestRequestMetricsGroup headBlobMetricsGroup;
+  // OPTIONS
+  public final RestRequestMetricsGroup optionsMetricsGroup;
+  // POST
+  public final RestRequestMetricsGroup postBlobMetricsGroup;
+  public final RestRequestMetricsGroup postAccountsMetricsGroup;
+  // PUT
+  public final RestRequestMetricsGroup updateBlobTtlMetricsGroup;
 
   // AsyncOperationTracker.Metrics instances
   public final AsyncOperationTracker.Metrics postSecurityProcessRequestMetrics;
@@ -205,47 +188,41 @@ public class FrontendMetrics {
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
    */
   public FrontendMetrics(MetricRegistry metricRegistry) {
-    this.metricRegistry = metricRegistry;
-    // RestRequestMetrics instances
-    // DELETE
-    deleteBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "DeleteBlob", metricRegistry);
-    deleteBlobSSLMetrics =
-        new RestRequestMetrics(AmbryBlobStorageService.class, "DeleteBlob" + SSL_SUFFIX, metricRegistry);
-    // GET
-    getPeersMetrics = new RestRequestMetrics(GetPeersHandler.class, "GetPeers", metricRegistry);
-    getPeersSSLMetrics = new RestRequestMetrics(GetPeersHandler.class, "GetPeers" + SSL_SUFFIX, metricRegistry);
-    getReplicasMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetReplicas", metricRegistry);
-    getReplicasSSLMetrics =
-        new RestRequestMetrics(AmbryBlobStorageService.class, "GetReplicas" + SSL_SUFFIX, metricRegistry);
-    getSignedUrlMetrics = new RestRequestMetrics(GetSignedUrlHandler.class, "GetSignedUrl", metricRegistry);
-    getSignedUrlSSLMetrics =
-        new RestRequestMetrics(GetSignedUrlHandler.class, "GetSignedUrl" + SSL_SUFFIX, metricRegistry);
-    getClusterMapSnapshotMetrics =
-        new RestRequestMetrics(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot", metricRegistry);
-    getClusterMapSnapshotSSLMetrics =
-        new RestRequestMetrics(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot" + SSL_SUFFIX,
-            metricRegistry);
-    getAccountsMetrics = new RestRequestMetrics(GetAccountsHandler.class, "GetAccounts", metricRegistry);
-    getAccountsSSLMetrics =
-        new RestRequestMetrics(GetAccountsHandler.class, "GetAccounts" + SSL_SUFFIX, metricRegistry);
-    // OPTIONS
-    optionsMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options", metricRegistry);
-    optionsSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options" + SSL_SUFFIX, metricRegistry);
-    // POST
-    postAccountsMetrics = new RestRequestMetrics(PostAccountsHandler.class, "PostAccounts", metricRegistry);
-    postAccountsSSLMetrics =
-        new RestRequestMetrics(PostAccountsHandler.class, "PostAccounts" + SSL_SUFFIX, metricRegistry);
-    // PUT
-    updateBlobTtlMetrics = new RestRequestMetrics(TtlUpdateHandler.class, "UpdateBlobTtl", metricRegistry);
-    updateBlobTtlSSLMetrics =
-        new RestRequestMetrics(TtlUpdateHandler.class, "UpdateBlobTtl" + SSL_SUFFIX, metricRegistry);
-
     // RestRequestMetricsGroup
-    postRequestMetricsGroup = new RestRequestMetricsGroup("Post", BLOB);
-    getBlobInfoRequestMetricsGroup = new RestRequestMetricsGroup("Get", BLOB_INFO);
-    getBlobRequestMetricsGroup = new RestRequestMetricsGroup("Get", BLOB);
-    getUserMetadataRequestMetricsGroup = new RestRequestMetricsGroup("Get", USER_METADATA);
-    headRequestMetricsGroup = new RestRequestMetricsGroup("Head", BLOB);
+    // DELETE
+    deleteBlobMetricsGroup =
+        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "DeleteBlob", false, true, metricRegistry);
+    // GET
+    getBlobMetricsGroup =
+        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "GetBlob", true, true, metricRegistry);
+    getBlobInfoMetricsGroup =
+        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "GetBlobInfo", true, true, metricRegistry);
+    getUserMetadataMetricsGroup =
+        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "GetUserMetadata", true, false, metricRegistry);
+    getPeersMetricsGroup = new RestRequestMetricsGroup(GetPeersHandler.class, "GetPeers", false, false, metricRegistry);
+    getReplicasMetricsGroup =
+        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "GetReplicas", false, false, metricRegistry);
+    getSignedUrlMetricsGroup =
+        new RestRequestMetricsGroup(GetSignedUrlHandler.class, "GetSignedUrl", false, true, metricRegistry);
+    getClusterMapSnapshotMetricsGroup =
+        new RestRequestMetricsGroup(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot", false, false,
+            metricRegistry);
+    getAccountsMetricsGroup =
+        new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, false, metricRegistry);
+    // HEAD
+    headBlobMetricsGroup =
+        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "HeadBlob", false, false, metricRegistry);
+    // OPTIONS
+    optionsMetricsGroup =
+        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "Options", false, false, metricRegistry);
+    // POST
+    postBlobMetricsGroup =
+        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "PostBlob", true, true, metricRegistry);
+    postAccountsMetricsGroup =
+        new RestRequestMetricsGroup(PostAccountsHandler.class, "PostAccounts", false, false, metricRegistry);
+    // PUT
+    updateBlobTtlMetricsGroup =
+        new RestRequestMetricsGroup(TtlUpdateHandler.class, "UpdateBlobTtl", false, true, metricRegistry);
 
     // AsyncOperationTracker.Metrics instances
     postSecurityProcessRequestMetrics =
@@ -472,51 +449,5 @@ public class FrontendMetrics {
         metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "PutWithServiceIdForAccountNameRate"));
     putWithAccountAndContainerHeaderRate = metricRegistry.meter(
         MetricRegistry.name(AmbryBlobStorageService.class, "PutWithAccountAndContainerHeaderRate"));
-  }
-
-  /**
-   * Class to hold different {@link RestRequestMetrics} for plain text, ssl, with and without encryption
-   */
-  class RestRequestMetricsGroup {
-    private final RestRequestMetrics blobMetrics;
-    private final RestRequestMetrics blobSslMetrics;
-    private final RestRequestMetrics blobEncryptedMetrics;
-    private final RestRequestMetrics blobSslEncryptedMetrics;
-
-    /**
-     * Instantiates {@link RestRequestMetricsGroup} for the given requestType and resource
-     * @param requestType refers to the type of request (Head/Get/Post)
-     * @param resource refers to the resource type (Blob/BlobInfo/UserMetadata)
-     */
-    RestRequestMetricsGroup(String requestType, String resource) {
-      blobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, requestType + resource, metricRegistry);
-      blobSslMetrics =
-          new RestRequestMetrics(AmbryBlobStorageService.class, requestType + resource + SSL_SUFFIX, metricRegistry);
-      blobEncryptedMetrics =
-          new RestRequestMetrics(AmbryBlobStorageService.class, requestType + resource + ENCRYPTED, metricRegistry);
-      blobSslEncryptedMetrics =
-          new RestRequestMetrics(AmbryBlobStorageService.class, requestType + resource + SSL_SUFFIX + ENCRYPTED,
-              metricRegistry);
-    }
-
-    /**
-     * Fetches the appropriate {@link RestRequestMetrics} based on the params
-     * @param sslUsed {@code true} if the request is sent over ssl. {@code false} otherwise
-     * @param encrypted {@code true} if the blob is encrypted. {@code false} otherwise
-     * @return the appropriate {@link RestRequestMetrics} based on the params
-     */
-    RestRequestMetrics getRestRequestMetrics(boolean sslUsed, boolean encrypted) {
-      RestRequestMetrics toReturn;
-      if (sslUsed && encrypted) {
-        toReturn = blobSslEncryptedMetrics;
-      } else if (sslUsed) {
-        toReturn = blobSslMetrics;
-      } else if (encrypted) {
-        toReturn = blobEncryptedMetrics;
-      } else {
-        toReturn = blobMetrics;
-      }
-      return toReturn;
-    }
   }
 }

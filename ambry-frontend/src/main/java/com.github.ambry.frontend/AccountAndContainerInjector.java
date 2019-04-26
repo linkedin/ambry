@@ -59,21 +59,24 @@ public class AccountAndContainerInjector {
    * are present for the PUT requests that use serviceId as the account name, and the PUT requests that carry both the
    * {@code x-ambry-target-account} and {@code x-ambry-target-container} headers.
    * @param restRequest The Put {@link RestRequest}.
+   * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
+   *                     if {@link ContainerMetrics} instantiation is not needed.
    * @throws RestServiceException
    */
-  public void injectAccountAndContainerForPostRequest(RestRequest restRequest) throws RestServiceException {
+  public void injectAccountAndContainerForPostRequest(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
+      throws RestServiceException {
     accountAndContainerSanityCheck(restRequest);
     if (getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false) != null
         || getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false) != null) {
       ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithAccountAndContainerName);
       frontendMetrics.putWithAccountAndContainerHeaderRate.mark();
-      injectAccountAndContainerUsingAccountAndContainerHeaders(restRequest);
+      injectAccountAndContainerUsingAccountAndContainerHeaders(restRequest, metricsGroup);
     } else if (frontendConfig.allowServiceIdBasedPostRequest) {
       ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithServiceId);
       frontendMetrics.putWithServiceIdForAccountNameRate.mark();
       String serviceId = getHeader(restRequest.getArgs(), Headers.SERVICE_ID, true);
       boolean isPrivate = isPrivate(restRequest.getArgs());
-      injectAccountAndContainerUsingServiceId(restRequest, serviceId, isPrivate);
+      injectAccountAndContainerUsingServiceId(restRequest, serviceId, isPrivate, metricsGroup);
     } else {
       throw new RestServiceException(
           "Missing either " + Headers.TARGET_ACCOUNT_NAME + " or " + Headers.TARGET_CONTAINER_NAME + " header",
@@ -87,12 +90,14 @@ public class AccountAndContainerInjector {
    * {@link Container} into the {@link RestRequest}.
    * @param blobId The blobId to get the target {@link Account} and {@link Container} id.
    * @param restRequest The rest request to insert the target {@link Account} and {@link Container}.
+   * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
+   *                     if {@link ContainerMetrics} instantiation is not needed.
    * @throws RestServiceException if 1) either {@link Account} or {@link Container} could not be found; or 2)
-   *                              either {@link Account} or {@link Container} were explicitly specified as
-   *                              {@link Account#UNKNOWN_ACCOUNT} or {@link Container#UNKNOWN_CONTAINER}.
+   *                              either {@link Account} or {@link Container} IDs were explicitly specified as
+   *                              {@link Account#UNKNOWN_ACCOUNT_ID} or {@link Container#UNKNOWN_CONTAINER_ID}.
    */
-  public void injectTargetAccountAndContainerFromBlobId(BlobId blobId, RestRequest restRequest)
-      throws RestServiceException {
+  public void injectTargetAccountAndContainerFromBlobId(BlobId blobId, RestRequest restRequest,
+      RestRequestMetricsGroup metricsGroup) throws RestServiceException {
     Account targetAccount = accountService.getAccountById(blobId.getAccountId());
     if (targetAccount == null) {
       frontendMetrics.getHeadDeleteUnrecognizedAccountCount.inc();
@@ -115,7 +120,7 @@ public class AccountAndContainerInjector {
           "Container from blobId=" + blobId.getID() + "with accountId=" + blobId.getAccountId() + " containerId="
               + blobId.getContainerId() + " cannot be recognized", RestServiceErrorCode.InvalidContainer);
     }
-    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
+    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
   }
 
   /**
@@ -124,10 +129,12 @@ public class AccountAndContainerInjector {
    * for V1 blob IDs that do not directly encode the account/container ID.
    * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container}.
    * @param blobProperties The {@link BlobProperties} that contains the service id and blob privacy setting.
-   * @throws RestServiceException if no valid account or container cound be identified for re-injection.
+   * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
+   *                     if {@link ContainerMetrics} instantiation is not needed.
+   * @throws RestServiceException if no valid account or container could be identified for re-injection.
    */
-  public void ensureAccountAndContainerInjected(RestRequest restRequest, BlobProperties blobProperties)
-      throws RestServiceException {
+  public void ensureAccountAndContainerInjected(RestRequest restRequest, BlobProperties blobProperties,
+      RestRequestMetricsGroup metricsGroup) throws RestServiceException {
     Account targetAccount = (Account) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
     Container targetContainer = (Container) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
     if (targetAccount == null || targetContainer == null) {
@@ -137,7 +144,7 @@ public class AccountAndContainerInjector {
       // This should only occur for V1 blobs, where the blob ID does not contain the actual account and container IDs.
       String serviceId = blobProperties.getServiceId();
       boolean isPrivate = blobProperties.isPrivate();
-      injectAccountAndContainerUsingServiceId(restRequest, serviceId, isPrivate);
+      injectAccountAndContainerUsingServiceId(restRequest, serviceId, isPrivate, metricsGroup);
     }
   }
 
@@ -147,10 +154,12 @@ public class AccountAndContainerInjector {
    * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
    * @param serviceId The service ID associated with the blob.
    * @param isPrivate The blob's privacy setting.
+   * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
+   *                     if {@link ContainerMetrics} instantiation is not needed.
    * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be found.
    */
-  private void injectAccountAndContainerUsingServiceId(RestRequest restRequest, String serviceId, boolean isPrivate)
-      throws RestServiceException {
+  private void injectAccountAndContainerUsingServiceId(RestRequest restRequest, String serviceId, boolean isPrivate,
+      RestRequestMetricsGroup metricsGroup) throws RestServiceException {
     // First, try to see if a migrated account exists for the service ID.
     Account targetAccount = accountService.getAccountByName(serviceId);
     if (targetAccount == null) {
@@ -169,16 +178,18 @@ public class AccountAndContainerInjector {
           "Invalid account or container to inject; serviceId=" + serviceId + ", isPrivate=" + isPrivate,
           RestServiceErrorCode.InternalServerError);
     }
-    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
+    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
   }
 
   /**
    * Injects {@link Account} and {@link Container} for the PUT requests that carry the target account and container headers.
    * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
+   * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
+   *                     if {@link ContainerMetrics} instantiation is not needed.
    * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be found.
    */
-  private void injectAccountAndContainerUsingAccountAndContainerHeaders(RestRequest restRequest)
-      throws RestServiceException {
+  private void injectAccountAndContainerUsingAccountAndContainerHeaders(RestRequest restRequest,
+      RestRequestMetricsGroup metricsGroup) throws RestServiceException {
     String accountName = getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
     Account targetAccount = accountService.getAccountByName(accountName);
     if (targetAccount == null) {
@@ -195,7 +206,7 @@ public class AccountAndContainerInjector {
           "Container cannot be found for accountName=" + accountName + " and containerName=" + containerName
               + " in put request with account and container headers.", RestServiceErrorCode.InvalidContainer);
     }
-    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
+    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
   }
 
   /**
@@ -223,17 +234,24 @@ public class AccountAndContainerInjector {
   }
 
   /**
-   * Sets target {@link Account} and {@link Container} objects in the {@link RestRequest}.
+   * Sets target {@link Account} and {@link Container} objects in the {@link RestRequest}. Also handles instantiation
+   * and injection of {@link ContainerMetrics} instances.
    * @param restRequest The {@link RestRequest} to set.
    * @param targetAccount The target {@link Account} to set.
    * @param targetContainer The target {@link Container} to set.
+   * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
+   *                     if {@link ContainerMetrics} instantiation is not needed.
    */
   private void setTargetAccountAndContainerInRestRequest(RestRequest restRequest, Account targetAccount,
-      Container targetContainer) {
+      Container targetContainer, RestRequestMetricsGroup metricsGroup) {
     restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, targetAccount);
     restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, targetContainer);
     logger.trace("Setting targetAccount={} and targetContainer={} for restRequest={} ", targetAccount, targetContainer,
         restRequest);
+    if (metricsGroup != null) {
+      restRequest.getMetricsTracker()
+          .injectContainerMetrics(metricsGroup.getContainerMetrics(targetAccount.getName(), targetContainer.getName()));
+    }
   }
 
   /**

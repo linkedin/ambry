@@ -207,8 +207,9 @@ class AmbryBlobStorageService implements BlobStorageService {
         if (subResource == SubResource.Replicas) {
           securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
         }
-        restRequest.getMetricsTracker()
-            .injectMetrics(getRestRequestMetricsForGet(frontendMetrics, subResource, restRequest.isSslUsed(), false));
+        RestRequestMetrics restRequestMetrics =
+            getMetricsGroupForGet(frontendMetrics, subResource).getRestRequestMetrics(restRequest.isSslUsed(), false);
+        restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
         securityService.processRequest(restRequest, securityCallback);
       }
     };
@@ -257,7 +258,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     ThrowingConsumer<RequestPath> routingAction = requestPath -> {
       RestRequestMetrics requestMetrics =
-          restRequest.isSslUsed() ? frontendMetrics.deleteBlobSSLMetrics : frontendMetrics.deleteBlobMetrics;
+          frontendMetrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       DeleteCallback routerCallback = new DeleteCallback(restRequest, restResponseChannel);
       SecurityProcessRequestCallback securityCallback =
@@ -272,7 +273,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     ThrowingConsumer<RequestPath> routingAction = requestPath -> {
       RestRequestMetrics requestMetrics =
-          frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
+          frontendMetrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       HeadCallback routerCallback = new HeadCallback(restRequest, restResponseChannel);
       SecurityProcessRequestCallback securityCallback =
@@ -288,7 +289,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     handlePrechecks(restRequest, restResponseChannel);
     RestRequestMetrics requestMetrics =
-        restRequest.isSslUsed() ? frontendMetrics.optionsSSLMetrics : frontendMetrics.optionsMetrics;
+        frontendMetrics.optionsMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     Exception exception = null;
     try {
@@ -391,32 +392,30 @@ class AmbryBlobStorageService implements BlobStorageService {
   }
 
   /**
-   * Fetch {@link RestRequestMetrics} for GetRequest based on the {@link SubResource} and {@link RestRequest} params
+   * Fetch {@link RestRequestMetricsGroup} for GetRequest based on the {@link SubResource}.
    * @param frontendMetrics instance of {@link FrontendMetrics} to use
    * @param subResource {@link SubResource} corresponding to the GetRequest
-   * @param sslUsed {@code true} if request is sent over ssl, {@code false} otherwise
-   * @param encrypted {@code true} if request is for an encrypted blob. {@code false} otherwise
-   * @return the appropriate {@link RestRequestMetrics} based on the given params
+   * @return the appropriate {@link RestRequestMetricsGroup} based on the given params
    */
-  private RestRequestMetrics getRestRequestMetricsForGet(FrontendMetrics frontendMetrics, SubResource subResource,
-      boolean sslUsed, boolean encrypted) {
-    RestRequestMetrics requestMetrics = null;
+  private static RestRequestMetricsGroup getMetricsGroupForGet(FrontendMetrics frontendMetrics,
+      SubResource subResource) {
+    RestRequestMetricsGroup group = null;
     if (subResource == null) {
-      requestMetrics = frontendMetrics.getBlobRequestMetricsGroup.getRestRequestMetrics(sslUsed, encrypted);
+      group = frontendMetrics.getBlobMetricsGroup;
     } else {
       switch (subResource) {
         case BlobInfo:
-          requestMetrics = frontendMetrics.getBlobInfoRequestMetricsGroup.getRestRequestMetrics(sslUsed, encrypted);
+          group = frontendMetrics.getBlobInfoMetricsGroup;
           break;
         case UserMetadata:
-          requestMetrics = frontendMetrics.getUserMetadataRequestMetricsGroup.getRestRequestMetrics(sslUsed, encrypted);
+          group = frontendMetrics.getUserMetadataMetricsGroup;
           break;
         case Replicas:
-          requestMetrics = sslUsed ? frontendMetrics.getReplicasSSLMetrics : frontendMetrics.getReplicasMetrics;
+          group = frontendMetrics.getReplicasMetricsGroup;
           break;
       }
     }
-    return requestMetrics;
+    return group;
   }
 
   /**
@@ -517,7 +516,15 @@ class AmbryBlobStorageService implements BlobStorageService {
           RestMethod restMethod = restRequest.getRestMethod();
           logger.trace("Handling {} of {}", restMethod, result);
           BlobId blobId = FrontendUtils.getBlobIdFromString(result, clusterMap);
-          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
+          RestRequestMetricsGroup metricsGroup = null;
+          if (getCallback != null) {
+            metricsGroup = getMetricsGroupForGet(frontendMetrics, getRequestPath(restRequest).getSubResource());
+          } else if (headCallback != null) {
+            metricsGroup = frontendMetrics.headBlobMetricsGroup;
+          } else if (deleteCallback != null) {
+            metricsGroup = frontendMetrics.deleteBlobMetricsGroup;
+          }
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest, metricsGroup);
           securityService.postProcessRequest(restRequest,
               securityPostProcessRequestCallback(result, restRequest, restResponseChannel, getCallback, headCallback,
                   deleteCallback));
@@ -682,9 +689,10 @@ class AmbryBlobStorageService implements BlobStorageService {
           SubResource subResource = getRequestPath(restRequest).getSubResource();
           // inject encryption metrics if need be
           if (BlobId.isEncrypted(convertedId)) {
-            restRequest.getMetricsTracker()
-                .injectMetrics(
-                    getRestRequestMetricsForGet(frontendMetrics, subResource, restRequest.isSslUsed(), true));
+            RestRequestMetrics restRequestMetrics =
+                getMetricsGroupForGet(frontendMetrics, subResource).getRestRequestMetrics(restRequest.isSslUsed(),
+                    true);
+            restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
           }
           if (subResource == null) {
             getCallback.markStartTime();
@@ -707,7 +715,7 @@ class AmbryBlobStorageService implements BlobStorageService {
           // inject encryption metrics if need be
           if (BlobId.isEncrypted(convertedId)) {
             RestRequestMetrics requestMetrics =
-                frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
+                frontendMetrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
             restRequest.getMetricsTracker().injectMetrics(requestMetrics);
           }
           headCallback.markStartTime();
@@ -833,7 +841,7 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.getSecurityResponseTimeInMs,
                   frontendMetrics.getSecurityResponseCallbackProcessingTimeInMs);
           accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
-              routerResult.getBlobInfo().getBlobProperties());
+              routerResult.getBlobInfo().getBlobProperties(), getMetricsGroupForGet(frontendMetrics, subResource));
           securityCallbackTracker.markOperationStart();
           securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
               (securityResult, securityException) -> {
@@ -984,7 +992,7 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.headSecurityResponseTimeInMs,
                   frontendMetrics.headSecurityResponseCallbackProcessingTimeInMs);
           accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
-              routerResult.getBlobInfo().getBlobProperties());
+              routerResult.getBlobInfo().getBlobProperties(), frontendMetrics.headBlobMetricsGroup);
           securityCallbackTracker.markOperationStart();
           securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
               (securityResult, securityException) -> {

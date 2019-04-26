@@ -73,7 +73,7 @@ class GetSignedUrlHandler {
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
     RestRequestMetrics requestMetrics =
-        restRequest.getSSLSession() != null ? metrics.getSignedUrlSSLMetrics : metrics.getSignedUrlMetrics;
+        metrics.getSignedUrlMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     String restMethodInSignedUrlStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.URL_TYPE, true);
     RestMethod restMethodInUrl;
@@ -122,7 +122,8 @@ class GetSignedUrlHandler {
               idConverter.convert(restRequest, blobIdStr, idConverterCallback);
               break;
             case POST:
-              accountAndContainerInjector.injectAccountAndContainerForPostRequest(restRequest);
+              accountAndContainerInjector.injectAccountAndContainerForPostRequest(restRequest,
+                  metrics.getSignedUrlMetricsGroup);
               securityService.postProcessRequest(restRequest,
                   new SecurityPostProcessRequestCallback(restRequest, restResponseChannel, callback));
               break;
@@ -167,7 +168,8 @@ class GetSignedUrlHandler {
       try {
         if (exception == null) {
           BlobId blobId = FrontendUtils.getBlobIdFromString(result, clusterMap);
-          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
+              metrics.getSignedUrlMetricsGroup);
           securityService.postProcessRequest(restRequest,
               new SecurityPostProcessRequestCallback(restRequest, restResponseChannel, callback));
         }
