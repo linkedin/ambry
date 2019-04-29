@@ -104,7 +104,7 @@ public class HelixBootstrapUpgradeToolTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{"DC1"}});
+    return Arrays.asList(new Object[][]{{"DC1"}, {"DC1, DC0"}, {"all"}});
   }
 
   /**
