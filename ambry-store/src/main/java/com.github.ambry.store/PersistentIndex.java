@@ -1084,7 +1084,7 @@ class PersistentIndex {
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) {
     LogSegment logSegment = log.getSegment(offset.getName());
     if (logSegment == null || offset.getOffset() > logSegment.getEndOffset()) {
-      throw new IllegalArgumentException("Offset is invalid: " + offset);
+      throw new IllegalArgumentException("Offset is invalid: " + offset + "; LogSegment: " + logSegment);
     }
     int numPrecedingLogSegments = getLogSegmentToIndexSegmentMapping(indexSegments).headMap(offset.getName()).size();
     return numPrecedingLogSegments * log.getSegmentCapacity() + offset.getOffset();
