@@ -84,7 +84,6 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
 
   @Override
   public void addListener(VirtualReplicatorClusterListener listener) {
-
   }
 
   @Override

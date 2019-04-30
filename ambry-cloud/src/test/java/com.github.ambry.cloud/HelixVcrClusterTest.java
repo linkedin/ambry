@@ -23,10 +23,10 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.AfterClass;
@@ -38,7 +38,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Test of HelixVcrClusterTest.
+ * Tests of HelixVcrCluster.
  */
 public class HelixVcrClusterTest {
   private final static Logger logger = LoggerFactory.getLogger(HelixVcrClusterTest.class);
@@ -50,10 +50,11 @@ public class HelixVcrClusterTest {
   private static TestUtils.ZkInfo zkInfo;
   private static final String VCR_CLUSTER_NAME = "vcrTestCluster";
   private static HelixControllerManager helixControllerManager;
+  private static final int NUM_PARTITIONS = 10;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, 1, 1, 2);
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, 1, 1, NUM_PARTITIONS);
     mockClusterMap = mockClusterAgentsFactory.getClusterMap();
     zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, ZK_SERVER_PORT, true);
     helixControllerManager =
@@ -66,57 +67,77 @@ public class HelixVcrClusterTest {
     zkInfo.shutdown();
   }
 
+  /**
+   * Test addPartition and removePartition of {@link HelixVcrCluster}
+   */
   @Test
-  public void helixVcrClusterFactoryTest() throws Exception {
+  public void helixVcrClusterTest() throws Exception {
+    // Create helixInstance1 and join the cluster. All partitions should be assigned to helixInstance1.
+    VirtualReplicatorCluster helixInstance1 = createHelixInstance(8123, 10123);
+    List<PartitionId> expectedPartitions = mockClusterMap.getAllPartitionIds(null);
+    CountDownLatch latchForAdd = new CountDownLatch(expectedPartitions.size());
+    CountDownLatch latchForRemove = new CountDownLatch(expectedPartitions.size() / 2);
+    MockVcrListener mockVcrListener = new MockVcrListener(latchForAdd, latchForRemove);
+    helixInstance1.addListener(mockVcrListener);
+    Assert.assertTrue("Latch count is not correct.", latchForAdd.await(5, TimeUnit.SECONDS));
+    Assert.assertArrayEquals("Partition assignments are not correct.", expectedPartitions.toArray(),
+        mockVcrListener.getPartitionSet().toArray());
+    Assert.assertEquals("Partition assignment are not correct.", helixInstance1.getAssignedPartitionIds(),
+        expectedPartitions);
+
+    // Create helixInstance2 and join the cluster. Half of partitions should be removed from helixInstance1.
+    VirtualReplicatorCluster helixInstance2 = createHelixInstance(8124, 10124);
+    Assert.assertTrue("Latch count is not correct.", latchForRemove.await(5, TimeUnit.SECONDS));
+    Assert.assertEquals("Number of partitions removed are not correct.", expectedPartitions.size() / 2,
+        mockVcrListener.getPartitionSet().size());
+    helixInstance1.close();
+    helixInstance2.close();
+  }
+
+  /**
+   * Helper function to create helix instance and join helix cluster.
+   * @param clusterMapPort The clusterMapPort of the instance.
+   * @param vcrSslPort The vcrSslPort of this vcr.
+   */
+  private VirtualReplicatorCluster createHelixInstance(int clusterMapPort, int vcrSslPort) throws Exception {
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("clustermap.resolve.hostnames", "false");
     props.setProperty("clustermap.cluster.name", "clusterName");
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.ssl.enabled.datacenters", "DC1,DC2");
-    props.setProperty("clustermap.port", "8123");
+    props.setProperty("clustermap.port", Integer.toString(clusterMapPort));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     props = new Properties();
-    props.setProperty("vcr.ssl.port", "12345");
-    props.setProperty(CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING,
-        ZK_SERVER_HOSTNAME + ":" + Integer.toString(ZK_SERVER_PORT));
+    props.setProperty("vcr.ssl.port", Integer.toString(vcrSslPort));
+    props.setProperty(CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING, ZK_SERVER_HOSTNAME + ":" + ZK_SERVER_PORT);
     props.setProperty(CloudConfig.VCR_CLUSTER_NAME, VCR_CLUSTER_NAME);
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(props));
-    // one vcr cluster participant
-    VirtualReplicatorCluster helixVcrCluster =
-        new HelixVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap).getVirtualReplicatorCluster();
-
-    List<PartitionId> expectedPartitions = mockClusterMap.getAllPartitionIds(null);
-    CountDownLatch latch = new CountDownLatch(expectedPartitions.size());
-    MockVcrListener mockVcrListener = new MockVcrListener(latch);
-    helixVcrCluster.addListener(mockVcrListener);
-    Assert.assertTrue("Latch count is not correct.", latch.await(5, TimeUnit.SECONDS));
-    Assert.assertArrayEquals("Partition assignments are not correct.", expectedPartitions.toArray(),
-        mockVcrListener.getPartitionSet().toArray());
-    Assert.assertEquals("Partition assignment are not correct.", helixVcrCluster.getAssignedPartitionIds(),
-        expectedPartitions);
-    helixVcrCluster.close();
+    return new HelixVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap).getVirtualReplicatorCluster();
   }
 
   private static class MockVcrListener implements VirtualReplicatorClusterListener {
 
-    private final Set partitionSet = new HashSet();
-    private final CountDownLatch latch;
+    private final Set<PartitionId> partitionSet = ConcurrentHashMap.newKeySet();
+    private final CountDownLatch latchForAdd;
+    private final CountDownLatch latchForRemove;
 
-    MockVcrListener(CountDownLatch latch) {
-      this.latch = latch;
+    MockVcrListener(CountDownLatch latchForAdd, CountDownLatch latchForRemove) {
+      this.latchForAdd = latchForAdd;
+      this.latchForRemove = latchForRemove;
     }
 
     @Override
     public void onPartitionAdded(PartitionId partitionId) {
       partitionSet.add(partitionId);
-      latch.countDown();
+      latchForAdd.countDown();
     }
 
     @Override
     public void onPartitionRemoved(PartitionId partitionId) {
-
+      partitionSet.remove(partitionId);
+      latchForRemove.countDown();
     }
 
     public Set getPartitionSet() {

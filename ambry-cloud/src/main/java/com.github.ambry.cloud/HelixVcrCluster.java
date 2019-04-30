@@ -58,8 +58,8 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   /**
    * Construct the helix VCR cluster.
    * @param cloudConfig The cloud configuration to use.
-   * @param clusterMapConfig The clustermap configuration to use.
-   * @param clusterMap The clustermap to use.
+   * @param clusterMapConfig The clusterMap configuration to use.
+   * @param clusterMap The clusterMap to use.
    */
   public HelixVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap)
       throws Exception {
@@ -95,11 +95,14 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   public void addPartition(String partitionIdStr) {
     PartitionId partitionId = partitionIdMap.get(partitionIdStr);
     if (partitionId != null) {
-      assignedPartitionIds.add(partitionId);
-      for (VirtualReplicatorClusterListener listener : listeners) {
-        listener.onPartitionAdded(partitionId);
+      if (assignedPartitionIds.add(partitionId)) {
+        for (VirtualReplicatorClusterListener listener : listeners) {
+          listener.onPartitionAdded(partitionId);
+        }
+        logger.info("Partition {} is added to current VCR: {}", partitionIdStr, vcrInstanceName);
+      } else {
+        logger.info("Partition {} exists on current VCR: {}", partitionIdStr, vcrInstanceName);
       }
-      logger.info("Added partition {} to current VCR: {}", partitionIdStr, vcrInstanceName);
     } else {
       logger.error("Partition {} not in clusterMap on add.", partitionIdStr);
       metrics.partitionIdNotInClusterMapOnAdd.inc();
@@ -114,11 +117,14 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   public void removePartition(String partitionIdStr) {
     PartitionId partitionId = partitionIdMap.get(partitionIdStr);
     if (partitionId != null) {
-      assignedPartitionIds.remove(partitionIdMap.get(partitionIdStr));
-      for (VirtualReplicatorClusterListener listener : listeners) {
-        listener.onPartitionRemoved(partitionId);
+      if (assignedPartitionIds.remove(partitionId)) {
+        for (VirtualReplicatorClusterListener listener : listeners) {
+          listener.onPartitionRemoved(partitionId);
+        }
+        logger.info("Partition {} is removed from current VCR: {}.", partitionIdStr, vcrInstanceName);
+      } else {
+        logger.info("Partition {} not exists on current VCR: {}", partitionIdStr, vcrInstanceName);
       }
-      logger.info("Removed partition {} from current VCR: {}.", partitionIdStr, vcrInstanceName);
     } else {
       logger.error("Partition {} not in clusterMap on remove.", partitionIdStr);
       metrics.partitionIdNotInClusterMapOnRemove.inc();

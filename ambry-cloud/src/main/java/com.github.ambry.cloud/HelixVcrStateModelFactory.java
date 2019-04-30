@@ -20,7 +20,6 @@ import org.apache.helix.participant.statemachine.StateModelFactory;
 /**
  * A factory for creating {@link HelixVcrStateModel}
  */
-
 public class HelixVcrStateModelFactory extends StateModelFactory<StateModel> {
   HelixVcrCluster helixVcrCluster;
 
