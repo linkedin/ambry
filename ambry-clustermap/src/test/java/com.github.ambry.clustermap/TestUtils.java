@@ -679,7 +679,7 @@ public class TestUtils {
       for (Datacenter dcObj : hardwareLayout.getDatacenters()) {
         dataNodes.addAll(dcObj.getDataNodes());
       }
-      return dataNodes;
+      return Collections.unmodifiableList(dataNodes);
     }
 
     public Datacenter getRandomDatacenter() {
