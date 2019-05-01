@@ -216,7 +216,6 @@ class CloudBlobStore implements Store {
   public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
     checkStarted();
     // Note: we skipped uploading the blob on PUT record if the TTL was below threshold.
-    //
     try {
       for (MessageInfo msgInfo : messageSetToUpdate.getMessageSetInfo()) {
         BlobId blobId = (BlobId) msgInfo.getStoreKey();
