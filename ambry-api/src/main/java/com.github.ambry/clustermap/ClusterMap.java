@@ -76,7 +76,8 @@ public interface ClusterMap extends AutoCloseable {
    *
    * @param hostname of the DataNodeId
    * @param port of the DataNodeId
-   * @return DataNodeId for this hostname and port.
+   * @return DataNodeId for this hostname and port, or {@code null} if the hostname and port does not match a node in
+   *         the cluster.
    */
   DataNodeId getDataNodeId(String hostname, int port);
 
