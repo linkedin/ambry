@@ -21,8 +21,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -31,6 +34,7 @@ import org.json.JSONObject;
  * and reports inconsistencies in the views from the two underlying cluster managers.
  */
 class CompositeClusterManager implements ClusterMap {
+  private static final Logger LOGGER = LoggerFactory.getLogger(CompositeClusterManager.class);
   final StaticClusterManager staticClusterManager;
   final HelixClusterManager helixClusterManager;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
@@ -41,7 +45,8 @@ class CompositeClusterManager implements ClusterMap {
    * @param helixClusterManager the {@link HelixClusterManager} instance to use for comparison of views.
    */
   CompositeClusterManager(StaticClusterManager staticClusterManager, HelixClusterManager helixClusterManager) {
-    if (staticClusterManager.getLocalDatacenterId() != helixClusterManager.getLocalDatacenterId()) {
+    if (helixClusterManager != null
+        && staticClusterManager.getLocalDatacenterId() != helixClusterManager.getLocalDatacenterId()) {
       throw new IllegalStateException(
           "Datacenter ID in the static cluster map [" + staticClusterManager.getLocalDatacenterId()
               + "] does not match the one in helix [" + helixClusterManager.getLocalDatacenterId() + "]");
@@ -59,8 +64,13 @@ class CompositeClusterManager implements ClusterMap {
     PartitionId partitionIdStatic = staticClusterManager.getPartitionIdFromStream(duplicatingInputStream);
     if (helixClusterManager != null) {
       duplicatingInputStream.reset();
-      PartitionId partitionIdDynamic = helixClusterManager.getPartitionIdFromStream(duplicatingInputStream);
-      if (!partitionIdStatic.toString().equals(partitionIdDynamic.toString())) {
+      try {
+        PartitionId partitionIdDynamic = helixClusterManager.getPartitionIdFromStream(duplicatingInputStream);
+        if (!partitionIdStatic.toString().equals(partitionIdDynamic.toString())) {
+          helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
+        }
+      } catch (IOException e) {
+        LOGGER.warn("HelixClusterManager could not deserialize partition ID that StaticClusterManager could", e);
         helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
       }
     }
@@ -129,7 +139,7 @@ class CompositeClusterManager implements ClusterMap {
   @Override
   public String getDatacenterName(byte id) {
     String dcName = staticClusterManager.getDatacenterName(id);
-    if (helixClusterManager != null && !dcName.equals(helixClusterManager.getDatacenterName(id))) {
+    if (helixClusterManager != null && !Objects.equals(dcName, helixClusterManager.getDatacenterName(id))) {
       helixClusterManagerMetrics.getDatacenterNameMismatchCount.inc();
     }
     return dcName;
@@ -151,7 +161,8 @@ class CompositeClusterManager implements ClusterMap {
     DataNodeId staticDataNode = staticClusterManager.getDataNodeId(hostname, port);
     if (helixClusterManager != null) {
       DataNodeId helixDataNode = helixClusterManager.getDataNodeId(hostname, port);
-      if (!staticDataNode.toString().equals(helixDataNode.toString())) {
+      if (!Objects.equals(staticDataNode != null ? staticDataNode.toString() : null,
+          helixDataNode != null ? helixDataNode.toString() : null)) {
         helixClusterManagerMetrics.getDataNodeIdMismatchCount.inc();
       }
     }
@@ -278,7 +289,8 @@ class CompositeClusterManager implements ClusterMap {
  */
 class DuplicatingInputStream extends FilterInputStream {
   private enum Mode {
-    SAVE_READS, SERVE_DUPLICATES
+    SAVE_READS,
+    SERVE_DUPLICATES
   }
 
   private Mode mode = Mode.SAVE_READS;
