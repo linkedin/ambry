@@ -26,15 +26,21 @@ public class VcrMetrics {
   // Encryption metrics
   public final Counter blobEncryptionCount;
   public final Counter blobDecryptionCount;
+  public final Counter blobEncryptionErrorCount;
+  public final Counter blobDecryptionErrorCount;
   public final Timer blobEncryptionTime;
   public final Timer blobDecryptionTime;
+  public final Counter blobUploadSkippedCount;
 
   public VcrMetrics(MetricRegistry registry) {
     this.registry = registry;
     blobEncryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionCount"));
     blobDecryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobDecryptionCount"));
+    blobEncryptionErrorCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionErrorCount"));
+    blobDecryptionErrorCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobDecryptionErrorCount"));
     blobEncryptionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionTime"));
     blobDecryptionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobDecryptionTime"));
+    blobUploadSkippedCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobUploadSkippedCount"));
   }
 
   /**

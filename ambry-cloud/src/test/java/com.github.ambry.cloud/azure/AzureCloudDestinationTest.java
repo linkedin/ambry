@@ -39,6 +39,7 @@ import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.Collections;
 import java.util.HashMap;
@@ -157,14 +158,14 @@ public class AzureCloudDestinationTest {
   /** Test upload of existing blob. */
   @Test
   public void testUploadExists() throws Exception {
-    when(mockBlob.exists()).thenReturn(true);
+    Mockito.doThrow(new StorageException("Exists", "Exists", 409, null, null))
+        .when(mockBlob)
+        .upload(any(), anyLong(), any(), any(), any());
     assertFalse("Upload of existing blob should return false", uploadDefaultBlob());
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
     assertEquals(0, azureMetrics.blobUploadSuccessCount.getCount());
     assertEquals(1, azureMetrics.blobUploadSkippedCount.getCount());
     assertEquals(0, azureMetrics.blobUploadErrorCount.getCount());
-    assertEquals(0, azureMetrics.blobUploadTime.getCount());
-    assertEquals(0, azureMetrics.documentCreateTime.getCount());
   }
 
   /** Test delete of nonexistent blob. */
@@ -299,7 +300,7 @@ public class AzureCloudDestinationTest {
   /** Test upload when doc client throws exception. */
   @Test
   public void testUploadDocClientException() throws Exception {
-    when(mockumentClient.createDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenThrow(
+    when(mockumentClient.upsertDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenThrow(
         DocumentClientException.class);
     expectCloudStorageException(() -> uploadDefaultBlob(), DocumentClientException.class);
     verifyUploadErrorMetrics(true);
@@ -334,8 +335,6 @@ public class AzureCloudDestinationTest {
     assertEquals(0, azureMetrics.blobUploadSuccessCount.getCount());
     assertEquals(0, azureMetrics.blobUploadSkippedCount.getCount());
     assertEquals(1, azureMetrics.blobUploadErrorCount.getCount());
-    assertEquals(isDocument ? 1 : 0, azureMetrics.blobUploadTime.getCount());
-    assertEquals(0, azureMetrics.documentCreateTime.getCount());
     assertEquals(isDocument ? 0 : 1, azureMetrics.storageErrorCount.getCount());
     assertEquals(isDocument ? 1 : 0, azureMetrics.documentErrorCount.getCount());
   }
@@ -348,8 +347,6 @@ public class AzureCloudDestinationTest {
   private void verifyUpdateErrorMetrics(int numUpdates, boolean isDocument) {
     assertEquals(0, azureMetrics.blobUpdatedCount.getCount());
     assertEquals(numUpdates, azureMetrics.blobUpdateErrorCount.getCount());
-    assertEquals(isDocument ? numUpdates : 0, azureMetrics.blobUpdateTime.getCount());
-    assertEquals(0, azureMetrics.documentUpdateTime.getCount());
     assertEquals(isDocument ? 0 : numUpdates, azureMetrics.storageErrorCount.getCount());
     assertEquals(isDocument ? numUpdates : 0, azureMetrics.documentErrorCount.getCount());
   }

@@ -132,14 +132,21 @@ class CloudBlobStore implements Store {
       String kmsContext = null;
       String cryptoAgentFactoryClass = null;
       EncryptionOrigin encryptionOrigin = isRouterEncrypted ? EncryptionOrigin.ROUTER : EncryptionOrigin.NONE;
+      boolean bufferChanged = false;
       if (requireEncryption) {
         if (isRouterEncrypted) {
           // Nothing further needed
         } else {
           // Need to encrypt the buffer before upload
           Timer.Context encryptionTimer = vcrMetrics.blobEncryptionTime.time();
-          messageBuf = cryptoAgent.encrypt(messageBuf);
-          encryptionTimer.stop();
+          try {
+            messageBuf = cryptoAgent.encrypt(messageBuf);
+            bufferChanged = true;
+          } catch (GeneralSecurityException ex) {
+            vcrMetrics.blobEncryptionErrorCount.inc();
+          } finally {
+            encryptionTimer.stop();
+          }
           vcrMetrics.blobEncryptionCount.inc();
           encryptionOrigin = EncryptionOrigin.VCR;
           kmsContext = cryptoAgent.getEncryptionContext();
@@ -151,7 +158,11 @@ class CloudBlobStore implements Store {
       CloudBlobMetadata blobMetadata =
           new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
               messageInfo.getSize(), encryptionOrigin, kmsContext, cryptoAgentFactoryClass);
-      cloudDestination.uploadBlob(blobId, size, blobMetadata, new ByteBufferInputStream(messageBuf));
+      // If buffer was encrypted, we no longer know its size
+      long bufferlen = bufferChanged ? -1 : size;
+      cloudDestination.uploadBlob(blobId, bufferlen, blobMetadata, new ByteBufferInputStream(messageBuf));
+    } else {
+      vcrMetrics.blobUploadSkippedCount.inc();
     }
   }
 
@@ -205,6 +216,7 @@ class CloudBlobStore implements Store {
   public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
     checkStarted();
     // Note: we skipped uploading the blob on PUT record if the TTL was below threshold.
+    //
     try {
       for (MessageInfo msgInfo : messageSetToUpdate.getMessageSetInfo()) {
         BlobId blobId = (BlobId) msgInfo.getStoreKey();

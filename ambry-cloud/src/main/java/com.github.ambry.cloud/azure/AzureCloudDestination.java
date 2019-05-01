@@ -30,6 +30,7 @@ import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.PartitionKey;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
+import com.microsoft.azure.storage.AccessCondition;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.OperationContext;
 import com.microsoft.azure.storage.StorageException;
@@ -40,15 +41,18 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.http.HttpHost;
 import org.slf4j.Logger;
@@ -69,6 +73,8 @@ class AzureCloudDestination implements CloudDestination {
   private final RequestOptions defaultRequestOptions = new RequestOptions();
   private final OperationContext blobOpContext = new OperationContext();
   private final AzureMetrics azureMetrics;
+  // Containers known to exist in the storage account
+  private final Set<String> knownContainers = Collections.synchronizedSet(new HashSet<>());
 
   /**
    * Construct an Azure cloud destination from config properties.
@@ -179,43 +185,69 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
+  public boolean uploadBlob(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) throws CloudStorageException {
 
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     Objects.requireNonNull(blobInputStream, "Input stream cannot be null");
 
-    BlobRequestOptions options = null; // may want to set BlobEncryptionPolicy here
     azureMetrics.blobUploadRequestCount.inc();
     try {
-      Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
-      CloudBlobContainer azureContainer = getContainer(blobId, true);
-      String azureBlobName = getAzureBlobName(blobId);
-      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
-
-      if (azureBlob.exists()) {
-        logger.debug("Skipping upload of blob {} as it already exists in Azure container {}.", blobId,
-            azureContainer.getName());
-        azureMetrics.blobUploadSkippedCount.inc();
+      boolean uploaded = uploadIfNotExists(blobId, inputLength, cloudBlobMetadata, blobInputStream);
+      if (!uploaded) {
         return false;
       }
 
-      azureBlob.setMetadata(getMetadataMap(cloudBlobMetadata));
-      azureBlob.upload(blobInputStream, blobSize, null, options, blobOpContext);
-      // Note: not calling this in finally block because don't want exceptions to manufacture
-      // short times that make the system look artificially fast
-      storageTimer.stop();
-
       Timer.Context docTimer = azureMetrics.documentCreateTime.time();
-      documentClient.createDocument(cosmosCollectionLink, cloudBlobMetadata, defaultRequestOptions, true);
-      docTimer.stop();
-      logger.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
+      try {
+        documentClient.upsertDocument(cosmosCollectionLink, cloudBlobMetadata, defaultRequestOptions, true);
+      } finally {
+        docTimer.stop();
+      }
       azureMetrics.blobUploadSuccessCount.inc();
       return true;
     } catch (URISyntaxException | StorageException | DocumentClientException | IOException e) {
       azureMetrics.blobUploadErrorCount.inc();
       updateErrorMetrics(e);
       throw new CloudStorageException("Error uploading blob " + blobId, e);
+    }
+  }
+
+  /**
+   * Upload the blob to Azure storage if it does not already exist in the designated container.
+   * @param blobId the blobId to upload
+   * @param inputLength the input stream length, if known (-1 if not)
+   * @param cloudBlobMetadata the blob metadata
+   * @param blobInputStream the input stream
+   * @return {@code true} if the upload was successful, {@code false} if the blob already exists.
+   * @throws StorageException
+   * @throws URISyntaxException
+   * @throws IOException
+   */
+  private boolean uploadIfNotExists(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
+      InputStream blobInputStream) throws StorageException, URISyntaxException, IOException {
+    BlobRequestOptions options = null; // may want to set BlobEncryptionPolicy here
+    AccessCondition condition = AccessCondition.generateIfNoneMatchCondition("*");
+    Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
+    try {
+      CloudBlobContainer azureContainer = getContainer(blobId, true);
+      String azureBlobName = getAzureBlobName(blobId);
+      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
+      azureBlob.setMetadata(getMetadataMap(cloudBlobMetadata));
+      azureBlob.upload(blobInputStream, inputLength, condition, options, blobOpContext);
+      logger.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
+      return true;
+    } catch (StorageException sex) {
+      if (sex.getHttpStatusCode() == HttpURLConnection.HTTP_CONFLICT) {
+        // The blob already exists
+        logger.debug("Skipped upload of existing blob {}.", blobId);
+        azureMetrics.blobUploadSkippedCount.inc();
+        return false;
+      } else {
+        throw sex;
+      }
+    } finally {
+      storageTimer.stop();
     }
   }
 
@@ -278,7 +310,6 @@ class AzureCloudDestination implements CloudDestination {
     // 2) the blob storage entry metadata (to enable rebuilding the database)
 
     try {
-      Timer.Context storageTimer = azureMetrics.blobUpdateTime.time();
       CloudBlobContainer azureContainer = getContainer(blobId, false);
       String azureBlobName = getAzureBlobName(blobId);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
@@ -287,25 +318,33 @@ class AzureCloudDestination implements CloudDestination {
         logger.debug("Blob {} not found in Azure container {}.", blobId, azureContainer.getName());
         return false;
       }
-      azureBlob.downloadAttributes(); // Makes sure we have latest
-      azureBlob.getMetadata().put(fieldName, String.valueOf(value));
-      azureBlob.uploadMetadata();
-      storageTimer.stop();
+
+      Timer.Context storageTimer = azureMetrics.blobUpdateTime.time();
+      try {
+        azureBlob.downloadAttributes(); // Makes sure we have latest
+        azureBlob.getMetadata().put(fieldName, String.valueOf(value));
+        azureBlob.uploadMetadata();
+      } finally {
+        storageTimer.stop();
+      }
 
       Timer.Context docTimer = azureMetrics.documentUpdateTime.time();
-      String docLink = cosmosCollectionLink + "/docs/" + blobId.getID();
-      RequestOptions options = new RequestOptions();
-      options.setPartitionKey(new PartitionKey(blobId.getPartition().toPathString()));
-      ResourceResponse<Document> response = documentClient.readDocument(docLink, options);
-      //CloudBlobMetadata blobMetadata = response.getResource().toObject(CloudBlobMetadata.class);
-      Document doc = response.getResource();
-      if (doc == null) {
-        logger.warn("Blob metadata record not found: " + docLink);
-        return false;
+      try {
+        String docLink = cosmosCollectionLink + "/docs/" + blobId.getID();
+        RequestOptions options = new RequestOptions();
+        options.setPartitionKey(new PartitionKey(blobId.getPartition().toPathString()));
+        ResourceResponse<Document> response = documentClient.readDocument(docLink, options);
+        //CloudBlobMetadata blobMetadata = response.getResource().toObject(CloudBlobMetadata.class);
+        Document doc = response.getResource();
+        if (doc == null) {
+          logger.warn("Blob metadata record not found: " + docLink);
+          return false;
+        }
+        doc.set(fieldName, value);
+        documentClient.replaceDocument(doc, options);
+      } finally {
+        docTimer.stop();
       }
-      doc.set(fieldName, value);
-      documentClient.replaceDocument(doc, options);
-      docTimer.stop();
       logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
       azureMetrics.blobUpdatedCount.inc();
       return true;
@@ -343,10 +382,22 @@ class AzureCloudDestination implements CloudDestination {
     String partitionPath = "partition-" + blobId.getPartition().toPathString();
     CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(partitionPath);
     if (autoCreate) {
-      azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
-          blobOpContext);
+      ensureCreated(azureContainer);
     }
     return azureContainer;
+  }
+
+  /**
+   * Utility method to ensure that the requested container exists in the storage account.
+   * @param azureContainer the container that must exist.
+   * @throws StorageException if the operation fails.
+   */
+  private void ensureCreated(CloudBlobContainer azureContainer) throws StorageException {
+    if (!knownContainers.contains(azureContainer.getName())) {
+      azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
+          blobOpContext);
+      knownContainers.add(azureContainer.getName());
+    }
   }
 
   /**
