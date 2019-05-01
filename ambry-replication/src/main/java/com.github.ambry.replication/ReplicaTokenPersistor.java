@@ -23,7 +23,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -72,28 +71,28 @@ public abstract class ReplicaTokenPersistor implements Runnable {
     long writeStartTimeMs = SystemTime.getInstance().milliseconds();
 
     // Get all partitions for the mount path and persist their tokens
-    List<ReplicaTokenInfo> tokenInfoList = new ArrayList<>();
+    List<ReplicaTokenInfo> tokensPersisted = new ArrayList<>();
     for (PartitionInfo info : partitionGroupedByMountPath.get(mountPath)) {
       for (RemoteReplicaInfo remoteReplica : info.getRemoteReplicaInfos()) {
         FindToken tokenToPersist = remoteReplica.getTokenToPersist();
         if (tokenToPersist != null) {
-          tokenInfoList.add(new ReplicaTokenInfo(remoteReplica));
+          tokensPersisted.add(new ReplicaTokenInfo(remoteReplica));
         }
       }
     }
 
     try {
-      persistTokens(mountPath, tokenInfoList);
+      persistTokens(mountPath, tokensPersisted);
     } finally {
       // TODO: could move this out
       replicationMetrics.remoteReplicaTokensPersistTime.update(
           SystemTime.getInstance().milliseconds() - writeStartTimeMs);
     }
 
-    if (shuttingDown) {
-      for (ReplicaTokenInfo replicaTokenInfo : tokenInfoList) {
+    for (ReplicaTokenInfo replicaTokenInfo : tokensPersisted) {
+      replicaTokenInfo.getReplicaInfo().onTokenPersisted();
+      if (shuttingDown) {
         logger.info("Persisted token {}", replicaTokenInfo.getReplicaToken());
-        replicaTokenInfo.getReplicaInfo().onTokenPersisted();
       }
     }
   }
