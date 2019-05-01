@@ -75,7 +75,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
   }
 
   @Override
-  public List<ReplicaTokenInfo> retrieve(String mountPath) throws IOException, ReplicationException {
+  public List<ReplicaTokenInfo> retrieve(String mountPath) throws ReplicationException {
     try {
       ByteArrayOutputStream tokenOutputStream = new ByteArrayOutputStream(4096);
       boolean tokenExists = cloudDestination.retrieveTokens(mountPath, replicaTokenFileName, tokenOutputStream);
@@ -85,7 +85,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
       } else {
         return Collections.emptyList();
       }
-    } catch (CloudStorageException e) {
+    } catch (IOException | CloudStorageException e) {
       throw new ReplicationException("IO error while reading from replica token file at mount path " + mountPath, e);
     }
   }

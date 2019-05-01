@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.protocol.GetRequest;
 import java.io.File;
 import java.util.Properties;
 import org.junit.Test;
@@ -55,8 +56,9 @@ public class CloudReplicaTest {
     CloudDataNode cloudDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
     CloudReplica cloudReplica = new CloudReplica(cloudConfig, new MockPartitionId(), cloudDataNode);
     assertEquals("Wrong mount path", mockPartitionId.toPathString(), cloudReplica.getMountPath());
-    assertEquals("Wrong replica path", mockPartitionId.toPathString() + File.separator + mockPartitionId.toPathString(),
-        cloudReplica.getReplicaPath());
+    assertEquals("Wrong replica path",
+        mockPartitionId.toPathString() + File.separator + GetRequest.Cloud_Replica_Keyword + File.separator
+            + mockPartitionId.toPathString(), cloudReplica.getReplicaPath());
     assertEquals("Wrong dataNodeId", cloudDataNode, cloudReplica.getDataNodeId());
     assertEquals("Wrong partitionId", mockPartitionId, cloudReplica.getPartitionId());
     assertEquals("Wrong peer replicaIds", mockPartitionId.getReplicaIds(), cloudReplica.getPeerReplicaIds());

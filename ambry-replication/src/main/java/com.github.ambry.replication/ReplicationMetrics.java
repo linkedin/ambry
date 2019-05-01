@@ -343,23 +343,16 @@ public class ReplicationMetrics {
   }
 
   /**
-   * Register metrics for measuring the number of active intra and inter colo replica threads.
+   * Register metrics for measuring the number of active replica threads.
    *
-   * @param replicaThreadPools A map of datacenter names to {@link ReplicaThread}s handling replication from that
-   *                           datacenter
-   * @param localDatacenter The datacenter on which the {@link ReplicationManager} is running
+   * @param replicaThreads A list of {@link ReplicaThread}s handling replication.
+   * @param datacenter The datacenter of the {@link ReplicaThread} is running
    */
-  void trackLiveThreadsCount(final Map<String, List<ReplicaThread>> replicaThreadPools, String localDatacenter) {
-    for (final String datacenter : replicaThreadPools.keySet()) {
-      Gauge<Integer> liveThreadsPerDatacenter = () -> getLiveThreads(replicaThreadPools.get(datacenter));
-      if (localDatacenter.equals(datacenter)) {
-        registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfIntra-Colo-ReplicaThreads"),
-            liveThreadsPerDatacenter);
-      } else {
-        registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfInter-" + datacenter + "-ReplicaThreads"),
-            liveThreadsPerDatacenter);
-      }
-    }
+  void trackLiveThreadsCount(final List<ReplicaThread> replicaThreads, String datacenter) {
+    Gauge<Integer> liveThreadsPerDatacenter = () -> getLiveThreads(replicaThreads);
+
+    registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfReplicaThreadsIn" + datacenter),
+        liveThreadsPerDatacenter);
   }
 
   private int getLiveThreads(List<ReplicaThread> replicaThreads) {

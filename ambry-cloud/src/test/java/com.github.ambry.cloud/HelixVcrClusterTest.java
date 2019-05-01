@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import org.apache.helix.InstanceType;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -79,6 +80,7 @@ public class HelixVcrClusterTest {
     CountDownLatch latchForRemove = new CountDownLatch(expectedPartitions.size() / 2);
     MockVcrListener mockVcrListener = new MockVcrListener(latchForAdd, latchForRemove);
     helixInstance1.addListener(mockVcrListener);
+    helixInstance1.participate(InstanceType.PARTICIPANT);
     Assert.assertTrue("Latch count is not correct.", latchForAdd.await(5, TimeUnit.SECONDS));
     Assert.assertArrayEquals("Partition assignments are not correct.", expectedPartitions.toArray(),
         mockVcrListener.getPartitionSet().toArray());
@@ -87,6 +89,7 @@ public class HelixVcrClusterTest {
 
     // Create helixInstance2 and join the cluster. Half of partitions should be removed from helixInstance1.
     VirtualReplicatorCluster helixInstance2 = createHelixInstance(8124, 10124);
+    helixInstance2.participate(InstanceType.PARTICIPANT);
     Assert.assertTrue("Latch count is not correct.", latchForRemove.await(5, TimeUnit.SECONDS));
     Assert.assertEquals("Number of partitions removed are not correct.", expectedPartitions.size() / 2,
         mockVcrListener.getPartitionSet().size());

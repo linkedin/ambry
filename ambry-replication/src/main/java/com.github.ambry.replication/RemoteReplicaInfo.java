@@ -40,7 +40,7 @@ import com.github.ambry.utils.Time;
  * eventually hold true.)
  */
 
-public class RemoteReplicaInfo {
+public class RemoteReplicaInfo implements Comparable<RemoteReplicaInfo> {
   private final ReplicaId replicaId;
   private final ReplicaId localReplicaId;
   private final Store localStore;
@@ -60,6 +60,7 @@ public class RemoteReplicaInfo {
   private long totalBytesReadFromLocalStore;
   private long localLagFromRemoteStore = -1;
   private long reEnableReplicationTime = 0;
+  private ReplicaThread replicaThread;
 
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
@@ -73,7 +74,7 @@ public class RemoteReplicaInfo {
     initializeTokens(token);
   }
 
-  ReplicaId getReplicaId() {
+  public ReplicaId getReplicaId() {
     return replicaId;
   }
 
@@ -121,7 +122,15 @@ public class RemoteReplicaInfo {
     return currentToken;
   }
 
-  void setTotalBytesReadFromLocalStore(long totalBytesReadFromLocalStore) {
+  public ReplicaThread getReplicaThread() {
+    return replicaThread;
+  }
+
+  void setReplicaThread(ReplicaThread replicaThread) {
+    this.replicaThread = replicaThread;
+  }
+
+  public void setTotalBytesReadFromLocalStore(long totalBytesReadFromLocalStore) {
     this.totalBytesReadFromLocalStore = totalBytesReadFromLocalStore;
   }
 
@@ -139,7 +148,7 @@ public class RemoteReplicaInfo {
     currentToken = token;
   }
 
-  synchronized void initializeTokens(FindToken token) {
+  synchronized public void initializeTokens(FindToken token) {
     currentToken = token;
     candidateTokenToPersist = token;
     tokenSafeToPersist = token;
@@ -170,7 +179,20 @@ public class RemoteReplicaInfo {
 
   @Override
   public String toString() {
-    return replicaId.toString();
+    return replicaId.getPartitionId().toPathString();
+  }
+
+  @Override
+  public int compareTo(RemoteReplicaInfo other) {
+    return this.getReplicaId()
+        .getPartitionId()
+        .toPathString()
+        .compareTo(other.getReplicaId().getPartitionId().toPathString());
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    return toString().equals(obj.toString());
   }
 
   /**

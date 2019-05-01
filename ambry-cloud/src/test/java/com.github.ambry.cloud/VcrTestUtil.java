@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.HelixAdminFactory;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
@@ -25,10 +24,11 @@ import java.util.Map;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.controller.rebalancer.strategy.CrushRebalanceStrategy;
+import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
+import org.apache.helix.manager.zk.client.DedicatedZkClientFactory;
 import org.apache.helix.manager.zk.client.HelixZkClient;
-import org.apache.helix.manager.zk.client.SharedZkClientFactory;
 import org.apache.helix.model.ClusterConfig;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.IdealState;
@@ -66,11 +66,11 @@ public class VcrTestUtil {
   public static HelixControllerManager populateZkInfoAndStartController(String zKConnectString, String vcrClusterName,
       ClusterMap clusterMap) {
     HelixZkClient zkClient =
-        SharedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(zKConnectString));
+        DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(zKConnectString));
     zkClient.setZkSerializer(new ZNRecordSerializer());
     ClusterSetup clusterSetup = new ClusterSetup(zkClient);
     clusterSetup.addCluster(vcrClusterName, true);
-    HelixAdmin admin = new HelixAdminFactory().getHelixAdmin(zKConnectString);
+    HelixAdmin admin = new ZKHelixAdmin(zkClient);
     // set ALLOW_PARTICIPANT_AUTO_JOIN
     HelixConfigScope configScope = new HelixConfigScopeBuilder(HelixConfigScope.ConfigScopeProperty.CLUSTER).
         forCluster(vcrClusterName).build();
@@ -95,6 +95,7 @@ public class VcrTestUtil {
     admin.rebalance(vcrClusterName, resourceName, 3, "", "");
     HelixControllerManager helixControllerManager = new HelixControllerManager(zKConnectString, vcrClusterName);
     helixControllerManager.syncStart();
+    zkClient.close();
     return helixControllerManager;
   }
 }

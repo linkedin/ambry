@@ -99,9 +99,9 @@ public class ServerPlaintextTest {
   @Test
   public void endToEndCloudBackupTest() throws Exception {
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, testEncryption, notificationSystem,
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem,
         null, Utils.Infinite_Time, false);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, testEncryption, notificationSystem,
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem,
         null, System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1), true);
   }
 

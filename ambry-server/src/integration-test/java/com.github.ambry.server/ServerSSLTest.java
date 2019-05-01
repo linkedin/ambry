@@ -135,9 +135,9 @@ public class ServerSSLTest {
   public void endToEndCloudBackupTest() throws Exception {
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
     ServerTestUtil.endToEndCloudBackupTest(sslCluster, dataNode, clientSSLConfig2, clientSSLSocketFactory2,
-        testEncryption, notificationSystem, serverSSLProps, Utils.Infinite_Time, false);
+        notificationSystem, serverSSLProps, Utils.Infinite_Time, false);
     ServerTestUtil.endToEndCloudBackupTest(sslCluster, dataNode, clientSSLConfig2, clientSSLSocketFactory2,
-        testEncryption, notificationSystem, serverSSLProps, System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1),
+        notificationSystem, serverSSLProps, System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1),
         true);
   }
 

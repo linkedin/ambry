@@ -28,9 +28,12 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -66,24 +69,55 @@ public class ReplicationManager extends ReplicationEngine {
             replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
             replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
-            updateReplicasToReplicate(remoteReplica.getDataNodeId().getDatacenterName(), remoteReplicaInfo);
           }
+          addRemoteReplicaInfoToReplicaThread(remoteReplicas, false);
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, partition, store, replicaId);
           partitionsToReplicate.put(partition, partitionInfo);
-          List<PartitionInfo> partitionInfos = partitionGroupedByMountPath.get(replicaId.getMountPath());
-          if (partitionInfos == null) {
-            partitionInfos = new ArrayList<>();
-          }
-          partitionInfos.add(partitionInfo);
-          partitionGroupedByMountPath.put(replicaId.getMountPath(), partitionInfos);
+          partitionGroupedByMountPath.computeIfAbsent(replicaId.getMountPath(), key -> new ArrayList<>())
+              .add(partitionInfo);
         }
       } else {
         logger.error("Not replicating to partition " + partition + " because an initialized store could not be found");
       }
     }
-    replicationMetrics.populatePerColoMetrics(numberOfReplicaThreads.keySet());
+    replicationMetrics.populatePerColoMetrics(replicaThreadPoolByDc.keySet());
     persistor =
         new DiskTokenPersistor(replicaTokenFileName, partitionGroupedByMountPath, replicationMetrics, clusterMap,
             factory);
+  }
+
+  @Override
+  public void start() throws ReplicationException {
+    try {
+      // read stored tokens
+      // iterate through all mount paths and read replication info for the partitions it owns
+      for (String mountPath : partitionGroupedByMountPath.keySet()) {
+        retrieveReplicaTokensAndPersistIfNecessary(mountPath);
+      }
+      if (replicaThreadPoolByDc.size() == 0) {
+        logger.warn("Number of Datacenters to replicate from is 0, not starting any replica threads");
+        return;
+      }
+      // valid for replication manager.
+      replicationMetrics.trackReplicationDisabledPartitions(replicaThreadPoolByDc);
+
+      // start all replica threads
+      for (List<ReplicaThread> replicaThreads : replicaThreadPoolByDc.values()) {
+        for (ReplicaThread thread : replicaThreads) {
+          Thread replicaThread = Utils.newThread(thread.getName(), thread, false);
+          logger.info("Starting replica thread " + thread.getName());
+          replicaThread.start();
+        }
+      }
+
+      // start background persistent thread
+      // start scheduler thread to persist replica token in the background
+      if (persistor != null) {
+        this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
+            replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
+      }
+    } catch (IOException e) {
+      logger.error("IO error while starting replication", e);
+    }
   }
 }

@@ -113,7 +113,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
    * @param mountPath The mouth path of the partition(s).
    * @return A list of {@link ReplicaTokenInfo}.
    */
-  protected abstract List<ReplicaTokenInfo> retrieve(String mountPath) throws IOException, ReplicationException;
+  public abstract List<ReplicaTokenInfo> retrieve(String mountPath) throws ReplicationException;
 
   @Override
   public void run() {

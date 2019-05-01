@@ -48,12 +48,13 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   private final DataNodeId currentDataNode;
   private final String vcrClusterName;
   private final String vcrInstanceName;
-  private final HelixManager manager;
-  private final HelixAdmin helixAdmin;
   private final Map<String, PartitionId> partitionIdMap;
   private final Set<PartitionId> assignedPartitionIds = ConcurrentHashMap.newKeySet();
   private final HelixVcrClusterMetrics metrics;
   private final List<VirtualReplicatorClusterListener> listeners = new ArrayList<>();
+  private final CloudConfig cloudConfig;
+  private HelixManager manager;
+  private HelixAdmin helixAdmin;
 
   /**
    * Construct the helix VCR cluster.
@@ -61,30 +62,21 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
    * @param clusterMapConfig The clusterMap configuration to use.
    * @param clusterMap The clusterMap to use.
    */
-  public HelixVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap)
-      throws Exception {
+  public HelixVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
     if (Utils.isNullOrEmpty(cloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING);
     } else if (Utils.isNullOrEmpty(cloudConfig.VCR_CLUSTER_NAME)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_CLUSTER_NAME);
     }
-
+    this.cloudConfig = cloudConfig;
     currentDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
     List<? extends PartitionId> allPartitions = clusterMap.getAllPartitionIds(null);
-    logger.trace("All partitions from clusterMap: {}.", allPartitions);
+    logger.info("All partitions from clusterMap: {}.", allPartitions);
     partitionIdMap = allPartitions.stream().collect(Collectors.toMap(PartitionId::toPathString, Function.identity()));
     vcrClusterName = cloudConfig.vcrClusterName;
     vcrInstanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
-
-    manager = HelixManagerFactory.getZKHelixManager(vcrClusterName, vcrInstanceName, InstanceType.PARTICIPANT,
-        cloudConfig.vcrClusterZkConnectString);
-    manager.getStateMachineEngine()
-        .registerStateModelFactory(LeaderStandbySMD.name, new HelixVcrStateModelFactory(this));
-    manager.connect();
-    helixAdmin = manager.getClusterManagmentTool();
     metrics = new HelixVcrClusterMetrics(clusterMap.getMetricRegistry());
-    logger.info("HelixVcrCluster started successfully.");
   }
 
   /**
@@ -140,6 +132,17 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   @Override
   public DataNodeId getCurrentDataNodeId() {
     return currentDataNode;
+  }
+
+  @Override
+  public void participate(InstanceType role) throws Exception {
+    manager = HelixManagerFactory.getZKHelixManager(vcrClusterName, vcrInstanceName, InstanceType.PARTICIPANT,
+        cloudConfig.vcrClusterZkConnectString);
+    manager.getStateMachineEngine()
+        .registerStateModelFactory(LeaderStandbySMD.name, new HelixVcrStateModelFactory(this));
+    manager.connect();
+    helixAdmin = manager.getClusterManagmentTool();
+    logger.info("Participate HelixVcrCluster as {} successfully.", role);
   }
 
   @Override

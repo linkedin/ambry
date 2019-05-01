@@ -104,6 +104,7 @@ public class VcrServerTest {
     props.setProperty("clustermap.resolve.hostnames", "false");
     props.setProperty("server.scheduler.num.of.threads", "1");
     props.setProperty("num.io.threads", "1");
+    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(16));
     props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, HelixVcrClusterFactory.class.getName());
     props.setProperty(CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING, zkConnectString);
     props.setProperty(CloudConfig.VCR_CLUSTER_NAME, vcrClusterName);

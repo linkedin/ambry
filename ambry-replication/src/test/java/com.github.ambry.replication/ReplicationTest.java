@@ -102,6 +102,57 @@ public class ReplicationTest {
   }
 
   /**
+   * Tests add/remove replicaInfo to {@link ReplicaThread}
+   * @throws Exception
+   */
+  @Test
+  public void remoteReplicaInfoAddRemoveTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    MockStoreKeyConverterFactory mockStoreKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    mockStoreKeyConverterFactory.setReturnInputIfAbsent(true);
+    mockStoreKeyConverterFactory.setConversionMap(new HashMap<>());
+    StoreKeyConverter storeKeyConverter = mockStoreKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
+
+    ReplicationMetrics replicationMetrics =
+        new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
+    replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
+    List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, null);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    hosts.put(remoteHost.dataNodeId, remoteHost);
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 4);
+    ReplicaThread replicaThread =
+        new ReplicaThread("threadtest", new MockFindToken.MockFindTokenFactory(), clusterMap, new AtomicInteger(0),
+            localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
+            mockStoreKeyConverterFactory.getStoreKeyConverter(), transformer, clusterMap.getMetricRegistry(), false,
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
+    for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
+      replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
+    }
+    List<RemoteReplicaInfo> actualRemoteReplicaInfoList = replicaThread.getRemoteReplicaInfos(remoteHost.dataNodeId);
+    Collections.sort(remoteReplicaInfoList);
+    Collections.sort(actualRemoteReplicaInfoList);
+    assertEquals("getRemoteReplicaInfos not correct", remoteReplicaInfoList, actualRemoteReplicaInfoList);
+
+    // Still in the list because of lazy remove
+    replicaThread.removeRemoteReplicaInfo(remoteReplicaInfoList.get(remoteReplicaInfoList.size() - 1));
+    actualRemoteReplicaInfoList = replicaThread.getRemoteReplicaInfos(remoteHost.dataNodeId);
+    Collections.sort(actualRemoteReplicaInfoList);
+    assertEquals("getRemoteReplicaInfos not correct", remoteReplicaInfoList, actualRemoteReplicaInfoList);
+
+    // Call replicate() to do actual remove
+    replicaThread.replicate();
+    actualRemoteReplicaInfoList = replicaThread.getRemoteReplicaInfos(remoteHost.dataNodeId);
+    Collections.sort(actualRemoteReplicaInfoList);
+    remoteReplicaInfoList.remove(remoteReplicaInfoList.size() - 1);
+    assertEquals("getRemoteReplicaInfos not correct", remoteReplicaInfoList, actualRemoteReplicaInfoList);
+  }
+
+  /**
    * Tests pausing all partitions and makes sure that the replica thread pauses. Also tests that it resumes when one
    * eligible partition is reenabled and that replication completes successfully.
    * @throws Exception
@@ -228,7 +279,7 @@ public class ReplicationTest {
     assertEquals("There should be no disabled partitions", expectedPaused,
         replicaThread.getReplicationDisabledPartitions());
     while (true) {
-      replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+      replicaThread.replicate();
       boolean replicationDone = true;
       for (RemoteReplicaInfo replicaInfo : replicasToReplicate.get(remoteHost.dataNodeId)) {
         PartitionId id = replicaInfo.getReplicaId().getPartitionId();
@@ -1046,7 +1097,37 @@ public class ReplicationTest {
     // 1 expired + 1 corrupt + 1 put (never present) + 1 deleted (never present) expected missing buffers
     verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
         idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex + 1, 4);
+  }
 
+  @Test
+  public void replicaThreadSleepTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    long expectedThrottleDurationMs =
+        localHost.dataNodeId.getDatacenterName().equals(remoteHost.dataNodeId.getDatacenterName())
+            ? config.replicationIntraReplicaThreadThrottleSleepDurationMs
+            : config.replicationInterReplicaThreadThrottleSleepDurationMs;
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+    int batchSize = 4;
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null);
+    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    // populate data, add 1 messages to both hosts.
+    for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
+      addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(localHost, remoteHost), 1);
+    }
     // tests to verify replica thread throttling and idling functions in the following steps:
     // 1. all replicas are in sync, thread level sleep and replica quarantine are both enabled.
     // 2. add put messages to some replica and verify that replication for replicas remain disabled.
@@ -1056,10 +1137,10 @@ public class ReplicationTest {
     // 1. verify that the replica thread sleeps and replicas are temporarily disable when all replicas are synced.
     List<List<RemoteReplicaInfo>> replicasToReplicateList = new ArrayList<>(replicasToReplicate.values());
     // replicate is called and time is moved forward to prepare the replicas for testing.
-    replicaThread.replicate(replicasToReplicateList);
+    replicaThread.replicate();
     time.sleep(config.replicationSyncedReplicaBackoffDurationMs + 1);
     long currentTimeMs = time.milliseconds();
-    replicaThread.replicate(replicasToReplicateList);
+    replicaThread.replicate();
     for (List<RemoteReplicaInfo> replicaInfos : replicasToReplicateList) {
       for (RemoteReplicaInfo replicaInfo : replicaInfos) {
         assertEquals("Unexpected re-enable replication time",
@@ -1067,7 +1148,7 @@ public class ReplicationTest {
       }
     }
     currentTimeMs = time.milliseconds();
-    replicaThread.replicate(replicasToReplicateList);
+    replicaThread.replicate();
     assertEquals("Replicas are in sync, replica thread should sleep by replication.thread.idle.sleep.duration.ms",
         currentTimeMs + config.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
 
@@ -1083,21 +1164,21 @@ public class ReplicationTest {
           .isEqual(partitionId.toString()) ? 3 : 0;
     }
     currentTimeMs = time.milliseconds();
-    replicaThread.replicate(replicasToReplicateList);
+    replicaThread.replicate();
     assertEquals("Replication for all replicas should be disabled and the thread should sleep",
         currentTimeMs + config.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
 
     // 3. forward the time and run replicate and verify the replication.
     time.sleep(config.replicationSyncedReplicaBackoffDurationMs);
-    replicaThread.replicate(replicasToReplicateList);
+    replicaThread.replicate();
     missingKeys = new int[replicasToReplicate.get(remoteHost.dataNodeId).size()];
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
 
     // 4. add more put messages and verify that replication continues and is throttled appropriately.
     addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(localHost, remoteHost), 3);
     currentTimeMs = time.milliseconds();
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    replicaThread.replicate();
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
     assertEquals("Replica thread should sleep exactly " + expectedThrottleDurationMs + " since remote has new token",
         currentTimeMs + expectedThrottleDurationMs, time.milliseconds());
@@ -1110,10 +1191,9 @@ public class ReplicationTest {
     replicasAndThread =
         getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
             null);
-    replicasToReplicateList = new ArrayList<>(replicasAndThread.getFirst().values());
     replicaThread = replicasAndThread.getSecond();
     currentTimeMs = time.milliseconds();
-    replicaThread.replicate(replicasToReplicateList);
+    replicaThread.replicate();
     assertEquals("Replica thread should not sleep when throttling is disabled and replicas are out of sync",
         currentTimeMs, time.milliseconds());
   }
@@ -1193,16 +1273,21 @@ public class ReplicationTest {
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
+    List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, listener);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate =
-        Collections.singletonMap(remoteHost.dataNodeId, localHost.getRemoteReplicaInfos(remoteHost, listener));
+
+        Collections.singletonMap(remoteHost.dataNodeId, remoteReplicaInfoList);
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", replicasToReplicate, new MockFindToken.MockFindTokenFactory(), clusterMap,
-            new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
+        new ReplicaThread("threadtest", new MockFindToken.MockFindTokenFactory(), clusterMap, new AtomicInteger(0),
+            localHost.dataNodeId, connectionPool, config, replicationMetrics, null, storeKeyConverter, transformer,
+            clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
+            new ResponseHandler(clusterMap), time);
+    for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
+      replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
+    }
     return new Pair<>(replicasToReplicate, replicaThread);
   }
 

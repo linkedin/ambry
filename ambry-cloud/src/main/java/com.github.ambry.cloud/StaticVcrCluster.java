@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.apache.helix.InstanceType;
 
 
 /**
@@ -75,6 +76,10 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
   @Override
   public DataNodeId getCurrentDataNodeId() {
     return currentDataNode;
+  }
+
+  @Override
+  public void participate(InstanceType role) throws Exception {
   }
 
   @Override

@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Pair;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashMap;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import org.apache.commons.io.IOUtils;
 
 
 /**
@@ -34,6 +36,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final Map<BlobId, Pair<CloudBlobMetadata, InputStream>> map = new HashMap<>();
   private final CountDownLatch latch;
   private final Set<BlobId> blobIds;
+  private final Map<String, byte[]> tokenMap = new HashMap<>();
 
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
@@ -86,12 +89,27 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream) {
+  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream)
+      throws CloudStorageException {
+    try {
+      tokenMap.put(partitionPath + tokenFileName, IOUtils.toByteArray(inputStream));
+    } catch (IOException e) {
+      throw new CloudStorageException("read input stream error", e);
+    }
   }
 
   @Override
-  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream) {
-    return false;
+  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream)
+      throws CloudStorageException {
+    if (tokenMap.get(partitionPath + tokenFileName) == null) {
+      return false;
+    }
+    try {
+      outputStream.write(tokenMap.get(partitionPath + tokenFileName));
+      return true;
+    } catch (IOException e) {
+      throw new CloudStorageException("write to stream error", e);
+    }
   }
 
   public boolean await(long duration, TimeUnit timeUnit) throws InterruptedException {
