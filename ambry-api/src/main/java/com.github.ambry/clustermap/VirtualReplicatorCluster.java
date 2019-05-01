@@ -39,4 +39,10 @@ public interface VirtualReplicatorCluster extends AutoCloseable {
    * @return list of PartitionId
    */
   List<? extends PartitionId> getAssignedPartitionIds();
+
+  /**
+   * Add {@link VirtualReplicatorClusterListener} to listen for cluster change.
+   * @param listener to add.
+   */
+  void addListener(VirtualReplicatorClusterListener listener);
 }

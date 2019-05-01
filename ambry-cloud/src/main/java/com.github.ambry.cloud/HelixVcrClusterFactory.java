@@ -21,26 +21,32 @@ import com.github.ambry.config.ClusterMapConfig;
 
 
 /**
- * {@link StaticVcrClusterFactory} to generate VCR Cluster for static partition assignment.
+ * {@link HelixVcrClusterFactory} to generate {@link HelixVcrCluster} for dynamic partition assignment.
  */
-public class StaticVcrClusterFactory implements VirtualReplicatorClusterFactory {
+public class HelixVcrClusterFactory implements VirtualReplicatorClusterFactory {
 
   private final CloudConfig cloudConfig;
   private final ClusterMapConfig clusterMapConfig;
   private final ClusterMap clusterMap;
   private VirtualReplicatorCluster virtualReplicatorCluster;
 
-  public StaticVcrClusterFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
+  public HelixVcrClusterFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
     this.cloudConfig = cloudConfig;
     this.clusterMapConfig = clusterMapConfig;
     this.clusterMap = clusterMap;
   }
 
   @Override
-  synchronized public VirtualReplicatorCluster getVirtualReplicatorCluster() {
+  synchronized public VirtualReplicatorCluster getVirtualReplicatorCluster() throws Exception {
     if (virtualReplicatorCluster == null) {
-      virtualReplicatorCluster = new StaticVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
+      virtualReplicatorCluster = new HelixVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
     }
     return virtualReplicatorCluster;
+  }
+
+  public void close() throws Exception {
+    if (virtualReplicatorCluster != null) {
+      virtualReplicatorCluster.close();
+    }
   }
 }

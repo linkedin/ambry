@@ -44,7 +44,7 @@ public class StaticVcrClusterTest {
   }
 
   @Test
-  public void staticVcrClusterFactoryTest() {
+  public void staticVcrClusterFactoryTest() throws Exception {
     Properties props = new Properties();
     String hostName = "localhostTest";
     int port = 12345;

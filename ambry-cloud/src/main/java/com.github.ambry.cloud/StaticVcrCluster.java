@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
+import com.github.ambry.clustermap.VirtualReplicatorClusterListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
@@ -79,6 +80,10 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
   @Override
   public List<? extends PartitionId> getAssignedPartitionIds() {
     return assignedPartitionIds;
+  }
+
+  @Override
+  public void addListener(VirtualReplicatorClusterListener listener) {
   }
 
   @Override
