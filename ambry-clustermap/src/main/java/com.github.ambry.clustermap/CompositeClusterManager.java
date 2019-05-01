@@ -45,7 +45,8 @@ class CompositeClusterManager implements ClusterMap {
    * @param helixClusterManager the {@link HelixClusterManager} instance to use for comparison of views.
    */
   CompositeClusterManager(StaticClusterManager staticClusterManager, HelixClusterManager helixClusterManager) {
-    if (staticClusterManager.getLocalDatacenterId() != helixClusterManager.getLocalDatacenterId()) {
+    if (helixClusterManager != null
+        && staticClusterManager.getLocalDatacenterId() != helixClusterManager.getLocalDatacenterId()) {
       throw new IllegalStateException(
           "Datacenter ID in the static cluster map [" + staticClusterManager.getLocalDatacenterId()
               + "] does not match the one in helix [" + helixClusterManager.getLocalDatacenterId() + "]");
