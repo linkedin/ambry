@@ -1,0 +1,16 @@
+Version: 2
+PartitionId: 666
+Hostname: omaha-23
+Port: 12345
+Replica path: /var/ambry/666/5h67xc07
+totalBytesRead: 45900320
+tokenType: JOURNAL
+offset: 889402
+PartitionId: 666
+Hostname: omaha-27
+Port: 12345
+Replica path: /var/ambry/666/f7334bd90
+totalBytesRead: 49428479
+tokenType: JOURNAL
+offset: 85300
+crc: 59226038

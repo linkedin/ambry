@@ -74,17 +74,19 @@ public interface CloudDestination {
   /**
    * Upload and persist the replica tokens for the specified Ambry partition in cloud storage.
    * @param partitionPath the string form of the partitionId
+   * @param tokenFileName the name of the token file to store in the cloud.
    * @param inputStream the InputStream containing the replica tokens.
    * @throws CloudStorageException if the upload encounters an error.
    */
-  public void persistTokens(String partitionPath, InputStream inputStream) throws CloudStorageException;
+  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream) throws CloudStorageException;
 
   /**
    * Retrieve the persisted replica tokens, if any, for the specified Ambry partition.
    * @param partitionPath the string form of the partitionId
+   * @param tokenFileName the name of the token file stored in the cloud.
    * @param outputStream the OutputStream to which the replica tokens are written.
    * @throws CloudStorageException if the upload encounters an error.
    * @return {@code true} if tokens were found, otherwise {@code false}.
    */
-  public boolean retrieveTokens(String partitionPath, OutputStream outputStream) throws CloudStorageException;
+  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream) throws CloudStorageException;
 }

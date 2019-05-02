@@ -65,7 +65,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
       tokenOutputStream.flush();
 
       InputStream inputStream = new ByteArrayInputStream(tokenOutputStream.toByteArray());
-      cloudDestination.persistTokens(mountPath, inputStream);
+      cloudDestination.persistTokens(mountPath, replicaTokenFileName, inputStream);
       logger.debug("Completed writing replica tokens to cloud destination.");
     } catch (CloudStorageException e) {
       throw new ReplicationException("IO error persisting replica tokens at mount path " + mountPath, e);
@@ -76,7 +76,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
   public List<ReplicaTokenInfo> retrieveTokens(String mountPath) throws IOException, ReplicationException {
     try {
       ByteArrayOutputStream tokenOutputStream = new ByteArrayOutputStream(4096);
-      boolean tokenExists = cloudDestination.retrieveTokens(mountPath, tokenOutputStream);
+      boolean tokenExists = cloudDestination.retrieveTokens(mountPath, replicaTokenFileName, tokenOutputStream);
       if (tokenExists) {
         InputStream inputStream = new ByteArrayInputStream(tokenOutputStream.toByteArray());
         return replicaTokenSerde.deserializeTokens(inputStream);

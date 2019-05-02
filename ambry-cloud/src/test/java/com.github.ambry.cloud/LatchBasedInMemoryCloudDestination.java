@@ -81,11 +81,11 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void persistTokens(String partitionPath, InputStream inputStream) {
+  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream) {
   }
 
   @Override
-  public boolean retrieveTokens(String partitionPath, OutputStream outputStream) {
+  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream) {
     return false;
   }
 

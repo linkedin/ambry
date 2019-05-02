@@ -348,13 +348,13 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void persistTokens(String partitionPath, InputStream inputStream) throws CloudStorageException {
+  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream) throws CloudStorageException {
     // Path is partitionId path string
     // Write to container partitionPath, blob filename "replicaTokens"
     try {
       String containerName = getAzureContainerName(partitionPath);
       CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
-      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference("replicaTokens");
+      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(tokenFileName);
       azureBlob.upload(inputStream, -1, null, null, blobOpContext);
     } catch (IOException | URISyntaxException | StorageException e) {
       throw new CloudStorageException("Could not persist token: " + partitionPath, e);
@@ -362,11 +362,11 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean retrieveTokens(String partitionPath, OutputStream outputStream) throws CloudStorageException {
+  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream) throws CloudStorageException {
     try {
       String containerName = getAzureContainerName(partitionPath);
       CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
-      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference("replicaTokens");
+      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(tokenFileName);
       if (!azureBlob.exists()) {
         return false;
       }

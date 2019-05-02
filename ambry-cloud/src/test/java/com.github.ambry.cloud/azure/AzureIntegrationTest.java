@@ -30,9 +30,11 @@ import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.PartitionKey;
 import com.microsoft.azure.documentdb.RequestOptions;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -66,10 +68,11 @@ public class AzureIntegrationTest {
   private short accountId = 101;
   private short containerId = 5;
   private String cosmosCollectionLink;
+  private String propFileName = "azure-test.properties";
+  private String tokenFileName = "replicaTokens";
 
   @Before
   public void setup() throws Exception {
-    String propFileName = "azure-test.properties";
     Properties props = new Properties();
     try (InputStream input = this.getClass().getClassLoader().getResourceAsStream(propFileName)) {
       if (input == null) {
@@ -166,6 +169,28 @@ public class AzureIntegrationTest {
       numDeletes++;
     }
     logger.info("Deleted {} metadata documents in partition {}", numDeletes, partitionId.toPathString());
+  }
+
+  /** Persist tokens to Azure, then read them back and verify they match. */
+  @Test
+  public void testTokens() throws Exception {
+    String partitionPath = "666";
+    InputStream input = this.getClass().getClassLoader().getResourceAsStream(tokenFileName);
+    if (input == null) {
+      throw new IllegalStateException("Could not find resource: " + tokenFileName);
+    }
+    byte[] tokenBytes = new byte[2000];
+    int tokensLength = input.read(tokenBytes, 0, 2000);
+    tokenBytes = Arrays.copyOf(tokenBytes, tokensLength);
+    InputStream tokenStream = new ByteArrayInputStream(tokenBytes);
+    azureDest.persistTokens(partitionPath, tokenFileName, tokenStream);
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream(tokensLength);
+    assertTrue("Retrieve tokens returned false", azureDest.retrieveTokens(partitionPath, tokenFileName, outputStream));
+    assertTrue("Retrieved token did not match sent", Arrays.equals(outputStream.toByteArray(), tokenBytes));
+    // Try for nonexistent partition
+    outputStream.reset();
+    assertFalse("Expected retrive to return false for nonexistent path",
+        azureDest.retrieveTokens("unknown-path", tokenFileName, outputStream));
   }
 
   /**
