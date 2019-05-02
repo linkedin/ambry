@@ -53,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.apache.http.HttpHost;
 import org.slf4j.Logger;
@@ -74,7 +75,7 @@ class AzureCloudDestination implements CloudDestination {
   private final OperationContext blobOpContext = new OperationContext();
   private final AzureMetrics azureMetrics;
   // Containers known to exist in the storage account
-  private final Set<String> knownContainers = Collections.synchronizedSet(new HashSet<>());
+  private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
 
   /**
    * Construct an Azure cloud destination from config properties.

@@ -91,6 +91,7 @@ public class AzureCloudDestinationTest {
     when(mockAzureAccount.createCloudBlobClient()).thenReturn(mockAzureClient);
     when(mockAzureClient.getContainerReference(anyString())).thenReturn(mockAzureContainer);
     when(mockAzureContainer.createIfNotExists(any(), any(), any())).thenReturn(true);
+    when(mockAzureContainer.getName()).thenReturn("666");
     when(mockAzureContainer.getBlockBlobReference(anyString())).thenReturn(mockBlob);
     when(mockBlob.exists()).thenReturn(false);
     when(mockBlob.getMetadata()).thenReturn(new HashMap<>());
