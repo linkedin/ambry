@@ -14,17 +14,41 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMapUtils;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
+import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
+import com.github.ambry.replication.BlobIdTransformer;
+import com.github.ambry.replication.MockConnectionPool;
+import com.github.ambry.replication.MockFindToken;
+import com.github.ambry.replication.MockFindTokenFactory;
+import com.github.ambry.replication.MockHost;
+import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicaThread;
+import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockMessageWriteSet;
+import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.InputStream;
@@ -37,10 +61,13 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.commons.BlobId.*;
+import static com.github.ambry.replication.ReplicationTest.*;
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.any;
@@ -112,7 +139,6 @@ public class CloudBlobStoreTest {
     // Put blobs with and without expiration and encryption
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 5;
-    long expireTime = System.currentTimeMillis() + 10000;
     int expectedUploads = 0;
     int expectedEncryptions = 0;
     for (int j = 0; j < count; j++) {
@@ -126,8 +152,6 @@ public class CloudBlobStoreTest {
       if (requireEncryption) {
         expectedEncryptions++;
       }
-      // Short TTL and encrypted, should not be uploaded nor encrypted
-      addBlobToSet(messageWriteSet, size, expireTime, refAccountId, refContainerId, true);
     }
     store.put(messageWriteSet);
     verify(dest, times(expectedUploads)).uploadBlob(any(BlobId.class), anyLong(), any(CloudBlobMetadata.class),
@@ -256,6 +280,156 @@ public class CloudBlobStoreTest {
   }
 
   /**
+   * Test PUT(with TTL) and TtlUpdate record replication.
+   * Replication may happen after PUT and after TtlUpdate, or after TtlUpdate only.
+   * PUT may already expired, expiration time < upload threshold or expiration time >= upload threshold.
+   * @throws Exception
+   */
+  @Test
+  public void testPutWithTtl() throws Exception {
+    // Set up remote host
+    MockClusterMap clusterMap = new MockClusterMap();
+    MockHost remoteHost = getLocalAndRemoteHosts(clusterMap).getSecond();
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    PartitionId partitionId = partitionIds.get(0);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    hosts.put(remoteHost.dataNodeId, remoteHost);
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 4);
+
+    // Generate BlobId for coming PUT.
+    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
+    List<BlobId> blobIdList = new ArrayList<>();
+    for (int i = 0; i < 6; i++) {
+      blobIdList.add(
+          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
+              containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK));
+    }
+
+    // Set up VCR
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.resolve.hostnames", "false");
+    props.setProperty("clustermap.cluster.name", "clusterName");
+    props.setProperty("clustermap.datacenter.name", "DC1");
+    props.setProperty("clustermap.ssl.enabled.datacenters", "DC0,DC1");
+    props.setProperty("clustermap.port", "12300");
+    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(64));
+    props.setProperty("vcr.ssl.port", "12345");
+
+    ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(props));
+    CloudDataNode cloudDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
+
+    LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
+        new LatchBasedInMemoryCloudDestination(blobIdList);
+    CloudReplica cloudReplica = new CloudReplica(cloudConfig, partitionId, cloudDataNode);
+    CloudBlobStore cloudBlobStore =
+        new CloudBlobStore(new VerifiableProperties(props), partitionId, latchBasedInMemoryCloudDestination,
+            new VcrMetrics(new MetricRegistry()));
+    cloudBlobStore.start();
+
+    // Prepare RemoteReplicaInfo for ReplicaThread.
+    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = null;
+    for (ReplicaId replica : partitionId.getReplicaIds()) {
+      if (replica.getDataNodeId() == remoteHost.dataNodeId) {
+        RemoteReplicaInfo remoteReplicaInfo =
+            new RemoteReplicaInfo(replica, cloudReplica, cloudBlobStore, new MockFindToken(0, 0), Long.MAX_VALUE,
+                SystemTime.getInstance(), new Port(remoteHost.dataNodeId.getPort(), PortType.PLAINTEXT));
+        replicasToReplicate =
+            Collections.singletonMap(remoteHost.dataNodeId, Collections.singletonList(remoteReplicaInfo));
+        break;
+      }
+    }
+    ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), Collections.emptyList());
+    replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
+
+    ReplicaThread replicaThread =
+        new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
+            new AtomicInteger(0), cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null,
+            storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(),
+            new ResponseHandler(clusterMap), new MockTime());
+
+    long referenceTime = System.currentTimeMillis();
+    // Case 1: Put already expired. Replication happens after Put and after TtlUpdate.
+    // Upload to Cloud only after replicating ttlUpdate.
+    BlobId id = blobIdList.get(0);
+    addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
+        referenceTime - 2000, referenceTime - 1000);
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertFalse("Blob should not exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+
+    // Case 2: Put already expired. Replication happens after TtlUpdate.
+    // Upload to Cloud only after replicating ttlUpdate.
+    id = blobIdList.get(1);
+    addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
+        referenceTime - 2000, referenceTime - 1000);
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+
+    // Case 3: Put TTL less than cloudConfig.vcrMinTtlDays. Replication happens after Put and after TtlUpdate.
+    // Upload to Cloud only after replicating ttlUpdate.
+    id = blobIdList.get(2);
+    addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
+        referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays) - 1);
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertFalse("Blob should not exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+
+    // Case 4: Put TTL less than cloudConfig.vcrMinTtlDays. Replication happens after TtlUpdate.
+    // Upload to Cloud only after replicating ttlUpdate.
+    id = blobIdList.get(3);
+    addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
+        referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays) - 1);
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+
+    // Case 5: Put TTL greater than or equals to cloudConfig.vcrMinTtlDays. Replication happens after Put and after TtlUpdate.
+    // Upload to Cloud after Put and update ttl after TtlUpdate.
+    id = blobIdList.get(4);
+    addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
+        referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays));
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertTrue(latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+
+    // Case 6: Put TTL greater than or equals to cloudConfig.vcrMinTtlDays. Replication happens after TtlUpdate.
+    // Upload to Cloud after TtlUpdate.
+    id = blobIdList.get(5);
+    addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
+        referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays));
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+
+    // Verify expiration time of all blobs.
+    Map<String, CloudBlobMetadata> map = latchBasedInMemoryCloudDestination.getBlobMetadata(blobIdList);
+    for (BlobId blobId : blobIdList) {
+      assertEquals("Blob ttl should be infinite now.", Utils.Infinite_Time,
+          map.get(blobId.toString()).getExpirationTime());
+    }
+  }
+
+  /**
    * Utility method to generate a BlobId and byte buffer for a blob with specified properties and add them to the specified MessageWriteSet.
    * @param messageWriteSet the {@link MockMessageWriteSet} in which to store the data.
    * @param size the size of the byte buffer.
@@ -270,7 +444,7 @@ public class CloudBlobStoreTest {
       short containerId, boolean encrypted) {
     BlobId id = getUniqueId(accountId, containerId, encrypted);
     long crc = random.nextLong();
-    MessageInfo info = new MessageInfo(id, size, false, false, expiresAtMs, crc, accountId, containerId, operationTime);
+    MessageInfo info = new MessageInfo(id, size, false, true, expiresAtMs, crc, accountId, containerId, operationTime);
     ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
     messageWriteSet.add(info, buffer);
     return id;
