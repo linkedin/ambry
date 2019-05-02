@@ -48,7 +48,6 @@ import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -242,7 +241,7 @@ class AzureCloudDestination implements CloudDestination {
       if (sex.getHttpStatusCode() == HttpURLConnection.HTTP_CONFLICT) {
         // The blob already exists
         logger.debug("Skipped upload of existing blob {}.", blobId);
-        azureMetrics.blobUploadSkippedCount.inc();
+        azureMetrics.blobUploadConflictCount.inc();
         return false;
       } else {
         throw sex;

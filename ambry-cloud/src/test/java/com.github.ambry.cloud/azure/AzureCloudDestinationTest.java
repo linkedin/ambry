@@ -39,7 +39,6 @@ import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.Collections;
 import java.util.HashMap;
@@ -128,7 +127,7 @@ public class AzureCloudDestinationTest {
     assertTrue("Expected success", uploadDefaultBlob());
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
     assertEquals(1, azureMetrics.blobUploadSuccessCount.getCount());
-    assertEquals(0, azureMetrics.blobUploadSkippedCount.getCount());
+    assertEquals(0, azureMetrics.blobUploadConflictCount.getCount());
     assertEquals(0, azureMetrics.blobUploadErrorCount.getCount());
     assertEquals(1, azureMetrics.blobUploadTime.getCount());
     assertEquals(1, azureMetrics.documentCreateTime.getCount());
@@ -165,7 +164,7 @@ public class AzureCloudDestinationTest {
     assertFalse("Upload of existing blob should return false", uploadDefaultBlob());
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
     assertEquals(0, azureMetrics.blobUploadSuccessCount.getCount());
-    assertEquals(1, azureMetrics.blobUploadSkippedCount.getCount());
+    assertEquals(1, azureMetrics.blobUploadConflictCount.getCount());
     assertEquals(0, azureMetrics.blobUploadErrorCount.getCount());
   }
 
@@ -334,7 +333,7 @@ public class AzureCloudDestinationTest {
   private void verifyUploadErrorMetrics(boolean isDocument) {
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
     assertEquals(0, azureMetrics.blobUploadSuccessCount.getCount());
-    assertEquals(0, azureMetrics.blobUploadSkippedCount.getCount());
+    assertEquals(0, azureMetrics.blobUploadConflictCount.getCount());
     assertEquals(1, azureMetrics.blobUploadErrorCount.getCount());
     assertEquals(isDocument ? 0 : 1, azureMetrics.storageErrorCount.getCount());
     assertEquals(isDocument ? 1 : 0, azureMetrics.documentErrorCount.getCount());
