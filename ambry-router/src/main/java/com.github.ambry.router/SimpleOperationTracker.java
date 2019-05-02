@@ -73,38 +73,43 @@ class SimpleOperationTracker implements OperationTracker {
 
   /**
    * Constructor for an {@code SimpleOperationTracker}.
-   *
    * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
-   * @param operationClass The operation class in which operation tracker is used.
+   * @param routerOperation The {@link RouterOperation} which {@link SimpleOperationTracker} is associated with.
    * @param partitionId The partition on which the operation is performed.
    * @param originatingDcName The original DC where blob was put.
    * @param shuffleReplicas Indicates if the replicas need to be shuffled.
    */
-  SimpleOperationTracker(RouterConfig routerConfig, Class operationClass, PartitionId partitionId,
+  SimpleOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
       String originatingDcName, boolean shuffleReplicas) {
     // populate tracker parameters based on operation type
     boolean crossColoEnabled = false;
     boolean includeNonOriginatingDcReplicas = true;
-    int replicasRequired = Integer.MAX_VALUE;
-    if (GetOperation.class.isAssignableFrom(operationClass)) {
-      successTarget = routerConfig.routerGetSuccessTarget;
-      parallelism = routerConfig.routerGetRequestParallelism;
-      crossColoEnabled = routerConfig.routerGetCrossDcEnabled;
-      includeNonOriginatingDcReplicas = routerConfig.routerGetIncludeNonOriginatingDcReplicas;
-      replicasRequired = routerConfig.routerGetReplicasRequired;
-    } else if (operationClass == PutOperation.class) {
-      successTarget = routerConfig.routerPutSuccessTarget;
-      parallelism = routerConfig.routerPutRequestParallelism;
-    } else if (operationClass == DeleteOperation.class) {
-      successTarget = routerConfig.routerDeleteSuccessTarget;
-      parallelism = routerConfig.routerDeleteRequestParallelism;
-      crossColoEnabled = true;
-    } else if (operationClass == TtlUpdateOperation.class) {
-      successTarget = routerConfig.routerTtlUpdateSuccessTarget;
-      parallelism = routerConfig.routerTtlUpdateRequestParallelism;
-      crossColoEnabled = true;
-    } else {
-      throw new IllegalArgumentException("Unrecognized operation: " + operationClass.getSimpleName());
+    int numOfReplicasRequired = Integer.MAX_VALUE;
+    switch (routerOperation) {
+      case GetBlobOperation:
+      case GetBlobInfoOperation:
+        successTarget = routerConfig.routerGetSuccessTarget;
+        parallelism = routerConfig.routerGetRequestParallelism;
+        crossColoEnabled = routerConfig.routerGetCrossDcEnabled;
+        includeNonOriginatingDcReplicas = routerConfig.routerGetIncludeNonOriginatingDcReplicas;
+        numOfReplicasRequired = routerConfig.routerGetReplicasRequired;
+        break;
+      case PutOperation:
+        successTarget = routerConfig.routerPutSuccessTarget;
+        parallelism = routerConfig.routerPutRequestParallelism;
+        break;
+      case DeleteOperation:
+        successTarget = routerConfig.routerDeleteSuccessTarget;
+        parallelism = routerConfig.routerDeleteRequestParallelism;
+        crossColoEnabled = true;
+        break;
+      case TtlUpdateOperation:
+        successTarget = routerConfig.routerTtlUpdateSuccessTarget;
+        parallelism = routerConfig.routerTtlUpdateRequestParallelism;
+        crossColoEnabled = true;
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported operation: " + routerOperation);
     }
     if (parallelism < 1) {
       throw new IllegalArgumentException("Parallelism has to be > 0. Configured to be " + parallelism);
@@ -152,10 +157,10 @@ class SimpleOperationTracker implements OperationTracker {
       // Please note replicasRequired is 6 because total number of local and originating replicas is always <= 6.
       // This may no longer be true with partition classes and flexible replication.
       // Don't do this if originatingDcName is unknown.
-      while (replicaPool.size() < replicasRequired && backupReplicas.size() > 0) {
+      while (replicaPool.size() < numOfReplicasRequired && backupReplicas.size() > 0) {
         replicaPool.add(backupReplicas.pollFirst());
       }
-      while (replicaPool.size() < replicasRequired && downReplicas.size() > 0) {
+      while (replicaPool.size() < numOfReplicasRequired && downReplicas.size() > 0) {
         replicaPool.add(downReplicas.pollFirst());
       }
     }
@@ -228,7 +233,7 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   /**
-   * Helper function to catch a potential race condition in {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, Class, PartitionId, String, boolean)}.
+   * Helper function to catch a potential race condition in {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, RouterOperation, PartitionId, String, boolean)}.
    *
    * @param partitionId The partition on which the operation is performed.
    * @param examinedReplicas All replicas examined.

@@ -55,7 +55,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
 
   /**
    * Constructs an {@link AdaptiveOperationTracker}
-   * @param operationClass The operation class in which operation tracker is used.
+   * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
+   * @param routerOperation The {@link RouterOperation} which {@link AdaptiveOperationTracker} is associated with.
    * @param partitionId The partition on which the operation is performed.
    * @param originatingDcName name of the cross colo DC whose replicas should be tried first.
    * @param localColoTracker the {@link Histogram} that tracks intra datacenter latencies for this class of requests.
@@ -63,16 +64,27 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * @param pastDueCounter the {@link Counter} that tracks the number of times a request is past due.
    * @param time the {@link Time} instance to use.
    */
-  AdaptiveOperationTracker(RouterConfig routerConfig, Class operationClass, PartitionId partitionId,
+  AdaptiveOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
       String originatingDcName, Histogram localColoTracker, Histogram crossColoTracker, Counter pastDueCounter,
       NonBlockingRouterMetrics routerMetrics, Time time) {
-    super(routerConfig, operationClass, partitionId, originatingDcName, true);
+    super(routerConfig, routerOperation, partitionId, originatingDcName, true);
     this.time = time;
     this.localColoTracker = localColoTracker;
     this.crossColoTracker = crossColoTracker;
     this.pastDueCounter = pastDueCounter;
     this.quantile = routerConfig.routerLatencyToleranceQuantile;
     this.otIterator = new OpTrackerIterator();
+    Class operationClass = null;
+    switch (routerOperation) {
+      case GetBlobOperation:
+        operationClass = GetBlobOperation.class;
+        break;
+      case GetBlobInfoOperation:
+        operationClass = GetBlobInfoOperation.class;
+        break;
+      default:
+        throw new IllegalArgumentException(routerOperation + " is not supported in AdaptiveOperationTracker");
+    }
     routerMetrics.registerCustomPercentiles(operationClass, "LocalColoLatencyMs", localColoTracker,
         routerConfig.routerOperationTrackerCustomPercentiles);
     if (crossColoTracker != null) {

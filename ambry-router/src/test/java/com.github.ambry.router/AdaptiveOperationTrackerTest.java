@@ -308,8 +308,8 @@ public class AdaptiveOperationTrackerTest {
       props.setProperty("router.operation.tracker.custom.percentiles", customPercentiles);
     }
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
-    return new AdaptiveOperationTracker(routerConfig, GetOperation.class, mockPartition, null, localColoTracker,
-        crossColoEnabled ? crossColoTracker : null, pastDueCounter, routerMetrics, time);
+    return new AdaptiveOperationTracker(routerConfig, RouterOperation.GetBlobOperation, mockPartition, null,
+        localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, routerMetrics, time);
   }
 
   /**

@@ -469,7 +469,7 @@ public class OperationTrackerTest {
   }
 
   /**
-   * Test that operation tracker correctly populate parameters(i.e. successTarget) according to passed in operation class.
+   * Test that operation tracker can correctly populate parameters(i.e. successTarget) based on input {@link RouterOperation}.
    */
   @Test
   public void operationClassTest() {
@@ -482,26 +482,13 @@ public class OperationTrackerTest {
     props.setProperty("router.ttl.update.success.target", "4");
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
     initialize();
-    try {
-      switch (operationTrackerType) {
-        case SIMPLE_OP_TRACKER:
-          new SimpleOperationTracker(routerConfig, getClass(), mockPartition, originatingDcName, true);
-          break;
-        case ADAPTIVE_OP_TRACKER:
-          new AdaptiveOperationTracker(routerConfig, getClass(), mockPartition, originatingDcName, localColoTracker,
-              crossColoTracker, pastDueCounter, routerMetrics, time);
-          break;
-      }
-      fail("Instantiation should fail because of unrecognized operation class");
-    } catch (Exception e) {
-      //expected
-    }
-    Map<Class, Integer> operationAndSuccessTarget = new HashMap<>();
-    operationAndSuccessTarget.put(GetOperation.class, 1);
-    operationAndSuccessTarget.put(PutOperation.class, 2);
-    operationAndSuccessTarget.put(DeleteOperation.class, 3);
-    operationAndSuccessTarget.put(TtlUpdateOperation.class, 4);
-    for (Map.Entry<Class, Integer> entry : operationAndSuccessTarget.entrySet()) {
+    Map<RouterOperation, Integer> operationAndSuccessTarget = new HashMap<>();
+    operationAndSuccessTarget.put(RouterOperation.GetBlobOperation, 1);
+    operationAndSuccessTarget.put(RouterOperation.GetBlobInfoOperation, 1);
+    operationAndSuccessTarget.put(RouterOperation.PutOperation, 2);
+    operationAndSuccessTarget.put(RouterOperation.DeleteOperation, 3);
+    operationAndSuccessTarget.put(RouterOperation.TtlUpdateOperation, 4);
+    for (Map.Entry<RouterOperation, Integer> entry : operationAndSuccessTarget.entrySet()) {
       SimpleOperationTracker operationTracker = null;
       switch (operationTrackerType) {
         case SIMPLE_OP_TRACKER:
@@ -509,13 +496,22 @@ public class OperationTrackerTest {
               new SimpleOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName, true);
           break;
         case ADAPTIVE_OP_TRACKER:
-          operationTracker =
-              new AdaptiveOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName,
-                  localColoTracker, crossColoTracker, pastDueCounter, routerMetrics, time);
+          try {
+            operationTracker =
+                new AdaptiveOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName,
+                    localColoTracker, crossColoTracker, pastDueCounter, routerMetrics, time);
+          } catch (IllegalArgumentException e) {
+            assertTrue("Get operation shouldn't throw any exception in adaptive tracker",
+                entry.getKey() != RouterOperation.GetBlobOperation
+                    && entry.getKey() != RouterOperation.GetBlobInfoOperation);
+          }
           break;
       }
       // ensure the success target matches the number specified for each type of operaiton
-      assertEquals("The suggest target doesn't match", (long) entry.getValue(), (operationTracker).getSuccessTarget());
+      if (operationTracker != null) {
+        assertEquals("The suggest target doesn't match", (long) entry.getValue(),
+            (operationTracker).getSuccessTarget());
+      }
     }
   }
 
@@ -569,11 +565,14 @@ public class OperationTrackerTest {
     OperationTracker tracker;
     switch (operationTrackerType) {
       case SIMPLE_OP_TRACKER:
-        tracker = new SimpleOperationTracker(routerConfig, GetOperation.class, mockPartition, originatingDcName, true);
+        tracker =
+            new SimpleOperationTracker(routerConfig, RouterOperation.GetBlobOperation, mockPartition, originatingDcName,
+                true);
         break;
       case ADAPTIVE_OP_TRACKER:
-        tracker = new AdaptiveOperationTracker(routerConfig, GetOperation.class, mockPartition, originatingDcName,
-            localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, routerMetrics, time);
+        tracker = new AdaptiveOperationTracker(routerConfig, RouterOperation.GetBlobOperation, mockPartition,
+            originatingDcName, localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter,
+            routerMetrics, time);
         break;
       default:
         throw new IllegalArgumentException("Unrecognized operation tracker type - " + operationTrackerType);

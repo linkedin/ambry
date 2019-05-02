@@ -237,18 +237,20 @@ abstract class GetOperation {
   /**
    * Gets an {@link OperationTracker} based on the config and {@code partitionId}.
    * @param partitionId the {@link PartitionId} for which a tracker is required.
-   * @param operationClass The operation class in which operation tracker is used.
+   * @param routerOperation The type of router operation used by tracker.
    * @return an {@link OperationTracker} based on the config and {@code partitionId}.
    */
-  protected OperationTracker getOperationTracker(PartitionId partitionId, byte datacenterId, Class operationClass) {
+  protected OperationTracker getOperationTracker(PartitionId partitionId, byte datacenterId,
+      RouterOperation routerOperation) {
     OperationTracker operationTracker;
     String trackerType = routerConfig.routerGetOperationTrackerType;
     String originatingDcName = clusterMap.getDatacenterName(datacenterId);
     if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
-      operationTracker = new SimpleOperationTracker(routerConfig, operationClass, partitionId, originatingDcName, true);
+      operationTracker =
+          new SimpleOperationTracker(routerConfig, routerOperation, partitionId, originatingDcName, true);
     } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
       operationTracker =
-          new AdaptiveOperationTracker(routerConfig, operationClass, partitionId, originatingDcName, localColoTracker,
+          new AdaptiveOperationTracker(routerConfig, routerOperation, partitionId, originatingDcName, localColoTracker,
               crossColoTracker, pastDueCounter, routerMetrics, time);
     } else {
       throw new IllegalArgumentException("Unrecognized tracker type: " + trackerType);

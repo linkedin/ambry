@@ -90,8 +90,8 @@ class TtlUpdateOperation {
     byte blobDcId = blobId.getDatacenterId();
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
-        new SimpleOperationTracker(routerConfig, TtlUpdateOperation.class, blobId.getPartition(), originatingDcName,
-            false);
+        new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
+            originatingDcName, false);
   }
 
   /**
