@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
@@ -100,14 +101,15 @@ public class NettyServerTest {
     }
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     final NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
+    final PerformanceConfig performanceConfig = new PerformanceConfig(verifiableProperties);
 
     Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = new HashMap<>();
     channelInitializers.put(nettyConfig.nettyServerPort,
-        new NettyServerChannelInitializer(nettyConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER, REQUEST_HANDLER,
-            PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, null));
+        new NettyServerChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
+            REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, null));
     channelInitializers.put(nettyConfig.nettyServerSSLPort,
-        new NettyServerChannelInitializer(nettyConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER, REQUEST_HANDLER,
-            PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, SSL_FACTORY));
+        new NettyServerChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
+            REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, SSL_FACTORY));
     return new NettyServer(nettyConfig, NETTY_METRICS, channelInitializers);
   }
 

@@ -671,6 +671,17 @@ public class TestUtils {
       return rackAware;
     }
 
+    /**
+     * @return all existing nodes in hardware layout when this method is being invoked.
+     */
+    public List<DataNode> getAllExistingDataNodes() {
+      List<DataNode> dataNodes = new ArrayList<>();
+      for (Datacenter dcObj : hardwareLayout.getDatacenters()) {
+        dataNodes.addAll(dcObj.getDataNodes());
+      }
+      return Collections.unmodifiableList(dataNodes);
+    }
+
     public Datacenter getRandomDatacenter() {
       if (hardwareLayout.getDatacenters().size() == 0) {
         return null;

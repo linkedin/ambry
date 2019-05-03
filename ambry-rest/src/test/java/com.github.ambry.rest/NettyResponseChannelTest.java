@@ -14,12 +14,15 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.PerformanceConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandler;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
@@ -49,9 +52,12 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -59,8 +65,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -116,6 +124,45 @@ public class NettyResponseChannelTest {
       assertTrue("Did not receive end marker", channel.readOutbound() instanceof LastHttpContent);
       assertEquals("Unexpected channel state on the server", isKeepAlive, channel.isActive());
     }
+  }
+
+  /**
+   * Tests that requests can be correctly evaluated based on their performance (i.e. latency, bandwidth)
+   * @throws Exception
+   */
+  @Test
+  public void requestPerformanceEvaluationTest() throws Exception {
+    long BANDWIDTH_THRESHOLD = 500L;
+    long TIME_TO_FIRST_BYTE_THRESHOLD = 30L;
+    String content = "@@randomContent@@@";
+    MockNettyRequest.inboundBytes = content.length();
+    Properties properties = new Properties();
+    properties.put("performance.success.post.average.bandwidth.threshold", Long.toString(BANDWIDTH_THRESHOLD));
+    properties.put("performance.success.get.average.bandwidth.threshold", Long.toString(BANDWIDTH_THRESHOLD));
+    properties.put("performance.success.get.time.to.first.byte.threshold", Long.toString(TIME_TO_FIRST_BYTE_THRESHOLD));
+    properties.put(PerformanceConfig.NON_SUCCESS_REST_REQUEST_TOTAL_TIME_THRESHOLD_STR,
+        "{\"PUT\": \"35\",\"GET\": \"35\",\"POST\": \"35\",\"HEAD\": \"35\",\"DELETE\": \"35\"}");
+    properties.put(PerformanceConfig.SUCCESS_REST_REQUEST_TOTAL_TIME_THRESHOLD_STR,
+        "{\"PUT\": \"35\",\"GET\": \"35\",\"POST\": \"35\",\"HEAD\": \"35\",\"DELETE\": \"35\"}");
+    PerformanceConfig config = new PerformanceConfig(new VerifiableProperties(properties));
+    MockNettyMessageProcessor.useMockNettyRequest = true;
+    MockNettyMessageProcessor.PERFORMANCE_CONFIG = config;
+
+    // test "Satisfied" requests
+    MockNettyRequest.roundTripTime = 30L;
+    MockNettyRequest.timeToFirstByte = 25L;
+    verifySatisfactionOfRequests(content, true);
+
+    // test "Unsatisfied" requests
+    MockNettyRequest.roundTripTime = 40L;
+    MockNettyRequest.timeToFirstByte = 36L;
+    verifySatisfactionOfRequests(content, false);
+
+    // use OPTIONS request as an example, which should skip evaluation and mark as satisfied directly
+    HttpRequest httpRequest =
+        RestTestUtils.createFullRequest(HttpMethod.OPTIONS, TestingUri.ImmediateResponseComplete.toString(), null,
+            TestUtils.getRandomBytes(18));
+    sendRequestAndEvaluateResponsePerformance(httpRequest, null, HttpResponseStatus.OK, true);
   }
 
   /**
@@ -897,6 +944,83 @@ public class NettyResponseChannelTest {
       }
     }
   }
+
+  // requestPerformanceEvaluationTest() helpers.
+
+  /**
+   * Verify satisfaction of all types of requests in both success and non-success cases.
+   * @param content the http content used by POST request
+   * @param shouldBeSatisfied whether the requests should be satisfied or not
+   * @throws IOException
+   */
+  private void verifySatisfactionOfRequests(String content, boolean shouldBeSatisfied) throws IOException {
+    byte[] fullRequestBytesArr = TestUtils.getRandomBytes(18);
+    RestServiceErrorCode REST_ERROR_CODE = RestServiceErrorCode.AccessDenied;
+    HttpRequest httpRequest;
+    // headers with error code
+    HttpHeaders httpHeaders = new DefaultHttpHeaders();
+    httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, REST_ERROR_CODE);
+    httpHeaders.set(MockNettyMessageProcessor.INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME, "true");
+    for (HttpMethod httpMethod : Arrays.asList(HttpMethod.POST, HttpMethod.GET, HttpMethod.PUT, HttpMethod.DELETE,
+        HttpMethod.HEAD)) {
+      if (httpMethod == HttpMethod.POST || httpMethod == HttpMethod.GET) {
+        // success POST/GET requests
+        httpRequest = RestTestUtils.createRequest(httpMethod, "/", null);
+        sendRequestAndEvaluateResponsePerformance(httpRequest, content, HttpResponseStatus.OK, shouldBeSatisfied);
+      } else {
+        // success PUT/DELETE/HEAD requests
+        httpRequest = RestTestUtils.createFullRequest(httpMethod, TestingUri.ImmediateResponseComplete.toString(), null,
+            fullRequestBytesArr);
+        sendRequestAndEvaluateResponsePerformance(httpRequest, null, HttpResponseStatus.OK, shouldBeSatisfied);
+      }
+      // non-success PUT/DELETE/HEAD/POST/GET requests (3xx or 4xx status code)
+      httpRequest =
+          RestTestUtils.createFullRequest(httpMethod, TestingUri.OnResponseCompleteWithRestException.toString(),
+              httpHeaders, fullRequestBytesArr);
+      sendRequestAndEvaluateResponsePerformance(httpRequest, null, getExpectedHttpResponseStatus(REST_ERROR_CODE),
+          shouldBeSatisfied);
+      if (!shouldBeSatisfied) {
+        // test 5xx status code
+        httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME,
+            RestServiceErrorCode.InternalServerError);
+        httpRequest =
+            RestTestUtils.createFullRequest(httpMethod, TestingUri.OnResponseCompleteWithRestException.toString(),
+                httpHeaders, fullRequestBytesArr);
+        sendRequestAndEvaluateResponsePerformance(httpRequest, null,
+            getExpectedHttpResponseStatus(RestServiceErrorCode.InternalServerError), false);
+        httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, REST_ERROR_CODE);
+      }
+    }
+  }
+
+  /**
+   * Send the curated request and verify that the response and satisfaction are expected.
+   * @param httpRequest the request to be handled by {@link MockNettyMessageProcessor}
+   * @param requestContent the content needed for POST request
+   * @param expectedStatus the expected {@link HttpResponseStatus}
+   * @param shouldBeSatisfied whether the request should be satisfied or not
+   * @throws IOException
+   */
+  private void sendRequestAndEvaluateResponsePerformance(HttpRequest httpRequest, String requestContent,
+      HttpResponseStatus expectedStatus, boolean shouldBeSatisfied) throws IOException {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    channel.pipeline().get(MockNettyMessageProcessor.class);
+    channel.writeInbound(httpRequest);
+    if (requestContent != null) {
+      channel.writeInbound(createContent(requestContent, true));
+    }
+    HttpResponse response = channel.readOutbound();
+    assertEquals("Unexpected response status", expectedStatus, response.status());
+    if (requestContent != null) {
+      String returnedContent = RestTestUtils.getContentString(channel.readOutbound());
+      assertEquals("Content does not match with expected content", requestContent, returnedContent);
+    }
+    if (shouldBeSatisfied) {
+      assertTrue(httpRequest.method() + " request should be satisfied", MockNettyRequest.mockTracker.isSatisfied());
+    } else {
+      assertFalse(httpRequest.method() + " request should be unsatisfied", MockNettyRequest.mockTracker.isSatisfied());
+    }
+  }
 }
 
 /**
@@ -906,54 +1030,67 @@ enum TestingUri {
   /**
    * When this request is received, {@link NettyResponseChannel#close()} is called immediately.
    */
-  Close, /**
+  Close,
+  /**
    * When this request is received, headers from the request are copied into the response channel.
    */
-  CopyHeaders, /**
+  CopyHeaders,
+  /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with null {@code cause}.
    */
-  ImmediateResponseComplete, /**
+  ImmediateResponseComplete,
+  /**
    * Reduces the write buffer low and high watermarks to 1 and 2 bytes respectively in
    * {@link io.netty.channel.ChannelConfig} so that data is written to the channel byte by byte. This simulates filling
    * up of write buffer (but does not test async writing and flushing since {@link EmbeddedChannel} is blocking).
    */
-  FillWriteBuffer, /**
+  FillWriteBuffer,
+  /**
    * When this request is received, some data is initially written to the channel via
    * {@link NettyResponseChannel#write(ByteBuffer, Callback)} . An attempt to modify response headers (metadata) is made
    * after this.
    */
-  ModifyResponseMetadataAfterWrite, /**
+  ModifyResponseMetadataAfterWrite,
+  /**
    * When this request is received, {@link NettyResponseChannel#close()} is called multiple times.
    */
-  MultipleClose, /**
+  MultipleClose,
+  /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * multiple times.
    */
-  MultipleOnResponseComplete, /**
+  MultipleOnResponseComplete,
+  /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with a {@link RestServiceException} as {@code cause}. The exception message and error code is the
    * {@link RestServiceErrorCode} passed in as the value of the header
    * {@link MockNettyMessageProcessor#REST_SERVICE_ERROR_CODE_HEADER_NAME}.
    */
-  OnResponseCompleteWithRestException, /**
+  OnResponseCompleteWithRestException,
+  /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with a {@link RuntimeException} as {@code cause}. The exception message is the URI string.
    */
-  OnResponseCompleteWithNonRestException, /**
+  OnResponseCompleteWithNonRestException,
+  /**
    * When this request is received tracking headers are copied over and then behaviors of OnResponseCompleteWithRestException is applied.
    */
-  CopyHeadersAndOnResponseCompleteWithRestException, /**
+  CopyHeadersAndOnResponseCompleteWithRestException,
+  /**
    * When this request is received tracking headers are copied over and then behaviors of OnResponseCompleteWithNonRestException is applied.
    */
-  CopyHeadersAndOnResponseCompleteWithNonRestException, /**
+  CopyHeadersAndOnResponseCompleteWithNonRestException,
+  /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with an {@link IOException} with message {@link Utils#CLIENT_RESET_EXCEPTION_MSG}.
    */
-  OnResponseCompleteWithEarlyClientTermination, /**
+  OnResponseCompleteWithEarlyClientTermination,
+  /**
    * Response sending fails midway through a write.
    */
-  ResponseFailureMidway, /**
+  ResponseFailureMidway,
+  /**
    * When this request is received, a response with {@link RestUtils.Headers#CONTENT_LENGTH} set is returned.
    * The value of the header {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} is used to determine the number
    * of chunks (each equal to {@link MockNettyMessageProcessor#CHUNK}) to return.
@@ -962,23 +1099,29 @@ enum TestingUri {
    * {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} times the length of
    * {@link MockNettyMessageProcessor#CHUNK}
    */
-  ResponseWithContentLength, /**
+  ResponseWithContentLength,
+  /**
    * When this request is received, {@link NettyResponseChannel#setHeader(String, Object)} is attempted with null
    * arguments. If these calls don't fail, we report an error.
    */
-  SetNullHeader, /**
+  SetNullHeader,
+  /**
    * Tests setting of a {@link NettyRequest} in {@link NettyResponseChannel}.
    */
-  SetRequest, /**
+  SetRequest,
+  /**
    * Requests a certain status to be set.
    */
-  SetStatus, /**
+  SetStatus,
+  /**
    * When this request is received, the {@link NettyResponseChannel} is closed and then a write operation is attempted.
    */
-  WriteAfterClose, /**
+  WriteAfterClose,
+  /**
    * Fail a write with a {@link Throwable} to test reactions.
    */
-  WriteFailureWithThrowable, /**
+  WriteFailureWithThrowable,
+  /**
    * When this request is received, a response with {@link RestUtils.Headers#CONTENT_LENGTH} set is returned.
    * The value of the header {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} is used to determine the number
    * of chunks (each equal to {@link MockNettyMessageProcessor#CHUNK}) to add to the response channel. The chunks added
@@ -989,7 +1132,8 @@ enum TestingUri {
    * {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} times the length of
    * {@link MockNettyMessageProcessor#CHUNK}
    */
-  WriteMoreThanContentLength, /**
+  WriteMoreThanContentLength,
+  /**
    * Catch all TestingUri.
    */
   Unknown;
@@ -1028,6 +1172,8 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   // 3. The last chunk will be sent as LastHttpContent.
   static final byte[] CHUNK = TestUtils.getRandomBytes(1024);
   static final String CHUNK_COUNT_HEADER_NAME = "chunkCount";
+  static PerformanceConfig PERFORMANCE_CONFIG = new PerformanceConfig(new VerifiableProperties(new Properties()));
+  static boolean useMockNettyRequest = false;
 
   // the write callbacks to verify if any. This is reset at the beginning of every request.
   final List<ChannelWriteCallback> writeCallbacksToVerify = new ArrayList<>();
@@ -1068,8 +1214,10 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
    */
   private void handleRequest(HttpRequest httpRequest) throws Exception {
     writeCallbacksToVerify.clear();
-    request = new NettyRequest(httpRequest, ctx.channel(), nettyMetrics, Collections.emptySet());
-    restResponseChannel = new NettyResponseChannel(ctx, nettyMetrics);
+    request =
+        useMockNettyRequest ? new MockNettyRequest(httpRequest, ctx.channel(), nettyMetrics, Collections.emptySet())
+            : new NettyRequest(httpRequest, ctx.channel(), nettyMetrics, Collections.emptySet());
+    restResponseChannel = new NettyResponseChannel(ctx, nettyMetrics, PERFORMANCE_CONFIG);
     restResponseChannel.setRequest(request);
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
     TestingUri uri = TestingUri.getTestingURI(request.getUri());
@@ -1268,10 +1416,9 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   /**
    * Copies headers from request to response.
    * @param httpRequest the {@link HttpRequest} to copy headers from.
-   * @throws ParseException
    * @throws RestServiceException
    */
-  private void copyHeaders(HttpRequest httpRequest) throws ParseException, RestServiceException {
+  private void copyHeaders(HttpRequest httpRequest) throws RestServiceException {
     restResponseChannel.setStatus(ResponseStatus.Accepted);
     assertEquals("ResponseStatus differs from what was set", ResponseStatus.Accepted, restResponseChannel.getStatus());
 
@@ -1382,7 +1529,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
    */
   private void setRequestTest() throws RestServiceException {
     ResponseStatus status = ResponseStatus.Accepted;
-    restResponseChannel = new NettyResponseChannel(ctx, new NettyMetrics(new MetricRegistry()));
+    restResponseChannel = new NettyResponseChannel(ctx, new NettyMetrics(new MetricRegistry()), PERFORMANCE_CONFIG);
     try {
       try {
         restResponseChannel.setRequest(null);
@@ -1405,6 +1552,35 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       restResponseChannel.onResponseComplete(null);
       assertFalse("Request channel is not closed", request.isOpen());
     }
+  }
+}
+
+/**
+ * Mock {@link NettyRequest} to help rest request performance evaluation test
+ */
+class MockNettyRequest extends NettyRequest {
+  static long inboundBytes = 0L;
+  static long roundTripTime = 1L;
+  static long timeToFirstByte = 1L;
+  static RestRequestMetricsTracker mockTracker;
+
+  MockNettyRequest(HttpRequest request, Channel channel, NettyMetrics metrics, Set<String> parameters)
+      throws Exception {
+    super(request, channel, metrics, parameters);
+    mockTracker = Mockito.spy(new RestRequestMetricsTracker());
+    when(mockTracker.getRoundTripTimeInMs()).thenReturn(roundTripTime);
+    when(mockTracker.getTimeToFirstByteInMs()).thenReturn(timeToFirstByte);
+    mockTracker.nioMetricsTracker.markRequestReceived();
+  }
+
+  @Override
+  public long getBytesReceived() {
+    return inboundBytes;
+  }
+
+  @Override
+  public RestRequestMetricsTracker getMetricsTracker() {
+    return mockTracker;
   }
 }
 

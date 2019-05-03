@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.utils.Utils;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -63,6 +64,7 @@ import org.slf4j.LoggerFactory;
 public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private final NettyMetrics nettyMetrics;
   private final NettyConfig nettyConfig;
+  private final PerformanceConfig performanceConfig;
   private final RestRequestHandler requestHandler;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -85,11 +87,14 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    * {@code requestHandler}.
    * @param nettyMetrics the metrics object to use.
    * @param nettyConfig the configuration object to use.
+   * @param performanceConfig the configuration object to use for SLO evaluation.
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
    */
-  public NettyMessageProcessor(NettyMetrics nettyMetrics, NettyConfig nettyConfig, RestRequestHandler requestHandler) {
+  public NettyMessageProcessor(NettyMetrics nettyMetrics, NettyConfig nettyConfig, PerformanceConfig performanceConfig,
+      RestRequestHandler requestHandler) {
     this.nettyMetrics = nettyMetrics;
     this.nettyConfig = nettyConfig;
+    this.performanceConfig = performanceConfig;
     this.requestHandler = requestHandler;
     logger.trace("Instantiated NettyMessageProcessor");
   }
@@ -388,7 +393,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     request = null;
     lastChannelReadTime = null;
     requestContentFullyReceived = false;
-    responseChannel = new NettyResponseChannel(ctx, nettyMetrics);
+    responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig);
     logger.trace("Refreshed state for channel {}", ctx.channel());
   }
 

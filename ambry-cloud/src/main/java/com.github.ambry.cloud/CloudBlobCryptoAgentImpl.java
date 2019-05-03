@@ -36,17 +36,19 @@ public class CloudBlobCryptoAgentImpl implements CloudBlobCryptoAgent {
   private final KeyManagementService kms;
   //Use this context to look up encryption key for the data encryption key
   private final String context;
+  private final Object contextKey;
 
-  public CloudBlobCryptoAgentImpl(CryptoService cryptoService, KeyManagementService kms, String context) {
+  public CloudBlobCryptoAgentImpl(CryptoService cryptoService, KeyManagementService kms, String context)
+      throws GeneralSecurityException {
     this.cryptoService = cryptoService;
     this.kms = kms;
     this.context = context;
+    contextKey = kms.getKey(context);
   }
 
   @Override
   public ByteBuffer encrypt(ByteBuffer buffer) throws GeneralSecurityException {
     Object key = kms.getRandomKey();
-    Object contextKey = kms.getKey(context);
     ByteBuffer encryptedKey = cryptoService.encryptKey(key, contextKey);
     ByteBuffer encryptedDataBuffer = cryptoService.encrypt(buffer, key);
     ByteBuffer output = ByteBuffer.allocate(
@@ -59,8 +61,7 @@ public class CloudBlobCryptoAgentImpl implements CloudBlobCryptoAgent {
   @Override
   public ByteBuffer decrypt(ByteBuffer buffer) throws GeneralSecurityException {
     EncryptedDataPayload encryptedDataPayload = EncryptedDataPayload.deserialize(buffer);
-    Object blobKeyKey = kms.getKey(context);
-    Object key = cryptoService.decryptKey(encryptedDataPayload.encryptedKey, blobKeyKey);
+    Object key = cryptoService.decryptKey(encryptedDataPayload.encryptedKey, contextKey);
     return cryptoService.decrypt(encryptedDataPayload.encryptedData, key);
   }
 

@@ -240,6 +240,9 @@ public class HelixBootstrapUpgradeToolTest {
    */
   @Test
   public void testEverything() throws Exception {
+    // keep initial data nodes in default Hardware Layout
+    List<DataNode> nodesInDefaultHardwareLayout = testHardwareLayout.getAllExistingDataNodes();
+
     /* Test bootstrap */
     long expectedResourceCount =
         (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
@@ -307,7 +310,18 @@ public class HelixBootstrapUpgradeToolTest {
     }
     Disk diskForNewReplica;
     do {
-      diskForNewReplica = testHardwareLayout.getRandomDisk();
+      if (partition1.getId() < 100L) {
+        // this is to ensure that if partition1 comes from initial partitions [0, 99], we add new replica to the disk
+        // residing on the initial nodes in default hardware layout. The reason here is, if new replica was added to a
+        // new node (not initially in hardware layout), the replica size of all initial partitions would be reset when
+        // first calling writeBootstrapOrUpgrade() at the end of testing. However the new added replica stays unchanged.
+        // So when writeBootstrapOrUpgrade() is called second time, validating cluster manager in Helix tool will see
+        // inconsistent replica size of same partition and an exception will be thrown which makes test failed.
+        DataNode randomNode = nodesInDefaultHardwareLayout.get(RANDOM.nextInt(nodesInDefaultHardwareLayout.size()));
+        diskForNewReplica = randomNode.getDisks().get(RANDOM.nextInt(randomNode.getDisks().size()));
+      } else {
+        diskForNewReplica = testHardwareLayout.getRandomDisk();
+      }
     } while (partition1Nodes.contains(diskForNewReplica.getDataNode()));
 
     partition1.addReplica(new Replica(partition1, diskForNewReplica, testHardwareLayout.clusterMapConfig));

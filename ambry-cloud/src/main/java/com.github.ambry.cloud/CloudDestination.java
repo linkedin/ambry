@@ -28,13 +28,13 @@ public interface CloudDestination {
   /**
    * Upload blob to the cloud destination.
    * @param blobId id of the Ambry blob
-   * @param blobSize size of the blob in bytes
+   * @param inputLength the length of the input stream, if known, -1 if unknown.
    * @param cloudBlobMetadata the {@link CloudBlobMetadata} for the blob being uploaded.
    * @param blobInputStream the stream to read blob data
    * @return flag indicating whether the blob was uploaded
    * @throws CloudStorageException if the upload encounters an error.
    */
-  boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata, InputStream blobInputStream)
+  boolean uploadBlob(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata, InputStream blobInputStream)
       throws CloudStorageException;
 
   /**

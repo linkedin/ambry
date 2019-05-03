@@ -138,7 +138,8 @@ public class AzureIntegrationTest {
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     }
-
+    long uploadTime = System.currentTimeMillis() - creationTime;
+    logger.info("Uploaded {} blobs in {} ms", numBlobs, uploadTime);
     Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(blobIdList);
     assertEquals("Unexpected size of returned metadata map", numBlobs, metadataMap.size());
     for (BlobId blobId : blobIdList) {
