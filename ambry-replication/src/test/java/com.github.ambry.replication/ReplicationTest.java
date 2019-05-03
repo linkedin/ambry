@@ -569,14 +569,16 @@ public class ReplicationTest {
     for (int missingKeysCount : missingKeysCounts) {
       expectedIndex = Math.min(expectedIndex + batchSize, numMessagesInEachPart) - 1;
       List<ReplicaThread.ExchangeMetadataResponse> response =
-          replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize), remoteReplicaInfos);
+          replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+              remoteReplicaInfos);
       assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
       for (int i = 0; i < response.size(); i++) {
         assertEquals(missingKeysCount, response.get(i).missingStoreKeys.size());
         assertEquals(expectedIndex, ((MockFindToken) response.get(i).remoteToken).getIndex());
         remoteReplicaInfos.get(i).setToken(response.get(i).remoteToken);
       }
-      replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize), remoteReplicaInfos, response);
+      replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+          remoteReplicaInfos, response);
       for (int i = 0; i < response.size(); i++) {
         assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
             remoteReplicaInfos.get(i).getToken());
@@ -591,7 +593,8 @@ public class ReplicationTest {
 
     // no more missing keys
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize), remoteReplicaInfos);
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+            remoteReplicaInfos);
     assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
     for (ReplicaThread.ExchangeMetadataResponse metadata : response) {
       assertEquals(0, metadata.missingStoreKeys.size());
@@ -694,7 +697,7 @@ public class ReplicationTest {
 
     // Do the replica metadata exchange.
     List<ReplicaThread.ExchangeMetadataResponse> responses =
-        testSetup.replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+        testSetup.replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
             testSetup.replicasToReplicate.get(remoteHost.dataNodeId));
 
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
@@ -712,7 +715,7 @@ public class ReplicationTest {
       iter.remove();
     }
 
-    testSetup.replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize),
+    testSetup.replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
         testSetup.replicasToReplicate.get(remoteHost.dataNodeId), responses);
 
     Assert.assertEquals(idsToExpectByPartition.keySet(), localHost.infosByPartition.keySet());
@@ -776,7 +779,7 @@ public class ReplicationTest {
 
     // Do the replica metadata exchange.
     List<ReplicaThread.ExchangeMetadataResponse> responses =
-        testSetup.replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+        testSetup.replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
             testSetup.replicasToReplicate.get(remoteHost.dataNodeId));
 
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
@@ -805,7 +808,7 @@ public class ReplicationTest {
             msgInfoToExpire.isTtlUpdated(), 1, msgInfoToExpire.getAccountId(), msgInfoToExpire.getContainerId(),
             msgInfoToExpire.getOperationTimeMs()));
 
-    testSetup.replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize),
+    testSetup.replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
         testSetup.replicasToReplicate.get(remoteHost.dataNodeId), responses);
 
     Assert.assertEquals(idsToExpectByPartition.keySet(), localHost.infosByPartition.keySet());
@@ -1020,7 +1023,7 @@ public class ReplicationTest {
 
     // Test the case where some partitions have missing keys, but not all.
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
             replicasToReplicate.get(remoteHost.dataNodeId));
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
@@ -1033,7 +1036,7 @@ public class ReplicationTest {
         assertEquals(expectedIndex + 1, ((MockFindToken) response.get(i).remoteToken).getIndex());
       }
     }
-    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize),
+    replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
         replicasToReplicate.get(remoteHost.dataNodeId), response);
     for (int i = 0; i < response.size(); i++) {
       assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
@@ -1125,7 +1128,7 @@ public class ReplicationTest {
     Time time = new MockTime();
     MockFindToken token1 = new MockFindToken(0, 0);
     RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(new MockReplicaId(), new MockReplicaId(),
-        new MockStore(null, Collections.emptyList(), Collections.emptyList(), null), token1, tokenPersistInterval, time,
+        new InMemoryStore(null, Collections.emptyList(), Collections.emptyList(), null), token1, tokenPersistInterval, time,
         new Port(5000, PortType.PLAINTEXT));
 
     // The equality check is for the reference, which is fine.
@@ -1196,7 +1199,7 @@ public class ReplicationTest {
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
+        new ReplicaThread("threadtest", replicasToReplicate, new MockFindToken.MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
             localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
@@ -1241,7 +1244,7 @@ public class ReplicationTest {
     expectedIndex += expectedIndexInc;
     expectedIndexOdd += expectedIndexInc;
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
             replicasToReplicate.get(remoteHost.dataNodeId));
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
@@ -1251,7 +1254,7 @@ public class ReplicationTest {
           ((MockFindToken) response.get(i).remoteToken).getIndex());
       replicasToReplicate.get(remoteHost.dataNodeId).get(i).setToken(response.get(i).remoteToken);
     }
-    replicaThread.fixMissingStoreKeys(new MockConnection(remoteHost, batchSize),
+    replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
         replicasToReplicate.get(remoteHost.dataNodeId), response);
     for (int i = 0; i < response.size(); i++) {
       assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
@@ -1272,7 +1275,7 @@ public class ReplicationTest {
   private void assertMissingKeys(int[] expectedMissingKeysSum, int batchSize, ReplicaThread replicaThread,
       MockHost remoteHost, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, batchSize),
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
             replicasToReplicate.get(remoteHost.dataNodeId));
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
@@ -1301,7 +1304,7 @@ public class ReplicationTest {
       int expectedIndex, int expectedIndexOdd, int expectedMissingBuffers) throws Exception {
     // no more missing keys
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnection(remoteHost, 4),
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, 4),
             replicasToReplicate.get(remoteHost.dataNodeId));
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
@@ -1639,10 +1642,12 @@ public class ReplicationTest {
 
     // Do the replica metadata exchange.
     List<ReplicaThread.ExchangeMetadataResponse> responses = testSetup.replicaThread.exchangeMetadata(
-        new MockConnection(testSetup.remoteHost, 10, testSetup.remoteConversionMap), singleReplicaList);
+        new MockConnectionPool.MockConnection(testSetup.remoteHost, 10, testSetup.remoteConversionMap),
+        singleReplicaList);
     // Do Get request to fix missing keys
     testSetup.replicaThread.fixMissingStoreKeys(
-        new MockConnection(testSetup.remoteHost, 10, testSetup.remoteConversionMap), singleReplicaList, responses);
+        new MockConnectionPool.MockConnection(testSetup.remoteHost, 10, testSetup.remoteConversionMap),
+        singleReplicaList, responses);
 
     // Verify
     String[] expectedResults = expectedStr.equals("") ? new String[0] : expectedStr.split("\\s");
@@ -1718,7 +1723,7 @@ public class ReplicationTest {
    * Interface to help perform actions on store events.
    */
   interface StoreEventListener {
-    void onPut(MockStore store, List<MessageInfo> messageInfos);
+    void onPut(InMemoryStore store, List<MessageInfo> messageInfos);
   }
 
   /**

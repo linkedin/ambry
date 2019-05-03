@@ -15,10 +15,42 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.messageformat.MessageMetadata;
+import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
+import com.github.ambry.network.Send;
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.protocol.ReplicaMetadataRequest;
+import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
+import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.protocol.Response;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.ByteBufferOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import static com.github.ambry.replication.ReplicationTest.*;
+import static org.junit.Assert.*;
 
 
 /**
@@ -56,5 +88,188 @@ public class MockConnectionPool implements ConnectionPool {
 
   @Override
   public void destroyConnection(ConnectedChannel connectedChannel) {
+  }
+
+  /**
+   * Implementation of {@link ConnectedChannel} that fetches message infos or blobs based on the type of request.
+   */
+  public static class MockConnection implements ConnectedChannel {
+
+    class MockSend implements Send {
+
+      private final List<ByteBuffer> buffers;
+      private final int size;
+      private int index;
+
+      MockSend(List<ByteBuffer> buffers) {
+        this.buffers = buffers;
+        index = 0;
+        int runningSize = 0;
+        for (ByteBuffer buffer : buffers) {
+          runningSize += buffer.remaining();
+        }
+        size = runningSize;
+      }
+
+      @Override
+      public long writeTo(WritableByteChannel channel) throws IOException {
+        ByteBuffer bufferToWrite = buffers.get(index);
+        index++;
+        int savedPos = bufferToWrite.position();
+        long written = channel.write(bufferToWrite);
+        bufferToWrite.position(savedPos);
+        return written;
+      }
+
+      @Override
+      public boolean isSendComplete() {
+        return buffers.size() == index;
+      }
+
+      @Override
+      public long sizeInBytes() {
+        return size;
+      }
+    }
+
+    private final MockHost host;
+    private final int maxSizeToReturn;
+
+    private List<ByteBuffer> buffersToReturn;
+    private Map<PartitionId, List<MessageInfo>> infosToReturn;
+    private Map<PartitionId, List<MessageMetadata>> messageMetadatasToReturn;
+    private Map<StoreKey, StoreKey> conversionMap;
+    private ReplicaMetadataRequest metadataRequest;
+    private GetRequest getRequest;
+
+    MockConnection(MockHost host, int maxSizeToReturn) {
+      this(host, maxSizeToReturn, null);
+    }
+
+    MockConnection(MockHost host, int maxSizeToReturn, Map<StoreKey, StoreKey> conversionMap) {
+      this.host = host;
+      this.maxSizeToReturn = maxSizeToReturn;
+      this.conversionMap = conversionMap == null ? new HashMap<>() : conversionMap;
+    }
+
+    @Override
+    public void send(Send request) {
+      if (request instanceof ReplicaMetadataRequest) {
+        metadataRequest = (ReplicaMetadataRequest) request;
+      } else if (request instanceof GetRequest) {
+        getRequest = (GetRequest) request;
+        buffersToReturn = new ArrayList<>();
+        infosToReturn = new HashMap<>();
+        messageMetadatasToReturn = new HashMap<>();
+        boolean requestIsEmpty = true;
+        for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
+          PartitionId partitionId = partitionRequestInfo.getPartition();
+          List<ByteBuffer> bufferList = host.buffersByPartition.get(partitionId);
+          List<MessageInfo> messageInfoList = host.infosByPartition.get(partitionId);
+          infosToReturn.put(partitionId, new ArrayList<>());
+          messageMetadatasToReturn.put(partitionId, new ArrayList<>());
+          List<StoreKey> convertedKeys = partitionRequestInfo.getBlobIds()
+              .stream()
+              .map(k -> conversionMap.getOrDefault(k, k))
+              .collect(Collectors.toList());
+          List<StoreKey> dedupKeys = convertedKeys.stream().distinct().collect(Collectors.toList());
+          for (StoreKey key : dedupKeys) {
+            requestIsEmpty = false;
+            int index = 0;
+            MessageInfo infoFound = null;
+            for (MessageInfo info : messageInfoList) {
+              if (key.equals(info.getStoreKey())) {
+                infoFound = getMergedMessageInfo(info.getStoreKey(), messageInfoList);
+                messageMetadatasToReturn.get(partitionId).add(null);
+                buffersToReturn.add(bufferList.get(index));
+                break;
+              }
+              index++;
+            }
+            if (infoFound != null) {
+              // If MsgInfo says it is deleted, get the original Put Message's MessageInfo as that is what Get Request
+              // looks for. Just set the deleted flag to true for the constructed MessageInfo from Put.
+              if (infoFound.isDeleted()) {
+                MessageInfo putMsgInfo = getMessageInfo(infoFound.getStoreKey(), messageInfoList, false, false);
+                infoFound = new MessageInfo(putMsgInfo.getStoreKey(), putMsgInfo.getSize(), true, false,
+                    putMsgInfo.getExpirationTimeInMs(), putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
+                    putMsgInfo.getOperationTimeMs());
+              }
+              infosToReturn.get(partitionId).add(infoFound);
+            }
+          }
+        }
+        assertFalse("Replication should not make empty GetRequests", requestIsEmpty);
+      }
+    }
+
+    @Override
+    public ChannelOutput receive() throws IOException {
+      Response response;
+      if (metadataRequest != null) {
+        List<ReplicaMetadataResponseInfo> responseInfoList = new ArrayList<>();
+        for (ReplicaMetadataRequestInfo requestInfo : metadataRequest.getReplicaMetadataRequestInfoList()) {
+          List<MessageInfo> messageInfosToReturn = new ArrayList<>();
+          List<MessageInfo> partitionInfos = host.infosByPartition.get(requestInfo.getPartitionId());
+          int startIndex = ((MockFindToken) (requestInfo.getToken())).getIndex();
+          int endIndex = Math.min(partitionInfos.size(), startIndex + maxSizeToReturn);
+          int indexRequested = 0;
+          Set<StoreKey> processedKeys = new HashSet<>();
+          for (int i = startIndex; i < endIndex; i++) {
+            StoreKey key = partitionInfos.get(i).getStoreKey();
+            if (processedKeys.add(key)) {
+              messageInfosToReturn.add(getMergedMessageInfo(key, partitionInfos));
+            }
+            indexRequested = i;
+          }
+          ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+              new ReplicaMetadataResponseInfo(requestInfo.getPartitionId(),
+                  new MockFindToken(indexRequested, requestInfo.getToken().getBytesRead()), messageInfosToReturn, 0);
+          responseInfoList.add(replicaMetadataResponseInfo);
+        }
+        response = new ReplicaMetadataResponse(1, "replicametadata", ServerErrorCode.No_Error, responseInfoList);
+        metadataRequest = null;
+      } else {
+        List<PartitionResponseInfo> responseInfoList = new ArrayList<>();
+        for (PartitionRequestInfo requestInfo : getRequest.getPartitionInfoList()) {
+          List<MessageInfo> infosForPartition = infosToReturn.get(requestInfo.getPartition());
+          PartitionResponseInfo partitionResponseInfo;
+          if (!getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest.getGetOption()
+              .equals(GetOption.Include_Deleted_Blobs) && infosForPartition.stream().anyMatch(MessageInfo::isDeleted)) {
+            partitionResponseInfo = new PartitionResponseInfo(requestInfo.getPartition(), ServerErrorCode.Blob_Deleted);
+          } else if (!getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest.getGetOption()
+              .equals(GetOption.Include_Expired_Blobs) && infosForPartition.stream().anyMatch(MessageInfo::isExpired)) {
+            partitionResponseInfo = new PartitionResponseInfo(requestInfo.getPartition(), ServerErrorCode.Blob_Expired);
+          } else {
+            partitionResponseInfo =
+                new PartitionResponseInfo(requestInfo.getPartition(), infosToReturn.get(requestInfo.getPartition()),
+                    messageMetadatasToReturn.get(requestInfo.getPartition()));
+          }
+          responseInfoList.add(partitionResponseInfo);
+        }
+        response = new GetResponse(1, "replication", responseInfoList, new MockSend(buffersToReturn),
+            ServerErrorCode.No_Error);
+        getRequest = null;
+      }
+      ByteBuffer buffer = ByteBuffer.allocate((int) response.sizeInBytes());
+      ByteBufferOutputStream stream = new ByteBufferOutputStream(buffer);
+      WritableByteChannel channel = Channels.newChannel(stream);
+      while (!response.isSendComplete()) {
+        response.writeTo(channel);
+      }
+      buffer.flip();
+      buffer.getLong();
+      return new ChannelOutput(new ByteBufferInputStream(buffer), buffer.remaining());
+    }
+
+    @Override
+    public String getRemoteHost() {
+      return host.dataNodeId.getHostname();
+    }
+
+    @Override
+    public int getRemotePort() {
+      return host.dataNodeId.getPort();
+    }
   }
 }

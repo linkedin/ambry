@@ -43,7 +43,7 @@ import static com.github.ambry.replication.ReplicationTest.*;
 /**
  * A mock implementation of {@link Store} that store all details in memory.
  */
-class MockStore implements Store {
+class InMemoryStore implements Store {
 
   class MockMessageReadSet implements MessageReadSet {
 
@@ -150,7 +150,7 @@ class MockStore implements Store {
   final List<MessageInfo> messageInfos;
   final PartitionId id;
 
-  MockStore(PartitionId id, List<MessageInfo> messageInfos, List<ByteBuffer> buffers,
+  InMemoryStore(PartitionId id, List<MessageInfo> messageInfos, List<ByteBuffer> buffers,
       ReplicationTest.StoreEventListener listener) {
     if (messageInfos.size() != buffers.size()) {
       throw new IllegalArgumentException("message info size and buffer size does not match");

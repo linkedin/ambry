@@ -33,7 +33,6 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.replication.BlobIdTransformer;
 import com.github.ambry.replication.MockConnectionPool;
 import com.github.ambry.replication.MockFindToken;
-import com.github.ambry.replication.MockFindTokenFactory;
 import com.github.ambry.replication.MockHost;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
@@ -355,7 +354,7 @@ public class CloudBlobStoreTest {
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
 
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
+        new ReplicaThread("threadtest", replicasToReplicate, new MockFindToken.MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(),
             new ResponseHandler(clusterMap), new MockTime());

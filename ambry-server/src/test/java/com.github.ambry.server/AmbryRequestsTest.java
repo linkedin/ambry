@@ -63,7 +63,7 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.protocol.TtlUpdateRequest;
-import com.github.ambry.replication.MockFindTokenFactory;
+import com.github.ambry.replication.MockFindToken;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
@@ -118,7 +118,7 @@ import static org.junit.Assert.*;
  * Tests for {@link AmbryRequests}.
  */
 public class AmbryRequestsTest {
-  private static final FindTokenFactory FIND_TOKEN_FACTORY = new MockFindTokenFactory();
+  private static final FindTokenFactory FIND_TOKEN_FACTORY = new MockFindToken.MockFindTokenFactory();
 
   private final MockClusterMap clusterMap;
   private final DataNodeId dataNodeId;
@@ -229,7 +229,8 @@ public class AmbryRequestsTest {
   @Test
   public void controlRequestSuccessTest() throws InterruptedException, IOException {
     RequestOrResponseType[] requestOrResponseTypes =
-        {RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest};
+        {RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.GetRequest,
+            RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest};
     for (RequestOrResponseType requestType : requestOrResponseTypes) {
       List<? extends PartitionId> partitionIds =
           clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);

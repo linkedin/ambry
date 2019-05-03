@@ -38,7 +38,7 @@ import java.util.function.Function;
  */
 public class MockHost {
   private final ClusterMap clusterMap;
-  private final Map<PartitionId, MockStore> storesByPartition = new HashMap<>();
+  private final Map<PartitionId, InMemoryStore> storesByPartition = new HashMap<>();
 
   public final DataNodeId dataNodeId;
   final Map<PartitionId, List<MessageInfo>> infosByPartition = new HashMap<>();
@@ -73,7 +73,7 @@ public class MockHost {
       for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
         if (peerReplicaId.getDataNodeId().equals(remoteHost.dataNodeId)) {
           PartitionId partitionId = replicaId.getPartitionId();
-          MockStore store = storesByPartition.computeIfAbsent(partitionId, partitionId1 -> new MockStore(partitionId,
+          InMemoryStore store = storesByPartition.computeIfAbsent(partitionId, partitionId1 -> new InMemoryStore(partitionId,
               infosByPartition.computeIfAbsent(partitionId1,
                   (Function<PartitionId, List<MessageInfo>>) partitionId2 -> new ArrayList<>()),
               buffersByPartition.computeIfAbsent(partitionId1,
