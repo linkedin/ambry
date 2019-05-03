@@ -67,79 +67,24 @@ class ClusterMapMetrics {
 
     // Metrics based on HardwareLayout
 
-    this.hardwareLayoutVersion = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return getHardwareLayoutVersion();
-      }
-    };
-    this.partitionLayoutVersion = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return getPartitionLayoutVersion();
-      }
-    };
+    this.hardwareLayoutVersion = this::getHardwareLayoutVersion;
+    this.partitionLayoutVersion = this::getPartitionLayoutVersion;
     registry.register(MetricRegistry.name(ClusterMap.class, "hardwareLayoutVersion"), hardwareLayoutVersion);
     registry.register(MetricRegistry.name(ClusterMap.class, "partitionLayoutVersion"), partitionLayoutVersion);
 
-    this.datacenterCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countDatacenters();
-      }
-    };
-    this.dataNodeCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countDataNodes();
-      }
-    };
-    this.diskCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countDisks();
-      }
-    };
+    this.datacenterCount = this::countDatacenters;
+    this.dataNodeCount = this::countDataNodes;
+    this.diskCount = this::countDisks;
     registry.register(MetricRegistry.name(ClusterMap.class, "datacenterCount"), datacenterCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "dataNodeCount"), dataNodeCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "diskCount"), diskCount);
 
-    this.dataNodesHardUpCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countDataNodesInHardState(HardwareState.AVAILABLE);
-      }
-    };
-    this.dataNodesHardDownCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countDataNodesInHardState(HardwareState.UNAVAILABLE);
-      }
-    };
-    this.dataNodesUnavailableCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countUnavailableDataNodes();
-      }
-    };
-    this.disksHardUpCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countDisksInHardState(HardwareState.AVAILABLE);
-      }
-    };
-    this.disksHardDownCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countDisksInHardState(HardwareState.UNAVAILABLE);
-      }
-    };
-    this.disksUnavailableCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countUnavailableDisks();
-      }
-    };
+    this.dataNodesHardUpCount = () -> countDataNodesInHardState(HardwareState.AVAILABLE);
+    this.dataNodesHardDownCount = () -> countDataNodesInHardState(HardwareState.UNAVAILABLE);
+    this.dataNodesUnavailableCount = this::countUnavailableDataNodes;
+    this.disksHardUpCount = () -> countDisksInHardState(HardwareState.AVAILABLE);
+    this.disksHardDownCount = () -> countDisksInHardState(HardwareState.UNAVAILABLE);
+    this.disksUnavailableCount = this::countUnavailableDisks;
     registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesHardUpCount"), dataNodesHardUpCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesHardDownCount"), dataNodesHardDownCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "dataNodesUnavailableCount"), dataNodesUnavailableCount);
@@ -149,54 +94,19 @@ class ClusterMapMetrics {
 
     // Metrics based on PartitionLayout
 
-    this.partitionCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countPartitions();
-      }
-    };
-    this.partitionsReadWrite = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countPartitionsInState(PartitionState.READ_WRITE);
-      }
-    };
-    this.partitionsReadOnly = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return countPartitionsInState(PartitionState.READ_ONLY);
-      }
-    };
+    this.partitionCount = this::countPartitions;
+    this.partitionsReadWrite = () -> countPartitionsInState(PartitionState.READ_WRITE);
+    this.partitionsReadOnly = () -> countPartitionsInState(PartitionState.READ_ONLY);
     registry.register(MetricRegistry.name(ClusterMap.class, "numberOfPartitions"), partitionCount);
     registry.register(MetricRegistry.name(ClusterMap.class, "numberOfReadWritePartitions"), partitionsReadWrite);
     registry.register(MetricRegistry.name(ClusterMap.class, "numberOfReadOnlyPartitions"), partitionsReadOnly);
 
-    this.isMajorityReplicasDown = new Gauge<Boolean>() {
-      @Override
-      public Boolean getValue() {
-        return isMajorityOfReplicasDown();
-      }
-    };
+    this.isMajorityReplicasDown = this::isMajorityOfReplicasDown;
     registry.register(MetricRegistry.name(ClusterMap.class, "isMajorityReplicasDown"), isMajorityReplicasDown);
 
-    this.rawCapacityInBytes = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return getRawCapacity();
-      }
-    };
-    this.allocatedRawCapacityInBytes = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return getAllocatedRawCapacity();
-      }
-    };
-    this.allocatedUsableCapacityInBytes = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return getAllocatedUsableCapacity();
-      }
-    };
+    this.rawCapacityInBytes = this::getRawCapacity;
+    this.allocatedRawCapacityInBytes = this::getAllocatedRawCapacity;
+    this.allocatedUsableCapacityInBytes = this::getAllocatedUsableCapacity;
     registry.register(MetricRegistry.name(ClusterMap.class, "rawCapacityInBytes"), rawCapacityInBytes);
     registry.register(MetricRegistry.name(ClusterMap.class, "allocatedRawCapacityInBytes"),
         allocatedRawCapacityInBytes);
@@ -218,12 +128,7 @@ class ClusterMapMetrics {
 
   private void addDataNodeToStateMetrics(final DataNode dataNode) {
     final String metricName = dataNode.getHostname() + "-" + dataNode.getPort() + "-ResourceState";
-    Gauge<Long> dataNodeState = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return dataNode.getState() == HardwareState.AVAILABLE ? 1L : 0L;
-      }
-    };
+    Gauge<Long> dataNodeState = () -> dataNode.getState() == HardwareState.AVAILABLE ? 1L : 0L;
     registry.register(MetricRegistry.name(ClusterMap.class, metricName), dataNodeState);
     dataNodeStateList.add(dataNodeState);
   }
@@ -232,12 +137,7 @@ class ClusterMapMetrics {
     final String metricName =
         disk.getDataNode().getHostname() + "-" + disk.getDataNode().getPort() + "-" + disk.getMountPath()
             + "-ResourceState";
-    Gauge<Long> diskState = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return disk.getState() == HardwareState.AVAILABLE ? 1L : 0L;
-      }
-    };
+    Gauge<Long> diskState = () -> disk.getState() == HardwareState.AVAILABLE ? 1L : 0L;
     registry.register(MetricRegistry.name(ClusterMap.class, metricName), diskState);
     dataNodeStateList.add(diskState);
   }
