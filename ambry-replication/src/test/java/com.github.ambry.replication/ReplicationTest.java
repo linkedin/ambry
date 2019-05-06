@@ -471,7 +471,7 @@ public class ReplicationTest {
       addDeleteMessagesToReplicasOfPartition(pid, ids.get(0), localHostAndExpectedLocalHost);
       idsDeletedLocallyByPartition.put(pid, ids.get(0));
       // ttl update 1 of the messages in the local host only
-      addTtlUpdateMessagesToReplicasOfPartition(pid, ids.get(1), localHostAndExpectedLocalHost);
+      addTtlUpdateMessagesToReplicasOfPartition(pid, ids.get(1), localHostAndExpectedLocalHost, UPDATED_EXPIRY_TIME_MS);
 
       // remote host only
       // add 2 put messages
@@ -484,7 +484,7 @@ public class ReplicationTest {
           hostList = remoteHostAndExpectedLocalHost;
         }
         // doing it in reverse order so that a put and ttl update arrive in the same batch
-        addTtlUpdateMessagesToReplicasOfPartition(pid, ids.get(i), hostList);
+        addTtlUpdateMessagesToReplicasOfPartition(pid, ids.get(i), hostList, UPDATED_EXPIRY_TIME_MS);
       }
       // delete one of the keys that has put and ttl update on local host
       addDeleteMessagesToReplicasOfPartition(pid, ids.get(1), remoteHostAndExpectedLocalHost);
@@ -493,7 +493,7 @@ public class ReplicationTest {
 
       // add a TTL update and delete message without a put msg (compaction can create such a situation)
       BlobId id = generateRandomBlobId(pid);
-      addTtlUpdateMessagesToReplicasOfPartition(pid, id, remoteHostOnly);
+      addTtlUpdateMessagesToReplicasOfPartition(pid, id, remoteHostOnly, UPDATED_EXPIRY_TIME_MS);
       addDeleteMessagesToReplicasOfPartition(pid, id, remoteHostOnly);
 
       // message transformation test cases
@@ -524,14 +524,14 @@ public class ReplicationTest {
           expectedLocalHostOnly);
 
       // TTL update of b0 on all hosts
-      addTtlUpdateMessagesToReplicasOfPartition(pid, b0p, localHostAndExpectedLocalHost);
-      addTtlUpdateMessagesToReplicasOfPartition(pid, b0, remoteHostOnly);
+      addTtlUpdateMessagesToReplicasOfPartition(pid, b0p, localHostAndExpectedLocalHost, UPDATED_EXPIRY_TIME_MS);
+      addTtlUpdateMessagesToReplicasOfPartition(pid, b0, remoteHostOnly, UPDATED_EXPIRY_TIME_MS);
       // TTL update on b1, b2 and b3 on remote
-      addTtlUpdateMessagesToReplicasOfPartition(pid, b1, remoteHostOnly);
-      addTtlUpdateMessagesToReplicasOfPartition(pid, b1p, expectedLocalHostOnly);
-      addTtlUpdateMessagesToReplicasOfPartition(pid, b2, remoteHostOnly);
-      addTtlUpdateMessagesToReplicasOfPartition(pid, b2p, expectedLocalHostOnly);
-      addTtlUpdateMessagesToReplicasOfPartition(pid, b3, remoteHostOnly);
+      addTtlUpdateMessagesToReplicasOfPartition(pid, b1, remoteHostOnly, UPDATED_EXPIRY_TIME_MS);
+      addTtlUpdateMessagesToReplicasOfPartition(pid, b1p, expectedLocalHostOnly, UPDATED_EXPIRY_TIME_MS);
+      addTtlUpdateMessagesToReplicasOfPartition(pid, b2, remoteHostOnly, UPDATED_EXPIRY_TIME_MS);
+      addTtlUpdateMessagesToReplicasOfPartition(pid, b2p, expectedLocalHostOnly, UPDATED_EXPIRY_TIME_MS);
+      addTtlUpdateMessagesToReplicasOfPartition(pid, b3, remoteHostOnly, UPDATED_EXPIRY_TIME_MS);
 
       numMessagesInEachPart = remoteHost.infosByPartition.get(pid).size();
     }
@@ -1128,8 +1128,8 @@ public class ReplicationTest {
     Time time = new MockTime();
     MockFindToken token1 = new MockFindToken(0, 0);
     RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(new MockReplicaId(), new MockReplicaId(),
-        new InMemoryStore(null, Collections.emptyList(), Collections.emptyList(), null), token1, tokenPersistInterval, time,
-        new Port(5000, PortType.PLAINTEXT));
+        new InMemoryStore(null, Collections.emptyList(), Collections.emptyList(), null), token1, tokenPersistInterval,
+        time, new Port(5000, PortType.PLAINTEXT));
 
     // The equality check is for the reference, which is fine.
     // Initially, the current token and the token to persist are the same.
@@ -1487,11 +1487,12 @@ public class ReplicationTest {
    * @param partitionId the {@link PartitionId} to use for generating the {@link StoreKey} of the message.
    * @param id the {@link StoreKey} to create a ttl update message for.
    * @param hosts the list of {@link MockHost} all of which will be populated with the messages.
+   * @param expirationTime
    * @throws MessageFormatException
    * @throws IOException
    */
   public static void addTtlUpdateMessagesToReplicasOfPartition(PartitionId partitionId, StoreKey id,
-      List<MockHost> hosts) throws MessageFormatException, IOException {
+      List<MockHost> hosts, long expirationTime) throws MessageFormatException, IOException {
     MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false, false);
     short aid;
     short cid;
@@ -1503,10 +1504,10 @@ public class ReplicationTest {
       aid = putMsg.getAccountId();
       cid = putMsg.getContainerId();
     }
-    ByteBuffer buffer = getTtlUpdateMessage(id, aid, cid, UPDATED_EXPIRY_TIME_MS, CONSTANT_TIME_MS);
+    ByteBuffer buffer = getTtlUpdateMessage(id, aid, cid, expirationTime, CONSTANT_TIME_MS);
     for (MockHost host : hosts) {
       host.addMessage(partitionId,
-          new MessageInfo(id, buffer.remaining(), false, true, UPDATED_EXPIRY_TIME_MS, aid, cid, CONSTANT_TIME_MS),
+          new MessageInfo(id, buffer.remaining(), false, true, expirationTime, aid, cid, CONSTANT_TIME_MS),
           buffer.duplicate());
     }
   }

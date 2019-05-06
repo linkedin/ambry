@@ -556,11 +556,13 @@ final class ServerTestUtil {
    * @param clientSSLSocketFactory the {@link SSLSocketFactory}.
    * @param testEncryption if encryption will be tested. Not used now.
    * @param notificationSystem the {@link MockNotificationSystem} to track blobs event in {@link MockCluster}.
-   * @param vcrSSLProps
+   * @param vcrSSLProps SSL related properties for VCR. Can be {@code null}.
+   * @param ttl The ttl of blobs in their original PUT.
+   * @param doTtlUpdate Do ttlUpdate request if {@true}.
    */
   static void endToEndCloudBackupTest(MockCluster cluster, DataNodeId dataNode, SSLConfig clientSSLConfig,
       SSLSocketFactory clientSSLSocketFactory, boolean testEncryption, MockNotificationSystem notificationSystem,
-      Properties vcrSSLProps) throws Exception {
+      Properties vcrSSLProps, long ttl, boolean doTtlUpdate) throws Exception {
     // TODO: test encryption
     int blobBackupCount = 10;
     int blobSize = 100;
@@ -573,8 +575,7 @@ final class ServerTestUtil {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties properties =
-        new BlobProperties(blobSize, "serviceid1", null, null, false, Utils.Infinite_Time, accountId, containerId,
-            false, null);
+        new BlobProperties(blobSize, "serviceid1", null, null, false, ttl, accountId, containerId, false, null);
     TestUtils.RANDOM.nextBytes(userMetadata);
     TestUtils.RANDOM.nextBytes(data);
 
@@ -592,6 +593,9 @@ final class ServerTestUtil {
     List<BlobId> blobIds = runnable.getBlobIds();
     for (BlobId blobId : blobIds) {
       notificationSystem.awaitBlobCreations(blobId.getID());
+      if (doTtlUpdate) {
+        updateBlobTtl(channel, blobId);
+      }
     }
 
     // Start the VCR and CloudBackupManager
