@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentMap;
 
 
 /**
- * Class to hold different {@link RestRequestMetrics} for plain text, ssl, with and without encryption
+ * Class to hold different {@link RestRequestMetrics} for plain text, ssl, with and without encryption.
  */
 class RestRequestMetricsGroup {
   private static final String SSL_SUFFIX = "Ssl";
@@ -34,10 +34,10 @@ class RestRequestMetricsGroup {
   private final boolean encryptedMetricsEnabled;
   private final boolean containerMetricsEnabled;
   private final MetricRegistry metricRegistry;
-  private final RestRequestMetrics blobMetrics;
-  private final RestRequestMetrics blobSslMetrics;
-  private final RestRequestMetrics blobEncryptedMetrics;
-  private final RestRequestMetrics blobSslEncryptedMetrics;
+  private final RestRequestMetrics nonSslUnencryptedMetrics;
+  private final RestRequestMetrics sslUnencryptedMetrics;
+  private final RestRequestMetrics nonSslEncryptedMetrics;
+  private final RestRequestMetrics sslEncryptedMetrics;
 
   /**
    * Instantiates {@link RestRequestMetricsGroup} for the given requestType and resource
@@ -54,12 +54,12 @@ class RestRequestMetricsGroup {
     this.encryptedMetricsEnabled = encryptedMetricsEnabled;
     this.containerMetricsEnabled = containerMetricsEnabled;
     this.metricRegistry = metricRegistry;
-    blobMetrics = new RestRequestMetrics(ownerClass, requestType, metricRegistry);
-    blobSslMetrics = new RestRequestMetrics(ownerClass, requestType + SSL_SUFFIX, metricRegistry);
-    blobEncryptedMetrics =
+    nonSslUnencryptedMetrics = new RestRequestMetrics(ownerClass, requestType, metricRegistry);
+    sslUnencryptedMetrics = new RestRequestMetrics(ownerClass, requestType + SSL_SUFFIX, metricRegistry);
+    nonSslEncryptedMetrics =
         encryptedMetricsEnabled ? new RestRequestMetrics(ownerClass, requestType + ENCRYPTED_SUFFIX, metricRegistry)
             : null;
-    blobSslEncryptedMetrics =
+    sslEncryptedMetrics =
         encryptedMetricsEnabled ? new RestRequestMetrics(ownerClass, requestType + SSL_SUFFIX + ENCRYPTED_SUFFIX,
             metricRegistry) : null;
   }
@@ -71,13 +71,11 @@ class RestRequestMetricsGroup {
    * @return the appropriate {@link RestRequestMetrics} based on the params
    */
   RestRequestMetrics getRestRequestMetrics(boolean sslUsed, boolean encrypted) {
-    RestRequestMetrics toReturn;
     if (encrypted && encryptedMetricsEnabled) {
-      toReturn = sslUsed ? blobSslEncryptedMetrics : blobEncryptedMetrics;
+      return sslUsed ? sslEncryptedMetrics : nonSslEncryptedMetrics;
     } else {
-      toReturn = sslUsed ? blobSslMetrics : blobMetrics;
+      return sslUsed ? sslUnencryptedMetrics : nonSslUnencryptedMetrics;
     }
-    return toReturn;
   }
 
   /**

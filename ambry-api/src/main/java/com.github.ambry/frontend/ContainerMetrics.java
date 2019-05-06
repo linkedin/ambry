@@ -64,7 +64,7 @@ public class ContainerMetrics {
     String metricPrefix = accountName + SEPARATOR + containerName + SEPARATOR + operationType;
     roundTripTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "RoundTripTimeInMs"));
-
+    // counts by status code type
     successCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "SuccessCount"));
     redirectionCount =
         metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "RedirectionCount"));
@@ -72,7 +72,7 @@ public class ContainerMetrics {
         metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "ClientErrorCount"));
     serverErrorCount =
         metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "ServerErrorCount"));
-
+    // counts for individual status codes
     badRequestCount =
         metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "BadRequestCount"));
     unauthorizedCount =
