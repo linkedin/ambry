@@ -1128,8 +1128,8 @@ public class ReplicationTest {
     Time time = new MockTime();
     MockFindToken token1 = new MockFindToken(0, 0);
     RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(new MockReplicaId(), new MockReplicaId(),
-        new InMemoryStore(null, Collections.emptyList(), Collections.emptyList(), null), token1, tokenPersistInterval, time,
-        new Port(5000, PortType.PLAINTEXT));
+        new InMemoryStore(null, Collections.emptyList(), Collections.emptyList(), null), token1, tokenPersistInterval,
+        time, new Port(5000, PortType.PLAINTEXT));
 
     // The equality check is for the reference, which is fine.
     // Initially, the current token and the token to persist are the same.

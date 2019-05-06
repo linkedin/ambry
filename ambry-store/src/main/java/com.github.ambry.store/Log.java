@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -326,7 +327,7 @@ class Log implements Write {
    * Creates {@link LogSegment} instances from {@code segmentFiles}.
    * @param segmentFiles the files that form the segments of the log.
    * @return {@code List} of {@link LogSegment} instances corresponding to {@code segmentFiles}.
-   * @throws IOException if there is an I/O error loading the segment files or creating {@link LogSegment} instances.
+   * @throws StoreException if there is an I/O error loading the segment files or creating {@link LogSegment} instances.
    */
   private List<LogSegment> getSegmentsToLoad(File[] segmentFiles) throws StoreException {
     List<LogSegment> segments = new ArrayList<>(segmentFiles.length);
@@ -391,8 +392,9 @@ class Log implements Write {
       try {
         diskSpaceAllocator.allocate(segmentFile, size);
       } catch (IOException e) {
-        StoreErrorCodes errorCode = e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-            : StoreErrorCodes.Unknown_Error;
+        StoreErrorCodes errorCode =
+            Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+                : StoreErrorCodes.Unknown_Error;
         throw new StoreException(errorCode.toString() + " while allocating the file", e, errorCode);
       }
     }
@@ -410,8 +412,8 @@ class Log implements Write {
       logSegment.close();
       diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
     } catch (IOException e) {
-      StoreErrorCodes errorCode =
-          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+          : StoreErrorCodes.Unknown_Error;
       throw new StoreException(errorCode.toString() + " while freeing log segment", e, errorCode);
     }
   }
@@ -463,9 +465,26 @@ class Log implements Write {
     Pair<String, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
     logger.info("Allocating new segment with name: " + segmentNameAndFilename.getFirst());
     File newSegmentFile = allocate(segmentNameAndFilename.getSecond(), segmentCapacity);
-    LogSegment newSegment =
-        new LogSegment(segmentNameAndFilename.getFirst(), newSegmentFile, segmentCapacity, metrics, true);
-    segmentsByName.put(segmentNameAndFilename.getFirst(), newSegment);
+    try {
+      LogSegment newSegment =
+          new LogSegment(segmentNameAndFilename.getFirst(), newSegmentFile, segmentCapacity, metrics, true);
+      segmentsByName.put(segmentNameAndFilename.getFirst(), newSegment);
+    } catch (StoreException e) {
+      logger.error("Failed to create new log segment {} with store exception: ", segmentNameAndFilename.getFirst(), e);
+      try {
+        diskSpaceAllocator.free(newSegmentFile, segmentCapacity);
+        remainingUnallocatedSegments.incrementAndGet();
+      } catch (IOException exception) {
+        StoreErrorCodes errorCode =
+            Objects.equals(exception.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+                : StoreErrorCodes.Unknown_Error;
+        throw new StoreException(
+            errorCode.toString() + " while freeing log segment " + segmentNameAndFilename.getFirst(), exception,
+            errorCode);
+      } finally {
+        metrics.overflowWriteError.inc();
+      }
+    }
   }
 
   /**
