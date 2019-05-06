@@ -26,6 +26,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -135,8 +136,8 @@ class LogSegment implements Read, Write {
     } catch (FileNotFoundException e) {
       throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);
     } catch (IOException e) {
-      StoreErrorCodes errorCode =
-          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+          : StoreErrorCodes.Unknown_Error;
       throw new StoreException(errorCode.toString() + " while creating log segment", e, errorCode);
     }
   }
@@ -164,8 +165,8 @@ class LogSegment implements Read, Write {
     } catch (ClosedChannelException e) {
       throw new StoreException("Channel closed while writing into the log segment", e, StoreErrorCodes.Channel_Closed);
     } catch (IOException e) {
-      StoreErrorCodes errorCode =
-          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+          : StoreErrorCodes.Unknown_Error;
       throw new StoreException(errorCode.toString() + " while writing into the log segment", e, errorCode);
     }
     endOffset.addAndGet(bytesWritten);
@@ -209,8 +210,9 @@ class LogSegment implements Read, Write {
           bytesWritten += fileChannel.write(byteBufferForAppend, endOffset.get() + bytesWritten);
         }
       } catch (IOException e) {
-        StoreErrorCodes errorCode = e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-            : StoreErrorCodes.Unknown_Error;
+        StoreErrorCodes errorCode =
+            Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+                : StoreErrorCodes.Unknown_Error;
         throw new StoreException(errorCode.toString() + " while writing into the log segment", e, errorCode);
       }
     }
@@ -239,8 +241,8 @@ class LogSegment implements Read, Write {
       directFile.write(byteArray, offset, length);
       endOffset.addAndGet(length);
     } catch (IOException e) {
-      StoreErrorCodes errorCode =
-          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+          : StoreErrorCodes.Unknown_Error;
       throw new StoreException(errorCode.toString() + " while writing into segment via direct IO", e, errorCode);
     }
     return length;
@@ -422,8 +424,8 @@ class LogSegment implements Read, Write {
       fileChannel.position(endOffset);
       this.endOffset.set(endOffset);
     } catch (IOException e) {
-      StoreErrorCodes errorCode =
-          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+          : StoreErrorCodes.Unknown_Error;
       throw new StoreException(errorCode.toString() + " while setting end offset of segment", e, errorCode);
     }
   }

@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+import java.util.Objects;
 
 
 /**
@@ -53,8 +54,8 @@ public class MockWrite implements Write {
     } catch (IOException e) {
       // The IOException message may vary in different java versions. As code evolves, we may need to update IO_ERROR_STR
       // in StoreException (based on java version that is being employed) to correctly capture disk I/O related errors.
-      StoreErrorCodes errorCode =
-          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+          : StoreErrorCodes.Unknown_Error;
       throw new StoreException(errorCode.toString() + " while writing into store", e, errorCode);
     }
     buf.limit(savedLimit);

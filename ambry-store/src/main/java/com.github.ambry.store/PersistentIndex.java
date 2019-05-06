@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
@@ -828,8 +829,8 @@ class PersistentIndex {
             + "]", StoreErrorCodes.ID_Deleted);
       }
     } catch (IOException e) {
-      StoreErrorCodes errorCode =
-          e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+          : StoreErrorCodes.Unknown_Error;
       throw new StoreException(errorCode.toString() + " when reading delete blob info from the log " + dataDir, e,
           errorCode);
     }
@@ -1661,8 +1662,9 @@ class PersistentIndex {
       } catch (FileNotFoundException e) {
         throw new StoreException("File not found while writing index to file", e, StoreErrorCodes.File_Not_Found);
       } catch (IOException e) {
-        StoreErrorCodes errorCode = e.getMessage().equals(StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-            : StoreErrorCodes.Unknown_Error;
+        StoreErrorCodes errorCode =
+            Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
+                : StoreErrorCodes.Unknown_Error;
         throw new StoreException(errorCode.toString() + " while persisting index to disk", e, errorCode);
       } finally {
         context.stop();

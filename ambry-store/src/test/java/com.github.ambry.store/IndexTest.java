@@ -211,6 +211,11 @@ public class IndexTest {
         .getMessageInfo(any(Read.class), anyLong(), any(StoreKeyFactory.class));
     verifyBlobReadOptions(state.deletedKeyWithPutInSameSegment, EnumSet.of(StoreGetOptions.Store_Include_Deleted),
         StoreErrorCodes.IOError);
+    // test that when IOException's error message is null, the error code should be Unknown_Error
+    doThrow(new IOException()).when(mockHardDelete)
+        .getMessageInfo(any(Read.class), anyLong(), any(StoreKeyFactory.class));
+    verifyBlobReadOptions(state.deletedKeyWithPutInSameSegment, EnumSet.of(StoreGetOptions.Store_Include_Deleted),
+        StoreErrorCodes.Unknown_Error);
   }
 
   /**
@@ -1168,6 +1173,14 @@ public class IndexTest {
       fail("Should have thrown exception due to I/O error");
     } catch (StoreException e) {
       assertEquals("StoreException error code mismatch ", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    // test that when IOException's error message is null, the error code should be Unknown_Error
+    try {
+      doThrow(new IOException()).when(mockLog).flush();
+      state.index.close();
+      fail("Should have thrown exception due to I/O error");
+    } catch (StoreException e) {
+      assertEquals("StoreException error code mismatch ", StoreErrorCodes.Unknown_Error, e.getErrorCode());
     }
     Mockito.reset(mockLog);
   }

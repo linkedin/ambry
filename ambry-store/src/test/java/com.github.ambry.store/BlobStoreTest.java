@@ -691,8 +691,8 @@ public class BlobStoreTest {
     MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
     short[] accountIds =
         {-1, Utils.getRandomShort(TestUtils.RANDOM), -1, mockId.getAccountId(), Utils.getRandomShort(TestUtils.RANDOM)};
-    short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(
-        TestUtils.RANDOM), mockId.getContainerId()};
+    short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
+        mockId.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
       verifyDeleteFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
           StoreErrorCodes.Authorization_Failure);
@@ -723,8 +723,8 @@ public class BlobStoreTest {
     MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
     short[] accountIds =
         {-1, Utils.getRandomShort(TestUtils.RANDOM), -1, mockId.getAccountId(), Utils.getRandomShort(TestUtils.RANDOM)};
-    short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(
-        TestUtils.RANDOM), mockId.getContainerId()};
+    short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
+        mockId.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
       verifyGetFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
           StoreErrorCodes.Authorization_Failure);
@@ -1099,6 +1099,17 @@ public class BlobStoreTest {
       fail("should throw exception");
     } catch (StoreException e) {
       assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    assertEquals("Mismatch in error count", 2, testStore2.getErrorCount().get());
+
+    // test that when InternalError's error message is null, the error code should be Unknown_Error and store error count
+    // stays unchanged.
+    doThrow(new InternalError()).when(mockStoreKeyFactory).getStoreKey(any(DataInputStream.class));
+    try {
+      testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
+      fail("should throw exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.Unknown_Error, e.getErrorCode());
     }
     assertEquals("Mismatch in error count", 2, testStore2.getErrorCount().get());
 

@@ -49,7 +49,7 @@ import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 
@@ -387,6 +387,14 @@ public class IndexSegmentTest {
       fail("should fail");
     } catch (StoreException e) {
       assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
+    }
+    // test that when IOException's error message is null, the error code should be Unknown_Error
+    doThrow(new IOException()).when(mockStoreKeyFactory).getStoreKey(any(DataInputStream.class));
+    try {
+      indexSegment.seal();
+      fail("should fail");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.Unknown_Error, e.getErrorCode());
     }
   }
 
