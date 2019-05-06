@@ -14,7 +14,6 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.Counter;
-import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 
@@ -31,6 +30,7 @@ public class VcrMetrics {
   public final Timer blobEncryptionTime;
   public final Timer blobDecryptionTime;
   public final Counter blobUploadSkippedCount;
+  public final Counter updateTtlNotSetError;
 
   public VcrMetrics(MetricRegistry registry) {
     this.registry = registry;
@@ -41,6 +41,7 @@ public class VcrMetrics {
     blobEncryptionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionTime"));
     blobDecryptionTime = registry.timer(MetricRegistry.name(CloudBlobStore.class, "BlobDecryptionTime"));
     blobUploadSkippedCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobUploadSkippedCount"));
+    updateTtlNotSetError = registry.counter(MetricRegistry.name(CloudBlobStore.class, "UpdateTtlNotSetError"));
   }
 
   /**

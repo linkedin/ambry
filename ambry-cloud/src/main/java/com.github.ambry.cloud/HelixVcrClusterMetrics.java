@@ -26,6 +26,6 @@ public class HelixVcrClusterMetrics {
     partitionIdNotInClusterMapOnRemove =
         registry.counter(MetricRegistry.name(HelixVcrCluster.class, "PartitionIdNotInClusterMapOnRemove"));
     partitionIdNotInClusterMapOnAdd =
-        registry.counter(MetricRegistry.name(VcrServer.class, "PartitionIdNotInClusterMapOnAdd"));
+        registry.counter(MetricRegistry.name(HelixVcrCluster.class, "PartitionIdNotInClusterMapOnAdd"));
   }
 }
