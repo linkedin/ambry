@@ -302,7 +302,7 @@ public class CloudBlobStoreTest {
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 4);
 
-    // Generate BlobId for coming PUT.
+    // Generate BlobIds for following PUT.
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -316,13 +316,8 @@ public class CloudBlobStoreTest {
 
     // Set up VCR
     Properties props = new Properties();
-    props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.resolve.hostnames", "false");
-    props.setProperty("clustermap.cluster.name", "clusterName");
-    props.setProperty("clustermap.datacenter.name", "DC1");
-    props.setProperty("clustermap.ssl.enabled.datacenters", "DC0,DC1");
+    setBasicProperties(props);
     props.setProperty("clustermap.port", "12300");
-    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(64));
     props.setProperty("vcr.ssl.port", "12345");
 
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));
@@ -358,6 +353,7 @@ public class CloudBlobStoreTest {
             new AtomicInteger(0), cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(),
             new ResponseHandler(clusterMap), new MockTime());
+    List<List<RemoteReplicaInfo>> replicasToReplicateList = new ArrayList<>(replicasToReplicate.values());
 
     long referenceTime = System.currentTimeMillis();
     // Case 1: Put already expired. Replication happens after Put and after TtlUpdate.
@@ -365,10 +361,10 @@ public class CloudBlobStoreTest {
     BlobId id = blobIdList.get(0);
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime - 2000, referenceTime - 1000);
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    replicaThread.replicate(replicasToReplicateList);
     assertFalse("Blob should not exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
     // Case 2: Put already expired. Replication happens after TtlUpdate.
@@ -377,7 +373,7 @@ public class CloudBlobStoreTest {
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime - 2000, referenceTime - 1000);
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
     // Case 3: Put TTL less than cloudConfig.vcrMinTtlDays. Replication happens after Put and after TtlUpdate.
@@ -385,10 +381,10 @@ public class CloudBlobStoreTest {
     id = blobIdList.get(2);
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays) - 1);
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    replicaThread.replicate(replicasToReplicateList);
     assertFalse("Blob should not exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
     // Case 4: Put TTL less than cloudConfig.vcrMinTtlDays. Replication happens after TtlUpdate.
@@ -397,7 +393,7 @@ public class CloudBlobStoreTest {
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays) - 1);
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
     // Case 5: Put TTL greater than or equals to cloudConfig.vcrMinTtlDays. Replication happens after Put and after TtlUpdate.
@@ -405,10 +401,10 @@ public class CloudBlobStoreTest {
     id = blobIdList.get(4);
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays));
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    replicaThread.replicate(replicasToReplicateList);
     assertTrue(latchBasedInMemoryCloudDestination.doesBlobExist(id));
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
     // Case 6: Put TTL greater than or equals to cloudConfig.vcrMinTtlDays. Replication happens after TtlUpdate.
@@ -417,7 +413,7 @@ public class CloudBlobStoreTest {
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays));
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
-    replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
+    replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
     // Verify expiration time of all blobs.
