@@ -343,6 +343,7 @@ project(':ambry-cloud') {
         testCompile project(':ambry-commons').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-store').sourceSets.test.output
+        testCompile project(':ambry-replication').sourceSets.test.output
     }
 }
 

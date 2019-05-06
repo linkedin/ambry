@@ -73,32 +73,17 @@ class BlockingChannelInfo {
     this.sslSocketFactory = sslSocketFactory;
     this.sslConfig = sslConfig;
 
-    availableConnections = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return blockingChannelAvailableConnections.size();
-      }
-    };
+    availableConnections = blockingChannelAvailableConnections::size;
     registry.register(
         MetricRegistry.name(BlockingChannelInfo.class, host + "-" + port.getPort() + "-availableConnections"),
         availableConnections);
 
-    activeConnections = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return blockingChannelActiveConnections.size();
-      }
-    };
+    activeConnections = blockingChannelActiveConnections::size;
     registry.register(
         MetricRegistry.name(BlockingChannelInfo.class, host + "-" + port.getPort() + "-activeConnections"),
         activeConnections);
 
-    totalNumberOfConnections = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return numberOfConnections.intValue();
-      }
-    };
+    totalNumberOfConnections = numberOfConnections::intValue;
     registry.register(
         MetricRegistry.name(BlockingChannelInfo.class, host + "-" + port.getPort() + "-totalNumberOfConnections"),
         totalNumberOfConnections);
@@ -240,8 +225,7 @@ class BlockingChannelInfo {
   }
 
   /**
-   * Returns the number of connections with this BlockingChannelInfo
-   * @return
+   * @return the number of connections with this BlockingChannelInfo
    */
   public int getNumberOfConnections() {
     return this.numberOfConnections.intValue();
@@ -310,40 +294,29 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
     connectionDestroyTime =
         registry.timer(MetricRegistry.name(BlockingChannelConnectionPool.class, "connectionDestroyTime"));
 
-    totalNumberOfNodesConnectedTo = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        int noOfNodesConnectedTo = 0;
-        for (BlockingChannelInfo blockingChannelInfo : connections.values()) {
-          if (blockingChannelInfo.getNumberOfConnections() > 0) {
-            noOfNodesConnectedTo++;
-          }
+    totalNumberOfNodesConnectedTo = () -> {
+      int noOfNodesConnectedTo = 0;
+      for (BlockingChannelInfo blockingChannelInfo : connections.values()) {
+        if (blockingChannelInfo.getNumberOfConnections() > 0) {
+          noOfNodesConnectedTo++;
         }
-        return noOfNodesConnectedTo;
       }
+      return noOfNodesConnectedTo;
     };
     registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "totalNumberOfNodesConnectedTo"),
         totalNumberOfNodesConnectedTo);
 
-    totalNumberOfConnections = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        int noOfConnections = 0;
-        for (BlockingChannelInfo blockingChannelInfo : connections.values()) {
-          noOfConnections += blockingChannelInfo.getNumberOfConnections();
-        }
-        return noOfConnections;
+    totalNumberOfConnections = () -> {
+      int noOfConnections = 0;
+      for (BlockingChannelInfo blockingChannelInfo : connections.values()) {
+        noOfConnections += blockingChannelInfo.getNumberOfConnections();
       }
+      return noOfConnections;
     };
     registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "totalNumberOfConnections"),
         totalNumberOfConnections);
     requestsWaitingToCheckoutConnectionCount = new AtomicInteger(0);
-    requestsWaitingToCheckoutConnection = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return requestsWaitingToCheckoutConnectionCount.get();
-      }
-    };
+    requestsWaitingToCheckoutConnection = requestsWaitingToCheckoutConnectionCount::get;
     registry.register(MetricRegistry.name(BlockingChannelConnectionPool.class, "requestsWaitingToCheckoutConnection"),
         requestsWaitingToCheckoutConnection);
     sslSocketFactoryClientInitializationCount = registry.counter(

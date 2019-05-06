@@ -185,10 +185,10 @@ class CloudBlobStore implements Store {
     if (messageInfo.isDeleted()) {
       return false;
     }
-
-    // expiration time above threshold
+    // expiration time above threshold or ttlUpdate is set. Expired blobs are blocked by ReplicaThread.
     return (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time
-        || messageInfo.getExpirationTimeInMs() - messageInfo.getOperationTimeMs() >= minTtlMillis);
+        || messageInfo.getExpirationTimeInMs() - messageInfo.getOperationTimeMs() >= minTtlMillis
+        || messageInfo.isTtlUpdated());
   }
 
   @Override
@@ -218,8 +218,16 @@ class CloudBlobStore implements Store {
     // Note: we skipped uploading the blob on PUT record if the TTL was below threshold.
     try {
       for (MessageInfo msgInfo : messageSetToUpdate.getMessageSetInfo()) {
-        BlobId blobId = (BlobId) msgInfo.getStoreKey();
-        cloudDestination.updateBlobExpiration(blobId, msgInfo.getExpirationTimeInMs());
+        // MessageInfo.expirationTimeInMs is not reliable if ttlUpdate is set. See {@code PersistentIndex#findKey()}
+        // and {@code PersistentIndex#markAsPermanent()}. If we change updateTtl to be more flexible, code here will
+        // need to be modified.
+        if (msgInfo.isTtlUpdated()) {
+          BlobId blobId = (BlobId) msgInfo.getStoreKey();
+          cloudDestination.updateBlobExpiration(blobId, Utils.Infinite_Time);
+        } else {
+          logger.error("updateTtl() is called but msgInfo.isTtlUpdated is not set. msgInfo: {}", msgInfo);
+          vcrMetrics.updateTtlNotSetError.inc();
+        }
       }
     } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);

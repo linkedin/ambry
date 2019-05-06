@@ -66,7 +66,7 @@ abstract class GetOperation {
 
   /**
    * Construct a GetOperation
-   * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
+   * @param routerConfig the {@link RouterConfig} containing the configs for get operations.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
@@ -237,23 +237,21 @@ abstract class GetOperation {
   /**
    * Gets an {@link OperationTracker} based on the config and {@code partitionId}.
    * @param partitionId the {@link PartitionId} for which a tracker is required.
+   * @param routerOperation The type of router operation used by tracker.
    * @return an {@link OperationTracker} based on the config and {@code partitionId}.
    */
-  protected OperationTracker getOperationTracker(PartitionId partitionId, byte datacenterId) {
+  protected OperationTracker getOperationTracker(PartitionId partitionId, byte datacenterId,
+      RouterOperation routerOperation) {
     OperationTracker operationTracker;
     String trackerType = routerConfig.routerGetOperationTrackerType;
     String originatingDcName = clusterMap.getDatacenterName(datacenterId);
     if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
-      operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId,
-          routerConfig.routerGetCrossDcEnabled, originatingDcName,
-          routerConfig.routerGetIncludeNonOriginatingDcReplicas, routerConfig.routerGetReplicasRequired,
-          routerConfig.routerGetSuccessTarget, routerConfig.routerGetRequestParallelism);
+      operationTracker =
+          new SimpleOperationTracker(routerConfig, routerOperation, partitionId, originatingDcName, true);
     } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
-      operationTracker = new AdaptiveOperationTracker(routerConfig.routerDatacenterName, partitionId,
-          routerConfig.routerGetCrossDcEnabled, originatingDcName,
-          routerConfig.routerGetIncludeNonOriginatingDcReplicas, routerConfig.routerGetReplicasRequired,
-          routerConfig.routerGetSuccessTarget, routerConfig.routerGetRequestParallelism, time, localColoTracker,
-          crossColoTracker, pastDueCounter, routerConfig.routerLatencyToleranceQuantile);
+      operationTracker =
+          new AdaptiveOperationTracker(routerConfig, routerOperation, partitionId, originatingDcName, localColoTracker,
+              crossColoTracker, pastDueCounter, routerMetrics, time);
     } else {
       throw new IllegalArgumentException("Unrecognized tracker type: " + trackerType);
     }

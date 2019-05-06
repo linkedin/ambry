@@ -61,7 +61,12 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   public boolean updateBlobExpiration(BlobId blobId, long expirationTime) throws CloudStorageException {
-    return true;
+    if (map.containsKey(blobId)) {
+      map.get(blobId).getFirst().setExpirationTime(expirationTime);
+      return true;
+    } else {
+      return false;
+    }
   }
 
   @Override

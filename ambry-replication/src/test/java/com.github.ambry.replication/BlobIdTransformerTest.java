@@ -13,7 +13,13 @@
  */
 package com.github.ambry.replication;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaEventType;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.messageformat.BlobProperties;
@@ -46,6 +52,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -502,8 +509,8 @@ public class BlobIdTransformerTest {
       int inputStreamSize;
       MessageInfo messageInfo;
       BlobProperties blobProperties =
-          new BlobProperties(blobPropertiesSize, "serviceId", "ownerId", "contentType", false, 0, 0, blobId.getAccountId(),
-              blobId.getContainerId(), hasEncryption, null);
+          new BlobProperties(blobPropertiesSize, "serviceId", "ownerId", "contentType", false, 0, 0,
+              blobId.getAccountId(), blobId.getContainerId(), hasEncryption, null);
       if (clazz != null) {
         MessageFormatInputStream messageFormatInputStream;
         if (clazz == PutMessageFormatInputStream.class) {
@@ -561,5 +568,80 @@ public class BlobIdTransformerTest {
   }
 
   private class BlobIdTransformerTestException extends Exception {
+  }
+
+  /**
+   * Mock clusterMap used when one wants the inputStream input for getPartitionIdFromStream
+   * to be read and have constructed a MockPartitionId from the input
+   */
+  private class MockReadingClusterMap implements ClusterMap {
+    private boolean throwException = false;
+
+    public MockReadingClusterMap() {
+    }
+
+    public void setThrowException(boolean bool) {
+      this.throwException = bool;
+    }
+
+    public PartitionId getPartitionIdFromStream(InputStream inputStream) throws IOException {
+      if (this.throwException) {
+        throw new IOException();
+      } else {
+        byte[] bytes = new byte[10];
+        inputStream.read(bytes);
+        ByteBuffer bb = ByteBuffer.wrap(bytes);
+        bb.getShort();
+        long num = bb.getLong();
+        return new MockPartitionId(num, (String) null);
+      }
+    }
+
+    public List<? extends PartitionId> getWritablePartitionIds(String partitionClass) {
+      return null;
+    }
+
+    public List<? extends PartitionId> getAllPartitionIds(String partitionClass) {
+      return null;
+    }
+
+    public boolean hasDatacenter(String s) {
+      return false;
+    }
+
+    public byte getLocalDatacenterId() {
+      return 0;
+    }
+
+    public String getDatacenterName(byte b) {
+      return null;
+    }
+
+    public DataNodeId getDataNodeId(String s, int i) {
+      return null;
+    }
+
+    public List<? extends ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
+      return null;
+    }
+
+    public List<? extends DataNodeId> getDataNodeIds() {
+      return null;
+    }
+
+    public MetricRegistry getMetricRegistry() {
+      return null;
+    }
+
+    public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType replicaEventType) {
+    }
+
+    @Override
+    public JSONObject getSnapshot() {
+      return null;
+    }
+
+    public void close() {
+    }
   }
 }

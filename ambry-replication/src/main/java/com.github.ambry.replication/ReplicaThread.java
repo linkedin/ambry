@@ -78,7 +78,7 @@ import org.slf4j.LoggerFactory;
 /**
  * A replica thread is responsible for handling replication for a set of partitions assigned to it
  */
-class ReplicaThread implements Runnable {
+public class ReplicaThread implements Runnable {
 
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode;
   private final Set<PartitionId> replicationDisabledPartitions = new HashSet<>();
@@ -114,7 +114,7 @@ class ReplicaThread implements Runnable {
 
   private volatile boolean allDisabled = false;
 
-  ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
+  public ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyConverter storeKeyConverter,
@@ -232,7 +232,7 @@ class ReplicaThread implements Runnable {
    * Replicas from the given replicas
    * @param replicasToReplicate list of {@link RemoteReplicaInfo} by data node
    */
-  void replicate(List<List<RemoteReplicaInfo>> replicasToReplicate) {
+  public void replicate(List<List<RemoteReplicaInfo>> replicasToReplicate) {
     // shuffle the nodes
     Collections.shuffle(replicasToReplicate);
     boolean allCaughtUp = true;
@@ -388,10 +388,10 @@ class ReplicaThread implements Runnable {
                       replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
             } catch (Exception e) {
-              replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
               logger.error(
                   "Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replica: " + remoteReplicaInfo
                       .getReplicaId(), e);
+              replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
               responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), e);
               ExchangeMetadataResponse exchangeMetadataResponse =
                   new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error);

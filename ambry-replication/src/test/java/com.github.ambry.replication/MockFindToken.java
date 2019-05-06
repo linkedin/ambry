@@ -20,20 +20,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 
-public class MockFindTokenFactory implements FindTokenFactory {
-
-  @Override
-  public FindToken getFindToken(DataInputStream stream) throws IOException {
-    return new MockFindToken(stream);
-  }
-
-  @Override
-  public FindToken getNewFindToken() {
-    return new MockFindToken(0, 0);
-  }
-}
-
-class MockFindToken implements FindToken {
+public class MockFindToken implements FindToken {
   int index;
   long bytesRead;
 
@@ -73,5 +60,18 @@ class MockFindToken implements FindToken {
 
   public long getBytesRead() {
     return this.bytesRead;
+  }
+
+  public static class MockFindTokenFactory implements FindTokenFactory {
+
+    @Override
+    public FindToken getFindToken(DataInputStream stream) throws IOException {
+      return new MockFindToken(stream);
+    }
+
+    @Override
+    public FindToken getNewFindToken() {
+      return new MockFindToken(0, 0);
+    }
   }
 }

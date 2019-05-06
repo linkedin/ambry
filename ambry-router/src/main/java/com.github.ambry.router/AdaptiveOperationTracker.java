@@ -17,6 +17,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.HashMap;
@@ -39,7 +40,6 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   static final long MIN_DATA_POINTS_REQUIRED = 1000;
 
   private final Time time;
-  private final String datacenterName;
   private final double quantile;
   private final Histogram localColoTracker;
   private final Histogram crossColoTracker;
@@ -55,34 +55,42 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
 
   /**
    * Constructs an {@link AdaptiveOperationTracker}
-   * @param datacenterName The datacenter where the router is located.
+   * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
+   * @param routerOperation The {@link RouterOperation} which {@link AdaptiveOperationTracker} is associated with.
    * @param partitionId The partition on which the operation is performed.
-   * @param crossColoEnabled {@code true} if requests can be sent to remote replicas, {@code false}
-   *                                otherwise.
    * @param originatingDcName name of the cross colo DC whose replicas should be tried first.
-   * @param includeNonOriginatingDcReplicas if take the option to include remote non originating DC replicas.
-   * @param replicasRequired The number of replicas required for the operation.
-   * @param successTarget The number of successful responses required to succeed the operation.
-   * @param parallelism The maximum number of inflight requests at any point of time.
-   * @param time the {@link Time} instance to use.
    * @param localColoTracker the {@link Histogram} that tracks intra datacenter latencies for this class of requests.
    * @param crossColoTracker the {@link Histogram} that tracks inter datacenter latencies for this class of requests.
    * @param pastDueCounter the {@link Counter} that tracks the number of times a request is past due.
-   * @param quantile the quantile cutoff to use for when evaluating requests against the trackers.
+   * @param time the {@link Time} instance to use.
    */
-  AdaptiveOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled,
-      String originatingDcName, boolean includeNonOriginatingDcReplicas, int replicasRequired, int successTarget,
-      int parallelism, Time time, Histogram localColoTracker, Histogram crossColoTracker, Counter pastDueCounter,
-      double quantile) {
-    super(datacenterName, partitionId, crossColoEnabled, originatingDcName, includeNonOriginatingDcReplicas,
-        replicasRequired, successTarget, parallelism, true);
-    this.datacenterName = datacenterName;
+  AdaptiveOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
+      String originatingDcName, Histogram localColoTracker, Histogram crossColoTracker, Counter pastDueCounter,
+      NonBlockingRouterMetrics routerMetrics, Time time) {
+    super(routerConfig, routerOperation, partitionId, originatingDcName, true);
     this.time = time;
     this.localColoTracker = localColoTracker;
     this.crossColoTracker = crossColoTracker;
     this.pastDueCounter = pastDueCounter;
-    this.quantile = quantile;
+    this.quantile = routerConfig.routerLatencyToleranceQuantile;
     this.otIterator = new OpTrackerIterator();
+    Class operationClass = null;
+    switch (routerOperation) {
+      case GetBlobOperation:
+        operationClass = GetBlobOperation.class;
+        break;
+      case GetBlobInfoOperation:
+        operationClass = GetBlobInfoOperation.class;
+        break;
+      default:
+        throw new IllegalArgumentException(routerOperation + " is not supported in AdaptiveOperationTracker");
+    }
+    routerMetrics.registerCustomPercentiles(operationClass, "LocalColoLatencyMs", localColoTracker,
+        routerConfig.routerOperationTrackerCustomPercentiles);
+    if (crossColoTracker != null) {
+      routerMetrics.registerCustomPercentiles(operationClass, "CrossColoLatencyMs", crossColoTracker,
+          routerConfig.routerOperationTrackerCustomPercentiles);
+    }
   }
 
   @Override

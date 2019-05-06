@@ -351,12 +351,7 @@ public class ReplicationMetrics {
    */
   void trackLiveThreadsCount(final Map<String, List<ReplicaThread>> replicaThreadPools, String localDatacenter) {
     for (final String datacenter : replicaThreadPools.keySet()) {
-      Gauge<Integer> liveThreadsPerDatacenter = new Gauge<Integer>() {
-        @Override
-        public Integer getValue() {
-          return getLiveThreads(replicaThreadPools.get(datacenter));
-        }
-      };
+      Gauge<Integer> liveThreadsPerDatacenter = () -> getLiveThreads(replicaThreadPools.get(datacenter));
       if (localDatacenter.equals(datacenter)) {
         registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfIntra-Colo-ReplicaThreads"),
             liveThreadsPerDatacenter);
@@ -382,12 +377,7 @@ public class ReplicationMetrics {
     DataNodeId dataNodeId = replicaId.getDataNodeId();
     final String metricName =
         dataNodeId.getHostname() + "-" + dataNodeId.getPort() + "-" + replicaId.getPartitionId() + "-replicaLagInBytes";
-    Gauge<Long> replicaLag = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return remoteReplicaInfo.getRemoteLagFromLocalInBytes();
-      }
-    };
+    Gauge<Long> replicaLag = remoteReplicaInfo::getRemoteLagFromLocalInBytes;
     registry.register(MetricRegistry.name(ReplicationMetrics.class, metricName), replicaLag);
     replicaLagInBytes.add(replicaLag);
   }
