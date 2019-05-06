@@ -162,6 +162,7 @@ class CloudBlobStore implements Store {
       long bufferlen = bufferChanged ? -1 : size;
       cloudDestination.uploadBlob(blobId, bufferlen, blobMetadata, new ByteBufferInputStream(messageBuf));
     } else {
+      logger.trace("Blob is skipped: {}", messageInfo);
       vcrMetrics.blobUploadSkippedCount.inc();
     }
   }
