@@ -25,6 +25,8 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.replication.RemoteReplicaInfo.*;
+
 
 /**
  * {@link DiskTokenPersistor} persists replication token to disk.
@@ -52,12 +54,9 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
   protected void persistTokens(String mountPath, List<ReplicaTokenInfo> tokenInfoList) throws IOException {
     File temp = new File(mountPath, replicaTokenFileName + ".tmp");
     File actual = new File(mountPath, replicaTokenFileName);
-    FileOutputStream fileStream = new FileOutputStream(temp);
-    try {
+    try (FileOutputStream fileStream = new FileOutputStream(temp)) {
       replicaTokenSerde.serializeTokens(tokenInfoList, fileStream);
 
-      // flush and overwrite old file
-      //fileStream.getChannel().force(true);
       // swap temp file with the original file
       temp.renameTo(actual);
       logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());

@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.replication.PartitionInfo;
-import com.github.ambry.replication.ReplicaTokenInfo;
 import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationMetrics;
@@ -29,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.replication.RemoteReplicaInfo.*;
 
 
 /**
@@ -49,7 +50,8 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
    * @param tokenfactory the {@link FindTokenFactory} to deserialize tokens.
    */
   public CloudTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactory tokenfactory, CloudDestination cloudDestination) {
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactory tokenfactory,
+      CloudDestination cloudDestination) {
     super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenfactory);
     this.replicaTokenFileName = replicaTokenFileName;
     this.cloudDestination = cloudDestination;
@@ -58,7 +60,8 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
   // Note: assuming that passed mountPath is the partitionId path
 
   @Override
-  protected void persistTokens(String mountPath, List<ReplicaTokenInfo> tokenInfoList) throws IOException, ReplicationException {
+  protected void persistTokens(String mountPath, List<ReplicaTokenInfo> tokenInfoList)
+      throws IOException, ReplicationException {
     try {
       ByteArrayOutputStream tokenOutputStream = new ByteArrayOutputStream(4096);
       replicaTokenSerde.serializeTokens(tokenInfoList, tokenOutputStream);

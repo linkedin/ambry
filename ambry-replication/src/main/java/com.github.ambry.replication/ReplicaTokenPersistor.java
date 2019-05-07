@@ -33,6 +33,8 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.replication.RemoteReplicaInfo.*;
+
 
 /**
  * {@link ReplicaTokenPersistor} is used in {@link ReplicationEngine} to persist replication token.
@@ -131,6 +133,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
     private final FindTokenFactory tokenfactory;
     private final short version = 0;
 
+    // Map<Sting,FindToken>
     public ReplicaTokenSerde(ClusterMap clusterMap, FindTokenFactory tokenfactory) {
       this.clusterMap = clusterMap;
       this.tokenfactory = tokenfactory;

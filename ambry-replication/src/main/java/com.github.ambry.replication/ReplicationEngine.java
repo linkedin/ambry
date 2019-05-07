@@ -376,9 +376,9 @@ public abstract class ReplicationEngine {
     boolean tokenWasReset = false;
     long readStartTimeMs = SystemTime.getInstance().milliseconds();
     try {
-      List<ReplicaTokenInfo> tokenInfoList = persistor.retrieveTokens(mountPath);
+      List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfoList = persistor.retrieveTokens(mountPath);
 
-      for (ReplicaTokenInfo tokenInfo : tokenInfoList) {
+      for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfoList) {
         String hostname = tokenInfo.getHostname();
         int port = tokenInfo.getPort();
         PartitionId partitionId = tokenInfo.getPartitionId();
