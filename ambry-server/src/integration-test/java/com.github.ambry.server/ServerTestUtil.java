@@ -489,6 +489,10 @@ final class ServerTestUtil {
       assertEquals("Delete blob on restarted store should succeed", ServerErrorCode.No_Error,
           deleteResponse.getError());
 
+      // Bounce servers to make them read the persisted token file.
+      cluster.stopServers();
+      cluster.startServers();
+
       channel.disconnect();
     } catch (Exception e) {
       e.printStackTrace();

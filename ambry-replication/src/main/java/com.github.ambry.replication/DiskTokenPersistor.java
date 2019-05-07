@@ -71,8 +71,8 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
   public List<ReplicaTokenInfo> retrieveTokens(String mountPath) throws IOException, ReplicationException {
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
     if (replicaTokenFile.exists()) {
-      try {
-        return replicaTokenSerde.deserializeTokens(new FileInputStream(replicaTokenFile));
+      try (FileInputStream fileInputStream = new FileInputStream(replicaTokenFile)) {
+        return replicaTokenSerde.deserializeTokens(fileInputStream);
       } catch (IOException e) {
         throw new ReplicationException("IO error while reading from replica token file at mount path " + mountPath, e);
       }
