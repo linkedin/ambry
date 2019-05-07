@@ -84,7 +84,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
     }
 
     try {
-      persistTokens(mountPath, tokensPersisted);
+      persist(mountPath, tokensPersisted);
     } finally {
       // TODO: could move this out
       replicationMetrics.remoteReplicaTokensPersistTime.update(
@@ -105,7 +105,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
    * @param tokenInfoList
    * @throws IOException
    */
-  protected abstract void persistTokens(String mountPath, List<ReplicaTokenInfo> tokenInfoList)
+  protected abstract void persist(String mountPath, List<ReplicaTokenInfo> tokenInfoList)
       throws IOException, ReplicationException;
 
   /**
@@ -113,7 +113,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
    * @param mountPath The mouth path of the partition(s).
    * @return A list of {@link ReplicaTokenInfo}.
    */
-  protected abstract List<ReplicaTokenInfo> retrieveTokens(String mountPath) throws IOException, ReplicationException;
+  protected abstract List<ReplicaTokenInfo> retrieve(String mountPath) throws IOException, ReplicationException;
 
   @Override
   public void run() {

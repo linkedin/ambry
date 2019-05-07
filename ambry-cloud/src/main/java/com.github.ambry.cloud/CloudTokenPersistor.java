@@ -60,12 +60,11 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
   // Note: assuming that passed mountPath is the partitionId path
 
   @Override
-  protected void persistTokens(String mountPath, List<ReplicaTokenInfo> tokenInfoList)
+  protected void persist(String mountPath, List<ReplicaTokenInfo> tokenInfoList)
       throws IOException, ReplicationException {
     try {
       ByteArrayOutputStream tokenOutputStream = new ByteArrayOutputStream(4096);
       replicaTokenSerde.serializeTokens(tokenInfoList, tokenOutputStream);
-      tokenOutputStream.flush();
 
       InputStream inputStream = new ByteArrayInputStream(tokenOutputStream.toByteArray());
       cloudDestination.persistTokens(mountPath, replicaTokenFileName, inputStream);
@@ -76,7 +75,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
   }
 
   @Override
-  public List<ReplicaTokenInfo> retrieveTokens(String mountPath) throws IOException, ReplicationException {
+  public List<ReplicaTokenInfo> retrieve(String mountPath) throws IOException, ReplicationException {
     try {
       ByteArrayOutputStream tokenOutputStream = new ByteArrayOutputStream(4096);
       boolean tokenExists = cloudDestination.retrieveTokens(mountPath, replicaTokenFileName, tokenOutputStream);

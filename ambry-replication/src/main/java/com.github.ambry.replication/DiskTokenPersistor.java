@@ -51,7 +51,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
   }
 
   @Override
-  protected void persistTokens(String mountPath, List<ReplicaTokenInfo> tokenInfoList) throws IOException {
+  protected void persist(String mountPath, List<ReplicaTokenInfo> tokenInfoList) throws IOException {
     File temp = new File(mountPath, replicaTokenFileName + ".tmp");
     File actual = new File(mountPath, replicaTokenFileName);
     try (FileOutputStream fileStream = new FileOutputStream(temp)) {
@@ -67,7 +67,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
   }
 
   @Override
-  public List<ReplicaTokenInfo> retrieveTokens(String mountPath) throws IOException, ReplicationException {
+  public List<ReplicaTokenInfo> retrieve(String mountPath) throws IOException, ReplicationException {
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
     if (replicaTokenFile.exists()) {
       try (FileInputStream fileInputStream = new FileInputStream(replicaTokenFile)) {

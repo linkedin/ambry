@@ -190,7 +190,7 @@ public class AzureIntegrationTest {
     assertTrue("Retrieved token did not match sent", Arrays.equals(outputStream.toByteArray(), tokenBytes));
     // Try for nonexistent partition
     outputStream.reset();
-    assertFalse("Expected retrive to return false for nonexistent path",
+    assertFalse("Expected retrieve to return false for nonexistent path",
         azureDest.retrieveTokens("unknown-path", tokenFileName, outputStream));
   }
 
