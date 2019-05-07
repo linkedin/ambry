@@ -52,7 +52,7 @@ public class ContainerMetrics {
 
   /**
    * Metric names will be in the following format:
-   * {@code com.github.ambry.frontend.ContainerMetrics.{accountName}__{containerName}__{operationType}{metric}}
+   * {@code com.github.ambry.frontend.ContainerMetrics.{accountName}___{containerName}___{operationType}{metric}}
    * For example:
    * {@code com.github.ambry.frontend.ContainerMetrics.account-a___container-b___GetBlobSuccessCount}
    * @param accountName the account name to use for naming metrics.
