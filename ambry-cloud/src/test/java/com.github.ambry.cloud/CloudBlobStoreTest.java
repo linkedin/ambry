@@ -123,6 +123,7 @@ public class CloudBlobStoreTest {
     properties.setProperty("clustermap.cluster.name", "dev");
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("clustermap.resolve.hostnames", "false");
     properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(64));
   }
 
@@ -363,7 +364,8 @@ public class CloudBlobStoreTest {
         referenceTime - 2000, referenceTime - 1000);
     replicaThread.replicate(replicasToReplicateList);
     assertFalse("Blob should not exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
-    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+        Utils.Infinite_Time);
     replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
@@ -372,7 +374,8 @@ public class CloudBlobStoreTest {
     id = blobIdList.get(1);
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime - 2000, referenceTime - 1000);
-    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+        Utils.Infinite_Time);
     replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
@@ -383,7 +386,8 @@ public class CloudBlobStoreTest {
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays) - 1);
     replicaThread.replicate(replicasToReplicateList);
     assertFalse("Blob should not exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
-    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+        Utils.Infinite_Time);
     replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
@@ -392,7 +396,8 @@ public class CloudBlobStoreTest {
     id = blobIdList.get(3);
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays) - 1);
-    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+        Utils.Infinite_Time);
     replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
@@ -403,7 +408,8 @@ public class CloudBlobStoreTest {
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays));
     replicaThread.replicate(replicasToReplicateList);
     assertTrue(latchBasedInMemoryCloudDestination.doesBlobExist(id));
-    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+        Utils.Infinite_Time);
     replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
@@ -412,7 +418,8 @@ public class CloudBlobStoreTest {
     id = blobIdList.get(5);
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays));
-    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost));
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+        Utils.Infinite_Time);
     replicaThread.replicate(replicasToReplicateList);
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 

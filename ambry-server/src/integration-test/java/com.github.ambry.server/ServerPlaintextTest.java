@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -98,8 +99,10 @@ public class ServerPlaintextTest {
   @Test
   public void endToEndCloudBackupTest() throws Exception {
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, testEncryption,
-        notificationSystem, null);
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, testEncryption, notificationSystem,
+        null, Utils.Infinite_Time, false);
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, testEncryption, notificationSystem,
+        null, System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1), true);
   }
 
   @Test

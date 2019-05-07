@@ -162,6 +162,7 @@ class CloudBlobStore implements Store {
       long bufferlen = bufferChanged ? -1 : size;
       cloudDestination.uploadBlob(blobId, bufferlen, blobMetadata, new ByteBufferInputStream(messageBuf));
     } else {
+      logger.trace("Blob is skipped: {}", messageInfo);
       vcrMetrics.blobUploadSkippedCount.inc();
     }
   }
@@ -185,10 +186,9 @@ class CloudBlobStore implements Store {
     if (messageInfo.isDeleted()) {
       return false;
     }
-    // expiration time above threshold or ttlUpdate is set. Expired blobs are blocked by ReplicaThread.
+    // expiration time above threshold. Expired blobs are blocked by ReplicaThread.
     return (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time
-        || messageInfo.getExpirationTimeInMs() - messageInfo.getOperationTimeMs() >= minTtlMillis
-        || messageInfo.isTtlUpdated());
+        || messageInfo.getExpirationTimeInMs() - messageInfo.getOperationTimeMs() >= minTtlMillis);
   }
 
   @Override
