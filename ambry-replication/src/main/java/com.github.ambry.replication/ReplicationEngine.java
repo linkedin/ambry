@@ -29,12 +29,8 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
-import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -86,7 +82,6 @@ public abstract class ReplicationEngine {
 
   protected static final short Replication_Delay_Multiplier = 5;
   protected static final String replicaTokenFileName = "replicaTokens";
-  private static final short Crc_Size = 8;
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, ScheduledExecutorService scheduler, DataNodeId dataNode,
@@ -125,7 +120,8 @@ public abstract class ReplicationEngine {
       // read stored tokens
       // iterate through all mount paths and read replication info for the partitions it owns
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
-        readFromFileAndPersistIfNecessary(mountPath);
+        // TODO: for VCR, every partition must have distinct mount path and be saved separately
+        retrieveReplicaTokensAndPersistIfNecessary(mountPath);
       }
       if (dataNodeRemoteReplicaInfosPerDC.size() == 0) {
         logger.warn("Number of Datacenters to replicate from is 0, not starting any replica threads");
@@ -368,91 +364,69 @@ public abstract class ReplicationEngine {
   }
 
   /**
-   * Reads the replica tokens from the file and populates the Remote replica info
-   * and persists the token file if necessary.
+   * Reads the replica tokens from storage, populates the Remote replica info,
+   * and re-persists the tokens if they have been reset.
    * @param mountPath The mount path where the replica tokens are stored
    * @throws ReplicationException
    * @throws IOException
    */
-  private void readFromFileAndPersistIfNecessary(String mountPath) throws ReplicationException, IOException {
+  private void retrieveReplicaTokensAndPersistIfNecessary(String mountPath) throws ReplicationException, IOException {
     logger.info("Reading replica tokens for mount path {}", mountPath);
-    long readStartTimeMs = SystemTime.getInstance().milliseconds();
-    File replicaTokenFile = new File(mountPath, replicaTokenFileName);
+
     boolean tokenWasReset = false;
-    if (replicaTokenFile.exists()) {
-      CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
-      DataInputStream stream = new DataInputStream(crcStream);
-      try {
-        short version = stream.readShort();
-        switch (version) {
-          case 0:
-            while (stream.available() > Crc_Size) {
-              // read partition id
-              PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-              // read remote node host name
-              String hostname = Utils.readIntString(stream);
-              // read remote replica path
-              String replicaPath = Utils.readIntString(stream);
-              // read remote port
-              int port = stream.readInt();
-              // read total bytes read from local store
-              long totalBytesReadFromLocalStore = stream.readLong();
-              // read replica token
-              FindToken token = factory.getFindToken(stream);
-              // update token
-              PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
-              if (partitionInfo != null) {
-                boolean updatedToken = false;
-                for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
-                  if (remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
-                      && remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == port
-                      && remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath)) {
-                    logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname,
-                        port, token);
-                    if (!partitionInfo.getStore().isEmpty()) {
-                      remoteReplicaInfo.initializeTokens(token);
-                      remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
-                    } else {
-                      // if the local replica is empty, it could have been newly created. In this case, the offset in
-                      // every peer replica which the local replica lags from should be set to 0, so that the local
-                      // replica starts fetching from the beginning of the peer. The totalBytes the peer read from the
-                      // local replica should also be set to 0. During initialization these values are already set to 0,
-                      // so we let them be.
-                      tokenWasReset = true;
-                      logTokenReset(partitionId, hostname, port, token);
-                    }
-                    updatedToken = true;
-                    break;
-                  }
-                }
-                if (!updatedToken) {
-                  logger.warn("Persisted remote replica host {} and port {} not present in new cluster ", hostname,
-                      port);
-                }
+    long readStartTimeMs = SystemTime.getInstance().milliseconds();
+    try {
+      List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfoList = persistor.retrieve(mountPath);
+
+      for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfoList) {
+        String hostname = tokenInfo.getHostname();
+        int port = tokenInfo.getPort();
+        PartitionId partitionId = tokenInfo.getPartitionId();
+        FindToken token = tokenInfo.getReplicaToken();
+        // update token
+        PartitionInfo partitionInfo = partitionsToReplicate.get(tokenInfo.getPartitionId());
+        if (partitionInfo != null) {
+          boolean updatedToken = false;
+          for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
+            DataNodeId dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
+            if (dataNodeId.getHostname().equalsIgnoreCase(hostname) && dataNodeId.getPort() == port && remoteReplicaInfo
+                .getReplicaId()
+                .getReplicaPath()
+                .equals(tokenInfo.getReplicaPath())) {
+              logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
+                  token);
+              if (!partitionInfo.getStore().isEmpty()) {
+                remoteReplicaInfo.initializeTokens(token);
+                remoteReplicaInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
               } else {
-                // If this partition was not found in partitionsToReplicate, it means that the local store corresponding
-                // to this partition could not be started. In such a case, the tokens for its remote replicas should be
-                // reset.
+                // if the local replica is empty, it could have been newly created. In this case, the offset in
+                // every peer replica which the local replica lags from should be set to 0, so that the local
+                // replica starts fetching from the beginning of the peer. The totalBytes the peer read from the
+                // local replica should also be set to 0. During initialization these values are already set to 0,
+                // so we let them be.
                 tokenWasReset = true;
                 logTokenReset(partitionId, hostname, port, token);
               }
+              updatedToken = true;
+              break;
             }
-            long crc = crcStream.getValue();
-            if (crc != stream.readLong()) {
-              throw new ReplicationException(
-                  "Crc check does not match for replica token file for mount path " + mountPath);
-            }
-            break;
-          default:
-            throw new ReplicationException("Invalid version in replica token file for mount path " + mountPath);
+          }
+          if (!updatedToken) {
+            logger.warn("Persisted remote replica host {} and port {} not present in new cluster ", hostname, port);
+          }
+        } else {
+          // If this partition was not found in partitionsToReplicate, it means that the local store corresponding
+          // to this partition could not be started. In such a case, the tokens for its remote replicas should be
+          // reset.
+          tokenWasReset = true;
+          logTokenReset(partitionId, hostname, port, token);
         }
-      } catch (IOException e) {
-        throw new ReplicationException("IO error while reading from replica token file " + e);
-      } finally {
-        stream.close();
-        replicationMetrics.remoteReplicaTokensRestoreTime.update(
-            SystemTime.getInstance().milliseconds() - readStartTimeMs);
       }
+    } catch (IOException e) {
+      throw new ReplicationException("IO error while reading from replica token file " + e);
+    } finally {
+      replicationMetrics.remoteReplicaTokensRestoreTime.update(
+          SystemTime.getInstance().milliseconds() - readStartTimeMs);
     }
 
     if (tokenWasReset) {

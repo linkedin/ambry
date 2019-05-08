@@ -39,6 +39,7 @@ import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.Collections;
 import java.util.HashMap;
@@ -324,6 +325,19 @@ public class AzureCloudDestinationTest {
     expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
         DocumentClientException.class);
     verifyUpdateErrorMetrics(2, true);
+  }
+
+  /** Test token methods. */
+  @Test
+  public void testTokens() throws Exception {
+    String path = blobId.getPartition().toPathString();
+    String tokenFile = "replicaTokens";
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream(100);
+    azureDest.persistTokens(path, tokenFile, new ByteArrayInputStream(new byte[100]));
+    when(mockBlob.exists()).thenReturn(true);
+    assertTrue("Expected retrieveTokens to return true", azureDest.retrieveTokens(path, tokenFile, outputStream));
+    when(mockBlob.exists()).thenReturn(false);
+    assertFalse("Expected retrieveTokens to return false", azureDest.retrieveTokens(path, tokenFile, outputStream));
   }
 
   /**

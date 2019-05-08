@@ -33,7 +33,6 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 class CloudReplica implements ReplicaId {
   private final PartitionId partitionId;
   private final DataNodeId dataNodeId;
-  private final String mountPathPrefix;
 
   /**
    * Instantiate an CloudReplica instance.
@@ -45,9 +44,6 @@ class CloudReplica implements ReplicaId {
   CloudReplica(CloudConfig cloudConfig, PartitionId partitionId, DataNodeId dataNodeId) {
     this.partitionId = partitionId;
     this.dataNodeId = dataNodeId;
-    this.mountPathPrefix = cloudConfig.vcrReplicaMountPathPrefix;
-    File mountPath = new File(getMountPath());
-    mountPath.mkdirs();
   }
 
   @Override
@@ -62,7 +58,7 @@ class CloudReplica implements ReplicaId {
 
   @Override
   public String getMountPath() {
-    return mountPathPrefix + partitionId.toPathString();
+    return partitionId.toPathString();
   }
 
   @Override

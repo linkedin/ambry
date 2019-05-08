@@ -152,6 +152,11 @@ public class MockCluster {
     serverList.add(server);
   }
 
+  /**
+   * Start up all the servers.
+   * @throws InstantiationException
+   * @throws IOException
+   */
   public void startServers() throws InstantiationException, IOException {
     serverInitialized = true;
     try {
@@ -165,7 +170,11 @@ public class MockCluster {
     }
   }
 
-  public void cleanup() throws IOException {
+  /**
+   * Shut down all the servers but keep the cluster.
+   * @throws IOException
+   */
+  public void stopServers() throws IOException {
     if (serverInitialized) {
       CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
       for (AmbryServer server : serverList) {
@@ -178,6 +187,17 @@ public class MockCluster {
       } catch (Exception e) {
         throw new IOException(e);
       }
+      serverInitialized = false;
+    }
+  }
+
+  /**
+   * Shut down the servers and clean up the cluster.
+   * @throws IOException
+   */
+  public void cleanup() throws IOException {
+    if (serverInitialized) {
+      stopServers();
       clusterMap.cleanup();
     }
   }

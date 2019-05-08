@@ -16,6 +16,7 @@ package com.github.ambry.cloud;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Pair;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -82,6 +83,15 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   public boolean doesBlobExist(BlobId blobId) throws CloudStorageException {
     return map.containsKey(blobId);
+  }
+
+  @Override
+  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream) {
+  }
+
+  @Override
+  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream) {
+    return false;
   }
 
   public boolean await(long duration, TimeUnit timeUnit) throws InterruptedException {

@@ -82,8 +82,8 @@ public class ReplicationManager extends ReplicationEngine {
       }
     }
     replicationMetrics.populatePerColoMetrics(numberOfReplicaThreads.keySet());
-    persistor = new DiskTokenPersistor(replicaTokenFileName, partitionGroupedByMountPath, replicationMetrics);
+    persistor =
+        new DiskTokenPersistor(replicaTokenFileName, partitionGroupedByMountPath, replicationMetrics, clusterMap,
+            factory);
   }
 }
-
-

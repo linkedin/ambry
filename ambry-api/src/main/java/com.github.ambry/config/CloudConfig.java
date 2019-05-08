@@ -23,7 +23,6 @@ public class CloudConfig {
   public static final String VCR_CLUSTER_ZK_CONNECT_STRING = "vcr.cluster.zk.connect.string";
   public static final String VCR_CLUSTER_NAME = "vcr.cluster.name";
   public static final String VCR_SSL_PORT = "vcr.ssl.port";
-  public static final String VCR_REPLICA_MOUNT_PATH_PREFIX = "vcr.replica.mount.path.prefix";
   public static final String VCR_REQUIRE_ENCRYPTION = "vcr.require.encryption";
   public static final String VCR_KMS_FACTORY = "vcr.key.management.service.factory";
   public static final String VCR_CRYPTO_SERVICE_FACTORY = "vcr.crypto.service.factory";
@@ -44,7 +43,6 @@ public class CloudConfig {
       "com.github.ambry.cloud.CloudBlobCryptoAgentFactoryImpl";
   private static final String DEFAULT_VCR_CLUSTER_ZK_CONNECT_STRING = "localhost:2181";
   private static final String DEFAULT_VCR_CLUSTER_NAME = "VCRCluster";
-  private static final String DEFAULT_VCR_REPLICA_MOUNT_PATH_PREFIX = "/tmp/vcr/";
   private static final int DEFAULT_MIN_TTL_DAYS = 14;
   private static final int DEFAULT_VCR_PROXY_PORT = 3128;
 
@@ -82,13 +80,6 @@ public class CloudConfig {
   @Config(VCR_SSL_PORT)
   @Default("null")
   public final Integer vcrSslPort;
-
-  /**
-   * The path prefix for CloudReplica mouth path.
-   */
-  @Config(VCR_REPLICA_MOUNT_PATH_PREFIX)
-  @Default(DEFAULT_VCR_REPLICA_MOUNT_PATH_PREFIX)
-  public final String vcrReplicaMountPathPrefix;
 
   /**
    * Require blobs to be encrypted prior to cloud upload?
@@ -164,8 +155,6 @@ public class CloudConfig {
         verifiableProperties.getString(VCR_CLUSTER_ZK_CONNECT_STRING, DEFAULT_VCR_CLUSTER_ZK_CONNECT_STRING);
     vcrClusterName = verifiableProperties.getString(VCR_CLUSTER_NAME, DEFAULT_VCR_CLUSTER_NAME);
     vcrSslPort = verifiableProperties.getInteger(VCR_SSL_PORT, null);
-    vcrReplicaMountPathPrefix =
-        verifiableProperties.getString(VCR_REPLICA_MOUNT_PATH_PREFIX, DEFAULT_VCR_REPLICA_MOUNT_PATH_PREFIX);
     vcrRequireEncryption = verifiableProperties.getBoolean(VCR_REQUIRE_ENCRYPTION, false);
     vcrKeyManagementServiceFactory = verifiableProperties.getString(VCR_KMS_FACTORY, RouterConfig.DEFAULT_KMS_FACTORY);
     vcrCryptoServiceFactory =
