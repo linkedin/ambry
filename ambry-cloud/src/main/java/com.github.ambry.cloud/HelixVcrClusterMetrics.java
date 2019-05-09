@@ -14,18 +14,25 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.PartitionId;
+import java.util.Set;
 
 
 public class HelixVcrClusterMetrics {
 
   public final Counter partitionIdNotInClusterMapOnRemove;
   public final Counter partitionIdNotInClusterMapOnAdd;
+  public Gauge<Integer> numberOfAssignedPartitions;
 
-  public HelixVcrClusterMetrics(MetricRegistry registry) {
+  public HelixVcrClusterMetrics(MetricRegistry registry, Set<PartitionId> assignedPartitionIds) {
     partitionIdNotInClusterMapOnRemove =
         registry.counter(MetricRegistry.name(HelixVcrCluster.class, "PartitionIdNotInClusterMapOnRemove"));
     partitionIdNotInClusterMapOnAdd =
         registry.counter(MetricRegistry.name(HelixVcrCluster.class, "PartitionIdNotInClusterMapOnAdd"));
+    numberOfAssignedPartitions = () -> assignedPartitionIds.size();
+    registry.register(MetricRegistry.name(HelixVcrCluster.class, "NumberOfAssignedPartitions"),
+        numberOfAssignedPartitions);
   }
 }

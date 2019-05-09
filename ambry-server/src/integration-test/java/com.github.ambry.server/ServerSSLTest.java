@@ -38,6 +38,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static org.junit.Assume.*;
+
 
 @RunWith(Parameterized.class)
 public class ServerSSLTest {
@@ -133,12 +135,12 @@ public class ServerSSLTest {
    */
   @Test
   public void endToEndCloudBackupTest() throws Exception {
+    assumeTrue(testEncryption);
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
     ServerTestUtil.endToEndCloudBackupTest(sslCluster, dataNode, clientSSLConfig2, clientSSLSocketFactory2,
         notificationSystem, serverSSLProps, Utils.Infinite_Time, false);
     ServerTestUtil.endToEndCloudBackupTest(sslCluster, dataNode, clientSSLConfig2, clientSSLSocketFactory2,
-        notificationSystem, serverSSLProps, System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1),
-        true);
+        notificationSystem, serverSSLProps, System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1), true);
   }
 
   @Test

@@ -94,7 +94,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     try {
       tokenMap.put(partitionPath + tokenFileName, IOUtils.toByteArray(inputStream));
     } catch (IOException e) {
-      throw new CloudStorageException("read input stream error", e);
+      throw new CloudStorageException("Read input stream error", e);
     }
   }
 
@@ -108,7 +108,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       outputStream.write(tokenMap.get(partitionPath + tokenFileName));
       return true;
     } catch (IOException e) {
-      throw new CloudStorageException("write to stream error", e);
+      throw new CloudStorageException("Write to stream error", e);
     }
   }
 

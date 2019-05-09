@@ -76,7 +76,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     vcrClusterName = cloudConfig.vcrClusterName;
     vcrInstanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
-    metrics = new HelixVcrClusterMetrics(clusterMap.getMetricRegistry());
+    metrics = new HelixVcrClusterMetrics(clusterMap.getMetricRegistry(), assignedPartitionIds);
   }
 
   /**
@@ -91,7 +91,8 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
         for (VirtualReplicatorClusterListener listener : listeners) {
           listener.onPartitionAdded(partitionId);
         }
-        logger.info("Partition {} is added to current VCR: {}", partitionIdStr, vcrInstanceName);
+        logger.info("Partition {} is added to current VCR: {}. Assigned partitions: {}", partitionIdStr,
+            vcrInstanceName, assignedPartitionIds);
       } else {
         logger.info("Partition {} exists on current VCR: {}", partitionIdStr, vcrInstanceName);
       }
@@ -113,7 +114,8 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
         for (VirtualReplicatorClusterListener listener : listeners) {
           listener.onPartitionRemoved(partitionId);
         }
-        logger.info("Partition {} is removed from current VCR: {}.", partitionIdStr, vcrInstanceName);
+        logger.info("Partition {} is removed from current VCR: {}. Assigned partitions: {}", partitionIdStr,
+            vcrInstanceName, assignedPartitionIds);
       } else {
         logger.info("Partition {} not exists on current VCR: {}", partitionIdStr, vcrInstanceName);
       }

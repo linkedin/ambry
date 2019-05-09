@@ -23,6 +23,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyConverter;
@@ -34,7 +35,6 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -61,7 +61,7 @@ public abstract class ReplicationEngine {
   private final NotificationSystem notification;
   // RemoteReplicaInfo are managed by replicaThread.
   protected final Map<String, List<ReplicaThread>> replicaThreadPoolByDc;
-  protected final Map<DataNodeId, ReplicaThread> dataNodeIdReplicaThreadMap;
+  protected final Map<DataNodeId, ReplicaThread> dataNodeIdToReplicaThread;
   protected final Map<String, AtomicInteger> nextReplicaThreadIndex;
   private final StoreKeyFactory storeKeyFactory;
   private final List<String> sslEnabledDatacenters;
@@ -73,8 +73,8 @@ public abstract class ReplicationEngine {
   protected final ReplicationMetrics replicationMetrics;
   protected final FindTokenFactory factory;
   protected final Logger logger = LoggerFactory.getLogger(getClass());
-  protected final Map<PartitionId, PartitionInfo> partitionsToReplicate;
-  protected final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
+  protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
+  protected final Map<String, List<PartitionInfo>> mountPathToPartitionInfoList;
   protected ReplicaTokenPersistor persistor = null;
 
   protected static final short Replication_Delay_Multiplier = 5;
@@ -95,8 +95,8 @@ public abstract class ReplicationEngine {
     }
     this.replicaThreadPoolByDc = new ConcurrentHashMap<>();
     this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaIds);
-    this.partitionGroupedByMountPath = new HashMap<>();
-    this.partitionsToReplicate = new ConcurrentHashMap<>();
+    this.mountPathToPartitionInfoList = new ConcurrentHashMap<>();
+    this.partitionToPartitionInfo = new ConcurrentHashMap<>();
     this.clusterMap = clusterMap;
     this.scheduler = scheduler;
     this.correlationIdGenerator = new AtomicInteger(0);
@@ -104,7 +104,7 @@ public abstract class ReplicationEngine {
     this.connectionPool = connectionPool;
     this.notification = requestNotification;
     this.metricRegistry = metricRegistry;
-    this.dataNodeIdReplicaThreadMap = new ConcurrentHashMap<>();
+    this.dataNodeIdToReplicaThread = new ConcurrentHashMap<>();
     this.nextReplicaThreadIndex = new ConcurrentHashMap<>();
     this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.storeKeyConverterFactory = storeKeyConverterFactory;
@@ -178,7 +178,7 @@ public abstract class ReplicationEngine {
   private RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
     RemoteReplicaInfo foundRemoteReplicaInfo = null;
 
-    PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
+    PartitionInfo partitionInfo = partitionToPartitionInfo.get(partitionId);
     for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
       if (remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath) && remoteReplicaInfo.getReplicaId()
           .getDataNodeId()
@@ -189,7 +189,7 @@ public abstract class ReplicationEngine {
       }
     }
     // TODO: replace replicaPath.contains("vcr").
-    if (foundRemoteReplicaInfo == null && !replicaPath.contains("vcr")) {
+    if (foundRemoteReplicaInfo == null && !replicaPath.contains(GetRequest.Cloud_Replica_Keyword)) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
@@ -220,43 +220,71 @@ public abstract class ReplicationEngine {
     }
   }
 
-  protected void removeRemoteReplicaInfo(List<RemoteReplicaInfo> remoteReplicaInfos) {
+  /**
+   * Remove a list of {@link RemoteReplicaInfo} from each's {@link ReplicaThread}.
+   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} to remote.
+   */
+  protected void removeRemoteReplicaInfoFromReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos) {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
+      // Thread safe with addRemoteReplicaInfoToReplicaThread.
+      // For ReplicationManger, this method is not used.
+      // For CloudBackUpManager with HelixVcrCluster, Helix requires acknowledgement before next message for the same
+      // resource, which means methods in HelixVcrStateModel will be executed sequentially for same partition.
+      // So do listener actions in addPartition() and removePartition().
       remoteReplicaInfo.getReplicaThread().removeRemoteReplicaInfo(remoteReplicaInfo);
+      remoteReplicaInfo.setReplicaThread(null);
     }
   }
 
+  /**
+   * Assign {@link RemoteReplicaInfo} to a {@link ReplicaThread} for replication.
+   * The assignment is based on {@link DataNodeId}. If no {@link ReplicaThread} responsible for a {@link DataNodeId},
+   * a {@link ReplicaThread} will be selected by {@link ReplicationEngine#getReplicaThreadIndexToUse(String)}.
+   * Create threads pool for a DC if not exists.
+   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} to add.
+   * @param startThread if threads need to be started when create.
+   */
   protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
       DataNodeId dataNodeIdToReplicate = remoteReplicaInfo.getReplicaId().getDataNodeId();
       String datacenter = dataNodeIdToReplicate.getDatacenterName();
       createThreadPoolIfNecessary(datacenter, startThread);
-      ReplicaThread replicaThread = dataNodeIdReplicaThreadMap.computeIfAbsent(dataNodeIdToReplicate,
+      ReplicaThread replicaThread = dataNodeIdToReplicaThread.computeIfAbsent(dataNodeIdToReplicate,
           key -> replicaThreadPoolByDc.get(datacenter).get(getReplicaThreadIndexToUse(datacenter)));
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
+      remoteReplicaInfo.setReplicaThread(replicaThread);
     }
   }
 
+  /**
+   * Select next available {@link ReplicaThread} in given datacenter.
+   * @param datacenter the datacenter String.
+   */
   private int getReplicaThreadIndexToUse(String datacenter) {
     return nextReplicaThreadIndex.get(datacenter).getAndIncrement() % replicaThreadPoolByDc.get(datacenter).size();
   }
 
   /**
-   * Updates the {@code dataNodesByDc} with the remoteReplicaInfo and also populates
-   * {@code numberOfReplicaThreads}
+   * Create thread pool for a datacenter if its thread pool doesn't exist.
+   * @param datacenter The datacenter String.
+   * @param startThread If thread needs to be started when create.
    */
   private void createThreadPoolIfNecessary(String datacenter, boolean startThread) {
-    replicaThreadPoolByDc.computeIfAbsent(datacenter, key -> {
-      nextReplicaThreadIndex.put(datacenter, new AtomicInteger(0));
-      int numOfThreadsInPool =
-          datacenter.equals(dataNodeId.getDatacenterName()) ? replicationConfig.replicationNumOfIntraDCReplicaThreads
-              : replicationConfig.replicationNumOfInterDCReplicaThreads;
-      return createThreadPool(datacenter, numOfThreadsInPool, startThread);
-    });
+    int numOfThreadsInPool =
+        datacenter.equals(dataNodeId.getDatacenterName()) ? replicationConfig.replicationNumOfIntraDCReplicaThreads
+            : replicationConfig.replicationNumOfInterDCReplicaThreads;
+    replicaThreadPoolByDc.computeIfAbsent(datacenter,
+        key -> createThreadPool(datacenter, numOfThreadsInPool, startThread));
   }
 
-  // {@link ReplicaThread} starts once created.
+  /**
+   * Create thread pool for a datacenter.
+   * @param datacenter The datacenter String.
+   * @param numberOfThreads number of threads to create for the thread pool.
+   * @param startThread If thread needs to be started when create.
+   */
   private List<ReplicaThread> createThreadPool(String datacenter, int numberOfThreads, boolean startThread) {
+    nextReplicaThreadIndex.put(datacenter, new AtomicInteger(0));
     List<ReplicaThread> replicaThreads = new ArrayList<>();
     if (numberOfThreads <= 0) {
       logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads for {} ",
@@ -269,10 +297,8 @@ public abstract class ReplicationEngine {
     for (int i = 0; i < numberOfThreads; i++) {
       boolean replicatingOverSsl = sslEnabledDatacenters.contains(datacenter);
       String threadIdentity =
-          "Replica Thread-" + (dataNodeId.getDatacenterName().equals(datacenter) ? "Intra-" : "Inter") + i + datacenter;
-      if (startThread) {
-        threadIdentity = "vcr-" + threadIdentity;
-      }
+          (startThread ? "Vcr" : "") + "ReplicaThread-" + (dataNodeId.getDatacenterName().equals(datacenter) ? "Intra-"
+              : "Inter-") + i + "-" + datacenter;
       try {
         StoreKeyConverter threadSpecificKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
         Transformer threadSpecificTransformer =
@@ -314,7 +340,7 @@ public abstract class ReplicationEngine {
       PartitionId partitionId = tokenInfo.getPartitionId();
       FindToken token = tokenInfo.getReplicaToken();
       // update token
-      PartitionInfo partitionInfo = partitionsToReplicate.get(tokenInfo.getPartitionId());
+      PartitionInfo partitionInfo = partitionToPartitionInfo.get(tokenInfo.getPartitionId());
       if (partitionInfo != null) {
         boolean updatedToken = false;
         for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
@@ -343,7 +369,7 @@ public abstract class ReplicationEngine {
           logger.warn("Persisted remote replica host {} and port {} not present in new cluster ", hostname, port);
         }
       } else {
-        // If this partition was not found in partitionsToReplicate, it means that the local store corresponding
+        // If this partition was not found in partitionToPartitionInfo, it means that the local store corresponding
         // to this partition could not be started. In such a case, the tokens for its remote replicas should be
         // reset.
         tokenWasReset = true;

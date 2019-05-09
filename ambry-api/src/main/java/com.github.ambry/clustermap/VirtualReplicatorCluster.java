@@ -36,8 +36,8 @@ public interface VirtualReplicatorCluster extends AutoCloseable {
   DataNodeId getCurrentDataNodeId();
 
   /**
-   * Join the cluster with a role.
-   * @param role the role
+   * Join the cluster as {@link InstanceType#PARTICIPANT} or {@link InstanceType#SPECTATOR} .
+   * @param role the {@link InstanceType}.
    */
   void participate(InstanceType role) throws Exception;
 

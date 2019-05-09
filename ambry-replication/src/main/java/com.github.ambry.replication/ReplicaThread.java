@@ -67,7 +67,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
@@ -81,12 +80,12 @@ import org.slf4j.LoggerFactory;
  */
 public class ReplicaThread implements Runnable {
 
-  private final Map<DataNodeId, Set<RemoteReplicaInfo>> replicasToReplicateGroupedByNode;
+  private final Map<DataNodeId, Set<RemoteReplicaInfo>> replicasToReplicateGroupedByNode = new HashMap<>();
   private final Set<RemoteReplicaInfo> replicaLazyRemoveSet = new HashSet<>();
   private final Set<PartitionId> replicationDisabledPartitions = new HashSet<>();
   private final Set<PartitionId> unmodifiableReplicationDisabledPartitions =
       Collections.unmodifiableSet(replicationDisabledPartitions);
-  private final Set<PartitionId> allReplicatedPartitions;
+  private final Set<PartitionId> allReplicatedPartitions = new HashSet<>();
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
   private final FindTokenFactory findTokenFactory;
@@ -122,7 +121,6 @@ public class ReplicaThread implements Runnable {
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time) {
     this.threadName = threadName;
-    this.replicasToReplicateGroupedByNode = new ConcurrentHashMap<>();
     this.running = true;
     this.findTokenFactory = findTokenFactory;
     this.clusterMap = clusterMap;
@@ -140,7 +138,6 @@ public class ReplicaThread implements Runnable {
     this.replicatingOverSsl = replicatingOverSsl;
     this.datacenterName = datacenterName;
     this.time = time;
-    allReplicatedPartitions = new HashSet<>();
     if (replicatingFromRemoteColo) {
       threadThrottleDurationMs = replicationConfig.replicationInterReplicaThreadThrottleSleepDurationMs;
       syncedBackOffCount = replicationMetrics.interColoReplicaSyncedBackoffCount;
@@ -223,29 +220,33 @@ public class ReplicaThread implements Runnable {
 
   /**
    * Do a lazy removal of {@link RemoteReplicaInfo} from current {@link ReplicaThread}.
+   * @param remoteReplicaInfo {@link RemoteReplicaInfo} to remove.
    */
   void removeRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
     lock.lock();
     replicaLazyRemoveSet.add(remoteReplicaInfo);
     lock.unlock();
+    logger.trace("RemoteReplicaInfo {} scheduled to be removed from ReplicaThread {}.", remoteReplicaInfo, threadName);
   }
 
   /**
    * Add a {@link RemoteReplicaInfo} to current {@link ReplicaThread}.
+   * @param remoteReplicaInfo {@link RemoteReplicaInfo} to add.
    */
   public void addRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
-//    System.out.println("add remoteReplicaInfo" + remoteReplicaInfo.getReplicaId() + "to" + this.threadName);
     lock.lock();
     allReplicatedPartitions.add(remoteReplicaInfo.getReplicaId().getPartitionId());
     replicaLazyRemoveSet.remove(remoteReplicaInfo);
     replicasToReplicateGroupedByNode.computeIfAbsent(remoteReplicaInfo.getReplicaId().getDataNodeId(),
         key -> new HashSet<>()).add(remoteReplicaInfo);
     lock.unlock();
+    logger.trace("RemoteReplicaInfo {} is added to ReplicaThread {}. Now working on {} dataNodeIds.", remoteReplicaInfo,
+        threadName, replicasToReplicateGroupedByNode.keySet().size());
   }
 
   /**
-   * @param dataNodeId given data node
-   * @return list of {@link RemoteReplicaInfo} belongs to given datanodeId.
+   * @return list of {@link RemoteReplicaInfo} belongs on given {@link DataNodeId}.
+   * @param dataNodeId The {@link DataNodeId}.
    */
   List<RemoteReplicaInfo> getRemoteReplicaInfos(DataNodeId dataNodeId) {
     List<RemoteReplicaInfo> remoteReplicaInfoList = new ArrayList<>(replicasToReplicateGroupedByNode.get(dataNodeId));
@@ -257,16 +258,12 @@ public class ReplicaThread implements Runnable {
    */
   public void replicate() {
     boolean allCaughtUp = true;
-    for (DataNodeId remoteNode : replicasToReplicateGroupedByNode.keySet()) {
+    List<DataNodeId> remoteDataNodes = new ArrayList<>(replicasToReplicateGroupedByNode.keySet());
+    for (DataNodeId remoteNode : remoteDataNodes) {
       if (!running) {
         break;
       }
       List<RemoteReplicaInfo> replicasToReplicatePerNode = getRemoteReplicaInfos(remoteNode);
-      boolean isVcr = threadName.startsWith("vcr");
-      if (isVcr) {
-//        logger.info("Remote node: {} Thread name: {} Remote replicas: {}", remoteNode, threadName,
-//            replicasToReplicatePerNode);
-      }
       Timer.Context context = null;
       Timer.Context portTypeBasedContext = null;
       if (replicatingFromRemoteColo) {
@@ -304,12 +301,11 @@ public class ReplicaThread implements Runnable {
         lock.lock();
         if (replicaLazyRemoveSet.contains(remoteReplicaInfo)) {
           // If remoteReplica is in the list to remove, we don't add it.
-          // race condition? Someone set it still ok here.
-          System.out.println("RemoteReplicaInfo:{} is removed" + remoteReplicaInfo);
           replicaLazyRemoveSet.remove(remoteReplicaInfo);
           replicasToReplicateGroupedByNode.get(remoteReplicaInfo.getReplicaId().getDataNodeId())
               .remove(remoteReplicaInfo);
           isRemoved = true;
+          logger.trace("RemoteReplicaInfo {} is removed from ReplicaThread {}.", remoteReplicaInfo, threadName);
         }
         lock.unlock();
         if (isRemoved) {
@@ -317,9 +313,6 @@ public class ReplicaThread implements Runnable {
         }
         activeReplicasPerNode.add(remoteReplicaInfo);
       }
-      // There two causes for activeReplicasPerNode.size()
-      // 1. remoteReplicaInfo is removed.
-      // 2. Paritions are disabled.
       if (activeReplicasPerNode.size() > 0) {
         allCaughtUp = false;
         try {
@@ -801,14 +794,10 @@ public class ReplicaThread implements Runnable {
   private void writeMessagesToLocalStoreAndAdvanceTokens(List<ExchangeMetadataResponse> exchangeMetadataResponseList,
       GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode)
       throws IOException, MessageFormatException {
-    boolean isVCR = replicasToReplicatePerNode.size() == 1;
     int partitionResponseInfoIndex = 0;
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;
     long startTime = SystemTime.getInstance().milliseconds();
-    if (isVCR) {
-//      System.out.println("excange metadata size: " + exchangeMetadataResponseList.size());
-    }
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
@@ -849,14 +838,11 @@ public class ReplicaThread implements Runnable {
               }
               messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
               if (messageInfoList.size() == 0) {
-                logger.info(
+                logger.debug(
                     "MessageInfoList is of size 0 as all messages are invalidated, deprecated, deleted or expired.");
               } else {
                 writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
                 remoteReplicaInfo.getLocalStore().put(writeset);
-                if (isVCR) {
-//                  System.out.println("writset" + writeset.getMessageSetInfo());
-                }
               }
 
               for (MessageInfo messageInfo : messageInfoList) {

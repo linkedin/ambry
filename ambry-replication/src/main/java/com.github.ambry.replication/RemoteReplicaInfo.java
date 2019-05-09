@@ -122,11 +122,11 @@ public class RemoteReplicaInfo implements Comparable<RemoteReplicaInfo> {
     return currentToken;
   }
 
-  public ReplicaThread getReplicaThread() {
+  synchronized ReplicaThread getReplicaThread() {
     return replicaThread;
   }
 
-  void setReplicaThread(ReplicaThread replicaThread) {
+  synchronized void setReplicaThread(ReplicaThread replicaThread) {
     this.replicaThread = replicaThread;
   }
 
@@ -148,7 +148,7 @@ public class RemoteReplicaInfo implements Comparable<RemoteReplicaInfo> {
     currentToken = token;
   }
 
-  synchronized public void initializeTokens(FindToken token) {
+  public void initializeTokens(FindToken token) {
     currentToken = token;
     candidateTokenToPersist = token;
     tokenSafeToPersist = token;
@@ -179,7 +179,7 @@ public class RemoteReplicaInfo implements Comparable<RemoteReplicaInfo> {
 
   @Override
   public String toString() {
-    return replicaId.getPartitionId().toPathString();
+    return replicaId.getPartitionId() + ":" + replicaId.getDataNodeId() + ":" + replicaId.getReplicaPath();
   }
 
   @Override

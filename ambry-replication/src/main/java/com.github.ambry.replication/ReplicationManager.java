@@ -72,8 +72,8 @@ public class ReplicationManager extends ReplicationEngine {
           }
           addRemoteReplicaInfoToReplicaThread(remoteReplicas, false);
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, partition, store, replicaId);
-          partitionsToReplicate.put(partition, partitionInfo);
-          partitionGroupedByMountPath.computeIfAbsent(replicaId.getMountPath(), key -> new ArrayList<>())
+          partitionToPartitionInfo.put(partition, partitionInfo);
+          mountPathToPartitionInfoList.computeIfAbsent(replicaId.getMountPath(), key -> new ArrayList<>())
               .add(partitionInfo);
         }
       } else {
@@ -82,7 +82,7 @@ public class ReplicationManager extends ReplicationEngine {
     }
     replicationMetrics.populatePerColoMetrics(replicaThreadPoolByDc.keySet());
     persistor =
-        new DiskTokenPersistor(replicaTokenFileName, partitionGroupedByMountPath, replicationMetrics, clusterMap,
+        new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfoList, replicationMetrics, clusterMap,
             factory);
   }
 
@@ -91,7 +91,7 @@ public class ReplicationManager extends ReplicationEngine {
     try {
       // read stored tokens
       // iterate through all mount paths and read replication info for the partitions it owns
-      for (String mountPath : partitionGroupedByMountPath.keySet()) {
+      for (String mountPath : mountPathToPartitionInfoList.keySet()) {
         retrieveReplicaTokensAndPersistIfNecessary(mountPath);
       }
       if (replicaThreadPoolByDc.size() == 0) {

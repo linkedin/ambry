@@ -334,7 +334,7 @@ public class CloudBlobStoreTest {
             new VcrMetrics(new MetricRegistry()));
     cloudBlobStore.start();
 
-    // Prepare RemoteReplicaInfo for ReplicaThread.
+    // Create ReplicaThread and add RemoteReplicaInfo to it.
     ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), Collections.emptyList());
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
     ReplicaThread replicaThread =

@@ -64,6 +64,7 @@ class CloudReplica implements ReplicaId {
 
   @Override
   public String getReplicaPath() {
+    // GetRequest.Cloud_Replica_Keyword is added to avoid error on its peers.
     return getMountPath() + File.separator + GetRequest.Cloud_Replica_Keyword + File.separator
         + partitionId.toPathString();
   }

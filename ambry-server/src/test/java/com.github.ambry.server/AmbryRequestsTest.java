@@ -63,6 +63,7 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.protocol.TtlUpdateRequest;
+import com.github.ambry.replication.BlobIdTransformer;
 import com.github.ambry.replication.MockFindToken;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
@@ -1547,7 +1548,6 @@ public class AmbryRequestsTest {
         StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
         StoreKeyConverterFactory storeKeyConverterFactory) throws ReplicationException {
       super(replicationConfig, clusterMapConfig, storeConfig, storageManager, new StoreKeyFactory() {
-
             @Override
             public StoreKey getStoreKey(DataInputStream stream) {
               return null;
@@ -1558,7 +1558,7 @@ public class AmbryRequestsTest {
               return null;
             }
           }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
-          "com.github.ambry.replication.BlobIdTransformer");
+          BlobIdTransformer.class.getName());
       reset();
     }
 

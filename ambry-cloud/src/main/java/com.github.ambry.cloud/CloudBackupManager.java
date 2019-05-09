@@ -71,16 +71,15 @@ public class CloudBackupManager extends ReplicationEngine {
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.cloudDestination = cloudDestinationFactory.getCloudDestination();
     persistor =
-        new CloudTokenPersistor(replicaTokenFileName, partitionGroupedByMountPath, replicationMetrics, clusterMap,
+        new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfoList, replicationMetrics, clusterMap,
             factory, cloudDestination);
     try {
       virtualReplicatorCluster.participate(InstanceType.PARTICIPANT);
     } catch (Exception e) {
       throw new ReplicationException("Cluster participate failed.", e);
     }
-    // Some sleep time
+    // Some sleep time can reduce listener message.
     List<? extends PartitionId> partitionIds = virtualReplicatorCluster.getAssignedPartitionIds();
-    System.out.println("pre add partition" + partitionIds);
     for (PartitionId partitionId : partitionIds) {
       addPartition(partitionId);
     }
@@ -92,21 +91,25 @@ public class CloudBackupManager extends ReplicationEngine {
         try {
           addPartition(partitionId);
         } catch (ReplicationException e) {
-          System.out.println("Exception on add: " + e);
+          logger.error("Exception on adding partition: ", e);
         }
       }
 
       @Override
       public void onPartitionRemoved(PartitionId partitionId) {
-
+        removeRemoteReplicaInfoFromReplicaThread(partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos());
       }
     });
 
     replicationMetrics.populatePerColoMetrics(replicaThreadPoolByDc.keySet());
   }
 
-  synchronized boolean addPartition(PartitionId partitionId) throws ReplicationException {
-    if (partitionsToReplicate.get(partitionId) != null) {
+  /**
+   * Add given {@link PartitionId} and its {@link RemoteReplicaInfo}s to backup list.
+   * @param partitionId the {@link PartitionId} to add.
+   */
+  boolean addPartition(PartitionId partitionId) throws ReplicationException {
+    if (partitionToPartitionInfo.get(partitionId) != null) {
       return false;
     }
     ReplicaId cloudReplica =
@@ -136,11 +139,16 @@ public class CloudBackupManager extends ReplicationEngine {
         remoteReplicaInfos.add(remoteReplicaInfo);
       }
       PartitionInfo partitionInfo = new PartitionInfo(remoteReplicaInfos, partitionId, cloudStore, cloudReplica);
-      partitionsToReplicate.put(partitionId, partitionInfo);
-      partitionGroupedByMountPath.computeIfAbsent(cloudReplica.getMountPath(), key -> new ArrayList<>())
-          .add(partitionInfo);
+      partitionToPartitionInfo.put(partitionId, partitionInfo);
+      mountPathToPartitionInfoList.compute(cloudReplica.getMountPath(), (key, value) -> {
+        // For CloudBackUpManger, at most one PartitionInfo in the list.
+        List<PartitionInfo> retList;
+        retList = (value == null ? new ArrayList<>() : value);
+        retList.add(partitionInfo);
+        return retList;
+      });
     } else {
-      throw new ReplicationException("Failed to add partition " + partitionId + " because no peer replicas found.");
+      throw new ReplicationException("Failed to add partition " + partitionId + ", because no peer replicas found.");
     }
     // read replication token
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
@@ -161,14 +169,11 @@ public class CloudBackupManager extends ReplicationEngine {
     }
     // create thread if necessary.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
-    logger.info("Partition {} added to back up", partitionId);
     return true;
   }
 
   @Override
   public void start() throws ReplicationException {
-    // TODO : fix disable partition metric
-    // replicationMetrics.trackReplicationDisabledPartitions(replicaThreadPoolByDc);
     // start background persistent thread
     // start scheduler thread to persist index in the background
     if (persistor != null) {
