@@ -32,6 +32,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static org.junit.Assume.*;
+
 
 @RunWith(Parameterized.class)
 public class ServerPlaintextTest {
@@ -98,11 +100,12 @@ public class ServerPlaintextTest {
    */
   @Test
   public void endToEndCloudBackupTest() throws Exception {
+    assumeTrue(testEncryption);
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem,
-        null, Utils.Infinite_Time, false);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem,
-        null, System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1), true);
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem, null,
+        Utils.Infinite_Time, false);
+    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, dataNode, null, null, notificationSystem, null,
+        System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1), true);
   }
 
   @Test

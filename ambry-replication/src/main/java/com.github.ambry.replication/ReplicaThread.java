@@ -81,8 +81,8 @@ import org.slf4j.LoggerFactory;
  */
 public class ReplicaThread implements Runnable {
 
-  private final ConcurrentHashMap<DataNodeId, Set<RemoteReplicaInfo>> replicasToReplicateGroupedByNode;
-  private final Set<RemoteReplicaInfo> replicaLazyRemoveSet = ConcurrentHashMap.newKeySet();
+  private final Map<DataNodeId, Set<RemoteReplicaInfo>> replicasToReplicateGroupedByNode;
+  private final Set<RemoteReplicaInfo> replicaLazyRemoveSet = new HashSet<>();
   private final Set<PartitionId> replicationDisabledPartitions = new HashSet<>();
   private final Set<PartitionId> unmodifiableReplicationDisabledPartitions =
       Collections.unmodifiableSet(replicationDisabledPartitions);
@@ -225,7 +225,9 @@ public class ReplicaThread implements Runnable {
    * Do a lazy removal of {@link RemoteReplicaInfo} from current {@link ReplicaThread}.
    */
   void removeRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
+    lock.lock();
     replicaLazyRemoveSet.add(remoteReplicaInfo);
+    lock.unlock();
   }
 
   /**
@@ -233,19 +235,12 @@ public class ReplicaThread implements Runnable {
    */
   public void addRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
 //    System.out.println("add remoteReplicaInfo" + remoteReplicaInfo.getReplicaId() + "to" + this.threadName);
+    lock.lock();
+    allReplicatedPartitions.add(remoteReplicaInfo.getReplicaId().getPartitionId());
     replicaLazyRemoveSet.remove(remoteReplicaInfo);
-    replicasToReplicateGroupedByNode.compute(remoteReplicaInfo.getReplicaId().getDataNodeId(), (key, set) -> {
-      allReplicatedPartitions.add(remoteReplicaInfo.getReplicaId().getPartitionId());
-      remoteReplicaInfo.setReplicaThread(this);
-      if (set == null) {
-        Set<RemoteReplicaInfo> newSet = new HashSet<>();
-        newSet.add(remoteReplicaInfo);
-        return newSet;
-      } else {
-        set.add(remoteReplicaInfo);
-        return set;
-      }
-    });
+    replicasToReplicateGroupedByNode.computeIfAbsent(remoteReplicaInfo.getReplicaId().getDataNodeId(),
+        key -> new HashSet<>()).add(remoteReplicaInfo);
+    lock.unlock();
   }
 
   /**
@@ -300,24 +295,27 @@ public class ReplicaThread implements Runnable {
 
       List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<RemoteReplicaInfo>();
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
+        ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+        boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+        if (replicationDisabledPartitions.contains(replicaId.getPartitionId()) || replicaId.isDown() || inBackoff) {
+          continue;
+        }
+        boolean isRemoved = false;
+        lock.lock();
         if (replicaLazyRemoveSet.contains(remoteReplicaInfo)) {
           // If remoteReplica is in the list to remove, we don't add it.
           // race condition? Someone set it still ok here.
           System.out.println("RemoteReplicaInfo:{} is removed" + remoteReplicaInfo);
-          replicasToReplicateGroupedByNode.computeIfPresent(remoteReplicaInfo.getReplicaId().getDataNodeId(),
-              (key, set) -> {
-                remoteReplicaInfo.setReplicaThread(null);
-                set.remove(remoteReplicaInfo);
-                replicaLazyRemoveSet.remove(remoteReplicaInfo);
-                return set;
-              });
+          replicaLazyRemoveSet.remove(remoteReplicaInfo);
+          replicasToReplicateGroupedByNode.get(remoteReplicaInfo.getReplicaId().getDataNodeId())
+              .remove(remoteReplicaInfo);
+          isRemoved = true;
+        }
+        lock.unlock();
+        if (isRemoved) {
           continue;
         }
-        ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-        boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
-        if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown() && !inBackoff) {
-          activeReplicasPerNode.add(remoteReplicaInfo);
-        }
+        activeReplicasPerNode.add(remoteReplicaInfo);
       }
       // There two causes for activeReplicasPerNode.size()
       // 1. remoteReplicaInfo is removed.
@@ -368,8 +366,6 @@ public class ReplicaThread implements Runnable {
           context.stop();
           portTypeBasedContext.stop();
         }
-      } else {
-        System.out.println("----------no active replica");
       }
     }
     long sleepDurationMs = 0;
@@ -381,15 +377,15 @@ public class ReplicaThread implements Runnable {
       throttleCount.inc();
     }
 
-//    if (sleepDurationMs > 0) {
-//      try {
-//        long currentTime = time.milliseconds();
-//        time.sleep(sleepDurationMs);
-//        logger.trace("Replica thread: {} slept for {} ms", threadName, time.milliseconds() - currentTime);
-//      } catch (InterruptedException e) {
-//        logger.error("Received interrupted exception during throttling", e);
-//      }
-//    }
+    if (sleepDurationMs > 0) {
+      try {
+        long currentTime = time.milliseconds();
+        time.sleep(sleepDurationMs);
+        logger.trace("Replica thread: {} slept for {} ms", threadName, time.milliseconds() - currentTime);
+      } catch (InterruptedException e) {
+        logger.error("Received interrupted exception during throttling", e);
+      }
+    }
   }
 
   /**
@@ -858,7 +854,7 @@ public class ReplicaThread implements Runnable {
               } else {
                 writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
                 remoteReplicaInfo.getLocalStore().put(writeset);
-                if(isVCR) {
+                if (isVCR) {
 //                  System.out.println("writset" + writeset.getMessageSetInfo());
                 }
               }
