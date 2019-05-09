@@ -103,7 +103,7 @@ public class StoreCopierTest {
     time.sleep(TimeUnit.SECONDS.toMillis(TestUtils.TTL_SECS + 1));
     StoreMetrics metrics = new StoreMetrics(clusterMap.getMetricRegistry());
     storeCopier = new StoreCopier("test_store", srcDir, tgtDir, STORE_CAPACITY, 4 * 1024 * 1024, storeConfig, metrics,
-        STORE_KEY_FACTORY, DISK_IO_SCHEDULER, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, Collections.EMPTY_LIST,
+        STORE_KEY_FACTORY, DISK_IO_SCHEDULER, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, Collections.emptyList(),
         time);
   }
 

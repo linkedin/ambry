@@ -91,7 +91,7 @@ class GetAccountsHandler {
      */
     private void start() {
       RestRequestMetrics requestMetrics =
-          restRequest.isSslUsed() ? frontendMetrics.getAccountsSSLMetrics : frontendMetrics.getAccountsMetrics;
+          frontendMetrics.getAccountsMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       // Start the callback chain by performing request security processing.
       securityService.processRequest(restRequest, securityProcessRequestCallback());

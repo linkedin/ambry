@@ -296,10 +296,10 @@ class TailoredPeersClusterMap implements ClusterMap {
     partNodes.add(datanodes.get(DATANODE_NAMES[3]));
     partitions.add(new MockPartitionId(4, MockClusterMap.DEFAULT_PARTITION_CLASS, partNodes, 0));
 
-    peerMap.put(DATANODE_NAMES[0], new HashSet(Arrays.asList(DATANODE_NAMES[1], DATANODE_NAMES[2])));
-    peerMap.put(DATANODE_NAMES[1], new HashSet(Arrays.asList(DATANODE_NAMES[0])));
+    peerMap.put(DATANODE_NAMES[0], new HashSet<>(Arrays.asList(DATANODE_NAMES[1], DATANODE_NAMES[2])));
+    peerMap.put(DATANODE_NAMES[1], new HashSet<>(Arrays.asList(DATANODE_NAMES[0])));
     peerMap.put(DATANODE_NAMES[2], Collections.singleton(DATANODE_NAMES[0]));
-    peerMap.put(DATANODE_NAMES[3], Collections.EMPTY_SET);
+    peerMap.put(DATANODE_NAMES[3], Collections.emptySet());
   }
 
   @Override

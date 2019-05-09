@@ -332,6 +332,7 @@ class NettyResponseChannel implements RestResponseChannel {
     if (errorResponseStatus != null) {
       responseStatus = errorResponseStatus;
     }
+    restRequestMetricsTracker.setResponseStatus(responseStatus);
     boolean shouldSkipCheck = false;
     switch (method) {
       case GET:

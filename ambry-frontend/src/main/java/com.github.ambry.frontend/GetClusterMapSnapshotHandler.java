@@ -85,7 +85,7 @@ class GetClusterMapSnapshotHandler {
      */
     private void start() {
       RestRequestMetrics requestMetrics =
-          restRequest.isSslUsed() ? metrics.getClusterMapSnapshotSSLMetrics : metrics.getClusterMapSnapshotMetrics;
+          metrics.getClusterMapSnapshotMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       securityService.processRequest(restRequest, securityProcessRequestCallback());
     }

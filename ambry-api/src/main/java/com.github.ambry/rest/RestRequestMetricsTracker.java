@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.frontend.ContainerMetrics;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -54,8 +55,10 @@ public class RestRequestMetricsTracker {
 
   private final AtomicBoolean metricsRecorded = new AtomicBoolean(false);
   private RestRequestMetrics metrics = defaultMetrics;
+  private ContainerMetrics containerMetrics;
   private boolean failed = false;
   private boolean satisfied = true;
+  private ResponseStatus responseStatus = ResponseStatus.Ok;
 
   /**
    * Tracker for updating NIO related metrics.
@@ -211,6 +214,13 @@ public class RestRequestMetricsTracker {
   }
 
   /**
+   * @param responseStatus the {@link ResponseStatus} to be used for certain count metrics.
+   */
+  public void setResponseStatus(ResponseStatus responseStatus) {
+    this.responseStatus = responseStatus;
+  }
+
+  /**
    * Injects a {@link RestRequestMetrics} that can be used to track the metrics of the {@link RestRequest} that this
    * instance of RestRequestMetricsTracker is attached to.
    * @param restRequestMetrics the {@link RestRequestMetrics} instance to use to track the metrics of the
@@ -222,6 +232,10 @@ public class RestRequestMetricsTracker {
     } else {
       throw new IllegalArgumentException("RestRequestMetrics provided cannot be null");
     }
+  }
+
+  public void injectContainerMetrics(ContainerMetrics containerMetrics) {
+    this.containerMetrics = containerMetrics;
   }
 
   /**
@@ -246,6 +260,9 @@ public class RestRequestMetricsTracker {
         metrics.scRoundTripTimeInMs.update(scalingMetricsTracker.roundTripTimeInMs);
         if (failed) {
           metrics.operationError.inc();
+        }
+        if (containerMetrics != null) {
+          containerMetrics.recordMetrics(nioMetricsTracker.roundTripTimeInMs, responseStatus);
         }
         if (satisfied) {
           metrics.satisfiedRequestCount.inc();

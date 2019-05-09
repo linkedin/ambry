@@ -21,3 +21,4 @@ jars/
 build/
 logs/
 null/
+.DS_Store

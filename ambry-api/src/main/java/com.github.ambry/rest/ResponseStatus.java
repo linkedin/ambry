@@ -128,28 +128,28 @@ public enum ResponseStatus {
   /**
    * @return {@code true} if status code is 2xx which means success. {@code false} otherwise.
    */
-  boolean isSuccess() {
+  public boolean isSuccess() {
     return statusCode >= 200 && statusCode < 300;
   }
 
   /**
    * @return {@code true} if status code is 3xx which means redirection. {@code false} otherwise.
    */
-  boolean isRedirection() {
+  public boolean isRedirection() {
     return statusCode >= 300 && statusCode < 400;
   }
 
   /**
    * @return {@code true} if status code is 4xx which means client error. {@code false} otherwise.
    */
-  boolean isClientError() {
+  public boolean isClientError() {
     return statusCode >= 400 && statusCode < 500;
   }
 
   /**
    * @return {@code true} if status code is 5xx which means server error. {@code false} otherwise.
    */
-  boolean isServerError() {
+  public boolean isServerError() {
     return statusCode >= 500;
   }
 

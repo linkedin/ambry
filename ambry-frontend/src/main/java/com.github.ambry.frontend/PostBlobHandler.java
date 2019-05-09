@@ -137,8 +137,7 @@ class PostBlobHandler {
     private void start() {
       // Metrics initialization. Can potentially be updated after parsing blob properties.
       restRequest.getMetricsTracker()
-          .injectMetrics(
-              frontendMetrics.postRequestMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
+          .injectMetrics(frontendMetrics.postBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
       try {
         // Start the callback chain by parsing blob info headers and performing request security processing.
         BlobInfo blobInfo = getBlobInfoFromRequest();
@@ -248,7 +247,8 @@ class PostBlobHandler {
      */
     private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
       long propsBuildStartTime = System.currentTimeMillis();
-      accountAndContainerInjector.injectAccountAndContainerForPostRequest(restRequest);
+      accountAndContainerInjector.injectAccountAndContainerForPostRequest(restRequest,
+          frontendMetrics.postBlobMetricsGroup);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
@@ -274,8 +274,7 @@ class PostBlobHandler {
       // inject encryption frontendMetrics if applicable
       if (blobProperties.isEncrypted()) {
         restRequest.getMetricsTracker()
-            .injectMetrics(
-                frontendMetrics.postRequestMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
+            .injectMetrics(frontendMetrics.postBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
       }
       byte[] userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
       frontendMetrics.blobPropsBuildTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);

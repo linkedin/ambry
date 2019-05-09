@@ -46,21 +46,21 @@ public class CommonUtilsTest {
     ZkInfo zkInfo = new ZkInfo(tempDirPath, "DC1", (byte) 0, 2200, true);
 
     try {
-      CommonUtils.createHelixPropertyStore(null, propertyStoreConfig, Collections.EMPTY_LIST);
+      CommonUtils.createHelixPropertyStore(null, propertyStoreConfig, Collections.emptyList());
       fail("create HelixPropertyStore with invalid arguments should fail");
     } catch (IllegalArgumentException e) {
       //expected
     }
 
     try {
-      CommonUtils.createHelixPropertyStore("", propertyStoreConfig, Collections.EMPTY_LIST);
+      CommonUtils.createHelixPropertyStore("", propertyStoreConfig, Collections.emptyList());
       fail("create HelixPropertyStore with invalid arguments should fail");
     } catch (IllegalArgumentException e) {
       //expected
     }
 
     try {
-      CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), null, Collections.EMPTY_LIST);
+      CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), null, Collections.emptyList());
       fail("create HelixPropertyStore with invalid arguments should fail");
     } catch (IllegalArgumentException e) {
       //expected

@@ -73,7 +73,7 @@ class GetPeersHandler {
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) {
     RestRequestMetrics requestMetrics =
-        restRequest.getSSLSession() != null ? metrics.getPeersSSLMetrics : metrics.getPeersMetrics;
+        metrics.getPeersMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     securityService.processRequest(restRequest,
         new SecurityProcessRequestCallback(restRequest, restResponseChannel, callback));
