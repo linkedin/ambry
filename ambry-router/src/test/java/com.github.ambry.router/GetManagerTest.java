@@ -408,7 +408,7 @@ public class GetManagerTest {
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     routerConfig = new RouterConfig(vProps);
-    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap),
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
         cryptoService, cryptoJobHandler, new InMemAccountService(false, true), mockTime,

@@ -16,7 +16,6 @@ package com.github.ambry.router;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
@@ -76,7 +75,6 @@ public class OperationTrackerTest {
   private final Set<ReplicaId> repetitionTracker = new HashSet<>();
 
   // for AdaptiveOperationTracker
-  private final NonBlockingRouterMetrics routerMetrics;
   private final Time time = new MockTime();
   private final MetricRegistry registry = new MetricRegistry();
   private final Histogram localColoTracker = registry.histogram("LocalColoTracker");
@@ -95,13 +93,8 @@ public class OperationTrackerTest {
   /**
    * @param operationTrackerType the type of {@link OperationTracker} that needs to be used in tests
    */
-  public OperationTrackerTest(String operationTrackerType) throws Exception {
+  public OperationTrackerTest(String operationTrackerType) {
     this.operationTrackerType = operationTrackerType;
-    if (operationTrackerType.equals(ADAPTIVE_OP_TRACKER)) {
-      routerMetrics = new NonBlockingRouterMetrics(new MockClusterMap());
-    } else {
-      routerMetrics = null;
-    }
   }
 
   /**
@@ -499,7 +492,7 @@ public class OperationTrackerTest {
           try {
             operationTracker =
                 new AdaptiveOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName,
-                    localColoTracker, crossColoTracker, pastDueCounter, routerMetrics, time);
+                    localColoTracker, crossColoTracker, pastDueCounter, time);
           } catch (IllegalArgumentException e) {
             assertTrue("Get operation shouldn't throw any exception in adaptive tracker",
                 entry.getKey() != RouterOperation.GetBlobOperation
@@ -571,8 +564,7 @@ public class OperationTrackerTest {
         break;
       case ADAPTIVE_OP_TRACKER:
         tracker = new AdaptiveOperationTracker(routerConfig, RouterOperation.GetBlobOperation, mockPartition,
-            originatingDcName, localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter,
-            routerMetrics, time);
+            originatingDcName, localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, time);
         break;
       default:
         throw new IllegalArgumentException("Unrecognized operation tracker type - " + operationTrackerType);

@@ -135,7 +135,7 @@ public class ChunkFillTest {
     VerifiableProperties vProps = getNonBlockingRouterProperties();
     MockClusterMap mockClusterMap = new MockClusterMap();
     RouterConfig routerConfig = new RouterConfig(vProps);
-    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
     BlobProperties putBlobProperties =
@@ -234,7 +234,7 @@ public class ChunkFillTest {
     VerifiableProperties vProps = getNonBlockingRouterProperties();
     MockClusterMap mockClusterMap = new MockClusterMap();
     RouterConfig routerConfig = new RouterConfig(vProps);
-    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     ResponseHandler responseHandler = new ResponseHandler(mockClusterMap);
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);

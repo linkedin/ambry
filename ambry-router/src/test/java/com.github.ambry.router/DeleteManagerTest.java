@@ -99,7 +99,7 @@ public class DeleteManagerTest {
     clusterMap = new MockClusterMap();
     serverLayout = new MockServerLayout(clusterMap);
     RouterConfig routerConfig = new RouterConfig(vProps);
-    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap),
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
         new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -360,7 +360,8 @@ public class DeleteManagerTest {
     Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.delete.request.parallelism", "3");
     VerifiableProperties vProps = new VerifiableProperties(props);
-    router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(clusterMap),
+    RouterConfig routerConfig = new RouterConfig(vProps);
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
         new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);

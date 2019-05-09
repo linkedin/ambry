@@ -69,7 +69,7 @@ public class CryptoJobHandlerTest {
     cryptoService = new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
     cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
     referenceClusterMap = new MockClusterMap();
-    routerMetrics = new NonBlockingRouterMetrics(referenceClusterMap);
+    routerMetrics = new NonBlockingRouterMetrics(referenceClusterMap, null);
   }
 
   @After

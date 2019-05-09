@@ -23,7 +23,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -392,9 +391,7 @@ class Log implements Write {
       try {
         diskSpaceAllocator.allocate(segmentFile, size);
       } catch (IOException e) {
-        StoreErrorCodes errorCode =
-            Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-                : StoreErrorCodes.Unknown_Error;
+        StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(errorCode.toString() + " while allocating the file", e, errorCode);
       }
     }
@@ -412,8 +409,7 @@ class Log implements Write {
       logSegment.close();
       diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
     } catch (IOException e) {
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while freeing log segment", e, errorCode);
     }
   }
@@ -470,17 +466,15 @@ class Log implements Write {
           new LogSegment(segmentNameAndFilename.getFirst(), newSegmentFile, segmentCapacity, metrics, true);
       segmentsByName.put(segmentNameAndFilename.getFirst(), newSegment);
     } catch (StoreException e) {
-      logger.error("Failed to create new log segment {} with store exception: ", segmentNameAndFilename.getFirst(), e);
       try {
         diskSpaceAllocator.free(newSegmentFile, segmentCapacity);
         remainingUnallocatedSegments.incrementAndGet();
+        throw e;
       } catch (IOException exception) {
-        StoreErrorCodes errorCode =
-            Objects.equals(exception.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-                : StoreErrorCodes.Unknown_Error;
+        StoreErrorCodes errorCode = StoreException.resolveErrorCode(exception);
         throw new StoreException(
-            errorCode.toString() + " while freeing log segment " + segmentNameAndFilename.getFirst(), exception,
-            errorCode);
+            e.getMessage() + " And then " + errorCode.toString() + " occurred while freeing the log segment "
+                + segmentNameAndFilename.getFirst(), exception, errorCode);
       } finally {
         metrics.overflowWriteError.inc();
       }

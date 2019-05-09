@@ -135,7 +135,7 @@ public class GetBlobInfoOperationTest {
     VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
-    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     options = new GetBlobOptionsInternal(
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
         routerMetrics.ageAtGet);
@@ -149,7 +149,7 @@ public class GetBlobInfoOperationTest {
       kmsSingleKey = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
       instantiateCryptoComponents(vprops);
     }
-    router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(mockClusterMap),
+    router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
         networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
         new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS);
     short accountId = Utils.getRandomShort(random);

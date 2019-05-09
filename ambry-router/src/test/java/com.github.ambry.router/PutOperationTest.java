@@ -50,7 +50,7 @@ import org.junit.Test;
 public class PutOperationTest {
   private final RouterConfig routerConfig;
   private final MockClusterMap mockClusterMap = new MockClusterMap();
-  private final NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+  private final NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, null);
   private final Time time;
   private final Map<Integer, PutOperation> correlationIdToPutOperation = new TreeMap<>();
   private final MockServer mockServer = new MockServer(mockClusterMap, "");

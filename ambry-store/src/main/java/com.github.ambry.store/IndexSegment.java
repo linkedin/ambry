@@ -41,7 +41,6 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
-import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -401,8 +400,7 @@ class IndexSegment {
       stream.writeLong(crcValue);
       stream.close();
     } catch (IOException e) {
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while trying to persist bloom filter", e, errorCode);
     }
   }
@@ -449,14 +447,11 @@ class IndexSegment {
       mmap.position(firstKeyRelativeOffset + index * persistedEntrySize);
       storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
     } catch (InternalError e) {
-      throw Objects.equals(e.getMessage(), StoreException.INTERNAL_ERROR_STR) ? new StoreException(
-          "Internal error occurred due to unsafe memory access", e, StoreErrorCodes.IOError)
-          : new StoreException("Unknown internal error while trying to get store key", e,
-              StoreErrorCodes.Unknown_Error);
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
+      throw new StoreException("Internal " + errorCode.toString() + " while trying to get store key", e, errorCode);
     } catch (IOException e) {
-      throw Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? new StoreException(
-          "IO error while trying to get store key", e, StoreErrorCodes.IOError)
-          : new StoreException("Unknown IO error while trying to get store key", e, StoreErrorCodes.Unknown_Error);
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
+      throw new StoreException(errorCode.toString() + " while trying to get store key", e, errorCode);
     } catch (Throwable t) {
       throw new StoreException("Unknown error while trying to get store key ", t, StoreErrorCodes.Unknown_Error);
     }
@@ -701,9 +696,7 @@ class IndexSegment {
         // swap temp file with the original file
         temp.renameTo(getFile());
       } catch (IOException e) {
-        StoreErrorCodes errorCode =
-            Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-                : StoreErrorCodes.Unknown_Error;
+        StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(
             "IndexSegment : " + indexFile.getAbsolutePath() + " encountered " + errorCode.toString()
                 + " while persisting index to disk", e, errorCode);
@@ -796,8 +789,7 @@ class IndexSegment {
     } catch (FileNotFoundException e) {
       throw new StoreException("File not found while mapping the segment of index", e, StoreErrorCodes.File_Not_Found);
     } catch (IOException e) {
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while mapping the segment of index", e, errorCode);
     } finally {
       rwLock.writeLock().unlock();
@@ -908,8 +900,7 @@ class IndexSegment {
             StoreErrorCodes.Index_Creation_Failure);
       }
     } catch (IOException e) {
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " encountered " + errorCode.toString()
           + " while reading from file ", e, errorCode);
     }

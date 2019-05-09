@@ -190,8 +190,9 @@ public class NonBlockingRouterTest {
   private void setRouter(Properties props, MockServerLayout mockServerLayout, NotificationSystem notificationSystem)
       throws IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), routerMetrics,
+    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
+    router = new NonBlockingRouter(routerConfig, routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
         cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -389,9 +390,10 @@ public class NonBlockingRouterTest {
   public void testRequestResponseHandlerThreadExitFlow() throws Exception {
     Properties props = getNonBlockingRouterProperties("DC1");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     MockClusterMap mockClusterMap = new MockClusterMap();
     MockTime mockTime = new MockTime();
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
         mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime,
@@ -453,6 +455,7 @@ public class NonBlockingRouterTest {
     maxPutChunkSize = PUT_CONTENT_SIZE / 4;
     Properties props = getNonBlockingRouterProperties("DC1");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     MockClusterMap mockClusterMap = new MockClusterMap();
     MockTime mockTime = new MockTime();
     MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
@@ -467,7 +470,7 @@ public class NonBlockingRouterTest {
         deletesDoneLatch.countDown();
       }
     };
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
         cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -537,7 +540,7 @@ public class NonBlockingRouterTest {
         deletesDoneLatch.get().countDown();
       }
     };
-    NonBlockingRouterMetrics localMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    NonBlockingRouterMetrics localMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     router = new NonBlockingRouter(routerConfig, localMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
@@ -616,6 +619,7 @@ public class NonBlockingRouterTest {
     maxPutChunkSize = PUT_CONTENT_SIZE;
     Properties props = getNonBlockingRouterProperties("DC1");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     MockClusterMap mockClusterMap = new MockClusterMap();
     MockTime mockTime = new MockTime();
     MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
@@ -630,8 +634,8 @@ public class NonBlockingRouterTest {
         receivedDeleteServiceId.set(serviceId);
       }
     };
-    NonBlockingRouterMetrics localMetrics = new NonBlockingRouterMetrics(mockClusterMap);
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), localMetrics,
+    NonBlockingRouterMetrics localMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
+    router = new NonBlockingRouter(routerConfig, localMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
         cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -719,8 +723,8 @@ public class NonBlockingRouterTest {
         // Fetch the stitched blob
         GetBlobResult getBlobResult = router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build())
             .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        assertTrue("Blob properties must be the same",
-            RouterTestHelpers.arePersistedFieldsEquivalent(putBlobProperties, getBlobResult.getBlobInfo().getBlobProperties()));
+        assertTrue("Blob properties must be the same", RouterTestHelpers.arePersistedFieldsEquivalent(putBlobProperties,
+            getBlobResult.getBlobInfo().getBlobProperties()));
         assertEquals("Unexpected blob size", expectedContent.length,
             getBlobResult.getBlobInfo().getBlobProperties().getBlobSize());
         assertArrayEquals("User metadata must be the same", putUserMetadata,
@@ -885,7 +889,7 @@ public class NonBlockingRouterTest {
     cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     KeyManagementService localKMS = new MockKeyManagementService(new KMSConfig(verifiableProperties), singleKeyForKMS);
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
-        new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+        new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
         new RouterCallback(networkClient, new ArrayList<>()), "0", localKMS, cryptoService, cryptoJobHandler,
         accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
@@ -902,7 +906,7 @@ public class NonBlockingRouterTest {
 
     opHelper = new OperationHelper(OperationType.GET);
     getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties),
-        new NonBlockingRouterMetrics(mockClusterMap),
+        new NonBlockingRouterMetrics(mockClusterMap, null),
         new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), localKMS, cryptoService,
         cryptoJobHandler, mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
@@ -919,7 +923,7 @@ public class NonBlockingRouterTest {
     opHelper = new OperationHelper(OperationType.DELETE);
     deleteManager =
         new DeleteManager(mockClusterMap, mockResponseHandler, accountService, new LoggingNotificationSystem(),
-            new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+            new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
             new RouterCallback(null, new ArrayList<BackgroundDeleteRequest>()), mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);

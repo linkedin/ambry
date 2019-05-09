@@ -178,8 +178,9 @@ public class GetBlobOperationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false}, {AdaptiveOperationTracker.class.getSimpleName(), false}, {AdaptiveOperationTracker.class.getSimpleName(), true}});
+    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false},
+        {AdaptiveOperationTracker.class.getSimpleName(), false},
+        {AdaptiveOperationTracker.class.getSimpleName(), true}});
   }
 
   /**
@@ -200,7 +201,7 @@ public class GetBlobOperationTest {
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
     blobIdFactory = new BlobIdFactory(mockClusterMap);
-    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet);
     mockServerLayout = new MockServerLayout(mockClusterMap);
     replicasCount =
@@ -215,8 +216,8 @@ public class GetBlobOperationTest {
       cryptoService = new MockCryptoService(new CryptoServiceConfig(vprops));
       cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     }
-    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
-        new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
+        networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
         new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS);
     mockNetworkClient = networkClientFactory.getMockNetworkClient();
     routerCallback = new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>());
@@ -1218,7 +1219,8 @@ public class GetBlobOperationTest {
     }
     // Ensure that a ChannelClosed exception is not set when the ReadableStreamChannel is closed correctly.
     Assert.assertNull("Callback operation exception should be null", op.getOperationException());
-    if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo && !options.getBlobOptions.isRawMode()) {
+    if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo
+        && !options.getBlobOptions.isRawMode()) {
       int sizeWritten = blobSize;
       if (options.getBlobOptions.getRange() != null) {
         ByteRange range = options.getBlobOptions.getRange().toResolvedByteRange(blobSize);
@@ -1348,8 +1350,8 @@ public class GetBlobOperationTest {
   private ByteBuffer getBlobBuffer() throws IOException {
     // Find server with the blob
     for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-      MockServer server = mockServerLayout.getMockServer(replicaId.getDataNodeId().getHostname(),
-          replicaId.getDataNodeId().getPort());
+      MockServer server =
+          mockServerLayout.getMockServer(replicaId.getDataNodeId().getHostname(), replicaId.getDataNodeId().getPort());
       if (server.getBlobs().containsKey(blobId.getID())) {
         return getBlobBufferFromServer(server);
       }
@@ -1365,8 +1367,9 @@ public class GetBlobOperationTest {
   private ByteBuffer getBlobBufferFromServer(MockServer server) throws IOException {
     PartitionRequestInfo requestInfo =
         new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId));
-    GetRequest getRequest = new GetRequest(1, "assertBlobReadSuccess", MessageFormatFlags.All,
-        Collections.singletonList(requestInfo), GetOption.None);
+    GetRequest getRequest =
+        new GetRequest(1, "assertBlobReadSuccess", MessageFormatFlags.All, Collections.singletonList(requestInfo),
+            GetOption.None);
     GetResponse getResponse = server.makeGetResponse(getRequest, ServerErrorCode.No_Error);
 
     // simulating server sending response over the wire

@@ -66,7 +66,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    */
   AdaptiveOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
       String originatingDcName, Histogram localColoTracker, Histogram crossColoTracker, Counter pastDueCounter,
-      NonBlockingRouterMetrics routerMetrics, Time time) {
+      Time time) {
     super(routerConfig, routerOperation, partitionId, originatingDcName, true);
     this.time = time;
     this.localColoTracker = localColoTracker;
@@ -74,23 +74,6 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     this.pastDueCounter = pastDueCounter;
     this.quantile = routerConfig.routerLatencyToleranceQuantile;
     this.otIterator = new OpTrackerIterator();
-    Class operationClass = null;
-    switch (routerOperation) {
-      case GetBlobOperation:
-        operationClass = GetBlobOperation.class;
-        break;
-      case GetBlobInfoOperation:
-        operationClass = GetBlobInfoOperation.class;
-        break;
-      default:
-        throw new IllegalArgumentException(routerOperation + " is not supported in AdaptiveOperationTracker");
-    }
-    routerMetrics.registerCustomPercentiles(operationClass, "LocalColoLatencyMs", localColoTracker,
-        routerConfig.routerOperationTrackerCustomPercentiles);
-    if (crossColoTracker != null) {
-      routerMetrics.registerCustomPercentiles(operationClass, "CrossColoLatencyMs", crossColoTracker,
-          routerConfig.routerOperationTrackerCustomPercentiles);
-    }
   }
 
   @Override

@@ -78,6 +78,7 @@ public class AdaptiveOperationTrackerTest {
   private final Histogram crossColoTracker = registry.histogram("CrossColoTracker");
   private final Counter pastDueCounter = registry.counter("PastDueCounter");
   private NonBlockingRouterMetrics routerMetrics;
+  private RouterConfig defaultRouterConfig;
 
   /**
    * Constructor that sets up state.
@@ -92,7 +93,11 @@ public class AdaptiveOperationTrackerTest {
     for (int i = 0; i < REPLICA_COUNT; i++) {
       mockPartition.replicaIds.add(new MockReplicaId(PORT, mockPartition, datanodes.get(i % datanodes.size()), 0));
     }
-    routerMetrics = new NonBlockingRouterMetrics(new MockClusterMap());
+    Properties props = new Properties();
+    props.setProperty("router.hostname", "localhost");
+    props.setProperty("router.datacenter.name", localDcName);
+    defaultRouterConfig = new RouterConfig(new VerifiableProperties(props));
+    routerMetrics = new NonBlockingRouterMetrics(new MockClusterMap(), defaultRouterConfig);
   }
 
   /**
@@ -106,7 +111,7 @@ public class AdaptiveOperationTrackerTest {
     double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
     double crossColoCutoff = crossColoTracker.getSnapshot().getValue(QUANTILE);
 
-    OperationTracker ot = getOperationTracker(true, REPLICA_COUNT, 2, null);
+    OperationTracker ot = getOperationTracker(createRouterConfig(true, REPLICA_COUNT, 2, null));
     // 3-0-0-0; 3-0-0-0
     sendRequests(ot, 2);
     // 1-2-0-0; 3-0-0-0
@@ -177,7 +182,7 @@ public class AdaptiveOperationTrackerTest {
     primeTracker(crossColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
     double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
 
-    OperationTracker ot = getOperationTracker(false, 1, 1, null);
+    OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, null));
     // 3-0-0-0
     sendRequests(ot, 1);
     // 2-1-0-0
@@ -209,7 +214,7 @@ public class AdaptiveOperationTrackerTest {
     primeTracker(crossColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
     double localColoCutoff = localColoTracker.getSnapshot().getValue(1);
 
-    OperationTracker ot = getOperationTracker(false, 1, 1, null);
+    OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, null));
     // 3-0-0-0
     sendRequests(ot, 1);
     // 2-1-0-0
@@ -238,14 +243,13 @@ public class AdaptiveOperationTrackerTest {
   }
 
   /**
-   * Test that adaptive operation track can correctly register custom percentiles. An example of metric name is:
+   * Test that {@link NonBlockingRouterMetrics} can correctly register custom percentiles. An example of metric name is:
    * "com.github.ambry.router.GetOperation.LocalColoLatencyMs.91.0.thPercentile"
    * @throws Exception
    */
   @Test
   public void customPercentilesMetricsRegistryTest() throws Exception {
     // test that if custom percentile is not set, no corresponding metrics would be generated.
-    getOperationTracker(true, 1, 1, null);
     MetricRegistry metricRegistry = routerMetrics.getMetricRegistry();
     MetricFilter filter = new MetricFilter() {
       @Override
@@ -257,14 +261,16 @@ public class AdaptiveOperationTrackerTest {
     assertTrue("No gauges should be created because custom percentile is not set", gauges.isEmpty());
     // test that dedicated gauges are correctly created for custom percentiles.
     String customPercentiles = "0.91,0.97";
+    RouterConfig routerConfig = createRouterConfig(false, 1, 1, customPercentiles);
     String[] percentileArray = customPercentiles.split(",");
     Arrays.sort(percentileArray);
     List<String> sortedPercentiles =
         Arrays.stream(percentileArray).map(p -> String.valueOf(Double.valueOf(p) * 100)).collect(Collectors.toList());
-    getOperationTracker(false, 1, 1, customPercentiles);
-    gauges = metricRegistry.getGauges(filter);
-    // Note that crossColoEnabled is false, the number of gauges should equal to number of given percentiles
-    assertEquals("The number of custom percentile gauge doesn't match", sortedPercentiles.size(), gauges.size());
+    routerMetrics = new NonBlockingRouterMetrics(new MockClusterMap(), routerConfig);
+    gauges = routerMetrics.getMetricRegistry().getGauges(filter);
+    // Note that each percentile creates 4 metrics (GetBlobInfo/GetBlob joins LocalColo/CrossColo). So, the total number of
+    // metrics should equal to 4 * (# of given custom percentiles)
+    assertEquals("The number of custom percentile gauge doesn't match", sortedPercentiles.size() * 4, gauges.size());
     Iterator mapItor = gauges.keySet().iterator();
     Iterator<String> listItor = sortedPercentiles.iterator();
     while (listItor.hasNext()) {
@@ -272,12 +278,8 @@ public class AdaptiveOperationTrackerTest {
       String percentileStr = listItor.next();
       assertTrue("The gauge name doesn't match", gaugeName.endsWith(percentileStr + ".thPercentile"));
     }
-    // reset router metrics to clean up registered metrics
-    routerMetrics = new NonBlockingRouterMetrics(new MockClusterMap());
-    metricRegistry = routerMetrics.getMetricRegistry();
-    getOperationTracker(true, 1, 1, customPercentiles);
-    gauges = metricRegistry.getGauges(filter);
-    assertEquals("The number of custom percentile gauge doesn't match", sortedPercentiles.size() * 2, gauges.size());
+    // reset router metrics to clean up registered custom percentile metrics
+    routerMetrics = new NonBlockingRouterMetrics(new MockClusterMap(), defaultRouterConfig);
   }
 
   // helpers
@@ -285,15 +287,25 @@ public class AdaptiveOperationTrackerTest {
   // general
 
   /**
-   * Returns an instance of {@link AdaptiveOperationTracker}.
+   * Instantiate an adaptive operation tracker.
+   * @param routerConfig the {@link RouterConfig} to use in adaptive tracker.
+   * @return an instance of {@link AdaptiveOperationTracker} with the given parameters.
+   */
+  private OperationTracker getOperationTracker(RouterConfig routerConfig) {
+    return new AdaptiveOperationTracker(routerConfig, RouterOperation.GetBlobOperation, mockPartition, null,
+        localColoTracker, routerConfig.routerGetCrossDcEnabled ? crossColoTracker : null, pastDueCounter, time);
+  }
+
+  /**
+   * Generate an instance of {@link RouterConfig} based on input parameters.
    * @param crossColoEnabled {@code true} if cross colo needs to be enabled. {@code false} otherwise.
    * @param successTarget the number of successful responses required for the operation to succeed.
    * @param parallelism the number of parallel requests that can be in flight.
    * @param customPercentiles the custom percentiles to be reported. Percentiles are specified in a comma-separated
    *                          string, i.e "0.94,0.96,0.97".
-   * @return an instance of {@link AdaptiveOperationTracker} with the given parameters.
+   * @return an instance of {@link RouterConfig}
    */
-  private OperationTracker getOperationTracker(boolean crossColoEnabled, int successTarget, int parallelism,
+  private RouterConfig createRouterConfig(boolean crossColoEnabled, int successTarget, int parallelism,
       String customPercentiles) {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
@@ -307,9 +319,7 @@ public class AdaptiveOperationTrackerTest {
     if (customPercentiles != null) {
       props.setProperty("router.operation.tracker.custom.percentiles", customPercentiles);
     }
-    RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
-    return new AdaptiveOperationTracker(routerConfig, RouterOperation.GetBlobOperation, mockPartition, null,
-        localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, routerMetrics, time);
+    return new RouterConfig(new VerifiableProperties(props));
   }
 
   /**
@@ -355,7 +365,7 @@ public class AdaptiveOperationTrackerTest {
    */
   private void doTrackerUpdateTest(boolean succeedRequests) throws InterruptedException {
     long timeIncrement = 10;
-    OperationTracker ot = getOperationTracker(true, REPLICA_COUNT, REPLICA_COUNT, null);
+    OperationTracker ot = getOperationTracker(createRouterConfig(true, REPLICA_COUNT, REPLICA_COUNT, null));
     // 3-0-0-0; 3-0-0-0
     sendRequests(ot, REPLICA_COUNT);
     // 0-3-0-0; 0-3-0-0
