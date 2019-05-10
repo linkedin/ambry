@@ -17,9 +17,9 @@ import java.util.Objects;
 
 
 public class StoreException extends Exception {
-  public static final String INTERNAL_ERROR_STR =
+  static final String INTERNAL_ERROR_STR =
       "a fault occurred in a recent unsafe memory access operation in compiled Java code";
-  public static final String IO_ERROR_STR = "Input/output error";
+  static final String IO_ERROR_STR = "Input/output error";
   private static final long serialVersionUID = 1;
   private final StoreErrorCodes error;
 
