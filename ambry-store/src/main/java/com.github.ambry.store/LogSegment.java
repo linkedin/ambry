@@ -104,7 +104,8 @@ class LogSegment implements Read, Write {
    */
   LogSegment(String name, File file, StoreMetrics metrics) throws StoreException {
     if (!file.exists() || !file.isFile()) {
-      throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist or is not a file");
+      throw new StoreException(file.getAbsolutePath() + " does not exist or is not a file",
+          StoreErrorCodes.File_Not_Found);
     }
     // TODO: just because the file exists, it does not mean the headers have been written into it. LogSegment should
     // TODO: be able to handle this situation.

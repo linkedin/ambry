@@ -444,14 +444,14 @@ public class LogSegmentTest {
     try {
       new LogSegment(name, file, STANDARD_SEGMENT_SIZE, metrics, true);
       fail("Construction should have failed because the backing file does not exist");
-    } catch (IllegalArgumentException e) {
+    } catch (StoreException e) {
       // expected. Nothing to do.
     }
 
     try {
       new LogSegment(name, file, metrics);
       fail("Construction should have failed because the backing file does not exist");
-    } catch (IllegalArgumentException e) {
+    } catch (StoreException e) {
       // expected. Nothing to do.
     }
 
@@ -461,7 +461,7 @@ public class LogSegmentTest {
     try {
       new LogSegment(name, file, STANDARD_SEGMENT_SIZE, metrics, true);
       fail("Construction should have failed because the backing file does not exist");
-    } catch (IllegalArgumentException e) {
+    } catch (StoreException e) {
       // expected. Nothing to do.
     }
 
@@ -470,7 +470,7 @@ public class LogSegmentTest {
     try {
       new LogSegment(name, file, metrics);
       fail("Construction should have failed because the backing file does not exist");
-    } catch (IllegalArgumentException e) {
+    } catch (StoreException e) {
       // expected. Nothing to do.
     }
 
