@@ -20,6 +20,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.utils.SystemTime;
 import java.util.HashMap;
 import java.util.List;
@@ -182,7 +183,7 @@ public class NonBlockingRouterMetrics {
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
 
-  public NonBlockingRouterMetrics(ClusterMap clusterMap) {
+  public NonBlockingRouterMetrics(ClusterMap clusterMap, RouterConfig routerConfig) {
     metricRegistry = clusterMap.getMetricRegistry();
 
     // Operation Rate.
@@ -406,6 +407,18 @@ public class NonBlockingRouterMetrics {
     // Encrypt/Decrypt job metrics
     encryptJobMetrics = new CryptoJobMetrics(PutOperation.class, "Encrypt", metricRegistry);
     decryptJobMetrics = new CryptoJobMetrics(GetOperation.class, "Decrypt", metricRegistry);
+
+    // Custom percentiles
+    if (routerConfig != null) {
+      registerCustomPercentiles(GetBlobOperation.class, "LocalColoLatencyMs", getBlobLocalColoLatencyMs,
+          routerConfig.routerOperationTrackerCustomPercentiles);
+      registerCustomPercentiles(GetBlobOperation.class, "CrossColoLatencyMs", getBlobCrossColoLatencyMs,
+          routerConfig.routerOperationTrackerCustomPercentiles);
+      registerCustomPercentiles(GetBlobInfoOperation.class, "LocalColoLatencyMs", getBlobInfoLocalColoLatencyMs,
+          routerConfig.routerOperationTrackerCustomPercentiles);
+      registerCustomPercentiles(GetBlobInfoOperation.class, "CrossColoLatencyMs", getBlobInfoCrossColoLatencyMs,
+          routerConfig.routerOperationTrackerCustomPercentiles);
+    }
   }
 
   /**
@@ -415,7 +428,7 @@ public class NonBlockingRouterMetrics {
    * @param histogram the {@link Histogram} to use.
    * @param percentiles a list of interested percentiles (double value).
    */
-  public void registerCustomPercentiles(Class ownerClass, String name, Histogram histogram, List<Double> percentiles) {
+  private void registerCustomPercentiles(Class ownerClass, String name, Histogram histogram, List<Double> percentiles) {
     percentiles.forEach(p -> {
       Gauge<Double> customPercentile = () -> histogram.getSnapshot().getValue(p);
       metricRegistry.register(MetricRegistry.name(ownerClass, name, String.valueOf(p * 100), "thPercentile"),

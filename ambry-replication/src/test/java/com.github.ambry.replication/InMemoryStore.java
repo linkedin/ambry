@@ -35,7 +35,6 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
 import static com.github.ambry.replication.ReplicationTest.*;
@@ -124,9 +123,7 @@ class InMemoryStore implements Store {
           sizeRead += channel.read(buf);
         }
       } catch (IOException e) {
-        StoreErrorCodes errorCode =
-            Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-                : StoreErrorCodes.Unknown_Error;
+        StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(errorCode.toString() + " while writing into dummy log", e, errorCode);
       }
       buf.flip();

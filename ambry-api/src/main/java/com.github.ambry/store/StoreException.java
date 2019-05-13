@@ -13,10 +13,13 @@
  */
 package com.github.ambry.store;
 
+import java.util.Objects;
+
+
 public class StoreException extends Exception {
-  public static final String INTERNAL_ERROR_STR =
+  static final String INTERNAL_ERROR_STR =
       "a fault occurred in a recent unsafe memory access operation in compiled Java code";
-  public static final String IO_ERROR_STR = "Input/output error";
+  static final String IO_ERROR_STR = "Input/output error";
   private static final long serialVersionUID = 1;
   private final StoreErrorCodes error;
 
@@ -37,5 +40,15 @@ public class StoreException extends Exception {
 
   public StoreErrorCodes getErrorCode() {
     return this.error;
+  }
+
+  /**
+   * Resolve the error code from {@link Throwable}. This is to determine if exception is related to real disk I/O issue.
+   * @param t the {@link Throwable} to check
+   * @return the {@link StoreErrorCodes} based on the error message in exception/error.
+   */
+  public static StoreErrorCodes resolveErrorCode(Throwable t) {
+    return Objects.equals(t.getMessage(), StoreException.IO_ERROR_STR) || Objects.equals(t.getMessage(),
+        StoreException.INTERNAL_ERROR_STR) ? StoreErrorCodes.IOError : StoreErrorCodes.Unknown_Error;
   }
 }

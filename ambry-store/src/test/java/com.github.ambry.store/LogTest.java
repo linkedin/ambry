@@ -33,10 +33,10 @@ import java.util.Set;
 import org.junit.After;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.mockito.stubbing.Answer;
 
 import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 
@@ -426,6 +426,67 @@ public class LogTest {
       segment = log.getNextSegment(segment);
     }
     assertNull("There should be no more segments", segment);
+  }
+
+  /**
+   * Test several failure scenarios where exception occurs when instantiating new log segment in ensureCapacity() method.
+   * The method should catch the exception, free log segment and restore the counter.
+   * @throws Exception
+   */
+  @Test
+  public void ensureCapacityFailureTest() throws Exception {
+    int numSegments = (int) (LOG_CAPACITY / SEGMENT_CAPACITY);
+    LogSegment segment = getLogSegment(LogSegmentNameHelper.getName(0, 0), SEGMENT_CAPACITY, true);
+    String lastName = LogSegmentNameHelper.getName(0, 0);
+    List<Pair<String, String>> segmentNameAndFileNamesDesired = new ArrayList<>();
+    for (int i = 0; i < numSegments; i++) {
+      lastName = LogSegmentNameHelper.getNextPositionName(lastName);
+      String fileName = LogSegmentNameHelper.nameToFilename(lastName);
+      segmentNameAndFileNamesDesired.add(new Pair<>(lastName, fileName));
+    }
+
+    File file = new File("1_0_log");
+    File mockFile = Mockito.spy(file);
+    when(mockFile.exists()).thenReturn(false);
+    DiskSpaceAllocator mockDiskAllocator = Mockito.spy(StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR);
+    Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, mockDiskAllocator, metrics, true,
+        Collections.singletonList(segment), segmentNameAndFileNamesDesired.iterator());
+    Log mockLog = Mockito.spy(log);
+    when(mockLog.allocate(anyString(), anyLong())).thenReturn(mockFile);
+    long initialUnallocatedSegments = mockLog.getRemainingUnallocatedSegments();
+
+    // write enough so that all segments are allocated
+    ByteBuffer buffer = ByteBuffer.allocate((int) (segment.getCapacityInBytes() - segment.getStartOffset()));
+    // write first segment
+    buffer.rewind();
+    CHANNEL_APPENDER.append(mockLog, buffer);
+
+    // Test 1: try to write second segment triggering roll over and calls ensureCapacity()
+    try {
+      buffer.rewind();
+      CHANNEL_APPENDER.append(mockLog, buffer);
+      fail("Should fail because log segment instantiation encounters FileNotFound exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in store error code", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertEquals(
+          "The number of unallocated segments should decrease because exception occurred when freeing the segment",
+          initialUnallocatedSegments - 1, mockLog.getRemainingUnallocatedSegments());
+    }
+
+    // Test 2: the segment with exception is freed successfully and remainingUnallocatedSegments counter is restored.
+    doAnswer((Answer) invocation -> null).when(mockDiskAllocator).free(any(File.class), any(Long.class));
+    try {
+      buffer.rewind();
+      CHANNEL_APPENDER.append(mockLog, buffer);
+      fail("Should fail because log segment instantiation encounters FileNotFound exception");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in store error code", StoreErrorCodes.File_Not_Found, e.getErrorCode());
+      // Note that the number should be initialUnallocatedSegments - 1 because in previous test the segment with exception
+      // didn't get freed due to exception in diskSpaceAllocator.free().
+      assertEquals(
+          "The number of unallocated segments should stay unchanged because exception segment is successfully freed",
+          initialUnallocatedSegments - 1, mockLog.getRemainingUnallocatedSegments());
+    }
   }
 
   // helpers

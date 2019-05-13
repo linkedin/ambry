@@ -884,7 +884,7 @@ public class PutManagerTest {
     if (testEncryption && instantiateEncryptionCast) {
       setupEncryptionCast(vProps);
     }
-    metrics = new NonBlockingRouterMetrics(mockClusterMap);
+    metrics = new NonBlockingRouterMetrics(mockClusterMap, null);
     router = new NonBlockingRouter(new RouterConfig(vProps), metrics,
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,

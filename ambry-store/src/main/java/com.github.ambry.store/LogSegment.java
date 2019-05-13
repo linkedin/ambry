@@ -26,7 +26,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -73,7 +72,8 @@ class LogSegment implements Read, Write {
   LogSegment(String name, File file, long capacityInBytes, StoreMetrics metrics, boolean writeHeader)
       throws StoreException {
     if (!file.exists() || !file.isFile()) {
-      throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist or is not a file");
+      throw new StoreException(file.getAbsolutePath() + " does not exist or is not a file",
+          StoreErrorCodes.File_Not_Found);
     }
     this.file = file;
     this.name = name;
@@ -104,7 +104,8 @@ class LogSegment implements Read, Write {
    */
   LogSegment(String name, File file, StoreMetrics metrics) throws StoreException {
     if (!file.exists() || !file.isFile()) {
-      throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist or is not a file");
+      throw new StoreException(file.getAbsolutePath() + " does not exist or is not a file",
+          StoreErrorCodes.File_Not_Found);
     }
     // TODO: just because the file exists, it does not mean the headers have been written into it. LogSegment should
     // TODO: be able to handle this situation.
@@ -136,8 +137,7 @@ class LogSegment implements Read, Write {
     } catch (FileNotFoundException e) {
       throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);
     } catch (IOException e) {
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while creating log segment", e, errorCode);
     }
   }
@@ -165,8 +165,7 @@ class LogSegment implements Read, Write {
     } catch (ClosedChannelException e) {
       throw new StoreException("Channel closed while writing into the log segment", e, StoreErrorCodes.Channel_Closed);
     } catch (IOException e) {
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while writing into the log segment", e, errorCode);
     }
     endOffset.addAndGet(bytesWritten);
@@ -210,9 +209,7 @@ class LogSegment implements Read, Write {
           bytesWritten += fileChannel.write(byteBufferForAppend, endOffset.get() + bytesWritten);
         }
       } catch (IOException e) {
-        StoreErrorCodes errorCode =
-            Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-                : StoreErrorCodes.Unknown_Error;
+        StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(errorCode.toString() + " while writing into the log segment", e, errorCode);
       }
     }
@@ -228,7 +225,7 @@ class LogSegment implements Read, Write {
    * @param offset The offset in the byteArray to start with.
    * @param length The amount of data in bytes to use from the byteArray.
    * @throws IllegalArgumentException if there is not enough space for data of size {@code length}.
-   * @throws IOException if data could not be written to the file because of I/O errors
+   * @throws StoreException if data could not be written to the file because of I/O errors
    */
   int appendFromDirectly(byte[] byteArray, int offset, int length) throws StoreException {
     if (!fileChannel.isOpen()) {
@@ -241,8 +238,7 @@ class LogSegment implements Read, Write {
       directFile.write(byteArray, offset, length);
       endOffset.addAndGet(length);
     } catch (IOException e) {
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while writing into segment via direct IO", e, errorCode);
     }
     return length;
@@ -424,8 +420,7 @@ class LogSegment implements Read, Write {
       fileChannel.position(endOffset);
       this.endOffset.set(endOffset);
     } catch (IOException e) {
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while setting end offset of segment", e, errorCode);
     }
   }

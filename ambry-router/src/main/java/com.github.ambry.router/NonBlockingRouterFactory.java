@@ -83,7 +83,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
     this.notificationSystem = notificationSystem;
     this.accountService = accountService;
     MetricRegistry registry = clusterMap.getMetricRegistry();
-    routerMetrics = new NonBlockingRouterMetrics(clusterMap);
+    routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     networkConfig = new NetworkConfig(verifiableProperties);
     networkMetrics = new NetworkMetrics(registry);
     time = SystemTime.getInstance();

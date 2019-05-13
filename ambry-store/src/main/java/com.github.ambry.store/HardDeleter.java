@@ -30,7 +30,6 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -235,8 +234,7 @@ public class HardDeleter implements Runnable {
       }
     } catch (IOException e) {
       metrics.hardDeleteExceptionsCount.inc();
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " occurred while performing hard delete ", e, errorCode);
     }
       /* Now that all the blobs in the range were successfully hard deleted, the next time hard deletes can be resumed
@@ -541,8 +539,7 @@ public class HardDeleter implements Runnable {
       fileStream.getChannel().force(true);
       tempFile.renameTo(actual);
     } catch (IOException e) {
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(
           errorCode.toString() + " while persisting cleanup tokens to disk " + tempFile.getAbsoluteFile(), errorCode);
     } finally {
@@ -622,8 +619,7 @@ public class HardDeleter implements Runnable {
         diskIOScheduler.getSlice(HARD_DELETE_CLEANUP_JOB_NAME, HARD_DELETE_CLEANUP_JOB_NAME, logWriteInfo.size);
       }
     } catch (IOException e) {
-      StoreErrorCodes errorCode = Objects.equals(e.getMessage(), StoreException.IO_ERROR_STR) ? StoreErrorCodes.IOError
-          : StoreErrorCodes.Unknown_Error;
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while performing hard delete ", e, errorCode);
     }
     logger.trace("Performed hard deletes from {} to {} for {}", startToken, endToken, dataDir);

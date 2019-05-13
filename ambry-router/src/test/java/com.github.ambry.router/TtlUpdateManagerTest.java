@@ -97,7 +97,7 @@ public class TtlUpdateManagerTest {
     VerifiableProperties vProps =
         new VerifiableProperties(getNonBlockingRouterProperties(DEFAULT_SUCCESS_TARGET, DEFAULT_PARALLELISM));
     RouterConfig routerConfig = new RouterConfig(vProps);
-    NonBlockingRouterMetrics metrics = new NonBlockingRouterMetrics(clusterMap);
+    NonBlockingRouterMetrics metrics = new NonBlockingRouterMetrics(clusterMap, null);
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, time);
