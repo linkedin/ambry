@@ -319,6 +319,7 @@ public abstract class ReplicationEngine {
       }
     }
     replicationMetrics.trackLiveThreadsCount(replicaThreads, datacenter);
+    replicationMetrics.populateSingleColoMetrics(datacenter);
     return replicaThreads;
   }
 

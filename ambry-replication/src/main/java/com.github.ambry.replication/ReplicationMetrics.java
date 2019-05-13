@@ -234,111 +234,119 @@ public class ReplicationMetrics {
   }
 
   /**
-   * Updates per colo metrics for each thread pool
-   * @param datacenters List of datacenters to replicate from
+   * Updates given colo metrics.
+   * @param datacenter The datacenter to replicate from.
    */
-  public void populatePerColoMetrics(Set<String> datacenters) {
+  public void populateSingleColoMetrics(String datacenter) {
+    Meter interColoReplicationBytesRatePerDC =
+        registry.meter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationBytesRate"));
+    interColoReplicationBytesRate.put(datacenter, interColoReplicationBytesRatePerDC);
+    Meter plainTextInterColoReplicationBytesRatePerDC = registry.meter(
+        MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-ReplicationBytesRate"));
+    plainTextInterColoReplicationBytesRate.put(datacenter, plainTextInterColoReplicationBytesRatePerDC);
+    Meter sslInterColoReplicationBytesRatePerDC =
+        registry.meter(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-ReplicationBytesRate"));
+    sslInterColoReplicationBytesRate.put(datacenter, sslInterColoReplicationBytesRatePerDC);
+    Counter interColoMetadataExchangeCountPerDC =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-MetadataExchangeCount"));
+    interColoMetadataExchangeCount.put(datacenter, interColoMetadataExchangeCountPerDC);
+    Counter interColoReplicationGetRequestCountPerDC = registry.counter(
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationGetRequestCount"));
+    interColoReplicationGetRequestCount.put(datacenter, interColoReplicationGetRequestCountPerDC);
+    Counter interColoBlobsReplicatedCountPerDC =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationBlobsCount"));
+    interColoBlobsReplicatedCount.put(datacenter, interColoBlobsReplicatedCountPerDC);
+    Counter plainTextInterColoMetadataExchangeCountPerDC = registry.counter(
+        MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-MetadataExchangeCount"));
+    plainTextInterColoMetadataExchangeCount.put(datacenter, plainTextInterColoMetadataExchangeCountPerDC);
+    Counter plainTextInterColoBlobsReplicatedCountPerDC = registry.counter(
+        MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-BlobsReplicatedCount"));
+    plainTextInterColoBlobsReplicatedCount.put(datacenter, plainTextInterColoBlobsReplicatedCountPerDC);
+    Counter sslInterColoMetadataExchangeCountPerDC =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-MetadataExchangeCount"));
+    sslInterColoMetadataExchangeCount.put(datacenter, sslInterColoMetadataExchangeCountPerDC);
+    Counter sslInterColoBlobsReplicatedCountPerDC =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-BlobsReplicatedCount"));
+    sslInterColoBlobsReplicatedCount.put(datacenter, sslInterColoBlobsReplicatedCountPerDC);
+    Timer interColoReplicationLatencyPerDC =
+        registry.timer(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationLatency"));
+    interColoReplicationLatency.put(datacenter, interColoReplicationLatencyPerDC);
+    Timer plainTextInterColoReplicationLatencyPerDC = registry.timer(
+        MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-ReplicationLatency"));
+    plainTextInterColoReplicationLatency.put(datacenter, plainTextInterColoReplicationLatencyPerDC);
+    Timer sslInterColoReplicationLatencyPerDC =
+        registry.timer(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-ReplicationLatency"));
+    sslInterColoReplicationLatency.put(datacenter, sslInterColoReplicationLatencyPerDC);
+    Histogram interColoExchangeMetadataTimePerDC =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ExchangeMetadataTime"));
+    interColoExchangeMetadataTime.put(datacenter, interColoExchangeMetadataTimePerDC);
+    Histogram plainTextInterColoExchangeMetadataTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-ExchangeMetadataTime"));
+    plainTextInterColoExchangeMetadataTime.put(datacenter, plainTextInterColoExchangeMetadataTimePerDC);
+    Histogram sslInterColoExchangeMetadataTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-ExchangeMetadataTime"));
+    sslInterColoExchangeMetadataTime.put(datacenter, sslInterColoExchangeMetadataTimePerDC);
+    Histogram interColoFixMissingKeysTimePerDC =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-FixMissingKeysTime"));
+    interColoFixMissingKeysTime.put(datacenter, interColoFixMissingKeysTimePerDC);
+    Histogram plainTextInterColoFixMissingKeysTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-FixMissingKeysTime"));
+    plainTextInterColoFixMissingKeysTime.put(datacenter, plainTextInterColoFixMissingKeysTimePerDC);
+    Histogram sslInterColoFixMissingKeysTimePerDC =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-FixMissingKeysTime"));
+    sslInterColoFixMissingKeysTime.put(datacenter, sslInterColoFixMissingKeysTimePerDC);
+    Histogram interColoReplicationMetadataRequestTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationMetadataRequestTime"));
+    interColoReplicationMetadataRequestTime.put(datacenter, interColoReplicationMetadataRequestTimePerDC);
+    Histogram plainTextInterColoReplicationMetadataRequestTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-ReplicationMetadataRequestTime"));
+    plainTextInterColoReplicationMetadataRequestTime.put(datacenter,
+        plainTextInterColoReplicationMetadataRequestTimePerDC);
+    Histogram sslInterColoReplicationMetadataRequestTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-ReplicationMetadataRequestTime"));
+    sslInterColoReplicationMetadataRequestTime.put(datacenter, sslInterColoReplicationMetadataRequestTimePerDC);
+    Histogram interColoCheckMissingKeysTimePerDC =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-CheckMissingKeysTime"));
+    interColoCheckMissingKeysTime.put(datacenter, interColoCheckMissingKeysTimePerDC);
+    Histogram interColoProcessMetadataResponseTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ProcessMetadataResponseTime"));
+    interColoProcessMetadataResponseTime.put(datacenter, interColoProcessMetadataResponseTimePerDC);
+    Histogram interColoGetRequestTimePerDC =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-GetRequestTime"));
+    interColoGetRequestTime.put(datacenter, interColoGetRequestTimePerDC);
+    Histogram plainTextInterColoGetRequestTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-GetRequestTime"));
+    plainTextInterColoGetRequestTime.put(datacenter, plainTextInterColoGetRequestTimePerDC);
+    Histogram sslInterColoGetRequestTimePerDC =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-GetRequestTime"));
+    sslInterColoGetRequestTime.put(datacenter, sslInterColoGetRequestTimePerDC);
+    Histogram interColoBatchStoreWriteTimePerDC =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-BatchStoreWriteTime"));
+    interColoBatchStoreWriteTime.put(datacenter, interColoBatchStoreWriteTimePerDC);
+    Histogram plainTextInterColoBatchStoreWriteTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-BatchStoreWriteTime"));
+    plainTextInterColoBatchStoreWriteTime.put(datacenter, plainTextInterColoBatchStoreWriteTimePerDC);
+    Histogram sslInterColoBatchStoreWriteTimePerDC =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-BatchStoreWriteTime"));
+    sslInterColoBatchStoreWriteTime.put(datacenter, sslInterColoBatchStoreWriteTimePerDC);
+    Histogram interColoTotalReplicationTimePerDC =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-TotalReplicationTime"));
+    interColoTotalReplicationTime.put(datacenter, interColoTotalReplicationTimePerDC);
+    Histogram plainTextInterColoTotalReplicationTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-TotalReplicationTime"));
+    plainTextInterColoTotalReplicationTime.put(datacenter, plainTextInterColoTotalReplicationTimePerDC);
+    Histogram sslInterColoTotalReplicationTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-TotalReplicationTime"));
+    sslInterColoTotalReplicationTime.put(datacenter, sslInterColoTotalReplicationTimePerDC);
+  }
+
+  /**
+   * Updates per colo metrics.
+   * @param datacenters List of datacenters to replicate from.
+   */
+  void populatePerColoMetrics(Set<String> datacenters) {
     for (String datacenter : datacenters) {
-      Meter interColoReplicationBytesRatePerDC =
-          registry.meter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationBytesRate"));
-      interColoReplicationBytesRate.put(datacenter, interColoReplicationBytesRatePerDC);
-      Meter plainTextInterColoReplicationBytesRatePerDC = registry.meter(
-          MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-ReplicationBytesRate"));
-      plainTextInterColoReplicationBytesRate.put(datacenter, plainTextInterColoReplicationBytesRatePerDC);
-      Meter sslInterColoReplicationBytesRatePerDC =
-          registry.meter(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-ReplicationBytesRate"));
-      sslInterColoReplicationBytesRate.put(datacenter, sslInterColoReplicationBytesRatePerDC);
-      Counter interColoMetadataExchangeCountPerDC =
-          registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-MetadataExchangeCount"));
-      interColoMetadataExchangeCount.put(datacenter, interColoMetadataExchangeCountPerDC);
-      Counter interColoReplicationGetRequestCountPerDC = registry.counter(
-          MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationGetRequestCount"));
-      interColoReplicationGetRequestCount.put(datacenter, interColoReplicationGetRequestCountPerDC);
-      Counter interColoBlobsReplicatedCountPerDC =
-          registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationBlobsCount"));
-      interColoBlobsReplicatedCount.put(datacenter, interColoBlobsReplicatedCountPerDC);
-      Counter plainTextInterColoMetadataExchangeCountPerDC = registry.counter(
-          MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-MetadataExchangeCount"));
-      plainTextInterColoMetadataExchangeCount.put(datacenter, plainTextInterColoMetadataExchangeCountPerDC);
-      Counter plainTextInterColoBlobsReplicatedCountPerDC = registry.counter(
-          MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-BlobsReplicatedCount"));
-      plainTextInterColoBlobsReplicatedCount.put(datacenter, plainTextInterColoBlobsReplicatedCountPerDC);
-      Counter sslInterColoMetadataExchangeCountPerDC = registry.counter(
-          MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-MetadataExchangeCount"));
-      sslInterColoMetadataExchangeCount.put(datacenter, sslInterColoMetadataExchangeCountPerDC);
-      Counter sslInterColoBlobsReplicatedCountPerDC = registry.counter(
-          MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-BlobsReplicatedCount"));
-      sslInterColoBlobsReplicatedCount.put(datacenter, sslInterColoBlobsReplicatedCountPerDC);
-      Timer interColoReplicationLatencyPerDC =
-          registry.timer(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationLatency"));
-      interColoReplicationLatency.put(datacenter, interColoReplicationLatencyPerDC);
-      Timer plainTextInterColoReplicationLatencyPerDC = registry.timer(
-          MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-ReplicationLatency"));
-      plainTextInterColoReplicationLatency.put(datacenter, plainTextInterColoReplicationLatencyPerDC);
-      Timer sslInterColoReplicationLatencyPerDC =
-          registry.timer(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-ReplicationLatency"));
-      sslInterColoReplicationLatency.put(datacenter, sslInterColoReplicationLatencyPerDC);
-      Histogram interColoExchangeMetadataTimePerDC =
-          registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ExchangeMetadataTime"));
-      interColoExchangeMetadataTime.put(datacenter, interColoExchangeMetadataTimePerDC);
-      Histogram plainTextInterColoExchangeMetadataTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-ExchangeMetadataTime"));
-      plainTextInterColoExchangeMetadataTime.put(datacenter, plainTextInterColoExchangeMetadataTimePerDC);
-      Histogram sslInterColoExchangeMetadataTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-ExchangeMetadataTime"));
-      sslInterColoExchangeMetadataTime.put(datacenter, sslInterColoExchangeMetadataTimePerDC);
-      Histogram interColoFixMissingKeysTimePerDC =
-          registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-FixMissingKeysTime"));
-      interColoFixMissingKeysTime.put(datacenter, interColoFixMissingKeysTimePerDC);
-      Histogram plainTextInterColoFixMissingKeysTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-FixMissingKeysTime"));
-      plainTextInterColoFixMissingKeysTime.put(datacenter, plainTextInterColoFixMissingKeysTimePerDC);
-      Histogram sslInterColoFixMissingKeysTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-FixMissingKeysTime"));
-      sslInterColoFixMissingKeysTime.put(datacenter, sslInterColoFixMissingKeysTimePerDC);
-      Histogram interColoReplicationMetadataRequestTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationMetadataRequestTime"));
-      interColoReplicationMetadataRequestTime.put(datacenter, interColoReplicationMetadataRequestTimePerDC);
-      Histogram plainTextInterColoReplicationMetadataRequestTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-ReplicationMetadataRequestTime"));
-      plainTextInterColoReplicationMetadataRequestTime.put(datacenter,
-          plainTextInterColoReplicationMetadataRequestTimePerDC);
-      Histogram sslInterColoReplicationMetadataRequestTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-ReplicationMetadataRequestTime"));
-      sslInterColoReplicationMetadataRequestTime.put(datacenter, sslInterColoReplicationMetadataRequestTimePerDC);
-      Histogram interColoCheckMissingKeysTimePerDC =
-          registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-CheckMissingKeysTime"));
-      interColoCheckMissingKeysTime.put(datacenter, interColoCheckMissingKeysTimePerDC);
-      Histogram interColoProcessMetadataResponseTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ProcessMetadataResponseTime"));
-      interColoProcessMetadataResponseTime.put(datacenter, interColoProcessMetadataResponseTimePerDC);
-      Histogram interColoGetRequestTimePerDC =
-          registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-GetRequestTime"));
-      interColoGetRequestTime.put(datacenter, interColoGetRequestTimePerDC);
-      Histogram plainTextInterColoGetRequestTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-GetRequestTime"));
-      plainTextInterColoGetRequestTime.put(datacenter, plainTextInterColoGetRequestTimePerDC);
-      Histogram sslInterColoGetRequestTimePerDC =
-          registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-GetRequestTime"));
-      sslInterColoGetRequestTime.put(datacenter, sslInterColoGetRequestTimePerDC);
-      Histogram interColoBatchStoreWriteTimePerDC =
-          registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-BatchStoreWriteTime"));
-      interColoBatchStoreWriteTime.put(datacenter, interColoBatchStoreWriteTimePerDC);
-      Histogram plainTextInterColoBatchStoreWriteTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-BatchStoreWriteTime"));
-      plainTextInterColoBatchStoreWriteTime.put(datacenter, plainTextInterColoBatchStoreWriteTimePerDC);
-      Histogram sslInterColoBatchStoreWriteTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-BatchStoreWriteTime"));
-      sslInterColoBatchStoreWriteTime.put(datacenter, sslInterColoBatchStoreWriteTimePerDC);
-      Histogram interColoTotalReplicationTimePerDC =
-          registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-TotalReplicationTime"));
-      interColoTotalReplicationTime.put(datacenter, interColoTotalReplicationTimePerDC);
-      Histogram plainTextInterColoTotalReplicationTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-TotalReplicationTime"));
-      plainTextInterColoTotalReplicationTime.put(datacenter, plainTextInterColoTotalReplicationTimePerDC);
-      Histogram sslInterColoTotalReplicationTimePerDC = registry.histogram(
-          MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-TotalReplicationTime"));
-      sslInterColoTotalReplicationTime.put(datacenter, sslInterColoTotalReplicationTimePerDC);
+      populateSingleColoMetrics(datacenter);
     }
   }
 

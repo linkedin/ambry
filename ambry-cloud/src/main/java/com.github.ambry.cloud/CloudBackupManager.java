@@ -70,38 +70,9 @@ public class CloudBackupManager extends ReplicationEngine {
     this.virtualReplicatorCluster = virtualReplicatorCluster;
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.cloudDestination = cloudDestinationFactory.getCloudDestination();
-    persistor =
+    this.persistor =
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfoList, replicationMetrics, clusterMap,
             factory, cloudDestination);
-    try {
-      virtualReplicatorCluster.participate(InstanceType.PARTICIPANT);
-    } catch (Exception e) {
-      throw new ReplicationException("Cluster participate failed.", e);
-    }
-    // Some sleep time can reduce listener message.
-    List<? extends PartitionId> partitionIds = virtualReplicatorCluster.getAssignedPartitionIds();
-    for (PartitionId partitionId : partitionIds) {
-      addPartition(partitionId);
-    }
-
-    // Add listener for new coming assigned partition
-    virtualReplicatorCluster.addListener(new VirtualReplicatorClusterListener() {
-      @Override
-      public void onPartitionAdded(PartitionId partitionId) {
-        try {
-          addPartition(partitionId);
-        } catch (ReplicationException e) {
-          logger.error("Exception on adding partition: ", e);
-        }
-      }
-
-      @Override
-      public void onPartitionRemoved(PartitionId partitionId) {
-        removeRemoteReplicaInfoFromReplicaThread(partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos());
-      }
-    });
-
-    replicationMetrics.populatePerColoMetrics(replicaThreadPoolByDc.keySet());
   }
 
   /**
@@ -174,11 +145,32 @@ public class CloudBackupManager extends ReplicationEngine {
 
   @Override
   public void start() throws ReplicationException {
+    // Add listener for new coming assigned partition
+    virtualReplicatorCluster.addListener(new VirtualReplicatorClusterListener() {
+      @Override
+      public void onPartitionAdded(PartitionId partitionId) {
+        try {
+          addPartition(partitionId);
+        } catch (ReplicationException e) {
+          logger.error("Exception on adding partition: ", e);
+        }
+      }
+
+      @Override
+      public void onPartitionRemoved(PartitionId partitionId) {
+        removeRemoteReplicaInfoFromReplicaThread(partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos());
+      }
+    });
+
+    try {
+      virtualReplicatorCluster.participate(InstanceType.PARTICIPANT);
+    } catch (Exception e) {
+      throw new ReplicationException("Cluster participate failed.", e);
+    }
+
     // start background persistent thread
     // start scheduler thread to persist index in the background
-    if (persistor != null) {
-      this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
-          replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
-    }
+    this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
+        replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
   }
 }

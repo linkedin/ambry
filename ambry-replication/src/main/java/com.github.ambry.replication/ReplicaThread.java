@@ -224,8 +224,11 @@ public class ReplicaThread implements Runnable {
    */
   void removeRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
     lock.lock();
-    replicaLazyRemoveSet.add(remoteReplicaInfo);
-    lock.unlock();
+    try {
+      replicaLazyRemoveSet.add(remoteReplicaInfo);
+    } finally {
+      lock.unlock();
+    }
     logger.trace("RemoteReplicaInfo {} scheduled to be removed from ReplicaThread {}.", remoteReplicaInfo, threadName);
   }
 
@@ -235,11 +238,14 @@ public class ReplicaThread implements Runnable {
    */
   public void addRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
     lock.lock();
-    allReplicatedPartitions.add(remoteReplicaInfo.getReplicaId().getPartitionId());
-    replicaLazyRemoveSet.remove(remoteReplicaInfo);
-    replicasToReplicateGroupedByNode.computeIfAbsent(remoteReplicaInfo.getReplicaId().getDataNodeId(),
-        key -> new HashSet<>()).add(remoteReplicaInfo);
-    lock.unlock();
+    try {
+      allReplicatedPartitions.add(remoteReplicaInfo.getReplicaId().getPartitionId());
+      replicaLazyRemoveSet.remove(remoteReplicaInfo);
+      replicasToReplicateGroupedByNode.computeIfAbsent(remoteReplicaInfo.getReplicaId().getDataNodeId(),
+          key -> new HashSet<>()).add(remoteReplicaInfo);
+    } finally {
+      lock.unlock();
+    }
     logger.trace("RemoteReplicaInfo {} is added to ReplicaThread {}. Now working on {} dataNodeIds.", remoteReplicaInfo,
         threadName, replicasToReplicateGroupedByNode.keySet().size());
   }
@@ -259,6 +265,7 @@ public class ReplicaThread implements Runnable {
   public void replicate() {
     boolean allCaughtUp = true;
     List<DataNodeId> remoteDataNodes = new ArrayList<>(replicasToReplicateGroupedByNode.keySet());
+    logger.trace("Replicating from {} DataNodes.", replicasToReplicateGroupedByNode.size());
     for (DataNodeId remoteNode : remoteDataNodes) {
       if (!running) {
         break;
@@ -299,20 +306,24 @@ public class ReplicaThread implements Runnable {
         }
         boolean isRemoved = false;
         lock.lock();
-        if (replicaLazyRemoveSet.contains(remoteReplicaInfo)) {
-          // If remoteReplica is in the list to remove, we don't add it.
-          replicaLazyRemoveSet.remove(remoteReplicaInfo);
-          replicasToReplicateGroupedByNode.get(remoteReplicaInfo.getReplicaId().getDataNodeId())
-              .remove(remoteReplicaInfo);
-          isRemoved = true;
-          logger.trace("RemoteReplicaInfo {} is removed from ReplicaThread {}.", remoteReplicaInfo, threadName);
+        try {
+          if (replicaLazyRemoveSet.contains(remoteReplicaInfo)) {
+            // If remoteReplica is in the list to remove, we don't add it.
+            replicaLazyRemoveSet.remove(remoteReplicaInfo);
+            replicasToReplicateGroupedByNode.get(remoteReplicaInfo.getReplicaId().getDataNodeId())
+                .remove(remoteReplicaInfo);
+            isRemoved = true;
+            logger.trace("RemoteReplicaInfo {} is removed from ReplicaThread {}.", remoteReplicaInfo, threadName);
+          }
+        } finally {
+          lock.unlock();
         }
-        lock.unlock();
         if (isRemoved) {
           continue;
         }
         activeReplicasPerNode.add(remoteReplicaInfo);
       }
+      logger.trace("Replicating from {} RemoteReplicaInfos.", activeReplicasPerNode.size());
       if (activeReplicasPerNode.size() > 0) {
         allCaughtUp = false;
         try {
