@@ -192,7 +192,7 @@ public class ClusterMapConfig {
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.disk.retry.backoff.ms", 10 * 60 * 1000, 1,
             30 * 60 * 1000);
     clusterMapFixedTimeoutReplicaErrorThreshold =
-        verifiableProperties.getIntInRange("clustermap.fixedtimeout.replica.error.threshold", 1, 1, 100);
+        verifiableProperties.getIntInRange("clustermap.fixedtimeout.replica.error.threshold", 1, 1, Integer.MAX_VALUE);
     clusterMapFixedTimeoutReplicaRetryBackoffMs =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.replica.retry.backoff.ms", 10 * 60 * 1000, 1,
             30 * 60 * 1000);

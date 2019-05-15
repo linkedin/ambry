@@ -29,6 +29,8 @@ import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -68,6 +70,7 @@ public class ClusterMapUtils {
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
   static final long MAX_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final int CURRENT_SCHEMA_VERSION = 0;
+  private static final Logger logger = LoggerFactory.getLogger(ClusterMapUtils.class);
 
   /**
    * Stores all zk related info for a DC.
@@ -313,6 +316,8 @@ public class ClusterMapUtils {
   static boolean areAllReplicasForPartitionUp(PartitionId partition) {
     for (ReplicaId replica : partition.getReplicaIds()) {
       if (replica.isDown()) {
+        logger.debug("Replica [{}] on {} {} is down", replica.getPartitionId().toPathString(),
+            replica.getDataNodeId().getHostname(), replica.getMountPath());
         return false;
       }
     }
@@ -393,6 +398,8 @@ public class ClusterMapUtils {
           if (areAllReplicasForPartitionUp((partition))) {
             healthyWritablePartitions.add(partition);
           }
+        } else {
+          logger.debug("{} is in READ_ONLY state, skipping it", partition.toString());
         }
       }
       return healthyWritablePartitions.isEmpty() ? writablePartitions : healthyWritablePartitions;
