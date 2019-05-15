@@ -38,6 +38,7 @@ class CompositeClusterManager implements ClusterMap {
   final StaticClusterManager staticClusterManager;
   final HelixClusterManager helixClusterManager;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
+  private final Logger logger = LoggerFactory.getLogger(CompositeClusterManager.class);
 
   /**
    * Construct a CompositeClusterManager instance.
@@ -88,8 +89,21 @@ class CompositeClusterManager implements ClusterMap {
   public List<PartitionId> getWritablePartitionIds(String partitionClass) {
     List<PartitionId> staticWritablePartitionIds = staticClusterManager.getWritablePartitionIds(partitionClass);
     if (helixClusterManager != null) {
-      if (!areEqual(staticWritablePartitionIds, helixClusterManager.getWritablePartitionIds(partitionClass))) {
+      List<PartitionId> helixWritablePartitionIds = helixClusterManager.getWritablePartitionIds(partitionClass);
+      Set<String> staticWritablePartitionSet = new HashSet<>();
+      Set<String> helixWritablePartitionSet = new HashSet<>();
+      staticWritablePartitionIds.forEach(p -> staticWritablePartitionSet.add(p.toString()));
+      helixWritablePartitionIds.forEach(p -> helixWritablePartitionSet.add(p.toString()));
+      if (!staticWritablePartitionSet.equals(helixWritablePartitionSet)) {
         helixClusterManagerMetrics.getWritablePartitionIdsMismatchCount.inc();
+        Set<String> partitionsInBoth = new HashSet<>(staticWritablePartitionSet);
+        partitionsInBoth.retainAll(helixWritablePartitionSet);
+        staticWritablePartitionSet.removeAll(partitionsInBoth);
+        helixWritablePartitionSet.removeAll(partitionsInBoth);
+        staticWritablePartitionSet.forEach(
+            partition -> logger.debug("{} is writable partition in static clustermap only", partition));
+        helixWritablePartitionSet.forEach(
+            partition -> logger.debug("{} is writable partition in helix only", partition));
       }
     }
     return staticWritablePartitionIds;
@@ -289,8 +303,7 @@ class CompositeClusterManager implements ClusterMap {
  */
 class DuplicatingInputStream extends FilterInputStream {
   private enum Mode {
-    SAVE_READS,
-    SERVE_DUPLICATES
+    SAVE_READS, SERVE_DUPLICATES
   }
 
   private Mode mode = Mode.SAVE_READS;
