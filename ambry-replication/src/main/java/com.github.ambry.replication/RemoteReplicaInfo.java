@@ -255,6 +255,12 @@ public class RemoteReplicaInfo implements Comparable<RemoteReplicaInfo> {
     public FindToken getReplicaToken() {
       return replicaToken;
     }
+
+    @Override
+    public String toString() {
+      return "ReplicaTokenInfo: replicaInfo:" + replicaInfo + "partitionId:" + partitionId + " hostname:" + hostname
+          + " port:" + port + "replicaPath:" + replicaPath;
+    }
   }
 }
 

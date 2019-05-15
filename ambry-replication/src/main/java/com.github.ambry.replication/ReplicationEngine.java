@@ -248,9 +248,14 @@ public abstract class ReplicationEngine {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
       DataNodeId dataNodeIdToReplicate = remoteReplicaInfo.getReplicaId().getDataNodeId();
       String datacenter = dataNodeIdToReplicate.getDatacenterName();
-      createThreadPoolIfNecessary(datacenter, startThread);
+      List<ReplicaThread> replicaThreads = getOrCreateThreadPoolIfNecessary(datacenter, startThread);
+      if (replicaThreads == null) {
+        logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads for {}.",
+            datacenter);
+        continue;
+      }
       ReplicaThread replicaThread = dataNodeIdToReplicaThread.computeIfAbsent(dataNodeIdToReplicate,
-          key -> replicaThreadPoolByDc.get(datacenter).get(getReplicaThreadIndexToUse(datacenter)));
+          key -> replicaThreads.get(getReplicaThreadIndexToUse(datacenter)));
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
       remoteReplicaInfo.setReplicaThread(replicaThread);
     }
@@ -265,34 +270,32 @@ public abstract class ReplicationEngine {
   }
 
   /**
-   * Create thread pool for a datacenter if its thread pool doesn't exist.
+   * Get thread pool for given datacenter. Create thread pool for a datacenter if its thread pool doesn't exist.
    * @param datacenter The datacenter String.
    * @param startThread If thread needs to be started when create.
+   * @return List of {@link ReplicaThread}s. Return null if number of replication thread in config is 0 for this DC.
    */
-  private void createThreadPoolIfNecessary(String datacenter, boolean startThread) {
+  private List<ReplicaThread> getOrCreateThreadPoolIfNecessary(String datacenter, boolean startThread) {
     int numOfThreadsInPool =
         datacenter.equals(dataNodeId.getDatacenterName()) ? replicationConfig.replicationNumOfIntraDCReplicaThreads
             : replicationConfig.replicationNumOfInterDCReplicaThreads;
-    replicaThreadPoolByDc.computeIfAbsent(datacenter,
+    if (numOfThreadsInPool <= 0) {
+      return null;
+    }
+    return replicaThreadPoolByDc.computeIfAbsent(datacenter,
         key -> createThreadPool(datacenter, numOfThreadsInPool, startThread));
   }
 
   /**
    * Create thread pool for a datacenter.
    * @param datacenter The datacenter String.
-   * @param numberOfThreads number of threads to create for the thread pool.
+   * @param numberOfThreads Number of threads to create for the thread pool.
    * @param startThread If thread needs to be started when create.
    */
   private List<ReplicaThread> createThreadPool(String datacenter, int numberOfThreads, boolean startThread) {
     nextReplicaThreadIndex.put(datacenter, new AtomicInteger(0));
     List<ReplicaThread> replicaThreads = new ArrayList<>();
-    if (numberOfThreads <= 0) {
-      logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads for {} ",
-          datacenter);
-      return null;
-    }
     logger.info("Number of replica threads to replicate from {}: {}", datacenter, numberOfThreads);
-
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
     for (int i = 0; i < numberOfThreads; i++) {
       boolean replicatingOverSsl = sslEnabledDatacenters.contains(datacenter);

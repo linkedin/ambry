@@ -36,6 +36,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -73,6 +74,43 @@ public class CloudBackupManager extends ReplicationEngine {
     this.persistor =
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfoList, replicationMetrics, clusterMap,
             factory, cloudDestination);
+  }
+
+  @Override
+  public void start() throws ReplicationException {
+    // Add listener for new coming assigned partition
+    virtualReplicatorCluster.addListener(new VirtualReplicatorClusterListener() {
+      @Override
+      public void onPartitionAdded(PartitionId partitionId) {
+        try {
+          addPartition(partitionId);
+        } catch (ReplicationException e) {
+          logger.error("Exception on adding partition{}: ", partitionId, e);
+        }
+      }
+
+      @Override
+      public void onPartitionRemoved(PartitionId partitionId) {
+        PartitionInfo partitionInfo = partitionToPartitionInfo.get(partitionId);
+        removeRemoteReplicaInfoFromReplicaThread(partitionInfo.getRemoteReplicaInfos());
+        try {
+          persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
+        } catch (IOException | ReplicationException e) {
+          logger.error("Exception on token write when remove partition{}: ", partitionId, e);
+        }
+      }
+    });
+
+    try {
+      virtualReplicatorCluster.participate(InstanceType.PARTICIPANT);
+    } catch (Exception e) {
+      throw new ReplicationException("Cluster participate failed.", e);
+    }
+
+    // start background persistent thread
+    // start scheduler thread to persist index in the background
+    this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
+        replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
   }
 
   /**
@@ -121,56 +159,34 @@ public class CloudBackupManager extends ReplicationEngine {
     } else {
       throw new ReplicationException("Failed to add partition " + partitionId + ", because no peer replicas found.");
     }
-    // read replication token
-    for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
-      List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfos = persistor.retrieve(cloudReplica.getMountPath());
-      for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfos) {
-        DataNodeId dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
-        if (dataNodeId.getHostname().equalsIgnoreCase(tokenInfo.getHostname())
-            && dataNodeId.getPort() == tokenInfo.getPort() && remoteReplicaInfo.getReplicaId()
-            .getReplicaPath()
-            .equals(tokenInfo.getReplicaPath())) {
-          logger.info("Read token for partition {} remote host {} port {} token {}", partitionId,
-              tokenInfo.getHostname(), tokenInfo.getPort(), tokenInfo.getReplicaToken());
-          remoteReplicaInfo.initializeTokens(tokenInfo.getReplicaToken());
-          remoteReplicaInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
-          break;
+    // Reload replication token if exist.
+    List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfos = persistor.retrieve(cloudReplica.getMountPath());
+    if (tokenInfos.size() != 0) {
+      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
+        boolean tokenReloaded = false;
+        for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfos) {
+          DataNodeId dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
+          if (dataNodeId.getHostname().equalsIgnoreCase(tokenInfo.getHostname())
+              && dataNodeId.getPort() == tokenInfo.getPort() && remoteReplicaInfo.getReplicaId()
+              .getReplicaPath()
+              .equals(tokenInfo.getReplicaPath())) {
+            logger.info("Read token for partition {} remote host {} port {} token {}", partitionId,
+                tokenInfo.getHostname(), tokenInfo.getPort(), tokenInfo.getReplicaToken());
+            tokenReloaded = true;
+            remoteReplicaInfo.initializeTokens(tokenInfo.getReplicaToken());
+            remoteReplicaInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
+            break;
+          }
+        }
+        if (tokenReloaded == false) {
+          logger.warn("Token reload failed. remoteReplicaInfo: {} tokenInfos: {}", remoteReplicaInfo, tokenInfos);
         }
       }
     }
-    // create thread if necessary.
+    // Add remoteReplicaInfos to {@link ReplicaThread}.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
     return true;
   }
-
-  @Override
-  public void start() throws ReplicationException {
-    // Add listener for new coming assigned partition
-    virtualReplicatorCluster.addListener(new VirtualReplicatorClusterListener() {
-      @Override
-      public void onPartitionAdded(PartitionId partitionId) {
-        try {
-          addPartition(partitionId);
-        } catch (ReplicationException e) {
-          logger.error("Exception on adding partition: ", e);
-        }
-      }
-
-      @Override
-      public void onPartitionRemoved(PartitionId partitionId) {
-        removeRemoteReplicaInfoFromReplicaThread(partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos());
-      }
-    });
-
-    try {
-      virtualReplicatorCluster.participate(InstanceType.PARTICIPANT);
-    } catch (Exception e) {
-      throw new ReplicationException("Cluster participate failed.", e);
-    }
-
-    // start background persistent thread
-    // start scheduler thread to persist index in the background
-    this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
-        replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
-  }
 }
+
+

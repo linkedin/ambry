@@ -91,8 +91,9 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
         for (VirtualReplicatorClusterListener listener : listeners) {
           listener.onPartitionAdded(partitionId);
         }
-        logger.info("Partition {} is added to current VCR: {}. Assigned partitions: {}", partitionIdStr,
-            vcrInstanceName, assignedPartitionIds);
+        logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
+            vcrInstanceName, assignedPartitionIds.size());
+        logger.debug("Assigned Partitions: {}", assignedPartitionIds);
       } else {
         logger.info("Partition {} exists on current VCR: {}", partitionIdStr, vcrInstanceName);
       }
@@ -114,8 +115,9 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
         for (VirtualReplicatorClusterListener listener : listeners) {
           listener.onPartitionRemoved(partitionId);
         }
-        logger.info("Partition {} is removed from current VCR: {}. Assigned partitions: {}", partitionIdStr,
-            vcrInstanceName, assignedPartitionIds);
+        logger.info("Partition {} is removed from current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
+            vcrInstanceName, assignedPartitionIds.size());
+        logger.debug("Assigned Partitions: {}", assignedPartitionIds);
       } else {
         logger.info("Partition {} not exists on current VCR: {}", partitionIdStr, vcrInstanceName);
       }
@@ -138,7 +140,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
 
   @Override
   public void participate(InstanceType role) throws Exception {
-    manager = HelixManagerFactory.getZKHelixManager(vcrClusterName, vcrInstanceName, InstanceType.PARTICIPANT,
+    manager = HelixManagerFactory.getZKHelixManager(vcrClusterName, vcrInstanceName, role,
         cloudConfig.vcrClusterZkConnectString);
     manager.getStateMachineEngine()
         .registerStateModelFactory(LeaderStandbySMD.name, new HelixVcrStateModelFactory(this));

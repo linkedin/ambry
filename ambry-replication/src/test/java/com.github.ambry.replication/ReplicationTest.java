@@ -138,14 +138,8 @@ public class ReplicationTest {
     Collections.sort(actualRemoteReplicaInfoList);
     assertEquals("getRemoteReplicaInfos not correct", remoteReplicaInfoList, actualRemoteReplicaInfoList);
 
-    // Still in the list because of lazy remove
+    // Test remove remoteReplicaInfo.
     replicaThread.removeRemoteReplicaInfo(remoteReplicaInfoList.get(remoteReplicaInfoList.size() - 1));
-    actualRemoteReplicaInfoList = replicaThread.getRemoteReplicaInfos(remoteHost.dataNodeId);
-    Collections.sort(actualRemoteReplicaInfoList);
-    assertEquals("getRemoteReplicaInfos not correct", remoteReplicaInfoList, actualRemoteReplicaInfoList);
-
-    // Call replicate() to do actual remove
-    replicaThread.replicate();
     actualRemoteReplicaInfoList = replicaThread.getRemoteReplicaInfos(remoteHost.dataNodeId);
     Collections.sort(actualRemoteReplicaInfoList);
     remoteReplicaInfoList.remove(remoteReplicaInfoList.size() - 1);
