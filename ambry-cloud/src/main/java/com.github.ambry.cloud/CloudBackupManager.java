@@ -86,6 +86,7 @@ public class CloudBackupManager extends ReplicationEngine {
           addPartition(partitionId);
         } catch (ReplicationException e) {
           logger.error("Exception on adding partition{}: ", partitionId, e);
+          vcrMetrics.addPartitionErrorCount.inc();
         }
       }
 
@@ -97,6 +98,7 @@ public class CloudBackupManager extends ReplicationEngine {
           persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
         } catch (IOException | ReplicationException e) {
           logger.error("Exception on token write when remove partition{}: ", partitionId, e);
+          vcrMetrics.removePartitionErrorCount.inc();
         }
       }
     });
