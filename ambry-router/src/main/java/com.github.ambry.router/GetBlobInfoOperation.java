@@ -136,7 +136,7 @@ class GetBlobInfoOperation extends GetOperation {
     while (inFlightRequestsIterator.hasNext()) {
       Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
       if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
-        onErrorResponse(entry.getValue().replicaId);
+        onErrorResponse(entry.getValue().replicaId, RouterErrorCode.OperationTimedOut);
         logger.trace("GetBlobInfoRequest with correlationId {} in flight has expired for replica {} ", entry.getKey(),
             entry.getValue().replicaId.getDataNodeId());
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
@@ -208,7 +208,7 @@ class GetBlobInfoOperation extends GetOperation {
       logger.trace("GetBlobInfoRequest with response correlationId {} timed out for replica {} ", correlationId,
           getRequestInfo.replicaId.getDataNodeId());
       setOperationException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
-      onErrorResponse(getRequestInfo.replicaId);
+      onErrorResponse(getRequestInfo.replicaId, RouterErrorCode.OperationTimedOut);
     } else {
       if (getResponse == null) {
         logger.trace(
@@ -216,7 +216,7 @@ class GetBlobInfoOperation extends GetOperation {
             correlationId, getRequestInfo.replicaId.getDataNodeId());
         setOperationException(new RouterException("Response deserialization received an unexpected error",
             RouterErrorCode.UnexpectedInternalError));
-        onErrorResponse(getRequestInfo.replicaId);
+        onErrorResponse(getRequestInfo.replicaId, RouterErrorCode.UnexpectedInternalError);
       } else {
         if (getResponse.getCorrelationId() != correlationId) {
           // The NetworkClient associates a response with a request based on the fact that only one request is sent
@@ -230,7 +230,7 @@ class GetBlobInfoOperation extends GetOperation {
               "The correlation id in the GetResponse " + getResponse.getCorrelationId()
                   + "is not the same as the correlation id in the associated GetRequest: " + correlationId,
               RouterErrorCode.UnexpectedInternalError));
-          onErrorResponse(getRequestInfo.replicaId);
+          onErrorResponse(getRequestInfo.replicaId, RouterErrorCode.UnexpectedInternalError);
           // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
         } else {
           try {
@@ -244,7 +244,7 @@ class GetBlobInfoOperation extends GetOperation {
             routerMetrics.responseDeserializationErrorCount.inc();
             setOperationException(new RouterException("Response deserialization received an unexpected error", e,
                 RouterErrorCode.UnexpectedInternalError));
-            onErrorResponse(getRequestInfo.replicaId);
+            onErrorResponse(getRequestInfo.replicaId, RouterErrorCode.UnexpectedInternalError);
           }
         }
       }
@@ -269,7 +269,7 @@ class GetBlobInfoOperation extends GetOperation {
         setOperationException(new RouterException(
             "Unexpected number of partition responses, expected: 1, " + "received: " + partitionsInResponse,
             RouterErrorCode.UnexpectedInternalError));
-        onErrorResponse(getRequestInfo.replicaId);
+        onErrorResponse(getRequestInfo.replicaId, RouterErrorCode.UnexpectedInternalError);
         // Again, no need to notify the responseHandler.
       } else {
         getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
@@ -280,12 +280,12 @@ class GetBlobInfoOperation extends GetOperation {
             setOperationException(new RouterException(
                 "Unexpected number of messages in a partition response, expected: 1, " + "received: " + msgsInResponse,
                 RouterErrorCode.UnexpectedInternalError));
-            onErrorResponse(getRequestInfo.replicaId);
+            onErrorResponse(getRequestInfo.replicaId, RouterErrorCode.UnexpectedInternalError);
           } else {
             MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
             MessageInfo messageInfo = partitionResponseInfo.getMessageInfoList().get(0);
             handleBody(getResponse.getInputStream(), messageMetadata, messageInfo);
-            operationTracker.onResponse(getRequestInfo.replicaId, true);
+            operationTracker.onResponse(getRequestInfo.replicaId, true, null);
             if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
               logger.trace("Cross colo request successful for remote replica in {} ",
                   getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
@@ -294,35 +294,34 @@ class GetBlobInfoOperation extends GetOperation {
           }
         } else {
           // process and set the most relevant exception.
-          if (getError != ServerErrorCode.No_Error) {
-            logger.trace("Replica  {} returned error {} with response correlationId {} ",
-                getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
-          }
-          processServerError(getError);
+          logger.trace("Replica  {} returned error {} with response correlationId {} ",
+              getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
+          RouterErrorCode routerErrorCode = processServerError(getError);
           if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
               || getError == ServerErrorCode.Blob_Authorization_Failure) {
             // this is a successful response and one that completes the operation regardless of whether the
             // success target has been reached or not.
             operationCompleted = true;
-          } else {
-            onErrorResponse(getRequestInfo.replicaId);
           }
+          // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
+          // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
+          onErrorResponse(getRequestInfo.replicaId, routerErrorCode);
         }
       }
     } else {
       logger.trace("Replica {} returned an error {} for a GetBlobInfoRequest with response correlationId : {} ",
           getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
-      processServerError(getError);
-      onErrorResponse(getRequestInfo.replicaId);
+      onErrorResponse(getRequestInfo.replicaId, processServerError(getError));
     }
   }
 
   /**
    * Perform the necessary actions when a request to a replica fails.
    * @param replicaId the {@link ReplicaId} associated with the failed response.
+   * @param routerErrorCode the {@link RouterErrorCode} associated with the failed response.
    */
-  void onErrorResponse(ReplicaId replicaId) {
-    operationTracker.onResponse(replicaId, false);
+  void onErrorResponse(ReplicaId replicaId, RouterErrorCode routerErrorCode) {
+    operationTracker.onResponse(replicaId, false, routerErrorCode);
     routerMetrics.routerRequestErrorCount.inc();
     routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getBlobInfoRequestErrorCount.inc();
   }
@@ -382,36 +381,37 @@ class GetBlobInfoOperation extends GetOperation {
   /**
    * Process the given {@link ServerErrorCode} and set operation status accordingly.
    * @param errorCode the {@link ServerErrorCode} to process.
+   * @return the {@link RouterErrorCode} mapped from server error code.
    */
-  private void processServerError(ServerErrorCode errorCode) {
+  private RouterErrorCode processServerError(ServerErrorCode errorCode) {
+    RouterErrorCode resolvedRouterErrorCode;
     switch (errorCode) {
       case Blob_Authorization_Failure:
         logger.trace("Requested blob authorization failed");
-        setOperationException(
-            new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobAuthorizationFailure));
+        resolvedRouterErrorCode = RouterErrorCode.BlobAuthorizationFailure;
         break;
       case Blob_Deleted:
         logger.trace("Requested blob was deleted");
-        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDeleted));
+        resolvedRouterErrorCode = RouterErrorCode.BlobDeleted;
         break;
       case Blob_Expired:
         logger.trace("Requested blob has expired");
-        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobExpired));
+        resolvedRouterErrorCode = RouterErrorCode.BlobExpired;
         break;
       case Blob_Not_Found:
         logger.trace("Requested blob was not found on this server");
-        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDoesNotExist));
+        resolvedRouterErrorCode = RouterErrorCode.BlobDoesNotExist;
         break;
       case Disk_Unavailable:
       case Replica_Unavailable:
         logger.trace("Disk or replica on which the requested blob resides is not accessible");
-        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.AmbryUnavailable));
+        resolvedRouterErrorCode = RouterErrorCode.AmbryUnavailable;
         break;
       default:
-        setOperationException(
-            new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
-        break;
+        resolvedRouterErrorCode = RouterErrorCode.UnexpectedInternalError;
     }
+    setOperationException(new RouterException("Server returned: " + errorCode, resolvedRouterErrorCode));
+    return resolvedRouterErrorCode;
   }
 
   /**
@@ -443,6 +443,13 @@ class GetBlobInfoOperation extends GetOperation {
       }
       NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
     }
+  }
+
+  /**
+   * @return {@link OperationTracker} associated with this operation
+   */
+  OperationTracker getOperationTrackerInUse() {
+    return operationTracker;
   }
 }
 

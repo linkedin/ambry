@@ -1407,7 +1407,7 @@ class PutOperation {
         }
       }
       if (isSuccessful) {
-        operationTracker.onResponse(chunkPutRequestInfo.replicaId, true);
+        operationTracker.onResponse(chunkPutRequestInfo.replicaId, true, null);
         if (RouterUtils.isRemoteReplica(routerConfig, chunkPutRequestInfo.replicaId)) {
           logger.trace("Cross colo request successful for remote replica in {} ",
               chunkPutRequestInfo.replicaId.getDataNodeId().getDatacenterName());
@@ -1424,7 +1424,7 @@ class PutOperation {
      * @param replicaId the {@link ReplicaId} associated with the failed response.
      */
     void onErrorResponse(ReplicaId replicaId) {
-      operationTracker.onResponse(replicaId, false);
+      operationTracker.onResponse(replicaId, false, RouterErrorCode.AmbryUnavailable);
       routerMetrics.routerRequestErrorCount.inc();
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestErrorCount.inc();
     }

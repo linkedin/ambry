@@ -252,7 +252,7 @@ class DeleteOperation {
     switch (serverErrorCode) {
       case No_Error:
       case Blob_Deleted:
-        operationTracker.onResponse(replica, true);
+        operationTracker.onResponse(replica, true, null);
         if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
           logger.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
               replica.getDataNodeId().getDatacenterName());
@@ -303,7 +303,7 @@ class DeleteOperation {
         resolvedRouterErrorCode = error;
       }
     }
-    operationTracker.onResponse(replica, false);
+    operationTracker.onResponse(replica, false, resolvedRouterErrorCode);
     if (error != RouterErrorCode.BlobDeleted && error != RouterErrorCode.BlobExpired) {
       routerMetrics.routerRequestErrorCount.inc();
     }
@@ -315,7 +315,7 @@ class DeleteOperation {
    */
   private void checkAndMaybeComplete() {
     // operationCompleted is true if Blob_Authorization_Failure was received.
-    if (operationTracker.isDone() || operationCompleted == true) {
+    if (operationTracker.isDone() || operationCompleted) {
       if (!operationTracker.hasSucceeded()) {
         setOperationException(
             new RouterException("The DeleteOperation could not be completed.", resolvedRouterErrorCode));

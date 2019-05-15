@@ -243,7 +243,7 @@ class TtlUpdateOperation {
     switch (serverErrorCode) {
       case No_Error:
       case Blob_Already_Updated:
-        operationTracker.onResponse(replica, true);
+        operationTracker.onResponse(replica, true, null);
         if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
           LOGGER.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
               replica.getDataNodeId().getDatacenterName());
@@ -297,7 +297,7 @@ class TtlUpdateOperation {
         resolvedRouterErrorCode = error;
       }
     }
-    operationTracker.onResponse(replica, false);
+    operationTracker.onResponse(replica, false, resolvedRouterErrorCode);
     if (error != RouterErrorCode.BlobDeleted && error != RouterErrorCode.BlobExpired) {
       routerMetrics.routerRequestErrorCount.inc();
     }
@@ -309,7 +309,7 @@ class TtlUpdateOperation {
    */
   private void checkAndMaybeComplete() {
     // operationCompleted is true if Blob_Authorization_Failure was received.
-    if (operationTracker.isDone() || operationCompleted == true) {
+    if (operationTracker.isDone() || operationCompleted) {
       if (!operationTracker.hasSucceeded()) {
         setOperationException(
             new RouterException("The TtlUpdateOperation could not be completed.", resolvedRouterErrorCode));

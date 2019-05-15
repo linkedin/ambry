@@ -226,8 +226,8 @@ class RouterTestHelpers {
    * @throws Exception
    */
   static void assertTtl(Router router, Collection<String> blobIds, long expectedTtlSecs) throws Exception {
-    GetBlobOptions options[] = {new GetBlobOptionsBuilder().build(), new GetBlobOptionsBuilder().operationType(
-        GetBlobOptions.OperationType.BlobInfo).build()};
+    GetBlobOptions options[] = {new GetBlobOptionsBuilder().build(),
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build()};
     for (String blobId : blobIds) {
       for (GetBlobOptions option : options) {
         GetBlobResult result = router.getBlob(blobId, option).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -313,6 +313,28 @@ class RouterTestHelpers {
     PartitionId partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     return new BlobId(BLOB_ID_VERSION, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
         Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partitionId, false, blobDataType).getID();
+  }
+
+  /**
+   * Get any of the replicas from local DC or remote DC (based on the given parameter).
+   * @param blobId
+   * @param fromLocal
+   * @param localDcName
+   * @return
+   */
+  static ReplicaId getAnyReplica(BlobId blobId, boolean fromLocal, String localDcName) {
+    ReplicaId replicaToReturn = null;
+    for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
+      if (fromLocal && replicaId.getDataNodeId().getDatacenterName().equals(localDcName)) {
+        replicaToReturn = replicaId;
+        break;
+      }
+      if (!fromLocal && !replicaId.getDataNodeId().getDatacenterName().equals(localDcName)) {
+        replicaToReturn = replicaId;
+        break;
+      }
+    }
+    return replicaToReturn;
   }
 
   /**
