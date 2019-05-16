@@ -85,8 +85,8 @@ public class CloudBackupManager extends ReplicationEngine {
         try {
           addPartition(partitionId);
         } catch (ReplicationException e) {
-          logger.error("Exception on adding partition{}: ", partitionId, e);
           vcrMetrics.addPartitionErrorCount.inc();
+          logger.error("Exception on adding partition {}: ", partitionId, e);
         }
       }
 
@@ -119,9 +119,9 @@ public class CloudBackupManager extends ReplicationEngine {
    * Add given {@link PartitionId} and its {@link RemoteReplicaInfo}s to backup list.
    * @param partitionId the {@link PartitionId} to add.
    */
-  boolean addPartition(PartitionId partitionId) throws ReplicationException {
-    if (partitionToPartitionInfo.get(partitionId) != null) {
-      return false;
+  void addPartition(PartitionId partitionId) throws ReplicationException {
+    if (partitionToPartitionInfo.containsKey(partitionId)) {
+      throw new ReplicationException("PartitionId " + partitionId + " already exists.");
     }
     ReplicaId cloudReplica =
         new CloudReplica(cloudConfig, partitionId, virtualReplicatorCluster.getCurrentDataNodeId());
@@ -153,8 +153,7 @@ public class CloudBackupManager extends ReplicationEngine {
       partitionToPartitionInfo.put(partitionId, partitionInfo);
       mountPathToPartitionInfoList.compute(cloudReplica.getMountPath(), (key, value) -> {
         // For CloudBackUpManger, at most one PartitionInfo in the list.
-        List<PartitionInfo> retList;
-        retList = (value == null ? new ArrayList<>() : value);
+        List<PartitionInfo> retList = (value == null) ? new ArrayList<>() : value;
         retList.add(partitionInfo);
         return retList;
       });
@@ -187,7 +186,6 @@ public class CloudBackupManager extends ReplicationEngine {
     }
     // Add remoteReplicaInfos to {@link ReplicaThread}.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
-    return true;
   }
 }
 

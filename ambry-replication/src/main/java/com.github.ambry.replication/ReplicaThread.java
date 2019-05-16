@@ -224,7 +224,18 @@ public class ReplicaThread implements Runnable {
   void removeRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
     lock.lock();
     try {
-      replicasToReplicateGroupedByNode.get(remoteReplicaInfo.getReplicaId().getDataNodeId()).remove(remoteReplicaInfo);
+      DataNodeId dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
+      Set<RemoteReplicaInfo> remoteReplicaInfos = replicasToReplicateGroupedByNode.get(dataNodeId);
+      if (remoteReplicaInfos != null) {
+        if (!remoteReplicaInfos.remove(remoteReplicaInfo)) {
+          replicationMetrics.remoteReplicaInfoRemoveError.inc();
+          logger.error("ReplicaThread: {}, RemoteReplicaInfo {} not found.", threadName, remoteReplicaInfo);
+        }
+      } else {
+        replicationMetrics.remoteReplicaInfoRemoveError.inc();
+        logger.error("ReplicaThread: {}, RemoteReplicaInfos Set is not created for DataNode {}, RemoteReplicaInfo: {}.",
+            threadName, dataNodeId, remoteReplicaInfo);
+      }
     } finally {
       lock.unlock();
     }
@@ -239,8 +250,12 @@ public class ReplicaThread implements Runnable {
     lock.lock();
     try {
       allReplicatedPartitions.add(remoteReplicaInfo.getReplicaId().getPartitionId());
-      replicasToReplicateGroupedByNode.computeIfAbsent(remoteReplicaInfo.getReplicaId().getDataNodeId(),
-          key -> new HashSet<>()).add(remoteReplicaInfo);
+      DataNodeId dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
+      if (!replicasToReplicateGroupedByNode.computeIfAbsent(dataNodeId, key -> new HashSet<>())
+          .add(remoteReplicaInfo)) {
+        replicationMetrics.remoteReplicaInfoAddError.inc();
+        logger.error("ReplicaThread: {}, RemoteReplicaInfo {} already exists.", threadName, remoteReplicaInfo);
+      }
     } finally {
       lock.unlock();
     }

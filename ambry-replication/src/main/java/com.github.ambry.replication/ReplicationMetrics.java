@@ -119,6 +119,8 @@ public class ReplicationMetrics {
   public final Counter interColoReplicaThreadIdleCount;
   public final Counter intraColoReplicaThreadThrottleCount;
   public final Counter interColoReplicaThreadThrottleCount;
+  public final Counter remoteReplicaInfoRemoveError;
+  public final Counter remoteReplicaInfoAddError;
 
   public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
@@ -228,6 +230,9 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicaThreadThrottleCount"));
     interColoReplicaThreadThrottleCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "InterColoReplicaThreadThrottleCount"));
+    remoteReplicaInfoRemoveError =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaInfoRemoveError"));
+    remoteReplicaInfoAddError = registry.counter(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaInfoAddError"));
     this.registry = registry;
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
     populateInvalidMessageMetricForReplicas(replicaIds);
