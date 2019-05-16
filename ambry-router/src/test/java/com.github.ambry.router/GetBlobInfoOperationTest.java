@@ -291,9 +291,7 @@ public class GetBlobInfoOperationTest {
       time.sleep(routerConfig.routerRequestTimeoutMs + 1);
       op.poll(requestRegistrationCallback);
       ++count;
-      System.out.println("counter = " + count);
     }
-    System.out.println("replicaCnt = " + replicasCount);
     // At this time requests would have been created for all replicas, as none of them were delivered,
     // and cross-colo proxying is enabled by default.
     Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,

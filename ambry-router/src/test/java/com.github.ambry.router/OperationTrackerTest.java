@@ -388,7 +388,8 @@ public class OperationTrackerTest {
     sendRequests(ot, 6, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
-      ot.onResponse(replica, false, null); // fail first 3 requests to local
+      // fail first 3 requests to local
+      ot.onResponse(replica, false, null);
       assertEquals("Should be local DC", localDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertFalse("Operation should have not succeeded", ot.hasSucceeded());
@@ -416,7 +417,8 @@ public class OperationTrackerTest {
     assertEquals("Should have 6 replicas", 6, inflightReplicas.size());
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
-      ot.onResponse(replica, false, null); // fail first 3 requests to local replicas
+      // fail first 3 requests to local replicas
+      ot.onResponse(replica, false, null);
       assertEquals("Should be local DC", localDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertFalse("Operation should have not succeeded", ot.hasSucceeded());

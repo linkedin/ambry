@@ -317,10 +317,10 @@ class RouterTestHelpers {
 
   /**
    * Get any of the replicas from local DC or remote DC (based on the given parameter).
-   * @param blobId
-   * @param fromLocal
-   * @param localDcName
-   * @return
+   * @param blobId the id of blob that sits on the replica
+   * @param fromLocal whether to get replica from local datacenter
+   * @param localDcName the name of local datacenter
+   * @return any {@link ReplicaId} that satisfies requirement
    */
   static ReplicaId getAnyReplica(BlobId blobId, boolean fromLocal, String localDcName) {
     ReplicaId replicaToReturn = null;
