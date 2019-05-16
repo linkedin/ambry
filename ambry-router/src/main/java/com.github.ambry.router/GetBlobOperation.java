@@ -300,6 +300,9 @@ class GetBlobOperation extends GetOperation {
     }
   }
 
+  /**
+   * @return the {@link OperationTracker} being used by first chunk.
+   */
   OperationTracker getFirstChunkOperationTrackerInUse() {
     return firstChunk.getChunkOperationTrackerInUse();
   }
@@ -985,6 +988,9 @@ class GetBlobOperation extends GetOperation {
       return state == ChunkState.Complete;
     }
 
+    /**
+     * @return {@link OperationTracker} being used by this chunk.
+     */
     OperationTracker getChunkOperationTrackerInUse() {
       return chunkOperationTracker;
     }
