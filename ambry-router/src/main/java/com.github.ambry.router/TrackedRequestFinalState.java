@@ -14,8 +14,10 @@
 package com.github.ambry.router;
 
 /**
- * The final state of a single request created to be sent to server.
+ * The final state of a single request that is tracked by operation tracker. Note that, after request is created in router,
+ * it is not guaranteed to be sent out. The request may already time out during connection checkout etc. This enum is
+ * consumed by operation tracker to change success/failure counter and determine whether to update Histograms.
  */
-public enum ServerRequestFinalState {
+public enum TrackedRequestFinalState {
   SUCCESS, FAILURE, TIMED_OUT
 }

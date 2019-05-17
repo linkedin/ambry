@@ -285,7 +285,7 @@ class GetBlobInfoOperation extends GetOperation {
             MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
             MessageInfo messageInfo = partitionResponseInfo.getMessageInfoList().get(0);
             handleBody(getResponse.getInputStream(), messageMetadata, messageInfo);
-            operationTracker.onResponse(getRequestInfo.replicaId, ServerRequestFinalState.SUCCESS);
+            operationTracker.onResponse(getRequestInfo.replicaId, TrackedRequestFinalState.SUCCESS);
             if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
               logger.trace("Cross colo request successful for remote replica in {} ",
                   getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
@@ -322,8 +322,8 @@ class GetBlobInfoOperation extends GetOperation {
    */
   void onErrorResponse(ReplicaId replicaId, RouterErrorCode routerErrorCode) {
     operationTracker.onResponse(replicaId,
-        routerErrorCode == RouterErrorCode.OperationTimedOut ? ServerRequestFinalState.TIMED_OUT
-            : ServerRequestFinalState.FAILURE);
+        routerErrorCode == RouterErrorCode.OperationTimedOut ? TrackedRequestFinalState.TIMED_OUT
+            : TrackedRequestFinalState.FAILURE);
     routerMetrics.routerRequestErrorCount.inc();
     routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getBlobInfoRequestErrorCount.inc();
   }
