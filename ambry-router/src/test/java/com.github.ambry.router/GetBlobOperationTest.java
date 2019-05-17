@@ -1486,6 +1486,7 @@ public class GetBlobOperationTest {
     properties.setProperty("router.get.request.parallelism", Integer.toString(2));
     properties.setProperty("router.get.success.target", Integer.toString(1));
     properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
+    properties.setProperty("router.request.timeout.ms", Integer.toString(200));
     return properties;
   }
 }

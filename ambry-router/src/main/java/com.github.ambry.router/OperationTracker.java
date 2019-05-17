@@ -26,7 +26,7 @@ import java.util.Iterator;
  * next replica to send a request.
  *
  * When an operation is progressing by receiving responses from replicas, its {@code OperationTracker}
- * needs to be informed by calling {@link #onResponse(ReplicaId, RequestResult)}.
+ * needs to be informed by calling {@link #onResponse(ReplicaId, RouterRequestFinalState)}.
  *
  * Typical usage of an {@code OperationTracker} would be:
  * <pre>
@@ -64,9 +64,9 @@ interface OperationTracker {
    * Accounts for successful, failed or timed-out response from a replica. Must invoke this method
    * if a successful/failed/timed-out response is received for a replica.
    * @param replicaId ReplicaId associated with this response.
-   * @param requestResult The result of a single request (SUCCESS, FAILURE or TIMED_OUT).
+   * @param routerRequestFinalState The result of a single request (SUCCESS, FAILURE or TIMED_OUT).
    */
-  void onResponse(ReplicaId replicaId, RequestResult requestResult);
+  void onResponse(ReplicaId replicaId, RouterRequestFinalState routerRequestFinalState);
 
   /**
    * Provide an iterator to the replicas to which requests may be sent. Each time when start to iterate

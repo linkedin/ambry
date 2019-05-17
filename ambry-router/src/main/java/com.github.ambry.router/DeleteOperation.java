@@ -252,7 +252,7 @@ class DeleteOperation {
     switch (serverErrorCode) {
       case No_Error:
       case Blob_Deleted:
-        operationTracker.onResponse(replica, RequestResult.SUCCESS);
+        operationTracker.onResponse(replica, RouterRequestFinalState.SUCCESS);
         if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
           logger.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
               replica.getDataNodeId().getDatacenterName());
@@ -304,7 +304,8 @@ class DeleteOperation {
       }
     }
     operationTracker.onResponse(replica,
-        resolvedRouterErrorCode == RouterErrorCode.OperationTimedOut ? RequestResult.TIMED_OUT : RequestResult.FAILURE);
+        resolvedRouterErrorCode == RouterErrorCode.OperationTimedOut ? RouterRequestFinalState.TIMED_OUT
+            : RouterRequestFinalState.FAILURE);
     if (error != RouterErrorCode.BlobDeleted && error != RouterErrorCode.BlobExpired) {
       routerMetrics.routerRequestErrorCount.inc();
     }

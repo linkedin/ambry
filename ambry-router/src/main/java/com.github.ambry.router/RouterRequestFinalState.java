@@ -13,6 +13,9 @@
  */
 package com.github.ambry.router;
 
-public enum RequestResult {
+/**
+ * The final state of a single router request.
+ */
+public enum RouterRequestFinalState {
   SUCCESS, FAILURE, TIMED_OUT
 }

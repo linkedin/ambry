@@ -144,7 +144,7 @@ public class AdaptiveOperationTrackerTest {
     // generate a response for every request and make sure there are no errors
     for (int i = 0; i < REPLICA_COUNT; i++) {
       assertFalse("Operation should not be done", ot.isDone());
-      ot.onResponse(inflightReplicas.poll(), RequestResult.SUCCESS);
+      ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.SUCCESS);
     }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     // past due counter should be REPLICA_COUNT - 2
@@ -191,13 +191,13 @@ public class AdaptiveOperationTrackerTest {
     sendRequests(ot, 1);
     // 1-2-0-0
     // provide a response to the second request that is not a success
-    ot.onResponse(inflightReplicas.pollLast(), RequestResult.FAILURE);
+    ot.onResponse(inflightReplicas.pollLast(), RouterRequestFinalState.FAILURE);
     // 1-1-0-1
     assertFalse("Operation should not be done", ot.isDone());
     // should now be able to send one more request
     sendRequests(ot, 1);
     // 0-2-0-1
-    ot.onResponse(inflightReplicas.pollLast(), RequestResult.SUCCESS);
+    ot.onResponse(inflightReplicas.pollLast(), RouterRequestFinalState.SUCCESS);
     // 0-1-1-1
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     // past due counter should be 1
@@ -235,7 +235,7 @@ public class AdaptiveOperationTrackerTest {
 
     sendRequests(ot, 1);
     // 1-2-0-0
-    ot.onResponse(inflightReplicas.pollLast(), RequestResult.SUCCESS);
+    ot.onResponse(inflightReplicas.pollLast(), RouterRequestFinalState.SUCCESS);
     // 1-1-1-0
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     // past due counter should be 1
@@ -392,7 +392,8 @@ public class AdaptiveOperationTrackerTest {
       Double[] expectedAverages, Histogram tracker) throws InterruptedException {
     for (double expectedAverage : expectedAverages) {
       time.sleep(timeIncrement);
-      ot.onResponse(inflightReplicas.poll(), succeedRequests ? RequestResult.SUCCESS : RequestResult.FAILURE);
+      ot.onResponse(inflightReplicas.poll(),
+          succeedRequests ? RouterRequestFinalState.SUCCESS : RouterRequestFinalState.FAILURE);
       assertEquals("Average does not match. Histogram recording may be incorrect", expectedAverage,
           tracker.getSnapshot().getMean(), 0.001);
     }

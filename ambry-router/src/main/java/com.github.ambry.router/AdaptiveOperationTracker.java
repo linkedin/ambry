@@ -77,15 +77,15 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   }
 
   @Override
-  public void onResponse(ReplicaId replicaId, RequestResult requestResult) {
-    super.onResponse(replicaId, requestResult);
+  public void onResponse(ReplicaId replicaId, RouterRequestFinalState routerRequestFinalState) {
+    super.onResponse(replicaId, routerRequestFinalState);
     long elapsedTime;
     if (unexpiredRequestSendTimes.containsKey(replicaId)) {
       elapsedTime = time.milliseconds() - unexpiredRequestSendTimes.remove(replicaId).getSecond();
     } else {
       elapsedTime = time.milliseconds() - expiredRequestSendTimes.remove(replicaId);
     }
-    if (requestResult != RequestResult.TIMED_OUT) {
+    if (routerRequestFinalState != RouterRequestFinalState.TIMED_OUT) {
       getLatencyHistogram(replicaId).update(elapsedTime);
     }
   }

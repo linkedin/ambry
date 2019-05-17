@@ -117,13 +117,13 @@ public class OperationTrackerTest {
     // 0-3-0-0; 9-0-0-0
     assertFalse("Operation should not have been done.", ot.isDone());
     for (int i = 0; i < 2; i++) {
-      ot.onResponse(inflightReplicas.poll(), RequestResult.SUCCESS);
+      ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.SUCCESS);
     }
     // 0-1-2-0; 9-0-0-0
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
 
-    ot.onResponse(inflightReplicas.poll(), RequestResult.FAILURE);
+    ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.FAILURE);
     // 0-0-2-1; 9-0-0-0
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
@@ -146,12 +146,12 @@ public class OperationTrackerTest {
     sendRequests(ot, 3, false);
     // 0-3-0-0; 9-0-0-0
     for (int i = 0; i < 2; i++) {
-      ot.onResponse(inflightReplicas.poll(), RequestResult.FAILURE);
+      ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.FAILURE);
     }
     assertFalse("Operation should not have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
     // 0-1-0-2; 9-0-0-0
-    ot.onResponse(inflightReplicas.poll(), RequestResult.SUCCESS);
+    ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.SUCCESS);
     // 0-0-1-2; 9-0-0-0
     assertFalse("Operation should not have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
@@ -174,14 +174,14 @@ public class OperationTrackerTest {
     sendRequests(ot, 2, false);
     // 1-2-0-0; 9-0-0-0
 
-    ot.onResponse(inflightReplicas.poll(), RequestResult.FAILURE);
+    ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.FAILURE);
     // 1-1-0-1; 9-0-0-0
     assertFalse("Operation should not have been done.", ot.isDone());
 
     sendRequests(ot, 1, false);
     // 0-2-0-1; 9-0-0-0
     assertFalse("Operation should not be done", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), RequestResult.SUCCESS);
+    ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.SUCCESS);
     // 0-1-1-1; 9-0-0-0
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
@@ -212,35 +212,35 @@ public class OperationTrackerTest {
     // 1-2-0-0; 9-0-0-0
     ReplicaId id = inflightReplicas.poll();
     assertEquals("First request should have been to local DC", localDcName, id.getDataNodeId().getDatacenterName());
-    ot.onResponse(id, RequestResult.FAILURE);
+    ot.onResponse(id, RouterRequestFinalState.FAILURE);
     // 1-1-0-1; 9-0-0-0
     assertFalse("Operation should not be done", ot.isDone());
     sendRequests(ot, 1, false);
     // 0-2-0-1; 9-0-0-0
     id = inflightReplicas.poll();
     assertEquals("Second request should have been to local DC", localDcName, id.getDataNodeId().getDatacenterName());
-    ot.onResponse(id, RequestResult.FAILURE);
+    ot.onResponse(id, RouterRequestFinalState.FAILURE);
     id = inflightReplicas.poll();
     assertEquals("Third request should have been to local DC", localDcName, id.getDataNodeId().getDatacenterName());
-    ot.onResponse(id, RequestResult.FAILURE);
+    ot.onResponse(id, RouterRequestFinalState.FAILURE);
     // 0-0-0-3; 9-0-0-0
     assertFalse("Operation should not be done", ot.isDone());
     sendRequests(ot, 2, false);
     // 0-0-0-3; 7-2-0-0
     assertFalse("Operation should not be done", ot.isDone());
     for (int i = 0; i < 2; i++) {
-      ot.onResponse(inflightReplicas.poll(), RequestResult.FAILURE);
+      ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.FAILURE);
     }
     // 0-0-0-3; 7-0-0-2
     assertFalse("Operation should not be done", ot.isDone());
     sendRequests(ot, 2, false);
     // 0-0-0-3; 5-2-0-2
-    ot.onResponse(inflightReplicas.poll(), RequestResult.FAILURE);
+    ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.FAILURE);
     assertFalse("Operation should not be done", ot.isDone());
     // 0-0-0-3; 5-1-0-3
     sendRequests(ot, 1, false);
     // 0-0-0-3; 4-1-0-3
-    ot.onResponse(inflightReplicas.poll(), RequestResult.SUCCESS);
+    ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.SUCCESS);
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
   }
@@ -262,7 +262,7 @@ public class OperationTrackerTest {
     while (!ot.hasSucceeded()) {
       sendRequests(ot, 3, false);
       for (int i = 0; i < 3; i++) {
-        ot.onResponse(inflightReplicas.poll(), RequestResult.SUCCESS);
+        ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.SUCCESS);
       }
     }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
@@ -295,14 +295,14 @@ public class OperationTrackerTest {
     localDcName = datanodes.get(0).getDatacenterName();
     OperationTracker ot = getOperationTracker(true, 1, 2, true, Integer.MAX_VALUE);
     sendRequests(ot, 2, true);
-    ot.onResponse(inflightReplicas.poll(), RequestResult.FAILURE);
-    ot.onResponse(inflightReplicas.poll(), RequestResult.FAILURE);
+    ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.FAILURE);
+    ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.FAILURE);
     assertFalse("Operation should not be done", ot.isDone());
     sendRequests(ot, 1, true);
-    ot.onResponse(inflightReplicas.poll(), RequestResult.FAILURE);
+    ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.FAILURE);
     assertFalse("Operation should not be done", ot.isDone());
     sendRequests(ot, 1, false);
-    ot.onResponse(inflightReplicas.poll(), RequestResult.SUCCESS);
+    ot.onResponse(inflightReplicas.poll(), RouterRequestFinalState.SUCCESS);
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
   }
@@ -338,12 +338,12 @@ public class OperationTrackerTest {
     sendRequests(ot, 3, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
-      ot.onResponse(replica, RequestResult.FAILURE);
+      ot.onResponse(replica, RouterRequestFinalState.FAILURE);
     }
     sendRequests(ot, 3, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
-      ot.onResponse(replica, RequestResult.FAILURE);
+      ot.onResponse(replica, RouterRequestFinalState.FAILURE);
     }
     assertEquals("Should have 0 replica in flight.", 0, inflightReplicas.size());
     assertFalse("Operation should have not succeeded", ot.hasSucceeded());
@@ -351,7 +351,7 @@ public class OperationTrackerTest {
     sendRequests(ot, 3, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
-      ot.onResponse(replica, RequestResult.SUCCESS);
+      ot.onResponse(replica, RouterRequestFinalState.SUCCESS);
     }
     assertEquals("Should have 0 replica in flight.", 0, inflightReplicas.size());
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
@@ -369,7 +369,7 @@ public class OperationTrackerTest {
     sendRequests(ot, 3, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
-      ot.onResponse(replica, RequestResult.SUCCESS);
+      ot.onResponse(replica, RouterRequestFinalState.SUCCESS);
       assertEquals("Should be originating DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertEquals("Should have 0 replica in flight.", 0, inflightReplicas.size());
@@ -389,14 +389,14 @@ public class OperationTrackerTest {
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       // fail first 3 requests to local
-      ot.onResponse(replica, RequestResult.FAILURE);
+      ot.onResponse(replica, RouterRequestFinalState.FAILURE);
       assertEquals("Should be local DC", localDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertFalse("Operation should have not succeeded", ot.hasSucceeded());
 
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
-      ot.onResponse(replica, RequestResult.SUCCESS);
+      ot.onResponse(replica, RouterRequestFinalState.SUCCESS);
       assertEquals("Should be originating DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertEquals("Should have 0 replica in flight.", 0, inflightReplicas.size());
@@ -418,14 +418,14 @@ public class OperationTrackerTest {
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       // fail first 3 requests to local replicas
-      ot.onResponse(replica, RequestResult.FAILURE);
+      ot.onResponse(replica, RouterRequestFinalState.FAILURE);
       assertEquals("Should be local DC", localDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertFalse("Operation should have not succeeded", ot.hasSucceeded());
 
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
-      ot.onResponse(replica, RequestResult.SUCCESS);
+      ot.onResponse(replica, RouterRequestFinalState.SUCCESS);
       assertEquals("Should be originating DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertEquals("Should have 0 replica in flight.", 0, inflightReplicas.size());
