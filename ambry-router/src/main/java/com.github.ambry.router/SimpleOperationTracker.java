@@ -185,9 +185,9 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   @Override
-  public void onResponse(ReplicaId replicaId, boolean isSuccessFul, RouterErrorCode routerErrorCode) {
+  public void onResponse(ReplicaId replicaId, RequestResult requestResult) {
     inflightCount--;
-    if (isSuccessFul) {
+    if (requestResult == RequestResult.SUCCESS) {
       succeededCount++;
     } else {
       failedCount++;
