@@ -300,6 +300,13 @@ class GetBlobOperation extends GetOperation {
     }
   }
 
+  /**
+   * @return the {@link OperationTracker} being used by first chunk.
+   */
+  OperationTracker getFirstChunkOperationTrackerInUse() {
+    return firstChunk.getChunkOperationTrackerInUse();
+  }
+
   // ReadableStreamChannel implementation:
 
   /**
@@ -629,7 +636,7 @@ class GetBlobOperation extends GetOperation {
       while (inFlightRequestsIterator.hasNext()) {
         Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
         if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
-          onErrorResponse(entry.getValue().replicaId);
+          onErrorResponse(entry.getValue().replicaId, RouterErrorCode.OperationTimedOut);
           logger.trace("GetBlobRequest with correlationId {} in flight has expired for replica {} ", entry.getKey(),
               entry.getValue().replicaId.getDataNodeId());
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
@@ -738,10 +745,13 @@ class GetBlobOperation extends GetOperation {
       routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs.update(
           requestLatencyMs);
       if (responseInfo.getError() != null) {
+        // responseInfo.getError() returns NetworkClientErrorCode. If error is not null, it probably means (1) connection
+        // checkout timed out; (2) pending connection timed out; (3) established connection timed out. In all these cases,
+        // the latency histogram in adaptive operation tracker should not be updated.
         logger.trace("GetBlobRequest with response correlationId {} timed out for replica {} ", correlationId,
             getRequestInfo.replicaId.getDataNodeId());
         chunkException = new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut);
-        onErrorResponse(getRequestInfo.replicaId);
+        onErrorResponse(getRequestInfo.replicaId, RouterErrorCode.OperationTimedOut);
       } else {
         if (getResponse == null) {
           logger.trace(
@@ -749,7 +759,7 @@ class GetBlobOperation extends GetOperation {
               correlationId, getRequestInfo.replicaId.getDataNodeId());
           chunkException = new RouterException("Response deserialization received an unexpected error",
               RouterErrorCode.UnexpectedInternalError);
-          onErrorResponse(getRequestInfo.replicaId);
+          onErrorResponse(getRequestInfo.replicaId, RouterErrorCode.UnexpectedInternalError);
         } else {
           if (getResponse.getCorrelationId() != correlationId) {
             // The NetworkClient associates a response with a request based on the fact that only one request is sent
@@ -763,7 +773,7 @@ class GetBlobOperation extends GetOperation {
                 "The correlation id in the GetResponse " + getResponse.getCorrelationId()
                     + " is not the same as the correlation id in the associated GetRequest: " + correlationId,
                 RouterErrorCode.UnexpectedInternalError);
-            onErrorResponse(getRequestInfo.replicaId);
+            onErrorResponse(getRequestInfo.replicaId, RouterErrorCode.UnexpectedInternalError);
             // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
             try {
@@ -777,7 +787,7 @@ class GetBlobOperation extends GetOperation {
               routerMetrics.responseDeserializationErrorCount.inc();
               chunkException = new RouterException("Response deserialization received an unexpected error", e,
                   RouterErrorCode.UnexpectedInternalError);
-              onErrorResponse(getRequestInfo.replicaId);
+              onErrorResponse(getRequestInfo.replicaId, RouterErrorCode.UnexpectedInternalError);
             }
           }
         }
@@ -860,7 +870,7 @@ class GetBlobOperation extends GetOperation {
               MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
               MessageInfo messageInfo = partitionResponseInfo.getMessageInfoList().get(0);
               handleBody(getResponse.getInputStream(), messageMetadata, messageInfo);
-              chunkOperationTracker.onResponse(getRequestInfo.replicaId, true);
+              chunkOperationTracker.onResponse(getRequestInfo.replicaId, TrackedRequestFinalState.SUCCESS);
               if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
                 logger.trace("Cross colo request successful for remote replica in {} ",
                     getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
@@ -869,32 +879,35 @@ class GetBlobOperation extends GetOperation {
             }
           } else {
             // process and set the most relevant exception.
-            processServerError(getError);
+            RouterErrorCode routerErrorCode = processServerError(getError);
             if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
                 || getError == ServerErrorCode.Blob_Authorization_Failure) {
               // this is a successful response and one that completes the operation regardless of whether the
               // success target has been reached or not.
               chunkCompleted = true;
-            } else {
-              onErrorResponse(getRequestInfo.replicaId);
             }
+            // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
+            // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
+            onErrorResponse(getRequestInfo.replicaId, routerErrorCode);
           }
         }
       } else {
         logger.trace("Replica {} returned an error {} for a GetBlobRequest with response correlationId : {} ",
             getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
         // process and set the most relevant exception.
-        processServerError(getError);
-        onErrorResponse(getRequestInfo.replicaId);
+        onErrorResponse(getRequestInfo.replicaId, processServerError(getError));
       }
     }
 
     /**
      * Perform the necessary actions when a request to a replica fails.
      * @param replicaId the {@link ReplicaId} associated with the failed response.
+     * @param routerErrorCode the {@link RouterErrorCode} associated with the failed response.
      */
-    void onErrorResponse(ReplicaId replicaId) {
-      chunkOperationTracker.onResponse(replicaId, false);
+    void onErrorResponse(ReplicaId replicaId, RouterErrorCode routerErrorCode) {
+      chunkOperationTracker.onResponse(replicaId,
+          routerErrorCode == RouterErrorCode.OperationTimedOut ? TrackedRequestFinalState.TIMED_OUT
+              : TrackedRequestFinalState.FAILURE);
       routerMetrics.routerRequestErrorCount.inc();
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getRequestErrorCount.inc();
     }
@@ -904,9 +917,12 @@ class GetBlobOperation extends GetOperation {
      * Receiving a {@link ServerErrorCode#Blob_Deleted}, {@link ServerErrorCode#Blob_Expired} or
      * {@link ServerErrorCode#Blob_Not_Found} is unexpected for all chunks except for the first.
      * @param errorCode the {@link ServerErrorCode} to process.
+     * @return the {@link RouterErrorCode} mapped from input server error code.
      */
-    void processServerError(ServerErrorCode errorCode) {
-      setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
+    RouterErrorCode processServerError(ServerErrorCode errorCode) {
+      RouterErrorCode resolvedRouterErrorCode = RouterErrorCode.UnexpectedInternalError;
+      setChunkException(new RouterException("Server returned: " + errorCode, resolvedRouterErrorCode));
+      return resolvedRouterErrorCode;
     }
 
     /**
@@ -972,6 +988,13 @@ class GetBlobOperation extends GetOperation {
      */
     boolean isComplete() {
       return state == ChunkState.Complete;
+    }
+
+    /**
+     * @return {@link OperationTracker} being used by this chunk.
+     */
+    OperationTracker getChunkOperationTrackerInUse() {
+      return chunkOperationTracker;
     }
   }
 
@@ -1044,7 +1067,7 @@ class GetBlobOperation extends GetOperation {
             logger.trace("BlobContent available to process for Metadata blob {}", blobId);
           } else {
             logger.trace("Processing stored decryption callback result for simple blob {}", blobId);
-            // Incase of simple blobs, user-metadata may or may not be passed into decryption job based on GetOptions flag.
+            // In case of simple blobs, user-metadata may or may not be passed into decryption job based on GetOptions flag.
             // Only in-case of GetBlobInfo and GetBlobAll, user-metadata is required to be decrypted
             if (decryptCallbackResultInfo.result.getDecryptedUserMetadata() != null) {
               blobInfo = new BlobInfo(serverBlobProperties,
@@ -1148,31 +1171,31 @@ class GetBlobOperation extends GetOperation {
      * {@link ServerErrorCode#Blob_Not_Found} is not unexpected for the first chunk, unlike for subsequent chunks.
      */
     @Override
-    void processServerError(ServerErrorCode errorCode) {
+    RouterErrorCode processServerError(ServerErrorCode errorCode) {
       logger.trace("Server returned an error: {} ", errorCode);
+      RouterErrorCode resolvedRouterErrorCode;
       switch (errorCode) {
         case Blob_Authorization_Failure:
-          setChunkException(
-              new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobAuthorizationFailure));
+          resolvedRouterErrorCode = RouterErrorCode.BlobAuthorizationFailure;
           break;
         case Blob_Deleted:
-          setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDeleted));
+          resolvedRouterErrorCode = RouterErrorCode.BlobDeleted;
           break;
         case Blob_Expired:
-          setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobExpired));
+          resolvedRouterErrorCode = RouterErrorCode.BlobExpired;
           break;
         case Blob_Not_Found:
-          setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDoesNotExist));
+          resolvedRouterErrorCode = RouterErrorCode.BlobDoesNotExist;
           break;
         case Disk_Unavailable:
         case Replica_Unavailable:
-          setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.AmbryUnavailable));
+          resolvedRouterErrorCode = RouterErrorCode.AmbryUnavailable;
           break;
         default:
-          setChunkException(
-              new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
-          break;
+          resolvedRouterErrorCode = RouterErrorCode.UnexpectedInternalError;
       }
+      setChunkException(new RouterException("Server returned: " + errorCode, resolvedRouterErrorCode));
+      return resolvedRouterErrorCode;
     }
 
     /**

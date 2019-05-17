@@ -77,15 +77,17 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   }
 
   @Override
-  public void onResponse(ReplicaId replicaId, boolean isSuccessFul) {
-    super.onResponse(replicaId, isSuccessFul);
+  public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
+    super.onResponse(replicaId, trackedRequestFinalState);
     long elapsedTime;
     if (unexpiredRequestSendTimes.containsKey(replicaId)) {
       elapsedTime = time.milliseconds() - unexpiredRequestSendTimes.remove(replicaId).getSecond();
     } else {
       elapsedTime = time.milliseconds() - expiredRequestSendTimes.remove(replicaId);
     }
-    getLatencyHistogram(replicaId).update(elapsedTime);
+    if (trackedRequestFinalState != TrackedRequestFinalState.TIMED_OUT) {
+      getLatencyHistogram(replicaId).update(elapsedTime);
+    }
   }
 
   @Override
@@ -101,7 +103,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * @return the {@link Histogram} that tracks requests to the class of replicas (intra or inter DC) that
    * {@code replicaId} belongs to.
    */
-  private Histogram getLatencyHistogram(ReplicaId replicaId) {
+  Histogram getLatencyHistogram(ReplicaId replicaId) {
     if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
       return localColoTracker;
     }

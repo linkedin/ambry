@@ -228,7 +228,7 @@ public class NetworkClient implements Closeable {
               connId);
           expectedConnections++;
         } catch (IOException e) {
-          logger.error("Received exception while warming up connection: {}", e);
+          logger.error("Received exception while warming up connection: ", e);
         }
       }
     }
@@ -242,7 +242,7 @@ public class NetworkClient implements Closeable {
         failedConnections += selector.disconnected().size();
         handleSelectorEvents(null);
       } catch (IOException e) {
-        logger.error("Warm up received unexpected error while polling: {}", e);
+        logger.error("Warm up received unexpected error while polling: ", e);
       }
       if (System.currentTimeMillis() - startTime > timeForWarmUp) {
         break;

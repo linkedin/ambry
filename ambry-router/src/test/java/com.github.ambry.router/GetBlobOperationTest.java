@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -82,6 +83,7 @@ import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.PutManagerTest.*;
 import static com.github.ambry.router.RouterTestHelpers.*;
+import static org.junit.Assume.*;
 
 
 /**
@@ -119,6 +121,7 @@ public class GetBlobOperationTest {
   private MockKeyManagementService kms = null;
   private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
+  private String localDcName;
 
   // Certain tests recreate the routerConfig with different properties.
   private RouterConfig routerConfig;
@@ -200,6 +203,7 @@ public class GetBlobOperationTest {
     VerifiableProperties vprops = new VerifiableProperties(getDefaultNonBlockingRouterProperties());
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
+    localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
     blobIdFactory = new BlobIdFactory(mockClusterMap);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet);
@@ -468,6 +472,63 @@ public class GetBlobOperationTest {
     Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
         correlationIdToGetOperation.size());
     assertFailureAndCheckErrorCode(op, RouterErrorCode.OperationTimedOut);
+
+    // test that timed out response won't update latency histogram
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
+    Histogram localColoTracker =
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, true, localDcName));
+    Histogram crossColoTracker =
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, false, localDcName));
+    Assert.assertEquals("Timed-out response shouldn't be counted into local colo latency histogram", 0,
+        localColoTracker.getCount());
+    Assert.assertEquals("Timed-out response shouldn't be counted into cross colo latency histogram", 0,
+        crossColoTracker.getCount());
+  }
+
+  /**
+   * Test the case where 2 local replicas timed out. The remaining one local replica and rest remote replicas respond
+   * with Blob_Not_Found.
+   * @throws Exception
+   */
+  @Test
+  public void testRequestTimeoutAndBlobNotFound() throws Exception {
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    doPut();
+    GetBlobOperation op = createOperation(null);
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
+    correlationIdToGetOperation.clear();
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    }
+    op.poll(requestRegistrationCallback);
+    time.sleep(routerConfig.routerRequestTimeoutMs + 1);
+
+    // 2 requests have been sent out and both of them timed out. Nest, complete operation on remaining replicas
+    // The request should have response from one local replica and all remote replicas.
+    while (!op.isOperationComplete()) {
+      op.poll(requestRegistrationCallback);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+            new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+        op.handleResponse(responseInfo, getResponse);
+      }
+    }
+
+    RouterException routerException = (RouterException) op.getOperationException();
+    // error code should be OperationTimedOut because it precedes BlobDoesNotExist
+    Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
+    Histogram localColoTracker =
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, true, localDcName));
+    Histogram crossColoTracker =
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, false, localDcName));
+    // the count of data points in local colo Histogram should be 1, because first 2 request timed out
+    Assert.assertEquals("The number of data points in local colo latency histogram is not expected", 1,
+        localColoTracker.getCount());
+    // the count of data points in cross colo Histogram should be 6 because all remote replicas respond with proper error code
+    Assert.assertEquals("The number of data points in cross colo latency histogram is not expected", 6,
+        crossColoTracker.getCount());
   }
 
   /**
@@ -1418,13 +1479,14 @@ public class GetBlobOperationTest {
   private Properties getDefaultNonBlockingRouterProperties() {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
+    properties.setProperty("router.datacenter.name", "DC3");
     properties.setProperty("router.put.request.parallelism", Integer.toString(3));
     properties.setProperty("router.put.success.target", Integer.toString(2));
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(maxChunkSize));
     properties.setProperty("router.get.request.parallelism", Integer.toString(2));
     properties.setProperty("router.get.success.target", Integer.toString(1));
     properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
+    properties.setProperty("router.request.timeout.ms", Integer.toString(20));
     return properties;
   }
 }
