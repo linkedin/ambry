@@ -14,8 +14,8 @@
 package com.github.ambry.router;
 
 /**
- * The final state of a single router request.
+ * The final state of a single request created to be sent to server.
  */
-public enum RouterRequestFinalState {
+public enum ServerRequestFinalState {
   SUCCESS, FAILURE, TIMED_OUT
 }
