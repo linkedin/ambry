@@ -188,8 +188,7 @@ public abstract class ReplicationEngine {
         break;
       }
     }
-    // TODO: replace replicaPath.contains("vcr").
-    if (foundRemoteReplicaInfo == null && !replicaPath.contains(GetRequest.Cloud_Replica_Keyword)) {
+    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(GetRequest.Cloud_Replica_Keyword)) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }

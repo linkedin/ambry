@@ -71,6 +71,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -264,18 +265,17 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * @return list of {@link RemoteReplicaInfo} belongs on given {@link DataNodeId}.
-   * @param dataNodeId The {@link DataNodeId}.
+   * @return a deep copy of replicasToReplicateGroupedByNode but return type is Map<DataNodeId, List<RemoteReplicaInfo>>.
    */
-  List<RemoteReplicaInfo> getRemoteReplicaInfos(DataNodeId dataNodeId) {
-    List<RemoteReplicaInfo> remoteReplicaInfoList = new ArrayList<>();
+  Map<DataNodeId, List<RemoteReplicaInfo>> getRemoteReplicaInfos() {
     lock.lock();
     try {
-      remoteReplicaInfoList = new ArrayList<>(replicasToReplicateGroupedByNode.get(dataNodeId));
+      return replicasToReplicateGroupedByNode.entrySet()
+          .stream()
+          .collect(Collectors.toMap(e -> e.getKey(), e -> new ArrayList<>(e.getValue())));
     } finally {
       lock.unlock();
     }
-    return remoteReplicaInfoList;
   }
 
   /**
@@ -283,19 +283,15 @@ public class ReplicaThread implements Runnable {
    */
   public void replicate() {
     boolean allCaughtUp = true;
-    List<DataNodeId> remoteDataNodes = Collections.EMPTY_LIST;
-    lock.lock();
-    try {
-      remoteDataNodes = new ArrayList<>(replicasToReplicateGroupedByNode.keySet());
-    } finally {
-      lock.unlock();
-    }
+    Map<DataNodeId, List<RemoteReplicaInfo>> dateNodeToRemoteReplicaInfo = getRemoteReplicaInfos();
+
     logger.trace("Replicating from {} DataNodes.", replicasToReplicateGroupedByNode.size());
-    for (DataNodeId remoteNode : remoteDataNodes) {
+    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dateNodeToRemoteReplicaInfo.entrySet()) {
+      DataNodeId remoteNode = entry.getKey();
       if (!running) {
         break;
       }
-      List<RemoteReplicaInfo> replicasToReplicatePerNode = getRemoteReplicaInfos(remoteNode);
+      List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
       Timer.Context context = null;
       Timer.Context portTypeBasedContext = null;
       if (replicatingFromRemoteColo) {

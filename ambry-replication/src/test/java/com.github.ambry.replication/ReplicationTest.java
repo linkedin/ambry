@@ -134,7 +134,8 @@ public class ReplicationTest {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }
-    List<RemoteReplicaInfo> actualRemoteReplicaInfoList = replicaThread.getRemoteReplicaInfos(remoteHost.dataNodeId);
+    List<RemoteReplicaInfo> actualRemoteReplicaInfoList =
+        replicaThread.getRemoteReplicaInfos().get(remoteHost.dataNodeId);
     Comparator<RemoteReplicaInfo> remoteReplicaInfoComparator =
         Comparator.comparing(info -> info.getReplicaId().getPartitionId().toPathString());
     Collections.sort(remoteReplicaInfoList, remoteReplicaInfoComparator);
@@ -143,7 +144,7 @@ public class ReplicationTest {
 
     // Test remove remoteReplicaInfo.
     replicaThread.removeRemoteReplicaInfo(remoteReplicaInfoList.get(remoteReplicaInfoList.size() - 1));
-    actualRemoteReplicaInfoList = replicaThread.getRemoteReplicaInfos(remoteHost.dataNodeId);
+    actualRemoteReplicaInfoList = replicaThread.getRemoteReplicaInfos().get(remoteHost.dataNodeId);
     Collections.sort(actualRemoteReplicaInfoList, remoteReplicaInfoComparator);
     remoteReplicaInfoList.remove(remoteReplicaInfoList.size() - 1);
     assertEquals("getRemoteReplicaInfos not correct", remoteReplicaInfoList, actualRemoteReplicaInfoList);

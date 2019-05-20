@@ -67,35 +67,38 @@ public class VcrTestUtil {
       ClusterMap clusterMap) {
     HelixZkClient zkClient =
         DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(zKConnectString));
-    zkClient.setZkSerializer(new ZNRecordSerializer());
-    ClusterSetup clusterSetup = new ClusterSetup(zkClient);
-    clusterSetup.addCluster(vcrClusterName, true);
-    HelixAdmin admin = new ZKHelixAdmin(zkClient);
-    // set ALLOW_PARTICIPANT_AUTO_JOIN
-    HelixConfigScope configScope = new HelixConfigScopeBuilder(HelixConfigScope.ConfigScopeProperty.CLUSTER).
-        forCluster(vcrClusterName).build();
-    Map<String, String> helixClusterProperties = new HashMap<>();
-    helixClusterProperties.put(ZKHelixManager.ALLOW_PARTICIPANT_AUTO_JOIN, String.valueOf(true));
-    admin.setConfig(configScope, helixClusterProperties);
-    // set PersistBestPossibleAssignment
-    ConfigAccessor configAccessor = new ConfigAccessor(zkClient);
-    ClusterConfig clusterConfig = configAccessor.getClusterConfig(vcrClusterName);
-    clusterConfig.setPersistBestPossibleAssignment(true);
-    configAccessor.setClusterConfig(vcrClusterName, clusterConfig);
+    try {
+      zkClient.setZkSerializer(new ZNRecordSerializer());
+      ClusterSetup clusterSetup = new ClusterSetup(zkClient);
+      clusterSetup.addCluster(vcrClusterName, true);
+      HelixAdmin admin = new ZKHelixAdmin(zkClient);
+      // set ALLOW_PARTICIPANT_AUTO_JOIN
+      HelixConfigScope configScope = new HelixConfigScopeBuilder(HelixConfigScope.ConfigScopeProperty.CLUSTER).
+          forCluster(vcrClusterName).build();
+      Map<String, String> helixClusterProperties = new HashMap<>();
+      helixClusterProperties.put(ZKHelixManager.ALLOW_PARTICIPANT_AUTO_JOIN, String.valueOf(true));
+      admin.setConfig(configScope, helixClusterProperties);
+      // set PersistBestPossibleAssignment
+      ConfigAccessor configAccessor = new ConfigAccessor(zkClient);
+      ClusterConfig clusterConfig = configAccessor.getClusterConfig(vcrClusterName);
+      clusterConfig.setPersistBestPossibleAssignment(true);
+      configAccessor.setClusterConfig(vcrClusterName, clusterConfig);
 
-    String resourceName = "1";
-    FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resourceName);
-    builder.setStateModel(LeaderStandbySMD.name);
-    for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
-      builder.add(partitionId.toPathString());
+      String resourceName = "1";
+      FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resourceName);
+      builder.setStateModel(LeaderStandbySMD.name);
+      for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
+        builder.add(partitionId.toPathString());
+      }
+      builder.setRebalanceStrategy(CrushRebalanceStrategy.class.getName());
+      IdealState idealState = builder.build();
+      admin.addResource(vcrClusterName, resourceName, idealState);
+      admin.rebalance(vcrClusterName, resourceName, 3, "", "");
+      HelixControllerManager helixControllerManager = new HelixControllerManager(zKConnectString, vcrClusterName);
+      helixControllerManager.syncStart();
+      return helixControllerManager;
+    } finally {
+      zkClient.close();
     }
-    builder.setRebalanceStrategy(CrushRebalanceStrategy.class.getName());
-    IdealState idealState = builder.build();
-    admin.addResource(vcrClusterName, resourceName, idealState);
-    admin.rebalance(vcrClusterName, resourceName, 3, "", "");
-    HelixControllerManager helixControllerManager = new HelixControllerManager(zKConnectString, vcrClusterName);
-    helixControllerManager.syncStart();
-    zkClient.close();
-    return helixControllerManager;
   }
 }

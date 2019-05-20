@@ -57,7 +57,7 @@ public class CloudReplicaTest {
     CloudReplica cloudReplica = new CloudReplica(cloudConfig, new MockPartitionId(), cloudDataNode);
     assertEquals("Wrong mount path", mockPartitionId.toPathString(), cloudReplica.getMountPath());
     assertEquals("Wrong replica path",
-        mockPartitionId.toPathString() + File.separator + GetRequest.Cloud_Replica_Keyword + File.separator
+        GetRequest.Cloud_Replica_Keyword + File.separator + mockPartitionId.toPathString() + File.separator
             + mockPartitionId.toPathString(), cloudReplica.getReplicaPath());
     assertEquals("Wrong dataNodeId", cloudDataNode, cloudReplica.getDataNodeId());
     assertEquals("Wrong partitionId", mockPartitionId, cloudReplica.getPartitionId());
