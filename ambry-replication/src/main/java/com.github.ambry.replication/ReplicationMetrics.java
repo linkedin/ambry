@@ -346,16 +346,6 @@ public class ReplicationMetrics {
   }
 
   /**
-   * Updates per colo metrics.
-   * @param datacenters List of datacenters to replicate from.
-   */
-  void populatePerColoMetrics(Set<String> datacenters) {
-    for (String datacenter : datacenters) {
-      populateSingleColoMetrics(datacenter);
-    }
-  }
-
-  /**
    * Register metrics for measuring the number of active replica threads.
    *
    * @param replicaThreads A list of {@link ReplicaThread}s handling replication.

@@ -80,7 +80,6 @@ public class ReplicationManager extends ReplicationEngine {
         logger.error("Not replicating to partition " + partition + " because an initialized store could not be found");
       }
     }
-    replicationMetrics.populatePerColoMetrics(replicaThreadPoolByDc.keySet());
     persistor =
         new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfoList, replicationMetrics, clusterMap,
             factory);

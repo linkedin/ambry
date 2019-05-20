@@ -97,7 +97,7 @@ public class CloudBackupManager extends ReplicationEngine {
         try {
           persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
         } catch (IOException | ReplicationException e) {
-          logger.error("Exception on token write when remove partition{}: ", partitionId, e);
+          logger.error("Exception on token write when remove partition {}: ", partitionId, e);
           vcrMetrics.removePartitionErrorCount.inc();
         }
       }
@@ -118,6 +118,7 @@ public class CloudBackupManager extends ReplicationEngine {
   /**
    * Add given {@link PartitionId} and its {@link RemoteReplicaInfo}s to backup list.
    * @param partitionId the {@link PartitionId} to add.
+   * @throws ReplicationException if replicas initialization failed.
    */
   void addPartition(PartitionId partitionId) throws ReplicationException {
     if (partitionToPartitionInfo.containsKey(partitionId)) {
@@ -152,7 +153,7 @@ public class CloudBackupManager extends ReplicationEngine {
       PartitionInfo partitionInfo = new PartitionInfo(remoteReplicaInfos, partitionId, cloudStore, cloudReplica);
       partitionToPartitionInfo.put(partitionId, partitionInfo);
       mountPathToPartitionInfoList.compute(cloudReplica.getMountPath(), (key, value) -> {
-        // For CloudBackUpManger, at most one PartitionInfo in the list.
+        // For CloudBackupManager, at most one PartitionInfo in the list.
         List<PartitionInfo> retList = (value == null) ? new ArrayList<>() : value;
         retList.add(partitionInfo);
         return retList;
@@ -179,8 +180,12 @@ public class CloudBackupManager extends ReplicationEngine {
             break;
           }
         }
-        if (tokenReloaded == false) {
-          logger.warn("Token reload failed. remoteReplicaInfo: {} tokenInfos: {}", remoteReplicaInfo, tokenInfos);
+        if (!tokenReloaded) {
+          // This may happen on clusterMap update: replica removed or added.
+          // Or error on token persist/retrieve.
+          logger.warn("Token not found or reload failed. remoteReplicaInfo: {} tokenInfos: {}", remoteReplicaInfo,
+              tokenInfos);
+          vcrMetrics.tokenReloadWarnCount.inc();
         }
       }
     }

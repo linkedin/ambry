@@ -40,6 +40,7 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
 
   private final DataNodeId currentDataNode;
   private final List<PartitionId> assignedPartitionIds;
+  private final List<VirtualReplicatorClusterListener> listeners = new ArrayList<>();
 
   /**
    * Construct the static VCR cluster.
@@ -80,6 +81,11 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
 
   @Override
   public void participate(InstanceType role) throws Exception {
+    for (VirtualReplicatorClusterListener listener : listeners) {
+      for (PartitionId partitionId : assignedPartitionIds) {
+        listener.onPartitionAdded(partitionId);
+      }
+    }
   }
 
   @Override
@@ -89,6 +95,7 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
 
   @Override
   public void addListener(VirtualReplicatorClusterListener listener) {
+    listeners.add(listener);
   }
 
   @Override

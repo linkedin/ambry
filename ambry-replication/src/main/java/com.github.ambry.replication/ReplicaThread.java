@@ -283,7 +283,13 @@ public class ReplicaThread implements Runnable {
    */
   public void replicate() {
     boolean allCaughtUp = true;
-    List<DataNodeId> remoteDataNodes = new ArrayList<>(replicasToReplicateGroupedByNode.keySet());
+    List<DataNodeId> remoteDataNodes = Collections.EMPTY_LIST;
+    lock.lock();
+    try {
+      remoteDataNodes = new ArrayList<>(replicasToReplicateGroupedByNode.keySet());
+    } finally {
+      lock.unlock();
+    }
     logger.trace("Replicating from {} DataNodes.", replicasToReplicateGroupedByNode.size());
     for (DataNodeId remoteNode : remoteDataNodes) {
       if (!running) {

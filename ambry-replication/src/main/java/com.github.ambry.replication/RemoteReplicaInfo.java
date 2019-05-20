@@ -19,6 +19,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.Store;
 import com.github.ambry.utils.Time;
+import java.util.Objects;
 
 /*
  * The token persist logic ensures that a token corresponding to an entry in the store is never persisted in the
@@ -40,7 +41,7 @@ import com.github.ambry.utils.Time;
  * eventually hold true.)
  */
 
-public class RemoteReplicaInfo implements Comparable<RemoteReplicaInfo> {
+public class RemoteReplicaInfo {
   private final ReplicaId replicaId;
   private final ReplicaId localReplicaId;
   private final Store localStore;
@@ -183,16 +184,19 @@ public class RemoteReplicaInfo implements Comparable<RemoteReplicaInfo> {
   }
 
   @Override
-  public int compareTo(RemoteReplicaInfo other) {
-    return this.getReplicaId()
-        .getPartitionId()
-        .toPathString()
-        .compareTo(other.getReplicaId().getPartitionId().toPathString());
-  }
-
-  @Override
   public boolean equals(Object obj) {
-    return toString().equals(obj.toString());
+    if (this == obj) {
+      return true;
+    }
+    if (obj == null || getClass() != obj.getClass()) {
+      return false;
+    }
+    RemoteReplicaInfo info = (RemoteReplicaInfo) obj;
+    if (Objects.equals(port, info.getPort()) && info.getReplicaId().getReplicaPath().equals(replicaId.getMountPath())
+        && info.getLocalReplicaId().getReplicaPath().equals(localReplicaId.getMountPath())) {
+      return true;
+    }
+    return false;
   }
 
   /**

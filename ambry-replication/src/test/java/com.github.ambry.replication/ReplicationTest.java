@@ -57,6 +57,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -120,7 +121,7 @@ public class ReplicationTest {
 
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
-    replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
+    replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
     List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, null);
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
     hosts.put(remoteHost.dataNodeId, remoteHost);
@@ -134,14 +135,16 @@ public class ReplicationTest {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }
     List<RemoteReplicaInfo> actualRemoteReplicaInfoList = replicaThread.getRemoteReplicaInfos(remoteHost.dataNodeId);
-    Collections.sort(remoteReplicaInfoList);
-    Collections.sort(actualRemoteReplicaInfoList);
+    Comparator<RemoteReplicaInfo> remoteReplicaInfoComparator =
+        Comparator.comparing(info -> info.getReplicaId().getPartitionId().toPathString());
+    Collections.sort(remoteReplicaInfoList, remoteReplicaInfoComparator);
+    Collections.sort(actualRemoteReplicaInfoList, remoteReplicaInfoComparator);
     assertEquals("getRemoteReplicaInfos not correct", remoteReplicaInfoList, actualRemoteReplicaInfoList);
 
     // Test remove remoteReplicaInfo.
     replicaThread.removeRemoteReplicaInfo(remoteReplicaInfoList.get(remoteReplicaInfoList.size() - 1));
     actualRemoteReplicaInfoList = replicaThread.getRemoteReplicaInfos(remoteHost.dataNodeId);
-    Collections.sort(actualRemoteReplicaInfoList);
+    Collections.sort(actualRemoteReplicaInfoList, remoteReplicaInfoComparator);
     remoteReplicaInfoList.remove(remoteReplicaInfoList.size() - 1);
     assertEquals("getRemoteReplicaInfos not correct", remoteReplicaInfoList, actualRemoteReplicaInfoList);
   }
@@ -1266,7 +1269,7 @@ public class ReplicationTest {
       Transformer transformer, StoreEventListener listener) {
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
-    replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
+    replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
     List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, listener);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate =
 
