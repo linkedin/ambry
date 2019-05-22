@@ -19,10 +19,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.io.IOUtils;
@@ -35,23 +35,23 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   private final Map<BlobId, Pair<CloudBlobMetadata, InputStream>> map = new HashMap<>();
   private final CountDownLatch latch;
-  private final Set<BlobId> blobIds;
-  private final Map<String, byte[]> tokenMap = new HashMap<>();
+  private final Set<BlobId> blobIdsToTrack = ConcurrentHashMap.newKeySet();
+  private final Map<String, byte[]> tokenMap = new ConcurrentHashMap<>();
 
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
-   * @param blobIds a list of blobs that {@link LatchBasedInMemoryCloudDestination} tracks.
+   * @param blobIdsToTrack a list of blobs that {@link LatchBasedInMemoryCloudDestination} tracks.
    */
-  public LatchBasedInMemoryCloudDestination(List<BlobId> blobIds) {
-    this.blobIds = new HashSet<>(blobIds);
-    this.latch = new CountDownLatch(blobIds.size());
+  public LatchBasedInMemoryCloudDestination(List<BlobId> blobIdsToTrack) {
+    this.blobIdsToTrack.addAll(blobIdsToTrack);
+    latch = new CountDownLatch(blobIdsToTrack.size());
   }
 
   @Override
-  public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
+  synchronized public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) {
-    if (blobIds.contains(blobId)) {
-      map.put(blobId, new Pair<>(cloudBlobMetadata, blobInputStream));
+    map.put(blobId, new Pair<>(cloudBlobMetadata, blobInputStream));
+    if (blobIdsToTrack.remove(blobId)) {
       latch.countDown();
     }
     return true;
@@ -110,6 +110,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     } catch (IOException e) {
       throw new CloudStorageException("Write to stream error", e);
     }
+  }
+
+  public Map<String, byte[]> getTokenMap() {
+    return tokenMap;
   }
 
   public boolean await(long duration, TimeUnit timeUnit) throws InterruptedException {

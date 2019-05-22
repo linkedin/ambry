@@ -36,7 +36,6 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -214,7 +213,15 @@ public class VcrServer {
     }
   }
 
-  public void awaitShutdown() throws InterruptedException {
-    shutdownLatch.await();
+  public void awaitShutdown(int timeoutMs) throws InterruptedException {
+    shutdownLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+  }
+
+  public VirtualReplicatorCluster getVirtualReplicatorCluster() {
+    return virtualReplicatorCluster;
+  }
+
+  public CloudBackupManager getCloudBackupManager() {
+    return cloudBackupManager;
   }
 }

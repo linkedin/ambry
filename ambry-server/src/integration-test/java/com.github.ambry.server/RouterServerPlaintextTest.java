@@ -74,7 +74,7 @@ public class RouterServerPlaintextTest {
   @BeforeClass
   public static void initializeTests() throws Exception {
     Properties properties = getRouterProperties("DC1");
-    plaintextCluster = new MockCluster(false, SystemTime.getInstance());
+    plaintextCluster = new MockCluster(new Properties(), false, SystemTime.getInstance());
     MockNotificationSystem notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
     plaintextCluster.startServers();

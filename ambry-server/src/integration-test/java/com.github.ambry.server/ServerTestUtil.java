@@ -19,7 +19,6 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.CloudBackupManager;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
-import com.github.ambry.cloud.HelixVcrClusterFactory;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
 import com.github.ambry.cloud.VcrServer;
@@ -42,7 +41,6 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
@@ -610,27 +608,9 @@ final class ServerTestUtil {
     HelixControllerManager helixControllerManager =
         VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, clusterMap);
     // Start the VCR and CloudBackupManager
-    Properties props = new Properties();
-    props.setProperty("connectionpool.read.timeout.ms", "15000");
-    props.setProperty("server.scheduler.num.of.threads", "1");
-    props.setProperty("num.io.threads", "1");
-    props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.resolve.hostnames", "false");
-    props.setProperty("clustermap.cluster.name", "thisIsClusterName");
-    props.setProperty("clustermap.datacenter.name", dataNode.getDatacenterName());
-    props.setProperty("clustermap.port", "12309");
-    if (vcrSSLProps == null) {
-      props.setProperty("clustermap.ssl.enabled.datacenters", "");
-    } else {
-      props.putAll(vcrSSLProps);
-      props.setProperty(CloudConfig.VCR_SSL_PORT, "12310");
-      props.setProperty("clustermap.ssl.enabled.datacenters", dataNode.getDatacenterName());
-    }
-    props.setProperty(CloudConfig.VCR_CLUSTER_NAME, vcrClusterName);
-    props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, HelixVcrClusterFactory.class.getName());
-    props.setProperty(CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING, zkConnectString);
-    props.setProperty(CloudConfig.KMS_SERVICE_KEY_CONTEXT, TestUtils.getRandomKey(32));
-    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(16));
+    Properties props =
+        VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
+            vcrSSLProps);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIds);
     CloudDestinationFactory cloudDestinationFactory =
@@ -2234,7 +2214,7 @@ final class ServerTestUtil {
    * @param hostName upon which connection has to be established
    * @return BlockingChannel
    */
-  static BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
+  public static BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
       SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.PLAINTEXT) {

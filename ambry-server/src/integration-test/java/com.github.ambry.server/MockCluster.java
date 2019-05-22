@@ -66,20 +66,23 @@ public class MockCluster {
   private final boolean enableHardDeletes;
   private final Time time;
 
-  public MockCluster(boolean enableHardDeletes, Time time) throws IOException {
-    this(new Properties(), enableHardDeletes, time);
+  public MockCluster(Properties serverSslProps, boolean enableHardDeletes, Time time) throws IOException {
+    this(serverSslProps, enableHardDeletes, time, 9, 3, 3);
   }
 
-  public MockCluster(Properties sslProps, boolean enableHardDeletes, Time time) throws IOException {
-    this.sslProps = sslProps;
+  public MockCluster(Properties serverSslProps, boolean enableHardDeletes, Time time, int numNodes,
+      int numMountPointsPerNode, int numStoresPerMountPoint) throws IOException {
+    this.sslProps = serverSslProps;
     this.enableHardDeletes = enableHardDeletes;
     this.time = time;
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     String sslEnabledDataCentersStr = sslProps.getProperty("clustermap.ssl.enabled.datacenters");
     sslEnabledDataCenterList =
-        sslEnabledDataCentersStr != null ? Utils.splitString(sslEnabledDataCentersStr, ",") : new ArrayList<String>();
+        sslEnabledDataCentersStr != null ? Utils.splitString(sslEnabledDataCentersStr, ",") : new ArrayList<>();
 
-    mockClusterAgentsFactory = new MockClusterAgentsFactory(sslEnabledDataCentersStr != null, 9, 3, 3);
+    mockClusterAgentsFactory =
+        new MockClusterAgentsFactory(sslEnabledDataCentersStr != null, numNodes, numMountPointsPerNode,
+            numStoresPerMountPoint);
     clusterMap = mockClusterAgentsFactory.getClusterMap();
 
     serverList = new ArrayList<AmbryServer>();
@@ -455,6 +458,10 @@ class MockNotificationSystem implements NotificationSystem {
   @Override
   public void close() {
     // ignore
+  }
+
+  List<String> getBlobIds() {
+    return new ArrayList<>(objectTracker.keySet());
   }
 
   /**

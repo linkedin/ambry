@@ -57,20 +57,9 @@ public class VcrServerTest {
    */
   @Test
   public void testVCRServerWithStaticCluster() throws Exception {
-    Properties props = new Properties();
-    props.setProperty("host.name", mockClusterMap.getDataNodes().get(0).getHostname());
-    int port = mockClusterMap.getDataNodes().get(0).getPort();
-    props.setProperty("port", Integer.toString(port));
-    props.setProperty("clustermap.cluster.name", "test");
-    props.setProperty("clustermap.datacenter.name", "DC1");
-    props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.port", Integer.toString(port));
-    props.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
-    props.setProperty("clustermap.resolve.hostnames", "false");
-    props.setProperty("server.scheduler.num.of.threads", "1");
-    props.setProperty("num.io.threads", "1");
-    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(16));
+    Properties props = VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "", 12300, 12400, null);
     props.setProperty(CloudConfig.VCR_ASSIGNED_PARTITIONS, "0,1");
+    props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, StaticVcrClusterFactory.class.getName());
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(new LatchBasedInMemoryCloudDestination(Collections.emptyList()));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
@@ -92,22 +81,7 @@ public class VcrServerTest {
     TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
     HelixControllerManager helixControllerManager =
         VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, mockClusterMap);
-    Properties props = new Properties();
-    props.setProperty("host.name", mockClusterMap.getDataNodes().get(0).getHostname());
-    int port = mockClusterMap.getDataNodes().get(0).getPort();
-    props.setProperty("port", Integer.toString(port));
-    props.setProperty("clustermap.cluster.name", "test");
-    props.setProperty("clustermap.datacenter.name", "DC1");
-    props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.port", Integer.toString(port));
-    props.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
-    props.setProperty("clustermap.resolve.hostnames", "false");
-    props.setProperty("server.scheduler.num.of.threads", "1");
-    props.setProperty("num.io.threads", "1");
-    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(16));
-    props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, HelixVcrClusterFactory.class.getName());
-    props.setProperty(CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING, zkConnectString);
-    props.setProperty(CloudConfig.VCR_CLUSTER_NAME, vcrClusterName);
+    Properties props = VcrTestUtil.createVcrProperties("DC1", vcrClusterName, zkConnectString, 12300, 12400, null);
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(new LatchBasedInMemoryCloudDestination(Collections.emptyList()));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);

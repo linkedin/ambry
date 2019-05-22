@@ -262,8 +262,19 @@ public class RemoteReplicaInfo {
 
     @Override
     public String toString() {
-      return "ReplicaTokenInfo: replicaInfo:" + replicaInfo + "partitionId:" + partitionId + " hostname:" + hostname
-          + " port:" + port + "replicaPath:" + replicaPath;
+      return "ReplicaTokenInfo: " + "partitionId:" + partitionId + " hostname: " + hostname + " port: " + port
+          + " replicaPath: " + replicaPath;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      return Objects.equals(replicaToken.toBytes(), ((ReplicaTokenInfo) o).getReplicaToken().toBytes());
     }
   }
 }

@@ -209,8 +209,8 @@ public abstract class ReplicationEngine {
         }
       }
 
-      // persist replica tokens
-      if (persistor != null) {
+      if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove) {
+        // persist replica tokens
         persistor.write(true);
       }
     } catch (Exception e) {

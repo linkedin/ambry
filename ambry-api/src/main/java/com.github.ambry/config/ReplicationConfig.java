@@ -106,6 +106,13 @@ public class ReplicationConfig {
   @Default("true")
   public final boolean replicationIncludeAll;
 
+  /**
+   * If true, replication token will be persisted explicitly.
+   */
+  @Config("replication.persist.token.on.shutdown.or.replica.remove")
+  @Default("true")
+  public final boolean replicationPersistTokenOnShutdownOrReplicaRemove;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -133,5 +140,7 @@ public class ReplicationConfig {
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
     replicationIncludeAll = verifiableProperties.getBoolean("replication.include.all", true);
+    replicationPersistTokenOnShutdownOrReplicaRemove =
+        verifiableProperties.getBoolean("replication.persist.token.on.shutdown.or.replica.remove", true);
   }
 }

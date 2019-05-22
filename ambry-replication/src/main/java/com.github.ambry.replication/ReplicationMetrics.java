@@ -22,7 +22,6 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -121,8 +120,8 @@ public class ReplicationMetrics {
   public final Counter interColoReplicaThreadThrottleCount;
   public final Counter remoteReplicaInfoRemoveError;
   public final Counter remoteReplicaInfoAddError;
+  public final Counter allResponsedKeysExist;
 
-  public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
   private Map<String, Counter> metadataRequestErrorMap;
   private Map<String, Counter> getRequestErrorMap;
@@ -233,8 +232,8 @@ public class ReplicationMetrics {
     remoteReplicaInfoRemoveError =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaInfoRemoveError"));
     remoteReplicaInfoAddError = registry.counter(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaInfoAddError"));
+    allResponsedKeysExist = registry.counter(MetricRegistry.name(ReplicaThread.class, "AllResponsedKeysExist"));
     this.registry = registry;
-    this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
     populateInvalidMessageMetricForReplicas(replicaIds);
   }
 
@@ -368,16 +367,6 @@ public class ReplicationMetrics {
     return count;
   }
 
-  public void addRemoteReplicaToLagMetrics(final RemoteReplicaInfo remoteReplicaInfo) {
-    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-    DataNodeId dataNodeId = replicaId.getDataNodeId();
-    final String metricName =
-        dataNodeId.getHostname() + "-" + dataNodeId.getPort() + "-" + replicaId.getPartitionId() + "-replicaLagInBytes";
-    Gauge<Long> replicaLag = remoteReplicaInfo::getRemoteLagFromLocalInBytes;
-    registry.register(MetricRegistry.name(ReplicationMetrics.class, metricName), replicaLag);
-    replicaLagInBytes.add(replicaLag);
-  }
-
   /**
    * Tracks the number of partitions for which replication is disabled.
    * @param replicaThreadPools A map of datacenter names to {@link ReplicaThread}s handling replication from that
@@ -417,26 +406,32 @@ public class ReplicationMetrics {
     }
   }
 
-  public void createRemoteReplicaErrorMetrics(RemoteReplicaInfo remoteReplicaInfo) {
-    String metadataRequestErrorMetricName =
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" + remoteReplicaInfo.getReplicaId()
-            .getDataNodeId()
-            .getPort() + "-" + remoteReplicaInfo.getReplicaId().getPartitionId().toString() + "-metadataRequestError";
+  public void addMetricsForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
+    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+    DataNodeId dataNodeId = replicaId.getDataNodeId();
+    final String metricNamePrefix =
+        dataNodeId.getHostname() + "-" + dataNodeId.getPort() + "-" + replicaId.getPartitionId().toString();
+
+    String metadataRequestErrorMetricName = metricNamePrefix + "-metadataRequestError";
+    if (metadataRequestErrorMap.containsKey(metadataRequestErrorMetricName)) {
+      // Metrics already exist. For VCR: Partition add/remove go back and forth.
+      return;
+    }
     Counter metadataRequestError =
         registry.counter(MetricRegistry.name(ReplicaThread.class, metadataRequestErrorMetricName));
     metadataRequestErrorMap.put(metadataRequestErrorMetricName, metadataRequestError);
-    String getRequestErrorMetricName =
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" + remoteReplicaInfo.getReplicaId()
-            .getDataNodeId()
-            .getPort() + "-" + remoteReplicaInfo.getReplicaId().getPartitionId().toString() + "-getRequestError";
+
+    String getRequestErrorMetricName = metricNamePrefix + "-getRequestError";
     Counter getRequestError = registry.counter(MetricRegistry.name(ReplicaThread.class, getRequestErrorMetricName));
     getRequestErrorMap.put(getRequestErrorMetricName, getRequestError);
-    String localStoreErrorMetricName =
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" + remoteReplicaInfo.getReplicaId()
-            .getDataNodeId()
-            .getPort() + "-" + remoteReplicaInfo.getReplicaId().getPartitionId().toString() + "-localStoreError";
+
+    String localStoreErrorMetricName = metricNamePrefix + "-localStoreError";
     Counter localStoreError = registry.counter(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     localStoreErrorMap.put(localStoreErrorMetricName, localStoreError);
+
+    Gauge<Long> replicaLag = remoteReplicaInfo::getRemoteLagFromLocalInBytes;
+    registry.register(MetricRegistry.name(ReplicationMetrics.class, metricNamePrefix + "-replicaLagInBytes"),
+        replicaLag);
   }
 
   public void updateMetadataRequestError(ReplicaId remoteReplica) {

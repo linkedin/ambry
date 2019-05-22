@@ -65,7 +65,7 @@ public class ServerPlaintextTokenTest {
     routerProps = new Properties();
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
-    plaintextCluster = new MockCluster(false, SystemTime.getInstance());
+    plaintextCluster = new MockCluster(new Properties(), false, SystemTime.getInstance());
     notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
     plaintextCluster.initializeServers(notificationSystem);
     plaintextCluster.startServers();

@@ -46,7 +46,8 @@ public class VcrMetrics {
     blobUploadSkippedCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobUploadSkippedCount"));
     updateTtlNotSetError = registry.counter(MetricRegistry.name(CloudBlobStore.class, "UpdateTtlNotSetError"));
     addPartitionErrorCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "AddPartitionErrorCount"));
-    removePartitionErrorCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "RemovePartitionErrorCount"));
+    removePartitionErrorCount =
+        registry.counter(MetricRegistry.name(CloudBlobStore.class, "RemovePartitionErrorCount"));
     tokenReloadWarnCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "TokenReloadWarnCount"));
   }
 

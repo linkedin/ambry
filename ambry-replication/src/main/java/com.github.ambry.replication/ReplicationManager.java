@@ -66,8 +66,7 @@ public class ReplicationManager extends ReplicationEngine {
                 new RemoteReplicaInfo(remoteReplica, replicaId, store, factory.getNewFindToken(),
                     storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
                     SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
-            replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
-            replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
+            replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
           }
           addRemoteReplicaInfoToReplicaThread(remoteReplicas, false);

@@ -583,7 +583,6 @@ public class ReplicaThread implements Runnable {
         remoteToConvertedNonNull.put(storeKey, convertedKey);
       }
     }
-
     Set<StoreKey> convertedMissingStoreKeys =
         remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteToConvertedNonNull.values()));
     Set<StoreKey> missingRemoteStoreKeys = new HashSet<>();
@@ -595,7 +594,10 @@ public class ReplicaThread implements Runnable {
         missingRemoteStoreKeys.add(remoteKey);
       }
     });
-
+    if (messageInfoList.size() != 0 && missingRemoteStoreKeys.size() == 0) {
+        // Catching up
+        replicationMetrics.allResponsedKeysExist.inc();
+    }
     replicationMetrics.updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime,
         replicatingFromRemoteColo, datacenterName);
     return missingRemoteStoreKeys;

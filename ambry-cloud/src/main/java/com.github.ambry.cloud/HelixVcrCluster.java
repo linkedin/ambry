@@ -161,6 +161,8 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
 
   @Override
   public void close() {
+    assignedPartitionIds.clear();
+    listeners.clear();
     manager.disconnect();
     helixAdmin.close();
   }

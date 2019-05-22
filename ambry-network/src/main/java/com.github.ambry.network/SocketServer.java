@@ -161,7 +161,7 @@ public class SocketServer implements NetworkServer {
     });
 
     // start accepting connections
-    logger.info("Starting acceptor threads");
+    logger.info("Starting acceptor threads on port {}", port);
     Acceptor plainTextAcceptor = new Acceptor(port, processors, sendBufferSize, recvBufferSize, metrics);
     this.acceptors.add(plainTextAcceptor);
     Utils.newThread("ambry-acceptor", plainTextAcceptor, false).start();

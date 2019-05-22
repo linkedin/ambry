@@ -16,14 +16,17 @@ package com.github.ambry.cloud;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.HelixControllerManager;
+import com.github.ambry.utils.TestUtils;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
-import org.apache.helix.controller.rebalancer.strategy.CrushRebalanceStrategy;
+import org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixManager;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
@@ -90,7 +93,7 @@ public class VcrTestUtil {
       for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
         builder.add(partitionId.toPathString());
       }
-      builder.setRebalanceStrategy(CrushRebalanceStrategy.class.getName());
+      builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
       IdealState idealState = builder.build();
       admin.addResource(vcrClusterName, resourceName, idealState);
       admin.rebalance(vcrClusterName, resourceName, 3, "", "");
@@ -100,5 +103,45 @@ public class VcrTestUtil {
     } finally {
       zkClient.close();
     }
+  }
+
+  /**
+   * Create a {@link Properties} for VCR.
+   * @param datacenter the datacenter to use.
+   * @param vcrClusterName the vcrClusterName to use.
+   * @param zkConnectString the zkConnectString to use.
+   * @param clusterMapPort the clusterMapPort to use.
+   * @param vcrSslPort the vcrSslPort to use.
+   * @param vcrSSLProps the SSL Properties to use if exist. Can be {@code null}.
+   * @return the created VCR {@link Properties}.
+   */
+  public static Properties createVcrProperties(String datacenter, String vcrClusterName, String zkConnectString,
+      int clusterMapPort, int vcrSslPort, Properties vcrSSLProps) {
+    // Start the VCR and CloudBackupManager
+    Properties props = new Properties();
+    props.setProperty("connectionpool.read.timeout.ms", "15000");
+    props.setProperty("server.scheduler.num.of.threads", "1");
+    props.setProperty("num.io.threads", "1");
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.resolve.hostnames", "false");
+    props.setProperty("clustermap.cluster.name", "thisIsClusterName");
+    props.setProperty("clustermap.datacenter.name", datacenter);
+    props.setProperty("clustermap.port", Integer.toString(clusterMapPort));
+    props.setProperty("port", Integer.toString(clusterMapPort));
+    if (vcrSSLProps == null) {
+      props.setProperty("clustermap.ssl.enabled.datacenters", "");
+    } else {
+      props.putAll(vcrSSLProps);
+      props.setProperty("clustermap.ssl.enabled.datacenters", datacenter);
+      props.setProperty(CloudConfig.VCR_SSL_PORT, Integer.toString(vcrSslPort));
+    }
+    props.setProperty(CloudConfig.VCR_CLUSTER_NAME, vcrClusterName);
+    props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, HelixVcrClusterFactory.class.getName());
+    props.setProperty(CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING, zkConnectString);
+    props.setProperty(CloudConfig.KMS_SERVICE_KEY_CONTEXT, TestUtils.getRandomKey(32));
+    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(16));
+    props.setProperty("replication.token.flush.delay.seconds", "100000");
+    props.setProperty("replication.token.flush.interval.seconds", "500000");
+    return props;
   }
 }
