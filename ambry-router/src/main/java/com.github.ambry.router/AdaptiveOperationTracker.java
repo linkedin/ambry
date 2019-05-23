@@ -37,8 +37,6 @@ import java.util.NoSuchElementException;
  * perceived latencies.
  */
 class AdaptiveOperationTracker extends SimpleOperationTracker {
-  static final long MIN_DATA_POINTS_REQUIRED = 1000;
-
   private final RouterConfig routerConfig;
   private final Time time;
   private final double quantile;
@@ -112,8 +110,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * Gets the {@link Histogram} that tracks request latencies to the class of replicas (intra or inter DC) that
    * {@code replicaId} belongs to.
    * @param replicaId the {@link ReplicaId} whose request latency is going to be tracked.
-   * @return the {@link Histogram} that tracks requests to the class of replicas (intra or inter DC) that
-   * {@code replicaId} belongs to.
+   * @param routerConfig the {@link RouterConfig} that specifies which scope the histogram is associated with.
+   * @return the {@link Histogram} associated with this replica.
    */
   Histogram getLatencyHistogram(ReplicaId replicaId, RouterConfig routerConfig) {
     boolean isLocalReplica = replicaId.getDataNodeId().getDatacenterName().equals(datacenterName);
@@ -134,6 +132,13 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     return histogramToReturn;
   }
 
+  /**
+   * Get certain colo-wide latency histogram based on given arguments.
+   * @param routerMetrics the {@link NonBlockingRouterMetrics} that used in this tracker.
+   * @param routerOperation the {@link RouterOperation} that uses this tracker.
+   * @param isLocalColo {@code true} if local latency histogram should be returned. {@code false} otherwise.
+   * @return colo-wide latency histogram.
+   */
   private Histogram getColoWideTracker(NonBlockingRouterMetrics routerMetrics, RouterOperation routerOperation,
       boolean isLocalColo) {
     Histogram trackerToReturn;
@@ -152,6 +157,12 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     return trackerToReturn;
   }
 
+  /**
+   * Get certain colo-wide past due counter based on given arguments.
+   * @param routerMetrics the {@link NonBlockingRouterMetrics} that used in this tracker.
+   * @param routerOperation the {@link RouterOperation} that uses this tracker.
+   * @return colo-wide past due counter.
+   */
   private Counter getColoWidePastDueCounter(NonBlockingRouterMetrics routerMetrics, RouterOperation routerOperation) {
     Counter pastDueCounter;
     switch (routerOperation) {
@@ -167,7 +178,14 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     return pastDueCounter;
   }
 
-  private Map<PartitionId, Histogram> getPartitionToLatencyMap(NonBlockingRouterMetrics routerMetrics,
+  /**
+   * Get certain partition-level histograms based on given arguments.
+   * @param routerMetrics the {@link NonBlockingRouterMetrics} that used in this tracker.
+   * @param routerOperation the {@link RouterOperation} that uses this tracker.
+   * @param isLocal {@code true} if local partition-level histograms should be returned. {@code false} otherwise.
+   * @return partition-to-histogram map.
+   */
+  Map<PartitionId, Histogram> getPartitionToLatencyMap(NonBlockingRouterMetrics routerMetrics,
       RouterOperation routerOperation, boolean isLocal) {
     Map<PartitionId, Histogram> partitionToHistogramMap;
     switch (routerOperation) {
@@ -229,7 +247,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
         if (!oldestEntry.getValue().getFirst()) {
           Histogram latencyTracker =
               getLatencyHistogram(oldestEntry.getKey(), routerConfig); //getLatencyHistogram(oldestEntry.getKey());
-          isPastDue = (latencyTracker.getCount() >= MIN_DATA_POINTS_REQUIRED) && (
+          isPastDue = (latencyTracker.getCount() >= routerConfig.routerOperationTrackerMinDataPointsRequired) && (
               time.milliseconds() - oldestEntry.getValue().getSecond() >= latencyTracker.getSnapshot()
                   .getValue(quantile));
           if (isPastDue) {

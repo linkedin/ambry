@@ -23,7 +23,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.util.HashMap;
 import java.util.List;
@@ -437,6 +436,11 @@ public class NonBlockingRouterMetrics {
     }
   }
 
+  /**
+   * Initialize partition-level histogram for all partitions in cluster map.
+   * @param clusterMap the {@link ClusterMap} that contains info of all partitions.
+   * @param routerConfig the {@link RouterConfig} that specifies histogram parameters.
+   */
   private void initializePartitionToHistogramMap(ClusterMap clusterMap, RouterConfig routerConfig) {
     int reservoirSize = routerConfig.routerOperationTrackerReservoirSize;
     double decayFactor = routerConfig.routerOperationTrackerReservoirDecayFactor;
@@ -452,54 +456,14 @@ public class NonBlockingRouterMetrics {
     }
   }
 
+  /**
+   * Create a histogram with given parameters.
+   * @param reservoirSize the maximum size of reservoir in histogram
+   * @param decayFactor the decay factor used by histogram
+   * @return a configured {@link Histogram}.
+   */
   private Histogram createHistogram(int reservoirSize, double decayFactor) {
     return new Histogram(new ExponentiallyDecayingReservoir(reservoirSize, decayFactor));
-  }
-
-  Pair<Histogram, Histogram> getColoWideLatencyHistogram(RouterOperation routerOperation) {
-    Histogram localColoLatency = null;
-    Histogram crossColoLatency = null;
-    switch (routerOperation) {
-      case GetBlobOperation:
-        localColoLatency = getBlobLocalColoLatencyMs;
-        crossColoLatency = getBlobCrossColoLatencyMs;
-        break;
-      case GetBlobInfoOperation:
-        localColoLatency = getBlobInfoLocalColoLatencyMs;
-        crossColoLatency = getBlobInfoCrossColoLatencyMs;
-        break;
-    }
-    return new Pair<>(localColoLatency, crossColoLatency);
-  }
-
-  Counter getPastDueCount(RouterOperation routerOperation) {
-    Counter pastDueCounter = null;
-    switch (routerOperation) {
-      case GetBlobOperation:
-        pastDueCounter = getBlobPastDueCount;
-        break;
-      case GetBlobInfoOperation:
-        pastDueCounter = getBlobInfoPastDueCount;
-        break;
-    }
-    return pastDueCounter;
-  }
-
-  Pair<Map<PartitionId, Histogram>, Map<PartitionId, Histogram>> getPartitionToHistogramMaps(
-      RouterOperation routerOperation) {
-    Map<PartitionId, Histogram> localColoMap = null;
-    Map<PartitionId, Histogram> crossColoMap = null;
-    switch (routerOperation) {
-      case GetBlobOperation:
-        localColoMap = getBlobLocalColoPartitionToLatency;
-        crossColoMap = getBlobCrossColoPartitionToLatency;
-        break;
-      case GetBlobInfoOperation:
-        localColoMap = getBlobInfoLocalColoPartitionToLatency;
-        crossColoMap = getBlobInfoCrossColoPartitionToLatency;
-        break;
-    }
-    return new Pair<>(localColoMap, crossColoMap);
   }
 
   /**

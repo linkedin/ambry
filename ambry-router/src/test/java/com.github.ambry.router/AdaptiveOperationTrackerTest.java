@@ -80,6 +80,7 @@ public class AdaptiveOperationTrackerTest {
   private final Histogram localColoTracker;
   private final Histogram crossColoTracker;
   private final Counter pastDueCounter;
+  private final long MIN_DATA_POINTS_REQUIRED;
   private NonBlockingRouterMetrics routerMetrics;
   private RouterConfig defaultRouterConfig;
   private OperationTrackerScope trackerScope;
@@ -103,11 +104,10 @@ public class AdaptiveOperationTrackerTest {
     props.setProperty("router.datacenter.name", localDcName);
     defaultRouterConfig = new RouterConfig(new VerifiableProperties(props));
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, defaultRouterConfig);
-    Pair<Histogram, Histogram> coloWideHistograms =
-        routerMetrics.getColoWideLatencyHistogram(RouterOperation.GetBlobOperation);
-    localColoTracker = coloWideHistograms.getFirst();
-    crossColoTracker = coloWideHistograms.getSecond();
-    pastDueCounter = routerMetrics.getPastDueCount(RouterOperation.GetBlobOperation);
+    localColoTracker = routerMetrics.getBlobLocalColoLatencyMs;
+    crossColoTracker = routerMetrics.getBlobCrossColoLatencyMs;
+    pastDueCounter = routerMetrics.getBlobPastDueCount;
+    MIN_DATA_POINTS_REQUIRED = defaultRouterConfig.routerOperationTrackerMinDataPointsRequired;
     trackerScope = OperationTrackerScope.ColoWide;
   }
 
@@ -117,8 +117,8 @@ public class AdaptiveOperationTrackerTest {
    */
   @Test
   public void adaptationTest() throws InterruptedException {
-    primeTracker(localColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
-    primeTracker(crossColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
+    primeTracker(localColoTracker, MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
+    primeTracker(crossColoTracker, MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
     double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
     double crossColoCutoff = crossColoTracker.getSnapshot().getValue(QUANTILE);
 
@@ -163,6 +163,10 @@ public class AdaptiveOperationTrackerTest {
     assertEquals("Past due counter is inconsistent", REPLICA_COUNT - 2, pastDueCounter.getCount());
   }
 
+  /**
+   * Tests that adaptive tracker uses separate histogram to determine if inflight requests are past due.
+   * @throws Exception
+   */
   @Test
   public void partitionLevelAdaptiveTrackerTest() throws Exception {
     MockPartitionId mockPartition1 = new MockPartitionId(1L, MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -177,32 +181,49 @@ public class AdaptiveOperationTrackerTest {
     RouterConfig routerConfig = createRouterConfig(true, 2, 1, null);
     NonBlockingRouterMetrics originalMetrics = routerMetrics;
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
-    Counter pastDueCount = routerMetrics.getPastDueCount(RouterOperation.GetBlobOperation);
-    Pair<Map<PartitionId, Histogram>, Map<PartitionId, Histogram>> partitionHistograms =
-        routerMetrics.getPartitionToHistogramMaps(RouterOperation.GetBlobOperation);
-    Map<PartitionId, Histogram> localColoMap = partitionHistograms.getFirst();
+    Counter pastDueCount = routerMetrics.getBlobPastDueCount;
+    Map<PartitionId, Histogram> localColoMap = routerMetrics.getBlobLocalColoPartitionToLatency;
+    Map<PartitionId, Histogram> crossColoMap = routerMetrics.getBlobCrossColoPartitionToLatency;
     // mock different distribution of Histogram for two partitions
     Histogram localHistogram1 = localColoMap.get(mockPartition1);
     Histogram localHistogram2 = localColoMap.get(mockPartition2);
-    primeTracker(localHistogram1, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, new Pair<>(0L, 50L));
-    primeTracker(localHistogram2, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, new Pair<>(100L, 120L));
+    Histogram remoteHistogram1 = crossColoMap.get(mockPartition1);
+    primeTracker(localHistogram1, routerConfig.routerOperationTrackerMinDataPointsRequired, new Pair<>(0L, 50L));
+    primeTracker(localHistogram2, routerConfig.routerOperationTrackerMinDataPointsRequired, new Pair<>(100L, 120L));
+    primeTracker(remoteHistogram1, routerConfig.routerOperationTrackerMinDataPointsRequired, new Pair<>(150L, 180L));
     OperationTracker tracker1 = getOperationTracker(routerConfig, mockPartition1);
     OperationTracker tracker2 = getOperationTracker(routerConfig, mockPartition2);
     double localColoCutoff1 = localHistogram1.getSnapshot().getValue(QUANTILE);
     double localColoCutoff2 = localHistogram2.getSnapshot().getValue(QUANTILE);
+    double crossColoCutoff1 = remoteHistogram1.getSnapshot().getValue(QUANTILE);
     sendRequests(tracker2, 1);
     sendRequests(tracker1, 1);
     // partition1: 2-1-0-0, partition2: 2-1-0-0
+
     time.sleep((long) localColoCutoff1 + 1);
     // partition1 should send 2nd request, partition2 won't because its 1st request isn't past due.
     sendRequests(tracker1, 1);
     sendRequests(tracker2, 0);
     // partition1: 1-2-0-0, partition2: 2-1-0-0
+
     time.sleep((long) (localColoCutoff2 - localColoCutoff1) + 2);
     // note that localColoCutoff2 > 2 * localColoCutoff1, then 2nd request of partition1 and 1st request of partition are both past due
     sendRequests(tracker1, 1);
     sendRequests(tracker2, 1);
     // partition1: 0-3-0-0, partition2: 1-2-0-0
+
+    time.sleep((long) localColoCutoff1 + 1);
+    // 3rd local request of partition1 is past due and starts sending 1st cross-colo request
+    sendRequests(tracker1, 1);
+    sendRequests(tracker2, 0);
+    // partition1: 0-3-0-0(local), 2-1-0-0(remote);  partition2: 1-2-0-0(local)
+
+    time.sleep((long) crossColoCutoff1 + 1);
+    // 1st cross-colo request of partition1 is past due and 2nd local request of partition2 is past due.
+    sendRequests(tracker1, 1);
+    sendRequests(tracker2, 1);
+    // partition1: 0-3-0-0(local), 1-2-0-0(remote);  partition2: 0-3-0-0(local)
+
     // generate request for each request to make them successful
     for (int i = 0; i < 2; ++i) {
       assertFalse("Operation should not be done", tracker1.isDone() || tracker2.isDone());
@@ -210,7 +231,7 @@ public class AdaptiveOperationTrackerTest {
       tracker2.onResponse(partitionAndInflightReplicas.get(mockPartition2).poll(), TrackedRequestFinalState.SUCCESS);
     }
     assertTrue("Operation should have succeeded", tracker1.hasSucceeded() && tracker2.hasSucceeded());
-    assertEquals("Past due counter is inconsistent", 2 + 1, pastDueCount.getCount());
+    assertEquals("Past due counter is inconsistent", 4 + 2, pastDueCount.getCount());
     // restore the tracer scope and routerMetrics
     trackerScope = OperationTrackerScope.ColoWide;
     routerMetrics = originalMetrics;
@@ -243,8 +264,8 @@ public class AdaptiveOperationTrackerTest {
    */
   @Test
   public void noUnexpiredRequestsTest() throws InterruptedException {
-    primeTracker(localColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
-    primeTracker(crossColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
+    primeTracker(localColoTracker, MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
+    primeTracker(crossColoTracker, MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
     double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
 
     OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, null), mockPartition);
@@ -275,8 +296,8 @@ public class AdaptiveOperationTrackerTest {
    */
   @Test
   public void trackerUpdateBetweenHasNextAndNextTest() throws InterruptedException {
-    primeTracker(localColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
-    primeTracker(crossColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
+    primeTracker(localColoTracker, MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
+    primeTracker(crossColoTracker, MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
     double localColoCutoff = localColoTracker.getSnapshot().getValue(1);
 
     OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, null), mockPartition);
@@ -344,6 +365,39 @@ public class AdaptiveOperationTrackerTest {
     }
     // reset router metrics to clean up registered custom percentile metrics
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, defaultRouterConfig);
+  }
+
+  /**
+   * Test that even thought metric scope in router config is invalid, the operation tracker still can default colo-wide
+   * histogram to track latency of requests.
+   */
+  @Test
+  public void invalidOperationTrackerScopeTest() {
+    Properties props = new Properties();
+    props.setProperty("router.hostname", "localhost");
+    props.setProperty("router.datacenter.name", localDcName);
+    props.setProperty("router.operation.tracker.metric.scope", "Invalid Scope");
+    props.setProperty("router.get.success.target", Integer.toString(1));
+    props.setProperty("router.get.request.parallelism", Integer.toString(1));
+    RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
+    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
+    AdaptiveOperationTracker tracker =
+        new AdaptiveOperationTracker(routerConfig, routerMetrics, RouterOperation.GetBlobInfoOperation, mockPartition,
+            null, time);
+    // test that operation tracker works correctly with default ColoWide scope
+    sendRequests(tracker, 1);
+    assertFalse("Operation should not be done", tracker.isDone());
+    tracker.onResponse(partitionAndInflightReplicas.get(mockPartition).poll(), TrackedRequestFinalState.SUCCESS);
+    assertTrue("Operation should have succeeded", tracker.hasSucceeded());
+    // test that no PartitionLevel metrics have been instantiated.
+    assertNull("PartitionLevel histogram in RouterMetrics should be null",
+        routerMetrics.getBlobInfoLocalColoPartitionToLatency);
+    assertNull("PartitionLevel histogram in RouterMetrics should be null",
+        routerMetrics.getBlobInfoCrossColoPartitionToLatency);
+    assertNull("PartitionLevel histogram in OperationTracker should be null",
+        tracker.getPartitionToLatencyMap(routerMetrics, RouterOperation.GetBlobInfoOperation, true));
+    assertNull("PartitionLevel histogram in OperationTracker should be null",
+        tracker.getPartitionToLatencyMap(routerMetrics, RouterOperation.GetBlobInfoOperation, false));
   }
 
   // helpers

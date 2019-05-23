@@ -155,6 +155,14 @@ public class MockClusterMap implements ClusterMap {
     partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName);
   }
 
+  /**
+   * Creates a mock cluster map with given list of data nodes and partitions.
+   * @param enableSSLPorts whether to enable SSL port.
+   * @param datanodes the list of data nodes created in this mock cluster map.
+   * @param numMountPointsPerNode number of mount points (mocking disks) that will be created in each data node
+   * @param partitionIdList the list of partitions created in this cluster map.
+   * @param localDatacenterName the name of local datacenter.
+   */
   public MockClusterMap(boolean enableSSLPorts, List<MockDataNodeId> datanodes, int numMountPointsPerNode,
       List<PartitionId> partitionIdList, String localDatacenterName) {
     this.enableSSLPorts = enableSSLPorts;
