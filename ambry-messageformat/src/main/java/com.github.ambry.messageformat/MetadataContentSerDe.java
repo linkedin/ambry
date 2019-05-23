@@ -16,6 +16,7 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Pair;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -42,6 +43,15 @@ public class MetadataContentSerDe {
     return outputBuf;
   }
 
+  public static ByteBuffer serializeMetadataContentV3(long totalSize, List<Pair<StoreKey, Long>> keysAndContentSizes) {
+    int bufSize =
+        MessageFormatRecord.Metadata_Content_Format_V3.getMetadataContentSize(keysAndContentSizes.get(0).getFirst().sizeInBytes(), keysAndContentSizes.size());
+    ByteBuffer outputBuf = ByteBuffer.allocate(bufSize);
+    MessageFormatRecord.Metadata_Content_Format_V3.serializeMetadataContentRecord(outputBuf, totalSize,
+        keysAndContentSizes);
+    return outputBuf;
+  }
+
   /**
    * Deserialize the serialized metadata content in the input ByteBuffer using the given {@link StoreKeyFactory} as a
    * reference.
@@ -57,6 +67,9 @@ public class MetadataContentSerDe {
     switch (version) {
       case MessageFormatRecord.Metadata_Content_Version_V2:
         return MessageFormatRecord.Metadata_Content_Format_V2.deserializeMetadataContentRecord(
+            new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);
+      case MessageFormatRecord.Metadata_Content_Version_V3:
+        return MessageFormatRecord.Metadata_Content_Format_V3.deserializeMetadataContentRecord(
             new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);
       default:
         throw new MessageFormatException("Unknown version encountered for MetadataContent: " + version,

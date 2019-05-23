@@ -285,6 +285,15 @@ public class PutManagerTest {
           RouterTestHelpers.buildValidChunkSizeStream(dataChunkSize * i + random.nextInt(dataChunkSize - 1) + 1,
               dataChunkSize)));
     }
+
+    // intermediate chunk sizes do not match
+    runTest.accept(
+        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+            LongStream.of(200, 10, 200)));
+
+    // last chunk larger than intermediate chunks
+    runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+            LongStream.of(200, 201)));
   }
 
   /**
@@ -301,14 +310,6 @@ public class PutManagerTest {
     };
 
     // chunk size issues
-    // intermediate chunk sizes do not match
-    runTest.accept(new Pair<>(
-        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
-            LongStream.of(200, 10, 200)), RouterErrorCode.InvalidPutArgument));
-    // last chunk larger than intermediate chunks
-    runTest.accept(new Pair<>(
-        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
-            LongStream.of(200, 201)), RouterErrorCode.InvalidPutArgument));
     // last chunk is size 0 (0 not supported by current metadata format)
     runTest.accept(new Pair<>(
         RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
@@ -1036,20 +1037,15 @@ public class PutManagerTest {
       CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe.deserializeMetadataContentRecord(ByteBuffer.wrap(data),
           new BlobIdFactory(mockClusterMap));
       List<StoreKey> dataBlobIds = compositeBlobInfo.getKeys();
-      long expectedMaxChunkSize;
       long expectedTotalSize;
       int expectedNumChunks;
       if (stitchOperation) {
-        expectedMaxChunkSize =
-            requestAndResult.chunksToStitch.stream().mapToLong(ChunkInfo::getChunkSizeInBytes).max().orElse(0);
         expectedTotalSize = requestAndResult.chunksToStitch.stream().mapToLong(ChunkInfo::getChunkSizeInBytes).sum();
         expectedNumChunks = requestAndResult.chunksToStitch.size();
       } else {
-        expectedMaxChunkSize = chunkSize;
         expectedTotalSize = requestAndResult.putContent.length;
         expectedNumChunks = RouterUtils.getNumChunksForBlobAndChunkSize(requestAndResult.putContent.length, chunkSize);
       }
-      assertEquals("Wrong max chunk size in metadata", expectedMaxChunkSize, compositeBlobInfo.getChunkSize());
       assertEquals("Wrong total size in metadata", expectedTotalSize, compositeBlobInfo.getTotalSize());
       assertEquals("Number of chunks is not as expected", expectedNumChunks, dataBlobIds.size());
       // Verify all dataBlobIds are DataChunk
@@ -1145,9 +1141,7 @@ public class PutManagerTest {
           result.getDecryptedBlobContent().get(content, offset.get(), dataBlobLength.get());
         }).run();
       }
-      if (key != lastKey) {
-        assertEquals("all chunks except last should be fully filled", chunkSize, dataBlobLength.get());
-      } else {
+      if (key == lastKey) {
         assertEquals("Last chunk should be of non-zero length and equal to the length of the remaining bytes",
             (originalPutContent.length - 1) % chunkSize + 1, dataBlobLength.get());
       }

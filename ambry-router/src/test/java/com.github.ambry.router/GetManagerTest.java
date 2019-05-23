@@ -137,12 +137,32 @@ public class GetManagerTest {
   }
 
   /**
+   * Tests getBlobInfo() and getBlob() of stitched composite blobs
+   * @throws Exception
+   */
+  @Test
+  public void testCompositeBlobGetSuccessStitch() throws Exception {
+    testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().build());
+  }
+
+  /**
    * Tests the router range request interface.
    * @throws Exception
    */
   @Test
   public void testRangeRequest() throws Exception {
     testGetSuccess(chunkSize * 6 + 11, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
+        .range(ByteRanges.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
+        .build());
+  }
+
+  /**
+   * Tests the router range request interface on stitched blobs.
+   * @throws Exception
+   */
+  @Test
+  public void testRangeRequestStitch() throws Exception {
+    testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
         .range(ByteRanges.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
         .build());
   }
@@ -157,6 +177,37 @@ public class GetManagerTest {
     setOperationParams(blobSize, options);
     String blobId =
         router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+    getBlobAndCompareContent(blobId);
+    // Test GetBlobInfoOperation, regardless of options passed in.
+    this.options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
+    getBlobAndCompareContent(blobId);
+    router.close();
+  }
+
+
+  /**
+   * Test a get request.
+   * @param blobSize the size of the blob to put/get.
+   * @param options the {@link GetBlobOptions} for the get request.
+   */
+  private void testGetSuccessStitch(int blobSize, GetBlobOptions options) throws Exception {
+    router = getNonBlockingRouter();
+    ByteBuffer byteBuffer = ByteBuffer.allocate(blobSize);
+    int chunkSize = blobSize / 10;
+    List<String> stitchBlobsIds = new ArrayList<>();
+    List<ChunkInfo> chunkInfos = new ArrayList<>();
+    int curBlobSize = blobSize;
+    for (int i = 0; i < 10; i++) {
+      int curChunkSize = Math.min(curBlobSize, chunkSize+i*5);
+      setOperationParams(curChunkSize, options);
+      byteBuffer.put(putContent);
+      curBlobSize -= curChunkSize;
+      stitchBlobsIds.add(router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get());
+      chunkInfos.add(new ChunkInfo(stitchBlobsIds.get(i), curChunkSize, -1L));
+    }
+    setOperationParams(blobSize, options);
+    putContent = byteBuffer.array();
+    String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunkInfos).get();
     getBlobAndCompareContent(blobId);
     // Test GetBlobInfoOperation, regardless of options passed in.
     this.options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();

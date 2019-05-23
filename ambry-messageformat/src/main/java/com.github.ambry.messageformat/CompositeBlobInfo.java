@@ -15,6 +15,9 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.Pair;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 
@@ -23,9 +26,41 @@ import java.util.List;
  * total composite blob size, and a list of keys for the blob's data chunks.
  */
 public class CompositeBlobInfo {
+
+  /**
+   * POJO class for holding a store key, the size of the data content it refers to,
+   * and the offset of the data in the larger composite blob
+   */
+  public static class StoreKeyAndSizeAndOffset {
+    private final StoreKey storeKey;
+    private final long offset;
+    private final long size;
+
+    public StoreKeyAndSizeAndOffset(StoreKey storeKey, long offset, long size) {
+      this.storeKey = storeKey;
+      this.offset = offset;
+      this.size = size;
+    }
+
+    public StoreKey getStoreKey() {
+      return storeKey;
+    }
+
+    public long getOffset() {
+      return offset;
+    }
+
+    public long getSize() {
+      return size;
+    }
+  }
+
+
   private final int chunkSize;
   private final long totalSize;
   private final List<StoreKey> keys;
+  private final List<Long> offsets = new ArrayList<>();
+  private final List<StoreKeyAndSizeAndOffset> keysAndSizesAndOffsets = new ArrayList<>();
 
   /**
    * Construct a {@link CompositeBlobInfo} object.
@@ -37,6 +72,49 @@ public class CompositeBlobInfo {
     this.chunkSize = chunkSize;
     this.totalSize = totalSize;
     this.keys = keys;
+    long last = 0;
+    for (StoreKey key : keys) {
+      offsets.add(last);
+      keysAndSizesAndOffsets.add(new StoreKeyAndSizeAndOffset(key, last, Math.min(chunkSize, totalSize - last)));
+      last += chunkSize;
+    }
+  }
+
+  /**
+   * Construct a {@link CompositeBlobInfo} object.
+   * @param keysAndContentSizes
+   */
+  public CompositeBlobInfo(List<Pair<StoreKey,Long>> keysAndContentSizes) {
+    this.chunkSize = -1;
+    this.keys = new ArrayList<>();
+    long last = 0;
+    for (Pair<StoreKey,Long> keyAndContentSize : keysAndContentSizes) {
+      StoreKey key = keyAndContentSize.getFirst();
+      keys.add(key);
+      offsets.add(last);
+      keysAndSizesAndOffsets.add(new StoreKeyAndSizeAndOffset(key, last, keyAndContentSize.getSecond()));
+      last += keyAndContentSize.getSecond();
+    }
+    this.totalSize = last;
+  }
+
+  public List<StoreKeyAndSizeAndOffset> getStoreKeysInByteRange(long start, long end) {
+    if (end < start || start < 0L || end >= totalSize) {
+      throw new IllegalArgumentException("Bad input parameters, start="+start+" end="+end+" totalSize="+totalSize);
+    }
+    int idx = Collections.binarySearch(offsets, start);
+    //binarySearch returns -(insertion point) - 1 if not an exact match, which points to the index of
+    //the first element greater than the key, or list.size() if all elements in the list are
+    // less than the specified key.
+    if (idx < 0) {
+      idx = -idx-2; //points to element with offset closest to but less than 'start'
+    }
+    List<StoreKeyAndSizeAndOffset> ans = new ArrayList<>();
+    while(idx < keys.size() && offsets.get(idx) <= end) {
+      ans.add(keysAndSizesAndOffsets.get(idx));
+      idx++;
+    }
+    return ans;
   }
 
   /**
@@ -61,5 +139,9 @@ public class CompositeBlobInfo {
    */
   public List<StoreKey> getKeys() {
     return keys;
+  }
+
+  public List<StoreKeyAndSizeAndOffset> getKeysAndSizesAndOffsets() {
+    return keysAndSizesAndOffsets;
   }
 }

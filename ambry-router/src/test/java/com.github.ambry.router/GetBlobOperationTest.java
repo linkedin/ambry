@@ -858,8 +858,6 @@ public class GetBlobOperationTest {
     // Ranges that start past the end of the blob (should not succeed)
     testRangeRequestFromStartOffset(blobSize, false);
     testRangeRequestOffsetRange(blobSize, blobSize + 20, false);
-    // 0 byte range
-    testRangeRequestLastNBytes(0, true);
     // 1 byte ranges
     testRangeRequestOffsetRange(0, 0, true);
     testRangeRequestOffsetRange(blobSize - 1, blobSize - 1, true);

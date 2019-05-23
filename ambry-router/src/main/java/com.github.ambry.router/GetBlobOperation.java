@@ -92,14 +92,12 @@ class GetBlobOperation extends GetOperation {
   private int numChunksTotal;
   // the total number of data chunks retrieved so far (and may or may not have been written out yet).
   private int numChunksRetrieved;
-  // the maximum size of a data chunk in bytes
-  private long chunkSize;
   // the total size of the object being fetched in this operation
   private long totalSize;
   // a byte range with defined start/end offsets that has been verified to be within the total blob size
   private ByteRange resolvedByteRange;
   // a list iterator to the chunk ids that need to be fetched for this operation, if this is a composite blob.
-  private ListIterator<StoreKey> chunkIdIterator;
+  private ListIterator<CompositeBlobInfo.StoreKeyAndSizeAndOffset> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
   private Map<Integer, ByteBuffer> chunkIndexToBuffer;
   // To find the GetChunk to hand over the response quickly.
@@ -278,7 +276,7 @@ class GetBlobOperation extends GetOperation {
         if (dataChunks != null) {
           for (GetChunk dataChunk : dataChunks) {
             if (dataChunk.isFree() && chunkIdIterator.hasNext()) {
-              dataChunk.initialize(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
+              dataChunk.initialize(chunkIdIterator.nextIndex(), chunkIdIterator.next());
             }
             if (dataChunk.isInProgress() || (dataChunk.isReady()
                 && numChunksRetrieved - blobDataChannel.getNumChunksWrittenOut()
@@ -471,6 +469,10 @@ class GetBlobOperation extends GetOperation {
     private OperationTracker chunkOperationTracker;
     // the blob id of the current chunk.
     private BlobId chunkBlobId;
+    // byte offset of the data in the chunk relative to the entire blob
+    private long offset;
+    // size of the chunk
+    private long chunkSize;
     // whether the operation on the current chunk has completed.
     private boolean chunkCompleted;
     // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
@@ -498,11 +500,12 @@ class GetBlobOperation extends GetOperation {
     /**
      * Construct a GetChunk
      * @param index the index (in the overall blob) of the initial data chunk that this GetChunk has to fetch.
-     * @param id the {@link BlobId} of the initial data chunk that this GetChunk has to fetch.
+     * @param keyAndSizeAndOffset the {@link BlobId}, data content size, and offset relative to the total blob
+     *                           of the initial data chunk that this GetChunk has to fetch.
      */
-    GetChunk(int index, BlobId id) {
+    GetChunk(int index, CompositeBlobInfo.StoreKeyAndSizeAndOffset keyAndSizeAndOffset) {
       reset();
-      initialize(index, id);
+      initialize(index, keyAndSizeAndOffset);
     }
 
     /**
@@ -552,11 +555,14 @@ class GetBlobOperation extends GetOperation {
     /**
      * Assign a chunk of the overall blob to this GetChunk.
      * @param index the index of the chunk of the overall blob that needs to be fetched through this GetChunk.
-     * @param id the id of the chunk of the overall blob that needs to be fetched through this GetChunk.
+     * @param keyAndSizeAndOffset the id, data content size, and offset (relative to the total size)
+     *                           of the chunk of the overall blob that needs to be fetched through this GetChunk.
      */
-    void initialize(int index, BlobId id) {
+    void initialize(int index, CompositeBlobInfo.StoreKeyAndSizeAndOffset keyAndSizeAndOffset) {
       chunkIndex = index;
-      chunkBlobId = id;
+      chunkBlobId = (BlobId) keyAndSizeAndOffset.getStoreKey();
+      offset = keyAndSizeAndOffset.getOffset();
+      chunkSize = keyAndSizeAndOffset.getSize();
       chunkOperationTracker = getOperationTracker(chunkBlobId.getPartition(), chunkBlobId.getDatacenterId(),
           RouterOperation.GetBlobOperation);
       progressTracker = new ProgressTracker(chunkOperationTracker);
@@ -937,9 +943,9 @@ class GetBlobOperation extends GetOperation {
         buf.position(0);
         buf.limit(0);
       } else {
-        long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() % chunkSize : 0;
+        long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() - offset : 0;
         long endOffsetInThisChunk =
-            chunkIndex == (numChunksTotal - 1) ? (resolvedByteRange.getEndOffset() % chunkSize) + 1 : chunkSize;
+            chunkIndex == (numChunksTotal - 1) ? resolvedByteRange.getEndOffset() - offset + 1 : chunkSize;
         buf.position((int) startOffsetInThisChunk);
         buf.limit((int) endOffsetInThisChunk);
       }
@@ -984,14 +990,14 @@ class GetBlobOperation extends GetOperation {
 
     // refers to the blob type.
     private BlobType blobType;
-    private List<StoreKey> keys;
+    private List<CompositeBlobInfo.StoreKeyAndSizeAndOffset> keysAndSizesAndOffsets;
     private BlobProperties serverBlobProperties;
 
     /**
      * Construct a FirstGetChunk and initialize it with the {@link BlobId} of the overall operation.
      */
     FirstGetChunk() {
-      super(-1, blobId);
+      super(-1, new CompositeBlobInfo.StoreKeyAndSizeAndOffset(blobId, 0L, -1L));
     }
 
     /**
@@ -1051,7 +1057,6 @@ class GetBlobOperation extends GetOperation {
                   decryptCallbackResultInfo.result.getDecryptedUserMetadata().array());
             }
             totalSize = decryptCallbackResultInfo.result.getDecryptedBlobContent().remaining();
-            chunkSize = totalSize;
             if (!resolveRange(totalSize)) {
               chunkIndexToBuffer.put(0, filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
               numChunksRetrieved = 1;
@@ -1188,18 +1193,15 @@ class GetBlobOperation extends GetOperation {
       ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
       compositeBlobInfo =
           MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
-      chunkSize = compositeBlobInfo.getChunkSize();
       totalSize = compositeBlobInfo.getTotalSize();
-
-      keys = compositeBlobInfo.getKeys();
+      keysAndSizesAndOffsets = compositeBlobInfo.getKeysAndSizesAndOffsets();
       boolean rangeResolutionFailure = false;
       try {
         if (options.getBlobOptions.getRange() != null) {
           resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
           // Get only the chunks within the range.
-          int firstChunkIndexInRange = (int) (resolvedByteRange.getStartOffset() / chunkSize);
-          int lastChunkIndexInRange = (int) (resolvedByteRange.getEndOffset() / chunkSize);
-          keys = keys.subList(firstChunkIndexInRange, lastChunkIndexInRange + 1);
+          keysAndSizesAndOffsets = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
+              resolvedByteRange.getEndOffset());
         }
       } catch (IllegalArgumentException e) {
         onInvalidRange(e);
@@ -1241,11 +1243,13 @@ class GetBlobOperation extends GetOperation {
         numChunksTotal = 0;
         dataChunks = null;
       } else {
-        chunkIdIterator = keys.listIterator();
-        numChunksTotal = keys.size();
-        dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
+        chunkIdIterator = keysAndSizesAndOffsets.listIterator();
+        numChunksTotal = keysAndSizesAndOffsets.size();
+        dataChunks = new GetChunk[Math.min(keysAndSizesAndOffsets.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
         for (int i = 0; i < dataChunks.length; i++) {
-          dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
+          int idx = chunkIdIterator.nextIndex();
+          CompositeBlobInfo.StoreKeyAndSizeAndOffset keyAndOffset = chunkIdIterator.next();
+          dataChunks[i] = new GetChunk(idx, keyAndOffset);
         }
       }
     }
@@ -1260,7 +1264,6 @@ class GetBlobOperation extends GetOperation {
       boolean rangeResolutionFailure = false;
       if (encryptionKey == null) {
         totalSize = blobData.getSize();
-        chunkSize = totalSize;
         rangeResolutionFailure = resolveRange(totalSize);
       } else {
         // for encrypted blobs, Blob data will not have the right size. Will have to wait until decryption is complete

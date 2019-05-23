@@ -54,6 +54,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -337,13 +338,13 @@ class PutOperation {
           RouterErrorCode.InvalidPutArgument);
     }
     long totalSize = 0;
-    long intermediateChunkSize = chunksToStitch.get(0).getChunkSizeInBytes();
+    long intermediateChunkSize = routerConfig.routerMaxPutChunkSizeBytes;
     metadataPutChunk.setIntermediateChunkSize(intermediateChunkSize);
     for (ListIterator<ChunkInfo> iter = chunksToStitch.listIterator(); iter.hasNext(); ) {
       int chunkIndex = iter.nextIndex();
       ChunkInfo chunkInfo = iter.next();
       BlobId chunkId = unwrapChunkInfo(chunkInfo, intermediateChunkSize, !iter.hasNext());
-      metadataPutChunk.addChunkId(chunkId, chunkIndex);
+      metadataPutChunk.addChunkId(chunkId, chunkInfo.getChunkSizeInBytes(), chunkIndex);
       totalSize += chunkInfo.getChunkSizeInBytes();
     }
     blobSize = totalSize;
@@ -364,7 +365,7 @@ class PutOperation {
     long chunkSize = chunkInfo.getChunkSizeInBytes();
     long chunkExpirationTimeInMs = chunkInfo.getExpirationTimeInMs();
 
-    if (chunkSize == 0 || chunkSize > intermediateChunkSize || (!lastChunk && chunkSize < intermediateChunkSize)) {
+    if (chunkSize == 0 || chunkSize > intermediateChunkSize) {
       throw new RouterException(
           "Invalid chunkSize for " + (lastChunk ? "last" : "intermediate") + " chunk: " + chunkSize
               + "; intermediateChunkSize: " + intermediateChunkSize, RouterErrorCode.InvalidPutArgument);
@@ -480,7 +481,7 @@ class PutOperation {
     } else if (chunk != metadataPutChunk) {
       // a data chunk has succeeded.
       logger.trace("Successfully put data chunk with blob id : {}", chunk.getChunkBlobId());
-      metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkIndex);
+      metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkBlobSize, chunk.chunkIndex);
       metadataPutChunk.maybeNotifyForChunkCreation(chunk);
     } else {
       blobId = chunk.getChunkBlobId();
@@ -1501,7 +1502,7 @@ class PutOperation {
    * on it.
    */
   private class MetadataPutChunk extends PutChunk {
-    private final TreeMap<Integer, StoreKey> indexToChunkIds;
+    private final TreeMap<Integer, Pair<StoreKey, Long>> indexToChunkIds;
     private int intermediateChunkSize = routerConfig.routerMaxPutChunkSizeBytes;
     private Pair<? extends StoreKey, BlobProperties> firstChunkIdAndProperties = null;
 
@@ -1537,11 +1538,12 @@ class PutOperation {
 
     /**
      * Add the given blobId of a successfully put data chunk to the metadata at its position in the overall blob.
-     * @param chunkBlobId the blobId of the associated data chunk
+     * @param storeKey the blobId of the associated data chunk
+     * @param chunkSize size of the data chunk
      * @param chunkIndex the position of the associated data chunk in the overall blob.
      */
-    void addChunkId(BlobId chunkBlobId, int chunkIndex) {
-      indexToChunkIds.put(chunkIndex, chunkBlobId);
+    void addChunkId(StoreKey storeKey, long chunkSize, int chunkIndex) {
+      indexToChunkIds.put(chunkIndex, new Pair<>(storeKey, chunkSize));
     }
 
     /**
@@ -1604,12 +1606,14 @@ class PutOperation {
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag());
       if (isStitchOperation() || getNumDataChunks() > 1) {
         // values returned are in the right order as TreeMap returns them in key-order.
-        List<StoreKey> orderedChunkIdList = new ArrayList<>(indexToChunkIds.values());
-        buf = MetadataContentSerDe.serializeMetadataContent(intermediateChunkSize, getBlobSize(), orderedChunkIdList);
+        List<Pair<StoreKey, Long>> orderedChunkIdList = indexToChunkIds.values().stream().collect(
+            Collectors.toList());
+
+        buf = MetadataContentSerDe.serializeMetadataContentV3(getBlobSize(), orderedChunkIdList);
         onFillComplete(false);
       } else {
         // if there is only one chunk
-        blobId = (BlobId) indexToChunkIds.get(0);
+        blobId = (BlobId) indexToChunkIds.get(0).getFirst();
         state = ChunkState.Complete;
         operationCompleted = true;
       }
@@ -1619,7 +1623,8 @@ class PutOperation {
      * @return a list of all of the successfully put chunk ids associated with this blob
      */
     List<StoreKey> getSuccessfullyPutChunkIds() {
-      return new ArrayList<>(indexToChunkIds.values());
+      return indexToChunkIds.values().stream().map(b -> b.getFirst()).collect(
+          Collectors.toList());
     }
 
     /**
