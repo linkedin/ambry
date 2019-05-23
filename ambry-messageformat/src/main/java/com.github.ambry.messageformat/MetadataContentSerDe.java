@@ -43,6 +43,12 @@ public class MetadataContentSerDe {
     return outputBuf;
   }
 
+  /**
+   * Serialize the input list of keys with data content sizes that form the metadata content.
+   * @param totalSize the total size of the object this metadata describes.
+   * @param keysAndContentSizes the input list of keys and related data content sizes that form the metadata content.
+   * @return a ByteBuffer containing the serialized output.
+   */
   public static ByteBuffer serializeMetadataContentV3(long totalSize, List<Pair<StoreKey, Long>> keysAndContentSizes) {
     int bufSize =
         MessageFormatRecord.Metadata_Content_Format_V3.getMetadataContentSize(keysAndContentSizes.get(0).getFirst().sizeInBytes(), keysAndContentSizes.size());
