@@ -186,18 +186,20 @@ public class GetManagerTest {
 
 
   /**
-   * Test a get request.
+   * Test a get request on a stitched blob.
    * @param blobSize the size of the blob to put/get.
    * @param options the {@link GetBlobOptions} for the get request.
    */
   private void testGetSuccessStitch(int blobSize, GetBlobOptions options) throws Exception {
     router = getNonBlockingRouter();
     ByteBuffer byteBuffer = ByteBuffer.allocate(blobSize);
+    //Divide blob into 10 chunks to be stitched
     int chunkSize = blobSize / 10;
     List<String> stitchBlobsIds = new ArrayList<>();
     List<ChunkInfo> chunkInfos = new ArrayList<>();
     int curBlobSize = blobSize;
     for (int i = 0; i < 10; i++) {
+      //Give each chunk a different size
       int curChunkSize = Math.min(curBlobSize, chunkSize+i*5);
       setOperationParams(curChunkSize, options);
       byteBuffer.put(putContent);

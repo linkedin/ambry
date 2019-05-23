@@ -98,6 +98,14 @@ public class CompositeBlobInfo {
     this.totalSize = last;
   }
 
+  /**
+   * Returns the keys (along with their data content size and offset relative to the total
+   * composite blob) of the chunks related to the given byte range of the entire composite
+   * blob
+   * @param start inclusive starting byte index
+   * @param end inclusive ending byte index
+   * @return
+   */
   public List<StoreKeyAndSizeAndOffset> getStoreKeysInByteRange(long start, long end) {
     if (end < start || start < 0L || end >= totalSize) {
       throw new IllegalArgumentException("Bad input parameters, start="+start+" end="+end+" totalSize="+totalSize);
@@ -141,6 +149,11 @@ public class CompositeBlobInfo {
     return keys;
   }
 
+  /**
+   * Get the list of keys for the composite blob's data chunks, along with the
+   * key's data content size and offset relative to the total composite blob
+   * @return A list of {@link StoreKeyAndSizeAndOffset}
+   */
   public List<StoreKeyAndSizeAndOffset> getKeysAndSizesAndOffsets() {
     return keysAndSizesAndOffsets;
   }
