@@ -250,8 +250,8 @@ abstract class GetOperation {
           new SimpleOperationTracker(routerConfig, routerOperation, partitionId, originatingDcName, true);
     } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
       operationTracker =
-          new AdaptiveOperationTracker(routerConfig, routerOperation, partitionId, originatingDcName, localColoTracker,
-              crossColoTracker, pastDueCounter, time);
+          new AdaptiveOperationTracker(routerConfig, routerMetrics, routerOperation, partitionId, originatingDcName,
+              time);
     } else {
       throw new IllegalArgumentException("Unrecognized tracker type: " + trackerType);
     }

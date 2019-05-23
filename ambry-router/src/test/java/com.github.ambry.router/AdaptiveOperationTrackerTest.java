@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -36,10 +37,12 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.SortedMap;
@@ -55,8 +58,8 @@ import static org.junit.Assert.*;
  *
  * The status of an operation is represented as in the following format:
  *
- * local unsent count-local inflight count-local succeeded count-local failed count;
- * remote unsent count-remote inflight count-remote succeeded count-remote failed count
+ * [local unsent count] - [local inflight count] - [local succeeded count] - [local failed count];
+ * [remote unsent count] - [remote inflight count] - [remote succeeded count] - [remote failed count]
  *
  * For example: 3-0-0-0; 9-0-0-0
  */
@@ -64,28 +67,29 @@ public class AdaptiveOperationTrackerTest {
   private static final int REPLICA_COUNT = 6;
   private static final int PORT = 6666;
   private static final double QUANTILE = 0.9;
-  private static final Pair<Long, Long> LOCAL_COLO_LATENCY_RANGE = new Pair<>(0L, 100L);
+  private static final Pair<Long, Long> LOCAL_COLO_LATENCY_RANGE = new Pair<>(0L, 58L);
   private static final Pair<Long, Long> CROSS_COLO_LATENCY_RANGE = new Pair<>(120L, 220L);
 
   private final List<MockDataNodeId> datanodes;
   private final MockPartitionId mockPartition;
   private final String localDcName;
-  private final LinkedList<ReplicaId> inflightReplicas = new LinkedList<>();
+  private final MockClusterMap mockClusterMap;
+  private final Map<PartitionId, LinkedList<ReplicaId>> partitionAndInflightReplicas = new HashMap<>();
   private final Set<ReplicaId> repetitionTracker = new HashSet<>();
   private final Time time = new MockTime();
-  private final MetricRegistry registry = new MetricRegistry();
-  private final Histogram localColoTracker = registry.histogram("LocalColoTracker");
-  private final Histogram crossColoTracker = registry.histogram("CrossColoTracker");
-  private final Counter pastDueCounter = registry.counter("PastDueCounter");
+  private final Histogram localColoTracker;
+  private final Histogram crossColoTracker;
+  private final Counter pastDueCounter;
   private NonBlockingRouterMetrics routerMetrics;
   private RouterConfig defaultRouterConfig;
+  private OperationTrackerScope trackerScope;
 
   /**
    * Constructor that sets up state.
    */
-  public AdaptiveOperationTrackerTest() throws Exception {
+  public AdaptiveOperationTrackerTest() {
     List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
-    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    List<String> mountPaths = Arrays.asList("mockMountPath0", "mockMountPath1", "mockMountPath2");
     datanodes = new ArrayList<>(Arrays.asList(new MockDataNodeId(portList, mountPaths, "dc-0"),
         new MockDataNodeId(portList, mountPaths, "dc-1")));
     localDcName = datanodes.get(0).getDatacenterName();
@@ -93,11 +97,18 @@ public class AdaptiveOperationTrackerTest {
     for (int i = 0; i < REPLICA_COUNT; i++) {
       mockPartition.replicaIds.add(new MockReplicaId(PORT, mockPartition, datanodes.get(i % datanodes.size()), 0));
     }
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", localDcName);
     defaultRouterConfig = new RouterConfig(new VerifiableProperties(props));
-    routerMetrics = new NonBlockingRouterMetrics(new MockClusterMap(), defaultRouterConfig);
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, defaultRouterConfig);
+    Pair<Histogram, Histogram> coloWideHistograms =
+        routerMetrics.getColoWideLatencyHistogram(RouterOperation.GetBlobOperation);
+    localColoTracker = coloWideHistograms.getFirst();
+    crossColoTracker = coloWideHistograms.getSecond();
+    pastDueCounter = routerMetrics.getPastDueCount(RouterOperation.GetBlobOperation);
+    trackerScope = OperationTrackerScope.ColoWide;
   }
 
   /**
@@ -111,7 +122,7 @@ public class AdaptiveOperationTrackerTest {
     double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
     double crossColoCutoff = crossColoTracker.getSnapshot().getValue(QUANTILE);
 
-    OperationTracker ot = getOperationTracker(createRouterConfig(true, REPLICA_COUNT, 2, null));
+    OperationTracker ot = getOperationTracker(createRouterConfig(true, REPLICA_COUNT, 2, null), mockPartition);
     // 3-0-0-0; 3-0-0-0
     sendRequests(ot, 2);
     // 1-2-0-0; 3-0-0-0
@@ -130,7 +141,8 @@ public class AdaptiveOperationTrackerTest {
     // 0-3-0-0; 1-2-0-0
     long sleepTime = (long) localColoCutoff + 2;
     time.sleep(sleepTime);
-    // no requests should be sent
+    // no requests should be sent.
+    // for first cross colo request, 2 * (localColoCutoff + 2) <= 2 * (57 * 0.9 + 2) = 106.6 < 120 * 0.9 <= crossColoCutoff
     sendRequests(ot, 0);
     // 0-3-0-0; 1-2-0-0
     sleepTime = (long) (crossColoCutoff - localColoCutoff) + 2;
@@ -144,11 +156,64 @@ public class AdaptiveOperationTrackerTest {
     // generate a response for every request and make sure there are no errors
     for (int i = 0; i < REPLICA_COUNT; i++) {
       assertFalse("Operation should not be done", ot.isDone());
-      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+      ot.onResponse(partitionAndInflightReplicas.get(mockPartition).poll(), TrackedRequestFinalState.SUCCESS);
     }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
-    // past due counter should be REPLICA_COUNT - 2
+    // past due counter should be REPLICA_COUNT - 2 (note that pastDueCounter is updated only when Iterator.remove() is called)
     assertEquals("Past due counter is inconsistent", REPLICA_COUNT - 2, pastDueCounter.getCount());
+  }
+
+  @Test
+  public void partitionLevelAdaptiveTrackerTest() throws Exception {
+    MockPartitionId mockPartition1 = new MockPartitionId(1L, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    MockPartitionId mockPartition2 = new MockPartitionId(2L, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    for (int i = 0; i < REPLICA_COUNT; i++) {
+      mockPartition1.replicaIds.add(new MockReplicaId(PORT, mockPartition1, datanodes.get(i % datanodes.size()), 1));
+      mockPartition2.replicaIds.add(new MockReplicaId(PORT, mockPartition2, datanodes.get(i % datanodes.size()), 2));
+    }
+    MockClusterMap clusterMap =
+        new MockClusterMap(false, datanodes, 3, Arrays.asList(mockPartition1, mockPartition2), localDcName);
+    trackerScope = OperationTrackerScope.PartitionLevel;
+    RouterConfig routerConfig = createRouterConfig(true, 2, 1, null);
+    NonBlockingRouterMetrics originalMetrics = routerMetrics;
+    routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
+    Counter pastDueCount = routerMetrics.getPastDueCount(RouterOperation.GetBlobOperation);
+    Pair<Map<PartitionId, Histogram>, Map<PartitionId, Histogram>> partitionHistograms =
+        routerMetrics.getPartitionToHistogramMaps(RouterOperation.GetBlobOperation);
+    Map<PartitionId, Histogram> localColoMap = partitionHistograms.getFirst();
+    // mock different distribution of Histogram for two partitions
+    Histogram localHistogram1 = localColoMap.get(mockPartition1);
+    Histogram localHistogram2 = localColoMap.get(mockPartition2);
+    primeTracker(localHistogram1, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, new Pair<>(0L, 50L));
+    primeTracker(localHistogram2, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, new Pair<>(100L, 120L));
+    OperationTracker tracker1 = getOperationTracker(routerConfig, mockPartition1);
+    OperationTracker tracker2 = getOperationTracker(routerConfig, mockPartition2);
+    double localColoCutoff1 = localHistogram1.getSnapshot().getValue(QUANTILE);
+    double localColoCutoff2 = localHistogram2.getSnapshot().getValue(QUANTILE);
+    sendRequests(tracker2, 1);
+    sendRequests(tracker1, 1);
+    // partition1: 2-1-0-0, partition2: 2-1-0-0
+    time.sleep((long) localColoCutoff1 + 1);
+    // partition1 should send 2nd request, partition2 won't because its 1st request isn't past due.
+    sendRequests(tracker1, 1);
+    sendRequests(tracker2, 0);
+    // partition1: 1-2-0-0, partition2: 2-1-0-0
+    time.sleep((long) (localColoCutoff2 - localColoCutoff1) + 2);
+    // note that localColoCutoff2 > 2 * localColoCutoff1, then 2nd request of partition1 and 1st request of partition are both past due
+    sendRequests(tracker1, 1);
+    sendRequests(tracker2, 1);
+    // partition1: 0-3-0-0, partition2: 1-2-0-0
+    // generate request for each request to make them successful
+    for (int i = 0; i < 2; ++i) {
+      assertFalse("Operation should not be done", tracker1.isDone() || tracker2.isDone());
+      tracker1.onResponse(partitionAndInflightReplicas.get(mockPartition1).poll(), TrackedRequestFinalState.SUCCESS);
+      tracker2.onResponse(partitionAndInflightReplicas.get(mockPartition2).poll(), TrackedRequestFinalState.SUCCESS);
+    }
+    assertTrue("Operation should have succeeded", tracker1.hasSucceeded() && tracker2.hasSucceeded());
+    assertEquals("Past due counter is inconsistent", 2 + 1, pastDueCount.getCount());
+    // restore the tracer scope and routerMetrics
+    trackerScope = OperationTrackerScope.ColoWide;
+    routerMetrics = originalMetrics;
   }
 
   /**
@@ -182,7 +247,7 @@ public class AdaptiveOperationTrackerTest {
     primeTracker(crossColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
     double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
 
-    OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, null));
+    OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, null), mockPartition);
     // 3-0-0-0
     sendRequests(ot, 1);
     // 2-1-0-0
@@ -191,13 +256,13 @@ public class AdaptiveOperationTrackerTest {
     sendRequests(ot, 1);
     // 1-2-0-0
     // provide a response to the second request that is not a success
-    ot.onResponse(inflightReplicas.pollLast(), TrackedRequestFinalState.FAILURE);
+    ot.onResponse(partitionAndInflightReplicas.get(mockPartition).pollLast(), TrackedRequestFinalState.FAILURE);
     // 1-1-0-1
     assertFalse("Operation should not be done", ot.isDone());
     // should now be able to send one more request
     sendRequests(ot, 1);
     // 0-2-0-1
-    ot.onResponse(inflightReplicas.pollLast(), TrackedRequestFinalState.SUCCESS);
+    ot.onResponse(partitionAndInflightReplicas.get(mockPartition).pollLast(), TrackedRequestFinalState.SUCCESS);
     // 0-1-1-1
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     // past due counter should be 1
@@ -214,7 +279,7 @@ public class AdaptiveOperationTrackerTest {
     primeTracker(crossColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
     double localColoCutoff = localColoTracker.getSnapshot().getValue(1);
 
-    OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, null));
+    OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, null), mockPartition);
     // 3-0-0-0
     sendRequests(ot, 1);
     // 2-1-0-0
@@ -235,7 +300,7 @@ public class AdaptiveOperationTrackerTest {
 
     sendRequests(ot, 1);
     // 1-2-0-0
-    ot.onResponse(inflightReplicas.pollLast(), TrackedRequestFinalState.SUCCESS);
+    ot.onResponse(partitionAndInflightReplicas.get(mockPartition).pollLast(), TrackedRequestFinalState.SUCCESS);
     // 1-1-1-0
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     // past due counter should be 1
@@ -245,10 +310,9 @@ public class AdaptiveOperationTrackerTest {
   /**
    * Test that {@link NonBlockingRouterMetrics} can correctly register custom percentiles. An example of metric name is:
    * "com.github.ambry.router.GetOperation.LocalColoLatencyMs.91.0.thPercentile"
-   * @throws Exception
    */
   @Test
-  public void customPercentilesMetricsRegistryTest() throws Exception {
+  public void customPercentilesMetricsRegistryTest() {
     // test that if custom percentile is not set, no corresponding metrics would be generated.
     MetricRegistry metricRegistry = routerMetrics.getMetricRegistry();
     MetricFilter filter = new MetricFilter() {
@@ -266,7 +330,7 @@ public class AdaptiveOperationTrackerTest {
     Arrays.sort(percentileArray);
     List<String> sortedPercentiles =
         Arrays.stream(percentileArray).map(p -> String.valueOf(Double.valueOf(p) * 100)).collect(Collectors.toList());
-    routerMetrics = new NonBlockingRouterMetrics(new MockClusterMap(), routerConfig);
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     gauges = routerMetrics.getMetricRegistry().getGauges(filter);
     // Note that each percentile creates 4 metrics (GetBlobInfo/GetBlob joins LocalColo/CrossColo). So, the total number of
     // metrics should equal to 4 * (# of given custom percentiles)
@@ -279,7 +343,7 @@ public class AdaptiveOperationTrackerTest {
       assertTrue("The gauge name doesn't match", gaugeName.endsWith(percentileStr + ".thPercentile"));
     }
     // reset router metrics to clean up registered custom percentile metrics
-    routerMetrics = new NonBlockingRouterMetrics(new MockClusterMap(), defaultRouterConfig);
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, defaultRouterConfig);
   }
 
   // helpers
@@ -289,11 +353,12 @@ public class AdaptiveOperationTrackerTest {
   /**
    * Instantiate an adaptive operation tracker.
    * @param routerConfig the {@link RouterConfig} to use in adaptive tracker.
+   * @param partitionId the {@link PartitionId} to use in adaptive tracker.
    * @return an instance of {@link AdaptiveOperationTracker} with the given parameters.
    */
-  private OperationTracker getOperationTracker(RouterConfig routerConfig) {
-    return new AdaptiveOperationTracker(routerConfig, RouterOperation.GetBlobOperation, mockPartition, null,
-        localColoTracker, routerConfig.routerGetCrossDcEnabled ? crossColoTracker : null, pastDueCounter, time);
+  private OperationTracker getOperationTracker(RouterConfig routerConfig, PartitionId partitionId) {
+    return new AdaptiveOperationTracker(routerConfig, routerMetrics, RouterOperation.GetBlobOperation, partitionId,
+        null, time);
   }
 
   /**
@@ -316,6 +381,7 @@ public class AdaptiveOperationTrackerTest {
     props.setProperty("router.get.include.non.originating.dc.replicas", "true");
     props.setProperty("router.get.replicas.required", Integer.toString(Integer.MAX_VALUE));
     props.setProperty("router.latency.tolerance.quantile", Double.toString(QUANTILE));
+    props.setProperty("router.operation.tracker.metric.scope", trackerScope.toString());
     if (customPercentiles != null) {
       props.setProperty("router.operation.tracker.custom.percentiles", customPercentiles);
     }
@@ -330,7 +396,10 @@ public class AdaptiveOperationTrackerTest {
    */
   private void primeTracker(Histogram tracker, long numRequests, Pair<Long, Long> latencyRange) {
     for (long i = 0; i < numRequests; i++) {
-      long latency = Utils.getRandomLong(TestUtils.RANDOM, latencyRange.getSecond()) + latencyRange.getFirst();
+      // Given latencyRange specifies boundaries of latency: low = latencyRange.getFirst(), high = latencyRange.getSecond().
+      // Any randomly generated latency should fall in the range [low, high).
+      long latency = Utils.getRandomLong(TestUtils.RANDOM, latencyRange.getSecond() - latencyRange.getFirst())
+          + latencyRange.getFirst();
       tracker.update(latency);
     }
   }
@@ -348,7 +417,10 @@ public class AdaptiveOperationTrackerTest {
       assertNotNull("There should be a replica to send a request to", nextReplica);
       assertFalse("Replica that was used for a request returned by iterator again",
           repetitionTracker.contains(nextReplica));
-      inflightReplicas.offer(nextReplica);
+      LinkedList<ReplicaId> infightReplicas =
+          partitionAndInflightReplicas.getOrDefault(nextReplica.getPartitionId(), new LinkedList<>());
+      infightReplicas.offer(nextReplica);
+      partitionAndInflightReplicas.put(nextReplica.getPartitionId(), infightReplicas);
       repetitionTracker.add(nextReplica);
       replicaIdIterator.remove();
       sent++;
@@ -365,7 +437,8 @@ public class AdaptiveOperationTrackerTest {
    */
   private void doTrackerUpdateTest(boolean succeedRequests) throws InterruptedException {
     long timeIncrement = 10;
-    OperationTracker ot = getOperationTracker(createRouterConfig(true, REPLICA_COUNT, REPLICA_COUNT, null));
+    OperationTracker ot =
+        getOperationTracker(createRouterConfig(true, REPLICA_COUNT, REPLICA_COUNT, null), mockPartition);
     // 3-0-0-0; 3-0-0-0
     sendRequests(ot, REPLICA_COUNT);
     // 0-3-0-0; 0-3-0-0
@@ -392,7 +465,7 @@ public class AdaptiveOperationTrackerTest {
       Double[] expectedAverages, Histogram tracker) throws InterruptedException {
     for (double expectedAverage : expectedAverages) {
       time.sleep(timeIncrement);
-      ot.onResponse(inflightReplicas.poll(),
+      ot.onResponse(partitionAndInflightReplicas.get(mockPartition).poll(),
           succeedRequests ? TrackedRequestFinalState.SUCCESS : TrackedRequestFinalState.FAILURE);
       assertEquals("Average does not match. Histogram recording may be incorrect", expectedAverage,
           tracker.getSnapshot().getMean(), 0.001);

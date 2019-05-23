@@ -477,9 +477,9 @@ public class GetBlobOperationTest {
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
     Histogram localColoTracker =
-        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, true, localDcName));
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, true, localDcName), routerConfig);
     Histogram crossColoTracker =
-        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, false, localDcName));
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, false, localDcName), routerConfig);
     Assert.assertEquals("Timed-out response shouldn't be counted into local colo latency histogram", 0,
         localColoTracker.getCount());
     Assert.assertEquals("Timed-out response shouldn't be counted into cross colo latency histogram", 0,
@@ -520,9 +520,9 @@ public class GetBlobOperationTest {
     // error code should be OperationTimedOut because it precedes BlobDoesNotExist
     Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
     Histogram localColoTracker =
-        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, true, localDcName));
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, true, localDcName), routerConfig);
     Histogram crossColoTracker =
-        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, false, localDcName));
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, false, localDcName), routerConfig);
     // the count of data points in local colo Histogram should be 1, because first 2 request timed out
     Assert.assertEquals("The number of data points in local colo latency histogram is not expected", 1,
         localColoTracker.getCount());

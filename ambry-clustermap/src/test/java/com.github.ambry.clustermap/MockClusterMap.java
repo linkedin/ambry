@@ -24,8 +24,10 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -151,6 +153,21 @@ public class MockClusterMap implements ClusterMap {
       specialPartition = null;
     }
     partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName);
+  }
+
+  public MockClusterMap(boolean enableSSLPorts, List<MockDataNodeId> datanodes, int numMountPointsPerNode,
+      List<PartitionId> partitionIdList, String localDatacenterName) {
+    this.enableSSLPorts = enableSSLPorts;
+    this.dataNodes = datanodes;
+    this.numMountPointsPerNode = numMountPointsPerNode;
+    partitions = new HashMap<>();
+    partitionIdList.forEach(p -> partitions.put(Long.valueOf(p.toPathString()), p));
+    this.localDatacenterName = localDatacenterName;
+    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName);
+    Set<String> dcNames = new HashSet<>();
+    datanodes.forEach(node -> dcNames.add(node.getDatacenterName()));
+    dataCentersInClusterMap.addAll(dcNames);
+    specialPartition = null;
   }
 
   protected ArrayList<Port> getListOfPorts(int port) {

@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
@@ -71,6 +72,7 @@ public class OperationTrackerTest {
   private MockPartitionId mockPartition;
   private String localDcName;
   private String originatingDcName;
+  private MockClusterMap mockClusterMap;
   private final LinkedList<ReplicaId> inflightReplicas = new LinkedList<>();
   private final Set<ReplicaId> repetitionTracker = new HashSet<>();
 
@@ -293,6 +295,7 @@ public class OperationTrackerTest {
     mockPartition = new MockPartitionId();
     populateReplicaList(replicaCount);
     localDcName = datanodes.get(0).getDatacenterName();
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
     OperationTracker ot = getOperationTracker(true, 1, 2, true, Integer.MAX_VALUE);
     sendRequests(ot, 2, true);
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
@@ -319,6 +322,8 @@ public class OperationTrackerTest {
     datanodes.add(new MockDataNodeId(portList, mountPaths, "dc-0"));
     datanodes.add(new MockDataNodeId(portList, mountPaths, "dc-1"));
     mockPartition = new MockPartitionId();
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition),
+        datanodes.get(0).getDatacenterName());
     int replicaCount = 6;
     populateReplicaList(replicaCount);
     // Test scenarios with various number of replicas down
@@ -477,6 +482,7 @@ public class OperationTrackerTest {
     props.setProperty("router.ttl.update.success.target", "4");
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
     initialize();
+    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     Map<RouterOperation, Integer> operationAndSuccessTarget = new HashMap<>();
     operationAndSuccessTarget.put(RouterOperation.GetBlobOperation, 1);
     operationAndSuccessTarget.put(RouterOperation.GetBlobInfoOperation, 1);
@@ -492,9 +498,8 @@ public class OperationTrackerTest {
           break;
         case ADAPTIVE_OP_TRACKER:
           try {
-            operationTracker =
-                new AdaptiveOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName,
-                    localColoTracker, crossColoTracker, pastDueCounter, time);
+            operationTracker = new AdaptiveOperationTracker(routerConfig, routerMetrics, entry.getKey(), mockPartition,
+                originatingDcName, time);
           } catch (IllegalArgumentException e) {
             assertTrue("Get operation shouldn't throw any exception in adaptive tracker",
                 entry.getKey() != RouterOperation.GetBlobOperation
@@ -523,6 +528,7 @@ public class OperationTrackerTest {
     mockPartition = new MockPartitionId();
     populateReplicaList(replicaCount);
     localDcName = datanodes.get(0).getDatacenterName();
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
   }
 
   /**
@@ -557,6 +563,7 @@ public class OperationTrackerTest {
     props.setProperty("router.get.replicas.required", Integer.toString(replicasRequired));
     props.setProperty("router.latency.tolerance.quantile", Double.toString(QUANTILE));
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
+    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     OperationTracker tracker;
     switch (operationTrackerType) {
       case SIMPLE_OP_TRACKER:
@@ -565,8 +572,9 @@ public class OperationTrackerTest {
                 true);
         break;
       case ADAPTIVE_OP_TRACKER:
-        tracker = new AdaptiveOperationTracker(routerConfig, RouterOperation.GetBlobOperation, mockPartition,
-            originatingDcName, localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, time);
+        tracker =
+            new AdaptiveOperationTracker(routerConfig, routerMetrics, RouterOperation.GetBlobOperation, mockPartition,
+                originatingDcName, time);
         break;
       default:
         throw new IllegalArgumentException("Unrecognized operation tracker type - " + operationTrackerType);

@@ -14,13 +14,16 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.ExponentiallyDecayingReservoir;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.util.HashMap;
 import java.util.List;
@@ -179,6 +182,13 @@ public class NonBlockingRouterMetrics {
   // Crypto job metrics
   public final CryptoJobMetrics encryptJobMetrics;
   public final CryptoJobMetrics decryptJobMetrics;
+
+  // Partition-level Histogram for operation tracker
+  Map<PartitionId, Histogram> getBlobLocalColoPartitionToLatency;
+  Map<PartitionId, Histogram> getBlobCrossColoPartitionToLatency;
+
+  Map<PartitionId, Histogram> getBlobInfoLocalColoPartitionToLatency;
+  Map<PartitionId, Histogram> getBlobInfoCrossColoPartitionToLatency;
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -419,6 +429,77 @@ public class NonBlockingRouterMetrics {
       registerCustomPercentiles(GetBlobInfoOperation.class, "CrossColoLatencyMs", getBlobInfoCrossColoLatencyMs,
           routerConfig.routerOperationTrackerCustomPercentiles);
     }
+
+    if (routerConfig != null
+        && routerConfig.routerOperationTrackerMetricScope == OperationTrackerScope.PartitionLevel) {
+      // pre-populate all partition-to-histogram maps here to allow lock-free hashmap in adaptive operation tracker
+      initializePartitionToHistogramMap(clusterMap, routerConfig);
+    }
+  }
+
+  private void initializePartitionToHistogramMap(ClusterMap clusterMap, RouterConfig routerConfig) {
+    int reservoirSize = routerConfig.routerOperationTrackerReservoirSize;
+    double decayFactor = routerConfig.routerOperationTrackerReservoirDecayFactor;
+    getBlobLocalColoPartitionToLatency = new HashMap<>();
+    getBlobInfoLocalColoPartitionToLatency = new HashMap<>();
+    getBlobCrossColoPartitionToLatency = new HashMap<>();
+    getBlobInfoCrossColoPartitionToLatency = new HashMap<>();
+    for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
+      getBlobLocalColoPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+      getBlobInfoLocalColoPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+      getBlobCrossColoPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+      getBlobInfoCrossColoPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+    }
+  }
+
+  private Histogram createHistogram(int reservoirSize, double decayFactor) {
+    return new Histogram(new ExponentiallyDecayingReservoir(reservoirSize, decayFactor));
+  }
+
+  Pair<Histogram, Histogram> getColoWideLatencyHistogram(RouterOperation routerOperation) {
+    Histogram localColoLatency = null;
+    Histogram crossColoLatency = null;
+    switch (routerOperation) {
+      case GetBlobOperation:
+        localColoLatency = getBlobLocalColoLatencyMs;
+        crossColoLatency = getBlobCrossColoLatencyMs;
+        break;
+      case GetBlobInfoOperation:
+        localColoLatency = getBlobInfoLocalColoLatencyMs;
+        crossColoLatency = getBlobInfoCrossColoLatencyMs;
+        break;
+    }
+    return new Pair<>(localColoLatency, crossColoLatency);
+  }
+
+  Counter getPastDueCount(RouterOperation routerOperation) {
+    Counter pastDueCounter = null;
+    switch (routerOperation) {
+      case GetBlobOperation:
+        pastDueCounter = getBlobPastDueCount;
+        break;
+      case GetBlobInfoOperation:
+        pastDueCounter = getBlobInfoPastDueCount;
+        break;
+    }
+    return pastDueCounter;
+  }
+
+  Pair<Map<PartitionId, Histogram>, Map<PartitionId, Histogram>> getPartitionToHistogramMaps(
+      RouterOperation routerOperation) {
+    Map<PartitionId, Histogram> localColoMap = null;
+    Map<PartitionId, Histogram> crossColoMap = null;
+    switch (routerOperation) {
+      case GetBlobOperation:
+        localColoMap = getBlobLocalColoPartitionToLatency;
+        crossColoMap = getBlobCrossColoPartitionToLatency;
+        break;
+      case GetBlobInfoOperation:
+        localColoMap = getBlobInfoLocalColoPartitionToLatency;
+        crossColoMap = getBlobInfoCrossColoPartitionToLatency;
+        break;
+    }
+    return new Pair<>(localColoMap, crossColoMap);
   }
 
   /**
