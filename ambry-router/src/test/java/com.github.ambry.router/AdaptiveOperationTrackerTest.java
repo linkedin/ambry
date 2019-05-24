@@ -232,6 +232,22 @@ public class AdaptiveOperationTrackerTest {
     }
     assertTrue("Operation should have succeeded", tracker1.hasSucceeded() && tracker2.hasSucceeded());
     assertEquals("Past due counter is inconsistent", 4 + 2, pastDueCount.getCount());
+    // complete remaining inflight requests and test different final state of request
+    LinkedList<ReplicaId> inflightRequests1 = partitionAndInflightReplicas.get(mockPartition1);
+    LinkedList<ReplicaId> inflightRequests2 = partitionAndInflightReplicas.get(mockPartition2);
+    while (!inflightRequests1.isEmpty()) {
+      tracker1.onResponse(inflightRequests1.poll(), TrackedRequestFinalState.FAILURE);
+    }
+    while (!inflightRequests2.isEmpty()) {
+      tracker2.onResponse(inflightRequests2.poll(), TrackedRequestFinalState.TIMED_OUT);
+    }
+    // The number of data points in local colo histogram should be 5 (3 from partition1, 2 from partition2). Note that,
+    // 3rd request of partition2 timed out which shouldn't be added to histogram.
+    assertEquals("Mismatch in number of data points in local colo histogram", 5,
+        routerMetrics.getBlobLocalColoLatencyMs.getCount());
+    // The number of data points in cross colo histogram should be 2 (both of them come from partition1)
+    assertEquals("Mismatch in number of data points in cross colo histogram", 2,
+        routerMetrics.getBlobCrossColoLatencyMs.getCount());
     // restore the tracer scope and routerMetrics
     trackerScope = OperationTrackerScope.ColoWide;
     routerMetrics = originalMetrics;
@@ -398,6 +414,13 @@ public class AdaptiveOperationTrackerTest {
         tracker.getPartitionToLatencyMap(routerMetrics, RouterOperation.GetBlobInfoOperation, true));
     assertNull("PartitionLevel histogram in OperationTracker should be null",
         tracker.getPartitionToLatencyMap(routerMetrics, RouterOperation.GetBlobInfoOperation, false));
+    // extra test: invalid router operation
+    try {
+      tracker.getPartitionToLatencyMap(routerMetrics, RouterOperation.PutOperation, true);
+      fail("should fail due to invalid router operation");
+    } catch (IllegalArgumentException e) {
+      //expected
+    }
   }
 
   // helpers
