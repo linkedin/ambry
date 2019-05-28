@@ -46,6 +46,7 @@ public class TestUtils {
   public static final long TTL_SECS = TimeUnit.DAYS.toSeconds(7);
   public static final Random RANDOM = new Random();
   public static final List<Boolean> BOOLEAN_VALUES = Collections.unmodifiableList(Arrays.asList(true, false));
+  private static final int CHECK_INTERVAL_IN_MS = 100;
 
   /**
    * Return the number of threads currently running with a name containing the given pattern.
@@ -367,14 +368,13 @@ public class TestUtils {
    * @return true if value match.
    */
   public static <T> boolean checkAndSleep(T expectedValue, Supplier expressionToCheck, int timeoutInMs) {
-    int checkIntervalInMs = 100;
     long startTime = System.currentTimeMillis();
     try {
       while (!Objects.equals(expectedValue, expressionToCheck.get())) {
         if (System.currentTimeMillis() - startTime >= timeoutInMs) {
           return false;
         }
-        Thread.sleep(checkIntervalInMs);
+        Thread.sleep(CHECK_INTERVAL_IN_MS);
       }
     } catch (InterruptedException e) {
       return false;

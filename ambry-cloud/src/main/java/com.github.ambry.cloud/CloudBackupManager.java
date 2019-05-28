@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
@@ -72,7 +71,7 @@ public class CloudBackupManager extends ReplicationEngine {
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.cloudDestination = cloudDestinationFactory.getCloudDestination();
     this.persistor =
-        new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfoList, replicationMetrics, clusterMap,
+        new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             factory, cloudDestination);
   }
 
@@ -101,6 +100,7 @@ public class CloudBackupManager extends ReplicationEngine {
           if (partitionInfo == null) {
             logger.error("PartitionId {} not exist when remove from {}: ", partitionId, dataNodeId);
             vcrMetrics.removePartitionErrorCount.inc();
+            return;
           }
           removeRemoteReplicaInfoFromReplicaThread(partitionInfo.getRemoteReplicaInfos());
           if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove) {
@@ -129,7 +129,7 @@ public class CloudBackupManager extends ReplicationEngine {
 
     // start background persistent thread
     // start scheduler thread to persist index in the background
-    this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
+    scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
         replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
   }
 
@@ -169,14 +169,18 @@ public class CloudBackupManager extends ReplicationEngine {
       }
       PartitionInfo partitionInfo = new PartitionInfo(remoteReplicaInfos, partitionId, cloudStore, cloudReplica);
       partitionToPartitionInfo.put(partitionId, partitionInfo);
-      mountPathToPartitionInfoList.compute(cloudReplica.getMountPath(), (key, value) -> {
+      mountPathToPartitionInfos.compute(cloudReplica.getMountPath(), (key, value) -> {
         // For CloudBackupManager, at most one PartitionInfo in the list.
         List<PartitionInfo> retList = (value == null) ? new ArrayList<>() : value;
         retList.add(partitionInfo);
         return retList;
       });
     } else {
-      throw new ReplicationException("Failed to add partition " + partitionId + ", because no peer replicas found.");
+      try {
+        cloudStore.shutdown();
+      } finally {
+        throw new ReplicationException("Failed to add partition " + partitionId + ", because no peer replicas found.");
+      }
     }
     // Reload replication token if exist.
     List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfos = persistor.retrieve(cloudReplica.getMountPath());
@@ -184,11 +188,7 @@ public class CloudBackupManager extends ReplicationEngine {
       for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
         boolean tokenReloaded = false;
         for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfos) {
-          DataNodeId dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
-          if (dataNodeId.getHostname().equalsIgnoreCase(tokenInfo.getHostname())
-              && dataNodeId.getPort() == tokenInfo.getPort() && remoteReplicaInfo.getReplicaId()
-              .getReplicaPath()
-              .equals(tokenInfo.getReplicaPath())) {
+          if (isTokenForRemoteReplicaInfo(remoteReplicaInfo, tokenInfo)) {
             logger.info("Read token for partition {} remote host {} port {} token {}", partitionId,
                 tokenInfo.getHostname(), tokenInfo.getPort(), tokenInfo.getReplicaToken());
             tokenReloaded = true;

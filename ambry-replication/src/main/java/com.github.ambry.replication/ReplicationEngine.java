@@ -62,7 +62,7 @@ public abstract class ReplicationEngine {
   // RemoteReplicaInfo are managed by replicaThread.
   protected final Map<String, List<ReplicaThread>> replicaThreadPoolByDc;
   protected final Map<DataNodeId, ReplicaThread> dataNodeIdToReplicaThread;
-  protected final Map<String, AtomicInteger> nextReplicaThreadIndex;
+  protected final Map<String, AtomicInteger> nextReplicaThreadIndexByDc;
   private final StoreKeyFactory storeKeyFactory;
   private final List<String> sslEnabledDatacenters;
   private final StoreKeyConverterFactory storeKeyConverterFactory;
@@ -74,7 +74,7 @@ public abstract class ReplicationEngine {
   protected final FindTokenFactory factory;
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
-  protected final Map<String, List<PartitionInfo>> mountPathToPartitionInfoList;
+  protected final Map<String, List<PartitionInfo>> mountPathToPartitionInfos;
   protected ReplicaTokenPersistor persistor = null;
 
   protected static final short Replication_Delay_Multiplier = 5;
@@ -95,7 +95,7 @@ public abstract class ReplicationEngine {
     }
     this.replicaThreadPoolByDc = new ConcurrentHashMap<>();
     this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaIds);
-    this.mountPathToPartitionInfoList = new ConcurrentHashMap<>();
+    this.mountPathToPartitionInfos = new ConcurrentHashMap<>();
     this.partitionToPartitionInfo = new ConcurrentHashMap<>();
     this.clusterMap = clusterMap;
     this.scheduler = scheduler;
@@ -105,7 +105,7 @@ public abstract class ReplicationEngine {
     this.notification = requestNotification;
     this.metricRegistry = metricRegistry;
     this.dataNodeIdToReplicaThread = new ConcurrentHashMap<>();
-    this.nextReplicaThreadIndex = new ConcurrentHashMap<>();
+    this.nextReplicaThreadIndexByDc = new ConcurrentHashMap<>();
     this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.storeKeyConverterFactory = storeKeyConverterFactory;
     this.transformerClassName = transformerClassName;
@@ -265,7 +265,7 @@ public abstract class ReplicationEngine {
    * @param datacenter the datacenter String.
    */
   private int getReplicaThreadIndexToUse(String datacenter) {
-    return nextReplicaThreadIndex.get(datacenter).getAndIncrement() % replicaThreadPoolByDc.get(datacenter).size();
+    return nextReplicaThreadIndexByDc.get(datacenter).getAndIncrement() % replicaThreadPoolByDc.get(datacenter).size();
   }
 
   /**
@@ -292,7 +292,7 @@ public abstract class ReplicationEngine {
    * @param startThread If thread needs to be started when create.
    */
   private List<ReplicaThread> createThreadPool(String datacenter, int numberOfThreads, boolean startThread) {
-    nextReplicaThreadIndex.put(datacenter, new AtomicInteger(0));
+    nextReplicaThreadIndexByDc.put(datacenter, new AtomicInteger(0));
     List<ReplicaThread> replicaThreads = new ArrayList<>();
     logger.info("Number of replica threads to replicate from {}: {}", datacenter, numberOfThreads);
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
@@ -347,9 +347,7 @@ public abstract class ReplicationEngine {
       if (partitionInfo != null) {
         boolean updatedToken = false;
         for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
-          DataNodeId dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
-          if (dataNodeId.getHostname().equalsIgnoreCase(hostname) && dataNodeId.getPort() == port
-              && remoteReplicaInfo.getReplicaId().getReplicaPath().equals(tokenInfo.getReplicaPath())) {
+          if (isTokenForRemoteReplicaInfo(remoteReplicaInfo, tokenInfo)) {
             logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
                 token);
             if (!partitionInfo.getStore().isEmpty()) {
@@ -404,5 +402,20 @@ public abstract class ReplicationEngine {
     replicationMetrics.replicationTokenResetCount.inc();
     logger.info("Resetting token for partition {} remote host {} port {}, persisted token {}", partitionId, hostname,
         port, token);
+  }
+
+  /**
+   * Check if a token is for the given {@link RemoteReplicaInfo} based on hostname, port and replicaPath.
+   * @param remoteReplicaInfo The remoteReplicaInfo to check.
+   * @param tokenInfo The tokenInfo to check.
+   * @return true if hostname, port and replicaPath match.
+   */
+  protected boolean isTokenForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo,
+      RemoteReplicaInfo.ReplicaTokenInfo tokenInfo) {
+    DataNodeId dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
+    return dataNodeId.getHostname().equalsIgnoreCase(tokenInfo.getHostname())
+        && dataNodeId.getPort() == tokenInfo.getPort() && remoteReplicaInfo.getReplicaId()
+        .getReplicaPath()
+        .equals(tokenInfo.getReplicaPath());
   }
 }
