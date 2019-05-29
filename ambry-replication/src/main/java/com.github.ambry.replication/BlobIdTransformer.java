@@ -202,7 +202,7 @@ public class BlobIdTransformer implements Transformer {
           }
           newKeys.add(newDataChunkKey);
         }
-        ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContent(compositeBlobInfo.getChunkSize(),
+        ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContentV2(compositeBlobInfo.getChunkSize(),
             compositeBlobInfo.getTotalSize(), newKeys);
         blobPropertiesSize = compositeBlobInfo.getTotalSize();
         metadataContent.flip();

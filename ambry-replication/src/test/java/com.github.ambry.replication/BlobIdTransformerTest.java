@@ -561,7 +561,7 @@ public class BlobIdTransformerTest {
         storeKeys.add(blobIdFactory.getStoreKey(datachunkId));
       }
       ByteBuffer output =
-          MetadataContentSerDe.serializeMetadataContent(COMPOSITE_BLOB_DATA_CHUNK_SIZE, COMPOSITE_BLOB_SIZE, storeKeys);
+          MetadataContentSerDe.serializeMetadataContentV2(COMPOSITE_BLOB_DATA_CHUNK_SIZE, COMPOSITE_BLOB_SIZE, storeKeys);
       output.flip();
       return output;
     }

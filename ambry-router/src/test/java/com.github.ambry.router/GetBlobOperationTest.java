@@ -764,7 +764,7 @@ public class GetBlobOperationTest {
       storeKeys.add(blobId);
     }
     blobSize = maxChunkSize * numChunks;
-    ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContent(maxChunkSize, blobSize, storeKeys);
+    ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContentV2(maxChunkSize, blobSize, storeKeys);
     metadataContent.flip();
     blobProperties =
         new BlobProperties(blobSize - 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,

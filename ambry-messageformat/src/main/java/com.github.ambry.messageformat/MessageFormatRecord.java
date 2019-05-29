@@ -1496,7 +1496,7 @@ public class MessageFormatRecord {
    */
   public static class Metadata_Content_Format_V3 {
     private static final int NUM_OF_KEYS_FIELD_SIZE_IN_BYTES = 4;
-    private static final int SIZE_OF_BLOB_FIELD_IN_BYTES = 4;
+    private static final int SIZE_OF_BLOB_FIELD_SIZE_IN_BYTES = 8;
     private static final int TOTAL_SIZE_FIELD_SIZE_IN_BYTES = 8;
 
     /**
@@ -1506,8 +1506,8 @@ public class MessageFormatRecord {
      * @return The total size in bytes.
      */
     public static int getMetadataContentSize(int keySize, int numberOfKeys) {
-      return Version_Field_Size_In_Bytes + TOTAL_SIZE_FIELD_SIZE_IN_BYTES + NUM_OF_KEYS_FIELD_SIZE_IN_BYTES + (
-          numberOfKeys * keySize * SIZE_OF_BLOB_FIELD_IN_BYTES);
+      return Version_Field_Size_In_Bytes + TOTAL_SIZE_FIELD_SIZE_IN_BYTES + NUM_OF_KEYS_FIELD_SIZE_IN_BYTES
+          + numberOfKeys * (keySize + SIZE_OF_BLOB_FIELD_SIZE_IN_BYTES);
     }
 
     /**
@@ -1522,13 +1522,17 @@ public class MessageFormatRecord {
       outputBuffer.putShort(Metadata_Content_Version_V3);
       outputBuffer.putLong(totalSize);
       outputBuffer.putInt(keysAndContentSizes.size());
-
+      long sum = 0;
       for (Pair<StoreKey, Long> keyAndContentSize : keysAndContentSizes) {
         if (keyAndContentSize.getFirst().sizeInBytes() != keySize) {
           throw new IllegalArgumentException("Keys are not of same size");
         }
         outputBuffer.putLong(keyAndContentSize.getSecond());
         outputBuffer.put(keyAndContentSize.getFirst().toBytes());
+        sum += keyAndContentSize.getSecond();
+      }
+      if (sum != totalSize) {
+        throw new IllegalArgumentException("Key content sizes do not equal total size");
       }
     }
 

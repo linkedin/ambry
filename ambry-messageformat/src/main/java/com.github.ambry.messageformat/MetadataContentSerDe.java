@@ -34,7 +34,7 @@ public class MetadataContentSerDe {
    * @param keys the input list of keys that form the metadata content.
    * @return a ByteBuffer containing the serialized output.
    */
-  public static ByteBuffer serializeMetadataContent(int chunkSize, long totalSize, List<StoreKey> keys) {
+  public static ByteBuffer serializeMetadataContentV2(int chunkSize, long totalSize, List<StoreKey> keys) {
     int bufSize =
         MessageFormatRecord.Metadata_Content_Format_V2.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     ByteBuffer outputBuf = ByteBuffer.allocate(bufSize);
@@ -50,8 +50,8 @@ public class MetadataContentSerDe {
    * @return a ByteBuffer containing the serialized output.
    */
   public static ByteBuffer serializeMetadataContentV3(long totalSize, List<Pair<StoreKey, Long>> keysAndContentSizes) {
-    int bufSize =
-        MessageFormatRecord.Metadata_Content_Format_V3.getMetadataContentSize(keysAndContentSizes.get(0).getFirst().sizeInBytes(), keysAndContentSizes.size());
+    int bufSize = MessageFormatRecord.Metadata_Content_Format_V3.getMetadataContentSize(
+        keysAndContentSizes.get(0).getFirst().sizeInBytes(), keysAndContentSizes.size());
     ByteBuffer outputBuf = ByteBuffer.allocate(bufSize);
     MessageFormatRecord.Metadata_Content_Format_V3.serializeMetadataContentRecord(outputBuf, totalSize,
         keysAndContentSizes);
