@@ -162,9 +162,10 @@ public class GetManagerTest {
    */
   @Test
   public void testRangeRequestStitch() throws Exception {
-    testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
-        .range(ByteRanges.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
-        .build());
+    testGetSuccessStitch(chunkSize * 6 + 11,
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
+            .range(ByteRanges.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
+            .build());
   }
 
   /**
@@ -184,7 +185,6 @@ public class GetManagerTest {
     router.close();
   }
 
-
   /**
    * Test a get request on a stitched blob.
    * @param blobSize the size of the blob to put/get.
@@ -200,11 +200,12 @@ public class GetManagerTest {
     int curBlobSize = blobSize;
     for (int i = 0; i < 10; i++) {
       //Give each chunk a different size
-      int curChunkSize = Math.min(curBlobSize, chunkSize+i*5);
+      int curChunkSize = Math.min(curBlobSize, chunkSize + i * 5);
       setOperationParams(curChunkSize, options);
       byteBuffer.put(putContent);
       curBlobSize -= curChunkSize;
-      stitchBlobsIds.add(router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get());
+      stitchBlobsIds.add(
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get());
       chunkInfos.add(new ChunkInfo(stitchBlobsIds.get(i), curChunkSize, -1L));
     }
     setOperationParams(blobSize, options);

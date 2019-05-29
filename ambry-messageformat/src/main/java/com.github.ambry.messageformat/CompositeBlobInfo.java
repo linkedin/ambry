@@ -55,7 +55,6 @@ public class CompositeBlobInfo {
     }
   }
 
-
   private final int chunkSize;
   private final long totalSize;
   private final List<StoreKey> keys;
@@ -84,11 +83,11 @@ public class CompositeBlobInfo {
    * Construct a {@link CompositeBlobInfo} object.
    * @param keysAndContentSizes
    */
-  public CompositeBlobInfo(List<Pair<StoreKey,Long>> keysAndContentSizes) {
+  public CompositeBlobInfo(List<Pair<StoreKey, Long>> keysAndContentSizes) {
     this.chunkSize = -1;
     this.keys = new ArrayList<>();
     long last = 0;
-    for (Pair<StoreKey,Long> keyAndContentSize : keysAndContentSizes) {
+    for (Pair<StoreKey, Long> keyAndContentSize : keysAndContentSizes) {
       StoreKey key = keyAndContentSize.getFirst();
       keys.add(key);
       offsets.add(last);
@@ -108,17 +107,18 @@ public class CompositeBlobInfo {
    */
   public List<StoreKeyAndSizeAndOffset> getStoreKeysInByteRange(long start, long end) {
     if (end < start || start < 0L || end >= totalSize) {
-      throw new IllegalArgumentException("Bad input parameters, start="+start+" end="+end+" totalSize="+totalSize);
+      throw new IllegalArgumentException(
+          "Bad input parameters, start=" + start + " end=" + end + " totalSize=" + totalSize);
     }
     int idx = Collections.binarySearch(offsets, start);
     //binarySearch returns -(insertion point) - 1 if not an exact match, which points to the index of
     //the first element greater than the key, or list.size() if all elements in the list are
     // less than the specified key.
     if (idx < 0) {
-      idx = -idx-2; //points to element with offset closest to but less than 'start'
+      idx = -idx - 2; //points to element with offset closest to but less than 'start'
     }
     List<StoreKeyAndSizeAndOffset> ans = new ArrayList<>();
-    while(idx < keys.size() && offsets.get(idx) <= end) {
+    while (idx < keys.size() && offsets.get(idx) <= end) {
       ans.add(keysAndSizesAndOffsets.get(idx));
       idx++;
     }

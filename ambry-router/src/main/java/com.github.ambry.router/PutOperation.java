@@ -1606,8 +1606,7 @@ class PutOperation {
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag());
       if (isStitchOperation() || getNumDataChunks() > 1) {
         // values returned are in the right order as TreeMap returns them in key-order.
-        List<Pair<StoreKey, Long>> orderedChunkIdList = indexToChunkIds.values().stream().collect(
-            Collectors.toList());
+        List<Pair<StoreKey, Long>> orderedChunkIdList = indexToChunkIds.values().stream().collect(Collectors.toList());
 
         buf = MetadataContentSerDe.serializeMetadataContentV3(getBlobSize(), orderedChunkIdList);
         onFillComplete(false);
@@ -1623,8 +1622,7 @@ class PutOperation {
      * @return a list of all of the successfully put chunk ids associated with this blob
      */
     List<StoreKey> getSuccessfullyPutChunkIds() {
-      return indexToChunkIds.values().stream().map(b -> b.getFirst()).collect(
-          Collectors.toList());
+      return indexToChunkIds.values().stream().map(b -> b.getFirst()).collect(Collectors.toList());
     }
 
     /**

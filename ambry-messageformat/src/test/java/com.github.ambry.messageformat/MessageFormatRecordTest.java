@@ -478,7 +478,7 @@ public class MessageFormatRecordTest {
     // Test Metadata Blob V3
     int numKeys = 5;
     List<StoreKey> keys = getKeys(60, numKeys);
-    List<Pair<StoreKey,Long>> keysAndContentSizes = new ArrayList<>();
+    List<Pair<StoreKey, Long>> keysAndContentSizes = new ArrayList<>();
     long total = 0;
     for (int i = 0; i < numKeys; i++) {
       long randNum = ThreadLocalRandom.current().nextLong(1, 10000000);
@@ -491,11 +491,12 @@ public class MessageFormatRecordTest {
     Assert.assertEquals("Total size doesn't match", total, compositeBlobInfo.getTotalSize());
     Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
     List<CompositeBlobInfo.StoreKeyAndSizeAndOffset> list = compositeBlobInfo.getKeysAndSizesAndOffsets();
-    Assert.assertEquals("StoreKeyAndSizeAndOffset and input list have different sizes", list.size(), keysAndContentSizes.size());
+    Assert.assertEquals("StoreKeyAndSizeAndOffset and input list have different sizes", list.size(),
+        keysAndContentSizes.size());
     long sum = 0;
     for (int i = 0; i < list.size(); i++) {
       Assert.assertEquals(keysAndContentSizes.get(i).getFirst(), list.get(i).getStoreKey());
-      Assert.assertEquals((long)keysAndContentSizes.get(i).getSecond(), list.get(i).getSize());
+      Assert.assertEquals((long) keysAndContentSizes.get(i).getSecond(), list.get(i).getSize());
       Assert.assertEquals(sum, list.get(i).getOffset());
       sum += list.get(i).getSize();
     }
@@ -518,13 +519,13 @@ public class MessageFormatRecordTest {
   @Test
   public void testInvalidMetadataContentV3Fields() {
     List<StoreKey> keys = getKeys(60, 2);
-    int[][] chunkSizes = {{0,0}, {2,3}, {5,5}, {5,5}};
+    int[][] chunkSizes = {{0, 0}, {2, 3}, {5, 5}, {5, 5}};
     long[] totalSizes = {5, -10, 10 * keys.size() - 9, 10 * keys.size() + 1};
     for (int n = 0; n < chunkSizes.length; n++) {
       try {
         List<Pair<StoreKey, Long>> keyAndContentSizes = new ArrayList<>();
-        keyAndContentSizes.add(new Pair<>(keys.get(0), (long)chunkSizes[n][0]));
-        keyAndContentSizes.add(new Pair<>(keys.get(1), (long)chunkSizes[n][1]));
+        keyAndContentSizes.add(new Pair<>(keys.get(0), (long) chunkSizes[n][0]));
+        keyAndContentSizes.add(new Pair<>(keys.get(1), (long) chunkSizes[n][1]));
         MetadataContentSerDe.serializeMetadataContentV3(totalSizes[n], keyAndContentSizes);
         fail("Should have failed to serialize");
       } catch (IllegalArgumentException ignored) {
@@ -554,8 +555,8 @@ public class MessageFormatRecordTest {
   }
 
   private ByteBuffer getSerializedMetadataContentV3(long totalSize, List<Pair<StoreKey, Long>> keysAndContentSizes) {
-    int size =
-        MessageFormatRecord.Metadata_Content_Format_V3.getMetadataContentSize(keysAndContentSizes.get(0).getFirst().sizeInBytes(), keysAndContentSizes.size());
+    int size = MessageFormatRecord.Metadata_Content_Format_V3.getMetadataContentSize(
+        keysAndContentSizes.get(0).getFirst().sizeInBytes(), keysAndContentSizes.size());
     ByteBuffer metadataContent = ByteBuffer.allocate(size);
     MessageFormatRecord.Metadata_Content_Format_V3.serializeMetadataContentRecord(metadataContent, totalSize,
         keysAndContentSizes);
@@ -683,7 +684,7 @@ public class MessageFormatRecordTest {
   public void testBlobRecordWithMetadataContentV3() throws IOException, MessageFormatException {
     int numKeys = 5;
     List<StoreKey> keys = getKeys(60, numKeys);
-    List<Pair<StoreKey,Long>> keysAndContentSizes = new ArrayList<>();
+    List<Pair<StoreKey, Long>> keysAndContentSizes = new ArrayList<>();
     long total = 0;
     for (int i = 0; i < numKeys; i++) {
       long randNum = ThreadLocalRandom.current().nextLong(1, 10000000);
@@ -692,7 +693,8 @@ public class MessageFormatRecordTest {
     }
 
     ByteBuffer metadataContent = getSerializedMetadataContentV3(total, keysAndContentSizes);
-    int metadataContentSize = MessageFormatRecord.Metadata_Content_Format_V3.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
+    int metadataContentSize =
+        MessageFormatRecord.Metadata_Content_Format_V3.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(metadataContentSize);
     ByteBuffer blob = ByteBuffer.allocate((int) blobSize);
     BlobData blobData = getBlobRecordV2(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
@@ -706,11 +708,12 @@ public class MessageFormatRecordTest {
     Assert.assertEquals("Total size doesn't match", total, compositeBlobInfo.getTotalSize());
     Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
     List<CompositeBlobInfo.StoreKeyAndSizeAndOffset> list = compositeBlobInfo.getKeysAndSizesAndOffsets();
-    Assert.assertEquals("StoreKeyAndSizeAndOffset and input list have different sizes", list.size(), keysAndContentSizes.size());
+    Assert.assertEquals("StoreKeyAndSizeAndOffset and input list have different sizes", list.size(),
+        keysAndContentSizes.size());
     long sum = 0;
     for (int i = 0; i < list.size(); i++) {
       Assert.assertEquals(keysAndContentSizes.get(i).getFirst(), list.get(i).getStoreKey());
-      Assert.assertEquals((long)keysAndContentSizes.get(i).getSecond(), list.get(i).getSize());
+      Assert.assertEquals((long) keysAndContentSizes.get(i).getSecond(), list.get(i).getSize());
       Assert.assertEquals(sum, list.get(i).getOffset());
       sum += list.get(i).getSize();
     }

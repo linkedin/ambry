@@ -287,13 +287,12 @@ public class PutManagerTest {
     }
 
     // intermediate chunk sizes do not match
-    runTest.accept(
-        RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
-            LongStream.of(200, 10, 200)));
+    runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+        LongStream.of(200, 10, 200)));
 
     // last chunk larger than intermediate chunks
     runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
-            LongStream.of(200, 201)));
+        LongStream.of(200, 201)));
   }
 
   /**
