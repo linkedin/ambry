@@ -237,6 +237,7 @@ abstract class GetOperation {
   /**
    * Gets an {@link OperationTracker} based on the config and {@code partitionId}.
    * @param partitionId the {@link PartitionId} for which a tracker is required.
+   * @param datacenterId the id of datacenter in which the blob originated.
    * @param routerOperation The type of router operation used by tracker.
    * @return an {@link OperationTracker} based on the config and {@code partitionId}.
    */
