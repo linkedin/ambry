@@ -191,7 +191,7 @@ class AzureCloudDestination implements CloudDestination {
 
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     Objects.requireNonNull(blobInputStream, "Input stream cannot be null");
-
+    azureMetrics.blobUploadRate.mark();
     azureMetrics.blobUploadRequestCount.inc();
     try {
       boolean uploaded = uploadIfNotExists(blobId, inputLength, cloudBlobMetadata, blobInputStream);
