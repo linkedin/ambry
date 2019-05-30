@@ -31,6 +31,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.CompositeBlobInfo;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.protocol.PutRequest;
@@ -82,6 +83,7 @@ public class PutManagerTest {
   static final GeneralSecurityException GSE = new GeneralSecurityException("Exception to throw for tests");
   private static final long MAX_WAIT_MS = 5000;
   private final boolean testEncryption;
+  private final int metadataContentVersion;
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
   private final MockClusterMap mockClusterMap;
@@ -110,20 +112,24 @@ public class PutManagerTest {
   private static final String EXTERNAL_ASSET_TAG = "ExternalAssetTag";
 
   /**
-   * Running for both regular and encrypted blobs
-   * @return an array with both {@code false} and {@code true}.
+   * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
+   * @return an array with all four different choices
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
+        {false, MessageFormatRecord.Metadata_Content_Version_V3},
+        {true, MessageFormatRecord.Metadata_Content_Version_V2},
+        {true, MessageFormatRecord.Metadata_Content_Version_V3}});
   }
 
   /**
    * Pre-initialization common to all tests.
    * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
-  public PutManagerTest(boolean testEncryption) throws Exception {
+  public PutManagerTest(boolean testEncryption, int metadataContentVersion) throws Exception {
     this.testEncryption = testEncryption;
+    this.metadataContentVersion = metadataContentVersion;
     // random chunkSize in the range [2, 1 MB]
     chunkSize = random.nextInt(1024 * 1024) + 2;
     requestParallelism = 3;
@@ -286,13 +292,15 @@ public class PutManagerTest {
               dataChunkSize)));
     }
 
-    // intermediate chunk sizes do not match
-    runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
-        LongStream.of(200, 10, 200)));
+    if (metadataContentVersion > 2) {
+      // intermediate chunk sizes do not match
+      runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+          LongStream.of(200, 10, 200)));
 
-    // last chunk larger than intermediate chunks
-    runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
-        LongStream.of(200, 201)));
+      // last chunk larger than intermediate chunks
+      runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+          LongStream.of(200, 201)));
+    }
   }
 
   /**
@@ -309,6 +317,17 @@ public class PutManagerTest {
     };
 
     // chunk size issues
+    if (metadataContentVersion <= 2) {
+      // intermediate chunk sizes do not match
+      runTest.accept(new Pair<>(
+          RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+              LongStream.of(200, 10, 200)), RouterErrorCode.InvalidPutArgument));
+
+      // last chunk larger than intermediate chunks
+      runTest.accept(new Pair<>(
+          RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
+              LongStream.of(200, 201)), RouterErrorCode.InvalidPutArgument));
+    }
     // last chunk is size 0 (0 not supported by current metadata format)
     runTest.accept(new Pair<>(
         RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
@@ -880,7 +899,7 @@ public class PutManagerTest {
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.metadata.content.version", "3");
+    properties.setProperty("router.metadata.content.version", String.valueOf(metadataContentVersion));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     if (testEncryption && instantiateEncryptionCast) {
       setupEncryptionCast(vProps);

@@ -339,7 +339,9 @@ class PutOperation {
           RouterErrorCode.InvalidPutArgument);
     }
     long totalSize = 0;
-    long intermediateChunkSize = routerConfig.routerMaxPutChunkSizeBytes;
+    long intermediateChunkSize =
+        routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2
+            ? chunksToStitch.get(0).getChunkSizeInBytes() : routerConfig.routerMaxPutChunkSizeBytes;
     metadataPutChunk.setIntermediateChunkSize(intermediateChunkSize);
     for (ListIterator<ChunkInfo> iter = chunksToStitch.listIterator(); iter.hasNext(); ) {
       int chunkIndex = iter.nextIndex();
@@ -366,7 +368,9 @@ class PutOperation {
     long chunkSize = chunkInfo.getChunkSizeInBytes();
     long chunkExpirationTimeInMs = chunkInfo.getExpirationTimeInMs();
 
-    if (chunkSize == 0 || chunkSize > intermediateChunkSize) {
+    if (chunkSize == 0 || chunkSize > intermediateChunkSize || (
+        routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2 && !lastChunk
+            && chunkSize < intermediateChunkSize)) {
       throw new RouterException(
           "Invalid chunkSize for " + (lastChunk ? "last" : "intermediate") + " chunk: " + chunkSize
               + "; intermediateChunkSize: " + intermediateChunkSize, RouterErrorCode.InvalidPutArgument);

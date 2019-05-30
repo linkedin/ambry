@@ -23,6 +23,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -55,6 +56,7 @@ public class GetManagerTest {
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private NonBlockingRouter router;
   private final boolean testEncryption;
+  private final int metadataContentVersion;
   private KeyManagementService kms = null;
   private CryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
@@ -74,20 +76,24 @@ public class GetManagerTest {
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
 
   /**
-   * Running for both regular and encrypted blobs
-   * @return an array with both {@code false} and {@code true}.
+   * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
+   * @return an array with all four different choices
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
+        {false, MessageFormatRecord.Metadata_Content_Version_V3},
+        {true, MessageFormatRecord.Metadata_Content_Version_V2},
+        {true, MessageFormatRecord.Metadata_Content_Version_V3}});
   }
 
   /**
    * Pre-initialization common to all tests.
    * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
-  public GetManagerTest(boolean testEncryption) throws Exception {
+  public GetManagerTest(boolean testEncryption, int metadataContentVersion) throws Exception {
     this.testEncryption = testEncryption;
+    this.metadataContentVersion = metadataContentVersion;
     // random chunkSize in the range [1, 1 MB]
     chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
@@ -141,8 +147,13 @@ public class GetManagerTest {
    * @throws Exception
    */
   @Test
-  public void testCompositeBlobGetSuccessStitch() throws Exception {
-    testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().build());
+  public void testCompositeBlobGetSuccessStitchDifferentSizedBlobs() throws Exception {
+    if (metadataContentVersion > 2) {
+      testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().build());
+    } else {
+      router = getNonBlockingRouter();
+      router.close();
+    }
   }
 
   /**
@@ -161,11 +172,16 @@ public class GetManagerTest {
    * @throws Exception
    */
   @Test
-  public void testRangeRequestStitch() throws Exception {
-    testGetSuccessStitch(chunkSize * 6 + 11,
-        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
-            .range(ByteRanges.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
-            .build());
+  public void testRangeRequestStitchDifferentSizedBlobs() throws Exception {
+    if (metadataContentVersion > 2) {
+      testGetSuccessStitch(chunkSize * 6 + 11,
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
+              .range(ByteRanges.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
+              .build());
+    } else {
+      router = getNonBlockingRouter();
+      router.close();
+    }
   }
 
   /**
@@ -460,7 +476,7 @@ public class GetManagerTest {
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.metadata.content.version", "3");
+    properties.setProperty("router.metadata.content.version", String.valueOf(metadataContentVersion));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     routerConfig = new RouterConfig(vProps);
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
