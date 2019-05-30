@@ -1056,14 +1056,21 @@ public class PutManagerTest {
       CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe.deserializeMetadataContentRecord(ByteBuffer.wrap(data),
           new BlobIdFactory(mockClusterMap));
       List<StoreKey> dataBlobIds = compositeBlobInfo.getKeys();
+      long expectedMaxChunkSize;
       long expectedTotalSize;
       int expectedNumChunks;
       if (stitchOperation) {
+        expectedMaxChunkSize =
+            requestAndResult.chunksToStitch.stream().mapToLong(ChunkInfo::getChunkSizeInBytes).max().orElse(0);
         expectedTotalSize = requestAndResult.chunksToStitch.stream().mapToLong(ChunkInfo::getChunkSizeInBytes).sum();
         expectedNumChunks = requestAndResult.chunksToStitch.size();
       } else {
+        expectedMaxChunkSize = chunkSize;
         expectedTotalSize = requestAndResult.putContent.length;
         expectedNumChunks = RouterUtils.getNumChunksForBlobAndChunkSize(requestAndResult.putContent.length, chunkSize);
+      }
+      if (metadataContentVersion <= MessageFormatRecord.Metadata_Content_Version_V2) {
+        assertEquals("Wrong max chunk size in metadata", expectedMaxChunkSize, compositeBlobInfo.getChunkSize());
       }
       assertEquals("Wrong total size in metadata", expectedTotalSize, compositeBlobInfo.getTotalSize());
       assertEquals("Number of chunks is not as expected", expectedNumChunks, dataBlobIds.size());
@@ -1160,7 +1167,9 @@ public class PutManagerTest {
           result.getDecryptedBlobContent().get(content, offset.get(), dataBlobLength.get());
         }).run();
       }
-      if (key == lastKey) {
+      if (metadataContentVersion <= MessageFormatRecord.Metadata_Content_Version_V2 && key != lastKey) {
+        assertEquals("all chunks except last should be fully filled", chunkSize, dataBlobLength.get());
+      } else if (key == lastKey) {
         assertEquals("Last chunk should be of non-zero length and equal to the length of the remaining bytes",
             (originalPutContent.length - 1) % chunkSize + 1, dataBlobLength.get());
       }
