@@ -88,6 +88,7 @@ import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -116,7 +117,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import javax.net.ssl.SSLSocketFactory;
 import org.junit.Assert;
 
@@ -558,16 +558,14 @@ final class ServerTestUtil {
    * @param dataNode the datanode where blobs are originally put.
    * @param clientSSLConfig the {@link SSLConfig}.
    * @param clientSSLSocketFactory the {@link SSLSocketFactory}.
-   * @param testEncryption if encryption will be tested. Not used now.
    * @param notificationSystem the {@link MockNotificationSystem} to track blobs event in {@link MockCluster}.
    * @param vcrSSLProps SSL related properties for VCR. Can be {@code null}.
    * @param ttl The ttl of blobs in their original PUT.
    * @param doTtlUpdate Do ttlUpdate request if {@true}.
    */
   static void endToEndCloudBackupTest(MockCluster cluster, DataNodeId dataNode, SSLConfig clientSSLConfig,
-      SSLSocketFactory clientSSLSocketFactory, boolean testEncryption, MockNotificationSystem notificationSystem,
-      Properties vcrSSLProps, long ttl, boolean doTtlUpdate) throws Exception {
-    // TODO: test encryption
+      SSLSocketFactory clientSSLSocketFactory, MockNotificationSystem notificationSystem, Properties vcrSSLProps,
+      long ttl, boolean doTtlUpdate) throws Exception {
     int blobBackupCount = 10;
     int blobSize = 100;
     int userMetaDataSize = 100;
@@ -602,36 +600,25 @@ final class ServerTestUtil {
       }
     }
 
+    // Start Helix Controller and ZK Server.
+    int zkPort = 31999;
+    String zkConnectString = "localhost:" + zkPort;
+    String vcrClusterName = "vcrTestCluster";
+    TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
+    HelixControllerManager helixControllerManager =
+        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, clusterMap);
     // Start the VCR and CloudBackupManager
-    Properties props = new Properties();
-    props.setProperty("connectionpool.read.timeout.ms", "15000");
-    props.setProperty("server.scheduler.num.of.threads", "1");
-    props.setProperty("num.io.threads", "1");
-    props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.resolve.hostnames", "false");
-    props.setProperty("clustermap.cluster.name", "thisIsClusterName");
-    props.setProperty("clustermap.datacenter.name", dataNode.getDatacenterName());
-    props.setProperty("clustermap.port", "12309");
-    props.setProperty("vcr.cluster.name", "VCRCluster");
-    if (vcrSSLProps == null) {
-      props.setProperty("clustermap.ssl.enabled.datacenters", "");
-    } else {
-      props.putAll(vcrSSLProps);
-      props.setProperty("vcr.ssl.port", "12310");
-      props.setProperty("clustermap.ssl.enabled.datacenters", dataNode.getDatacenterName());
-    }
-    props.setProperty("vcr.cluster.name", "VCRCluster");
-    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
-    props.setProperty("vcr.assigned.partitions", String.join(",",
-        clusterMap.getAllPartitionIds(null).stream().map(p -> p.toPathString()).collect(Collectors.toList())));
-    VerifiableProperties vProps = new VerifiableProperties(props);
+    Properties props =
+        VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
+            vcrSSLProps);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIds);
     CloudDestinationFactory cloudDestinationFactory =
         new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
 
     VcrServer vcrServer =
-        VcrTestUtil.createVcrServer(vProps, clusterAgentsFactory, notificationSystem, cloudDestinationFactory);
+        VcrTestUtil.createVcrServer(new VerifiableProperties(props), clusterAgentsFactory, notificationSystem,
+            cloudDestinationFactory);
     vcrServer.startup();
 
     // Waiting for backup done
@@ -646,6 +633,8 @@ final class ServerTestUtil {
       // TODO: verify other metadata and blob data
     }
     vcrServer.shutdown();
+    helixControllerManager.syncStop();
+    zkInfo.shutdown();
   }
 
   static void endToEndReplicationWithMultiNodeMultiPartitionTest(int interestedDataNodePortNumber, Port dataNode1Port,
@@ -2225,7 +2214,7 @@ final class ServerTestUtil {
    * @param hostName upon which connection has to be established
    * @return BlockingChannel
    */
-  static BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
+  public static BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
       SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.PLAINTEXT) {

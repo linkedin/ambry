@@ -27,8 +27,8 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import org.apache.helix.InstanceType;
+import org.apache.helix.tools.ClusterVerifiers.StrictMatchExternalViewVerifier;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -72,26 +72,38 @@ public class HelixVcrClusterTest {
    */
   @Test
   public void helixVcrClusterTest() throws Exception {
+    StrictMatchExternalViewVerifier helixBalanceVerifier =
+        new StrictMatchExternalViewVerifier(ZK_CONNECT_STRING, VCR_CLUSTER_NAME, null, null);
     // Create helixInstance1 and join the cluster. All partitions should be assigned to helixInstance1.
     VirtualReplicatorCluster helixInstance1 = createHelixInstance(8123, 10123);
     List<PartitionId> expectedPartitions = mockClusterMap.getAllPartitionIds(null);
-    CountDownLatch latchForAdd = new CountDownLatch(expectedPartitions.size());
-    CountDownLatch latchForRemove = new CountDownLatch(expectedPartitions.size() / 2);
-    MockVcrListener mockVcrListener = new MockVcrListener(latchForAdd, latchForRemove);
+    MockVcrListener mockVcrListener = new MockVcrListener();
     helixInstance1.addListener(mockVcrListener);
-    Assert.assertTrue("Latch count is not correct.", latchForAdd.await(5, TimeUnit.SECONDS));
-    Assert.assertArrayEquals("Partition assignments are not correct.", expectedPartitions.toArray(),
-        mockVcrListener.getPartitionSet().toArray());
+    helixInstance1.participate(InstanceType.PARTICIPANT);
+    Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(2000));
     Assert.assertEquals("Partition assignment are not correct.", helixInstance1.getAssignedPartitionIds(),
         expectedPartitions);
 
     // Create helixInstance2 and join the cluster. Half of partitions should be removed from helixInstance1.
     VirtualReplicatorCluster helixInstance2 = createHelixInstance(8124, 10124);
-    Assert.assertTrue("Latch count is not correct.", latchForRemove.await(5, TimeUnit.SECONDS));
+    helixInstance2.participate(InstanceType.PARTICIPANT);
+    // Detect any ideal state change first.
+    TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() < expectedPartitions.size(),
+        500);
+    Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(2000));
     Assert.assertEquals("Number of partitions removed are not correct.", expectedPartitions.size() / 2,
         mockVcrListener.getPartitionSet().size());
-    helixInstance1.close();
+
+    // Close helixInstance2. All partitions should back to helixInstance1.
     helixInstance2.close();
+    // Detect any ideal state change first.
+    TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() > expectedPartitions.size() / 2,
+        500);
+    Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(2000));
+    Assert.assertEquals("Partition assignment are not correct.", helixInstance1.getAssignedPartitionIds(),
+        expectedPartitions);
+
+    helixInstance1.close();
   }
 
   /**
@@ -120,24 +132,19 @@ public class HelixVcrClusterTest {
   private static class MockVcrListener implements VirtualReplicatorClusterListener {
 
     private final Set<PartitionId> partitionSet = ConcurrentHashMap.newKeySet();
-    private final CountDownLatch latchForAdd;
-    private final CountDownLatch latchForRemove;
 
-    MockVcrListener(CountDownLatch latchForAdd, CountDownLatch latchForRemove) {
-      this.latchForAdd = latchForAdd;
-      this.latchForRemove = latchForRemove;
+    MockVcrListener() {
+
     }
 
     @Override
     public void onPartitionAdded(PartitionId partitionId) {
       partitionSet.add(partitionId);
-      latchForAdd.countDown();
     }
 
     @Override
     public void onPartitionRemoved(PartitionId partitionId) {
       partitionSet.remove(partitionId);
-      latchForRemove.countDown();
     }
 
     public Set getPartitionSet() {

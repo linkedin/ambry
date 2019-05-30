@@ -19,6 +19,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.Store;
 import com.github.ambry.utils.Time;
+import java.util.Objects;
 
 /*
  * The token persist logic ensures that a token corresponding to an entry in the store is never persisted in the
@@ -60,6 +61,7 @@ public class RemoteReplicaInfo {
   private long totalBytesReadFromLocalStore;
   private long localLagFromRemoteStore = -1;
   private long reEnableReplicationTime = 0;
+  private ReplicaThread replicaThread;
 
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
@@ -73,7 +75,7 @@ public class RemoteReplicaInfo {
     initializeTokens(token);
   }
 
-  ReplicaId getReplicaId() {
+  public ReplicaId getReplicaId() {
     return replicaId;
   }
 
@@ -121,7 +123,15 @@ public class RemoteReplicaInfo {
     return currentToken;
   }
 
-  void setTotalBytesReadFromLocalStore(long totalBytesReadFromLocalStore) {
+  synchronized ReplicaThread getReplicaThread() {
+    return replicaThread;
+  }
+
+  synchronized void setReplicaThread(ReplicaThread replicaThread) {
+    this.replicaThread = replicaThread;
+  }
+
+  public void setTotalBytesReadFromLocalStore(long totalBytesReadFromLocalStore) {
     this.totalBytesReadFromLocalStore = totalBytesReadFromLocalStore;
   }
 
@@ -139,7 +149,7 @@ public class RemoteReplicaInfo {
     currentToken = token;
   }
 
-  synchronized void initializeTokens(FindToken token) {
+  public void initializeTokens(FindToken token) {
     currentToken = token;
     candidateTokenToPersist = token;
     tokenSafeToPersist = token;
@@ -170,7 +180,23 @@ public class RemoteReplicaInfo {
 
   @Override
   public String toString() {
-    return replicaId.toString();
+    return replicaId.getPartitionId() + ":" + replicaId.getDataNodeId() + ":" + replicaId.getReplicaPath();
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) {
+      return true;
+    }
+    if (obj == null || getClass() != obj.getClass()) {
+      return false;
+    }
+    RemoteReplicaInfo info = (RemoteReplicaInfo) obj;
+    if (Objects.equals(port, info.getPort()) && info.getReplicaId().getReplicaPath().equals(replicaId.getMountPath())
+        && info.getLocalReplicaId().getReplicaPath().equals(localReplicaId.getMountPath())) {
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -232,6 +258,23 @@ public class RemoteReplicaInfo {
 
     public FindToken getReplicaToken() {
       return replicaToken;
+    }
+
+    @Override
+    public String toString() {
+      return "ReplicaTokenInfo: " + "partitionId:" + partitionId + " hostname: " + hostname + " port: " + port
+          + " replicaPath: " + replicaPath;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      return Objects.equals(replicaToken.toBytes(), ((ReplicaTokenInfo) o).getReplicaToken().toBytes());
     }
   }
 }

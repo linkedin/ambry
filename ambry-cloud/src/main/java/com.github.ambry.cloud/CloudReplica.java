@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.protocol.GetRequest;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -63,7 +64,9 @@ class CloudReplica implements ReplicaId {
 
   @Override
   public String getReplicaPath() {
-    return getMountPath() + File.separator + partitionId.toPathString();
+    // GetRequest.Cloud_Replica_Keyword is added to avoid error on its peers.
+    return GetRequest.Cloud_Replica_Keyword + File.separator + getMountPath() + File.separator
+        + partitionId.toPathString();
   }
 
   @Override

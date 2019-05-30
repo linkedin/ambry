@@ -67,7 +67,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
   }
 
   @Override
-  public List<ReplicaTokenInfo> retrieve(String mountPath) throws IOException, ReplicationException {
+  public List<ReplicaTokenInfo> retrieve(String mountPath) throws ReplicationException {
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
     if (replicaTokenFile.exists()) {
       try (FileInputStream fileInputStream = new FileInputStream(replicaTokenFile)) {

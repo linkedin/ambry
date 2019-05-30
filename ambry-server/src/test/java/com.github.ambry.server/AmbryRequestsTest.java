@@ -63,6 +63,7 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.protocol.TtlUpdateRequest;
+import com.github.ambry.replication.BlobIdTransformer;
 import com.github.ambry.replication.MockFindToken;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
@@ -137,8 +138,8 @@ public class AmbryRequestsTest {
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
-    properties.setProperty("replication.no.of.intra.dc.replica.threads", "0");
-    properties.setProperty("replication.no.of.inter.dc.replica.threads", "0");
+    properties.setProperty("replication.no.of.intra.dc.replica.threads", "1");
+    properties.setProperty("replication.no.of.inter.dc.replica.threads", "1");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     dataNodeId = clusterMap.getDataNodeIds().get(0);
     storageManager = new MockStorageManager(validKeysInStore, clusterMap.getReplicaIds(dataNodeId));
@@ -1547,17 +1548,17 @@ public class AmbryRequestsTest {
         StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
         StoreKeyConverterFactory storeKeyConverterFactory) throws ReplicationException {
       super(replicationConfig, clusterMapConfig, storeConfig, storageManager, new StoreKeyFactory() {
+            @Override
+            public StoreKey getStoreKey(DataInputStream stream) {
+              return null;
+            }
 
-        @Override
-        public StoreKey getStoreKey(DataInputStream stream) {
-          return null;
-        }
-
-        @Override
-        public StoreKey getStoreKey(String input) {
-          return null;
-        }
-      }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory, null);
+            @Override
+            public StoreKey getStoreKey(String input) {
+              return null;
+            }
+          }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
+          BlobIdTransformer.class.getName());
       reset();
     }
 

@@ -106,6 +106,17 @@ public class ReplicationConfig {
   @Default("true")
   public final boolean replicationIncludeAll;
 
+  /**
+   * If true, replication token will be persisted when shutdown or replica remote.
+   * For CloudBackupManger and ReplicationManager, token is persisted when shutdown if this config is true.
+   * For CloudBackupManger, where replica may be removed, token is also persisted if this config is true.
+   * ReplicationManager doesn't support replica remove now.
+   * This is used for test only as of now.
+   */
+  @Config("replication.persist.token.on.shutdown.or.replica.remove")
+  @Default("true")
+  public final boolean replicationPersistTokenOnShutdownOrReplicaRemove;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -133,5 +144,7 @@ public class ReplicationConfig {
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
     replicationIncludeAll = verifiableProperties.getBoolean("replication.include.all", true);
+    replicationPersistTokenOnShutdownOrReplicaRemove =
+        verifiableProperties.getBoolean("replication.persist.token.on.shutdown.or.replica.remove", true);
   }
 }

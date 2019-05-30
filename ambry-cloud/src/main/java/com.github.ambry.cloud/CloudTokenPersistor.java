@@ -47,12 +47,12 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
    * @param partitionGroupedByMountPath A map between mount path and list of partitions under this mount path.
    * @param replicationMetrics metrics including token persist time.
    * @param clusterMap the {@link ClusterMap} to deserialize tokens.
-   * @param tokenfactory the {@link FindTokenFactory} to deserialize tokens.
+   * @param tokenFactory the {@link FindTokenFactory} to deserialize tokens.
    */
   public CloudTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactory tokenfactory,
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactory tokenFactory,
       CloudDestination cloudDestination) {
-    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenfactory);
+    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenFactory);
     this.replicaTokenFileName = replicaTokenFileName;
     this.cloudDestination = cloudDestination;
   }
@@ -75,7 +75,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
   }
 
   @Override
-  public List<ReplicaTokenInfo> retrieve(String mountPath) throws IOException, ReplicationException {
+  public List<ReplicaTokenInfo> retrieve(String mountPath) throws ReplicationException {
     try {
       ByteArrayOutputStream tokenOutputStream = new ByteArrayOutputStream(4096);
       boolean tokenExists = cloudDestination.retrieveTokens(mountPath, replicaTokenFileName, tokenOutputStream);
@@ -85,7 +85,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
       } else {
         return Collections.emptyList();
       }
-    } catch (CloudStorageException e) {
+    } catch (IOException | CloudStorageException e) {
       throw new ReplicationException("IO error while reading from replica token file at mount path " + mountPath, e);
     }
   }

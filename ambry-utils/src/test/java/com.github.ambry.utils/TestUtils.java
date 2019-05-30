@@ -21,10 +21,12 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 import org.I0Itec.zkclient.ZkServer;
 import org.I0Itec.zkclient.exception.ZkException;
 import org.I0Itec.zkclient.exception.ZkInterruptedException;
@@ -44,6 +46,7 @@ public class TestUtils {
   public static final long TTL_SECS = TimeUnit.DAYS.toSeconds(7);
   public static final Random RANDOM = new Random();
   public static final List<Boolean> BOOLEAN_VALUES = Collections.unmodifiableList(Arrays.asList(true, false));
+  private static final int CHECK_INTERVAL_IN_MS = 100;
 
   /**
    * Return the number of threads currently running with a name containing the given pattern.
@@ -355,6 +358,28 @@ public class TestUtils {
      * @throws Exception
      */
     void run() throws Exception;
+  }
+
+  /**
+   * Periodically check expectedValue and actualValue until timeout.
+   * @param expectedValue the expected value.
+   * @param expressionToCheck the expression to check.
+   * @param timeoutInMs the time out in millisecond.
+   * @return true if value match.
+   */
+  public static <T> boolean checkAndSleep(T expectedValue, Supplier expressionToCheck, int timeoutInMs) {
+    long startTime = System.currentTimeMillis();
+    try {
+      while (!Objects.equals(expectedValue, expressionToCheck.get())) {
+        if (System.currentTimeMillis() - startTime >= timeoutInMs) {
+          return false;
+        }
+        Thread.sleep(CHECK_INTERVAL_IN_MS);
+      }
+    } catch (InterruptedException e) {
+      return false;
+    }
+    return true;
   }
 }
 
