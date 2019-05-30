@@ -27,6 +27,7 @@ import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.messageformat.PutMessageFormatBlobV1InputStream;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
@@ -73,6 +74,7 @@ public class BlobIdTransformerTest {
   private static final int USER_META_DATA_SIZE = 64;
   private static final int COMPOSITE_BLOB_SIZE = 8000000;
   private static final int COMPOSITE_BLOB_DATA_CHUNK_SIZE = 4000000;
+  private static short metadataContentVersion = MessageFormatRecord.Metadata_Content_Version_V3;
 
   public static final Pair<String, String> BLOB_ID_PAIR_VERSION_1_CONVERTED =
       new Pair<>("AAEAAQAAAAAAAAAhAAAAJDkwNTUwOTJhLTc3ZTAtNDI4NC1iY2IxLTc2MDZlYTAzNWM4OQ",
@@ -155,15 +157,23 @@ public class BlobIdTransformerTest {
    */
   @Test
   public void testMetaDataBlobOperation() throws IOException, MessageFormatException {
-    InputAndExpected inputAndExpected =
-        new InputAndExpected(BLOB_ID_VERSION_1_METADATA_CONVERTED, VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
-            new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getFirst(),
-                BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getFirst()},
-            new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getSecond(),
-                BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getSecond()});
-    TransformationOutput output = transformer.transform(inputAndExpected.getInput());
-    assertNull("output exception should be null", output.getException());
-    verifyOutput(output.getMsg(), inputAndExpected.getExpected());
+    for (int i = 0; i < 2; i++) {
+      //ensure we test both metadata content versions
+      if (i == 0) {
+        metadataContentVersion = MessageFormatRecord.Metadata_Content_Version_V2;
+      } else {
+        metadataContentVersion = MessageFormatRecord.Metadata_Content_Version_V3;
+      }
+      InputAndExpected inputAndExpected =
+          new InputAndExpected(BLOB_ID_VERSION_1_METADATA_CONVERTED, VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
+              new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getFirst(),
+                  BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getFirst()},
+              new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getSecond(),
+                  BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getSecond()});
+      TransformationOutput output = transformer.transform(inputAndExpected.getInput());
+      assertNull("output exception should be null", output.getException());
+      verifyOutput(output.getMsg(), inputAndExpected.getExpected());
+    }
   }
 
   /**
@@ -560,8 +570,28 @@ public class BlobIdTransformerTest {
       for (String datachunkId : datachunkIds) {
         storeKeys.add(blobIdFactory.getStoreKey(datachunkId));
       }
-      ByteBuffer output =
-          MetadataContentSerDe.serializeMetadataContentV2(COMPOSITE_BLOB_DATA_CHUNK_SIZE, COMPOSITE_BLOB_SIZE, storeKeys);
+      ByteBuffer output;
+      switch (metadataContentVersion) {
+        case MessageFormatRecord.Metadata_Content_Version_V2:
+          output = MetadataContentSerDe.serializeMetadataContentV2(COMPOSITE_BLOB_DATA_CHUNK_SIZE, COMPOSITE_BLOB_SIZE,
+              storeKeys);
+          break;
+        case MessageFormatRecord.Metadata_Content_Version_V3:
+          int totalLeft = COMPOSITE_BLOB_SIZE;
+          List<Pair<StoreKey, Long>> keyAndSizeList = new ArrayList<>();
+          int i = 0;
+          while (totalLeft >= COMPOSITE_BLOB_DATA_CHUNK_SIZE) {
+            keyAndSizeList.add(new Pair<>(storeKeys.get(i++), (long) COMPOSITE_BLOB_DATA_CHUNK_SIZE));
+            totalLeft -= COMPOSITE_BLOB_DATA_CHUNK_SIZE;
+          }
+          if (totalLeft > 0) {
+            keyAndSizeList.add(new Pair<>(storeKeys.get(i), (long) totalLeft));
+          }
+          output = MetadataContentSerDe.serializeMetadataContentV3(COMPOSITE_BLOB_SIZE, keyAndSizeList);
+          break;
+        default:
+          throw new IllegalStateException("Unexpected metadata content version: " + metadataContentVersion);
+      }
       output.flip();
       return output;
     }

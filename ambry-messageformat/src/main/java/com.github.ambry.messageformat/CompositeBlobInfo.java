@@ -27,39 +27,12 @@ import java.util.List;
  */
 public class CompositeBlobInfo {
 
-  /**
-   * POJO class for holding a store key, the size of the data content it refers to,
-   * and the offset of the data in the larger composite blob
-   */
-  public static class StoreKeyAndSizeAndOffset {
-    private final StoreKey storeKey;
-    private final long offset;
-    private final long size;
-
-    public StoreKeyAndSizeAndOffset(StoreKey storeKey, long offset, long size) {
-      this.storeKey = storeKey;
-      this.offset = offset;
-      this.size = size;
-    }
-
-    public StoreKey getStoreKey() {
-      return storeKey;
-    }
-
-    public long getOffset() {
-      return offset;
-    }
-
-    public long getSize() {
-      return size;
-    }
-  }
-
   private final int chunkSize;
   private final long totalSize;
   private final List<StoreKey> keys;
   private final List<Long> offsets = new ArrayList<>();
-  private final List<StoreKeyAndSizeAndOffset> keysAndSizesAndOffsets = new ArrayList<>();
+  private final List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
+  private final short metadataContentVersion;
 
   /**
    * Construct a {@link CompositeBlobInfo} object.
@@ -71,27 +44,29 @@ public class CompositeBlobInfo {
     this.chunkSize = chunkSize;
     this.totalSize = totalSize;
     this.keys = keys;
+    metadataContentVersion = MessageFormatRecord.Metadata_Content_Version_V2;
     long last = 0;
     for (StoreKey key : keys) {
       offsets.add(last);
-      keysAndSizesAndOffsets.add(new StoreKeyAndSizeAndOffset(key, last, Math.min(chunkSize, totalSize - last)));
+      chunkMetadataList.add(new ChunkMetadata(key, last, Math.min(chunkSize, totalSize - last)));
       last += chunkSize;
     }
   }
 
   /**
    * Construct a {@link CompositeBlobInfo} object.
-   * @param keysAndContentSizes
+   * @param keysAndContentSizes list of store keys and the size of the data content they reference
    */
   public CompositeBlobInfo(List<Pair<StoreKey, Long>> keysAndContentSizes) {
     this.chunkSize = -1;
     this.keys = new ArrayList<>();
     long last = 0;
+    metadataContentVersion = MessageFormatRecord.Metadata_Content_Version_V3;
     for (Pair<StoreKey, Long> keyAndContentSize : keysAndContentSizes) {
       StoreKey key = keyAndContentSize.getFirst();
       keys.add(key);
       offsets.add(last);
-      keysAndSizesAndOffsets.add(new StoreKeyAndSizeAndOffset(key, last, keyAndContentSize.getSecond()));
+      chunkMetadataList.add(new ChunkMetadata(key, last, keyAndContentSize.getSecond()));
       last += keyAndContentSize.getSecond();
     }
     this.totalSize = last;
@@ -103,26 +78,29 @@ public class CompositeBlobInfo {
    * blob
    * @param start inclusive starting byte index
    * @param end inclusive ending byte index
-   * @return
+   * @return the list of {@link ChunkMetadata} that lie upon the inclusive range
+   * between 'start' and 'end'
    */
-  public List<StoreKeyAndSizeAndOffset> getStoreKeysInByteRange(long start, long end) {
+  public List<ChunkMetadata> getStoreKeysInByteRange(long start, long end) {
     if (end < start || start < 0L || end >= totalSize) {
       throw new IllegalArgumentException(
           "Bad input parameters, start=" + start + " end=" + end + " totalSize=" + totalSize);
     }
-    int idx = Collections.binarySearch(offsets, start);
+    int startIdx = Collections.binarySearch(offsets, start);
     //binarySearch returns -(insertion point) - 1 if not an exact match, which points to the index of
-    //the first element greater than the key, or list.size() if all elements in the list are
-    // less than the specified key.
-    if (idx < 0) {
-      idx = -idx - 2; //points to element with offset closest to but less than 'start'
+    //the first element greater than 'start', or list.size() if all elements in the list are
+    // less than 'start'.
+    if (startIdx < 0) {
+      startIdx = -startIdx - 2; //points to element with offset closest to but less than 'start'
     }
-    List<StoreKeyAndSizeAndOffset> ans = new ArrayList<>();
-    while (idx < keys.size() && offsets.get(idx) <= end) {
-      ans.add(keysAndSizesAndOffsets.get(idx));
-      idx++;
+
+    int endIdx = Collections.binarySearch(offsets, end);
+    if (endIdx < 0) {
+      endIdx = -endIdx - 2; //points to element with offset closest to but less than 'end'
     }
-    return ans;
+    endIdx++;//List.subList expects an exclusive index
+
+    return chunkMetadataList.subList(startIdx, endIdx);
   }
 
   /**
@@ -152,9 +130,45 @@ public class CompositeBlobInfo {
   /**
    * Get the list of keys for the composite blob's data chunks, along with the
    * key's data content size and offset relative to the total composite blob
-   * @return A list of {@link StoreKeyAndSizeAndOffset}
+   * @return A list of {@link ChunkMetadata}
    */
-  public List<StoreKeyAndSizeAndOffset> getKeysAndSizesAndOffsets() {
-    return keysAndSizesAndOffsets;
+  public List<ChunkMetadata> getChunkMetadataList() {
+    return chunkMetadataList;
+  }
+
+  /**
+   * Return the version of the metadata content record that this object was deserialized from
+   * @return
+   */
+  public short getMetadataContentVersion() {
+    return metadataContentVersion;
+  }
+
+  /**
+   * POJO class for holding a store key, the size of the data content it refers to,
+   * and the offset of the data in the larger composite blob
+   */
+  public static class ChunkMetadata {
+    private final StoreKey storeKey;
+    private final long offset;
+    private final long size;
+
+    public ChunkMetadata(StoreKey storeKey, long offset, long size) {
+      this.storeKey = storeKey;
+      this.offset = offset;
+      this.size = size;
+    }
+
+    public StoreKey getStoreKey() {
+      return storeKey;
+    }
+
+    public long getOffset() {
+      return offset;
+    }
+
+    public long getSize() {
+      return size;
+    }
   }
 }

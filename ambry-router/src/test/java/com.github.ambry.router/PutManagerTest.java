@@ -880,6 +880,7 @@ public class PutManagerTest {
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
+    properties.setProperty("router.metadata.content.version", "3");
     VerifiableProperties vProps = new VerifiableProperties(properties);
     if (testEncryption && instantiateEncryptionCast) {
       setupEncryptionCast(vProps);

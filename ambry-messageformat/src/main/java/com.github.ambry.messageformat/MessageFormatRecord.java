@@ -1512,9 +1512,10 @@ public class MessageFormatRecord {
 
     /**
      * Serialize a metadata content record.
-     * @param outputBuffer
-     * @param totalSize
-     * @param keysAndContentSizes
+     * @param outputBuffer output buffer of the serialized metadata content
+     * @param totalSize total size of the blob data content
+     * @param keysAndContentSizes list of data blob keys referenced by the metadata
+     *                            blob along with the data content sizes of each data blob
      */
     public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, long totalSize,
         List<Pair<StoreKey, Long>> keysAndContentSizes) {
@@ -1546,12 +1547,17 @@ public class MessageFormatRecord {
     public static CompositeBlobInfo deserializeMetadataContentRecord(DataInputStream stream,
         StoreKeyFactory storeKeyFactory) throws IOException {
       List<Pair<StoreKey, Long>> keysAndContentSizes = new ArrayList<>();
-      stream.readLong(); //total size
+      long totalSize = stream.readLong();
+      long sum = 0;
       int numberOfKeys = stream.readInt();
       for (int i = 0; i < numberOfKeys; i++) {
         long contentSize = stream.readLong();
         StoreKey storeKey = storeKeyFactory.getStoreKey(stream);
         keysAndContentSizes.add(new Pair<>(storeKey, contentSize));
+        sum += contentSize;
+      }
+      if (sum != totalSize) {
+        throw new IllegalArgumentException("Key content sizes do not equal total size");
       }
       return new CompositeBlobInfo(keysAndContentSizes);
     }

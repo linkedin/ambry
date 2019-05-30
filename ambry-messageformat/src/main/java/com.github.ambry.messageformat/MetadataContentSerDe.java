@@ -21,12 +21,14 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 /**
  * A class to serialize and deserialize MetadataContent which forms the content of a Metadata Blob.
  */
 public class MetadataContentSerDe {
+
   /**
    * Serialize the input list of keys that form the metadata content.
    * @param chunkSize the size of the intermediate data chunks for the object this metadata describes.

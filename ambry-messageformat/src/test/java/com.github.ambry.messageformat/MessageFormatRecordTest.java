@@ -490,9 +490,8 @@ public class MessageFormatRecordTest {
     CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV3(metadataContent, new MockIdFactory());
     Assert.assertEquals("Total size doesn't match", total, compositeBlobInfo.getTotalSize());
     Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
-    List<CompositeBlobInfo.StoreKeyAndSizeAndOffset> list = compositeBlobInfo.getKeysAndSizesAndOffsets();
-    Assert.assertEquals("StoreKeyAndSizeAndOffset and input list have different sizes", list.size(),
-        keysAndContentSizes.size());
+    List<CompositeBlobInfo.ChunkMetadata> list = compositeBlobInfo.getChunkMetadataList();
+    Assert.assertEquals("ChunkMetadata and input list have different sizes", list.size(), keysAndContentSizes.size());
     long sum = 0;
     for (int i = 0; i < list.size(); i++) {
       Assert.assertEquals(keysAndContentSizes.get(i).getFirst(), list.get(i).getStoreKey());
@@ -707,9 +706,8 @@ public class MessageFormatRecordTest {
     CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV3(metadataContent, new MockIdFactory());
     Assert.assertEquals("Total size doesn't match", total, compositeBlobInfo.getTotalSize());
     Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
-    List<CompositeBlobInfo.StoreKeyAndSizeAndOffset> list = compositeBlobInfo.getKeysAndSizesAndOffsets();
-    Assert.assertEquals("StoreKeyAndSizeAndOffset and input list have different sizes", list.size(),
-        keysAndContentSizes.size());
+    List<CompositeBlobInfo.ChunkMetadata> list = compositeBlobInfo.getChunkMetadataList();
+    Assert.assertEquals("ChunkMetadata and input list have different sizes", list.size(), keysAndContentSizes.size());
     long sum = 0;
     for (int i = 0; i < list.size(); i++) {
       Assert.assertEquals(keysAndContentSizes.get(i).getFirst(), list.get(i).getStoreKey());

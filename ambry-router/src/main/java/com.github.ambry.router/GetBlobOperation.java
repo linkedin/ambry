@@ -97,7 +97,7 @@ class GetBlobOperation extends GetOperation {
   // a byte range with defined start/end offsets that has been verified to be within the total blob size
   private ByteRange resolvedByteRange;
   // a list iterator to the chunk ids that need to be fetched for this operation, if this is a composite blob.
-  private ListIterator<CompositeBlobInfo.StoreKeyAndSizeAndOffset> chunkIdIterator;
+  private ListIterator<CompositeBlobInfo.ChunkMetadata> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
   private Map<Integer, ByteBuffer> chunkIndexToBuffer;
   // To find the GetChunk to hand over the response quickly.
@@ -503,7 +503,7 @@ class GetBlobOperation extends GetOperation {
      * @param keyAndSizeAndOffset the {@link BlobId}, data content size, and offset relative to the total blob
      *                           of the initial data chunk that this GetChunk has to fetch.
      */
-    GetChunk(int index, CompositeBlobInfo.StoreKeyAndSizeAndOffset keyAndSizeAndOffset) {
+    GetChunk(int index, CompositeBlobInfo.ChunkMetadata keyAndSizeAndOffset) {
       reset();
       initialize(index, keyAndSizeAndOffset);
     }
@@ -558,7 +558,7 @@ class GetBlobOperation extends GetOperation {
      * @param keyAndSizeAndOffset the id, data content size, and offset (relative to the total size)
      *                           of the chunk of the overall blob that needs to be fetched through this GetChunk.
      */
-    void initialize(int index, CompositeBlobInfo.StoreKeyAndSizeAndOffset keyAndSizeAndOffset) {
+    void initialize(int index, CompositeBlobInfo.ChunkMetadata keyAndSizeAndOffset) {
       chunkIndex = index;
       chunkBlobId = (BlobId) keyAndSizeAndOffset.getStoreKey();
       offset = keyAndSizeAndOffset.getOffset();
@@ -944,10 +944,10 @@ class GetBlobOperation extends GetOperation {
         buf.limit(0);
       } else {
         long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() - offset : 0;
-        long endOffsetInThisChunk =
+        long endOffsetInThisChunkExclusive =
             chunkIndex == (numChunksTotal - 1) ? resolvedByteRange.getEndOffset() - offset + 1 : chunkSize;
         buf.position((int) startOffsetInThisChunk);
-        buf.limit((int) endOffsetInThisChunk);
+        buf.limit((int) endOffsetInThisChunkExclusive);
       }
       return buf.slice();
     }
@@ -990,14 +990,14 @@ class GetBlobOperation extends GetOperation {
 
     // refers to the blob type.
     private BlobType blobType;
-    private List<CompositeBlobInfo.StoreKeyAndSizeAndOffset> keysAndSizesAndOffsets;
+    private List<CompositeBlobInfo.ChunkMetadata> keysAndSizesAndOffsets;
     private BlobProperties serverBlobProperties;
 
     /**
      * Construct a FirstGetChunk and initialize it with the {@link BlobId} of the overall operation.
      */
     FirstGetChunk() {
-      super(-1, new CompositeBlobInfo.StoreKeyAndSizeAndOffset(blobId, 0L, -1L));
+      super(-1, new CompositeBlobInfo.ChunkMetadata(blobId, 0L, -1L));
     }
 
     /**
@@ -1194,7 +1194,7 @@ class GetBlobOperation extends GetOperation {
       compositeBlobInfo =
           MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
       totalSize = compositeBlobInfo.getTotalSize();
-      keysAndSizesAndOffsets = compositeBlobInfo.getKeysAndSizesAndOffsets();
+      keysAndSizesAndOffsets = compositeBlobInfo.getChunkMetadataList();
       boolean rangeResolutionFailure = false;
       try {
         if (options.getBlobOptions.getRange() != null) {
@@ -1248,7 +1248,7 @@ class GetBlobOperation extends GetOperation {
         dataChunks = new GetChunk[Math.min(keysAndSizesAndOffsets.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
         for (int i = 0; i < dataChunks.length; i++) {
           int idx = chunkIdIterator.nextIndex();
-          CompositeBlobInfo.StoreKeyAndSizeAndOffset keyAndOffset = chunkIdIterator.next();
+          CompositeBlobInfo.ChunkMetadata keyAndOffset = chunkIdIterator.next();
           dataChunks[i] = new GetChunk(idx, keyAndOffset);
         }
       }
