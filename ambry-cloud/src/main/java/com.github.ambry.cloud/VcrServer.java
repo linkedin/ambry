@@ -174,7 +174,7 @@ public class VcrServer {
   public void shutdown() {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
-      logger.info("shutdown started");
+      logger.info("VCR shutdown started");
       if (scheduler != null) {
         shutDownExecutorService(scheduler, 5, TimeUnit.MINUTES);
       }
@@ -213,8 +213,8 @@ public class VcrServer {
     }
   }
 
-  public void awaitShutdown(int timeoutMs) throws InterruptedException {
-    shutdownLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+  public boolean awaitShutdown(int timeoutMs) throws InterruptedException {
+    return shutdownLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
   }
 
   public VirtualReplicatorCluster getVirtualReplicatorCluster() {

@@ -23,6 +23,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -73,14 +74,16 @@ public class HelixVcrClusterTest {
   @Test
   public void helixVcrClusterTest() throws Exception {
     StrictMatchExternalViewVerifier helixBalanceVerifier =
-        new StrictMatchExternalViewVerifier(ZK_CONNECT_STRING, VCR_CLUSTER_NAME, null, null);
+        new StrictMatchExternalViewVerifier(ZK_CONNECT_STRING, VCR_CLUSTER_NAME,
+            Collections.singleton(VcrTestUtil.helixResource), null);
     // Create helixInstance1 and join the cluster. All partitions should be assigned to helixInstance1.
     VirtualReplicatorCluster helixInstance1 = createHelixInstance(8123, 10123);
     List<PartitionId> expectedPartitions = mockClusterMap.getAllPartitionIds(null);
     MockVcrListener mockVcrListener = new MockVcrListener();
     helixInstance1.addListener(mockVcrListener);
     helixInstance1.participate(InstanceType.PARTICIPANT);
-    Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(2000));
+    TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() > 0, 1000);
+    Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(5000));
     Assert.assertEquals("Partition assignment are not correct.", helixInstance1.getAssignedPartitionIds(),
         expectedPartitions);
 
@@ -89,8 +92,8 @@ public class HelixVcrClusterTest {
     helixInstance2.participate(InstanceType.PARTICIPANT);
     // Detect any ideal state change first.
     TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() < expectedPartitions.size(),
-        500);
-    Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(2000));
+        1000);
+    Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(5000));
     Assert.assertEquals("Number of partitions removed are not correct.", expectedPartitions.size() / 2,
         mockVcrListener.getPartitionSet().size());
 
@@ -99,7 +102,7 @@ public class HelixVcrClusterTest {
     // Detect any ideal state change first.
     TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() > expectedPartitions.size() / 2,
         500);
-    Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(2000));
+    Assert.assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(5000));
     Assert.assertEquals("Partition assignment are not correct.", helixInstance1.getAssignedPartitionIds(),
         expectedPartitions);
 

@@ -68,6 +68,12 @@ public class HelixVcrStateModel extends StateModel {
     helixVcrCluster.removePartition(message.getPartitionName());
   }
 
+  @Transition(to = "DROPPED", from = "OFFLINE")
+  public void onBecomeDroppedFromOffline(Message message, NotificationContext context) {
+    logger.info("{} Becoming DROPPED from OFFLINE of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
+        message.getPartitionName());
+  }
+
   @Override
   public void reset() {
     // no op
