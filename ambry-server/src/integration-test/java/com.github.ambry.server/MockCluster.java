@@ -182,7 +182,7 @@ public class MockCluster {
    */
   public void stopServers() throws IOException {
     if (serverInitialized) {
-      logger.info("STOP server......");
+      logger.info("Stopping servers......");
       CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
       for (AmbryServer server : serverList) {
         new Thread(new ServerShutdown(shutdownLatch, server)).start();
