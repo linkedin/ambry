@@ -46,6 +46,7 @@ import org.apache.helix.tools.ClusterSetup;
  */
 public class VcrTestUtil {
 
+  public static String helixResource = "resource1";
   /**
    * Create a {@link VcrServer}.
    * @param properties the config properties to use.
@@ -87,16 +88,15 @@ public class VcrTestUtil {
       clusterConfig.setPersistBestPossibleAssignment(true);
       configAccessor.setClusterConfig(vcrClusterName, clusterConfig);
 
-      String resourceName = "1";
-      FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resourceName);
+      FullAutoModeISBuilder builder = new FullAutoModeISBuilder(helixResource);
       builder.setStateModel(LeaderStandbySMD.name);
       for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
         builder.add(partitionId.toPathString());
       }
       builder.setRebalanceStrategy(CrushEdRebalanceStrategy.class.getName());
       IdealState idealState = builder.build();
-      admin.addResource(vcrClusterName, resourceName, idealState);
-      admin.rebalance(vcrClusterName, resourceName, 3, "", "");
+      admin.addResource(vcrClusterName, helixResource, idealState);
+      admin.rebalance(vcrClusterName, helixResource, 3, "", "");
       HelixControllerManager helixControllerManager = new HelixControllerManager(zKConnectString, vcrClusterName);
       helixControllerManager.syncStart();
       return helixControllerManager;

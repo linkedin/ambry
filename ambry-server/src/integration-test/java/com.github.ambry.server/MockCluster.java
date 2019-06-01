@@ -44,6 +44,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import junit.framework.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.*;
 
@@ -55,6 +57,7 @@ import static org.junit.Assert.*;
  * On shutdown we ensure the servers are shutdown.
  */
 public class MockCluster {
+  private Logger logger = LoggerFactory.getLogger(getClass());
   private final MockClusterAgentsFactory mockClusterAgentsFactory;
   private final MockClusterMap clusterMap;
   private List<AmbryServer> serverList = null;
@@ -179,6 +182,7 @@ public class MockCluster {
    */
   public void stopServers() throws IOException {
     if (serverInitialized) {
+      logger.info("Stopping servers......");
       CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
       for (AmbryServer server : serverList) {
         new Thread(new ServerShutdown(shutdownLatch, server)).start();
@@ -221,6 +225,7 @@ public class MockCluster {
 }
 
 class ServerShutdown implements Runnable {
+  private Logger logger = LoggerFactory.getLogger(getClass());
   private final CountDownLatch latch;
   private final AmbryServer server;
 
@@ -232,6 +237,11 @@ class ServerShutdown implements Runnable {
   @Override
   public void run() {
     server.shutdown();
+    try {
+      server.awaitShutdown();
+    } catch (InterruptedException e) {
+      logger.warn("Server awaitShutdown is interrupted.");
+    }
     latch.countDown();
   }
 }
