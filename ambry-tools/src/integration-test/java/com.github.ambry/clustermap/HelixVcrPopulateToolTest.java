@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ public class HelixVcrPopulateToolTest {
   private static final String SRC_ZK_CONNECT_STRING = SRC_ZK_SERVER_HOSTNAME + ":" + SRC_ZK_SERVER_PORT;
   private static TestUtils.ZkInfo srcZkInfo;
   private static final String SRC_CLUSTER_NAME = "srcCluster";
+  private static HelixAdmin srcHelixAdmin;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
@@ -51,7 +52,7 @@ public class HelixVcrPopulateToolTest {
     zkClient.setZkSerializer(new ZNRecordSerializer());
     ClusterSetup clusterSetup = new ClusterSetup(zkClient);
     clusterSetup.addCluster(SRC_CLUSTER_NAME, true);
-    HelixAdmin admin = new HelixAdminFactory().getHelixAdmin(SRC_ZK_CONNECT_STRING);
+    srcHelixAdmin = new HelixAdminFactory().getHelixAdmin(SRC_ZK_CONNECT_STRING);
 
     String resourceName = "1";
     FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resourceName);
@@ -61,7 +62,7 @@ public class HelixVcrPopulateToolTest {
     }
     builder.setRebalanceStrategy(CrushRebalanceStrategy.class.getName());
     IdealState idealState = builder.build();
-    admin.addResource(SRC_CLUSTER_NAME, resourceName, idealState);
+    srcHelixAdmin.addResource(SRC_CLUSTER_NAME, resourceName, idealState);
   }
 
   @AfterClass
@@ -84,6 +85,24 @@ public class HelixVcrPopulateToolTest {
         new com.github.ambry.utils.TestUtils.ZkInfo(TestUtils.getTempDir("helixDestVcr"), "DC1", (byte) 1,
             destZkServerPort, true);
     HelixVcrPopulateTool.createCluster(destZkConnectString, destVcrClusterName);
+
+    HelixVcrPopulateTool.updateResourceAndPartition(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString,
+        destVcrClusterName, false);
+    Assert.assertTrue("Dest and Src should be same",
+        isSrcDestSync(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString, destVcrClusterName));
+
+    // add one more partition to src cluster resource 1 and add one more resource to src cluster
+    srcHelixAdmin.dropResource(SRC_CLUSTER_NAME, "1");
+    String[] resourceNames = {"1", "2"};
+    for (String resourceName : resourceNames) {
+      FullAutoModeISBuilder builder = new FullAutoModeISBuilder(resourceName);
+      builder.setStateModel(LeaderStandbySMD.name);
+      for (int i = 0; i < 101; i++) {
+        builder.add(Integer.toString(i));
+      }
+      builder.setRebalanceStrategy(CrushRebalanceStrategy.class.getName());
+      srcHelixAdmin.addResource(SRC_CLUSTER_NAME, resourceName, builder.build());
+    }
 
     HelixVcrPopulateTool.updateResourceAndPartition(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString,
         destVcrClusterName, false);

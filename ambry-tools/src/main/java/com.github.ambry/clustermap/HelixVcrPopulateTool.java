@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,10 +48,10 @@ public class HelixVcrPopulateTool {
   private static String SEPARATOR = "/";
   static List<String> ignoreResourceKeyWords = Arrays.asList("aggregation", "trigger", "stats");
 
-  public static void main(String args[]) {
+  public static void main(String[] args) {
     OptionParser parser = new OptionParser();
     OptionSpec createClusterOpt = parser.accepts("createCluster",
-        "Create resources in dest by copying from src to dest. --createCluster --dest destZkEndpoint/destClusterName");
+        "Create resources in dest cluster. --createCluster --dest destZkEndpoint/destClusterName");
     OptionSpec updateClusterOpt = parser.accepts("updateCluster",
         "Update resources in dest by copying from src to dest. --updateCluster"
             + " --src srcZkEndpoint/srcClusterName --dest destZkEndpoint/destClusterName");
@@ -77,9 +77,9 @@ public class HelixVcrPopulateTool {
     }
 
     if (options.has(updateClusterOpt)) {
-      System.out.println("Updating cluster: " + destClusterName);
       String srcZkString = options.valueOf(srcOpt).split(SEPARATOR)[0];
       String srcClusterName = options.valueOf(srcOpt).split(SEPARATOR)[1];
+      System.out.println("Updating cluster: " + destClusterName + "by checking " + srcClusterName);
       boolean dryRun = options.has(dryRunOpt);
       updateResourceAndPartition(srcZkString, srcClusterName, destZkString, destClusterName, dryRun);
     }
@@ -90,16 +90,15 @@ public class HelixVcrPopulateTool {
    * Create a helix cluster with given information.
    * @param destZkString the cluster's zk string
    * @param destClusterName the cluster's name
-   * @return false if cluster already exist, otherwise true.
    */
-  static boolean createCluster(String destZkString, String destClusterName) {
+  static void createCluster(String destZkString, String destClusterName) {
     HelixZkClient destZkClient =
         DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(destZkString));
     destZkClient.setZkSerializer(new ZNRecordSerializer());
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
     if (destAdmin.getClusters().contains(destClusterName)) {
-      System.out.println("Create cluster failed. " + destClusterName + " already exist.");
-      return false;
+      System.out.println("Failed to create cluster becuase " + destClusterName + " already exist.");
+      return;
     }
     ClusterSetup clusterSetup = new ClusterSetup(destZkString);
     clusterSetup.addCluster(destClusterName, true);
@@ -115,16 +114,18 @@ public class HelixVcrPopulateTool {
     ClusterConfig clusterConfig = configAccessor.getClusterConfig(destClusterName);
     clusterConfig.setPersistBestPossibleAssignment(true);
     configAccessor.setClusterConfig(destClusterName, clusterConfig);
-    System.out.println("Cluster " + destClusterName + " create done.");
-    return true;
+    System.out.println("Cluster " + destClusterName + " is created successfully!");
+    return;
   }
 
   /**
-   * Update dest cluster information based on src cluster. Dest cluster resource will be recreated if src cluster has any change.
+   * Update dest cluster information based on src cluster.
+   * Dest cluster resource will be recreated if it mismatches that in src cluster.
    * @param srcZkString the src cluster's zk string
    * @param srcClusterName the src cluster's name
    * @param destZkString the dest cluster's zk string
    * @param destClusterName the dest cluster's name
+   * @param dryRun run the update process but without actual change.
    */
   static void updateResourceAndPartition(String srcZkString, String srcClusterName, String destZkString,
       String destClusterName, boolean dryRun) {
@@ -144,18 +145,22 @@ public class HelixVcrPopulateTool {
         // check if every partition exist.
         Set<String> srcPartitions = srcAdmin.getResourceIdealState(srcClusterName, resource).getPartitionSet();
         Set<String> destPartitions = destAdmin.getResourceIdealState(destClusterName, resource).getPartitionSet();
-        for (String partition : srcPartitions) {
-          if (!destPartitions.contains(partition)) {
-            if (dryRun) {
-              System.out.println("DryRun: Drop Resource " + resource);
-            } else {
-              // This resource need to be recreate.
-              destAdmin.dropResource(destClusterName, resource);
-              System.out.println("Dropped Resource " + resource);
+        if (srcPartitions.size() != destPartitions.size()) {
+          createNewResource = true;
+        } else {
+          for (String partition : srcPartitions) {
+            if (!destPartitions.contains(partition)) {
               createNewResource = true;
               break;
             }
           }
+        }
+        if (dryRun) {
+          System.out.println("DryRun: Drop Resource " + resource);
+        } else {
+          // This resource need to be recreate.
+          destAdmin.dropResource(destClusterName, resource);
+          System.out.println("Dropped Resource " + resource);
         }
       } else {
         createNewResource = true;
@@ -179,7 +184,7 @@ public class HelixVcrPopulateTool {
         }
       }
     }
-    System.out.println("Cluster " + destClusterName + " update done.");
+    System.out.println("Cluster " + destClusterName + " is updated successfully!");
   }
 }
 
