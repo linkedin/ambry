@@ -127,8 +127,7 @@ public class CloudBackupManager extends ReplicationEngine {
       throw new ReplicationException("Cluster participate failed.", e);
     }
 
-    // start background persistent thread
-    // start scheduler thread to persist index in the background
+    // Schedule background thread to persist tokens
     scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
         replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
   }

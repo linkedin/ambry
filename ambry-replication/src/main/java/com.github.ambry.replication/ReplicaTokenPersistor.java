@@ -41,7 +41,7 @@ import static com.github.ambry.replication.RemoteReplicaInfo.*;
  */
 public abstract class ReplicaTokenPersistor implements Runnable {
 
-  private static final Logger logger = LoggerFactory.getLogger(DiskTokenPersistor.class);
+  private static final Logger logger = LoggerFactory.getLogger(ReplicaTokenPersistor.class);
   protected final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
   protected final ReplicationMetrics replicationMetrics;
   protected final ReplicaTokenSerde replicaTokenSerde;
@@ -118,6 +118,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
   @Override
   public void run() {
     try {
+      logger.debug("Running replica token persistence task");
       write(false);
     } catch (Exception e) {
       logger.error("Error while persisting the replica tokens {}", e);

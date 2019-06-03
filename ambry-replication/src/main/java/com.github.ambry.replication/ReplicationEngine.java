@@ -201,6 +201,7 @@ public abstract class ReplicationEngine {
    * @throws ReplicationException
    */
   public void shutdown() throws ReplicationException {
+    logger.info("Shutting down replica threads");
     try {
       // stop all replica threads
       for (Map.Entry<String, List<ReplicaThread>> replicaThreads : replicaThreadPoolByDc.entrySet()) {
@@ -383,11 +384,7 @@ public abstract class ReplicationEngine {
       // We must ensure that the the token file is persisted if any of the tokens in the file got reset. We need to do
       // this before an associated store takes any writes, to avoid the case where a store takes writes and persists it,
       // before the replica token file is persisted after the reset.
-      if (persistor != null) {
-        persistor.write(mountPath, false);
-      } else {
-        logger.warn("Unable to persist after token reset, persistor is null");
-      }
+      persistor.write(mountPath, false);
     }
   }
 

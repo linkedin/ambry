@@ -64,6 +64,10 @@ class CloudBlobStore implements Store {
   private final long minTtlMillis;
   private final boolean requireEncryption;
   private boolean started;
+  // Internal counts for put requests to this partition store since store startup (includes all replicas)
+  private long numPutsRequested = 0, numPutsDone = 0, numPutsSkipped = 0;
+  private long lastTimeLoggedCounts = System.currentTimeMillis();
+  private long logCountsInterval = 60000;
 
   /**
    * Constructor for CloudBlobStore
@@ -115,6 +119,8 @@ class CloudBlobStore implements Store {
     // Write the blobs in the message set
     CloudWriteChannel cloudWriter = new CloudWriteChannel(this, messageSetToWrite.getMessageSetInfo());
     messageSetToWrite.writeTo(cloudWriter);
+
+    logPutCountsPeriodically();
   }
 
   /**
@@ -126,6 +132,7 @@ class CloudBlobStore implements Store {
    */
   private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size)
       throws CloudStorageException, IOException, GeneralSecurityException {
+    numPutsRequested++;
     if (shouldUpload(messageInfo)) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       boolean isRouterEncrypted = isRouterEncrypted(blobId);
@@ -144,6 +151,7 @@ class CloudBlobStore implements Store {
             bufferChanged = true;
           } catch (GeneralSecurityException ex) {
             vcrMetrics.blobEncryptionErrorCount.inc();
+            throw ex;
           } finally {
             encryptionTimer.stop();
           }
@@ -160,10 +168,26 @@ class CloudBlobStore implements Store {
               messageInfo.getSize(), encryptionOrigin, kmsContext, cryptoAgentFactoryClass);
       // If buffer was encrypted, we no longer know its size
       long bufferlen = bufferChanged ? -1 : size;
-      cloudDestination.uploadBlob(blobId, bufferlen, blobMetadata, new ByteBufferInputStream(messageBuf));
+      boolean putDone =
+          cloudDestination.uploadBlob(blobId, bufferlen, blobMetadata, new ByteBufferInputStream(messageBuf));
+      numPutsDone += (putDone ? 1 : 0);
+      numPutsSkipped += (putDone ? 0 : 1);
     } else {
       logger.trace("Blob is skipped: {}", messageInfo);
       vcrMetrics.blobUploadSkippedCount.inc();
+      numPutsSkipped++;
+    }
+  }
+
+  /**
+   * Log the collected put counts on the prescribed interval.
+   */
+  private void logPutCountsPeriodically() {
+    long now = System.currentTimeMillis();
+    if (now >= lastTimeLoggedCounts + logCountsInterval) {
+      logger.debug("Put counts for partition {}: requested: {}, done: {}, skipped: {}", partitionId.toPathString(),
+          numPutsRequested, numPutsDone, numPutsSkipped);
+      lastTimeLoggedCounts = now;
     }
   }
 

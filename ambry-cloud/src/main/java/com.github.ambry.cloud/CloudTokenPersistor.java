@@ -68,7 +68,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
 
       InputStream inputStream = new ByteArrayInputStream(tokenOutputStream.toByteArray());
       cloudDestination.persistTokens(mountPath, replicaTokenFileName, inputStream);
-      logger.debug("Completed writing replica tokens to cloud destination.");
+      logger.debug("Persisted replica tokens for {} to cloud destination.", mountPath);
     } catch (CloudStorageException e) {
       throw new ReplicationException("IO error persisting replica tokens at mount path " + mountPath, e);
     }
