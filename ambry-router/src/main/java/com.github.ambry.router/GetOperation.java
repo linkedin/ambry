@@ -13,8 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Histogram;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -53,9 +51,6 @@ abstract class GetOperation {
   protected final CryptoService cryptoService;
   protected final CryptoJobHandler cryptoJobHandler;
   protected final Time time;
-  private final Histogram localColoTracker;
-  private final Histogram crossColoTracker;
-  private final Counter pastDueCounter;
   protected volatile boolean operationCompleted = false;
   protected final AtomicReference<Exception> operationException = new AtomicReference<>();
   protected GetBlobResultInternal operationResult;
@@ -73,9 +68,6 @@ abstract class GetOperation {
    * @param blobId the {@link BlobId} of the associated blob
    * @param options the {@link GetBlobOptionsInternal} associated with this operation.
    * @param getOperationCallback the callback that is to be called when the operation completes.
-   * @param localColoTracker the {@link Histogram} that tracks intra datacenter latencies for this class of requests.
-   * @param crossColoTracker the {@link Histogram} that tracks inter datacenter latencies for this class of requests.
-   * @param pastDueCounter the {@link Counter} that tracks the number of times a request is past due.
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
@@ -84,18 +76,14 @@ abstract class GetOperation {
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> getOperationCallback, Histogram localColoTracker, Histogram crossColoTracker,
-      Counter pastDueCounter, KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
-      Time time, boolean isEncrypted) {
+      Callback<GetBlobResultInternal> getOperationCallback, KeyManagementService kms, CryptoService cryptoService,
+      CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted) {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.options = options;
     this.getOperationCallback = getOperationCallback;
-    this.localColoTracker = localColoTracker;
-    this.crossColoTracker = crossColoTracker;
-    this.pastDueCounter = pastDueCounter;
     this.kms = kms;
     this.cryptoService = cryptoService;
     this.cryptoJobHandler = cryptoJobHandler;

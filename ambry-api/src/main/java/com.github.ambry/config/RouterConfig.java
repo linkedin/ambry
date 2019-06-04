@@ -16,9 +16,7 @@ package com.github.ambry.config;
 import com.github.ambry.router.OperationTrackerScope;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 
@@ -252,11 +250,11 @@ public class RouterConfig {
 
   /**
    * The metric scope that is applied to operation tracker. This config specifies at which granularity router should
-   * track the latency distribution. For example, ColoWide or PartitionLevel. The valid scope is defined in
+   * track the latency distribution. For example, Datacenter or Partition. The valid scope is defined in
    * {@link OperationTrackerScope}
    */
   @Config("router.operation.tracker.metric.scope")
-  @Default("ColoWide")
+  @Default("Datacenter")
   public final OperationTrackerScope routerOperationTrackerMetricScope;
 
   /**
@@ -344,13 +342,8 @@ public class RouterConfig {
         Utils.splitString(verifiableProperties.getString("router.operation.tracker.custom.percentiles", ""), ",");
     routerOperationTrackerCustomPercentiles =
         Collections.unmodifiableList(customPercentiles.stream().map(Double::valueOf).collect(Collectors.toList()));
-    String scopeStr = verifiableProperties.getString("router.operation.tracker.metric.scope", "ColoWide");
-    Set<String> validTrackerScopes = new HashSet<>();
-    for (OperationTrackerScope scope : OperationTrackerScope.values()) {
-      validTrackerScopes.add(scope.toString());
-    }
-    routerOperationTrackerMetricScope = validTrackerScopes.contains(scopeStr) ? OperationTrackerScope.valueOf(scopeStr)
-        : OperationTrackerScope.valueOf("ColoWide");
+    String scopeStr = verifiableProperties.getString("router.operation.tracker.metric.scope", "Datacenter");
+    routerOperationTrackerMetricScope = OperationTrackerScope.valueOf(scopeStr);
     routerOperationTrackerReservoirSize =
         verifiableProperties.getIntInRange("router.operation.tracker.reservoir.size", 1028, 0, Integer.MAX_VALUE);
     routerOperationTrackerReservoirDecayFactor =

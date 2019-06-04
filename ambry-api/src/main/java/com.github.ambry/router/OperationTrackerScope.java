@@ -14,10 +14,10 @@
 package com.github.ambry.router;
 
 /**
- * The metric scope applied to operation tracker. For now, the scope defines at which granularity the latency distribution
- * should be tracked by operation tracker (i.e. ColoWide means latencies of all requests in local datacenter would be kept
- * in a single Histogram)
+ * The metric scope adopted by operation tracker. For now, the scope defines at which granularity the latency distribution
+ * should be tracked by operation tracker (i.e. Datacenter means latencies of all requests in local datacenter would be
+ * kept in a single Histogram)
  */
 public enum OperationTrackerScope {
-  ColoWide, PartitionLevel
+  Datacenter, Partition
 }

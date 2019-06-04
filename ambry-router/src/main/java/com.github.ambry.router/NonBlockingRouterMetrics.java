@@ -165,12 +165,12 @@ public class NonBlockingRouterMetrics {
   public final Counter rawBlobGetCount;
 
   // AdaptiveOperationTracker metrics
-  public final Histogram getBlobLocalColoLatencyMs;
-  public final Histogram getBlobCrossColoLatencyMs;
+  public final Histogram getBlobLocalDcLatencyMs;
+  public final Histogram getBlobCrossDcLatencyMs;
   public final Counter getBlobPastDueCount;
 
-  public final Histogram getBlobInfoLocalColoLatencyMs;
-  public final Histogram getBlobInfoCrossColoLatencyMs;
+  public final Histogram getBlobInfoLocalDcLatencyMs;
+  public final Histogram getBlobInfoCrossDcLatencyMs;
   public final Counter getBlobInfoPastDueCount;
 
   // Workload characteristics
@@ -183,11 +183,11 @@ public class NonBlockingRouterMetrics {
   public final CryptoJobMetrics decryptJobMetrics;
 
   // Partition-level Histogram for operation tracker
-  Map<PartitionId, Histogram> getBlobLocalColoPartitionToLatency;
-  Map<PartitionId, Histogram> getBlobCrossColoPartitionToLatency;
+  Map<PartitionId, Histogram> getBlobLocalDcPartitionToLatency;
+  Map<PartitionId, Histogram> getBlobCrossDcPartitionToLatency;
 
-  Map<PartitionId, Histogram> getBlobInfoLocalColoPartitionToLatency;
-  Map<PartitionId, Histogram> getBlobInfoCrossColoPartitionToLatency;
+  Map<PartitionId, Histogram> getBlobInfoLocalDcPartitionToLatency;
+  Map<PartitionId, Histogram> getBlobInfoCrossDcPartitionToLatency;
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -396,16 +396,16 @@ public class NonBlockingRouterMetrics {
     }
 
     // AdaptiveOperationTracker trackers
-    getBlobLocalColoLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "LocalColoLatencyMs"));
-    getBlobCrossColoLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "CrossColoLatencyMs"));
+    getBlobLocalDcLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "LocalDcLatencyMs"));
+    getBlobCrossDcLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "CrossDcLatencyMs"));
     getBlobPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "PastDueCount"));
 
-    getBlobInfoLocalColoLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "LocalColoLatencyMs"));
-    getBlobInfoCrossColoLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossColoLatencyMs"));
+    getBlobInfoLocalDcLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "LocalDcLatencyMs"));
+    getBlobInfoCrossDcLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossDcLatencyMs"));
     getBlobInfoPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "PastDueCount"));
 
     // Workload
@@ -419,18 +419,17 @@ public class NonBlockingRouterMetrics {
 
     // Custom percentiles
     if (routerConfig != null) {
-      registerCustomPercentiles(GetBlobOperation.class, "LocalColoLatencyMs", getBlobLocalColoLatencyMs,
+      registerCustomPercentiles(GetBlobOperation.class, "LocalDcLatencyMs", getBlobLocalDcLatencyMs,
           routerConfig.routerOperationTrackerCustomPercentiles);
-      registerCustomPercentiles(GetBlobOperation.class, "CrossColoLatencyMs", getBlobCrossColoLatencyMs,
+      registerCustomPercentiles(GetBlobOperation.class, "CrossDcLatencyMs", getBlobCrossDcLatencyMs,
           routerConfig.routerOperationTrackerCustomPercentiles);
-      registerCustomPercentiles(GetBlobInfoOperation.class, "LocalColoLatencyMs", getBlobInfoLocalColoLatencyMs,
+      registerCustomPercentiles(GetBlobInfoOperation.class, "LocalDcLatencyMs", getBlobInfoLocalDcLatencyMs,
           routerConfig.routerOperationTrackerCustomPercentiles);
-      registerCustomPercentiles(GetBlobInfoOperation.class, "CrossColoLatencyMs", getBlobInfoCrossColoLatencyMs,
+      registerCustomPercentiles(GetBlobInfoOperation.class, "CrossDcLatencyMs", getBlobInfoCrossDcLatencyMs,
           routerConfig.routerOperationTrackerCustomPercentiles);
     }
 
-    if (routerConfig != null
-        && routerConfig.routerOperationTrackerMetricScope == OperationTrackerScope.PartitionLevel) {
+    if (routerConfig != null && routerConfig.routerOperationTrackerMetricScope == OperationTrackerScope.Partition) {
       // pre-populate all partition-to-histogram maps here to allow lock-free hashmap in adaptive operation tracker
       initializePartitionToHistogramMap(clusterMap, routerConfig);
     }
@@ -444,15 +443,15 @@ public class NonBlockingRouterMetrics {
   private void initializePartitionToHistogramMap(ClusterMap clusterMap, RouterConfig routerConfig) {
     int reservoirSize = routerConfig.routerOperationTrackerReservoirSize;
     double decayFactor = routerConfig.routerOperationTrackerReservoirDecayFactor;
-    getBlobLocalColoPartitionToLatency = new HashMap<>();
-    getBlobInfoLocalColoPartitionToLatency = new HashMap<>();
-    getBlobCrossColoPartitionToLatency = new HashMap<>();
-    getBlobInfoCrossColoPartitionToLatency = new HashMap<>();
+    getBlobLocalDcPartitionToLatency = new HashMap<>();
+    getBlobInfoLocalDcPartitionToLatency = new HashMap<>();
+    getBlobCrossDcPartitionToLatency = new HashMap<>();
+    getBlobInfoCrossDcPartitionToLatency = new HashMap<>();
     for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
-      getBlobLocalColoPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
-      getBlobInfoLocalColoPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
-      getBlobCrossColoPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
-      getBlobInfoCrossColoPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+      getBlobLocalDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+      getBlobInfoLocalDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+      getBlobCrossDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+      getBlobInfoCrossDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
     }
   }
 

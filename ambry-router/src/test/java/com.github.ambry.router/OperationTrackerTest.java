@@ -13,9 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -78,10 +75,6 @@ public class OperationTrackerTest {
 
   // for AdaptiveOperationTracker
   private final Time time = new MockTime();
-  private final MetricRegistry registry = new MetricRegistry();
-  private final Histogram localColoTracker = registry.histogram("LocalColoTracker");
-  private final Histogram crossColoTracker = registry.histogram("CrossColoTracker");
-  private final Counter pastDueCounter = registry.counter("PastDueCounter");
 
   /**
    * Running for both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}

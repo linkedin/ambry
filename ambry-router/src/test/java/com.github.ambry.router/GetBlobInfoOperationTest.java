@@ -303,9 +303,9 @@ public class GetBlobInfoOperationTest {
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
     Assert.assertEquals("Timed-out response shouldn't be counted into local colo latency histogram", 0,
-        tracker.getLatencyHistogram(localReplica, routerConfig).getCount());
+        tracker.getLatencyHistogram(localReplica).getCount());
     Assert.assertEquals("Timed-out response shouldn't be counted into cross colo latency histogram", 0,
-        tracker.getLatencyHistogram(remoteReplica, routerConfig).getCount());
+        tracker.getLatencyHistogram(remoteReplica).getCount());
   }
 
   /**
@@ -347,10 +347,10 @@ public class GetBlobInfoOperationTest {
     // error code should be OperationTimedOut because it precedes BlobDoesNotExist
     Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
     Assert.assertEquals("The number of data points in local colo latency histogram is not expected", 0,
-        tracker.getLatencyHistogram(localReplica, routerConfig).getCount());
+        tracker.getLatencyHistogram(localReplica).getCount());
     // the count of data points in Histogram should be 5 because 9(total replicas) - 4(# of timed out request) = 5
     Assert.assertEquals("The number of data points in cross colo latency histogram is not expected", 5,
-        tracker.getLatencyHistogram(remoteReplica, routerConfig).getCount());
+        tracker.getLatencyHistogram(remoteReplica).getCount());
   }
 
   /**

@@ -104,11 +104,11 @@ public class AdaptiveOperationTrackerTest {
     props.setProperty("router.datacenter.name", localDcName);
     defaultRouterConfig = new RouterConfig(new VerifiableProperties(props));
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, defaultRouterConfig);
-    localColoTracker = routerMetrics.getBlobLocalColoLatencyMs;
-    crossColoTracker = routerMetrics.getBlobCrossColoLatencyMs;
+    localColoTracker = routerMetrics.getBlobLocalDcLatencyMs;
+    crossColoTracker = routerMetrics.getBlobCrossDcLatencyMs;
     pastDueCounter = routerMetrics.getBlobPastDueCount;
     MIN_DATA_POINTS_REQUIRED = defaultRouterConfig.routerOperationTrackerMinDataPointsRequired;
-    trackerScope = OperationTrackerScope.ColoWide;
+    trackerScope = OperationTrackerScope.Datacenter;
   }
 
   /**
@@ -177,13 +177,13 @@ public class AdaptiveOperationTrackerTest {
     }
     MockClusterMap clusterMap =
         new MockClusterMap(false, datanodes, 3, Arrays.asList(mockPartition1, mockPartition2), localDcName);
-    trackerScope = OperationTrackerScope.PartitionLevel;
+    trackerScope = OperationTrackerScope.Partition;
     RouterConfig routerConfig = createRouterConfig(true, 2, 1, null);
     NonBlockingRouterMetrics originalMetrics = routerMetrics;
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     Counter pastDueCount = routerMetrics.getBlobPastDueCount;
-    Map<PartitionId, Histogram> localColoMap = routerMetrics.getBlobLocalColoPartitionToLatency;
-    Map<PartitionId, Histogram> crossColoMap = routerMetrics.getBlobCrossColoPartitionToLatency;
+    Map<PartitionId, Histogram> localColoMap = routerMetrics.getBlobLocalDcPartitionToLatency;
+    Map<PartitionId, Histogram> crossColoMap = routerMetrics.getBlobCrossDcPartitionToLatency;
     // mock different distribution of Histogram for two partitions
     Histogram localHistogram1 = localColoMap.get(mockPartition1);
     Histogram localHistogram2 = localColoMap.get(mockPartition2);
@@ -244,12 +244,12 @@ public class AdaptiveOperationTrackerTest {
     // The number of data points in local colo histogram should be 5 (3 from partition1, 2 from partition2). Note that,
     // 3rd request of partition2 timed out which shouldn't be added to histogram.
     assertEquals("Mismatch in number of data points in local colo histogram", 5,
-        routerMetrics.getBlobLocalColoLatencyMs.getCount());
+        routerMetrics.getBlobLocalDcLatencyMs.getCount());
     // The number of data points in cross colo histogram should be 2 (both of them come from partition1)
     assertEquals("Mismatch in number of data points in cross colo histogram", 2,
-        routerMetrics.getBlobCrossColoLatencyMs.getCount());
+        routerMetrics.getBlobCrossDcLatencyMs.getCount());
     // restore the tracer scope and routerMetrics
-    trackerScope = OperationTrackerScope.ColoWide;
+    trackerScope = OperationTrackerScope.Datacenter;
     routerMetrics = originalMetrics;
   }
 
@@ -384,8 +384,7 @@ public class AdaptiveOperationTrackerTest {
   }
 
   /**
-   * Test that even thought metric scope in router config is invalid, the operation tracker still can default colo-wide
-   * histogram to track latency of requests.
+   * Test that if metric scope in router config is invalid, the {@link IllegalArgumentException} is thrown explicitly.
    */
   @Test
   public void invalidOperationTrackerScopeTest() {
@@ -395,28 +394,35 @@ public class AdaptiveOperationTrackerTest {
     props.setProperty("router.operation.tracker.metric.scope", "Invalid Scope");
     props.setProperty("router.get.success.target", Integer.toString(1));
     props.setProperty("router.get.request.parallelism", Integer.toString(1));
-    RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
+    RouterConfig routerConfig = null;
+    try {
+      routerConfig = new RouterConfig(new VerifiableProperties(props));
+    } catch (IllegalArgumentException e) {
+      //exception is expected and set valid metric scope to instantiate routerConfig for subsequent test.
+      props.setProperty("router.operation.tracker.metric.scope", "Datacenter");
+      routerConfig = new RouterConfig(new VerifiableProperties(props));
+    }
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     AdaptiveOperationTracker tracker =
         new AdaptiveOperationTracker(routerConfig, routerMetrics, RouterOperation.GetBlobInfoOperation, mockPartition,
             null, time);
-    // test that operation tracker works correctly with default ColoWide scope
+    // test that operation tracker works correctly with default Datacenter scope
     sendRequests(tracker, 1);
     assertFalse("Operation should not be done", tracker.isDone());
     tracker.onResponse(partitionAndInflightReplicas.get(mockPartition).poll(), TrackedRequestFinalState.SUCCESS);
     assertTrue("Operation should have succeeded", tracker.hasSucceeded());
-    // test that no PartitionLevel metrics have been instantiated.
-    assertNull("PartitionLevel histogram in RouterMetrics should be null",
-        routerMetrics.getBlobInfoLocalColoPartitionToLatency);
-    assertNull("PartitionLevel histogram in RouterMetrics should be null",
-        routerMetrics.getBlobInfoCrossColoPartitionToLatency);
-    assertNull("PartitionLevel histogram in OperationTracker should be null",
-        tracker.getPartitionToLatencyMap(routerMetrics, RouterOperation.GetBlobInfoOperation, true));
-    assertNull("PartitionLevel histogram in OperationTracker should be null",
-        tracker.getPartitionToLatencyMap(routerMetrics, RouterOperation.GetBlobInfoOperation, false));
+    // test that no Partition metrics have been instantiated.
+    assertNull("Partition histogram in RouterMetrics should be null",
+        routerMetrics.getBlobInfoLocalDcPartitionToLatency);
+    assertNull("Partition histogram in RouterMetrics should be null",
+        routerMetrics.getBlobInfoCrossDcPartitionToLatency);
+    assertNull("Partition histogram in OperationTracker should be null",
+        tracker.getPartitionToLatencyMap(RouterOperation.GetBlobInfoOperation, true));
+    assertNull("Partition histogram in OperationTracker should be null",
+        tracker.getPartitionToLatencyMap(RouterOperation.GetBlobInfoOperation, false));
     // extra test: invalid router operation
     try {
-      tracker.getPartitionToLatencyMap(routerMetrics, RouterOperation.PutOperation, true);
+      tracker.getPartitionToLatencyMap(RouterOperation.PutOperation, true);
       fail("should fail due to invalid router operation");
     } catch (IllegalArgumentException e) {
       //expected
