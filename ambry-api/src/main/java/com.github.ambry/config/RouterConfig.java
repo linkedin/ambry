@@ -13,6 +13,7 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.router.OperationTrackerScope;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.List;
@@ -248,6 +249,39 @@ public class RouterConfig {
   public final List<Double> routerOperationTrackerCustomPercentiles;
 
   /**
+   * The metric scope that is applied to operation tracker. This config specifies at which granularity router should
+   * track the latency distribution. For example, Datacenter or Partition. The valid scope is defined in
+   * {@link OperationTrackerScope}
+   */
+  @Config("router.operation.tracker.metric.scope")
+  @Default("Datacenter")
+  public final OperationTrackerScope routerOperationTrackerMetricScope;
+
+  /**
+   * The maximum size of histogram reservoir in operation tracker. This configs specifies the max number of data points
+   * that can be kept by histogram reservoir.
+   */
+  @Config("router.operation.tracker.reservoir.size")
+  @Default("1028")
+  public final int routerOperationTrackerReservoirSize;
+
+  /**
+   * The decay factor of histogram reservoir in operation tracker. This config specifies how biased histogram should be
+   * on new data.
+   */
+  @Config("router.operation.tracker.reservoir.decay.factor")
+  @Default("0.015")
+  public final double routerOperationTrackerReservoirDecayFactor;
+
+  /**
+   * The minimum required data points to populate histogram in operation tracker. If number of data points is less than
+   * this threshold, the tracker ignores statistics from histogram.
+   */
+  @Config("router.operation.tracker.min.data.points.required")
+  @Default("1000")
+  public final long routerOperationTrackerMinDataPointsRequired;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -308,5 +342,13 @@ public class RouterConfig {
         Utils.splitString(verifiableProperties.getString("router.operation.tracker.custom.percentiles", ""), ",");
     routerOperationTrackerCustomPercentiles =
         Collections.unmodifiableList(customPercentiles.stream().map(Double::valueOf).collect(Collectors.toList()));
+    String scopeStr = verifiableProperties.getString("router.operation.tracker.metric.scope", "Datacenter");
+    routerOperationTrackerMetricScope = OperationTrackerScope.valueOf(scopeStr);
+    routerOperationTrackerReservoirSize =
+        verifiableProperties.getIntInRange("router.operation.tracker.reservoir.size", 1028, 0, Integer.MAX_VALUE);
+    routerOperationTrackerReservoirDecayFactor =
+        verifiableProperties.getDouble("router.operation.tracker.reservoir.decay.factor", 0.015);
+    routerOperationTrackerMinDataPointsRequired =
+        verifiableProperties.getLong("router.operation.tracker.min.data.points.required", 1000L);
   }
 }
