@@ -943,8 +943,9 @@ class GetBlobOperation extends GetOperation {
         buf.position(0);
         buf.limit(0);
       } else {
-        long startOffsetInThisChunk = Math.max(resolvedByteRange.getStartOffset() - offset, 0);
-        long endOffsetInThisChunkExclusive = Math.min(resolvedByteRange.getEndOffset() - offset + 1, chunkSize);
+        long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() - offset : 0;
+        long endOffsetInThisChunkExclusive =
+            chunkIndex == (numChunksTotal - 1) ? resolvedByteRange.getEndOffset() - offset + 1 : chunkSize;
         buf.position((int) startOffsetInThisChunk);
         buf.limit((int) endOffsetInThisChunkExclusive);
       }
