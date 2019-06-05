@@ -107,7 +107,7 @@ public class HelixVcrPopulateTool {
     }
 
     if (options.has(maintenanceOpt)) {
-      boolean maintenanceMode = options.valueOf(maintenanceOpt);
+      boolean maintenanceMode = options.valueOf(enableOpt);
       maintainCluster(destZkString, destClusterName, maintenanceMode);
       System.out.println("Cluster " + destClusterName + " maintenance mode: " + maintenanceMode);
     }
