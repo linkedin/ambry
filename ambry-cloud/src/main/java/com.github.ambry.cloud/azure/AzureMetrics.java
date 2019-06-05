@@ -42,8 +42,8 @@ public class AzureMetrics {
   public static final String BLOB_DELETION_TIME = "BlobDeletionTime";
   public static final String BLOB_DELETE_ERROR_COUNT = "BlobDeleteErrorCount";
   public static final String CONFIG_ERROR_COUNT = "ConfigErrorCount";
-  public static final String BLOB_UPLOAD_TOTAL_BYTE_RATE = "BlobUploadTotalByteRate";
-  public static final String BLOB_UPLOAD_TOTAL_LATENCY = "BlobUploadTotalLatency";
+  public static final String BLOB_UPLOAD_SUCCESS_BYTE_RATE = "BlobUploadSuccessByteRate";
+  public static final String BLOB_UPLOAD_SUCCESS_LATENCY = "BlobUploadSuccessLatency";
 
   // Metrics
   public final Counter blobUploadRequestCount;
@@ -65,8 +65,8 @@ public class AzureMetrics {
   public final Timer blobDeletionTime;
   public final Counter blobDeleteErrorCount;
   public final Counter configErrorCount;
-  public final Meter blobUploadTotalByteRate;
-  public final Histogram blobUploadTotalLatency;
+  public final Meter blobUploadSuccessByteRate;
+  public final Histogram blobUploadSuccessLatency;
 
   public AzureMetrics(MetricRegistry registry) {
     blobUploadRequestCount =
@@ -92,9 +92,9 @@ public class AzureMetrics {
     blobDeletionTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_DELETION_TIME));
     blobDeleteErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DELETE_ERROR_COUNT));
     configErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, CONFIG_ERROR_COUNT));
-    blobUploadTotalByteRate =
-        registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_TOTAL_BYTE_RATE));
-    blobUploadTotalLatency =
-        registry.histogram(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_TOTAL_LATENCY));
+    blobUploadSuccessByteRate =
+        registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_SUCCESS_BYTE_RATE));
+    blobUploadSuccessLatency =
+        registry.histogram(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_SUCCESS_LATENCY));
   }
 }

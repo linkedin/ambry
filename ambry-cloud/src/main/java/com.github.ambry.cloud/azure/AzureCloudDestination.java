@@ -207,8 +207,8 @@ class AzureCloudDestination implements CloudDestination {
         docTimer.stop();
       }
       azureMetrics.blobUploadSuccessCount.inc();
-      azureMetrics.blobUploadTotalLatency.update(SystemTime.getInstance().milliseconds() - uploadStartTime);
-      azureMetrics.blobUploadTotalByteRate.mark(inputLength);
+      azureMetrics.blobUploadSuccessLatency.update(SystemTime.getInstance().milliseconds() - uploadStartTime);
+      azureMetrics.blobUploadSuccessByteRate.mark(inputLength);
       return true;
     } catch (URISyntaxException | StorageException | DocumentClientException | IOException e) {
       azureMetrics.blobUploadErrorCount.inc();
