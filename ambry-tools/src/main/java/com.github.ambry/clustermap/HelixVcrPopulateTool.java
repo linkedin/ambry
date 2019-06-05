@@ -47,27 +47,42 @@ public class HelixVcrPopulateTool {
 
   private static String SEPARATOR = "/";
   static List<String> ignoreResourceKeyWords = Arrays.asList("aggregation", "trigger", "stats");
+  private static int replicaNumber = 3;
 
   public static void main(String[] args) {
     OptionParser parser = new OptionParser();
     OptionSpec createClusterOpt = parser.accepts("createCluster",
-        "Create resources in dest cluster. --createCluster --dest destZkEndpoint/destClusterName");
+        "Create cluster in dest zk(no resource creation). --createCluster --dest destZkEndpoint/destClusterName");
+
     OptionSpec updateClusterOpt = parser.accepts("updateCluster",
         "Update resources in dest by copying from src to dest. --updateCluster"
             + " --src srcZkEndpoint/srcClusterName --dest destZkEndpoint/destClusterName");
     OptionSpec dryRunOpt = parser.accepts("dryRun", "Do dry run.");
 
+    OptionSpec controlResourceOpt = parser.accepts("controlResource",
+        "Enable/Disable a resource. --controlResource --dest destZkEndpoint/destClusterName --resource resource --enable true");
+    ArgumentAcceptingOptionSpec<String> resourceOpt =
+        parser.accepts("resource").withRequiredArg().describedAs("resource name").ofType(String.class);
+
+    ArgumentAcceptingOptionSpec<Boolean> maintenanceOpt = parser.accepts("maintainCluster",
+        "Enter/Exit helix maintenance mode. --maintainCluster --dest destZkEndpoint/destClusterName --enable true")
+        .withRequiredArg()
+        .ofType(Boolean.class);
+
+    // Some shared options.
     ArgumentAcceptingOptionSpec<String> srcOpt =
         parser.accepts("src").withRequiredArg().describedAs("src zk and cluster name").ofType(String.class);
     ArgumentAcceptingOptionSpec<String> destOpt =
         parser.accepts("dest").withRequiredArg().describedAs("dest zk and cluster name").ofType(String.class);
+    ArgumentAcceptingOptionSpec<Boolean> enableOpt =
+        parser.accepts("enable").withRequiredArg().describedAs("enable/disable").ofType(Boolean.class);
 
     OptionSet options = parser.parse(args);
 
     String destZkString = options.valueOf(destOpt).split(SEPARATOR)[0];
     String destClusterName = options.valueOf(destOpt).split(SEPARATOR)[1];
     if (!destClusterName.contains("VCR")) {
-      System.out.println("dest should be a VCR cluster.(VCR string should be included)");
+      System.err.println("dest should be a VCR cluster.(VCR string should be included)");
       return;
     }
 
@@ -83,6 +98,19 @@ public class HelixVcrPopulateTool {
       boolean dryRun = options.has(dryRunOpt);
       updateResourceAndPartition(srcZkString, srcClusterName, destZkString, destClusterName, dryRun);
     }
+
+    if (options.has(controlResourceOpt)) {
+      String resourceName = options.valueOf(resourceOpt);
+      Boolean enable = options.valueOf(enableOpt);
+      controlResource(destZkString, destClusterName, resourceName, enable);
+      System.out.println("Resource " + resourceName + " status: " + enable);
+    }
+
+    if (options.has(maintenanceOpt)) {
+      boolean maintenanceMode = options.valueOf(enableOpt);
+      maintainCluster(destZkString, destClusterName, maintenanceMode);
+      System.out.println("Cluster " + destClusterName + " maintenance mode: " + maintenanceMode);
+    }
     System.out.println("Done.");
   }
 
@@ -97,7 +125,7 @@ public class HelixVcrPopulateTool {
     destZkClient.setZkSerializer(new ZNRecordSerializer());
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
     if (destAdmin.getClusters().contains(destClusterName)) {
-      System.out.println("Failed to create cluster becuase " + destClusterName + " already exist.");
+      System.err.println("Failed to create cluster becuase " + destClusterName + " already exist.");
       return;
     }
     ClusterSetup clusterSetup = new ClusterSetup(destZkString);
@@ -141,23 +169,26 @@ public class HelixVcrPopulateTool {
         continue;
       }
       boolean createNewResource = false;
+      boolean dropResource = false;
       if (destResources.contains(resource)) {
         // check if every partition exist.
         Set<String> srcPartitions = srcAdmin.getResourceIdealState(srcClusterName, resource).getPartitionSet();
         Set<String> destPartitions = destAdmin.getResourceIdealState(destClusterName, resource).getPartitionSet();
         if (srcPartitions.size() != destPartitions.size()) {
+          dropResource = true;
           createNewResource = true;
         } else {
           for (String partition : srcPartitions) {
             if (!destPartitions.contains(partition)) {
+              dropResource = true;
               createNewResource = true;
               break;
             }
           }
         }
-        if (dryRun) {
+        if (dropResource && dryRun) {
           System.out.println("DryRun: Drop Resource " + resource);
-        } else {
+        } else if (dropResource) {
           // This resource need to be recreate.
           destAdmin.dropResource(destClusterName, resource);
           System.out.println("Dropped Resource " + resource);
@@ -179,12 +210,43 @@ public class HelixVcrPopulateTool {
           System.out.println("DryRun: Add Resource " + resource + " with partition " + srcPartitions);
         } else {
           destAdmin.addResource(destClusterName, resource, idealState);
-          destAdmin.rebalance(destClusterName, resource, 3, "", "");
+          destAdmin.rebalance(destClusterName, resource, replicaNumber, "", "");
           System.out.println("Added Resource " + resource + " with partition " + srcPartitions);
         }
       }
     }
     System.out.println("Cluster " + destClusterName + " is updated successfully!");
+  }
+
+  /**
+   * Enable or disable a resource in dest cluster.
+   * @param destZkString the cluster's zk string
+   * @param destClusterName the cluster's name
+   * @param resourceName the resource to enable/disable
+   * @param enable enable the resource if true
+   */
+  static void controlResource(String destZkString, String destClusterName, String resourceName, boolean enable) {
+    HelixZkClient destZkClient =
+        DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(destZkString));
+    destZkClient.setZkSerializer(new ZNRecordSerializer());
+    HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
+    destAdmin.enableResource(destClusterName, resourceName, enable);
+    return;
+  }
+
+  /**
+   * Enable or disable maintenance mode for a cluster.
+   * @param destZkString the cluster's zk string
+   * @param destClusterName the cluster's name
+   * @param enable enter maintenance mode if true
+   */
+  static void maintainCluster(String destZkString, String destClusterName, boolean enable) {
+    HelixZkClient destZkClient =
+        DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(destZkString));
+    destZkClient.setZkSerializer(new ZNRecordSerializer());
+    HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
+    destAdmin.enableMaintenanceMode(destClusterName, enable);
+    return;
   }
 }
 
