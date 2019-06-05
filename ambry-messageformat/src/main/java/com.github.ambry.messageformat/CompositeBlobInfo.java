@@ -19,6 +19,7 @@ import com.github.ambry.utils.Pair;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 
 /**
@@ -170,5 +171,21 @@ public class CompositeBlobInfo {
     public long getSize() {
       return size;
     }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that instanceof ChunkMetadata) {
+        ChunkMetadata thatCM = (ChunkMetadata) that;
+        return storeKey.equals(thatCM.storeKey) && offset == thatCM.offset && size == thatCM.size;
+      }
+      return false;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(storeKey, offset, size);
+    }
   }
+
+
 }
