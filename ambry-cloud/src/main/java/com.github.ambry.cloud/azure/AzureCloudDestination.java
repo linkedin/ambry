@@ -195,6 +195,7 @@ class AzureCloudDestination implements CloudDestination {
     azureMetrics.blobUploadRequestCount.inc();
     try {
       long uploadStartTime = SystemTime.getInstance().milliseconds();
+      cloudBlobMetadata.setCloudBlobName(getAzureBlobName(blobId));
       boolean uploaded = uploadIfNotExists(blobId, inputLength, cloudBlobMetadata, blobInputStream);
       if (!uploaded) {
         return false;
@@ -443,10 +444,9 @@ class AzureCloudDestination implements CloudDestination {
    * @param blobId The {@link BlobId} to store.
    * @return An Azure-friendly blob name.
    */
-  private String getAzureBlobName(BlobId blobId) {
-    // Prefix to assist in blob data sharding, since beginning of blobId has little variation.
-    String prefix = blobId.getUuid().substring(0, 4) + "-";
-    return prefix + blobId.getID();
+  String getAzureBlobName(BlobId blobId) {
+    // Reverse to assist in blob data sharding, since beginning of blobId has little variation.
+    return new StringBuilder(blobId.getID()).reverse().toString();
   }
 
   /**

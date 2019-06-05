@@ -44,6 +44,7 @@ public class CloudBlobMetadata {
   private EncryptionOrigin encryptionOrigin;
   private String vcrKmsContext;
   private String cryptoAgentFactory;
+  private String cloudBlobName;
 
   /**
    * Possible values of encryption origin for cloud stored blobs.
@@ -57,7 +58,6 @@ public class CloudBlobMetadata {
     ROUTER,
     /** Encrypted by VCR */
     VCR
-
   }
 
   /**
@@ -91,6 +91,7 @@ public class CloudBlobMetadata {
     this.encryptionOrigin = encryptionOrigin;
     this.vcrKmsContext = vcrKmsContext;
     this.cryptoAgentFactory = cryptoAgentFactory;
+    this.cloudBlobName = blobId.getID();
   }
 
   /**
@@ -273,6 +274,23 @@ public class CloudBlobMetadata {
    */
   public CloudBlobMetadata setVcrKmsContext(String vcrKmsContext) {
     this.vcrKmsContext = vcrKmsContext;
+    return this;
+  }
+
+  /**
+   * @return the blob's name in cloud.
+   */
+  public String getCloudBlobName() {
+    return cloudBlobName;
+  }
+
+  /**
+   * Sets blob's name in cloud.
+   * @param cloudBlobName the blob's name in cloud.
+   * @return this instance.
+   */
+  public CloudBlobMetadata setCloudBlobName(String cloudBlobName) {
+    this.cloudBlobName = cloudBlobName;
     return this;
   }
 
