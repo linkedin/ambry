@@ -19,6 +19,7 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.utils.SystemTime;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.Document;
@@ -191,9 +192,9 @@ class AzureCloudDestination implements CloudDestination {
 
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     Objects.requireNonNull(blobInputStream, "Input stream cannot be null");
-    azureMetrics.blobUploadRate.mark();
     azureMetrics.blobUploadRequestCount.inc();
     try {
+      long uploadStartTime = SystemTime.getInstance().milliseconds();
       boolean uploaded = uploadIfNotExists(blobId, inputLength, cloudBlobMetadata, blobInputStream);
       if (!uploaded) {
         return false;
@@ -206,6 +207,8 @@ class AzureCloudDestination implements CloudDestination {
         docTimer.stop();
       }
       azureMetrics.blobUploadSuccessCount.inc();
+      azureMetrics.blobUploadTotalLatency.update(SystemTime.getInstance().milliseconds() - uploadStartTime);
+      azureMetrics.blobUploadTotalByteRate.mark(inputLength);
       return true;
     } catch (URISyntaxException | StorageException | DocumentClientException | IOException e) {
       azureMetrics.blobUploadErrorCount.inc();
@@ -399,7 +402,8 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream) throws CloudStorageException {
+  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream)
+      throws CloudStorageException {
     // Path is partitionId path string
     // Write to container partitionPath, blob filename "replicaTokens"
     try {
@@ -413,7 +417,8 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream) throws CloudStorageException {
+  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream)
+      throws CloudStorageException {
     try {
       String containerName = getAzureContainerName(partitionPath);
       CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);

@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
@@ -41,7 +42,8 @@ public class AzureMetrics {
   public static final String BLOB_DELETION_TIME = "BlobDeletionTime";
   public static final String BLOB_DELETE_ERROR_COUNT = "BlobDeleteErrorCount";
   public static final String CONFIG_ERROR_COUNT = "ConfigErrorCount";
-  public static final String BLOB_UPLOAD_RATE = "BlobUploadRate";
+  public static final String BLOB_UPLOAD_TOTAL_BYTE_RATE = "BlobUploadTotalByteRate";
+  public static final String BLOB_UPLOAD_TOTAL_LATENCY = "BlobUploadTotalLatency";
 
   // Metrics
   public final Counter blobUploadRequestCount;
@@ -63,7 +65,8 @@ public class AzureMetrics {
   public final Timer blobDeletionTime;
   public final Counter blobDeleteErrorCount;
   public final Counter configErrorCount;
-  public final Meter blobUploadRate;
+  public final Meter blobUploadTotalByteRate;
+  public final Histogram blobUploadTotalLatency;
 
   public AzureMetrics(MetricRegistry registry) {
     blobUploadRequestCount =
@@ -89,6 +92,9 @@ public class AzureMetrics {
     blobDeletionTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_DELETION_TIME));
     blobDeleteErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DELETE_ERROR_COUNT));
     configErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, CONFIG_ERROR_COUNT));
-    blobUploadRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_RATE));
+    blobUploadTotalByteRate =
+        registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_TOTAL_BYTE_RATE));
+    blobUploadTotalLatency =
+        registry.histogram(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_TOTAL_LATENCY));
   }
 }
