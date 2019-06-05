@@ -80,10 +80,10 @@ public class ConnectionTrackerTest {
 
     boolean done = false;
     do {
-      String connId = connectionTracker.checkOutConnection("host1", port1);
-      if (connId == null && connectionTracker.mayCreateNewConnection("host1", port1)) {
+      String connId = connectionTracker.checkOutConnection("host1", port1, null);
+      if (connId == null && connectionTracker.mayCreateNewConnection("host1", port1, null)) {
         connId = mockNewConnection("host1", port1);
-        connectionTracker.startTrackingInitiatedConnection("host1", port1, connId);
+        connectionTracker.startTrackingInitiatedConnection("host1", port1, connId, null);
       } else {
         done = true;
       }
@@ -95,10 +95,10 @@ public class ConnectionTrackerTest {
     Port port2 = new Port(200, PortType.SSL);
     done = false;
     do {
-      String connId = connectionTracker.checkOutConnection("host2", port2);
-      if (connId == null && connectionTracker.mayCreateNewConnection("host2", port2)) {
+      String connId = connectionTracker.checkOutConnection("host2", port2, null);
+      if (connId == null && connectionTracker.mayCreateNewConnection("host2", port2, null)) {
         connId = mockNewConnection("host2", port2);
-        connectionTracker.startTrackingInitiatedConnection("host2", port2, connId);
+        connectionTracker.startTrackingInitiatedConnection("host2", port2, connId, null);
       } else {
         done = true;
       }
@@ -114,7 +114,7 @@ public class ConnectionTrackerTest {
     }
     assertCounts(totalConnectionsCount, availableCount);
 
-    String conn = connectionTracker.checkOutConnection("host2", port2);
+    String conn = connectionTracker.checkOutConnection("host2", port2, null);
     Assert.assertNotNull(conn);
     availableCount--;
     assertCounts(totalConnectionsCount, availableCount);
@@ -128,7 +128,7 @@ public class ConnectionTrackerTest {
     String checkedInConn = conn;
     Set<String> connIdSet = new HashSet<String>();
     for (int i = 0; i < routerConfig.routerScalingUnitMaxConnectionsPerPortSsl; i++) {
-      conn = connectionTracker.checkOutConnection("host2", port2);
+      conn = connectionTracker.checkOutConnection("host2", port2, null);
       Assert.assertNotNull(conn);
       connIdSet.add(conn);
       availableCount--;
@@ -139,7 +139,7 @@ public class ConnectionTrackerTest {
     Assert.assertTrue(connIdSet.contains(checkedInConn));
 
     // Now that the pool has been exhausted, checkOutConnection should return null.
-    Assert.assertNull(connectionTracker.checkOutConnection("host2", port2));
+    Assert.assertNull(connectionTracker.checkOutConnection("host2", port2, null));
     //And it should not have initiated a new connection.
     assertCounts(totalConnectionsCount, availableCount);
 
@@ -157,10 +157,10 @@ public class ConnectionTrackerTest {
     }
 
     // test connection removal.
-    String conn11 = connectionTracker.checkOutConnection("host1", port1);
+    String conn11 = connectionTracker.checkOutConnection("host1", port1, null);
     Assert.assertNotNull(conn11);
     availableCount--;
-    String conn12 = connectionTracker.checkOutConnection("host1", port1);
+    String conn12 = connectionTracker.checkOutConnection("host1", port1, null);
     Assert.assertNotNull(conn12);
     availableCount--;
     connectionTracker.checkInConnection(conn11);
@@ -181,20 +181,20 @@ public class ConnectionTrackerTest {
     }
     assertCounts(totalConnectionsCount, availableCount);
 
-    Assert.assertNotNull(connectionTracker.checkOutConnection("host1", port1));
+    Assert.assertNotNull(connectionTracker.checkOutConnection("host1", port1, null));
     availableCount--;
     for (int i = 0; i < 2; i++) {
       Assert.assertNull("There should not be any available connections to check out",
-          connectionTracker.checkOutConnection("host1", port1));
+          connectionTracker.checkOutConnection("host1", port1, null));
       Assert.assertTrue("It should be okay to initiate a new connection",
-          connectionTracker.mayCreateNewConnection("host1", port1));
-      connectionTracker.startTrackingInitiatedConnection("host1", port1, mockNewConnection("host1", port1));
+          connectionTracker.mayCreateNewConnection("host1", port1, null));
+      connectionTracker.startTrackingInitiatedConnection("host1", port1, mockNewConnection("host1", port1), null);
       totalConnectionsCount++;
     }
     Assert.assertNull("There should not be any available connections to check out",
-        connectionTracker.checkOutConnection("host1", port1));
+        connectionTracker.checkOutConnection("host1", port1, null));
     Assert.assertFalse("It should not be okay to initiate a new connection",
-        connectionTracker.mayCreateNewConnection("host1", port1));
+        connectionTracker.mayCreateNewConnection("host1", port1, null));
     assertCounts(totalConnectionsCount, availableCount);
   }
 

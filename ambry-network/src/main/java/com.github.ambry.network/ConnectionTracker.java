@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.clustermap.DataNodeId;
 import java.util.HashMap;
 import java.util.LinkedList;
 
@@ -49,10 +50,11 @@ class ConnectionTracker {
    * the given hostPort has not reached the pool limit.
    * @param host the host associated with this check.
    * @param port the port associated with this check.
+   * @param dataNodeId the {@link DataNodeId} associated with this check.
    * @return true if a new connection may be created, false otherwise.
    */
-  boolean mayCreateNewConnection(String host, Port port) {
-    return !getHostPortPoolManager(host, port).hasReachedPoolLimit();
+  boolean mayCreateNewConnection(String host, Port port, DataNodeId dataNodeId) {
+    return !getHostPortPoolManager(host, port, dataNodeId).hasReachedPoolLimit();
   }
 
   /**
@@ -61,9 +63,10 @@ class ConnectionTracker {
    * @param host the host to which this connection belongs.
    * @param port the port on the host to which this connection belongs.
    * @param connId the connection id of the connection.
+   * @param dataNodeId the {@link DataNodeId} associated with this connection
    */
-  void startTrackingInitiatedConnection(String host, Port port, String connId) {
-    HostPortPoolManager hostPortPoolManager = getHostPortPoolManager(host, port);
+  void startTrackingInitiatedConnection(String host, Port port, String connId, DataNodeId dataNodeId) {
+    HostPortPoolManager hostPortPoolManager = getHostPortPoolManager(host, port, dataNodeId);
     hostPortPoolManager.incrementPoolCount();
     connectionIdToPoolManager.put(connId, hostPortPoolManager);
     totalManagedConnectionsCount++;
@@ -73,10 +76,11 @@ class ConnectionTracker {
    * Attempts to check out an existing connection to the hostPort provided, or returns null if none available.
    * @param host The host to connect to.
    * @param port The port on the host to connect to.
+   * @param dataNodeId The {@link DataNodeId} to connect to.
    * @return connectionId, if there is one available to use, null otherwise.
    */
-  String checkOutConnection(String host, Port port) {
-    return getHostPortPoolManager(host, port).checkOutConnection();
+  String checkOutConnection(String host, Port port, DataNodeId dataNodeId) {
+    return getHostPortPoolManager(host, port, dataNodeId).checkOutConnection();
   }
 
   /**
@@ -96,14 +100,16 @@ class ConnectionTracker {
    * Remove and stop tracking the given connection id.
    * @param connectionId connection to remove.
    * @throws {@link IllegalArgumentException} if the passed in connection id is invalid.
+   * @return {@link DataNodeId} associated with this connection.
    */
-  void removeConnection(String connectionId) {
+  DataNodeId removeConnection(String connectionId) {
     HostPortPoolManager hostPortPoolManager = connectionIdToPoolManager.remove(connectionId);
     if (hostPortPoolManager == null) {
       throw new IllegalArgumentException("Invalid connection id passed in");
     }
-    hostPortPoolManager.removeConnection(connectionId);
+    DataNodeId dataNodeId = hostPortPoolManager.removeConnection(connectionId);
     totalManagedConnectionsCount--;
+    return dataNodeId;
   }
 
   /**
@@ -131,14 +137,15 @@ class ConnectionTracker {
    * already.
    * @param host The hostname
    * @param port The port
+   * @param dataNodeId The {@link DataNodeId} associated with (host, port) pair
    * @return the HostPortPoolManager for the associated (host, port) pair.
    */
-  private HostPortPoolManager getHostPortPoolManager(String host, Port port) {
-    String lookupStr = host + ":" + Integer.toString(port.getPort());
+  private HostPortPoolManager getHostPortPoolManager(String host, Port port, DataNodeId dataNodeId) {
+    String lookupStr = host + ":" + port.getPort();
     HostPortPoolManager poolManager = hostPortToPoolManager.get(lookupStr);
     if (poolManager == null) {
       poolManager = new HostPortPoolManager(
-          port.getPortType() == PortType.SSL ? maxConnectionsPerPortSsl : maxConnectionsPerPortPlainText);
+          port.getPortType() == PortType.SSL ? maxConnectionsPerPortSsl : maxConnectionsPerPortPlainText, dataNodeId);
       hostPortToPoolManager.put(lookupStr, poolManager);
     }
     return poolManager;
@@ -157,6 +164,7 @@ class ConnectionTracker {
   int getMaxConnectionsPerPortSsl() {
     return maxConnectionsPerPortSsl;
   }
+
   /**
    * HostPortPoolManager manages all the connections to a specific (host,
    * port) pair. The  {@link ConnectionTracker} creates one for every (host, port) pair it knows of.
@@ -164,16 +172,19 @@ class ConnectionTracker {
   private class HostPortPoolManager {
     private final int maxConnectionsToHostPort;
     private final LinkedList<String> availableConnections;
+    private final DataNodeId dataNodeId;
     private int poolCount;
 
     /**
      * Instantiate a HostPortPoolManager
      * @param poolLimit the max connections allowed for this hostPort.
+     * @param dataNodeId the {@link DataNodeId} associated with this {@link HostPortPoolManager}.
      */
-    HostPortPoolManager(int poolLimit) {
+    HostPortPoolManager(int poolLimit, DataNodeId dataNodeId) {
       poolCount = 0;
       maxConnectionsToHostPort = poolLimit;
       availableConnections = new LinkedList<String>();
+      this.dataNodeId = dataNodeId;
     }
 
     /**
@@ -211,10 +222,12 @@ class ConnectionTracker {
      * Remove a connection managed by this manager. This connection id could be either a checked out connection or a
      * connection that was previously available to be checked out.
      * @param connectionId the connection id of the connection.
+     * @return {@link DataNodeId} associated with this manager and this connection.
      */
-    void removeConnection(String connectionId) {
+    DataNodeId removeConnection(String connectionId) {
       availableConnections.remove(connectionId);
       poolCount--;
+      return dataNodeId;
     }
 
     /**

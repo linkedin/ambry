@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
@@ -45,12 +46,16 @@ public class NetworkClientTest {
   private final int MAX_PORTS_SSL = 3;
   private final Time time;
 
-  MockSelector selector;
-  NetworkClient networkClient;
-  String host1 = "host1";
-  Port port1 = new Port(2222, PortType.PLAINTEXT);
-  String host2 = "host2";
-  Port port2 = new Port(3333, PortType.SSL);
+  private MockSelector selector;
+  private NetworkClient networkClient;
+  private NetworkMetrics networkMetrics;
+  private String sslHost;
+  private Port sslPort;
+  private ReplicaId replicaOnSslNode;
+  private List<DataNodeId> localPlainTextDataNodes;
+  private List<DataNodeId> localSslDataNodes;
+  private MockClusterMap sslEnabledClusterMap;
+  private MockClusterMap sslDisabledClusterMap;
 
   /**
    * Test the {@link NetworkClientFactory}
@@ -74,72 +79,53 @@ public class NetworkClientTest {
     NetworkConfig networkConfig = new NetworkConfig(vprops);
     selector = new MockSelector();
     time = new MockTime();
-    networkClient =
-        new NetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), MAX_PORTS_PLAIN_TEXT,
-            MAX_PORTS_SSL, CHECKOUT_TIMEOUT_MS, time);
+    networkMetrics = new NetworkMetrics(new MetricRegistry());
+    networkClient = new NetworkClient(selector, networkConfig, networkMetrics, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+        CHECKOUT_TIMEOUT_MS, time);
+    sslEnabledClusterMap = new MockClusterMap(true, 9, 3, 3, false);
+    localSslDataNodes = sslEnabledClusterMap.getDataNodeIds()
+        .stream()
+        .filter(dataNodeId -> sslEnabledClusterMap.getDatacenterName(sslEnabledClusterMap.getLocalDatacenterId())
+            .equals(dataNodeId.getDatacenterName()))
+        .collect(Collectors.toList());
+    sslDisabledClusterMap = new MockClusterMap();
+    localPlainTextDataNodes = sslDisabledClusterMap.getDataNodeIds()
+        .stream()
+        .filter(dataNodeId -> sslDisabledClusterMap.getDatacenterName(sslDisabledClusterMap.getLocalDatacenterId())
+            .equals(dataNodeId.getDatacenterName()))
+        .collect(Collectors.toList());
+    DataNodeId dataNodeId = localSslDataNodes.get(0);
+    sslHost = dataNodeId.getHostname();
+    sslPort = dataNodeId.getPortToConnectTo();
+    replicaOnSslNode = sslEnabledClusterMap.getReplicaIds(dataNodeId).get(0);
   }
 
   /**
    * Test {@link NetworkClient#warmUpConnections(List, int, long)}
    */
   @Test
-  public void testWarmUpConnections() throws IOException {
-    MockClusterMap mockClusterMap = new MockClusterMap(true, 9, 3, 3, false);
-    List<DataNodeId> localDataNodeIds = mockClusterMap.getDataNodeIds()
-        .stream()
-        .filter(dataNodeId -> mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())
-            .equals(dataNodeId.getDatacenterName()))
-        .collect(Collectors.toList());
-    int maxPort = mockClusterMap.isSslPortsEnabled() ? MAX_PORTS_SSL : MAX_PORTS_PLAIN_TEXT;
-    // warm up plain-text connections.
-    doTestWarmUpConnections(localDataNodeIds, maxPort, PortType.PLAINTEXT);
+  public void testWarmUpConnectionsSslAndPlainText() {
+    // warm up plain-text connections with SSL enabled nodes.
+    doTestWarmUpConnections(localSslDataNodes, MAX_PORTS_SSL, PortType.PLAINTEXT);
     // enable SSL to local DC.
-    for (DataNodeId dataNodeId : localDataNodeIds) {
-      ((MockDataNodeId) dataNodeId).setSslEnabledDataCenters(
-          Collections.singletonList(mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())));
+    for (DataNodeId dataNodeId : localSslDataNodes) {
+      ((MockDataNodeId) dataNodeId).setSslEnabledDataCenters(Collections.singletonList(
+          sslEnabledClusterMap.getDatacenterName(sslEnabledClusterMap.getLocalDatacenterId())));
     }
     // warm up SSL connections.`
-    doTestWarmUpConnections(localDataNodeIds, maxPort, PortType.SSL);
-  }
-
-  /**
-   * Test {@link NetworkClient#warmUpConnections(List, int, long)}
-   */
-  @Test
-  public void testWarmUpConnectionsSsl() throws IOException {
-    MockClusterMap mockClusterMap = new MockClusterMap();
-    List<DataNodeId> localDataNodeIds = mockClusterMap.getDataNodeIds()
-        .stream()
-        .filter(dataNodeId -> mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())
-            .equals(dataNodeId.getDatacenterName()))
-        .collect(Collectors.toList());
-    int maxPort = mockClusterMap.isSslPortsEnabled() ? MAX_PORTS_SSL : MAX_PORTS_PLAIN_TEXT;
-    Assert.assertEquals("Connection count is not expected", maxPort * localDataNodeIds.size(),
-        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
-    Assert.assertEquals("Connection count is not expected", 50 * maxPort / 100 * localDataNodeIds.size(),
-        networkClient.warmUpConnections(localDataNodeIds, 50, 2000));
-    Assert.assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(localDataNodeIds, 0, 2000));
-    selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
-    Assert.assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
-    selector.setState(MockSelectorState.Good);
+    doTestWarmUpConnections(localSslDataNodes, MAX_PORTS_SSL, PortType.SSL);
+    // warm up plain-text connections with plain-text nodes.
+    doTestWarmUpConnections(localPlainTextDataNodes, MAX_PORTS_PLAIN_TEXT, PortType.PLAINTEXT);
   }
 
   /**
    * Test connection warm up failed case.
    */
   @Test
-  public void testWarmUpConnectionsFailedAll() throws IOException {
-    MockClusterMap mockClusterMap = new MockClusterMap();
-    List<DataNodeId> localDataNodeIds = mockClusterMap.getDataNodeIds()
-        .stream()
-        .filter(dataNodeId -> mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())
-            .equals(dataNodeId.getDatacenterName()))
-        .collect(Collectors.toList());
+  public void testWarmUpConnectionsFailedAll() {
     selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
     Assert.assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(localDataNodeIds, 2, 2000));
+        networkClient.warmUpConnections(localPlainTextDataNodes, 2, 2000));
     selector.setState(MockSelectorState.Good);
   }
 
@@ -147,11 +133,15 @@ public class NetworkClientTest {
    * tests basic request sending, polling and receiving responses correctly associated with the requests.
    */
   @Test
-  public void testBasicSendAndPoll() throws IOException {
-    List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
+  public void testBasicSendAndPoll() {
+    DataNodeId dataNodeId = localPlainTextDataNodes.get(0);
+    ReplicaId replicaId = sslDisabledClusterMap.getReplicaIds(dataNodeId).get(0);
+    List<RequestInfo> requestInfoList = new ArrayList<>();
     List<ResponseInfo> responseInfoList;
-    requestInfoList.add(new RequestInfo(host1, port1, new MockSend(1)));
-    requestInfoList.add(new RequestInfo(host1, port1, new MockSend(2)));
+    requestInfoList.add(
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(1), replicaId));
+    requestInfoList.add(
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(2), replicaId));
     int requestCount = requestInfoList.size();
     int responseCount = 0;
 
@@ -181,11 +171,11 @@ public class NetworkClientTest {
    * Tests a failure scenario where requests remain too long in the {@link NetworkClient}'s pending requests queue.
    */
   @Test
-  public void testConnectionUnavailable() throws IOException, InterruptedException {
-    List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
+  public void testConnectionUnavailable() throws InterruptedException {
+    List<RequestInfo> requestInfoList = new ArrayList<>();
     List<ResponseInfo> responseInfoList;
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(4)));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
     int requestCount = requestInfoList.size();
     int responseCount = 0;
 
@@ -220,11 +210,11 @@ public class NetworkClientTest {
    * Tests a failure scenario where connections get disconnected after requests are sent out.
    */
   @Test
-  public void testNetworkError() throws IOException, InterruptedException {
-    List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
+  public void testNetworkError() {
+    List<RequestInfo> requestInfoList = new ArrayList<>();
     List<ResponseInfo> responseInfoList;
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(5)));
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(6)));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(5), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(6), replicaOnSslNode));
     int requestCount = requestInfoList.size();
     int responseCount = 0;
 
@@ -250,13 +240,20 @@ public class NetworkClientTest {
   }
 
   /**
-   * Test exception on connect
+   * Test exceptions in sendAndPoll().
    */
   @Test
   public void testExceptionOnConnect() {
-    List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(4)));
+    List<RequestInfo> requestInfoList = new ArrayList<>();
+    // test that IllegalStateException would be thrown if replica is not specified in RequestInfo
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(-1), null));
+    networkClient.sendAndPoll(requestInfoList, 100);
+    Assert.assertEquals("NetworkClientException should increase because replica is null in request", 1,
+        networkMetrics.networkClientException.getCount());
+    requestInfoList.clear();
+    // test that IOException occurs when selector invokes connect()
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
     selector.setState(MockSelectorState.ThrowExceptionOnConnect);
     try {
       networkClient.sendAndPoll(requestInfoList, 100);
@@ -274,9 +271,9 @@ public class NetworkClientTest {
    * immediately failed.
    */
   @Test
-  public void testConnectionInitializationFailures() throws Exception {
+  public void testConnectionInitializationFailures() {
     List<RequestInfo> requestInfoList = new ArrayList<>();
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(0)));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(0), replicaOnSslNode));
     selector.setState(MockSelectorState.IdlePoll);
     Assert.assertEquals(0, selector.connectCallCount());
     // this sendAndPoll() should initiate a connect().
@@ -292,7 +289,7 @@ public class NetworkClientTest {
     Assert.assertEquals(0, responseInfoList.size());
 
     // Another connection should get initialized if a new request comes in for the same destination.
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(1)));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(1), replicaOnSslNode));
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
@@ -324,29 +321,39 @@ public class NetworkClientTest {
    * Connection C1 gets disconnected, which was initiated in the context of Request R1
    * Request R1 is completed.
    * Request R2 reuses C1 and gets completed.
-   *
-   * @throws Exception
    */
   @Test
-  public void testOutOfOrderConnectionEstablishment() throws Exception {
+  public void testOutOfOrderConnectionEstablishment() {
     selector.setState(MockSelectorState.DelayFailAlternateConnect);
     List<RequestInfo> requestInfoList = new ArrayList<>();
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(2)));
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(2), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode));
     List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     requestInfoList.clear();
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
+
+    // Invoke sendAndPoll() again, the Connection C1 will get disconnected
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
+    // Verify that no more connection is initiated in network client
     Assert.assertEquals(2, selector.connectCallCount());
-    Assert.assertEquals(1, responseInfoList.size());
-    Assert.assertEquals(null, responseInfoList.get(0).getError());
-    Assert.assertEquals(2, ((MockSend) responseInfoList.get(0).getRequestInfo().getRequest()).getCorrelationId());
+    // There should be 2 responses, one is success from Request R1, another is from Connection C1 timeout.
+    Assert.assertEquals(2, responseInfoList.size());
+    Assert.assertNull(responseInfoList.get(1).getError());
+    // Verify that Request R1 get sent via Connection C2. Note that 2 is correlation Id of R1
+    Assert.assertEquals(2, ((MockSend) responseInfoList.get(1).getRequestInfo().getRequest()).getCorrelationId());
+    // Verify the timeout connection event is added into response list, which will be handled by ResponseHandler directly.
+    Assert.assertEquals("Mismatch in error code", NetworkClientErrorCode.NetworkError,
+        responseInfoList.get(0).getError());
+    Assert.assertNull(responseInfoList.get(0).getRequestInfo());
     responseInfoList.clear();
+
+    // Invoke sendAndPoll() again, Request R2 will get sent via Connection C2
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(1, responseInfoList.size());
-    Assert.assertEquals(null, responseInfoList.get(0).getError());
+    Assert.assertNull(responseInfoList.get(0).getError());
+    // Verify the correlation Id of Request R2
     Assert.assertEquals(3, ((MockSend) responseInfoList.get(0).getRequestInfo().getRequest()).getCorrelationId());
     responseInfoList.clear();
     selector.setState(MockSelectorState.Good);
@@ -361,7 +368,7 @@ public class NetworkClientTest {
   public void testPendingRequestTimeOutWithDisconnection() throws Exception {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     selector.setState(MockSelectorState.IdlePoll);
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(4)));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
     List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     Assert.assertEquals(0, responseInfoList.size());
     requestInfoList.clear();
@@ -370,9 +377,15 @@ public class NetworkClientTest {
     // increment the time so that the request times out in the next cycle.
     time.sleep(2000);
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
-    Assert.assertEquals(1, responseInfoList.size());
-    Assert.assertEquals("Error received should be ConnectionUnavailable", NetworkClientErrorCode.ConnectionUnavailable,
-        responseInfoList.get(0).getError());
+    // here the size of responseInfoList should be 2 because first response comes from dropping request in the queue that
+    // waits too long. (This response would be handled by corresponding manager, i.e PutManager, GetManager, etc); second
+    // response comes from underlying connection timeout in nioSelector (usually due to remote node is down). This response
+    // will be handled by ResponseHandler to mark remote node down immediately.
+    Assert.assertEquals("Mismatch in number of responses", 2, responseInfoList.size());
+    Assert.assertEquals("Error received in first response should be ConnectionUnavailable",
+        NetworkClientErrorCode.ConnectionUnavailable, responseInfoList.get(0).getError());
+    Assert.assertEquals("Error received in second response should be NetworkError", NetworkClientErrorCode.NetworkError,
+        responseInfoList.get(1).getError());
     responseInfoList.clear();
     selector.setState(MockSelectorState.Good);
   }
@@ -382,9 +395,9 @@ public class NetworkClientTest {
    */
   @Test
   public void testExceptionOnPoll() {
-    List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(4)));
+    List<RequestInfo> requestInfoList = new ArrayList<>();
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
     selector.setState(MockSelectorState.ThrowExceptionOnPoll);
     try {
       networkClient.sendAndPoll(requestInfoList, 100);
@@ -408,7 +421,7 @@ public class NetworkClientTest {
    * Test to ensure subsequent operations after a close throw an {@link IllegalStateException}.
    */
   @Test
-  public void testClose() throws IOException {
+  public void testClose() {
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     networkClient.close();
     try {
@@ -523,24 +536,30 @@ enum MockSelectorState {
   /**
    * The Good state.
    */
-  Good, /**
+  Good,
+  /**
    * A state that causes all connect calls to throw an IOException.
    */
-  ThrowExceptionOnConnect, /**
+  ThrowExceptionOnConnect,
+  /**
    * A state that causes disconnections of connections on which a send is attempted.
    */
-  DisconnectOnSend, /**
+  DisconnectOnSend,
+  /**
    * A state that causes all poll calls to throw an IOException.
    */
-  ThrowExceptionOnPoll, /**
+  ThrowExceptionOnPoll,
+  /**
    * A state that causes all connections initiated to fail during poll.
    */
-  FailConnectionInitiationOnPoll, /**
+  FailConnectionInitiationOnPoll,
+  /**
    * A state that simulates inactivity during a poll. The poll itself may do work,
    * but as long as this state is set, calls to connected(), disconnected(), completedReceives() etc.
    * will return empty lists.
    */
-  IdlePoll, /**
+  IdlePoll,
+  /**
    * Fail every other connect.
    */
   DelayFailAlternateConnect;

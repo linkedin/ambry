@@ -34,7 +34,7 @@ class RouterRequestInfo extends RequestInfo {
    * @param replicaId the {@link ReplicaId} to which this request is targeted.
    */
   RouterRequestInfo(String host, Port port, Send request, ReplicaId replicaId) {
-    super(host, port, request);
+    super(host, port, request, replicaId);
     this.replicaId = replicaId;
   }
 

@@ -436,7 +436,7 @@ class StaticClusterManager implements ClusterMap {
       capacityOfReplicasInBytes = replicaId.getCapacityInBytes();
       Integer numberOfReplicas = replicaCountByDatacenter.get(replicaId.getDataNodeId().getDatacenterName());
       if (numberOfReplicas == null) {
-        numberOfReplicas = new Integer(0);
+        numberOfReplicas = 0;
       }
       numberOfReplicas++;
       replicaCountByDatacenter.put(replicaId.getDataNodeId().getDatacenterName(), numberOfReplicas);

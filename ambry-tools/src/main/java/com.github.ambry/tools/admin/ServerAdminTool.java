@@ -781,11 +781,12 @@ public class ServerAdminTool implements Closeable {
       }
       List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, POLL_TIMEOUT_MS);
       if (responseInfos.size() > 1) {
+        // May need to relax this check because response list may contain more than 1 response
         throw new IllegalStateException("Received more than one response even though a single request was sent");
       } else if (!responseInfos.isEmpty()) {
         responseInfo = responseInfos.get(0);
       }
-      requestInfos = Collections.EMPTY_LIST;
+      requestInfos = Collections.emptyList();
     } while (responseInfo == null);
     if (responseInfo.getError() != null) {
       throw new IllegalStateException(

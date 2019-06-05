@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.Time;
 import java.io.Closeable;
@@ -142,7 +143,7 @@ public class NetworkClient implements Closeable {
           pendingConnectionsToAssociatedRequests.remove(requestMetadata.pendingConnectionId);
           requestMetadata.pendingConnectionId = null;
         }
-        networkMetrics.connectionTimeOutError.inc();
+        networkMetrics.connectionCheckoutTimeoutError.inc();
       } else {
         // Since requests are ordered by time, once the first request that cannot be dropped is found,
         // we let that and the rest be iterated over in the next while loop. Just move the cursor backwards as this
@@ -157,15 +158,19 @@ public class NetworkClient implements Closeable {
       try {
         String host = requestMetadata.requestInfo.getHost();
         Port port = requestMetadata.requestInfo.getPort();
-        String connId = connectionTracker.checkOutConnection(host, port);
+        ReplicaId replicaId = requestMetadata.requestInfo.getReplicaId();
+        if (replicaId == null) {
+          throw new IllegalStateException("ReplicaId in request is null.");
+        }
+        String connId = connectionTracker.checkOutConnection(host, port, replicaId.getDataNodeId());
         if (connId == null) {
           networkMetrics.connectionNotAvailable.inc();
           if (requestMetadata.pendingConnectionId == null) {
-            if (connectionTracker.mayCreateNewConnection(host, port)) {
+            if (connectionTracker.mayCreateNewConnection(host, port, replicaId.getDataNodeId())) {
               connId =
                   selector.connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
                       networkConfig.socketReceiveBufferBytes, port.getPortType());
-              connectionTracker.startTrackingInitiatedConnection(host, port, connId);
+              connectionTracker.startTrackingInitiatedConnection(host, port, connId, replicaId.getDataNodeId());
               requestMetadata.pendingConnectionId = connId;
               pendingConnectionsToAssociatedRequests.put(connId, requestMetadata);
               logger.trace("Initiated a connection to host {} port {} ", host, port);
@@ -225,7 +230,7 @@ public class NetworkClient implements Closeable {
               networkConfig.socketSendBufferBytes, networkConfig.socketReceiveBufferBytes,
               dataNodeId.getPortToConnectTo().getPortType());
           connectionTracker.startTrackingInitiatedConnection(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(),
-              connId);
+              connId, dataNodeId);
           expectedConnections++;
         } catch (IOException e) {
           logger.error("Received exception while warming up connection: ", e);
@@ -240,7 +245,7 @@ public class NetworkClient implements Closeable {
         selector.poll(1000L);
         successfulConnections += selector.connected().size();
         failedConnections += selector.disconnected().size();
-        handleSelectorEvents(null);
+        handleSelectorEvents(new ArrayList<>());
       } catch (IOException e) {
         logger.error("Warm up received unexpected error while polling: ", e);
       }
@@ -269,7 +274,7 @@ public class NetworkClient implements Closeable {
 
     for (String connId : selector.disconnected()) {
       logger.trace("ConnectionId {} disconnected, removing it from connection tracker", connId);
-      connectionTracker.removeConnection(connId);
+      DataNodeId dataNodeId = connectionTracker.removeConnection(connId);
       // If this was a pending connection and if there is a request that initiated this connection,
       // mark the corresponding request as failed.
       RequestMetadata requestMetadata = pendingConnectionsToAssociatedRequests.remove(connId);
@@ -286,8 +291,17 @@ public class NetworkClient implements Closeable {
           logger.trace("ConnectionId {} with request in flight disconnected", connId);
           responseInfoList.add(
               new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.NetworkError, null));
+        } else {
+          logger.debug(
+              "ConnectionId {} has been failed previously due to long wait and now associated channel to {} timed out",
+              connId, dataNodeId);
+          // Explicitly set requestInfo = null in ResponseInfo, the OperationController should detect this and directly
+          // notify ResponseHandler without handing it over to PutManager/GetManager/DeleteManager/TtlUpdateManager.
+          responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, dataNodeId));
+          // No need to call pendingRequests.remove() because it has been removed due to connection unavailability in prepareSends()
         }
       }
+      networkMetrics.connectionDisconnected.inc();
     }
 
     for (NetworkReceive recv : selector.completedReceives()) {

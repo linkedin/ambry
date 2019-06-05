@@ -1456,9 +1456,8 @@ public class GetBlobOperationTest {
    * one of them.
    * @param requestList the list containing the requests handed over by the operation.
    * @return the list of responses from the network client.
-   * @throws IOException
    */
-  private List<ResponseInfo> sendAndWaitForResponses(List<RequestInfo> requestList) throws IOException {
+  private List<ResponseInfo> sendAndWaitForResponses(List<RequestInfo> requestList) {
     int sendCount = requestList.size();
     // Shuffle the replicas to introduce randomness in the order in which responses arrive.
     Collections.shuffle(requestList);
