@@ -500,12 +500,12 @@ class GetBlobOperation extends GetOperation {
     /**
      * Construct a GetChunk
      * @param index the index (in the overall blob) of the initial data chunk that this GetChunk has to fetch.
-     * @param keyAndSizeAndOffset the {@link BlobId}, data content size, and offset relative to the total blob
+     * @param chunkMetadata the {@link BlobId}, data content size, and offset relative to the total blob
      *                           of the initial data chunk that this GetChunk has to fetch.
      */
-    GetChunk(int index, CompositeBlobInfo.ChunkMetadata keyAndSizeAndOffset) {
+    GetChunk(int index, CompositeBlobInfo.ChunkMetadata chunkMetadata) {
       reset();
-      initialize(index, keyAndSizeAndOffset);
+      initialize(index, chunkMetadata);
     }
 
     /**
@@ -555,14 +555,14 @@ class GetBlobOperation extends GetOperation {
     /**
      * Assign a chunk of the overall blob to this GetChunk.
      * @param index the index of the chunk of the overall blob that needs to be fetched through this GetChunk.
-     * @param keyAndSizeAndOffset the id, data content size, and offset (relative to the total size)
+     * @param chunkMetadata the id, data content size, and offset (relative to the total size)
      *                           of the chunk of the overall blob that needs to be fetched through this GetChunk.
      */
-    void initialize(int index, CompositeBlobInfo.ChunkMetadata keyAndSizeAndOffset) {
+    void initialize(int index, CompositeBlobInfo.ChunkMetadata chunkMetadata) {
       chunkIndex = index;
-      chunkBlobId = (BlobId) keyAndSizeAndOffset.getStoreKey();
-      offset = keyAndSizeAndOffset.getOffset();
-      chunkSize = keyAndSizeAndOffset.getSize();
+      chunkBlobId = (BlobId) chunkMetadata.getStoreKey();
+      offset = chunkMetadata.getOffset();
+      chunkSize = chunkMetadata.getSize();
       chunkOperationTracker = getOperationTracker(chunkBlobId.getPartition(), chunkBlobId.getDatacenterId(),
           RouterOperation.GetBlobOperation);
       progressTracker = new ProgressTracker(chunkOperationTracker);
@@ -943,9 +943,8 @@ class GetBlobOperation extends GetOperation {
         buf.position(0);
         buf.limit(0);
       } else {
-        long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() - offset : 0;
-        long endOffsetInThisChunkExclusive =
-            chunkIndex == (numChunksTotal - 1) ? resolvedByteRange.getEndOffset() - offset + 1 : chunkSize;
+        long startOffsetInThisChunk = Math.max(resolvedByteRange.getStartOffset() - offset, 0);
+        long endOffsetInThisChunkExclusive = Math.min(resolvedByteRange.getEndOffset() - offset + 1, chunkSize);
         buf.position((int) startOffsetInThisChunk);
         buf.limit((int) endOffsetInThisChunkExclusive);
       }

@@ -68,15 +68,83 @@ public class CompositeBlobInfoTest {
     //total size given as input
     assertInvalidGetStoreKeysInByteRange(totalSize, totalSize, compositeBlobInfo);
     //total size and total size + 1 given as input
-    assertInvalidGetStoreKeysInByteRange(totalSize, totalSize+1, compositeBlobInfo);
+    assertInvalidGetStoreKeysInByteRange(totalSize, totalSize + 1, compositeBlobInfo);
     //negative number given as input
-    assertInvalidGetStoreKeysInByteRange(-1, totalSize-1, compositeBlobInfo);
+    assertInvalidGetStoreKeysInByteRange(-1, totalSize - 1, compositeBlobInfo);
     //start bigger than end
-    assertInvalidGetStoreKeysInByteRange(totalSize-1, 0, compositeBlobInfo);
+    assertInvalidGetStoreKeysInByteRange(totalSize - 1, 0, compositeBlobInfo);
     //start bigger than end, one byte
     assertInvalidGetStoreKeysInByteRange(1, 0, compositeBlobInfo);
     //total range but end equal to total size
     assertInvalidGetStoreKeysInByteRange(0, totalSize, compositeBlobInfo);
+  }
+
+  /**
+   * Tests that invalid inputs to the V3 {@link CompositeBlobInfo} ctor don't work
+   */
+  @Test
+  public void testCreateInvalidCompositeBlob() {
+    //tests null input
+    invalidV3CompositeBlobInfoCtor(null);
+    //tests empty input
+    List<Pair<StoreKey, Long>> keysAndContentSizes = new ArrayList<>();
+    invalidV3CompositeBlobInfoCtor(keysAndContentSizes);
+    //tests attempt creation of compositeBlobInfo with 0 length blob
+    keysAndContentSizes = createKeysAndContentSizes(60, 1, 1000000, 100);
+    keysAndContentSizes.add(new Pair<>(new MockId(UtilsTest.getRandomString(60)), 0L));
+    invalidV3CompositeBlobInfoCtor(keysAndContentSizes);
+  }
+
+  /**
+   * Tests various kinds of inputs for the V2 {@link CompositeBlobInfo}
+   */
+  @Test
+  public void testV2CompositeBlobInfoCtor() {
+    List<StoreKey> keys = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+      keys.add(new MockId(UtilsTest.getRandomString(60)));
+    }
+    //creates 1 10 byte blob, so not enough keys
+    invalidV2CompositeBlobInfoCtor(100, 10, keys);
+    //creates 9 100 byte blobs, so too many keys
+    invalidV2CompositeBlobInfoCtor(100, 900, keys);
+    //creates 9 100 byte blobs and 1 1 byte blob
+    validV2CompositeBlobInfoCtor(100, 901, keys);
+    //creates 10 100 byte blobs
+    validV2CompositeBlobInfoCtor(100, 1000, keys);
+    //creates 10 100 byte blobs and 1 1 byte blob, so not enough keys
+    invalidV2CompositeBlobInfoCtor(100, 1001, keys);
+    //rest are a mix of negative and 0 values for chunkSize and totalSize, all invalid
+    invalidV2CompositeBlobInfoCtor(0, 0, keys);
+    invalidV2CompositeBlobInfoCtor(1, 0, keys);
+    invalidV2CompositeBlobInfoCtor(0, 1, keys);
+    invalidV2CompositeBlobInfoCtor(-1, 1, keys);
+    invalidV2CompositeBlobInfoCtor(-1, -1, keys);
+    invalidV2CompositeBlobInfoCtor(1, -1, keys);
+  }
+
+  private void validV2CompositeBlobInfoCtor(int chunkSize, long totalSize, List<StoreKey> keys) {
+    new CompositeBlobInfo(chunkSize, totalSize, keys);
+  }
+
+  private void invalidV2CompositeBlobInfoCtor(int chunkSize, long totalSize, List<StoreKey> keys) {
+    try {
+      new CompositeBlobInfo(chunkSize, totalSize, keys);
+    } catch (IllegalArgumentException e) {
+      //expected
+      return;
+    }
+    fail();
+  }
+
+  private void invalidV3CompositeBlobInfoCtor(List<Pair<StoreKey, Long>> keysAndContentSizes) {
+    try {
+      new CompositeBlobInfo(keysAndContentSizes);
+    } catch (IllegalArgumentException e) {
+      //expected
+      return;
+    }
+    fail();
   }
 
   /**

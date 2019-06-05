@@ -564,7 +564,7 @@ public class MessageFormatRecordTest {
   }
 
   private CompositeBlobInfo deserializeMetadataContentV3(ByteBuffer metadataContent, StoreKeyFactory storeKeyFactory)
-      throws MessageFormatException, IOException {
+      throws IOException {
     ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(metadataContent);
     DataInputStream inputStream = new DataInputStream(byteBufferInputStream);
     short metadataContentVersion = inputStream.readShort();

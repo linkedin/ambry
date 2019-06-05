@@ -16,6 +16,7 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
+import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -30,7 +31,6 @@ public class CompositeBlobInfo {
 
   private final int chunkSize;
   private final long totalSize;
-  private final List<StoreKey> keys;
   private final List<Long> offsets = new ArrayList<>();
   private final List<ChunkMetadata> chunkMetadataList = new ArrayList<>();
   private final short metadataContentVersion;
@@ -43,12 +43,24 @@ public class CompositeBlobInfo {
    */
   public CompositeBlobInfo(int chunkSize, long totalSize, List<StoreKey> keys) {
     this.chunkSize = chunkSize;
+    if (chunkSize < 1L) {
+      throw new IllegalArgumentException("chunkSize cannot be 0 or less");
+    }
+    if (keys == null || keys.isEmpty()) {
+      throw new IllegalArgumentException("keys should not be null or empty");
+    }
+    long rightAmountOfKeys = totalSize / chunkSize + (totalSize % chunkSize == 0 ? 0 : 1);
+    if (rightAmountOfKeys != keys.size()) {
+      throw new IllegalArgumentException("keys should contain " + rightAmountOfKeys + " keys, not " + keys.size());
+    }
     this.totalSize = totalSize;
-    this.keys = keys;
     metadataContentVersion = MessageFormatRecord.Metadata_Content_Version_V2;
     long last = 0;
     for (StoreKey key : keys) {
       offsets.add(last);
+      if (totalSize - last < 1L) {
+        throw new IllegalArgumentException("CompositeBlobInfo can't be composed of blobs with size 0 or less");
+      }
       chunkMetadataList.add(new ChunkMetadata(key, last, Math.min(chunkSize, totalSize - last)));
       last += chunkSize;
     }
@@ -59,13 +71,17 @@ public class CompositeBlobInfo {
    * @param keysAndContentSizes list of store keys and the size of the data content they reference
    */
   public CompositeBlobInfo(List<Pair<StoreKey, Long>> keysAndContentSizes) {
+    if (keysAndContentSizes == null || keysAndContentSizes.isEmpty()) {
+      throw new IllegalArgumentException("keysAndContentSizes should not be null or empty");
+    }
     this.chunkSize = -1;
-    this.keys = new ArrayList<>();
     long last = 0;
     metadataContentVersion = MessageFormatRecord.Metadata_Content_Version_V3;
     for (Pair<StoreKey, Long> keyAndContentSize : keysAndContentSizes) {
+      if (keyAndContentSize.getSecond() < 1L) {
+        throw new IllegalArgumentException("CompositeBlobInfo can't be composed of blobs with size 0 or less");
+      }
       StoreKey key = keyAndContentSize.getFirst();
-      keys.add(key);
       offsets.add(last);
       chunkMetadataList.add(new ChunkMetadata(key, last, keyAndContentSize.getSecond()));
       last += keyAndContentSize.getSecond();
@@ -99,7 +115,7 @@ public class CompositeBlobInfo {
     if (endIdx < 0) {
       endIdx = -endIdx - 2; //points to element with offset closest to but less than 'end'
     }
-    endIdx++;//List.subList expects an exclusive index
+    endIdx++; //List.subList expects an exclusive index
 
     return chunkMetadataList.subList(startIdx, endIdx);
   }
@@ -125,7 +141,17 @@ public class CompositeBlobInfo {
    * @return A list of {@link StoreKey}s.
    */
   public List<StoreKey> getKeys() {
-    return keys;
+    return new AbstractList<StoreKey>() {
+      @Override
+      public StoreKey get(int index) {
+        return chunkMetadataList.get(index).getStoreKey();
+      }
+
+      @Override
+      public int size() {
+        return chunkMetadataList.size();
+      }
+    };
   }
 
   /**
@@ -139,7 +165,7 @@ public class CompositeBlobInfo {
 
   /**
    * Return the version of the metadata content record that this object was deserialized from
-   * @return
+   * @return the version of the metadata content record that this object was deserialized from
    */
   public short getMetadataContentVersion() {
     return metadataContentVersion;
@@ -186,6 +212,4 @@ public class CompositeBlobInfo {
       return Objects.hash(storeKey, offset, size);
     }
   }
-
-
 }

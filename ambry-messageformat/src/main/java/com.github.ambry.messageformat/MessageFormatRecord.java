@@ -1459,7 +1459,7 @@ public class MessageFormatRecord {
      * @throws MessageFormatException
      */
     public static CompositeBlobInfo deserializeMetadataContentRecord(DataInputStream stream,
-        StoreKeyFactory storeKeyFactory) throws IOException, MessageFormatException {
+        StoreKeyFactory storeKeyFactory) throws IOException {
       List<StoreKey> keys = new ArrayList<StoreKey>();
       int chunkSize = stream.readInt();
       long totalSize = stream.readLong();

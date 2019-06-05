@@ -56,6 +56,8 @@ import java.util.Random;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -63,18 +65,19 @@ import static org.junit.Assert.*;
 /**
  * Tests the BlobIdTransformer
  */
+@RunWith(Parameterized.class)
 public class BlobIdTransformerTest {
   private final ClusterMap clusterMap = new MockReadingClusterMap();
   private final BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
   private final BlobIdTransformer transformer;
   private final List<Pair> pairList;
   private final MockStoreKeyConverterFactory factory;
+  private final short metadataContentVersion;
   private static final int BLOB_STREAM_SIZE = 128;
   private static final int BLOB_ENCRYPTION_KEY_SIZE = 32;
   private static final int USER_META_DATA_SIZE = 64;
   private static final int COMPOSITE_BLOB_SIZE = 8000000;
   private static final int COMPOSITE_BLOB_DATA_CHUNK_SIZE = 4000000;
-  private static short metadataContentVersion = MessageFormatRecord.Metadata_Content_Version_V3;
 
   public static final Pair<String, String> BLOB_ID_PAIR_VERSION_1_CONVERTED =
       new Pair<>("AAEAAQAAAAAAAAAhAAAAJDkwNTUwOTJhLTc3ZTAtNDI4NC1iY2IxLTc2MDZlYTAzNWM4OQ",
@@ -114,10 +117,21 @@ public class BlobIdTransformerTest {
       new Class[]{PutMessageFormatInputStream.class, PutMessageFormatBlobV1InputStream.class};
 
   /**
+   * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
+   * @return an array with all four different choices
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{MessageFormatRecord.Metadata_Content_Version_V2},
+        {MessageFormatRecord.Metadata_Content_Version_V3}});
+  }
+
+  /**
    * Sets up common components
    * @throws IOException
    */
-  public BlobIdTransformerTest() throws Exception {
+  public BlobIdTransformerTest(int metadataContentVersion) throws Exception {
+    this.metadataContentVersion = (short) metadataContentVersion;
     Pair<String, String>[] pairs =
         new Pair[]{BLOB_ID_PAIR_VERSION_1_CONVERTED, BLOB_ID_PAIR_VERSION_2_CONVERTED, BLOB_ID_PAIR_VERSION_3_CONVERTED,
             BLOB_ID_PAIR_VERSION_3_NULL, BLOB_ID_VERSION_1_METADATA_CONVERTED, BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED,
@@ -157,23 +171,15 @@ public class BlobIdTransformerTest {
    */
   @Test
   public void testMetaDataBlobOperation() throws IOException, MessageFormatException {
-    for (int i = 0; i < 2; i++) {
-      //ensure we test both metadata content versions
-      if (i == 0) {
-        metadataContentVersion = MessageFormatRecord.Metadata_Content_Version_V2;
-      } else {
-        metadataContentVersion = MessageFormatRecord.Metadata_Content_Version_V3;
-      }
-      InputAndExpected inputAndExpected =
-          new InputAndExpected(BLOB_ID_VERSION_1_METADATA_CONVERTED, VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
-              new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getFirst(),
-                  BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getFirst()},
-              new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getSecond(),
-                  BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getSecond()});
-      TransformationOutput output = transformer.transform(inputAndExpected.getInput());
-      assertNull("output exception should be null", output.getException());
-      verifyOutput(output.getMsg(), inputAndExpected.getExpected());
-    }
+    InputAndExpected inputAndExpected =
+        new InputAndExpected(BLOB_ID_VERSION_1_METADATA_CONVERTED, VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false,
+            new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getFirst(),
+                BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getFirst()},
+            new String[]{BLOB_ID_VERSION_1_DATACHUNK_0_CONVERTED.getSecond(),
+                BLOB_ID_VERSION_1_DATACHUNK_1_CONVERTED.getSecond()});
+    TransformationOutput output = transformer.transform(inputAndExpected.getInput());
+    assertNull("output exception should be null", output.getException());
+    verifyOutput(output.getMsg(), inputAndExpected.getExpected());
   }
 
   /**
