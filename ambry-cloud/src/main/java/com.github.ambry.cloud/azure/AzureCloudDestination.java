@@ -445,8 +445,9 @@ class AzureCloudDestination implements CloudDestination {
    * @return An Azure-friendly blob name.
    */
   String getAzureBlobName(BlobId blobId) {
-    // Reverse to assist in blob data sharding, since beginning of blobId has little variation.
-    return new StringBuilder(blobId.getID()).reverse().toString();
+    // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
+    String blobIdStr = blobId.getID();
+    return blobIdStr.substring(blobIdStr.length() - 4) + "-" + blobIdStr;
   }
 
   /**
