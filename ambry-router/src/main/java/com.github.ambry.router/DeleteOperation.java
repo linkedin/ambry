@@ -20,6 +20,7 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.Port;
+import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
@@ -127,7 +128,7 @@ class DeleteOperation {
       Port port = replica.getDataNodeId().getPortToConnectTo();
       DeleteRequest deleteRequest = createDeleteRequest();
       deleteRequestInfos.put(deleteRequest.getCorrelationId(), new DeleteRequestInfo(time.milliseconds(), replica));
-      RouterRequestInfo requestInfo = new RouterRequestInfo(hostname, port, deleteRequest, replica);
+      RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest, replica);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {

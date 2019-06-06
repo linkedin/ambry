@@ -159,7 +159,7 @@ class DeleteManager {
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
     DeleteResponse deleteReponse = extractDeleteResponseAndNotifyResponseHandler(responseInfo);
-    RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
+    RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     int correlationId = ((DeleteRequest) routerRequestInfo.getRequest()).getCorrelationId();
     DeleteOperation deleteOperation = correlationIdToDeleteOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
@@ -191,7 +191,7 @@ class DeleteManager {
    */
   private DeleteResponse extractDeleteResponseAndNotifyResponseHandler(ResponseInfo responseInfo) {
     DeleteResponse deleteResponse = null;
-    ReplicaId replicaId = ((RouterRequestInfo) responseInfo.getRequestInfo()).getReplicaId();
+    ReplicaId replicaId = responseInfo.getRequestInfo().getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {
       try {

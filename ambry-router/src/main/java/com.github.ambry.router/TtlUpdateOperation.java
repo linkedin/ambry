@@ -20,6 +20,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.Port;
+import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
@@ -121,7 +122,7 @@ class TtlUpdateOperation {
       TtlUpdateRequest ttlUpdateRequest = createTtlUpdateRequest();
       ttlUpdateRequestInfos.put(ttlUpdateRequest.getCorrelationId(),
           new TtlUpdateRequestInfo(time.milliseconds(), replica));
-      RouterRequestInfo requestInfo = new RouterRequestInfo(hostname, port, ttlUpdateRequest, replica);
+      RequestInfo requestInfo = new RequestInfo(hostname, port, ttlUpdateRequest, replica);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {

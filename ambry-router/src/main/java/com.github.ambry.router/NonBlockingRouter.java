@@ -812,8 +812,7 @@ class NonBlockingRouter implements Router {
             DataNodeId dataNodeId = responseInfo.getDataNode();
             responseHandler.onConnectionTimeout(dataNodeId);
           } else {
-            RouterRequestInfo routerRequestInfo = (RouterRequestInfo) requestInfo;
-            RequestOrResponseType type = ((RequestOrResponse) routerRequestInfo.getRequest()).getRequestType();
+            RequestOrResponseType type = ((RequestOrResponse) requestInfo.getRequest()).getRequestType();
             switch (type) {
               case PutRequest:
                 putManager.handleResponse(responseInfo);

@@ -175,7 +175,7 @@ class TtlUpdateManager {
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
     TtlUpdateResponse ttlUpdateResponse = extractTtlUpdateResponseAndNotifyResponseHandler(responseInfo);
-    RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
+    RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     int correlationId = ((TtlUpdateRequest) routerRequestInfo.getRequest()).getCorrelationId();
     TtlUpdateOperation ttlUpdateOperation = correlationIdToTtlUpdateOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
@@ -207,7 +207,7 @@ class TtlUpdateManager {
    */
   private TtlUpdateResponse extractTtlUpdateResponseAndNotifyResponseHandler(ResponseInfo responseInfo) {
     TtlUpdateResponse ttlUpdateResponse = null;
-    ReplicaId replicaId = ((RouterRequestInfo) responseInfo.getRequestInfo()).getReplicaId();
+    ReplicaId replicaId = responseInfo.getRequestInfo().getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {
       try {

@@ -67,7 +67,7 @@ public class RequestInfo {
   /**
    * @return the {@link ReplicaId} associated with this request.
    */
-  ReplicaId getReplicaId() {
+  public ReplicaId getReplicaId() {
     return replicaId;
   }
 }

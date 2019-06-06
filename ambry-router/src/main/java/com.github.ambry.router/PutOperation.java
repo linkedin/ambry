@@ -1285,7 +1285,7 @@ class PutOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = replicaId.getDataNodeId().getPortToConnectTo();
         PutRequest putRequest = createPutRequest();
-        RouterRequestInfo request = new RouterRequestInfo(hostname, port, putRequest, replicaId);
+        RequestInfo request = new RequestInfo(hostname, port, putRequest, replicaId);
         int correlationId = putRequest.getCorrelationId();
         correlationIdToChunkPutRequestInfo.put(correlationId,
             new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));

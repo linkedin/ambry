@@ -149,8 +149,7 @@ public class SafeServerShutdownTool {
         clusterMapConfig, config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap()) {
       SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(
           new SSLConfig(verifiableProperties)) : null;
-      try (ServerAdminTool serverAdminTool = new ServerAdminTool(clusterMap.getMetricRegistry(), sslFactory,
-          verifiableProperties)) {
+      try (ServerAdminTool serverAdminTool = new ServerAdminTool(clusterMap, sslFactory, verifiableProperties)) {
         DataNodeId dataNodeId = clusterMap.getDataNodeId(config.hostname, config.port);
         if (dataNodeId == null) {
           throw new IllegalArgumentException(

@@ -661,7 +661,7 @@ class GetBlobOperation extends GetOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = replicaId.getDataNodeId().getPortToConnectTo();
         GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption());
-        RouterRequestInfo request = new RouterRequestInfo(hostname, port, getRequest, replicaId);
+        RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId);
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
         correlationIdToGetChunk.put(correlationId, this);

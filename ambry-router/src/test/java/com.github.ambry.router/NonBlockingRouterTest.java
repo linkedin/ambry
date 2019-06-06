@@ -972,11 +972,10 @@ public class NonBlockingRouterTest {
       }
       opHelper.pollOpManager(allRequests);
     }
-    ReplicaId replicaIdToFail =
-        indexToFail == -1 ? null : ((RouterRequestInfo) allRequests.get(indexToFail)).getReplicaId();
+    ReplicaId replicaIdToFail = indexToFail == -1 ? null : allRequests.get(indexToFail).getReplicaId();
     for (RequestInfo requestInfo : allRequests) {
       ResponseInfo responseInfo;
-      if (replicaIdToFail != null && replicaIdToFail.equals(((RouterRequestInfo) requestInfo).getReplicaId())) {
+      if (replicaIdToFail != null && replicaIdToFail.equals(requestInfo.getReplicaId())) {
         responseInfo = new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null);
       } else {
         List<RequestInfo> requestInfoListToSend = new ArrayList<>();

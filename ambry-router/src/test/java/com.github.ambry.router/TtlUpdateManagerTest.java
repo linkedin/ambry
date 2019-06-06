@@ -380,7 +380,7 @@ public class TtlUpdateManagerTest {
           throw new IllegalStateException("Received response more than once for a request");
         }
         requestAcks.add(requestInfo);
-        RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
+        RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
         RequestOrResponseType type = ((RequestOrResponse) routerRequestInfo.getRequest()).getRequestType();
         switch (type) {
           case TtlUpdateRequest:
