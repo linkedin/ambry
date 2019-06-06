@@ -129,7 +129,7 @@ public class AzureCloudDestinationTest {
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
     assertEquals(1, azureMetrics.blobUploadSuccessCount.getCount());
     assertEquals(0, azureMetrics.blobUploadConflictCount.getCount());
-    assertEquals(0, azureMetrics.blobUploadErrorCount.getCount());
+    assertEquals(0, azureMetrics.backupErrorCount.getCount());
     assertEquals(1, azureMetrics.blobUploadTime.getCount());
     assertEquals(1, azureMetrics.documentCreateTime.getCount());
   }
@@ -166,7 +166,7 @@ public class AzureCloudDestinationTest {
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
     assertEquals(0, azureMetrics.blobUploadSuccessCount.getCount());
     assertEquals(1, azureMetrics.blobUploadConflictCount.getCount());
-    assertEquals(0, azureMetrics.blobUploadErrorCount.getCount());
+    assertEquals(0, azureMetrics.backupErrorCount.getCount());
   }
 
   /** Test delete of nonexistent blob. */
@@ -348,7 +348,7 @@ public class AzureCloudDestinationTest {
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
     assertEquals(0, azureMetrics.blobUploadSuccessCount.getCount());
     assertEquals(0, azureMetrics.blobUploadConflictCount.getCount());
-    assertEquals(1, azureMetrics.blobUploadErrorCount.getCount());
+    assertEquals(1, azureMetrics.backupErrorCount.getCount());
     assertEquals(isDocument ? 0 : 1, azureMetrics.storageErrorCount.getCount());
     assertEquals(isDocument ? 1 : 0, azureMetrics.documentErrorCount.getCount());
   }

@@ -19,7 +19,6 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.utils.SystemTime;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.Document;
@@ -192,10 +191,8 @@ class AzureCloudDestination implements CloudDestination {
 
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     Objects.requireNonNull(blobInputStream, "Input stream cannot be null");
-    azureMetrics.blobUploadRequestCount.inc();
     try {
-      long uploadStartTime = SystemTime.getInstance().milliseconds();
-      cloudBlobMetadata.setCloudBlobName(getAzureBlobName(blobId));
+      Timer.Context backupTimer = azureMetrics.backupSuccessLatency.time();
       boolean uploaded = uploadIfNotExists(blobId, inputLength, cloudBlobMetadata, blobInputStream);
       if (!uploaded) {
         return false;
@@ -207,12 +204,11 @@ class AzureCloudDestination implements CloudDestination {
       } finally {
         docTimer.stop();
       }
-      azureMetrics.blobUploadSuccessCount.inc();
-      azureMetrics.blobUploadSuccessLatency.update(SystemTime.getInstance().milliseconds() - uploadStartTime);
-      azureMetrics.blobUploadSuccessByteRate.mark(inputLength);
+      backupTimer.stop();
+      azureMetrics.backupSuccessByteRate.mark(inputLength);
       return true;
     } catch (URISyntaxException | StorageException | DocumentClientException | IOException e) {
-      azureMetrics.blobUploadErrorCount.inc();
+      azureMetrics.backupErrorCount.inc();
       updateErrorMetrics(e);
       throw new CloudStorageException("Error uploading blob " + blobId, e);
     }
@@ -233,14 +229,17 @@ class AzureCloudDestination implements CloudDestination {
       InputStream blobInputStream) throws StorageException, URISyntaxException, IOException {
     BlobRequestOptions options = null; // may want to set BlobEncryptionPolicy here
     AccessCondition condition = AccessCondition.generateIfNoneMatchCondition("*");
+    azureMetrics.blobUploadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
     try {
       CloudBlobContainer azureContainer = getContainer(blobId, true);
       String azureBlobName = getAzureBlobName(blobId);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
+      cloudBlobMetadata.setCloudBlobName(getAzureBlobName(blobId));
       azureBlob.setMetadata(getMetadataMap(cloudBlobMetadata));
       azureBlob.upload(blobInputStream, inputLength, condition, options, blobOpContext);
       logger.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
+      azureMetrics.blobUploadSuccessCount.inc();
       return true;
     } catch (StorageException sex) {
       if (sex.getHttpStatusCode() == HttpURLConnection.HTTP_CONFLICT) {
@@ -476,6 +475,7 @@ class AzureCloudDestination implements CloudDestination {
     map.put(CloudBlobMetadata.FIELD_ENCRYPTION_ORIGIN, cloudBlobMetadata.getEncryptionOrigin().name());
     map.put(CloudBlobMetadata.FIELD_VCR_KMS_CONTEXT, String.valueOf(cloudBlobMetadata.getVcrKmsContext()));
     map.put(CloudBlobMetadata.FIELD_CRYPTO_AGENT_FACTORY, String.valueOf(cloudBlobMetadata.getCryptoAgentFactory()));
+    map.put(CloudBlobMetadata.FIELD_CLOUD_BLOB_NAME, String.valueOf(cloudBlobMetadata.getCloudBlobName()));
     return map;
   }
 }
