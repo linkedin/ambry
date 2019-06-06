@@ -69,7 +69,7 @@ class MockSelector extends Selector {
    * @param address The address to connect to
    * @param sendBufferSize not used.
    * @param receiveBufferSize not used.
-   * @param portType {@PortType} which represents the type of connection to establish
+   * @param portType {@link PortType} which represents the type of connection to establish
    * @return the connection id for the connection.
    */
   @Override
@@ -99,7 +99,7 @@ class MockSelector extends Selector {
   public void poll(long timeoutMs, List<NetworkSend> sends) throws IOException {
     this.sends = sends;
     disconnected.clear();
-    if(state.get() == MockSelectorState.FailConnectionInitiationOnPoll){
+    if (state.get() == MockSelectorState.FailConnectionInitiationOnPoll) {
       disconnected.addAll(connected);
       connected.clear();
     }
