@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -840,6 +841,26 @@ public class NonBlockingRouterTest {
     //submission after closing should return a future that is already done.
     setOperationParams();
     assertClosed();
+  }
+
+  /**
+   * Test that Response Handler correctly handles disconnected connections after warming up.
+   */
+  @Test
+  public void testWarmUpConnectionFailureHandling() throws IOException {
+    Properties props = getNonBlockingRouterProperties("DC3");
+    MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
+    mockSelectorState.set(MockSelectorState.FailConnectionInitiationOnPoll);
+    setRouter(props, mockServerLayout, new LoggingNotificationSystem());
+    List<DataNodeId> localNodes = mockClusterMap.getDataNodes()
+        .stream()
+        .filter(node -> node.getDatacenterName().equals("DC3"))
+        .collect(Collectors.toList());
+    for (DataNodeId node : localNodes) {
+      assertTrue("Local node should be marked as timed out by ResponseHandler.", ((MockDataNodeId) node).isTimedOut());
+    }
+    router.close();
+    mockSelectorState.set(MockSelectorState.Good);
   }
 
   /**

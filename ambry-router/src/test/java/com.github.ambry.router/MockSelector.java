@@ -98,6 +98,11 @@ class MockSelector extends Selector {
   @Override
   public void poll(long timeoutMs, List<NetworkSend> sends) throws IOException {
     this.sends = sends;
+    disconnected.clear();
+    if(state.get() == MockSelectorState.FailConnectionInitiationOnPoll){
+      disconnected.addAll(connected);
+      connected.clear();
+    }
     if (sends != null) {
       for (NetworkSend send : sends) {
         if (state.get() == MockSelectorState.ThrowExceptionOnSend) {
@@ -140,9 +145,7 @@ class MockSelector extends Selector {
    */
   @Override
   public List<String> disconnected() {
-    List<String> toReturn = disconnected;
-    disconnected = new ArrayList<String>();
-    return toReturn;
+    return this.disconnected;
   }
 
   /**
@@ -203,22 +206,31 @@ enum MockSelectorState {
   /**
    * The Good state.
    */
-  Good, /**
+  Good,
+  /**
    * A state that causes all connect calls to throw an IOException.
    */
-  ThrowExceptionOnConnect, /**
+  ThrowExceptionOnConnect,
+  /**
    * A state that causes disconnections of connections on which a send is attempted.
    */
-  DisconnectOnSend, /**
+  DisconnectOnSend,
+  /**
    * A state that causes all poll calls to throw an IOException if there is anything to send.
    */
-  ThrowExceptionOnSend, /**
+  ThrowExceptionOnSend,
+  /**
    * A state that causes all poll calls to throw an IOException regardless of whether there are sends to perform or
    * not.
    */
-  ThrowExceptionOnAllPoll, /**
+  ThrowExceptionOnAllPoll,
+  /**
    * Throw a throwable during poll that sends.
    */
   ThrowThrowableOnSend,
+  /**
+   * A state that causes all connections initiated to fail during poll.
+   */
+  FailConnectionInitiationOnPoll
 }
 

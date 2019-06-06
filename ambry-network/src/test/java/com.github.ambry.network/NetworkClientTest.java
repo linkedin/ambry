@@ -101,7 +101,7 @@ public class NetworkClientTest {
   }
 
   /**
-   * Test {@link NetworkClient#warmUpConnections(List, int, long)}
+   * Test {@link NetworkClient#warmUpConnections(List, int, long, List)}
    */
   @Test
   public void testWarmUpConnectionsSslAndPlainText() {
@@ -124,8 +124,11 @@ public class NetworkClientTest {
   @Test
   public void testWarmUpConnectionsFailedAll() {
     selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
+    List<ResponseInfo> responseInfos = new ArrayList<>();
     Assert.assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(localPlainTextDataNodes, 2, 2000));
+        networkClient.warmUpConnections(localPlainTextDataNodes, 2, 2000, responseInfos));
+    // verify that the connections to all local nodes get disconnected
+    Assert.assertEquals("Mismatch in timeout responses", 3, responseInfos.size());
     selector.setState(MockSelectorState.Good);
   }
 
@@ -377,7 +380,7 @@ public class NetworkClientTest {
     // increment the time so that the request times out in the next cycle.
     time.sleep(2000);
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
-    // here the size of responseInfoList should be 2 because first response comes from dropping request in the queue that
+    // the size of responseInfoList should be 2 because first response comes from dropping request in the queue that
     // waits too long. (This response would be handled by corresponding manager, i.e PutManager, GetManager, etc); second
     // response comes from underlying connection timeout in nioSelector (usually due to remote node is down). This response
     // will be handled by ResponseHandler to mark remote node down immediately.
@@ -432,20 +435,20 @@ public class NetworkClientTest {
   }
 
   /**
-   * Helper function to test {@link NetworkClient#warmUpConnections(List, int, long)}
+   * Helper function to test {@link NetworkClient#warmUpConnections(List, int, long, List)}
    */
   private void doTestWarmUpConnections(List<DataNodeId> localDataNodeIds, int maxPort, PortType expectedPortType) {
     Assert.assertEquals("Port type is not expected.", expectedPortType,
         localDataNodeIds.get(0).getPortToConnectTo().getPortType());
     Assert.assertEquals("Connection count is not expected", maxPort * localDataNodeIds.size(),
-        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000, new ArrayList<>()));
     Assert.assertEquals("Connection count is not expected", 50 * maxPort / 100 * localDataNodeIds.size(),
-        networkClient.warmUpConnections(localDataNodeIds, 50, 2000));
+        networkClient.warmUpConnections(localDataNodeIds, 50, 2000, new ArrayList<>()));
     Assert.assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(localDataNodeIds, 0, 2000));
+        networkClient.warmUpConnections(localDataNodeIds, 0, 2000, new ArrayList<>()));
     selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
     Assert.assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(localDataNodeIds, 100, 2000));
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000, new ArrayList<>()));
     selector.setState(MockSelectorState.Good);
   }
 }
@@ -645,6 +648,7 @@ class MockSelector extends Selector {
    */
   @Override
   public void poll(long timeoutMs, List<NetworkSend> sends) throws IOException {
+    disconnected.clear();
     if (state == MockSelectorState.ThrowExceptionOnPoll) {
       throw new IOException("Mock exception on poll");
     }
@@ -701,9 +705,10 @@ class MockSelector extends Selector {
     if (state == MockSelectorState.IdlePoll) {
       return new ArrayList<>();
     }
-    List<String> toReturn = disconnected;
-    disconnected = new ArrayList<String>();
-    return toReturn;
+    return this.disconnected;
+//    List<String> toReturn = disconnected;
+//    disconnected = new ArrayList<String>();
+//    return toReturn;
   }
 
   /**

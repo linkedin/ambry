@@ -208,10 +208,11 @@ public class NetworkClient implements Closeable {
    * @param dataNodeIds warm up target nodes.
    * @param connectionWarmUpPercentagePerDataNode percentage of max connections would like to establish in the warmup.
    * @param timeForWarmUp max time to wait for connections' establish.
+   * @param responseInfoList records responses from disconnected connections.
    * @return number of connections established successfully.
    */
   public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionWarmUpPercentagePerDataNode,
-      long timeForWarmUp) {
+      long timeForWarmUp, List<ResponseInfo> responseInfoList) {
     int expectedConnections = 0;
     logger.info("Connection warm up start.");
     if (dataNodeIds.size() == 0) {
@@ -245,7 +246,7 @@ public class NetworkClient implements Closeable {
         selector.poll(1000L);
         successfulConnections += selector.connected().size();
         failedConnections += selector.disconnected().size();
-        handleSelectorEvents(new ArrayList<>());
+        handleSelectorEvents(responseInfoList);
       } catch (IOException e) {
         logger.error("Warm up received unexpected error while polling: ", e);
       }

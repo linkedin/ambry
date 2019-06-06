@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -32,6 +33,7 @@ public class MockDataNodeId implements DataNodeId {
   private final String datacenter;
   private List<String> sslEnabledDataCenters = new ArrayList<String>();
   private int portNum;
+  private AtomicBoolean isTimedout = new AtomicBoolean(false);
 
   public MockDataNodeId(String hostname, List<Port> ports, List<String> mountPaths, String dataCenter) {
     this.hostname = hostname;
@@ -189,11 +191,15 @@ public class MockDataNodeId implements DataNodeId {
   }
 
   public void onNodeTimeout() {
-    /* no-op for now */
+    isTimedout.set(true);
   }
 
   public void onNodeResponse() {
-    /* no-op for now */
+    isTimedout.set(false);
+  }
+
+  public boolean isTimedOut() {
+    return isTimedout.get();
   }
 
   @Override

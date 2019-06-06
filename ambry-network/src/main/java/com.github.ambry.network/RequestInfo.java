@@ -31,11 +31,8 @@ public class RequestInfo {
    * @param host the host to which the data is meant for
    * @param port the port on the host to which the data is meant for
    * @param request the data to be sent.
+   * @param replicaId the {@link ReplicaId} associated with this request
    */
-  public RequestInfo(String host, Port port, Send request) {
-    this(host, port, request, null);
-  }
-
   public RequestInfo(String host, Port port, Send request, ReplicaId replicaId) {
     this.host = host;
     this.port = port;

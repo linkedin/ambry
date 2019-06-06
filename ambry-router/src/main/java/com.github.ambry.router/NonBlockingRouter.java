@@ -554,12 +554,20 @@ class NonBlockingRouter implements Router {
     OperationController(String suffix, String defaultPartitionClass, AccountService accountService) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
       // Warm up connections to dataNodes in local DC.
+      List<ResponseInfo> responseInfos = new ArrayList<>();
       networkClient.warmUpConnections(clusterMap.getDataNodeIds()
               .stream()
               .filter(dataNodeId -> clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId())
                   .equals(dataNodeId.getDatacenterName()))
               .collect(Collectors.toList()), routerConfig.routerConnectionsWarmUpPercentagePerPort,
-          routerConfig.routerConnectionsWarmUpTimeoutMs);
+          routerConfig.routerConnectionsWarmUpTimeoutMs, responseInfos);
+      // Update ResponseHandler immediately if connections lost to certain nodes.
+      for (ResponseInfo responseInfo : responseInfos) {
+        if (responseInfo.getRequestInfo() == null) {
+          DataNodeId dataNodeId = responseInfo.getDataNode();
+          responseHandler.onConnectionTimeout(dataNodeId);
+        }
+      }
       routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
       putManager =
           new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,
