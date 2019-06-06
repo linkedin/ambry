@@ -118,8 +118,9 @@ public class ResponseHandler {
   }
 
   /**
-   *
-   * @param dataNodeId
+   * Take action when connection to certain {@link DataNodeId} timed out. The clustermap is supposed to mark node resource
+   * down and avoid subsequent requests routed to this node within down window.
+   * @param dataNodeId the {@link DataNodeId} associated with timeout connection.
    */
   public void onConnectionTimeout(DataNodeId dataNodeId) {
     if (dataNodeId != null) {

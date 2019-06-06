@@ -67,6 +67,9 @@ public class ResponseInfo {
     return response;
   }
 
+  /**
+   * @return the {@link DataNodeId} with which the response is associated.
+   */
   public DataNodeId getDataNode() {
     return dataNode;
   }
