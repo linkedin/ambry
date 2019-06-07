@@ -124,12 +124,12 @@ public class HelixVcrPopulateTool {
         DedicatedZkClientFactory.getInstance().buildZkClient(new HelixZkClient.ZkConnectionConfig(destZkString));
     destZkClient.setZkSerializer(new ZNRecordSerializer());
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
-//    if (destAdmin.getClusters().contains(destClusterName)) {
-//      System.err.println("Failed to create cluster becuase " + destClusterName + " already exist.");
-//      return;
-//    }
-//    ClusterSetup clusterSetup = new ClusterSetup(destZkString);
-//    clusterSetup.addCluster(destClusterName, true);
+    if (destAdmin.getClusters().contains(destClusterName)) {
+      System.err.println("Failed to create cluster becuase " + destClusterName + " already exist.");
+      return;
+    }
+    ClusterSetup clusterSetup = new ClusterSetup(destZkString);
+    clusterSetup.addCluster(destClusterName, true);
 
     // set ALLOW_PARTICIPANT_AUTO_JOIN
     HelixConfigScope configScope = new HelixConfigScopeBuilder(HelixConfigScope.ConfigScopeProperty.CLUSTER).

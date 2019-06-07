@@ -581,7 +581,6 @@ public class DumpIndexTool {
       exitCode = 4;
     } else {
       logger.info("Index of {} is well formed and without errors", replicaDir);
-      logger.info(results.toString());
     }
     return exitCode;
   }

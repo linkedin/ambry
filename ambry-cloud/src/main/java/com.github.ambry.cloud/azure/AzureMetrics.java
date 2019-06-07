@@ -40,9 +40,9 @@ public class AzureMetrics {
   public static final String BLOB_DELETION_TIME = "BlobDeletionTime";
   public static final String BLOB_DELETE_ERROR_COUNT = "BlobDeleteErrorCount";
   public static final String CONFIG_ERROR_COUNT = "ConfigErrorCount";
-  public static final String BACKUP_SUCCESS_LATENCY = "backupSuccessLatency";
-  public static final String BACKUP_SUCCESS_BYTE_RATE = "backupSuccessByteRate";
-  public static final String BACKUP_ERROR_COUNT = "backupErrorCount";
+  public static final String BACKUP_SUCCESS_LATENCY = "BackupSuccessLatency";
+  public static final String BACKUP_SUCCESS_BYTE_RATE = "BackupSuccessByteRate";
+  public static final String BACKUP_ERROR_COUNT = "BackupErrorCount";
 
   // Metrics
   public final Counter blobUploadRequestCount;
