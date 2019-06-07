@@ -212,7 +212,7 @@ class PostBlobHandler {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postRouterPutBlobMetrics, blobId -> {
-        setSignedIdMetadataIfRequired(blobInfo.getBlobProperties());
+        setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
         idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo));
       }, uri, LOGGER, finalCallback);
     }
@@ -301,7 +301,7 @@ class PostBlobHandler {
      * @param blobProperties the {@link BlobProperties} from the request.
      * @throws RestServiceException
      */
-    private void setSignedIdMetadataIfRequired(BlobProperties blobProperties) throws RestServiceException {
+    private void setSignedIdMetadataAndBlobSize(BlobProperties blobProperties) throws RestServiceException {
       if (RestUtils.isChunkUpload(restRequest.getArgs())) {
         Map<String, String> metadata = new HashMap<>(2);
         metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBytesReceived()));
@@ -311,6 +311,8 @@ class PostBlobHandler {
             Long.toString(Utils.addSecondsToEpochTime(time.milliseconds(), blobProperties.getTimeToLiveInSeconds())));
         restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
       }
+      //the actual blob size is the number of bytes read
+      restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBytesReceived());
     }
 
     /**
@@ -348,6 +350,7 @@ class PostBlobHandler {
       }
       List<ChunkInfo> chunksToStitch = new ArrayList<>(signedChunkIds.size());
       String expectedSession = null;
+      long totalStitchedBlobSize = 0;
       for (String signedChunkId : signedChunkIds) {
         if (!idSigningService.isIdSigned(signedChunkId)) {
           throw new RestServiceException("All chunks IDs must be signed: " + signedChunkId,
@@ -360,6 +363,8 @@ class PostBlobHandler {
         expectedSession = verifyChunkUploadSession(metadata, expectedSession);
         @SuppressWarnings("ConstantConditions")
         long chunkSizeBytes = RestUtils.getLongHeader(metadata, RestUtils.Headers.BLOB_SIZE, true);
+
+        totalStitchedBlobSize = totalStitchedBlobSize + chunkSizeBytes;
         // Expiration time is sent to the router, but not verified in this handler. The router is responsible for making
         // checks related to internal ambry requirements, like making sure that the chunks do not expire before the
         // metadata blob.
@@ -369,6 +374,8 @@ class PostBlobHandler {
 
         chunksToStitch.add(new ChunkInfo(blobId, chunkSizeBytes, expirationTimeMs));
       }
+      //the actual blob size for stitched blob is the sum of all the chunk sizes
+      restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, totalStitchedBlobSize);
       return chunksToStitch;
     }
 
