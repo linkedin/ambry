@@ -65,7 +65,7 @@ class CloudBlobStore implements Store {
   private final boolean requireEncryption;
   private boolean started;
   // Internal counts for put requests to this partition store since store startup (includes all replicas)
-  private long numPutsRequested = 0, numPutsDone = 0, numPutsSkipped = 0;
+  private long numKeysQueried = 0, numMissingKeys = 0, numPutsRequested = 0, numPutsDone = 0, numPutsSkipped = 0;
   private long lastTimeLoggedCounts = System.currentTimeMillis();
   private long logCountsInterval = 60000;
 
@@ -120,7 +120,7 @@ class CloudBlobStore implements Store {
     CloudWriteChannel cloudWriter = new CloudWriteChannel(this, messageSetToWrite.getMessageSetInfo());
     messageSetToWrite.writeTo(cloudWriter);
 
-    logPutCountsPeriodically();
+    logCountsPeriodically();
   }
 
   /**
@@ -182,11 +182,12 @@ class CloudBlobStore implements Store {
   /**
    * Log the collected put counts on the prescribed interval.
    */
-  private void logPutCountsPeriodically() {
+  private void logCountsPeriodically() {
     long now = System.currentTimeMillis();
     if (now >= lastTimeLoggedCounts + logCountsInterval) {
-      logger.debug("Put counts for partition {}: requested: {}, done: {}, skipped: {}", partitionId.toPathString(),
-          numPutsRequested, numPutsDone, numPutsSkipped);
+      logger.debug(
+          "Counts for partition {}: keys queried: {}, missing keys: {}, puts requested: {}, done: {}, skipped: {}",
+          partitionId.toPathString(), numKeysQueried, numMissingKeys, numPutsRequested, numPutsDone, numPutsSkipped);
       lastTimeLoggedCounts = now;
     }
   }
@@ -266,11 +267,15 @@ class CloudBlobStore implements Store {
   @Override
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     checkStarted();
+    numKeysQueried += keys.size();
     // Check existence of keys in cloud metadata
     List<BlobId> blobIdList = keys.stream().map(key -> (BlobId) key).collect(Collectors.toList());
     try {
       Set<String> foundSet = cloudDestination.getBlobMetadata(blobIdList).keySet();
-      return keys.stream().filter(key -> !foundSet.contains(key.getID())).collect(Collectors.toSet());
+      Set<StoreKey> missingKeys =
+          keys.stream().filter(key -> !foundSet.contains(key.getID())).collect(Collectors.toSet());
+      numMissingKeys += missingKeys.size();
+      return missingKeys;
     } catch (CloudStorageException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
     }
