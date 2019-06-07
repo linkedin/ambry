@@ -110,10 +110,12 @@ public class AzureIntegrationTest {
     assertTrue("Expected update to return true", azureDest.updateBlobExpiration(blobId, expirationTime));
     CloudBlobMetadata metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
     assertEquals(expirationTime, metadata.getExpirationTime());
+    assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
     long deletionTime = System.currentTimeMillis() + 1000;
     assertTrue("Expected deletion to return true", azureDest.deleteBlob(blobId, deletionTime));
     metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
     assertEquals(deletionTime, metadata.getDeletionTime());
+    assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
   }
 
   /**
@@ -154,6 +156,7 @@ public class AzureIntegrationTest {
           metadata.getEncryptionOrigin());
       assertEquals("Unexpected metadata vcrKmsContext", vcrKmsContext, metadata.getVcrKmsContext());
       assertEquals("Unexpected metadata cryptoAgentFactory", cryptoAgentFactory, metadata.getCryptoAgentFactory());
+      assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
     }
 
     // Cleanup

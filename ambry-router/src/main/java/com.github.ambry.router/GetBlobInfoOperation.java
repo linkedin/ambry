@@ -87,9 +87,8 @@ class GetBlobInfoOperation extends GetOperation {
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted) {
-    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-        routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,
-        routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
+        cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
     operationTracker =
         getOperationTracker(blobId.getPartition(), blobId.getDatacenterId(), RouterOperation.GetBlobInfoOperation);

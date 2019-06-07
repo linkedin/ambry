@@ -290,10 +290,9 @@ public class GetBlobOperationTest {
 
   /**
    * Test {@link GetBlobOperation} instantiation and validate the get methods.
-   * @throws Exception
    */
   @Test
-  public void testInstantiation() throws Exception {
+  public void testInstantiation() {
     Callback<GetBlobResultInternal> getRouterCallback = new Callback<GetBlobResultInternal>() {
       @Override
       public void onCompletion(GetBlobResultInternal result, Exception exception) {

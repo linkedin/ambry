@@ -37,15 +37,18 @@ import java.util.NoSuchElementException;
  * perceived latencies.
  */
 class AdaptiveOperationTracker extends SimpleOperationTracker {
-  static final long MIN_DATA_POINTS_REQUIRED = 1000;
-
+  private final RouterConfig routerConfig;
+  private final NonBlockingRouterMetrics routerMetrics;
   private final Time time;
   private final double quantile;
-  private final Histogram localColoTracker;
-  private final Histogram crossColoTracker;
+  private final Histogram localDcHistogram;
+  private final Histogram crossDcHistogram;
   private final Counter pastDueCounter;
   private final OpTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaIterator;
+  private Map<PartitionId, Histogram> localDcPartitionToHistogram;
+  private Map<PartitionId, Histogram> crossDcPartitionToHistogram;
+
   // The value contains a pair - the boolean indicates whether the request to the corresponding replicaId has been
   // determined as expired (but not yet removed). The long is the time at which the request was sent.
   private final LinkedHashMap<ReplicaId, Pair<Boolean, Long>> unexpiredRequestSendTimes = new LinkedHashMap<>();
@@ -56,24 +59,27 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   /**
    * Constructs an {@link AdaptiveOperationTracker}
    * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} that contains histograms used by this operation tracker.
    * @param routerOperation The {@link RouterOperation} which {@link AdaptiveOperationTracker} is associated with.
    * @param partitionId The partition on which the operation is performed.
-   * @param originatingDcName name of the cross colo DC whose replicas should be tried first.
-   * @param localColoTracker the {@link Histogram} that tracks intra datacenter latencies for this class of requests.
-   * @param crossColoTracker the {@link Histogram} that tracks inter datacenter latencies for this class of requests.
-   * @param pastDueCounter the {@link Counter} that tracks the number of times a request is past due.
+   * @param originatingDcName name of originating DC whose replicas should be tried first.
    * @param time the {@link Time} instance to use.
    */
-  AdaptiveOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
-      String originatingDcName, Histogram localColoTracker, Histogram crossColoTracker, Counter pastDueCounter,
-      Time time) {
+  AdaptiveOperationTracker(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      RouterOperation routerOperation, PartitionId partitionId, String originatingDcName, Time time) {
     super(routerConfig, routerOperation, partitionId, originatingDcName, true);
+    this.routerConfig = routerConfig;
+    this.routerMetrics = routerMetrics;
     this.time = time;
-    this.localColoTracker = localColoTracker;
-    this.crossColoTracker = crossColoTracker;
-    this.pastDueCounter = pastDueCounter;
+    this.localDcHistogram = getWholeDcTracker(routerOperation, true);
+    this.crossDcHistogram = getWholeDcTracker(routerOperation, false);
+    this.pastDueCounter = getWholeDcPastDueCounter(routerOperation);
     this.quantile = routerConfig.routerLatencyToleranceQuantile;
     this.otIterator = new OpTrackerIterator();
+    if (routerConfig.routerOperationTrackerMetricScope == OperationTrackerScope.Partition) {
+      localDcPartitionToHistogram = getPartitionToLatencyMap(routerOperation, true);
+      crossDcPartitionToHistogram = getPartitionToLatencyMap(routerOperation, false);
+    }
   }
 
   @Override
@@ -87,6 +93,12 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     }
     if (trackedRequestFinalState != TrackedRequestFinalState.TIMED_OUT) {
       getLatencyHistogram(replicaId).update(elapsedTime);
+      if (routerConfig.routerOperationTrackerMetricScope != OperationTrackerScope.Datacenter) {
+        // This is only used to report whole datacenter histogram for monitoring purpose
+        Histogram histogram =
+            replicaId.getDataNodeId().getDatacenterName().equals(datacenterName) ? localDcHistogram : crossDcHistogram;
+        histogram.update(elapsedTime);
+      }
     }
   }
 
@@ -100,14 +112,90 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * Gets the {@link Histogram} that tracks request latencies to the class of replicas (intra or inter DC) that
    * {@code replicaId} belongs to.
    * @param replicaId the {@link ReplicaId} whose request latency is going to be tracked.
-   * @return the {@link Histogram} that tracks requests to the class of replicas (intra or inter DC) that
-   * {@code replicaId} belongs to.
+   * @return the {@link Histogram} associated with this replica.
    */
   Histogram getLatencyHistogram(ReplicaId replicaId) {
-    if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
-      return localColoTracker;
+    boolean isLocalReplica = replicaId.getDataNodeId().getDatacenterName().equals(datacenterName);
+    Histogram histogramToReturn;
+    // TODO add support for replica-level/disk-level/node-level histogram based on the config
+    switch (routerConfig.routerOperationTrackerMetricScope) {
+      case Datacenter:
+        histogramToReturn = isLocalReplica ? localDcHistogram : crossDcHistogram;
+        break;
+      case Partition:
+        PartitionId partitionId = replicaId.getPartitionId();
+        histogramToReturn = isLocalReplica ? localDcPartitionToHistogram.get(partitionId)
+            : crossDcPartitionToHistogram.get(partitionId);
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported operation tracker metric scope.");
     }
-    return crossColoTracker;
+    return histogramToReturn;
+  }
+
+  /**
+   * Get certain whole DC latency histogram based on given arguments.
+   * @param routerOperation the {@link RouterOperation} that uses this tracker.
+   * @param isLocal {@code true} if local DC latency histogram should be returned. {@code false} otherwise.
+   * @return whole DC latency histogram.
+   */
+  private Histogram getWholeDcTracker(RouterOperation routerOperation, boolean isLocal) {
+    Histogram trackerToReturn;
+    switch (routerOperation) {
+      case GetBlobInfoOperation:
+        trackerToReturn =
+            isLocal ? routerMetrics.getBlobInfoLocalDcLatencyMs : routerMetrics.getBlobInfoCrossDcLatencyMs;
+        break;
+      case GetBlobOperation:
+        trackerToReturn = isLocal ? routerMetrics.getBlobLocalDcLatencyMs : routerMetrics.getBlobCrossDcLatencyMs;
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported router operation when getting whole DC latency tracker.");
+    }
+    return trackerToReturn;
+  }
+
+  /**
+   * Get certain whole DC past due counter based on given arguments.
+   * @param routerOperation the {@link RouterOperation} that uses this tracker.
+   * @return whole DC past due counter.
+   */
+  private Counter getWholeDcPastDueCounter(RouterOperation routerOperation) {
+    Counter pastDueCounter;
+    switch (routerOperation) {
+      case GetBlobInfoOperation:
+        pastDueCounter = routerMetrics.getBlobInfoPastDueCount;
+        break;
+      case GetBlobOperation:
+        pastDueCounter = routerMetrics.getBlobPastDueCount;
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported router operation when getting whole DC past due counter.");
+    }
+    return pastDueCounter;
+  }
+
+  /**
+   * Get certain partition-level histograms based on given arguments.
+   * @param routerOperation the {@link RouterOperation} that uses this tracker.
+   * @param isLocal {@code true} if local partition-level histograms should be returned. {@code false} otherwise.
+   * @return partition-to-histogram map.
+   */
+  Map<PartitionId, Histogram> getPartitionToLatencyMap(RouterOperation routerOperation, boolean isLocal) {
+    Map<PartitionId, Histogram> partitionToHistogramMap;
+    switch (routerOperation) {
+      case GetBlobInfoOperation:
+        partitionToHistogramMap = isLocal ? routerMetrics.getBlobInfoLocalDcPartitionToLatency
+            : routerMetrics.getBlobInfoCrossDcPartitionToLatency;
+        break;
+      case GetBlobOperation:
+        partitionToHistogramMap =
+            isLocal ? routerMetrics.getBlobLocalDcPartitionToLatency : routerMetrics.getBlobCrossDcPartitionToLatency;
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported router operation when getting partition-to-latency map");
+    }
+    return partitionToHistogramMap;
   }
 
   /**
@@ -153,7 +241,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
         Map.Entry<ReplicaId, Pair<Boolean, Long>> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
         if (!oldestEntry.getValue().getFirst()) {
           Histogram latencyTracker = getLatencyHistogram(oldestEntry.getKey());
-          isPastDue = (latencyTracker.getCount() >= MIN_DATA_POINTS_REQUIRED) && (
+          isPastDue = (latencyTracker.getCount() >= routerConfig.routerOperationTrackerMinDataPointsRequired) && (
               time.milliseconds() - oldestEntry.getValue().getSecond() >= latencyTracker.getSnapshot()
                   .getValue(quantile));
           if (isPastDue) {

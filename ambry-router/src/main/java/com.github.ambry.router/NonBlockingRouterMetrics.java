@@ -14,12 +14,14 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.ExponentiallyDecayingReservoir;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.utils.SystemTime;
 import java.util.HashMap;
@@ -163,12 +165,12 @@ public class NonBlockingRouterMetrics {
   public final Counter rawBlobGetCount;
 
   // AdaptiveOperationTracker metrics
-  public final Histogram getBlobLocalColoLatencyMs;
-  public final Histogram getBlobCrossColoLatencyMs;
+  public final Histogram getBlobLocalDcLatencyMs;
+  public final Histogram getBlobCrossDcLatencyMs;
   public final Counter getBlobPastDueCount;
 
-  public final Histogram getBlobInfoLocalColoLatencyMs;
-  public final Histogram getBlobInfoCrossColoLatencyMs;
+  public final Histogram getBlobInfoLocalDcLatencyMs;
+  public final Histogram getBlobInfoCrossDcLatencyMs;
   public final Counter getBlobInfoPastDueCount;
 
   // Workload characteristics
@@ -179,6 +181,13 @@ public class NonBlockingRouterMetrics {
   // Crypto job metrics
   public final CryptoJobMetrics encryptJobMetrics;
   public final CryptoJobMetrics decryptJobMetrics;
+
+  // Partition-level Histogram for operation tracker
+  Map<PartitionId, Histogram> getBlobLocalDcPartitionToLatency;
+  Map<PartitionId, Histogram> getBlobCrossDcPartitionToLatency;
+
+  Map<PartitionId, Histogram> getBlobInfoLocalDcPartitionToLatency;
+  Map<PartitionId, Histogram> getBlobInfoCrossDcPartitionToLatency;
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -387,16 +396,16 @@ public class NonBlockingRouterMetrics {
     }
 
     // AdaptiveOperationTracker trackers
-    getBlobLocalColoLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "LocalColoLatencyMs"));
-    getBlobCrossColoLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "CrossColoLatencyMs"));
+    getBlobLocalDcLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "LocalDcLatencyMs"));
+    getBlobCrossDcLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "CrossDcLatencyMs"));
     getBlobPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "PastDueCount"));
 
-    getBlobInfoLocalColoLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "LocalColoLatencyMs"));
-    getBlobInfoCrossColoLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossColoLatencyMs"));
+    getBlobInfoLocalDcLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "LocalDcLatencyMs"));
+    getBlobInfoCrossDcLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossDcLatencyMs"));
     getBlobInfoPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "PastDueCount"));
 
     // Workload
@@ -410,15 +419,50 @@ public class NonBlockingRouterMetrics {
 
     // Custom percentiles
     if (routerConfig != null) {
-      registerCustomPercentiles(GetBlobOperation.class, "LocalColoLatencyMs", getBlobLocalColoLatencyMs,
+      registerCustomPercentiles(GetBlobOperation.class, "LocalDcLatencyMs", getBlobLocalDcLatencyMs,
           routerConfig.routerOperationTrackerCustomPercentiles);
-      registerCustomPercentiles(GetBlobOperation.class, "CrossColoLatencyMs", getBlobCrossColoLatencyMs,
+      registerCustomPercentiles(GetBlobOperation.class, "CrossDcLatencyMs", getBlobCrossDcLatencyMs,
           routerConfig.routerOperationTrackerCustomPercentiles);
-      registerCustomPercentiles(GetBlobInfoOperation.class, "LocalColoLatencyMs", getBlobInfoLocalColoLatencyMs,
+      registerCustomPercentiles(GetBlobInfoOperation.class, "LocalDcLatencyMs", getBlobInfoLocalDcLatencyMs,
           routerConfig.routerOperationTrackerCustomPercentiles);
-      registerCustomPercentiles(GetBlobInfoOperation.class, "CrossColoLatencyMs", getBlobInfoCrossColoLatencyMs,
+      registerCustomPercentiles(GetBlobInfoOperation.class, "CrossDcLatencyMs", getBlobInfoCrossDcLatencyMs,
           routerConfig.routerOperationTrackerCustomPercentiles);
     }
+
+    if (routerConfig != null && routerConfig.routerOperationTrackerMetricScope == OperationTrackerScope.Partition) {
+      // pre-populate all partition-to-histogram maps here to allow lock-free hashmap in adaptive operation tracker
+      initializePartitionToHistogramMap(clusterMap, routerConfig);
+    }
+  }
+
+  /**
+   * Initialize partition-level histogram for all partitions in cluster map.
+   * @param clusterMap the {@link ClusterMap} that contains info of all partitions.
+   * @param routerConfig the {@link RouterConfig} that specifies histogram parameters.
+   */
+  private void initializePartitionToHistogramMap(ClusterMap clusterMap, RouterConfig routerConfig) {
+    int reservoirSize = routerConfig.routerOperationTrackerReservoirSize;
+    double decayFactor = routerConfig.routerOperationTrackerReservoirDecayFactor;
+    getBlobLocalDcPartitionToLatency = new HashMap<>();
+    getBlobInfoLocalDcPartitionToLatency = new HashMap<>();
+    getBlobCrossDcPartitionToLatency = new HashMap<>();
+    getBlobInfoCrossDcPartitionToLatency = new HashMap<>();
+    for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
+      getBlobLocalDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+      getBlobInfoLocalDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+      getBlobCrossDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+      getBlobInfoCrossDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+    }
+  }
+
+  /**
+   * Create a histogram with given parameters.
+   * @param reservoirSize the maximum size of reservoir in histogram
+   * @param decayFactor the decay factor used by histogram
+   * @return a configured {@link Histogram}.
+   */
+  private Histogram createHistogram(int reservoirSize, double decayFactor) {
+    return new Histogram(new ExponentiallyDecayingReservoir(reservoirSize, decayFactor));
   }
 
   /**

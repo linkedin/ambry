@@ -25,7 +25,6 @@ public class AzureMetrics {
   public static final String BLOB_UPLOAD_REQUEST_COUNT = "BlobUploadRequestCount";
   public static final String BLOB_UPLOAD_SUCCESS_COUNT = "BlobUploadSuccessCount";
   public static final String BLOB_UPLOAD_CONFLICT_COUNT = "BlobUploadConflictCount";
-  public static final String BLOB_UPLOAD_ERROR_COUNT = "BlobUploadErrorCount";
   public static final String BLOB_UPLOAD_TIME = "BlobUploadTime";
   public static final String BLOB_UPDATE_TIME = "BlobUpdateTime";
   public static final String BLOB_UPDATED_COUNT = "BlobUpdatedCount";
@@ -41,13 +40,14 @@ public class AzureMetrics {
   public static final String BLOB_DELETION_TIME = "BlobDeletionTime";
   public static final String BLOB_DELETE_ERROR_COUNT = "BlobDeleteErrorCount";
   public static final String CONFIG_ERROR_COUNT = "ConfigErrorCount";
-  public static final String BLOB_UPLOAD_RATE = "BlobUploadRate";
+  public static final String BACKUP_SUCCESS_LATENCY = "BackupSuccessLatency";
+  public static final String BACKUP_SUCCESS_BYTE_RATE = "BackupSuccessByteRate";
+  public static final String BACKUP_ERROR_COUNT = "BackupErrorCount";
 
   // Metrics
   public final Counter blobUploadRequestCount;
   public final Counter blobUploadSuccessCount;
   public final Counter blobUploadConflictCount;
-  public final Counter blobUploadErrorCount;
   public final Counter blobUpdatedCount;
   public final Timer blobUploadTime;
   public final Timer blobUpdateTime;
@@ -63,7 +63,9 @@ public class AzureMetrics {
   public final Timer blobDeletionTime;
   public final Counter blobDeleteErrorCount;
   public final Counter configErrorCount;
-  public final Meter blobUploadRate;
+  public final Timer backupSuccessLatency;
+  public final Meter backupSuccessByteRate;
+  public final Counter backupErrorCount;
 
   public AzureMetrics(MetricRegistry registry) {
     blobUploadRequestCount =
@@ -72,7 +74,6 @@ public class AzureMetrics {
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_SUCCESS_COUNT));
     blobUploadConflictCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_CONFLICT_COUNT));
-    blobUploadErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_ERROR_COUNT));
     blobUpdatedCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATED_COUNT));
     blobUploadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_TIME));
     blobUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TIME));
@@ -89,6 +90,8 @@ public class AzureMetrics {
     blobDeletionTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_DELETION_TIME));
     blobDeleteErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DELETE_ERROR_COUNT));
     configErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, CONFIG_ERROR_COUNT));
-    blobUploadRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_RATE));
+    backupSuccessByteRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BACKUP_SUCCESS_BYTE_RATE));
+    backupSuccessLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BACKUP_SUCCESS_LATENCY));
+    backupErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BACKUP_ERROR_COUNT));
   }
 }

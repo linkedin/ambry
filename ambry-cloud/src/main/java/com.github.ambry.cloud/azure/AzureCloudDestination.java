@@ -191,9 +191,8 @@ class AzureCloudDestination implements CloudDestination {
 
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     Objects.requireNonNull(blobInputStream, "Input stream cannot be null");
-
-    azureMetrics.blobUploadRequestCount.inc();
     try {
+      Timer.Context backupTimer = azureMetrics.backupSuccessLatency.time();
       boolean uploaded = uploadIfNotExists(blobId, inputLength, cloudBlobMetadata, blobInputStream);
       if (!uploaded) {
         return false;
@@ -205,10 +204,11 @@ class AzureCloudDestination implements CloudDestination {
       } finally {
         docTimer.stop();
       }
-      azureMetrics.blobUploadSuccessCount.inc();
+      backupTimer.stop();
+      azureMetrics.backupSuccessByteRate.mark(inputLength);
       return true;
     } catch (URISyntaxException | StorageException | DocumentClientException | IOException e) {
-      azureMetrics.blobUploadErrorCount.inc();
+      azureMetrics.backupErrorCount.inc();
       updateErrorMetrics(e);
       throw new CloudStorageException("Error uploading blob " + blobId, e);
     }
@@ -229,14 +229,17 @@ class AzureCloudDestination implements CloudDestination {
       InputStream blobInputStream) throws StorageException, URISyntaxException, IOException {
     BlobRequestOptions options = null; // may want to set BlobEncryptionPolicy here
     AccessCondition condition = AccessCondition.generateIfNoneMatchCondition("*");
+    azureMetrics.blobUploadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
     try {
       CloudBlobContainer azureContainer = getContainer(blobId, true);
       String azureBlobName = getAzureBlobName(blobId);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
+      cloudBlobMetadata.setCloudBlobName(getAzureBlobName(blobId));
       azureBlob.setMetadata(getMetadataMap(cloudBlobMetadata));
       azureBlob.upload(blobInputStream, inputLength, condition, options, blobOpContext);
       logger.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
+      azureMetrics.blobUploadSuccessCount.inc();
       return true;
     } catch (StorageException sex) {
       if (sex.getHttpStatusCode() == HttpURLConnection.HTTP_CONFLICT) {
@@ -399,7 +402,8 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream) throws CloudStorageException {
+  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream)
+      throws CloudStorageException {
     // Path is partitionId path string
     // Write to container partitionPath, blob filename "replicaTokens"
     try {
@@ -413,7 +417,8 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream) throws CloudStorageException {
+  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream)
+      throws CloudStorageException {
     try {
       String containerName = getAzureContainerName(partitionPath);
       CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
@@ -438,10 +443,10 @@ class AzureCloudDestination implements CloudDestination {
    * @param blobId The {@link BlobId} to store.
    * @return An Azure-friendly blob name.
    */
-  private String getAzureBlobName(BlobId blobId) {
-    // Prefix to assist in blob data sharding, since beginning of blobId has little variation.
-    String prefix = blobId.getUuid().substring(0, 4) + "-";
-    return prefix + blobId.getID();
+  String getAzureBlobName(BlobId blobId) {
+    // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
+    String blobIdStr = blobId.getID();
+    return blobIdStr.substring(blobIdStr.length() - 4) + "-" + blobIdStr;
   }
 
   /**
@@ -470,6 +475,7 @@ class AzureCloudDestination implements CloudDestination {
     map.put(CloudBlobMetadata.FIELD_ENCRYPTION_ORIGIN, cloudBlobMetadata.getEncryptionOrigin().name());
     map.put(CloudBlobMetadata.FIELD_VCR_KMS_CONTEXT, String.valueOf(cloudBlobMetadata.getVcrKmsContext()));
     map.put(CloudBlobMetadata.FIELD_CRYPTO_AGENT_FACTORY, String.valueOf(cloudBlobMetadata.getCryptoAgentFactory()));
+    map.put(CloudBlobMetadata.FIELD_CLOUD_BLOB_NAME, String.valueOf(cloudBlobMetadata.getCloudBlobName()));
     return map;
   }
 }
