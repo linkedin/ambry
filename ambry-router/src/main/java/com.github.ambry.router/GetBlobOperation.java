@@ -994,7 +994,7 @@ class GetBlobOperation extends GetOperation {
 
     // refers to the blob type.
     private BlobType blobType;
-    private List<CompositeBlobInfo.ChunkMetadata> keysAndSizesAndOffsets;
+    private List<CompositeBlobInfo.ChunkMetadata> chunkMetadataList;
     private BlobProperties serverBlobProperties;
 
     /**
@@ -1198,22 +1198,22 @@ class GetBlobOperation extends GetOperation {
       compositeBlobInfo =
           MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
       totalSize = compositeBlobInfo.getTotalSize();
-      keysAndSizesAndOffsets = compositeBlobInfo.getChunkMetadataList();
+      chunkMetadataList = compositeBlobInfo.getChunkMetadataList();
       boolean rangeResolutionFailure = false;
       try {
         if (options.getBlobOptions.getBlobSegment() != -1) {
           long requestedSegment = options.getBlobOptions.getBlobSegment();
-          if (requestedSegment < 0 || requestedSegment >= keysAndSizesAndOffsets.size()) {
+          if (requestedSegment < 0 || requestedSegment >= chunkMetadataList.size()) {
             throw new IllegalArgumentException(
-                "Bad segment number: " + requestedSegment + ", num of keys: " + keysAndSizesAndOffsets.size());
+                "Bad segment number: " + requestedSegment + ", num of keys: " + chunkMetadataList.size());
           }
-          keysAndSizesAndOffsets = keysAndSizesAndOffsets.subList((int) requestedSegment, (int) requestedSegment + 1);
+          chunkMetadataList = chunkMetadataList.subList((int) requestedSegment, (int) requestedSegment + 1);
         }
         if (options.getBlobOptions.getRange() != null) {
           resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
           // Get only the chunks within the range.
           if (options.getBlobOptions.getBlobSegment() == -1) {
-            keysAndSizesAndOffsets = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
+            chunkMetadataList = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
                 resolvedByteRange.getEndOffset());
           }
         }
@@ -1257,9 +1257,9 @@ class GetBlobOperation extends GetOperation {
         numChunksTotal = 0;
         dataChunks = null;
       } else {
-        chunkIdIterator = keysAndSizesAndOffsets.listIterator();
-        numChunksTotal = keysAndSizesAndOffsets.size();
-        dataChunks = new GetChunk[Math.min(keysAndSizesAndOffsets.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
+        chunkIdIterator = chunkMetadataList.listIterator();
+        numChunksTotal = chunkMetadataList.size();
+        dataChunks = new GetChunk[Math.min(chunkMetadataList.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
         for (int i = 0; i < dataChunks.length; i++) {
           int idx = chunkIdIterator.nextIndex();
           CompositeBlobInfo.ChunkMetadata keyAndOffset = chunkIdIterator.next();
