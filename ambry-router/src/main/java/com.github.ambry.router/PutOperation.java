@@ -27,6 +27,7 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
@@ -54,6 +55,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -337,13 +339,15 @@ class PutOperation {
           RouterErrorCode.InvalidPutArgument);
     }
     long totalSize = 0;
-    long intermediateChunkSize = chunksToStitch.get(0).getChunkSizeInBytes();
+    long intermediateChunkSize =
+        routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2
+            ? chunksToStitch.get(0).getChunkSizeInBytes() : routerConfig.routerMaxPutChunkSizeBytes;
     metadataPutChunk.setIntermediateChunkSize(intermediateChunkSize);
     for (ListIterator<ChunkInfo> iter = chunksToStitch.listIterator(); iter.hasNext(); ) {
       int chunkIndex = iter.nextIndex();
       ChunkInfo chunkInfo = iter.next();
       BlobId chunkId = unwrapChunkInfo(chunkInfo, intermediateChunkSize, !iter.hasNext());
-      metadataPutChunk.addChunkId(chunkId, chunkIndex);
+      metadataPutChunk.addChunkId(chunkId, chunkInfo.getChunkSizeInBytes(), chunkIndex);
       totalSize += chunkInfo.getChunkSizeInBytes();
     }
     blobSize = totalSize;
@@ -364,7 +368,9 @@ class PutOperation {
     long chunkSize = chunkInfo.getChunkSizeInBytes();
     long chunkExpirationTimeInMs = chunkInfo.getExpirationTimeInMs();
 
-    if (chunkSize == 0 || chunkSize > intermediateChunkSize || (!lastChunk && chunkSize < intermediateChunkSize)) {
+    if (chunkSize == 0 || chunkSize > intermediateChunkSize || (
+        routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2 && !lastChunk
+            && chunkSize < intermediateChunkSize)) {
       throw new RouterException(
           "Invalid chunkSize for " + (lastChunk ? "last" : "intermediate") + " chunk: " + chunkSize
               + "; intermediateChunkSize: " + intermediateChunkSize, RouterErrorCode.InvalidPutArgument);
@@ -480,7 +486,7 @@ class PutOperation {
     } else if (chunk != metadataPutChunk) {
       // a data chunk has succeeded.
       logger.trace("Successfully put data chunk with blob id : {}", chunk.getChunkBlobId());
-      metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkIndex);
+      metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkBlobSize, chunk.chunkIndex);
       metadataPutChunk.maybeNotifyForChunkCreation(chunk);
     } else {
       blobId = chunk.getChunkBlobId();
@@ -810,7 +816,7 @@ class PutOperation {
   private boolean isComposite() {
     // If the overall operation failed, we treat the successfully put chunks as part of a composite blob.
     boolean operationFailed = blobId == null || getOperationException() != null;
-    return operationFailed || metadataPutChunk.indexToChunkIds.size() > 1 || isStitchOperation();
+    return operationFailed || metadataPutChunk.indexToChunkIdsAndChunkSizes.size() > 1 || isStitchOperation();
   }
 
   /**
@@ -1501,7 +1507,7 @@ class PutOperation {
    * on it.
    */
   private class MetadataPutChunk extends PutChunk {
-    private final TreeMap<Integer, StoreKey> indexToChunkIds;
+    private final TreeMap<Integer, Pair<StoreKey, Long>> indexToChunkIdsAndChunkSizes;
     private int intermediateChunkSize = routerConfig.routerMaxPutChunkSizeBytes;
     private Pair<? extends StoreKey, BlobProperties> firstChunkIdAndProperties = null;
 
@@ -1509,7 +1515,7 @@ class PutOperation {
      * Initialize the MetadataPutChunk.
      */
     MetadataPutChunk() {
-      indexToChunkIds = new TreeMap<>();
+      indexToChunkIdsAndChunkSizes = new TreeMap<>();
       // metadata blob is in building state.
       state = ChunkState.Building;
     }
@@ -1537,11 +1543,12 @@ class PutOperation {
 
     /**
      * Add the given blobId of a successfully put data chunk to the metadata at its position in the overall blob.
-     * @param chunkBlobId the blobId of the associated data chunk
+     * @param storeKey the blobId of the associated data chunk
+     * @param chunkSize size of the data chunk
      * @param chunkIndex the position of the associated data chunk in the overall blob.
      */
-    void addChunkId(BlobId chunkBlobId, int chunkIndex) {
-      indexToChunkIds.put(chunkIndex, chunkBlobId);
+    void addChunkId(StoreKey storeKey, long chunkSize, int chunkIndex) {
+      indexToChunkIdsAndChunkSizes.put(chunkIndex, new Pair<>(storeKey, chunkSize));
     }
 
     /**
@@ -1567,7 +1574,7 @@ class PutOperation {
      * blob is composite. If no first chunk was put successfully, this will do nothing.
      */
     void maybeNotifyForFirstChunkCreation() {
-      if (indexToChunkIds.get(0) != null) {
+      if (indexToChunkIdsAndChunkSizes.get(0) != null) {
         // reason to check for not null: there are chances that 2nd chunk would completes before the first chunk and
         // the first chunk failed later. In such cases, even though metadata chunk might return some successfully
         // completed chunkIds, the first chunk may be null
@@ -1583,7 +1590,8 @@ class PutOperation {
 
     @Override
     void poll(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
-      if (isBuilding() && chunkFillingCompletedSuccessfully && indexToChunkIds.size() == getNumDataChunks()) {
+      if (isBuilding() && chunkFillingCompletedSuccessfully
+          && indexToChunkIdsAndChunkSizes.size() == getNumDataChunks()) {
         finalizeMetadataChunk();
       }
       if (isReady()) {
@@ -1604,12 +1612,20 @@ class PutOperation {
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag());
       if (isStitchOperation() || getNumDataChunks() > 1) {
         // values returned are in the right order as TreeMap returns them in key-order.
-        List<StoreKey> orderedChunkIdList = new ArrayList<>(indexToChunkIds.values());
-        buf = MetadataContentSerDe.serializeMetadataContent(intermediateChunkSize, getBlobSize(), orderedChunkIdList);
+        if (routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2) {
+          buf = MetadataContentSerDe.serializeMetadataContentV2(intermediateChunkSize, getBlobSize(),
+              getSuccessfullyPutChunkIds());
+        } else if (routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V3) {
+          List<Pair<StoreKey, Long>> orderedChunkIdList = new ArrayList<>(indexToChunkIdsAndChunkSizes.values());
+          buf = MetadataContentSerDe.serializeMetadataContentV3(getBlobSize(), orderedChunkIdList);
+        } else {
+          throw new IllegalStateException(
+              "Unexpected metadata content version: " + routerConfig.routerMetadataContentVersion);
+        }
         onFillComplete(false);
       } else {
         // if there is only one chunk
-        blobId = (BlobId) indexToChunkIds.get(0);
+        blobId = (BlobId) indexToChunkIdsAndChunkSizes.get(0).getFirst();
         state = ChunkState.Complete;
         operationCompleted = true;
       }
@@ -1619,7 +1635,7 @@ class PutOperation {
      * @return a list of all of the successfully put chunk ids associated with this blob
      */
     List<StoreKey> getSuccessfullyPutChunkIds() {
-      return new ArrayList<>(indexToChunkIds.values());
+      return indexToChunkIdsAndChunkSizes.values().stream().map(Pair::getFirst).collect(Collectors.toList());
     }
 
     /**

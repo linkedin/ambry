@@ -195,6 +195,13 @@ public class RouterConfig {
   public final short routerBlobidCurrentVersion;
 
   /**
+   * The version to use for new metadata blobs.
+   */
+  @Config("router.metadata.content.version")
+  @Default("2")
+  public final short routerMetadataContentVersion;
+
+  /**
    * The KeyManagementServiceFactory that will be used to fetch {@link com.github.ambry.router.KeyManagementService}
    */
   @Config("router.key.management.service.factory")
@@ -326,6 +333,8 @@ public class RouterConfig {
     routerBlobidCurrentVersion =
         verifiableProperties.getShortFromAllowedValues("router.blobid.current.version", (short) 6,
             new Short[]{1, 2, 3, 4, 5, 6});
+    routerMetadataContentVersion =
+        verifiableProperties.getShortFromAllowedValues("router.metadata.content.version", (short) 2, new Short[]{2, 3});
     routerKeyManagementServiceFactory =
         verifiableProperties.getString("router.key.management.service.factory", DEFAULT_KMS_FACTORY);
     routerCryptoServiceFactory =

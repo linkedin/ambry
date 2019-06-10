@@ -824,7 +824,7 @@ public class GetBlobOperationTest {
       storeKeys.add(blobId);
     }
     blobSize = maxChunkSize * numChunks;
-    ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContent(maxChunkSize, blobSize, storeKeys);
+    ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContentV2(maxChunkSize, blobSize, storeKeys);
     metadataContent.flip();
     blobProperties =
         new BlobProperties(blobSize - 20, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
@@ -918,15 +918,14 @@ public class GetBlobOperationTest {
     // Ranges that start past the end of the blob (should not succeed)
     testRangeRequestFromStartOffset(blobSize, false);
     testRangeRequestOffsetRange(blobSize, blobSize + 20, false);
-    // 0 byte range
-    testRangeRequestLastNBytes(0, true);
     // 1 byte ranges
     testRangeRequestOffsetRange(0, 0, true);
+    testRangeRequestOffsetRange(blobSize/2, blobSize/2, true);
     testRangeRequestOffsetRange(blobSize - 1, blobSize - 1, true);
     testRangeRequestFromStartOffset(blobSize - 1, true);
     testRangeRequestLastNBytes(1, true);
 
-    blobSize = maxChunkSize * 2 + random.nextInt(maxChunkSize);
+    blobSize = maxChunkSize * 2 + random.nextInt(maxChunkSize) + 1;
     // Single start chunk
     testRangeRequestOffsetRange(0, maxChunkSize - 1, true);
     // Single intermediate chunk

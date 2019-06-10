@@ -16,16 +16,19 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Pair;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 /**
  * A class to serialize and deserialize MetadataContent which forms the content of a Metadata Blob.
  */
 public class MetadataContentSerDe {
+
   /**
    * Serialize the input list of keys that form the metadata content.
    * @param chunkSize the size of the intermediate data chunks for the object this metadata describes.
@@ -33,12 +36,27 @@ public class MetadataContentSerDe {
    * @param keys the input list of keys that form the metadata content.
    * @return a ByteBuffer containing the serialized output.
    */
-  public static ByteBuffer serializeMetadataContent(int chunkSize, long totalSize, List<StoreKey> keys) {
+  public static ByteBuffer serializeMetadataContentV2(int chunkSize, long totalSize, List<StoreKey> keys) {
     int bufSize =
         MessageFormatRecord.Metadata_Content_Format_V2.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     ByteBuffer outputBuf = ByteBuffer.allocate(bufSize);
     MessageFormatRecord.Metadata_Content_Format_V2.serializeMetadataContentRecord(outputBuf, chunkSize, totalSize,
         keys);
+    return outputBuf;
+  }
+
+  /**
+   * Serialize the input list of keys with data content sizes that form the metadata content.
+   * @param totalSize the total size of the object this metadata describes.
+   * @param keysAndContentSizes the input list of keys and related data content sizes that form the metadata content.
+   * @return a ByteBuffer containing the serialized output.
+   */
+  public static ByteBuffer serializeMetadataContentV3(long totalSize, List<Pair<StoreKey, Long>> keysAndContentSizes) {
+    int bufSize = MessageFormatRecord.Metadata_Content_Format_V3.getMetadataContentSize(
+        keysAndContentSizes.get(0).getFirst().sizeInBytes(), keysAndContentSizes.size());
+    ByteBuffer outputBuf = ByteBuffer.allocate(bufSize);
+    MessageFormatRecord.Metadata_Content_Format_V3.serializeMetadataContentRecord(outputBuf, totalSize,
+        keysAndContentSizes);
     return outputBuf;
   }
 
@@ -57,6 +75,9 @@ public class MetadataContentSerDe {
     switch (version) {
       case MessageFormatRecord.Metadata_Content_Version_V2:
         return MessageFormatRecord.Metadata_Content_Format_V2.deserializeMetadataContentRecord(
+            new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);
+      case MessageFormatRecord.Metadata_Content_Version_V3:
+        return MessageFormatRecord.Metadata_Content_Format_V3.deserializeMetadataContentRecord(
             new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);
       default:
         throw new MessageFormatException("Unknown version encountered for MetadataContent: " + version,

@@ -29,6 +29,7 @@ import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
@@ -106,6 +107,7 @@ public class NonBlockingRouterTest {
   private final CryptoService cryptoService;
   private final MockClusterMap mockClusterMap;
   private final boolean testEncryption;
+  private final int metadataContentVersion;
   private final InMemAccountService accountService;
   private CryptoJobHandler cryptoJobHandler;
 
@@ -116,12 +118,15 @@ public class NonBlockingRouterTest {
   ReadableStreamChannel putChannel;
 
   /**
-   * Running for both regular and encrypted blobs
-   * @return an array with both {@code false} and {@code true}.
+   * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
+   * @return an array with all four different choices
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
+        {false, MessageFormatRecord.Metadata_Content_Version_V3},
+        {true, MessageFormatRecord.Metadata_Content_Version_V2},
+        {true, MessageFormatRecord.Metadata_Content_Version_V3}});
   }
 
   /**
@@ -129,8 +134,9 @@ public class NonBlockingRouterTest {
    * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise
    * @throws Exception
    */
-  public NonBlockingRouterTest(boolean testEncryption) throws Exception {
+  public NonBlockingRouterTest(boolean testEncryption, int metadataContentVersion) throws Exception {
     this.testEncryption = testEncryption;
+    this.metadataContentVersion = metadataContentVersion;
     mockTime = new MockTime();
     mockClusterMap = new MockClusterMap();
     NonBlockingRouter.currentOperationsCount.set(0);
@@ -169,6 +175,7 @@ public class NonBlockingRouterTest {
     properties.setProperty("clustermap.datacenter.name", "dc1");
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(128));
+    properties.setProperty("router.metadata.content.version", String.valueOf(metadataContentVersion));
     return properties;
   }
 

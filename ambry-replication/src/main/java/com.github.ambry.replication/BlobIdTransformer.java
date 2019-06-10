@@ -31,6 +31,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Pair;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -202,8 +203,22 @@ public class BlobIdTransformer implements Transformer {
           }
           newKeys.add(newDataChunkKey);
         }
-        ByteBuffer metadataContent = MetadataContentSerDe.serializeMetadataContent(compositeBlobInfo.getChunkSize(),
-            compositeBlobInfo.getTotalSize(), newKeys);
+        ByteBuffer metadataContent;
+        if (compositeBlobInfo.getMetadataContentVersion() == Metadata_Content_Version_V2) {
+          metadataContent = MetadataContentSerDe.serializeMetadataContentV2(compositeBlobInfo.getChunkSize(),
+              compositeBlobInfo.getTotalSize(), newKeys);
+        } else if (compositeBlobInfo.getMetadataContentVersion() == Metadata_Content_Version_V3) {
+          List<Pair<StoreKey, Long>> keyAndSizeList = new ArrayList<>();
+          List<CompositeBlobInfo.ChunkMetadata> chunkMetadataList = compositeBlobInfo.getChunkMetadataList();
+          for (int i = 0; i < newKeys.size(); i++) {
+            keyAndSizeList.add(new Pair<>(newKeys.get(i), chunkMetadataList.get(i).getSize()));
+          }
+          metadataContent =
+              MetadataContentSerDe.serializeMetadataContentV3(compositeBlobInfo.getTotalSize(), keyAndSizeList);
+        } else {
+          throw new IllegalStateException("Unexpected metadata content version from composite blob: "
+              + compositeBlobInfo.getMetadataContentVersion());
+        }
         blobPropertiesSize = compositeBlobInfo.getTotalSize();
         metadataContent.flip();
         blobDataBytes = new ByteBufferInputStream(metadataContent);
