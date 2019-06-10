@@ -921,8 +921,13 @@ public class RestUtilsTest {
     doBuildGetBlobOptionsTestForSubResource(args, null, expectedRange, GetBlobOptions.OperationType.All,
         shouldSucceedWithoutSubResource);
     for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
-      doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, GetBlobOptions.OperationType.BlobInfo,
-          shouldSucceedWithSubResource);
+      if (subResource.equals(RestUtils.SubResource.Segment)) {
+        doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, OperationType.All,
+            shouldSucceedWithSubResource);
+      } else {
+        doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, GetBlobOptions.OperationType.BlobInfo,
+            shouldSucceedWithSubResource);
+      }
     }
   }
 
