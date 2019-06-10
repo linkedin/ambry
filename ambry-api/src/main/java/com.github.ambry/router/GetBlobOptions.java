@@ -28,6 +28,8 @@ public class GetBlobOptions {
   private final ByteRange range;
   // Flag indicating whether to return the raw blob payload without deserialization.
   private final boolean rawMode;
+  private final long blobSegment;
+  public static long NO_BLOB_SEGMENT_IDX_SPECIFIED = -1;
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
@@ -36,7 +38,7 @@ public class GetBlobOptions {
    * @param range a {@link ByteRange} for this get request. This can be null, if the entire blob is desired.
    * @param rawMode a system flag indicating that the raw bytes should be returned.
    */
-  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean rawMode) {
+  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean rawMode, long blobSegment) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
     }
@@ -50,6 +52,7 @@ public class GetBlobOptions {
     this.getOption = getOption;
     this.range = range;
     this.rawMode = rawMode;
+    this.blobSegment = blobSegment;
   }
 
   /**
@@ -80,10 +83,17 @@ public class GetBlobOptions {
     return range;
   }
 
+  /**
+   * @return the blob segment
+   */
+  public long getBlobSegment() {
+    return blobSegment;
+  }
+
   @Override
   public String toString() {
     return "GetBlobOptions{operationType=" + operationType + ", getOption=" + getOption + ", range=" + range
-        + ", rawMode=" + rawMode + '}';
+        + ", rawMode=" + rawMode + ", blobSegment=" + blobSegment + '}';
   }
 
   @Override
@@ -106,6 +116,9 @@ public class GetBlobOptions {
     if (rawMode != that.rawMode) {
       return false;
     }
+    if (blobSegment != that.blobSegment) {
+      return false;
+    }
     return !(range != null ? !range.equals(that.range) : that.range != null);
   }
 
@@ -115,6 +128,7 @@ public class GetBlobOptions {
     result = 31 * result + getOption.hashCode();
     result = 31 * result + (range != null ? range.hashCode() : 0);
     result = 31 * result + Boolean.hashCode(rawMode);
+    result = 31 * result + (int) blobSegment;
     return result;
   }
 

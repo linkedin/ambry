@@ -29,6 +29,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -44,6 +45,8 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+
+import static com.github.ambry.router.GetBlobOptions.*;
 
 
 @RunWith(Parameterized.class)
@@ -71,9 +74,11 @@ public class GetManagerTest {
   private byte[] putContent;
   private ReadableStreamChannel putChannel;
   private GetBlobOptions options = new GetBlobOptionsBuilder().build();
+  private List<ChunkInfo> chunkInfos;
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
+  private static final int NUM_STITCHED_CHUNKS = 10;
 
   /**
    * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
@@ -101,13 +106,7 @@ public class GetManagerTest {
     mockSelectorState.set(MockSelectorState.Good);
     mockClusterMap = new MockClusterMap();
     mockServerLayout = new MockServerLayout(mockClusterMap);
-    if (testEncryption) {
-      VerifiableProperties vProps = new VerifiableProperties(new Properties());
-      kms = new SingleKeyManagementService(new KMSConfig(vProps),
-          TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
-      cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
-      cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
-    }
+    resetEncryptionObjects();
   }
 
   /**
@@ -157,6 +156,23 @@ public class GetManagerTest {
   }
 
   /**
+   * Tests getBlob() for segments of stitched composite blobs
+   * @throws Exception
+   */
+  @Test
+  public void testCompositeBlobGetSuccessStitchDifferentSizedBlobsSegments() throws Exception {
+    if (metadataContentVersion > 2) {
+      //Test grabbing every segment
+      for (int i = 0; i < NUM_STITCHED_CHUNKS; i++) {
+        testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().blobSegment(i).build());
+      }
+    } else {
+      router = getNonBlockingRouter();
+      router.close();
+    }
+  }
+
+  /**
    * Tests the router range request interface.
    * @throws Exception
    */
@@ -178,6 +194,33 @@ public class GetManagerTest {
           new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
               .range(ByteRanges.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
               .build());
+    } else {
+      router = getNonBlockingRouter();
+      router.close();
+    }
+  }
+
+  /**
+   * Tests the router range request interface on stitched blob segments.
+   * @throws Exception
+   */
+  @Test
+  public void testRangeRequestStitchDifferentSizedBlobsSegments() throws Exception {
+    if (metadataContentVersion > 2) {
+      //Test grabbing every segment with various offset ranges
+      for (int i = 0; i < NUM_STITCHED_CHUNKS; i++) {
+        testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().blobSegment(i)
+            .range(ByteRanges.fromOffsetRange(0, chunkSize / NUM_STITCHED_CHUNKS))
+            .build());
+        testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().blobSegment(i)
+            .range(ByteRanges.fromOffsetRange(chunkSize / NUM_STITCHED_CHUNKS / 2, chunkSize / NUM_STITCHED_CHUNKS))
+            .build());
+        testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().blobSegment(i)
+            .range(ByteRanges.fromOffsetRange(5, chunkSize / NUM_STITCHED_CHUNKS - 5))
+            .build());
+        testGetSuccessStitch(chunkSize * 6 + 11,
+            new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, 0)).build());
+      }
     } else {
       router = getNonBlockingRouter();
       router.close();
@@ -209,12 +252,12 @@ public class GetManagerTest {
   private void testGetSuccessStitch(int blobSize, GetBlobOptions options) throws Exception {
     router = getNonBlockingRouter();
     ByteBuffer byteBuffer = ByteBuffer.allocate(blobSize);
-    //Divide blob into 10 chunks to be stitched
-    int chunkSize = blobSize / 10;
+    //Divide blob into NUM_STITCHED_CHUNKS chunks to be stitched
+    int chunkSize = blobSize / NUM_STITCHED_CHUNKS;
     List<String> stitchBlobsIds = new ArrayList<>();
-    List<ChunkInfo> chunkInfos = new ArrayList<>();
+    chunkInfos = new ArrayList<>();
     int curBlobSize = blobSize;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < NUM_STITCHED_CHUNKS; i++) {
       //Give each chunk a different size
       int curChunkSize = Math.min(curBlobSize, chunkSize + i * 5);
       setOperationParams(curChunkSize, options);
@@ -410,6 +453,7 @@ public class GetManagerTest {
    */
   private void getBlobAndCompareContent(String blobId) throws Exception {
     GetBlobResult result = router.getBlob(blobId, options).get();
+
     switch (options.getOperationType()) {
       case All:
         compareBlobInfo(result.getBlobInfo());
@@ -463,13 +507,28 @@ public class GetManagerTest {
    * @param readableStreamChannel the {@link ReadableStreamChannel} that is the candidate for comparison.
    */
   private void compareContent(ReadableStreamChannel readableStreamChannel) throws Exception {
-    RouterTestHelpers.compareContent(putContent, options.getRange(), readableStreamChannel);
+    ByteRange byteRange = options.getRange();
+    if (options.getBlobSegment() != NO_BLOB_SEGMENT_IDX_SPECIFIED) {
+      int offset = 0;
+      int size = (int) chunkInfos.get(0).getChunkSizeInBytes();
+      for (int i = 0; i < (int) options.getBlobSegment(); i++) {
+        size = (int) chunkInfos.get(i + 1).getChunkSizeInBytes();
+        offset += chunkInfos.get(i).getChunkSizeInBytes();
+      }
+      if (options.getRange() == null) {
+        byteRange = ByteRanges.fromOffsetRange(offset, offset + size - 1);
+      } else {
+        byteRange = ByteRanges.fromOffsetRange(options.getRange().getStartOffset() + offset,
+            options.getRange().getEndOffset() + offset);
+      }
+    }
+    RouterTestHelpers.compareContent(putContent, byteRange, readableStreamChannel);
   }
 
   /**
    * @return Return a {@link NonBlockingRouter} created with default {@link VerifiableProperties}
    */
-  private NonBlockingRouter getNonBlockingRouter() throws IOException {
+  private NonBlockingRouter getNonBlockingRouter() throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
@@ -484,6 +543,7 @@ public class GetManagerTest {
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
         cryptoService, cryptoJobHandler, new InMemAccountService(false, true), mockTime,
         MockClusterMap.DEFAULT_PARTITION_CLASS);
+    resetEncryptionObjects();
     return router;
   }
 
@@ -502,6 +562,16 @@ public class GetManagerTest {
     random.nextBytes(putContent);
     putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     this.options = options;
+  }
+
+  private void resetEncryptionObjects() throws GeneralSecurityException {
+    if (testEncryption) {
+      VerifiableProperties vProps = new VerifiableProperties(new Properties());
+      kms = new SingleKeyManagementService(new KMSConfig(vProps),
+          TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+      cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
+      cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+    }
   }
 }
 

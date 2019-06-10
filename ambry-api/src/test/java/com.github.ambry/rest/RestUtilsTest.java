@@ -46,6 +46,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.github.ambry.router.GetBlobOptions.*;
 import static org.junit.Assert.*;
 
 
@@ -902,7 +903,7 @@ public class RestUtilsTest {
   }
 
   /**
-   * Test that {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource, GetOption)} works correctly for a given
+   * Test that {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource, GetOption, long)} works correctly for a given
    * range with and without a specified sub-resource.
    * @param rangeHeader the Range header value to add to the {@code args} map.
    * @param expectedRange the {@link ByteRange} expected to be parsed if the call should succeed, or {@code null} if no
@@ -926,7 +927,7 @@ public class RestUtilsTest {
   }
 
   /**
-   * Test that {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource, GetOption)} works correctly with given args and a
+   * Test that {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource, GetOption, long)} works correctly with given args and a
    * specified sub-resource.
    * @param args the map of args for the method call.
    * @param subResource the sub-resource for the call.
@@ -941,7 +942,8 @@ public class RestUtilsTest {
       ByteRange expectedRange, GetBlobOptions.OperationType expectedOpType, boolean shouldSucceed)
       throws RestServiceException {
     if (shouldSucceed) {
-      GetBlobOptions options = RestUtils.buildGetBlobOptions(args, subResource, GetOption.None);
+      GetBlobOptions options =
+          RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, NO_BLOB_SEGMENT_IDX_SPECIFIED);
       assertEquals("Unexpected range for args=" + args + " and subResource=" + subResource, expectedRange,
           options.getRange());
       assertEquals("Unexpected operation type for args=" + args + " and subResource=" + subResource, expectedOpType,
@@ -950,7 +952,7 @@ public class RestUtilsTest {
           options.getGetOption());
     } else {
       try {
-        RestUtils.buildGetBlobOptions(args, subResource, GetOption.None);
+        RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, NO_BLOB_SEGMENT_IDX_SPECIFIED);
         fail("buildGetBlobOptions should not have succeeded with args=" + args + "and subResource=" + subResource);
       } catch (RestServiceException expected) {
         assertEquals("Unexpected error code.", RestServiceErrorCode.InvalidArgs, expected.getErrorCode());
