@@ -13,8 +13,11 @@
  */
 package com.github.ambry.rest;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+
+import static com.github.ambry.router.GetBlobOptions.*;
 
 
 public class RequestPath {
@@ -22,6 +25,7 @@ public class RequestPath {
   private final String clusterName;
   private final String operationOrBlobId;
   private final RestUtils.SubResource subResource;
+  private final long blobSegmentNum;
   private final String pathAfterPrefixes;
   private String operationOrBlobIdWithoutLeadingSlash = null;
 
@@ -91,9 +95,18 @@ public class RequestPath {
     // test if the last segment is a sub-resource
     RestUtils.SubResource subResource = null;
     int lastSlashOffset = path.lastIndexOf('/');
+    long blobSegmentNum = NO_BLOB_SEGMENT_IDX_SPECIFIED;
+    System.out.println(Arrays.asList(path.split("/")));
     if (lastSlashOffset > offset) {
       try {
-        subResource = RestUtils.SubResource.valueOf(path.substring(lastSlashOffset + 1));
+        String[] fields = path.split("/");
+        if (RestUtils.SubResource.Segment.toString().equals(fields[fields.length - 2])) {
+          subResource = RestUtils.SubResource.valueOf(fields[fields.length - 2]);
+          blobSegmentNum = Long.valueOf(fields[fields.length - 1]);
+          lastSlashOffset = path.lastIndexOf('/', lastSlashOffset - 1);
+        } else {
+          subResource = RestUtils.SubResource.valueOf(path.substring(lastSlashOffset + 1));
+        }
       } catch (IllegalArgumentException e) {
         // nothing to do.
       }
@@ -106,16 +119,18 @@ public class RequestPath {
       operationOrBlobId = args.get(RestUtils.Headers.BLOB_ID).toString();
     }
 
-    return new RequestPath(prefixFound, clusterNameFound, pathAfterPrefixes, operationOrBlobId, subResource);
+    return new RequestPath(prefixFound, clusterNameFound, pathAfterPrefixes, operationOrBlobId, subResource,
+        blobSegmentNum);
   }
 
   RequestPath(String prefix, String clusterName, String pathAfterPrefixes, String operationOrBlobId,
-      RestUtils.SubResource subResource) {
+      RestUtils.SubResource subResource, long blobSegmentNum) {
     this.prefix = prefix;
     this.clusterName = clusterName;
     this.pathAfterPrefixes = pathAfterPrefixes;
     this.operationOrBlobId = operationOrBlobId;
     this.subResource = subResource;
+    this.blobSegmentNum = blobSegmentNum;
   }
 
   /**
@@ -165,6 +180,13 @@ public class RequestPath {
   }
 
   /**
+   * @return blob segment number for segmented blobs
+   */
+  public long getBlobSegmentNum() {
+    return blobSegmentNum;
+  }
+
+  /**
    * This will check if the request path matches the specified operation. This will check that that the first one or
    * more path segments in {@link #getOperationOrBlobId(boolean)} match the path segments in {@code operation}. For example,
    * {@code /op} or {@code /op/sub} will match the operation {@code op}.
@@ -185,13 +207,14 @@ public class RequestPath {
     }
     RequestPath that = (RequestPath) o;
     return prefix.equals(that.prefix) && clusterName.equals(that.clusterName) && operationOrBlobId.equals(
-        that.operationOrBlobId) && subResource == that.subResource;
+        that.operationOrBlobId) && subResource == that.subResource && blobSegmentNum == that.blobSegmentNum;
   }
 
   @Override
   public String toString() {
     return "RequestPath{" + "prefix='" + prefix + '\'' + ", clusterName='" + clusterName + '\''
-        + ", operationOrBlobId='" + operationOrBlobId + '\'' + ", subResource=" + subResource + '}';
+        + ", operationOrBlobId='" + operationOrBlobId + '\'' + ", subResource=" + subResource + ", blobSegmentNum="
+        + blobSegmentNum + '}';
   }
 
   /**

@@ -40,6 +40,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.router.GetBlobOptions.*;
 
 
 /**
@@ -164,7 +165,8 @@ class AmbrySecurityService implements SecurityService {
         responseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         switch (restMethod) {
           case HEAD:
-            options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);
+            options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None,
+                NO_BLOB_SEGMENT_IDX_SPECIFIED);
             responseChannel.setStatus(options.getRange() == null ? ResponseStatus.Ok : ResponseStatus.PartialContent);
             responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
@@ -183,7 +185,8 @@ class AmbrySecurityService implements SecurityService {
                     <= ifModifiedSinceMs) {
                   responseChannel.setStatus(ResponseStatus.NotModified);
                 } else {
-                  options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);
+                  options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None,
+                      NO_BLOB_SEGMENT_IDX_SPECIFIED);
                   if (options.getRange() != null) {
                     responseChannel.setStatus(ResponseStatus.PartialContent);
                   }

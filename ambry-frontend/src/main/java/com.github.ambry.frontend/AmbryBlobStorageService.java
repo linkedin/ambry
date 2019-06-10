@@ -200,7 +200,7 @@ class AmbryBlobStorageService implements BlobStorageService {
       } else {
         SubResource subResource = requestPath.getSubResource();
         GetBlobOptions options = buildGetBlobOptions(restRequest.getArgs(), subResource,
-            getGetOption(restRequest, frontendConfig.defaultRouterGetOption));
+            getGetOption(restRequest, frontendConfig.defaultRouterGetOption), requestPath.getBlobSegmentNum());
         GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subResource, options);
         SecurityProcessRequestCallback securityCallback =
             new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
