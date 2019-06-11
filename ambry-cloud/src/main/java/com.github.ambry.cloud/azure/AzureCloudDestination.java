@@ -19,6 +19,7 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.ClusterMapConfig;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.Document;
@@ -67,6 +68,7 @@ class AzureCloudDestination implements CloudDestination {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
+  private static final String SEPARATOR = "-";
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
   private final DocumentClient documentClient;
@@ -74,6 +76,7 @@ class AzureCloudDestination implements CloudDestination {
   private final RequestOptions defaultRequestOptions = new RequestOptions();
   private final OperationContext blobOpContext = new OperationContext();
   private final AzureMetrics azureMetrics;
+  private final String clusterName;
   // Containers known to exist in the storage account
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
 
@@ -81,15 +84,17 @@ class AzureCloudDestination implements CloudDestination {
    * Construct an Azure cloud destination from config properties.
    * @param cloudConfig the {@link CloudConfig} to use.
    * @param azureCloudConfig the {@link AzureCloudConfig} to use.
+   * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @throws InvalidKeyException if credentials in the connection string contain an invalid key.
    * @throws URISyntaxException if the connection string specifies an invalid URI.
    */
-  AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics)
-      throws URISyntaxException, InvalidKeyException {
+  AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
+      AzureMetrics azureMetrics) throws URISyntaxException, InvalidKeyException {
     this.azureMetrics = azureMetrics;
     azureAccount = CloudStorageAccount.parse(azureCloudConfig.azureStorageConnectionString);
     azureBlobClient = azureAccount.createCloudBlobClient();
+    this.clusterName = clusterName;
     // Check for proxy
     if (cloudConfig.vcrProxyHost != null) {
       logger.info("Using proxy: {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
@@ -113,14 +118,17 @@ class AzureCloudDestination implements CloudDestination {
    * @param azureAccount the {@link CloudStorageAccount} to use.
    * @param documentClient the {@link DocumentClient} to use.
    * @param cosmosCollectionLink the CosmosDB collection link to use.
+   * @param clusterName the name of the Ambry cluster.
+   * @param azureMetrics the {@link AzureMetrics} to use.
    * @throws CloudStorageException if the destination could not be created.
    */
   AzureCloudDestination(CloudStorageAccount azureAccount, DocumentClient documentClient, String cosmosCollectionLink,
-      AzureMetrics azureMetrics) {
+      String clusterName, AzureMetrics azureMetrics) {
     this.azureAccount = azureAccount;
     this.documentClient = documentClient;
     this.cosmosCollectionLink = cosmosCollectionLink;
     this.azureMetrics = azureMetrics;
+    this.clusterName = clusterName;
 
     // Create a blob client to interact with Blob storage
     azureBlobClient = azureAccount.createCloudBlobClient();
@@ -433,9 +441,13 @@ class AzureCloudDestination implements CloudDestination {
     }
   }
 
-  private String getAzureContainerName(String partitionPath) {
-    // TODO: "clustername-<pid>"
-    return "partition-" + partitionPath;
+  /**
+   * @return the name of the Azure storage container where blobs in the specified partition are stored.
+   * @param partitionPath the lexical path of the Ambry partition.
+   */
+  String getAzureContainerName(String partitionPath) {
+    // Include Ambry cluster name in case the same storage account is used to backup multiple clusters.
+    return clusterName + SEPARATOR + partitionPath;
   }
 
   /**
@@ -446,7 +458,7 @@ class AzureCloudDestination implements CloudDestination {
   String getAzureBlobName(BlobId blobId) {
     // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
     String blobIdStr = blobId.getID();
-    return blobIdStr.substring(blobIdStr.length() - 4) + "-" + blobIdStr;
+    return blobIdStr.substring(blobIdStr.length() - 4) + SEPARATOR + blobIdStr;
   }
 
   /**

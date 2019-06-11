@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -67,6 +68,7 @@ public class AzureCloudDestinationTest {
   private final String base64key = Base64.encodeBase64String("ambrykey".getBytes());
   private final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
+  private final String clusterName = "main";
   private final ObjectMapper objectMapper = new ObjectMapper();
   private Properties configProps = new Properties();
   private AzureCloudDestination azureDest;
@@ -114,9 +116,11 @@ public class AzureCloudDestinationTest {
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");
     configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
     configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
-
+    configProps.setProperty("clustermap.cluster.name", "main");
+    configProps.setProperty("clustermap.datacenter.name", "uswest");
+    configProps.setProperty("clustermap.host.name", "localhost");
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    azureDest = new AzureCloudDestination(mockAzureAccount, mockumentClient, "foo", azureMetrics);
+    azureDest = new AzureCloudDestination(mockAzureAccount, mockumentClient, "foo", clusterName, azureMetrics);
   }
 
   /**
@@ -235,7 +239,7 @@ public class AzureCloudDestinationTest {
   public void testAzureConnection() throws Exception {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, azureMetrics);
+    AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics);
     try {
       dest.testStorageConnectivity();
       fail("Expected exception");
@@ -255,7 +259,7 @@ public class AzureCloudDestinationTest {
     // Test without proxy
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, azureMetrics);
+    AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics);
     // check operation context proxy
     assertNull("Expected null proxy in blob op context", dest.getBlobOpContext().getDefaultProxy());
     assertNull("Expected null proxy in doc client", dest.getDocumentClient().getConnectionPolicy().getProxy());
@@ -266,7 +270,7 @@ public class AzureCloudDestinationTest {
     configProps.setProperty(CloudConfig.VCR_PROXY_HOST, proxyHost);
     configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
-    dest = new AzureCloudDestination(cloudConfig, azureConfig, azureMetrics);
+    dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics);
     assertNotNull("Expected proxy in blob op context", dest.getBlobOpContext().getDefaultProxy());
     HttpHost policyProxy = dest.getDocumentClient().getConnectionPolicy().getProxy();
     assertNotNull("Expected proxy in doc client", policyProxy);
