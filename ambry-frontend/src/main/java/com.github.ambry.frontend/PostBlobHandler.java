@@ -310,6 +310,8 @@ class PostBlobHandler {
         metadata.put(EXPIRATION_TIME_MS_KEY,
             Long.toString(Utils.addSecondsToEpochTime(time.milliseconds(), blobProperties.getTimeToLiveInSeconds())));
         restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
+      } else {
+        restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBytesReceived());
       }
       //the actual blob size is the number of bytes read
       restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBytesReceived());
