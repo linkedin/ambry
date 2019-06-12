@@ -364,7 +364,7 @@ class PostBlobHandler {
         @SuppressWarnings("ConstantConditions")
         long chunkSizeBytes = RestUtils.getLongHeader(metadata, RestUtils.Headers.BLOB_SIZE, true);
 
-        totalStitchedBlobSize = totalStitchedBlobSize + chunkSizeBytes;
+        totalStitchedBlobSize += chunkSizeBytes;
         // Expiration time is sent to the router, but not verified in this handler. The router is responsible for making
         // checks related to internal ambry requirements, like making sure that the chunks do not expire before the
         // metadata blob.
