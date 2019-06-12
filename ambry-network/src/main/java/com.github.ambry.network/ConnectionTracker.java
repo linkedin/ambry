@@ -54,6 +54,7 @@ class ConnectionTracker {
    * @return true if a new connection may be created, false otherwise.
    */
   boolean mayCreateNewConnection(String host, Port port, DataNodeId dataNodeId) {
+    // TODO refactor methods in this class to remove host and port because both info can be parsed from dataNodeId
     return !getHostPortPoolManager(host, port, dataNodeId).hasReachedPoolLimit();
   }
 

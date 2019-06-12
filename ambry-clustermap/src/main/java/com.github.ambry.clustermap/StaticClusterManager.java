@@ -434,11 +434,8 @@ class StaticClusterManager implements ClusterMap {
             "Data center " + dataCenterName + " provided already contains replica for partition " + partitionId);
       }
       capacityOfReplicasInBytes = replicaId.getCapacityInBytes();
-      Integer numberOfReplicas = replicaCountByDatacenter.get(replicaId.getDataNodeId().getDatacenterName());
-      if (numberOfReplicas == null) {
-        numberOfReplicas = 0;
-      }
-      numberOfReplicas++;
+      int numberOfReplicas =
+          replicaCountByDatacenter.getOrDefault(replicaId.getDataNodeId().getDatacenterName(), 0) + 1;
       replicaCountByDatacenter.put(replicaId.getDataNodeId().getDatacenterName(), numberOfReplicas);
     }
     if (replicaCountByDatacenter.size() == 0) {

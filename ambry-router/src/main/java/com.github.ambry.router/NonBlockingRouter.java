@@ -564,8 +564,7 @@ class NonBlockingRouter implements Router {
       // Update ResponseHandler immediately if connections lost to certain nodes.
       for (ResponseInfo responseInfo : responseInfos) {
         if (responseInfo.getRequestInfo() == null) {
-          DataNodeId dataNodeId = responseInfo.getDataNode();
-          responseHandler.onConnectionTimeout(dataNodeId);
+          responseHandler.onConnectionTimeout(responseInfo.getDataNode());
         }
       }
       routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
