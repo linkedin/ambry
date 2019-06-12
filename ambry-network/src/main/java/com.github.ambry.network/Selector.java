@@ -78,7 +78,7 @@ public class Selector implements Selectable {
   private final Set<String> unreadyConnections;
   private final Time time;
   private final NetworkMetrics metrics;
-  private final AtomicLong IdGenerator;
+  private final AtomicLong idGenerator;
   private final AtomicLong numActiveConnections;
   private final SSLFactory sslFactory;
 
@@ -88,19 +88,19 @@ public class Selector implements Selectable {
   public Selector(NetworkMetrics metrics, Time time, SSLFactory sslFactory) throws IOException {
     this.nioSelector = java.nio.channels.Selector.open();
     this.time = time;
-    this.keyMap = new HashMap<String, SelectionKey>();
-    this.completedSends = new ArrayList<NetworkSend>();
-    this.completedReceives = new ArrayList<NetworkReceive>();
-    this.connected = new ArrayList<String>();
-    this.disconnected = new ArrayList<String>();
+    this.keyMap = new HashMap<>();
+    this.completedSends = new ArrayList<>();
+    this.completedReceives = new ArrayList<>();
+    this.connected = new ArrayList<>();
+    this.disconnected = new ArrayList<>();
     this.closedConnections = new ArrayList<>();
     this.metrics = metrics;
-    this.IdGenerator = new AtomicLong(0);
+    this.sslFactory = sslFactory;
+    idGenerator = new AtomicLong(0);
     numActiveConnections = new AtomicLong(0);
     unreadyConnections = new HashSet<>();
     metrics.registerSelectorActiveConnections(numActiveConnections);
     metrics.registerSelectorUnreadyConnections(unreadyConnections);
-    this.sslFactory = sslFactory;
   }
 
   /**
@@ -114,18 +114,8 @@ public class Selector implements Selectable {
     int localPort = socket.getLocalPort();
     String remoteHost = socket.getInetAddress().getHostAddress();
     int remotePort = socket.getPort();
-    long connectionIdSuffix = IdGenerator.getAndIncrement();
-    StringBuilder connectionIdBuilder = new StringBuilder();
-    connectionIdBuilder.append(localHost)
-        .append(":")
-        .append(localPort)
-        .append("-")
-        .append(remoteHost)
-        .append(":")
-        .append(remotePort)
-        .append("_")
-        .append(connectionIdSuffix);
-    return connectionIdBuilder.toString();
+    long connectionIdSuffix = idGenerator.getAndIncrement();
+    return localHost + ":" + localPort + "-" + remoteHost + ":" + remotePort + "_" + connectionIdSuffix;
   }
 
   /**
@@ -194,7 +184,7 @@ public class Selector implements Selectable {
           createTransmission(connectionId, key, socket.getInetAddress().getHostName(), socket.getPort(), portType,
               SSLFactory.Mode.SERVER);
     } catch (IOException e) {
-      logger.error("IOException on transmission creation " + e);
+      logger.error("IOException on transmission creation ", e);
       socket.close();
       channel.close();
       throw e;

@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -148,14 +148,11 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     try {
       if (isOpen.get()) {
-        getOperationController().getBlob(blobIdStr, internalOptions, new Callback<GetBlobResultInternal>() {
-          @Override
-          public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
-            GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
-            futureResult.done(getBlobResult, exception);
-            if (callback != null) {
-              callback.onCompletion(getBlobResult, exception);
-            }
+        getOperationController().getBlob(blobIdStr, internalOptions, (internalResult, exception) -> {
+          GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
+          futureResult.done(getBlobResult, exception);
+          if (callback != null) {
+            callback.onCompletion(getBlobResult, exception);
           }
         });
       } else {

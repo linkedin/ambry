@@ -32,7 +32,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -41,9 +44,10 @@ import org.junit.Test;
  * Test the {@link NetworkClient}
  */
 public class NetworkClientTest {
-  private final int CHECKOUT_TIMEOUT_MS = 1000;
-  private final int MAX_PORTS_PLAIN_TEXT = 3;
-  private final int MAX_PORTS_SSL = 3;
+  private static final int CHECKOUT_TIMEOUT_MS = 1000;
+  private static final int MAX_PORTS_PLAIN_TEXT = 3;
+  private static final int MAX_PORTS_SSL = 4;
+
   private final Time time;
 
   private MockSelector selector;
@@ -106,7 +110,7 @@ public class NetworkClientTest {
   @Test
   public void testWarmUpConnectionsSslAndPlainText() {
     // warm up plain-text connections with SSL enabled nodes.
-    doTestWarmUpConnections(localSslDataNodes, MAX_PORTS_SSL, PortType.PLAINTEXT);
+    doTestWarmUpConnections(localSslDataNodes, MAX_PORTS_PLAIN_TEXT, PortType.PLAINTEXT);
     // enable SSL to local DC.
     for (DataNodeId dataNodeId : localSslDataNodes) {
       ((MockDataNodeId) dataNodeId).setSslEnabledDataCenters(Collections.singletonList(
@@ -114,8 +118,6 @@ public class NetworkClientTest {
     }
     // warm up SSL connections.`
     doTestWarmUpConnections(localSslDataNodes, MAX_PORTS_SSL, PortType.SSL);
-    // warm up plain-text connections with plain-text nodes.
-    doTestWarmUpConnections(localPlainTextDataNodes, MAX_PORTS_PLAIN_TEXT, PortType.PLAINTEXT);
   }
 
   /**
@@ -126,9 +128,10 @@ public class NetworkClientTest {
     selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
     List<ResponseInfo> responseInfos = new ArrayList<>();
     Assert.assertEquals("Connection count is not expected", 0,
-        networkClient.warmUpConnections(localPlainTextDataNodes, 2, 2000, responseInfos));
+        networkClient.warmUpConnections(localPlainTextDataNodes, 100, 2000, responseInfos));
     // verify that the connections to all local nodes get disconnected
-    Assert.assertEquals("Mismatch in timeout responses", 3, responseInfos.size());
+    Assert.assertEquals("Mismatch in timeout responses", localPlainTextDataNodes.size() * MAX_PORTS_PLAIN_TEXT,
+        responseInfos.size());
     selector.setState(MockSelectorState.Good);
   }
 
@@ -243,7 +246,7 @@ public class NetworkClientTest {
   }
 
   /**
-   * Test exceptions in sendAndPoll().
+   * Test exceptions thrown in sendAndPoll().
    */
   @Test
   public void testExceptionOnConnect() {
@@ -311,6 +314,51 @@ public class NetworkClientTest {
     Assert.assertEquals(NetworkClientErrorCode.NetworkError, responseInfoList.get(0).getError());
     Assert.assertEquals(NetworkClientErrorCode.NetworkError, responseInfoList.get(1).getError());
     responseInfoList.clear();
+  }
+
+  /**
+   * Test that connections get replenished in {@link NetworkClient#sendAndPoll(List, int)} to maintain the low
+   * watermark.
+   */
+  @Test
+  public void testConnectionReplenishment() {
+    AtomicInteger nextCorrelationId = new AtomicInteger(1);
+    Function<Integer, List<RequestInfo>> requestGen = numRequests -> IntStream.range(0, numRequests)
+        .mapToObj(
+            i -> new RequestInfo(sslHost, sslPort, new MockSend(nextCorrelationId.getAndIncrement()), replicaOnSslNode))
+        .collect(Collectors.toList());
+    // 1 host x 1 port x 3 connections x 100%
+    AtomicInteger expectedConnectCalls = new AtomicInteger(3);
+    Runnable checkConnectCalls = () -> Assert.assertEquals(expectedConnectCalls.get(), selector.connectCallCount());
+
+    networkClient.warmUpConnections(Collections.singletonList(replicaOnSslNode.getDataNodeId()), 100, 2000,
+        new ArrayList<>());
+    checkConnectCalls.run();
+
+    selector.setState(MockSelectorState.Good);
+    // this sendAndPoll() should use one of the pre-warmed connections
+    List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestGen.apply(3), 100);
+    checkConnectCalls.run();
+    Assert.assertEquals(3, responseInfoList.size());
+
+    // this sendAndPoll() should disconnect two of the pre-warmed connections
+    selector.setState(MockSelectorState.DisconnectOnSend);
+    responseInfoList = networkClient.sendAndPoll(requestGen.apply(2), 100);
+    checkConnectCalls.run();
+    Assert.assertEquals(2, responseInfoList.size());
+
+    // the two connections lost in the previous sendAndPoll should be replenished
+    selector.setState(MockSelectorState.Good);
+    responseInfoList = networkClient.sendAndPoll(requestGen.apply(1), 100);
+    expectedConnectCalls.addAndGet(2);
+    checkConnectCalls.run();
+    Assert.assertEquals(1, responseInfoList.size());
+
+    // this call should use the existing connections in the pool
+    selector.setState(MockSelectorState.Good);
+    responseInfoList = networkClient.sendAndPoll(requestGen.apply(3), 100);
+    checkConnectCalls.run();
+    Assert.assertEquals(3, responseInfoList.size());
   }
 
   /**
@@ -435,21 +483,24 @@ public class NetworkClientTest {
   }
 
   /**
-   * Helper function to test {@link NetworkClient#warmUpConnections(List, int, long, List)}
+   * Helper function to test {@link NetworkClient#warmUpConnections(List, int, long, List)}. This will build up to 100%
+   * pre-warmed connections.
    */
   private void doTestWarmUpConnections(List<DataNodeId> localDataNodeIds, int maxPort, PortType expectedPortType) {
     Assert.assertEquals("Port type is not expected.", expectedPortType,
         localDataNodeIds.get(0).getPortToConnectTo().getPortType());
-    Assert.assertEquals("Connection count is not expected", maxPort * localDataNodeIds.size(),
-        networkClient.warmUpConnections(localDataNodeIds, 100, 2000, new ArrayList<>()));
-    Assert.assertEquals("Connection count is not expected", 50 * maxPort / 100 * localDataNodeIds.size(),
-        networkClient.warmUpConnections(localDataNodeIds, 50, 2000, new ArrayList<>()));
     Assert.assertEquals("Connection count is not expected", 0,
         networkClient.warmUpConnections(localDataNodeIds, 0, 2000, new ArrayList<>()));
     selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
     Assert.assertEquals("Connection count is not expected", 0,
         networkClient.warmUpConnections(localDataNodeIds, 100, 2000, new ArrayList<>()));
     selector.setState(MockSelectorState.Good);
+    int halfConnections = 50 * maxPort / 100 * localDataNodeIds.size();
+    int allConnections = maxPort * localDataNodeIds.size();
+    Assert.assertEquals("Connection count is not expected", halfConnections,
+        networkClient.warmUpConnections(localDataNodeIds, 50, 2000, new ArrayList<>()));
+    Assert.assertEquals("Connection count is not expected", allConnections - halfConnections,
+        networkClient.warmUpConnections(localDataNodeIds, 100, 2000, new ArrayList<>()));
   }
 }
 
@@ -574,13 +625,14 @@ enum MockSelectorState {
  */
 class MockSelector extends Selector {
   private int index;
-  private Set<String> connectionIds = new HashSet<String>();
-  private List<String> connected = new ArrayList<String>();
-  private List<String> disconnected = new ArrayList<String>();
+  private Set<String> connectionIds = new HashSet<>();
+  private List<String> connected = new ArrayList<>();
+  private List<String> nextConnected = new ArrayList<>();
+  private List<String> disconnected = new ArrayList<>();
   private final List<String> delayedFailFreshList = new ArrayList<>();
   private final List<String> delayedFailPassedList = new ArrayList<>();
-  private List<NetworkSend> sends = new ArrayList<NetworkSend>();
-  private List<NetworkReceive> receives = new ArrayList<NetworkReceive>();
+  private List<NetworkSend> sends = new ArrayList<>();
+  private List<NetworkReceive> receives = new ArrayList<>();
   private MockSelectorState state = MockSelectorState.Good;
   private boolean wakeUpCalled = false;
   private int connectCallCount = 0;
@@ -625,7 +677,7 @@ class MockSelector extends Selector {
       // next poll (when it is fresh), but the subsequent poll.
       delayedFailFreshList.add(hostPortString);
     } else {
-      connected.add(hostPortString);
+      nextConnected.add(hostPortString);
       connectionIds.add(hostPortString);
     }
     return hostPortString;
@@ -648,23 +700,21 @@ class MockSelector extends Selector {
    */
   @Override
   public void poll(long timeoutMs, List<NetworkSend> sends) throws IOException {
-    disconnected.clear();
     if (state == MockSelectorState.ThrowExceptionOnPoll) {
       throw new IOException("Mock exception on poll");
     }
+    disconnected = new ArrayList<>();
     if (state == MockSelectorState.FailConnectionInitiationOnPoll) {
-      for (String connId : connected) {
-        disconnected.add(connId);
-      }
-      connected.clear();
+      disconnected.addAll(nextConnected);
+      connected = new ArrayList<>();
+      nextConnected = new ArrayList<>();
+    } else if (state != MockSelectorState.IdlePoll) {
+      connected = nextConnected;
+      nextConnected = new ArrayList<>();
     }
-    for (String connId : delayedFailPassedList) {
-      disconnected.add(connId);
-    }
+    disconnected.addAll(delayedFailPassedList);
     delayedFailPassedList.clear();
-    for (String connId : delayedFailFreshList) {
-      delayedFailPassedList.add(connId);
-    }
+    delayedFailPassedList.addAll(delayedFailFreshList);
     delayedFailFreshList.clear();
     this.sends = sends;
     if (sends != null) {
@@ -691,9 +741,7 @@ class MockSelector extends Selector {
     if (state == MockSelectorState.IdlePoll) {
       return new ArrayList<>();
     }
-    List<String> toReturn = connected;
-    connected = new ArrayList<String>();
-    return toReturn;
+    return connected;
   }
 
   /**
@@ -705,10 +753,7 @@ class MockSelector extends Selector {
     if (state == MockSelectorState.IdlePoll) {
       return new ArrayList<>();
     }
-    return this.disconnected;
-//    List<String> toReturn = disconnected;
-//    disconnected = new ArrayList<String>();
-//    return toReturn;
+    return disconnected;
   }
 
   /**
@@ -721,7 +766,7 @@ class MockSelector extends Selector {
       return new ArrayList<>();
     }
     List<NetworkSend> toReturn = sends;
-    sends = new ArrayList<NetworkSend>();
+    sends = new ArrayList<>();
     return toReturn;
   }
 
@@ -735,7 +780,7 @@ class MockSelector extends Selector {
       return new ArrayList<>();
     }
     List<NetworkReceive> toReturn = receives;
-    receives = new ArrayList<NetworkReceive>();
+    receives = new ArrayList<>();
     return toReturn;
   }
 
