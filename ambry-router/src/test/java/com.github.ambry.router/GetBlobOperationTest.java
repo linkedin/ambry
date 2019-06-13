@@ -492,7 +492,7 @@ public class GetBlobOperationTest {
    * @throws Exception
    */
   @Test
-  public void testRequestTimeoutAndBlobNotFound() throws Exception {
+  public void testRequestTimeoutAndBlobNotFoundMajorityNotFound() throws Exception {
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     doPut();
     GetBlobOperation op = createOperation(null);
@@ -518,7 +518,7 @@ public class GetBlobOperationTest {
 
     RouterException routerException = (RouterException) op.getOperationException();
     // error code should be OperationTimedOut because it precedes BlobDoesNotExist
-    Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
+    Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
     Histogram localColoTracker =
         tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, true, localDcName));
     Histogram crossColoTracker =
@@ -529,6 +529,43 @@ public class GetBlobOperationTest {
     // the count of data points in cross colo Histogram should be 6 because all remote replicas respond with proper error code
     Assert.assertEquals("The number of data points in cross colo latency histogram is not expected", 6,
         crossColoTracker.getCount());
+  }
+
+  /**
+   * Test the case where 2 local replicas respond with Blob_Not_Found. The remaining one local replica and rest remote
+   * replicas time out due to network error.
+   * @throws Exception
+   */
+  @Test
+  public void testRequestTimeoutAndBlobNotFoundMajorityTimeout() throws Exception {
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    doPut();
+    GetBlobOperation op = createOperation(null);
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
+    correlationIdToGetOperation.clear();
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    }
+
+    int blobNotFoundCounter = 0;
+    while (!op.isOperationComplete()) {
+      op.poll(requestRegistrationCallback);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = null;
+        if (blobNotFoundCounter < 2) {
+          getResponse = responseInfo.getError() == null ? GetResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+          blobNotFoundCounter ++;
+        } else {
+          responseInfo = new ResponseInfo(responseInfo.getRequestInfo(), NetworkClientErrorCode.NetworkError, null);
+        }
+        op.handleResponse(responseInfo, getResponse);
+      }
+    }
+
+    RouterException routerException = (RouterException) op.getOperationException();
+    // error code should be OperationTimedOut because it precedes BlobDoesNotExist
+    Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
   }
 
   /**
