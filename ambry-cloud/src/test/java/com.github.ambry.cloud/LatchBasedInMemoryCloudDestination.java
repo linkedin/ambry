@@ -18,6 +18,7 @@ import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -81,6 +82,21 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       }
     }
     return result;
+  }
+
+  @Override
+  public List<CloudBlobMetadata> getDeadBlobs(String partitionPath) {
+    return Collections.emptyList();
+  }
+
+  @Override
+  public boolean purgeBlob(CloudBlobMetadata blobMetadata) {
+    return true;
+  }
+
+  @Override
+  public int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) {
+    return 0;
   }
 
   @Override

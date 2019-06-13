@@ -22,7 +22,6 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -160,6 +159,18 @@ public class AzureCloudDestinationTest {
     assertEquals(1, azureMetrics.documentUpdateTime.getCount());
   }
 
+  /** Test purge. */
+  @Test
+  public void testPurge() throws Exception {
+    when(mockBlob.deleteIfExists()).thenReturn(true);
+    CloudBlobMetadata cloudBlobMetadata =
+        new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
+            CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+    assertTrue("Expected success", azureDest.purgeBlob(cloudBlobMetadata));
+    assertEquals(1, azureMetrics.blobDeletedCount.getCount());
+    assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
+  }
+
   /** Test upload of existing blob. */
   @Test
   public void testUploadExists() throws Exception {
@@ -210,7 +221,13 @@ public class AzureCloudDestinationTest {
     CloudBlobMetadata outputMetadata = metadataMap.get(blobId.getID());
     assertEquals("Returned metadata does not match original", inputMetadata, outputMetadata);
     assertEquals(1, azureMetrics.documentQueryCount.getCount());
-    assertEquals(1, azureMetrics.documentQueryTime.getCount());
+    assertEquals(1, azureMetrics.missingKeysQueryTime.getCount());
+
+    // Test getDeadBlobs
+    List<CloudBlobMetadata> metadataList = azureDest.getDeadBlobs(blobId.getPartition().toPathString());
+    assertEquals("Expected no dead blobs", 0, metadataList.size());
+    assertEquals(2, azureMetrics.documentQueryCount.getCount());
+    assertEquals(1, azureMetrics.deadBlobsQueryTime.getCount());
   }
 
   /** Test blob existence check. */

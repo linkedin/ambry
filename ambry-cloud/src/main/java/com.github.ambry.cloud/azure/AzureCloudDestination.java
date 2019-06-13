@@ -19,7 +19,6 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.config.ClusterMapConfig;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.Document;
@@ -48,6 +47,7 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -55,6 +55,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.http.HttpHost;
 import org.slf4j.Logger;
@@ -68,6 +70,9 @@ class AzureCloudDestination implements CloudDestination {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
+  static final String DEAD_BLOBS_QUERY_TEMPLATE =
+      "SELECT * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND %d)" + " OR (c."
+          + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND %d)";
   private static final String SEPARATOR = "-";
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
@@ -77,6 +82,7 @@ class AzureCloudDestination implements CloudDestination {
   private final OperationContext blobOpContext = new OperationContext();
   private final AzureMetrics azureMetrics;
   private final String clusterName;
+  private final long retentionPeriodMs;
   // Containers known to exist in the storage account
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
 
@@ -110,6 +116,7 @@ class AzureCloudDestination implements CloudDestination {
     }
     documentClient = new DocumentClient(azureCloudConfig.cosmosEndpoint, azureCloudConfig.cosmosKey, connectionPolicy,
         ConsistencyLevel.Session);
+    this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     logger.info("Created Azure destination");
   }
 
@@ -129,6 +136,7 @@ class AzureCloudDestination implements CloudDestination {
     this.cosmosCollectionLink = cosmosCollectionLink;
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
+    this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
 
     // Create a blob client to interact with Blob storage
     azureBlobClient = azureAccount.createCloudBlobClient();
@@ -279,22 +287,50 @@ class AzureCloudDestination implements CloudDestination {
     if (blobIds.isEmpty()) {
       return Collections.emptyMap();
     }
+    Timer.Context queryTimer = azureMetrics.missingKeysQueryTime.time();
+    try {
+      String quotedBlobIds =
+          String.join(",", blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.toList()));
+      String querySpec = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
+      List<CloudBlobMetadata> metadataList = runMetadataQuery(blobIds.get(0).getPartition().toPathString(), querySpec);
+      return metadataList.stream().collect(Collectors.toMap(m -> m.getId(), Function.identity()));
+    } finally {
+      queryTimer.stop();
+    }
+  }
+
+  @Override
+  public List<CloudBlobMetadata> getDeadBlobs(String partitionPath) throws CloudStorageException {
+    long now = System.currentTimeMillis();
+    long retentionThreshold = now - retentionPeriodMs;
+    Timer.Context queryTimer = azureMetrics.deadBlobsQueryTime.time();
+    try {
+      String deadBlobsQuery = String.format(DEAD_BLOBS_QUERY_TEMPLATE, retentionThreshold, retentionThreshold);
+      return runMetadataQuery(partitionPath, deadBlobsQuery);
+    } finally {
+      queryTimer.stop();
+    }
+  }
+
+  /**
+   * Get the list of blobs in the specified partition matching the specified DocumentDB query.
+   * @param partitionPath the partition to query.
+   * @param query the DocumentDB query to execute.
+   * @return a List of {@link CloudBlobMetadata} referencing the matching blobs.
+   * @throws CloudStorageException
+   */
+  List<CloudBlobMetadata> runMetadataQuery(String partitionPath, String query) throws CloudStorageException {
     azureMetrics.documentQueryCount.inc();
-    Timer.Context queryTimer = azureMetrics.documentQueryTime.time();
-    String quotedBlobIds =
-        String.join(",", blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.toList()));
-    String querySpec = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
     FeedOptions feedOptions = new FeedOptions();
-    feedOptions.setPartitionKey(new PartitionKey(blobIds.get(0).getPartition().toPathString()));
-    FeedResponse<Document> response = documentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions);
+    feedOptions.setPartitionKey(new PartitionKey(partitionPath));
+    FeedResponse<Document> response = documentClient.queryDocuments(cosmosCollectionLink, query, feedOptions);
     try {
       // Note: internal query iterator wraps DocumentClientException in IllegalStateException!
-      Map<String, CloudBlobMetadata> metadataMap = new HashMap<>();
+      List<CloudBlobMetadata> metadataList = new ArrayList<>();
       response.getQueryIterable()
           .iterator()
-          .forEachRemaining(doc -> metadataMap.put(doc.getId(), doc.toObject(CloudBlobMetadata.class)));
-      queryTimer.stop();
-      return metadataMap;
+          .forEachRemaining(doc -> metadataList.add(doc.toObject(CloudBlobMetadata.class)));
+      return metadataList;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
         azureMetrics.documentErrorCount.inc();
@@ -334,8 +370,12 @@ class AzureCloudDestination implements CloudDestination {
       Timer.Context storageTimer = azureMetrics.blobUpdateTime.time();
       try {
         azureBlob.downloadAttributes(); // Makes sure we have latest
-        azureBlob.getMetadata().put(fieldName, String.valueOf(value));
-        azureBlob.uploadMetadata();
+        // Update only if value has changed
+        String textValue = String.valueOf(value);
+        if (!textValue.equals(azureBlob.getMetadata().get(fieldName))) {
+          azureBlob.getMetadata().put(fieldName, textValue);
+          azureBlob.uploadMetadata();
+        }
       } finally {
         storageTimer.stop();
       }
@@ -352,8 +392,11 @@ class AzureCloudDestination implements CloudDestination {
           logger.warn("Blob metadata record not found: " + docLink);
           return false;
         }
-        doc.set(fieldName, value);
-        documentClient.replaceDocument(doc, options);
+        // Update only if value has changed
+        if (!value.equals(doc.get(fieldName))) {
+          doc.set(fieldName, value);
+          documentClient.replaceDocument(doc, options);
+        }
       } finally {
         docTimer.stop();
       }
@@ -365,6 +408,48 @@ class AzureCloudDestination implements CloudDestination {
       updateErrorMetrics(e);
       throw new CloudStorageException("Error updating blob metadata: " + blobId, e);
     }
+  }
+
+  @Override
+  public boolean purgeBlob(CloudBlobMetadata blobMetadata) throws CloudStorageException {
+    String blobId = blobMetadata.getId();
+    String blobFileName = blobMetadata.getCloudBlobName();
+    String partitionPath = blobMetadata.getPartitionId();
+    String containerName = getAzureContainerName(partitionPath);
+    RequestOptions options = new RequestOptions();
+    options.setPartitionKey(new PartitionKey(partitionPath));
+    azureMetrics.blobDeleteRequestCount.inc();
+    Timer.Context deleteTimer = azureMetrics.blobDeletionTime.time();
+    try {
+      // delete blob from storage
+      CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
+      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobFileName);
+      azureBlob.deleteIfExists();
+
+      // Delete the document too
+      String docLink = cosmosCollectionLink + "/docs/" + blobId;
+      documentClient.deleteDocument(docLink, options);
+      azureMetrics.blobDeletedCount.inc();
+      return true;
+    } catch (Exception e) {
+      azureMetrics.blobDeleteErrorCount.inc();
+      String error = (e instanceof DocumentClientException) ? "Failed to delete metadata document for blob " + blobId
+          : "Failed to delete blob " + blobId + ", storage path: " + containerName + "/" + blobFileName;
+      throw new CloudStorageException(error, e);
+    } finally {
+      deleteTimer.stop();
+    }
+  }
+
+  @Override
+  public int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws CloudStorageException {
+    int numPurged = 0;
+    for (CloudBlobMetadata blobMetadata : blobMetadataList) {
+      purgeBlob(blobMetadata);
+      numPurged++;
+    }
+    logger.info("Purged {} blobs", numPurged);
+    return numPurged;
   }
 
   @Override
