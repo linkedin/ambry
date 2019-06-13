@@ -13,7 +13,6 @@
  */
 package com.github.ambry.tools.admin;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
@@ -181,7 +180,7 @@ public class BlobValidator implements Closeable {
    * @param args associated arguments.
    * @throws Exception
    */
-  public static void main(String args[]) throws Exception {
+  public static void main(String[] args) throws Exception {
     VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
     BlobValidatorConfig config = new BlobValidatorConfig(verifiableProperties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
@@ -192,7 +191,8 @@ public class BlobValidator implements Closeable {
     SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(
         new SSLConfig(verifiableProperties)) : null;
     StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
-    BlobValidator validator = new BlobValidator(config.replicasToContactPerSec, sslFactory, verifiableProperties);
+    BlobValidator validator =
+        new BlobValidator(clusterMap, config.replicasToContactPerSec, sslFactory, verifiableProperties);
     LOGGER.info("Validation starting");
     switch (config.typeOfOperation) {
       case ValidateBlobOnAllReplicas:
@@ -276,15 +276,17 @@ public class BlobValidator implements Closeable {
 
   /**
    * Constructs a BlobValidator
+   *
+   * @param clusterMap the {@link ClusterMap} to use.
    * @param replicasToContactPerSec the number of replicas to contact in a second.
    * @param sslFactory the {@link SSLFactory} to use.
    * @param verifiableProperties the {@link VerifiableProperties} to use to construct configs.
    * @throws Exception
    */
-  BlobValidator(long replicasToContactPerSec, SSLFactory sslFactory, VerifiableProperties verifiableProperties)
-      throws Exception {
+  BlobValidator(ClusterMap clusterMap, long replicasToContactPerSec, SSLFactory sslFactory,
+      VerifiableProperties verifiableProperties) throws Exception {
     throttler = new Throttler(replicasToContactPerSec, 1000, true, SystemTime.getInstance());
-    serverAdminTool = new ServerAdminTool(new MetricRegistry(), sslFactory, verifiableProperties);
+    serverAdminTool = new ServerAdminTool(clusterMap, sslFactory, verifiableProperties);
   }
 
   /**

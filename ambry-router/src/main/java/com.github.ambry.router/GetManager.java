@@ -218,7 +218,7 @@ class GetManager {
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
     GetResponse getResponse = extractGetResponseAndNotifyResponseHandler(responseInfo);
-    RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
+    RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     GetRequest getRequest = (GetRequest) routerRequestInfo.getRequest();
     GetOperation getOperation = correlationIdToGetOperation.remove(getRequest.getCorrelationId());
     if (getOperations.contains(getOperation)) {
@@ -244,7 +244,7 @@ class GetManager {
    */
   private GetResponse extractGetResponseAndNotifyResponseHandler(ResponseInfo responseInfo) {
     GetResponse getResponse = null;
-    ReplicaId replicaId = ((RouterRequestInfo) responseInfo.getRequestInfo()).getReplicaId();
+    ReplicaId replicaId = responseInfo.getRequestInfo().getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {
       try {

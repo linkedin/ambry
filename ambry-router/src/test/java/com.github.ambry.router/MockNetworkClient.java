@@ -32,9 +32,9 @@ import java.util.List;
  * tests and how many responses are received by the client.
  */
 class MockNetworkClient extends NetworkClient {
-  boolean wokenUp = false;
-  int responseCount = 0;
-  int processedResponseCount = 0;
+  private boolean wokenUp = false;
+  private int responseCount = 0;
+  private int processedResponseCount = 0;
 
   /**
    * Construct a MockNetworkClient with mock components.

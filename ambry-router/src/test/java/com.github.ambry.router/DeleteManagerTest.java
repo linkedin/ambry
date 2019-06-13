@@ -418,7 +418,8 @@ public class DeleteManagerTest {
     errorCodeHashMap.put(MockSelectorState.ThrowExceptionOnSend, RouterErrorCode.OperationTimedOut);
     errorCodeHashMap.put(MockSelectorState.ThrowThrowableOnSend, RouterErrorCode.RouterClosed);
     for (MockSelectorState state : MockSelectorState.values()) {
-      if (state == MockSelectorState.Good) {
+      if (state == MockSelectorState.Good || state == MockSelectorState.FailConnectionInitiationOnPoll) {
+        // FailConnectionInitiationOnPoll is temporarily used for warm up failure test, skip it here
         continue;
       }
       mockSelectorState.set(state);

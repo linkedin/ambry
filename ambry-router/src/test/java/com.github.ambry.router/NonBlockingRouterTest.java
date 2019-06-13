@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -850,6 +851,26 @@ public class NonBlockingRouterTest {
   }
 
   /**
+   * Test that Response Handler correctly handles disconnected connections after warming up.
+   */
+  @Test
+  public void testWarmUpConnectionFailureHandling() throws IOException {
+    Properties props = getNonBlockingRouterProperties("DC3");
+    MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
+    mockSelectorState.set(MockSelectorState.FailConnectionInitiationOnPoll);
+    setRouter(props, mockServerLayout, new LoggingNotificationSystem());
+    List<DataNodeId> localNodes = mockClusterMap.getDataNodes()
+        .stream()
+        .filter(node -> node.getDatacenterName().equals("DC3"))
+        .collect(Collectors.toList());
+    for (DataNodeId node : localNodes) {
+      assertTrue("Local node should be marked as timed out by ResponseHandler.", ((MockDataNodeId) node).isTimedOut());
+    }
+    router.close();
+    mockSelectorState.set(MockSelectorState.Good);
+  }
+
+  /**
    * Response handling related tests for all operation managers.
    */
   @Test
@@ -979,11 +1000,10 @@ public class NonBlockingRouterTest {
       }
       opHelper.pollOpManager(allRequests);
     }
-    ReplicaId replicaIdToFail =
-        indexToFail == -1 ? null : ((RouterRequestInfo) allRequests.get(indexToFail)).getReplicaId();
+    ReplicaId replicaIdToFail = indexToFail == -1 ? null : allRequests.get(indexToFail).getReplicaId();
     for (RequestInfo requestInfo : allRequests) {
       ResponseInfo responseInfo;
-      if (replicaIdToFail != null && replicaIdToFail.equals(((RouterRequestInfo) requestInfo).getReplicaId())) {
+      if (replicaIdToFail != null && replicaIdToFail.equals(requestInfo.getReplicaId())) {
         responseInfo = new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null);
       } else {
         List<RequestInfo> requestInfoListToSend = new ArrayList<>();

@@ -13,11 +13,11 @@
  */
 package com.github.ambry.tools.admin;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
@@ -95,6 +95,7 @@ public class ServerAdminTool implements Closeable {
   private final NetworkClient networkClient;
   private final AtomicInteger correlationId = new AtomicInteger(0);
   private final Time time = SystemTime.getInstance();
+  private final ClusterMap clusterMap;
 
   /**
    * The different operations supported by the tool.
@@ -258,7 +259,7 @@ public class ServerAdminTool implements Closeable {
    * @param args associated arguments.
    * @throws Exception
    */
-  public static void main(String args[]) throws Exception {
+  public static void main(String[] args) throws Exception {
     VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
     ServerAdminToolConfig config = new ServerAdminToolConfig(verifiableProperties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
@@ -267,8 +268,7 @@ public class ServerAdminTool implements Closeable {
             config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
     SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(
         new SSLConfig(verifiableProperties)) : null;
-    ServerAdminTool serverAdminTool =
-        new ServerAdminTool(clusterMap.getMetricRegistry(), sslFactory, verifiableProperties);
+    ServerAdminTool serverAdminTool = new ServerAdminTool(clusterMap, sslFactory, verifiableProperties);
     File file = new File(config.dataOutputFilePath);
     if (!file.exists() && !file.createNewFile()) {
       throw new IllegalStateException("Could not create " + file);
@@ -346,7 +346,7 @@ public class ServerAdminTool implements Closeable {
         }
         break;
       case ReplicationControl:
-        List<String> origins = Collections.EMPTY_LIST;
+        List<String> origins = Collections.emptyList();
         if (config.origins.length > 0 && !config.origins[0].isEmpty()) {
           origins = Arrays.asList(config.origins);
         }
@@ -522,15 +522,16 @@ public class ServerAdminTool implements Closeable {
 
   /**
    * Creates an instance of the server admin tool
-   * @param metricRegistry the {@link MetricRegistry} to use for metrics
+   * @param clusterMap the {@link ClusterMap} to use
    * @param sslFactory the {@link SSLFactory} to use
    * @param verifiableProperties the {@link VerifiableProperties} to use for config.
    * @throws Exception
    */
-  public ServerAdminTool(MetricRegistry metricRegistry, SSLFactory sslFactory,
-      VerifiableProperties verifiableProperties) throws Exception {
-    NetworkMetrics metrics = new NetworkMetrics(metricRegistry);
+  public ServerAdminTool(ClusterMap clusterMap, SSLFactory sslFactory, VerifiableProperties verifiableProperties)
+      throws Exception {
+    NetworkMetrics metrics = new NetworkMetrics(clusterMap.getMetricRegistry());
     NetworkConfig config = new NetworkConfig(verifiableProperties);
+    this.clusterMap = clusterMap;
     networkClient =
         new NetworkClientFactory(metrics, config, sslFactory, MAX_CONNECTIONS_PER_SERVER, MAX_CONNECTIONS_PER_SERVER,
             CONNECTION_CHECKOUT_TIMEOUT_MS, time).getNetworkClient();
@@ -631,7 +632,7 @@ public class ServerAdminTool implements Closeable {
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.TriggerCompaction, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, adminRequest);
+    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, partitionId, adminRequest);
     AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
     return adminResponse.getError();
   }
@@ -653,7 +654,7 @@ public class ServerAdminTool implements Closeable {
         new AdminRequest(AdminRequestOrResponseType.RequestControl, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
     RequestControlAdminRequest controlRequest = new RequestControlAdminRequest(toControl, enable, adminRequest);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, controlRequest);
+    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
     AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
     return adminResponse.getError();
   }
@@ -675,7 +676,7 @@ public class ServerAdminTool implements Closeable {
         new AdminRequest(AdminRequestOrResponseType.ReplicationControl, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
     ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, controlRequest);
+    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
     AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
     return adminResponse.getError();
   }
@@ -699,7 +700,7 @@ public class ServerAdminTool implements Closeable {
             CLIENT_ID);
     BlobStoreControlAdminRequest controlRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, enable, adminRequest);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, controlRequest);
+    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
     AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
     return adminResponse.getError();
   }
@@ -725,7 +726,7 @@ public class ServerAdminTool implements Closeable {
             CLIENT_ID);
     CatchupStatusAdminRequest catchupStatusRequest =
         new CatchupStatusAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, catchupStatusRequest);
+    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, partitionId, catchupStatusRequest);
     CatchupStatusAdminResponse response =
         CatchupStatusAdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
     return new Pair<>(response.getError(), response.getError() == ServerErrorCode.No_Error && response.isCaughtUp());
@@ -745,13 +746,15 @@ public class ServerAdminTool implements Closeable {
    */
   private Pair<ServerErrorCode, InputStream> getGetResponse(DataNodeId dataNodeId, BlobId blobId,
       MessageFormatFlags flags, GetOption getOption, ClusterMap clusterMap) throws Exception {
+    PartitionId partitionId = blobId.getPartition();
     PartitionRequestInfo partitionRequestInfo =
-        new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId));
+        new PartitionRequestInfo(partitionId, Collections.singletonList(blobId));
     List<PartitionRequestInfo> partitionRequestInfos = new ArrayList<>();
     partitionRequestInfos.add(partitionRequestInfo);
     GetRequest getRequest =
         new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, flags, partitionRequestInfos, getOption);
-    InputStream serverResponseStream = new ByteBufferInputStream(sendRequestGetResponse(dataNodeId, getRequest));
+    InputStream serverResponseStream =
+        new ByteBufferInputStream(sendRequestGetResponse(dataNodeId, partitionId, getRequest));
     GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
     ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
     ServerErrorCode errorCode =
@@ -763,15 +766,18 @@ public class ServerAdminTool implements Closeable {
   /**
    * Sends {@code request} to {@code dataNodeId} and returns the response as a {@link ByteBuffer}.
    * @param dataNodeId the {@link DataNodeId} to contact.
+   * @param partitionId the {@link PartitionId} associated with request.
    * @param request the request to send.
    * @return the response as a {@link ByteBuffer} if the response was successfully received. {@code null} otherwise.
    * @throws TimeoutException
    */
-  private ByteBuffer sendRequestGetResponse(DataNodeId dataNodeId, Send request) throws TimeoutException {
+  private ByteBuffer sendRequestGetResponse(DataNodeId dataNodeId, PartitionId partitionId, Send request)
+      throws TimeoutException {
+    ReplicaId replicaId = getReplicaFromNode(dataNodeId, partitionId);
     String hostname = dataNodeId.getHostname();
     Port port = dataNodeId.getPortToConnectTo();
     String identifier = hostname + ":" + port.getPort();
-    RequestInfo requestInfo = new RequestInfo(hostname, port, request);
+    RequestInfo requestInfo = new RequestInfo(hostname, port, request, replicaId);
     List<RequestInfo> requestInfos = Collections.singletonList(requestInfo);
     ResponseInfo responseInfo = null;
     long startTimeMs = time.milliseconds();
@@ -781,16 +787,40 @@ public class ServerAdminTool implements Closeable {
       }
       List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, POLL_TIMEOUT_MS);
       if (responseInfos.size() > 1) {
+        // May need to relax this check because response list may contain more than 1 response
         throw new IllegalStateException("Received more than one response even though a single request was sent");
       } else if (!responseInfos.isEmpty()) {
         responseInfo = responseInfos.get(0);
       }
-      requestInfos = Collections.EMPTY_LIST;
+      requestInfos = Collections.emptyList();
     } while (responseInfo == null);
     if (responseInfo.getError() != null) {
       throw new IllegalStateException(
           identifier + ": Encountered error while trying to send request - " + responseInfo.getError());
     }
     return responseInfo.getResponse();
+  }
+
+  /**
+   * Get replica of given {@link PartitionId} from given {@link DataNodeId}. If partitionId is null, it returns any
+   * replica on the certain node.
+   * @param dataNodeId the {@link DataNodeId} on which replica resides.
+   * @param partitionId the {@link PartitionId} which replica belongs to.
+   * @return {@link ReplicaId} from given node.
+   */
+  private ReplicaId getReplicaFromNode(DataNodeId dataNodeId, PartitionId partitionId) {
+    ReplicaId replicaToReturn = null;
+    if (partitionId != null) {
+      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+        if (replicaId.getDataNodeId().getHostname().equals(dataNodeId.getHostname())) {
+          replicaToReturn = replicaId;
+          break;
+        }
+      }
+    } else {
+      // pick any replica on this node
+      replicaToReturn = clusterMap.getReplicaIds(dataNodeId).get(0);
+    }
+    return replicaToReturn;
   }
 }

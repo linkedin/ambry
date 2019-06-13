@@ -232,7 +232,7 @@ class PutManager {
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
     PutResponse putResponse = extractPutResponseAndNotifyResponseHandler(responseInfo);
-    RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
+    RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     int correlationId = ((PutRequest) routerRequestInfo.getRequest()).getCorrelationId();
     // Get the PutOperation that generated the request.
     PutOperation putOperation = correlationIdToPutOperation.remove(correlationId);
@@ -261,7 +261,7 @@ class PutManager {
    */
   private PutResponse extractPutResponseAndNotifyResponseHandler(ResponseInfo responseInfo) {
     PutResponse putResponse = null;
-    ReplicaId replicaId = ((RouterRequestInfo) responseInfo.getRequestInfo()).getReplicaId();
+    ReplicaId replicaId = responseInfo.getRequestInfo().getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {
       try {

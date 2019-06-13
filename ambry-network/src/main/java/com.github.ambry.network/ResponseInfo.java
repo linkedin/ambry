@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.clustermap.DataNodeId;
 import java.nio.ByteBuffer;
 
 
@@ -20,12 +21,13 @@ import java.nio.ByteBuffer;
  * The response from a {@link NetworkClient} comes in the form of an object of this class.
  * This class consists of the request associated with this response, along with either a non-null exception if there
  * was an error sending the request or a non-null ByteBuffer containing the successful response received for this
- * request.
+ * request. Also, this class contains {@link DataNodeId} to which the request is issued.
  */
 public class ResponseInfo {
   private final RequestInfo requestInfo;
   private final NetworkClientErrorCode error;
   private final ByteBuffer response;
+  private final DataNodeId dataNode;
 
   /**
    * Constructs a ResponseInfo with the given parameters.
@@ -34,9 +36,14 @@ public class ResponseInfo {
    * @param response the response received for this request.
    */
   public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, ByteBuffer response) {
+    this(requestInfo, error, response, requestInfo == null ? null : requestInfo.getReplicaId().getDataNodeId());
+  }
+
+  public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, ByteBuffer response, DataNodeId dataNode) {
     this.requestInfo = requestInfo;
     this.error = error;
     this.response = response;
+    this.dataNode = dataNode;
   }
 
   /**
@@ -58,5 +65,12 @@ public class ResponseInfo {
    */
   public ByteBuffer getResponse() {
     return response;
+  }
+
+  /**
+   * @return the {@link DataNodeId} with which the response is associated.
+   */
+  public DataNodeId getDataNode() {
+    return dataNode;
   }
 }

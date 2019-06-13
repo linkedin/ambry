@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
@@ -553,12 +554,19 @@ class NonBlockingRouter implements Router {
     OperationController(String suffix, String defaultPartitionClass, AccountService accountService) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
       // Warm up connections to dataNodes in local DC.
+      List<ResponseInfo> responseInfos = new ArrayList<>();
       networkClient.warmUpConnections(clusterMap.getDataNodeIds()
               .stream()
               .filter(dataNodeId -> clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId())
                   .equals(dataNodeId.getDatacenterName()))
               .collect(Collectors.toList()), routerConfig.routerConnectionsWarmUpPercentagePerPort,
-          routerConfig.routerConnectionsWarmUpTimeoutMs);
+          routerConfig.routerConnectionsWarmUpTimeoutMs, responseInfos);
+      // Update ResponseHandler immediately if connections lost to certain nodes.
+      for (ResponseInfo responseInfo : responseInfos) {
+        if (responseInfo.getRequestInfo() == null) {
+          responseHandler.onConnectionTimeout(responseInfo.getDataNode());
+        }
+      }
       routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
       putManager =
           new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,
@@ -802,23 +810,32 @@ class NonBlockingRouter implements Router {
     protected void onResponse(List<ResponseInfo> responseInfoList) {
       for (ResponseInfo responseInfo : responseInfoList) {
         try {
-          RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
-          RequestOrResponseType type = ((RequestOrResponse) routerRequestInfo.getRequest()).getRequestType();
-          switch (type) {
-            case PutRequest:
-              putManager.handleResponse(responseInfo);
-              break;
-            case GetRequest:
-              getManager.handleResponse(responseInfo);
-              break;
-            case DeleteRequest:
-              deleteManager.handleResponse(responseInfo);
-              break;
-            case TtlUpdateRequest:
-              ttlUpdateManager.handleResponse(responseInfo);
-              break;
-            default:
-              logger.error("Unexpected response type: " + type + " received, discarding");
+          RequestInfo requestInfo = responseInfo.getRequestInfo();
+          if (requestInfo == null) {
+            // If requestInfo is null, it means request has been failed previously due to long wait in pending requests
+            // queue. The failed request was already handled by one of the managers(PutManager, GetManager, etc). Current
+            // response comes from timed-out connection associated with previous request. Router only needs to notify
+            // responseHandler to mark the data node resource down.
+            DataNodeId dataNodeId = responseInfo.getDataNode();
+            responseHandler.onConnectionTimeout(dataNodeId);
+          } else {
+            RequestOrResponseType type = ((RequestOrResponse) requestInfo.getRequest()).getRequestType();
+            switch (type) {
+              case PutRequest:
+                putManager.handleResponse(responseInfo);
+                break;
+              case GetRequest:
+                getManager.handleResponse(responseInfo);
+                break;
+              case DeleteRequest:
+                deleteManager.handleResponse(responseInfo);
+                break;
+              case TtlUpdateRequest:
+                ttlUpdateManager.handleResponse(responseInfo);
+                break;
+              default:
+                logger.error("Unexpected response type: " + type + " received, discarding");
+            }
           }
         } catch (Exception e) {
           logger.error("Unexpected error received while handling a response: ", e);

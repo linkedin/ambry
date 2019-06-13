@@ -14,12 +14,14 @@
 package com.github.ambry.commons;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.NetworkClientErrorCode;
 import java.io.IOException;
 import java.net.SocketException;
+import java.util.List;
 
 
 /**
@@ -112,6 +114,21 @@ public class ResponseHandler {
       onException(replicaId, (Exception) event);
     } else if (event instanceof NetworkClientErrorCode) {
       onNetworkEvent(replicaId, (NetworkClientErrorCode) event);
+    }
+  }
+
+  /**
+   * Take action when connection to certain {@link DataNodeId} timed out. The clustermap is supposed to mark node resource
+   * down and avoid subsequent requests routed to this node within down window.
+   * @param dataNodeId the {@link DataNodeId} associated with timeout connection.
+   */
+  public void onConnectionTimeout(DataNodeId dataNodeId) {
+    if (dataNodeId != null) {
+      List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
+      if (!replicaIds.isEmpty()) {
+        // Pick any replica from this node to mark resource down
+        clusterMap.onReplicaEvent(replicaIds.get(0), ReplicaEventType.Node_Timeout);
+      }
     }
   }
 }
