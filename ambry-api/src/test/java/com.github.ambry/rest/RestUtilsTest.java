@@ -903,7 +903,7 @@ public class RestUtilsTest {
   }
 
   /**
-   * Test that {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource, GetOption, long)} works correctly for a given
+   * Test that {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource, GetOption, int)} works correctly for a given
    * range with and without a specified sub-resource.
    * @param rangeHeader the Range header value to add to the {@code args} map.
    * @param expectedRange the {@link ByteRange} expected to be parsed if the call should succeed, or {@code null} if no
@@ -932,7 +932,7 @@ public class RestUtilsTest {
   }
 
   /**
-   * Test that {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource, GetOption, long)} works correctly with given args and a
+   * Test that {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource, GetOption, int)} works correctly with given args and a
    * specified sub-resource.
    * @param args the map of args for the method call.
    * @param subResource the sub-resource for the call.

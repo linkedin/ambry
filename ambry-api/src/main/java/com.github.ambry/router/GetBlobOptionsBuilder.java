@@ -28,7 +28,7 @@ public class GetBlobOptionsBuilder {
   private GetOption getOption = GetOption.None;
   private ByteRange range = null;
   private boolean rawMode = false;
-  private long blobSegment = NO_BLOB_SEGMENT_IDX_SPECIFIED;
+  private int blobSegmentIdx = NO_BLOB_SEGMENT_IDX_SPECIFIED;
 
   /**
    * @param operationType the {@link GetBlobOptions.OperationType} for this request.
@@ -69,11 +69,11 @@ public class GetBlobOptionsBuilder {
   }
 
   /**
-   * @param blobSegment blob segment index of a metadata blob that one wants to get.
+   * @param blobSegmentIdx blob segment index of a metadata blob that one wants to get.
    * @return this builder
    */
-  public GetBlobOptionsBuilder blobSegment(long blobSegment) {
-    this.blobSegment = blobSegment;
+  public GetBlobOptionsBuilder blobSegment(int blobSegmentIdx) {
+    this.blobSegmentIdx = blobSegmentIdx;
     return this;
   }
 
@@ -81,6 +81,6 @@ public class GetBlobOptionsBuilder {
    * @return the {@link GetBlobOptions} built.
    */
   public GetBlobOptions build() {
-    return new GetBlobOptions(operationType, getOption, range, rawMode, blobSegment);
+    return new GetBlobOptions(operationType, getOption, range, rawMode, blobSegmentIdx);
   }
 }

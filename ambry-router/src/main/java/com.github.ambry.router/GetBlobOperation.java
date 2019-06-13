@@ -959,7 +959,7 @@ class GetBlobOperation extends GetOperation {
         buf.limit(0);
       } else {
         long relativeOffset = offset;
-        if (options.getBlobOptions.getBlobSegment() != -1) {
+        if (options.getBlobOptions.hasBlobSegment()) {
           relativeOffset = 0;
         }
         long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() - relativeOffset : 0;
@@ -1223,18 +1223,18 @@ class GetBlobOperation extends GetOperation {
       chunkMetadataList = compositeBlobInfo.getChunkMetadataList();
       boolean rangeResolutionFailure = false;
       try {
-        if (options.getBlobOptions.getBlobSegment() != -1) {
-          long requestedSegment = options.getBlobOptions.getBlobSegment();
+        if (options.getBlobOptions.hasBlobSegment()) {
+          int requestedSegment = options.getBlobOptions.getBlobSegmentIdx();
           if (requestedSegment < 0 || requestedSegment >= chunkMetadataList.size()) {
             throw new IllegalArgumentException(
                 "Bad segment number: " + requestedSegment + ", num of keys: " + chunkMetadataList.size());
           }
-          chunkMetadataList = chunkMetadataList.subList((int) requestedSegment, (int) requestedSegment + 1);
+          chunkMetadataList = chunkMetadataList.subList(requestedSegment, requestedSegment + 1);
         }
         if (options.getBlobOptions.getRange() != null) {
           resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
           // Get only the chunks within the range.
-          if (options.getBlobOptions.getBlobSegment() == -1) {
+          if (!options.getBlobOptions.hasBlobSegment()) {
             chunkMetadataList = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
                 resolvedByteRange.getEndOffset());
           }
@@ -1252,7 +1252,7 @@ class GetBlobOperation extends GetOperation {
           decryptCallbackResultInfo = new DecryptCallBackResultInfo();
           progressTracker.initializeCryptoJobTracker(CryptoJobType.DECRYPTION);
           decryptJobMetricsTracker.onJobSubmission();
-          logger.trace("Submitting decrypt job for Metadaata chunk {}", blobId);
+          logger.trace("Submitting decrypt job for Metadata chunk {}", blobId);
           long startTimeMs = System.currentTimeMillis();
           cryptoJobHandler.submitJob(
               new DecryptJob(blobId, encryptionKey, null, ByteBuffer.wrap(userMetadata), cryptoService, kms,

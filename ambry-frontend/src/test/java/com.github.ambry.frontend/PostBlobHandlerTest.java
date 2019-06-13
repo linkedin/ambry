@@ -511,7 +511,7 @@ public class PostBlobHandlerTest {
    * @return A {@link RestRequest} object that defines the request required by the input.
    */
   private RestRequest getRestRequest(JSONObject headers, String path, byte[] requestBody)
-      throws UnsupportedEncodingException, URISyntaxException {
+      throws UnsupportedEncodingException, URISyntaxException, RestServiceException {
     RestRequest request = AmbryBlobStorageServiceTest.createRestRequest(RestMethod.POST, path, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(requestBody), null)));
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,

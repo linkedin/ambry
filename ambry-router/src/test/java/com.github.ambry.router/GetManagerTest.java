@@ -46,8 +46,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.router.GetBlobOptions.*;
-
 
 @RunWith(Parameterized.class)
 public class GetManagerTest {
@@ -64,7 +62,8 @@ public class GetManagerTest {
   private CryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
   private RouterConfig routerConfig;
-  private int chunkSize;
+  //  private int chunkSize;
+//  private int largeBlobSize;
   private int requestParallelism;
   private int successTarget;
   // Request params;
@@ -75,6 +74,8 @@ public class GetManagerTest {
   private ReadableStreamChannel putChannel;
   private GetBlobOptions options = new GetBlobOptionsBuilder().build();
   private List<ChunkInfo> chunkInfos;
+  private static final int CHUNK_SIZE = new Random().nextInt(1024 * 1024) + 1;
+  private static final int LARGE_BLOB_SIZE = CHUNK_SIZE * 6 + 11;
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
@@ -100,7 +101,7 @@ public class GetManagerTest {
     this.testEncryption = testEncryption;
     this.metadataContentVersion = metadataContentVersion;
     // random chunkSize in the range [1, 1 MB]
-    chunkSize = random.nextInt(1024 * 1024) + 1;
+//    chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
     successTarget = 2;
     mockSelectorState.set(MockSelectorState.Good);
@@ -129,7 +130,7 @@ public class GetManagerTest {
    */
   @Test
   public void testSimpleBlobGetSuccess() throws Exception {
-    testGetSuccess(chunkSize, new GetBlobOptionsBuilder().build());
+    testGetSuccess(CHUNK_SIZE, new GetBlobOptionsBuilder().build());
   }
 
   /**
@@ -138,7 +139,7 @@ public class GetManagerTest {
    */
   @Test
   public void testCompositeBlobGetSuccess() throws Exception {
-    testGetSuccess(chunkSize * 6 + 11, new GetBlobOptionsBuilder().build());
+    testGetSuccess(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().build());
   }
 
   /**
@@ -147,8 +148,8 @@ public class GetManagerTest {
    */
   @Test
   public void testCompositeBlobGetSuccessStitchDifferentSizedBlobs() throws Exception {
-    if (metadataContentVersion > 2) {
-      testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().build());
+    if (metadataContentVersion > MessageFormatRecord.Metadata_Content_Version_V2) {
+      testGetSuccessStitch(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().build());
     } else {
       router = getNonBlockingRouter();
       router.close();
@@ -161,10 +162,10 @@ public class GetManagerTest {
    */
   @Test
   public void testCompositeBlobGetSuccessStitchDifferentSizedBlobsSegments() throws Exception {
-    if (metadataContentVersion > 2) {
+    if (metadataContentVersion > MessageFormatRecord.Metadata_Content_Version_V2) {
       //Test grabbing every segment
       for (int i = 0; i < NUM_STITCHED_CHUNKS; i++) {
-        testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().blobSegment(i).build());
+        testGetSuccessStitch(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().blobSegment(i).build());
       }
     } else {
       router = getNonBlockingRouter();
@@ -178,8 +179,8 @@ public class GetManagerTest {
    */
   @Test
   public void testRangeRequest() throws Exception {
-    testGetSuccess(chunkSize * 6 + 11, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
-        .range(ByteRanges.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
+    testGetSuccess(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
+        .range(ByteRanges.fromOffsetRange(CHUNK_SIZE * 2 + 3, CHUNK_SIZE * 5 + 4))
         .build());
   }
 
@@ -190,10 +191,9 @@ public class GetManagerTest {
   @Test
   public void testRangeRequestStitchDifferentSizedBlobs() throws Exception {
     if (metadataContentVersion > 2) {
-      testGetSuccessStitch(chunkSize * 6 + 11,
-          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
-              .range(ByteRanges.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4))
-              .build());
+      testGetSuccessStitch(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
+          .range(ByteRanges.fromOffsetRange(CHUNK_SIZE * 2 + 3, CHUNK_SIZE * 5 + 4))
+          .build());
     } else {
       router = getNonBlockingRouter();
       router.close();
@@ -206,19 +206,19 @@ public class GetManagerTest {
    */
   @Test
   public void testRangeRequestStitchDifferentSizedBlobsSegments() throws Exception {
-    if (metadataContentVersion > 2) {
+    if (metadataContentVersion > MessageFormatRecord.Metadata_Content_Version_V2) {
       //Test grabbing every segment with various offset ranges
       for (int i = 0; i < NUM_STITCHED_CHUNKS; i++) {
-        testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().blobSegment(i)
-            .range(ByteRanges.fromOffsetRange(0, chunkSize / NUM_STITCHED_CHUNKS))
+        testGetSuccessStitch(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().blobSegment(i)
+            .range(ByteRanges.fromOffsetRange(0, CHUNK_SIZE / NUM_STITCHED_CHUNKS))
             .build());
-        testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().blobSegment(i)
-            .range(ByteRanges.fromOffsetRange(chunkSize / NUM_STITCHED_CHUNKS / 2, chunkSize / NUM_STITCHED_CHUNKS))
+        testGetSuccessStitch(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().blobSegment(i)
+            .range(ByteRanges.fromOffsetRange(CHUNK_SIZE / NUM_STITCHED_CHUNKS / 2, CHUNK_SIZE / NUM_STITCHED_CHUNKS))
             .build());
-        testGetSuccessStitch(chunkSize * 6 + 11, new GetBlobOptionsBuilder().blobSegment(i)
-            .range(ByteRanges.fromOffsetRange(5, chunkSize / NUM_STITCHED_CHUNKS - 5))
+        testGetSuccessStitch(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().blobSegment(i)
+            .range(ByteRanges.fromOffsetRange(5, CHUNK_SIZE / NUM_STITCHED_CHUNKS - 5))
             .build());
-        testGetSuccessStitch(chunkSize * 6 + 11,
+        testGetSuccessStitch(LARGE_BLOB_SIZE,
             new GetBlobOptionsBuilder().blobSegment(i).range(ByteRanges.fromOffsetRange(0, 0)).build());
       }
     } else {
@@ -338,7 +338,7 @@ public class GetManagerTest {
   private void testBadCallback(Callback<GetBlobResult> getBlobCallback, CountDownLatch getBlobCallbackCalled,
       Boolean checkBadCallbackBlob) throws Exception {
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize * 6 + 11, new GetBlobOptionsBuilder().build());
+    setOperationParams(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().build());
     final CountDownLatch getBlobInfoCallbackCalled = new CountDownLatch(1);
     String blobId =
         router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
@@ -378,7 +378,7 @@ public class GetManagerTest {
     Assert.assertTrue("Router should not be closed", router.isOpen());
 
     // Test that GetManager is still operational
-    setOperationParams(chunkSize, new GetBlobOptionsBuilder().build());
+    setOperationParams(CHUNK_SIZE, new GetBlobOptionsBuilder().build());
     blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     getBlobAndCompareContent(blobId);
     this.options = infoOptions;
@@ -394,7 +394,7 @@ public class GetManagerTest {
   @Test
   public void testFailureOnAllPollThatSends() throws Exception {
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize, new GetBlobOptionsBuilder().build());
+    setOperationParams(CHUNK_SIZE, new GetBlobOptionsBuilder().build());
     String blobId =
         router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
@@ -435,7 +435,7 @@ public class GetManagerTest {
   @Test
   public void testBadBlobId() throws Exception {
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize, new GetBlobOptionsBuilder().build());
+    setOperationParams(CHUNK_SIZE, new GetBlobOptionsBuilder().build());
     String[] badBlobIds = {"", "abc", "123", "invalid_id", "[],/-"};
     for (String blobId : badBlobIds) {
       for (GetBlobOptions.OperationType opType : GetBlobOptions.OperationType.values()) {
@@ -508,11 +508,11 @@ public class GetManagerTest {
    */
   private void compareContent(ReadableStreamChannel readableStreamChannel) throws Exception {
     ByteRange byteRange = options.getRange();
-    if (options.getBlobSegment() != NO_BLOB_SEGMENT_IDX_SPECIFIED) {
-      int offset = 0;
-      int size = (int) chunkInfos.get(0).getChunkSizeInBytes();
-      for (int i = 0; i < (int) options.getBlobSegment(); i++) {
-        size = (int) chunkInfos.get(i + 1).getChunkSizeInBytes();
+    if (options.hasBlobSegment()) {
+      long offset = 0;
+      long size = chunkInfos.get(0).getChunkSizeInBytes();
+      for (int i = 0; i < options.getBlobSegmentIdx(); i++) {
+        size = chunkInfos.get(i + 1).getChunkSizeInBytes();
         offset += chunkInfos.get(i).getChunkSizeInBytes();
       }
       if (options.getRange() == null) {
@@ -532,7 +532,7 @@ public class GetManagerTest {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
+    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(CHUNK_SIZE));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     properties.setProperty("router.metadata.content.version", String.valueOf(metadataContentVersion));
@@ -564,6 +564,10 @@ public class GetManagerTest {
     this.options = options;
   }
 
+  /**
+   * Resets objects related to encryption testing
+   * @throws GeneralSecurityException
+   */
   private void resetEncryptionObjects() throws GeneralSecurityException {
     if (testEncryption) {
       VerifiableProperties vProps = new VerifiableProperties(new Properties());

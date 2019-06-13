@@ -28,8 +28,8 @@ public class GetBlobOptions {
   private final ByteRange range;
   // Flag indicating whether to return the raw blob payload without deserialization.
   private final boolean rawMode;
-  private final long blobSegment;
-  public static long NO_BLOB_SEGMENT_IDX_SPECIFIED = -1;
+  private final int blobSegmentIdx;
+  public static int NO_BLOB_SEGMENT_IDX_SPECIFIED = -1;
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
@@ -37,8 +37,11 @@ public class GetBlobOptions {
    * @param getOption the {@link GetOption} associated with the request.
    * @param range a {@link ByteRange} for this get request. This can be null, if the entire blob is desired.
    * @param rawMode a system flag indicating that the raw bytes should be returned.
+   * @param blobSegmentIdx if not NO_BLOB_SEGMENT_IDX_SPECIFIED, the blob segment requested to be returned (only relevant for
+   *                       metadata blobs)
    */
-  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean rawMode, long blobSegment) {
+  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean rawMode,
+      int blobSegmentIdx) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
     }
@@ -52,7 +55,7 @@ public class GetBlobOptions {
     this.getOption = getOption;
     this.range = range;
     this.rawMode = rawMode;
-    this.blobSegment = blobSegment;
+    this.blobSegmentIdx = blobSegmentIdx;
   }
 
   /**
@@ -86,14 +89,21 @@ public class GetBlobOptions {
   /**
    * @return the blob segment
    */
-  public long getBlobSegment() {
-    return blobSegment;
+  public int getBlobSegmentIdx() {
+    return blobSegmentIdx;
+  }
+
+  /**
+   * @return whether a blob segment has been specified or not
+   */
+  public boolean hasBlobSegment() {
+    return blobSegmentIdx != NO_BLOB_SEGMENT_IDX_SPECIFIED;
   }
 
   @Override
   public String toString() {
     return "GetBlobOptions{operationType=" + operationType + ", getOption=" + getOption + ", range=" + range
-        + ", rawMode=" + rawMode + ", blobSegment=" + blobSegment + '}';
+        + ", rawMode=" + rawMode + ", blobSegmentIdx=" + blobSegmentIdx + '}';
   }
 
   @Override
@@ -116,7 +126,7 @@ public class GetBlobOptions {
     if (rawMode != that.rawMode) {
       return false;
     }
-    if (blobSegment != that.blobSegment) {
+    if (blobSegmentIdx != that.blobSegmentIdx) {
       return false;
     }
     return !(range != null ? !range.equals(that.range) : that.range != null);
@@ -128,7 +138,7 @@ public class GetBlobOptions {
     result = 31 * result + getOption.hashCode();
     result = 31 * result + (range != null ? range.hashCode() : 0);
     result = 31 * result + Boolean.hashCode(rawMode);
-    result = 31 * result + (int) blobSegment;
+    result = 31 * result + (int) blobSegmentIdx;
     return result;
   }
 

@@ -429,7 +429,7 @@ public class AmbrySecurityServiceTest {
    * @throws java.net.URISyntaxException
    */
   private RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers)
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+      throws JSONException, UnsupportedEncodingException, URISyntaxException, RestServiceException {
     JSONObject request = new JSONObject();
     request.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
     request.put(MockRestRequest.URI_KEY, uri);

@@ -1365,14 +1365,9 @@ public class GetBlobOperationTest {
       } else {
         putContentBuf = ByteBuffer.wrap(putContent);
         // If a range is set, compare the result against the specified byte range.
-        if (options != null) {
-          if (options.getBlobSegment() != NO_BLOB_SEGMENT_IDX_SPECIFIED) {
-
-          }
-          if (options.getRange() != null) {
-            ByteRange range = options.getRange().toResolvedByteRange(blobSize);
-            putContentBuf = ByteBuffer.wrap(putContent, (int) range.getStartOffset(), (int) range.getRangeSize());
-          }
+        if (options != null && options.getRange() != null) {
+          ByteRange range = options.getRange().toResolvedByteRange(blobSize);
+          putContentBuf = ByteBuffer.wrap(putContent, (int) range.getStartOffset(), (int) range.getRangeSize());
         }
       }
 
