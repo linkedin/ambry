@@ -214,7 +214,7 @@ public abstract class ReplicationEngine {
         persistor.write(true);
       }
     } catch (Exception e) {
-      logger.error("Error shutting down replica manager {}", e);
+      logger.error("Error shutting down replica manager", e);
       throw new ReplicationException("Error shutting down replica manager");
     }
   }

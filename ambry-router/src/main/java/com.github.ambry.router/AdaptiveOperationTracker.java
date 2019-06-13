@@ -15,8 +15,11 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.Resource;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -46,8 +49,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   private final Counter pastDueCounter;
   private final OpTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaIterator;
-  private Map<PartitionId, Histogram> localDcPartitionToHistogram;
-  private Map<PartitionId, Histogram> crossDcPartitionToHistogram;
+
+  private Map<Resource, Histogram> localDcResourceToHistogram;
+  private Map<Resource, Histogram> crossDcResourceToHistogram;
 
   // The value contains a pair - the boolean indicates whether the request to the corresponding replicaId has been
   // determined as expired (but not yet removed). The long is the time at which the request was sent.
@@ -76,9 +80,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     this.pastDueCounter = getWholeDcPastDueCounter(routerOperation);
     this.quantile = routerConfig.routerLatencyToleranceQuantile;
     this.otIterator = new OpTrackerIterator();
-    if (routerConfig.routerOperationTrackerMetricScope == OperationTrackerScope.Partition) {
-      localDcPartitionToHistogram = getPartitionToLatencyMap(routerOperation, true);
-      crossDcPartitionToHistogram = getPartitionToLatencyMap(routerOperation, false);
+    if (routerConfig.routerOperationTrackerMetricScope != OperationTrackerScope.Datacenter) {
+      localDcResourceToHistogram = getResourceToLatencyMap(routerOperation, true);
+      crossDcResourceToHistogram = getResourceToLatencyMap(routerOperation, false);
     }
   }
 
@@ -117,15 +121,24 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   Histogram getLatencyHistogram(ReplicaId replicaId) {
     boolean isLocalReplica = replicaId.getDataNodeId().getDatacenterName().equals(datacenterName);
     Histogram histogramToReturn;
-    // TODO add support for replica-level/disk-level/node-level histogram based on the config
     switch (routerConfig.routerOperationTrackerMetricScope) {
       case Datacenter:
         histogramToReturn = isLocalReplica ? localDcHistogram : crossDcHistogram;
         break;
       case Partition:
         PartitionId partitionId = replicaId.getPartitionId();
-        histogramToReturn = isLocalReplica ? localDcPartitionToHistogram.get(partitionId)
-            : crossDcPartitionToHistogram.get(partitionId);
+        histogramToReturn =
+            isLocalReplica ? localDcResourceToHistogram.get(partitionId) : crossDcResourceToHistogram.get(partitionId);
+        break;
+      case DataNode:
+        DataNodeId dataNodeId = replicaId.getDataNodeId();
+        histogramToReturn =
+            isLocalReplica ? localDcResourceToHistogram.get(dataNodeId) : crossDcResourceToHistogram.get(dataNodeId);
+        break;
+      case Disk:
+        DiskId diskId = replicaId.getDiskId();
+        histogramToReturn =
+            isLocalReplica ? localDcResourceToHistogram.get(diskId) : crossDcResourceToHistogram.get(diskId);
         break;
       default:
         throw new IllegalArgumentException("Unsupported operation tracker metric scope.");
@@ -176,26 +189,26 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   }
 
   /**
-   * Get certain partition-level histograms based on given arguments.
+   * Get certain resource-level histograms based on given arguments.
    * @param routerOperation the {@link RouterOperation} that uses this tracker.
-   * @param isLocal {@code true} if local partition-level histograms should be returned. {@code false} otherwise.
-   * @return partition-to-histogram map.
+   * @param isLocal {@code true} if local resource-level histograms should be returned. {@code false} otherwise.
+   * @return resource-to-histogram map.
    */
-  Map<PartitionId, Histogram> getPartitionToLatencyMap(RouterOperation routerOperation, boolean isLocal) {
-    Map<PartitionId, Histogram> partitionToHistogramMap;
+  Map<Resource, Histogram> getResourceToLatencyMap(RouterOperation routerOperation, boolean isLocal) {
+    Map<Resource, Histogram> resourceToHistogramMap;
     switch (routerOperation) {
       case GetBlobInfoOperation:
-        partitionToHistogramMap = isLocal ? routerMetrics.getBlobInfoLocalDcPartitionToLatency
-            : routerMetrics.getBlobInfoCrossDcPartitionToLatency;
+        resourceToHistogramMap = isLocal ? routerMetrics.getBlobInfoLocalDcResourceToLatency
+            : routerMetrics.getBlobInfoCrossDcResourceToLatency;
         break;
       case GetBlobOperation:
-        partitionToHistogramMap =
-            isLocal ? routerMetrics.getBlobLocalDcPartitionToLatency : routerMetrics.getBlobCrossDcPartitionToLatency;
+        resourceToHistogramMap =
+            isLocal ? routerMetrics.getBlobLocalDcResourceToLatency : routerMetrics.getBlobCrossDcResourceToLatency;
         break;
       default:
-        throw new IllegalArgumentException("Unsupported router operation when getting partition-to-latency map");
+        throw new IllegalArgumentException("Unsupported router operation when getting resource-to-latency map");
     }
-    return partitionToHistogramMap;
+    return resourceToHistogramMap;
   }
 
   /**
