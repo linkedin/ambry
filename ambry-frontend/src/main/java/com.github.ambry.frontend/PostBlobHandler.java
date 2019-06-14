@@ -304,7 +304,7 @@ class PostBlobHandler {
     private void setSignedIdMetadataAndBlobSize(BlobProperties blobProperties) throws RestServiceException {
       if (RestUtils.isChunkUpload(restRequest.getArgs())) {
         Map<String, String> metadata = new HashMap<>(2);
-        metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBytesReceived()));
+        metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBlobBytesReceived()));
         metadata.put(RestUtils.Headers.SESSION,
             RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
         metadata.put(EXPIRATION_TIME_MS_KEY,
@@ -312,7 +312,7 @@ class PostBlobHandler {
         restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
       }
       //the actual blob size is the number of bytes read
-      restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBytesReceived());
+      restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
     }
 
     /**

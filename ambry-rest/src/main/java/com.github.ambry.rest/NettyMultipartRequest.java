@@ -50,9 +50,9 @@ import org.slf4j.LoggerFactory;
 class NettyMultipartRequest extends NettyRequest {
   private final Queue<HttpContent> rawRequestContents = new LinkedBlockingQueue<>();
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final AtomicLong bytesReceived = new AtomicLong(0);
   private final long maxSizeAllowedInBytes;
-
+  //For Multipart request, bytes received in http content can be different from blob bytes received.
+  private final AtomicLong blobBytesReceived = new AtomicLong(0);
   private boolean readyForRead = false;
   private boolean hasBlob = false;
 
@@ -221,6 +221,7 @@ class NettyMultipartRequest extends NettyRequest {
             try {
               if (isOpen()) {
                 requestContents.add(new DefaultHttpContent(ReferenceCountUtil.retain(fileUpload.content())));
+                blobBytesReceived.set(fileUpload.content().capacity());
               } else {
                 nettyMetrics.multipartRequestAlreadyClosedError.inc();
                 throw new RestServiceException("Request is closed", RestServiceErrorCode.RequestChannelClosed);
@@ -251,5 +252,10 @@ class NettyMultipartRequest extends NettyRequest {
       nettyMetrics.unsupportedPartError.inc();
       throw new RestServiceException("Unexpected HTTP data", RestServiceErrorCode.BadRequest);
     }
+  }
+
+  @Override
+  public long getBlobBytesReceived() {
+    return blobBytesReceived.get();
   }
 }
