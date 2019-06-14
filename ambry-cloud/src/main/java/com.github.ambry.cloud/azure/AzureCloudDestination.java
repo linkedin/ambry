@@ -402,10 +402,18 @@ class AzureCloudDestination implements CloudDestination {
    * @throws StorageException if the operation fails.
    */
   private void ensureCreated(CloudBlobContainer azureContainer) throws StorageException {
-    if (!knownContainers.contains(azureContainer.getName())) {
-      azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
-          blobOpContext);
-      knownContainers.add(azureContainer.getName());
+    String containerName = azureContainer.getName();
+    if (!knownContainers.contains(containerName)) {
+      try {
+        if (azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
+            blobOpContext)) {
+          logger.info("Created container {}", containerName);
+        }
+      } catch (StorageException ex) {
+        logger.error("Failed to create container {}", containerName);
+        throw ex;
+      }
+      knownContainers.add(containerName);
     }
   }
 
@@ -447,7 +455,9 @@ class AzureCloudDestination implements CloudDestination {
    */
   String getAzureContainerName(String partitionPath) {
     // Include Ambry cluster name in case the same storage account is used to backup multiple clusters.
-    return clusterName + SEPARATOR + partitionPath;
+    // Azure requires container names to be all lower case
+    String rawContainerName = clusterName + SEPARATOR + partitionPath;
+    return rawContainerName.toLowerCase();
   }
 
   /**
