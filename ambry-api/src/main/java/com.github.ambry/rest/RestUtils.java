@@ -313,7 +313,15 @@ public class RestUtils {
      * "replicas" here means the string representation of all the replicas (i.e. host:port/path) where the blob might
      * reside.
      */
-    Replicas
+    Replicas,
+
+    /**
+     * Used when fetching individual segments/data blobs from a composite blob.
+     * Will come in the resource URI in the form "*\/Segment\/<NON-NEGATIVE_INTEGER>",
+     * where NON-NEGATIVE_INTEGER is a non-negative integer that represents the index
+     * of a segment one wants to GET
+     */
+    Segment
   }
 
   public static final class MultipartPost {
@@ -508,18 +516,22 @@ public class RestUtils {
    *             arguments to values.
    * @param subResource the {@link SubResource} for the request, or {@code null} if no sub-resource is requested.
    * @param getOption the {@link GetOption} required.
+   * @param blobSegmentIdx index of blob segment one wishes to GET, {@link GetBlobOptions#NO_BLOB_SEGMENT_IDX_SPECIFIED}
+   *                       if not used
    * @return a populated {@link GetBlobOptions} object.
    * @throws RestServiceException if the {@link GetBlobOptions} could not be constructed.
    */
   public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource,
-      GetOption getOption) throws RestServiceException {
+      GetOption getOption, int blobSegmentIdx) throws RestServiceException {
     String rangeHeaderValue = getHeader(args, Headers.RANGE, false);
     if (subResource != null && rangeHeaderValue != null) {
       throw new RestServiceException("Ranges not supported for sub-resources.", RestServiceErrorCode.InvalidArgs);
     }
     return new GetBlobOptionsBuilder().operationType(
-        subResource == null ? GetBlobOptions.OperationType.All : GetBlobOptions.OperationType.BlobInfo)
+        subResource == null || subResource == SubResource.Segment ? GetBlobOptions.OperationType.All
+            : GetBlobOptions.OperationType.BlobInfo)
         .getOption(getOption)
+        .blobSegment(blobSegmentIdx)
         .range(rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null)
         .build();
   }

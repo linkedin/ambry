@@ -958,9 +958,13 @@ class GetBlobOperation extends GetOperation {
         buf.position(0);
         buf.limit(0);
       } else {
-        long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() - offset : 0;
+        long relativeOffset = offset;
+        if (options.getBlobOptions.hasBlobSegmentIdx()) {
+          relativeOffset = 0;
+        }
+        long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() - relativeOffset : 0;
         long endOffsetInThisChunkExclusive =
-            chunkIndex == (numChunksTotal - 1) ? resolvedByteRange.getEndOffset() - offset + 1 : chunkSize;
+            chunkIndex == (numChunksTotal - 1) ? resolvedByteRange.getEndOffset() - relativeOffset + 1 : chunkSize;
         buf.position((int) startOffsetInThisChunk);
         buf.limit((int) endOffsetInThisChunkExclusive);
       }
@@ -1219,11 +1223,21 @@ class GetBlobOperation extends GetOperation {
       chunkMetadataList = compositeBlobInfo.getChunkMetadataList();
       boolean rangeResolutionFailure = false;
       try {
+        if (options.getBlobOptions.hasBlobSegmentIdx()) {
+          int requestedSegment = options.getBlobOptions.getBlobSegmentIdx();
+          if (requestedSegment < 0 || requestedSegment >= chunkMetadataList.size()) {
+            throw new IllegalArgumentException(
+                "Bad segment number: " + requestedSegment + ", num of keys: " + chunkMetadataList.size());
+          }
+          chunkMetadataList = chunkMetadataList.subList(requestedSegment, requestedSegment + 1);
+        }
         if (options.getBlobOptions.getRange() != null) {
           resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
           // Get only the chunks within the range.
-          chunkMetadataList = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
-              resolvedByteRange.getEndOffset());
+          if (!options.getBlobOptions.hasBlobSegmentIdx()) {
+            chunkMetadataList = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
+                resolvedByteRange.getEndOffset());
+          }
         }
       } catch (IllegalArgumentException e) {
         onInvalidRange(e);
@@ -1238,7 +1252,7 @@ class GetBlobOperation extends GetOperation {
           decryptCallbackResultInfo = new DecryptCallBackResultInfo();
           progressTracker.initializeCryptoJobTracker(CryptoJobType.DECRYPTION);
           decryptJobMetricsTracker.onJobSubmission();
-          logger.trace("Submitting decrypt job for Metadaata chunk {}", blobId);
+          logger.trace("Submitting decrypt job for Metadata chunk {}", blobId);
           long startTimeMs = System.currentTimeMillis();
           cryptoJobHandler.submitJob(
               new DecryptJob(blobId, encryptionKey, null, ByteBuffer.wrap(userMetadata), cryptoService, kms,

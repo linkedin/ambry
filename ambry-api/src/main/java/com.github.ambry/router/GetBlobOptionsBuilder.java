@@ -16,6 +16,8 @@ package com.github.ambry.router;
 
 import com.github.ambry.protocol.GetOption;
 
+import static com.github.ambry.router.GetBlobOptions.*;
+
 
 /**
  * A builder for {@link GetBlobOptions} objects. The following options will be assigned by default:
@@ -26,6 +28,7 @@ public class GetBlobOptionsBuilder {
   private GetOption getOption = GetOption.None;
   private ByteRange range = null;
   private boolean rawMode = false;
+  private int blobSegmentIdx = NO_BLOB_SEGMENT_IDX_SPECIFIED;
 
   /**
    * @param operationType the {@link GetBlobOptions.OperationType} for this request.
@@ -66,9 +69,18 @@ public class GetBlobOptionsBuilder {
   }
 
   /**
+   * @param blobSegmentIdx blob segment index of a metadata blob that one wants to get.
+   * @return this builder
+   */
+  public GetBlobOptionsBuilder blobSegment(int blobSegmentIdx) {
+    this.blobSegmentIdx = blobSegmentIdx;
+    return this;
+  }
+
+  /**
    * @return the {@link GetBlobOptions} built.
    */
   public GetBlobOptions build() {
-    return new GetBlobOptions(operationType, getOption, range, rawMode);
+    return new GetBlobOptions(operationType, getOption, range, rawMode, blobSegmentIdx);
   }
 }
