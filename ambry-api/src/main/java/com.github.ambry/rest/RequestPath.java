@@ -110,7 +110,7 @@ public class RequestPath {
         //segment index, e.g. "Segment/32"
         if (SEGMENT.equals(fields[fields.length - 2])) {
           isSegment = true;
-          subResource = SubResource.valueOf(fields[fields.length - 2]);
+          subResource = SubResource.Segment;
           blobSegmentIdx = Integer.valueOf(fields[fields.length - 1]);
           lastSlashOffset = path.lastIndexOf(PATH_SEPARATOR_CHAR, lastSlashOffset - 1);
         } else {
@@ -193,7 +193,7 @@ public class RequestPath {
   }
 
   /**
-   * @return blob segment number for segmented blobs, or NO_BLOB_SEGMENT_IDX_SPECIFIED for non-segmented blobs
+   * @return blob segment index for segmented blobs, or NO_BLOB_SEGMENT_IDX_SPECIFIED for non-segmented blobs
    */
   public int getBlobSegmentIdx() {
     return blobSegmentIdx;

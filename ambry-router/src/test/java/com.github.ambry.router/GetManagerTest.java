@@ -62,8 +62,6 @@ public class GetManagerTest {
   private CryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
   private RouterConfig routerConfig;
-  //  private int chunkSize;
-//  private int largeBlobSize;
   private int requestParallelism;
   private int successTarget;
   // Request params;
@@ -100,8 +98,6 @@ public class GetManagerTest {
   public GetManagerTest(boolean testEncryption, int metadataContentVersion) throws Exception {
     this.testEncryption = testEncryption;
     this.metadataContentVersion = metadataContentVersion;
-    // random chunkSize in the range [1, 1 MB]
-//    chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
     successTarget = 2;
     mockSelectorState.set(MockSelectorState.Good);
@@ -508,7 +504,7 @@ public class GetManagerTest {
    */
   private void compareContent(ReadableStreamChannel readableStreamChannel) throws Exception {
     ByteRange byteRange = options.getRange();
-    if (options.hasBlobSegment()) {
+    if (options.hasBlobSegmentIdx()) {
       long offset = 0;
       long size = chunkInfos.get(0).getChunkSizeInBytes();
       for (int i = 0; i < options.getBlobSegmentIdx(); i++) {

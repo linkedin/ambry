@@ -87,16 +87,16 @@ public class GetBlobOptions {
   }
 
   /**
-   * @return the blob segment
+   * @return the blob segment index
    */
   public int getBlobSegmentIdx() {
     return blobSegmentIdx;
   }
 
   /**
-   * @return whether a blob segment has been specified or not
+   * @return whether a blob segment index has been specified or not
    */
-  public boolean hasBlobSegment() {
+  public boolean hasBlobSegmentIdx() {
     return blobSegmentIdx != NO_BLOB_SEGMENT_IDX_SPECIFIED;
   }
 

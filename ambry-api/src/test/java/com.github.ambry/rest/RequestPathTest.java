@@ -141,12 +141,11 @@ public class RequestPathTest {
     RestRequest restRequest = RestUtilsTest.createRestRequest(RestMethod.GET, requestPath, null);
     try {
       RequestPath.parse(restRequest, prefixesToRemove, CLUSTER_NAME);
+      fail();
     } catch (RestServiceException e) {
       assertTrue(e.getErrorCode().equals(RestServiceErrorCode.BadRequest));
-      //expected
-      return;
     }
-    fail();
+
   }
 
   /**

@@ -959,7 +959,7 @@ class GetBlobOperation extends GetOperation {
         buf.limit(0);
       } else {
         long relativeOffset = offset;
-        if (options.getBlobOptions.hasBlobSegment()) {
+        if (options.getBlobOptions.hasBlobSegmentIdx()) {
           relativeOffset = 0;
         }
         long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() - relativeOffset : 0;
@@ -1223,7 +1223,7 @@ class GetBlobOperation extends GetOperation {
       chunkMetadataList = compositeBlobInfo.getChunkMetadataList();
       boolean rangeResolutionFailure = false;
       try {
-        if (options.getBlobOptions.hasBlobSegment()) {
+        if (options.getBlobOptions.hasBlobSegmentIdx()) {
           int requestedSegment = options.getBlobOptions.getBlobSegmentIdx();
           if (requestedSegment < 0 || requestedSegment >= chunkMetadataList.size()) {
             throw new IllegalArgumentException(
@@ -1234,7 +1234,7 @@ class GetBlobOperation extends GetOperation {
         if (options.getBlobOptions.getRange() != null) {
           resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
           // Get only the chunks within the range.
-          if (!options.getBlobOptions.hasBlobSegment()) {
+          if (!options.getBlobOptions.hasBlobSegmentIdx()) {
             chunkMetadataList = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
                 resolvedByteRange.getEndOffset());
           }
