@@ -317,8 +317,8 @@ public class NetworkClientTest {
   }
 
   /**
-   * Test that connections get replenished in {@link NetworkClient#sendAndPoll(List, int)} to maintain the low
-   * watermark.
+   * Test that connections get replenished in {@link NetworkClient#sendAndPoll(List, int)} to maintain the minimum
+   * number of active connections.
    */
   @Test
   public void testConnectionReplenishment() {

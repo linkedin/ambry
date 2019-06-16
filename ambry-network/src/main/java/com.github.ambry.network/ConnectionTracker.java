@@ -35,7 +35,7 @@ class ConnectionTracker {
   private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionTracker.class);
   private final HashMap<Pair<String, Port>, HostPortPoolManager> hostPortToPoolManager = new HashMap<>();
   private final HashMap<String, HostPortPoolManager> connectionIdToPoolManager = new HashMap<>();
-  private final HashSet<HostPortPoolManager> poolManagersBelowWatermark = new HashSet<>();
+  private final HashSet<HostPortPoolManager> poolManagersBelowMinActiveConnections = new HashSet<>();
   private int totalManagedConnectionsCount = 0;
   private final int maxConnectionsPerPortPlainText;
   private final int maxConnectionsPerPortSsl;
@@ -65,32 +65,37 @@ class ConnectionTracker {
 
   /**
    * Configure the connection tracker to keep a specified percentage of connections to this data node ready for use.
-   * @param dataNodeId the {@link DataNodeId} to warm up connections for.
-   * @param warmUpPercentage percentage of max connections to this data node that should be kept ready for use.
+   * @param dataNodeId the {@link DataNodeId} to configure the connection pool for.
+   * @param minActiveConnectionsPercentage percentage of max connections to this data node that should be kept ready
+   *                                       for use. The minimum connection number will be rounded down to the nearest
+   *                                       whole number.
    */
-  void enableConnectionWarmUp(DataNodeId dataNodeId, int warmUpPercentage) {
+  void setMinimumActiveConnectionsPercentage(DataNodeId dataNodeId, int minActiveConnectionsPercentage) {
     HostPortPoolManager hostPortPoolManager =
         getHostPortPoolManager(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), dataNodeId);
-    hostPortPoolManager.setLowWatermark(warmUpPercentage * hostPortPoolManager.poolLimit / 100);
-    if (!hostPortPoolManager.hasReachedLowWatermark()) {
-      poolManagersBelowWatermark.add(hostPortPoolManager);
+    hostPortPoolManager.setMinActiveConnections(minActiveConnectionsPercentage * hostPortPoolManager.poolLimit / 100);
+    if (!hostPortPoolManager.hasMinActiveConnections()) {
+      poolManagersBelowMinActiveConnections.add(hostPortPoolManager);
     }
   }
 
   /**
-   * For (host, port) pools that are below the connection watermark, initiate new connections to each host until they
-   * meet
+   * For (host, port) pools that are below the minimum number of active connections, initiate new connections to each
+   * host until they meet it.
    * @param connectionFactory the {@link ConnectionFactory} for interfacing with the networking layer.
    * @return the number of connections initiated.
    */
   int replenishConnections(ConnectionFactory connectionFactory) {
     int connectionsInitiated = 0;
-    Iterator<HostPortPoolManager> iter = poolManagersBelowWatermark.iterator();
+    Iterator<HostPortPoolManager> iter = poolManagersBelowMinActiveConnections.iterator();
     while (iter.hasNext()) {
       HostPortPoolManager poolManager = iter.next();
       try {
-        while (!poolManager.hasReachedLowWatermark()) {
-          connectAndTrack(connectionFactory, poolManager.host, poolManager.port, poolManager.dataNodeId, false);
+        while (!poolManager.hasMinActiveConnections()) {
+          String connId = connectionFactory.connect(poolManager.host, poolManager.port);
+          poolManager.incrementPoolCount();
+          connectionIdToPoolManager.put(connId, poolManager);
+          totalManagedConnectionsCount++;
           connectionsInitiated++;
         }
         iter.remove();
@@ -114,31 +119,13 @@ class ConnectionTracker {
    */
   String connectAndTrack(ConnectionFactory connectionFactory, String host, Port port, DataNodeId dataNodeId)
       throws IOException {
-    return connectAndTrack(connectionFactory, host, port, dataNodeId, true);
-  }
-
-  /**
-   * @see #connectAndTrack(ConnectionFactory, String, Port, DataNodeId)
-   * @param connectionFactory the {@link ConnectionFactory} for interfacing with the networking layer.
-   * @param host the host to which this connection belongs.
-   * @param port the port on the host to which this connection belongs.
-   * @param dataNodeId the {@link DataNodeId} associated with this connection
-   * @param editPoolManagersBelowWatermark true to allow this method to edit {@link #poolManagersBelowWatermark}.
-   *                                       Otherwise, removal of hosts that have reached the low watermark will be
-   *                                       deferred. This must be false for methods that use an {@link Iterator} to
-   *                                       iterate through {@link #poolManagersBelowWatermark} to avoid
-   *                                       {@link java.util.ConcurrentModificationException}s.
-   * @return the connection id of the connection returned by {@link ConnectionFactory#connect}.
-   */
-  private String connectAndTrack(ConnectionFactory connectionFactory, String host, Port port, DataNodeId dataNodeId,
-      boolean editPoolManagersBelowWatermark) throws IOException {
     String connId = connectionFactory.connect(host, port);
     HostPortPoolManager hostPortPoolManager = getHostPortPoolManager(host, port, dataNodeId);
     hostPortPoolManager.incrementPoolCount();
     connectionIdToPoolManager.put(connId, hostPortPoolManager);
     totalManagedConnectionsCount++;
-    if (editPoolManagersBelowWatermark && hostPortPoolManager.hasReachedLowWatermark()) {
-      poolManagersBelowWatermark.remove(hostPortPoolManager);
+    if (hostPortPoolManager.hasMinActiveConnections()) {
+      poolManagersBelowMinActiveConnections.remove(hostPortPoolManager);
     }
     return connId;
   }
@@ -180,8 +167,8 @@ class ConnectionTracker {
     }
     DataNodeId dataNodeId = hostPortPoolManager.removeConnection(connectionId);
     totalManagedConnectionsCount--;
-    if (!hostPortPoolManager.hasReachedLowWatermark()) {
-      poolManagersBelowWatermark.add(hostPortPoolManager);
+    if (!hostPortPoolManager.hasMinActiveConnections()) {
+      poolManagersBelowMinActiveConnections.add(hostPortPoolManager);
     }
     return dataNodeId;
   }
@@ -226,7 +213,7 @@ class ConnectionTracker {
   private static class HostPortPoolManager {
     private final LinkedList<String> availableConnections = new LinkedList<>();
     private final DataNodeId dataNodeId;
-    private int lowWatermark = 0;
+    private int minActiveConnections = 0;
     private int poolCount = 0;
     final String host;
     final Port port;
@@ -246,12 +233,14 @@ class ConnectionTracker {
       this.dataNodeId = dataNodeId;
     }
 
-    boolean hasReachedLowWatermark() {
-      return poolCount >= lowWatermark;
+    /**
+     * @return true if this manager has at least {@link #minActiveConnections}.
+     */
+    boolean hasMinActiveConnections() {
+      return poolCount >= minActiveConnections;
     }
 
     /**
-     * Return true if this manager has reached the pool limit.
      * @return true if this manager has reached the pool limit
      */
     boolean hasReachedPoolLimit() {
@@ -259,10 +248,10 @@ class ConnectionTracker {
     }
 
     /**
-     * @param lowWatermark the minimum number of connections to this (host, port) to keep ready for use.
+     * @param minActiveConnections the minimum number of connections to this (host, port) to keep ready for use.
      */
-    public void setLowWatermark(int lowWatermark) {
-      this.lowWatermark = Math.min(poolLimit, lowWatermark);
+    void setMinActiveConnections(int minActiveConnections) {
+      this.minActiveConnections = Math.min(poolLimit, minActiveConnections);
     }
 
     /**

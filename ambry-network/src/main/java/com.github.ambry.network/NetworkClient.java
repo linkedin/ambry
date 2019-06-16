@@ -205,9 +205,9 @@ public class NetworkClient implements Closeable {
    * counting in the method, but this is tolerable as other good/bad connections can be handled in next selector.poll().
    * If a connection established after this time window of timeForWarmUp, it can be handled in next selector.poll().
    * <p>
-   * This will also set the connection pool low watermark for each of the data nodes. This means that the NetworkClient
-   * will attempt to keep a percentage of connections ready for use at all times by initiating extra connections in
-   * {@link NetworkClient#sendAndPoll} when a pool is below the low watermark.
+   * This will also set the minimum number of active connections for each of the data nodes. This means that the
+   * NetworkClient will attempt to keep a percentage of connections ready for use at all times by initiating extra
+   * connections in {@link NetworkClient#sendAndPoll} when a pool drops below this number.
    * @param dataNodeIds warm up target nodes.
    * @param connectionWarmUpPercentagePerDataNode percentage of max connections would like to establish in the warmup.
    * @param timeForWarmUp max time to wait for connections' establish in milliseconds.
@@ -220,8 +220,8 @@ public class NetworkClient implements Closeable {
     if (dataNodeIds.size() == 0) {
       return 0;
     }
-    dataNodeIds.forEach(
-        dataNodeId -> connectionTracker.enableConnectionWarmUp(dataNodeId, connectionWarmUpPercentagePerDataNode));
+    dataNodeIds.forEach(dataNodeId -> connectionTracker.setMinimumActiveConnectionsPercentage(dataNodeId,
+        connectionWarmUpPercentagePerDataNode));
     int expectedConnections = connectionTracker.replenishConnections(this::connect);
 
     long startTime = System.currentTimeMillis();

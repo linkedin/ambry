@@ -204,7 +204,7 @@ public class ConnectionTrackerTest {
   }
 
   /**
-   * Test behavior of {@link ConnectionTracker#enableConnectionWarmUp} and
+   * Test behavior of {@link ConnectionTracker#setMinimumActiveConnectionsPercentage} and
    * {@link ConnectionTracker#replenishConnections}.
    * @throws IOException
    */
@@ -214,7 +214,7 @@ public class ConnectionTrackerTest {
         routerConfig.routerScalingUnitMaxConnectionsPerPortSsl);
     // When no connections were ever made to a host:port, connectionTracker should return null, but
     // initiate connections.
-    int lowWatermarkCount = 0;
+    int minActiveConnectionsCount = 0;
     int totalConnectionsCount = 0;
     int availableCount = 0;
 
@@ -223,19 +223,19 @@ public class ConnectionTrackerTest {
     MockDataNodeId dataNodeId2 =
         new MockDataNodeId("host2", Arrays.asList(plainTextPort, sslPort), Collections.emptyList(), "DC1");
     dataNodeId2.setSslEnabledDataCenters(Collections.singletonList("DC1"));
-    connectionTracker.enableConnectionWarmUp(dataNodeId1, 50);
-    lowWatermarkCount += 50 * routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText / 100;
-    connectionTracker.enableConnectionWarmUp(dataNodeId2, 200);
-    lowWatermarkCount += routerConfig.routerScalingUnitMaxConnectionsPerPortSsl;
+    connectionTracker.setMinimumActiveConnectionsPercentage(dataNodeId1, 50);
+    minActiveConnectionsCount += 50 * routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText / 100;
+    connectionTracker.setMinimumActiveConnectionsPercentage(dataNodeId2, 200);
+    minActiveConnectionsCount += routerConfig.routerScalingUnitMaxConnectionsPerPortSsl;
 
     // call replenishConnections to warm up connections
     assertCounts(totalConnectionsCount, availableCount);
     connectionTracker.replenishConnections(this::mockNewConnection);
-    totalConnectionsCount += lowWatermarkCount;
+    totalConnectionsCount += minActiveConnectionsCount;
     assertCounts(totalConnectionsCount, availableCount);
     List<String> newConnections = getNewlyEstablishedConnections();
     newConnections.forEach(connectionTracker::checkInConnection);
-    availableCount += lowWatermarkCount;
+    availableCount += minActiveConnectionsCount;
     assertCounts(totalConnectionsCount, availableCount);
     Assert.assertTrue(connectionTracker.mayCreateNewConnection("host1", plainTextPort, dataNodeId1));
     Assert.assertFalse(connectionTracker.mayCreateNewConnection("host2", sslPort, dataNodeId2));
