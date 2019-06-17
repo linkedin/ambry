@@ -39,6 +39,7 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup getSignedUrlMetricsGroup;
   public final RestRequestMetricsGroup getClusterMapSnapshotMetricsGroup;
   public final RestRequestMetricsGroup getAccountsMetricsGroup;
+  public final RestRequestMetricsGroup getSegmentMetricsGroup;
   // HEAD
   public final RestRequestMetricsGroup headBlobMetricsGroup;
   // OPTIONS
@@ -209,6 +210,8 @@ public class FrontendMetrics {
             metricRegistry);
     getAccountsMetricsGroup =
         new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, false, metricRegistry);
+    getSegmentMetricsGroup =
+        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "GetSegment", true, false, metricRegistry);
     // HEAD
     headBlobMetricsGroup =
         new RestRequestMetricsGroup(AmbryBlobStorageService.class, "HeadBlob", false, false, metricRegistry);

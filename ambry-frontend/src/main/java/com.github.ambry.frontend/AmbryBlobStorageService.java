@@ -413,6 +413,9 @@ class AmbryBlobStorageService implements BlobStorageService {
         case Replicas:
           group = frontendMetrics.getReplicasMetricsGroup;
           break;
+        case Segment:
+          group = frontendMetrics.getSegmentMetricsGroup;
+          break;
       }
     }
     return group;
@@ -701,6 +704,7 @@ class AmbryBlobStorageService implements BlobStorageService {
             switch (subResource) {
               case BlobInfo:
               case UserMetadata:
+              case Segment:
                 getCallback.markStartTime();
                 router.getBlob(convertedId, getCallback.options, getCallback);
                 break;
