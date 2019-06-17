@@ -400,7 +400,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private static RestRequestMetricsGroup getMetricsGroupForGet(FrontendMetrics frontendMetrics,
       SubResource subResource) {
     RestRequestMetricsGroup group = null;
-    if (subResource == null) {
+    if (subResource == null || subResource.equals(SubResource.Segment)) {
       group = frontendMetrics.getBlobMetricsGroup;
     } else {
       switch (subResource) {
@@ -412,9 +412,6 @@ class AmbryBlobStorageService implements BlobStorageService {
           break;
         case Replicas:
           group = frontendMetrics.getReplicasMetricsGroup;
-          break;
-        case Segment:
-          group = frontendMetrics.getSegmentMetricsGroup;
           break;
       }
     }
