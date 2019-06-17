@@ -141,6 +141,8 @@ public class HelixVcrPopulateTool {
     ConfigAccessor configAccessor = new ConfigAccessor(destZkClient);
     ClusterConfig clusterConfig = configAccessor.getClusterConfig(destClusterName);
     clusterConfig.setPersistBestPossibleAssignment(true);
+    clusterConfig.setMaxOfflineInstancesAllowed(4);  // if offline instances >= 4, helix enters maintenance mode.
+    clusterConfig.setNumOfflineInstancesForAutoExit(2); // if offline instances <= 2, helix exit maintenance mode.
     configAccessor.setClusterConfig(destClusterName, clusterConfig);
     System.out.println("Cluster " + destClusterName + " is created successfully!");
     return;

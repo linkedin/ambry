@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import org.apache.helix.ClusterMessagingService;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.ControllerChangeListener;
@@ -44,6 +45,7 @@ import org.apache.helix.ZNRecord;
 import org.apache.helix.api.listeners.ClusterConfigChangeListener;
 import org.apache.helix.api.listeners.ConfigChangeListener;
 import org.apache.helix.api.listeners.ResourceConfigChangeListener;
+import org.apache.helix.controller.pipeline.Pipeline;
 import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
 import org.apache.helix.messaging.handling.MessageHandler;
 import org.apache.helix.model.HelixConfigScope;
@@ -488,6 +490,7 @@ public class HelixParticipantTest {
         org.apache.helix.api.listeners.IdealStateChangeListener idealStateChangeListener) throws Exception {
       throw new IllegalStateException("Not implemented");
     }
+
     @Override
     public void addLiveInstanceChangeListener(
         org.apache.helix.api.listeners.LiveInstanceChangeListener liveInstanceChangeListener) throws Exception {
@@ -519,7 +522,6 @@ public class HelixParticipantTest {
     public void addResourceConfigChangeListener(ResourceConfigChangeListener resourceConfigChangeListener)
         throws Exception {
       throw new IllegalStateException("Not implemented");
-
     }
 
     @Override
@@ -599,6 +601,11 @@ public class HelixParticipantTest {
 
     @Override
     public void addControllerMessageListener(MessageListener listener) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void setEnabledControlPipelineTypes(Set<Pipeline.Type> types) {
       throw new IllegalStateException("Not implemented");
     }
 

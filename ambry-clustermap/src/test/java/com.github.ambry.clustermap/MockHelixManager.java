@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ClusterMessagingService;
 import org.apache.helix.ConfigAccessor;
@@ -39,6 +40,7 @@ import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.api.listeners.MessageListener;
 import org.apache.helix.api.listeners.ResourceConfigChangeListener;
 import org.apache.helix.api.listeners.ScopedConfigChangeListener;
+import org.apache.helix.controller.pipeline.Pipeline;
 import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.LiveInstance;
@@ -293,6 +295,11 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public void addControllerMessageListener(org.apache.helix.MessageListener listener) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void setEnabledControlPipelineTypes(Set<Pipeline.Type> types) {
     throw new IllegalStateException("Not implemented");
   }
 
