@@ -703,13 +703,15 @@ public class NonBlockingRouterMetrics {
     onError(e);
     Counter blobErrorCount = encrypted ? getEncryptedBlobErrorCount : getBlobErrorCount;
     Counter blobWithRangeErrorCount = encrypted ? getEncryptedBlobWithRangeErrorCount : getBlobWithRangeErrorCount;
-    Counter blobWithSegmentErrorCount = encrypted ? getEncryptedBlobWithSegmentErrorCount : getBlobWithSegmentErrorCount;
+    Counter blobWithSegmentErrorCount =
+        encrypted ? getEncryptedBlobWithSegmentErrorCount : getBlobWithSegmentErrorCount;
     Meter operationErrorRateMeter = encrypted ? encryptedOperationErrorRate : operationErrorRate;
     if (RouterUtils.isSystemHealthError(e)) {
       blobErrorCount.inc();
       if (options != null) {
-        if (options.getBlobOptions.getRange() != null)
+        if (options.getBlobOptions.getRange() != null) {
           blobWithRangeErrorCount.inc();
+        }
         if (options.getBlobOptions.hasBlobSegmentIdx()) {
           blobWithSegmentErrorCount.inc();
         }
