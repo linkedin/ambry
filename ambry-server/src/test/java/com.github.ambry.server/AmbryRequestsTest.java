@@ -1337,7 +1337,7 @@ public class AmbryRequestsTest {
 
       @Override
       public long getSizeInBytes() {
-        throw new UnsupportedOperationException();
+        return 0;
       }
 
       @Override
