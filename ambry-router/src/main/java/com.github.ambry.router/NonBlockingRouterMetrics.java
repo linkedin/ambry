@@ -48,6 +48,7 @@ public class NonBlockingRouterMetrics {
   public final Meter getBlobInfoOperationRate;
   public final Meter getBlobOperationRate;
   public final Meter getBlobWithRangeOperationRate;
+  public final Meter getBlobWithSegmentOperationRate;
   public final Meter deleteBlobOperationRate;
   public final Meter updateBlobTtlOperationRate;
   public final Meter putEncryptedBlobOperationRate;
@@ -55,6 +56,7 @@ public class NonBlockingRouterMetrics {
   public final Meter getEncryptedBlobInfoOperationRate;
   public final Meter getEncryptedBlobOperationRate;
   public final Meter getEncryptedBlobWithRangeOperationRate;
+  public final Meter getEncryptedBlobWithSegmentOperationRate;
   public final Meter operationQueuingRate;
   public final Meter operationDequeuingRate;
   public final Meter getBlobNotOriginateLocalOperationRate;
@@ -84,11 +86,13 @@ public class NonBlockingRouterMetrics {
   public final Counter getBlobInfoErrorCount;
   public final Counter getBlobErrorCount;
   public final Counter getBlobWithRangeErrorCount;
+  public final Counter getBlobWithSegmentErrorCount;
   public final Counter putEncryptedBlobErrorCount;
   public final Counter stitchEncryptedBlobErrorCount;
   public final Counter getEncryptedBlobInfoErrorCount;
   public final Counter getEncryptedBlobErrorCount;
   public final Counter getEncryptedBlobWithRangeErrorCount;
+  public final Counter getEncryptedBlobWithSegmentErrorCount;
   public final Counter deleteBlobErrorCount;
   public final Counter updateBlobTtlErrorCount;
   public final Counter operationAbortCount;
@@ -160,7 +164,9 @@ public class NonBlockingRouterMetrics {
   public final Histogram getBlobSizeBytes;
   public final Histogram getBlobChunkCount;
   public final Histogram getBlobWithRangeSizeBytes;
+  public final Histogram getBlobWithSegmentSizeBytes;
   public final Histogram getBlobWithRangeTotalBlobSizeBytes;
+  public final Histogram getBlobWithSegmentTotalBlobSizeBytes;
   public final Counter simpleBlobPutCount;
   public final Counter simpleBlobGetCount;
   public final Counter compositeBlobPutCount;
@@ -206,6 +212,8 @@ public class NonBlockingRouterMetrics {
     getBlobOperationRate = metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationRate"));
     getBlobWithRangeOperationRate =
         metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeOperationRate"));
+    getBlobWithSegmentOperationRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithSegmentOperationRate"));
     putEncryptedBlobOperationRate =
         metricRegistry.meter(MetricRegistry.name(PutOperation.class, "PutEncryptedBlobOperationRate"));
     stitchEncryptedBlobOperationRate =
@@ -216,6 +224,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobOperationRate"));
     getEncryptedBlobWithRangeOperationRate =
         metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobWithRangeOperationRate"));
+    getEncryptedBlobWithSegmentOperationRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobWithSegmentOperationRate"));
     deleteBlobOperationRate =
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationRate"));
     updateBlobTtlOperationRate =
@@ -270,6 +280,8 @@ public class NonBlockingRouterMetrics {
     getBlobErrorCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobErrorCount"));
     getBlobWithRangeErrorCount =
         metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeErrorCount"));
+    getBlobWithSegmentErrorCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithSegmentErrorCount"));
     putEncryptedBlobErrorCount =
         metricRegistry.counter(MetricRegistry.name(PutOperation.class, "PutEncryptedBlobErrorCount"));
     stitchEncryptedBlobErrorCount =
@@ -280,6 +292,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobErrorCount"));
     getEncryptedBlobWithRangeErrorCount =
         metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobWithRangeErrorCount"));
+    getEncryptedBlobWithSegmentErrorCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobWithSegmentErrorCount"));
     deleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobErrorCount"));
     updateBlobTtlErrorCount =
         metricRegistry.counter(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlErrorCount"));
@@ -381,8 +395,12 @@ public class NonBlockingRouterMetrics {
     getBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobChunkCount"));
     getBlobWithRangeSizeBytes =
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeSizeBytes"));
+    getBlobWithSegmentSizeBytes =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithSegmentSizeBytes"));
     getBlobWithRangeTotalBlobSizeBytes =
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeTotalBlobSizeBytes"));
+    getBlobWithSegmentTotalBlobSizeBytes =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithSegmentTotalBlobSizeBytes"));
     simpleBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "SimpleBlobPutCount"));
     simpleBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "SimpleBlobGetCount"));
     compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));
@@ -685,11 +703,16 @@ public class NonBlockingRouterMetrics {
     onError(e);
     Counter blobErrorCount = encrypted ? getEncryptedBlobErrorCount : getBlobErrorCount;
     Counter blobWithRangeErrorCount = encrypted ? getEncryptedBlobWithRangeErrorCount : getBlobWithRangeErrorCount;
+    Counter blobWithSegmentErrorCount = encrypted ? getEncryptedBlobWithSegmentErrorCount : getBlobWithSegmentErrorCount;
     Meter operationErrorRateMeter = encrypted ? encryptedOperationErrorRate : operationErrorRate;
     if (RouterUtils.isSystemHealthError(e)) {
       blobErrorCount.inc();
-      if (options != null && options.getBlobOptions.getRange() != null) {
-        blobWithRangeErrorCount.inc();
+      if (options != null) {
+        if (options.getBlobOptions.getRange() != null)
+          blobWithRangeErrorCount.inc();
+        if (options.getBlobOptions.hasBlobSegmentIdx()) {
+          blobWithSegmentErrorCount.inc();
+        }
       }
       operationErrorRateMeter.mark();
     }

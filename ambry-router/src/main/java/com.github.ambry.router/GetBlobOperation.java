@@ -449,9 +449,15 @@ class GetBlobOperation extends GetOperation {
     private void updateChunkingAndSizeMetricsOnSuccessfulGet() {
       routerMetrics.getBlobSizeBytes.update(bytesWritten.get());
       routerMetrics.getBlobChunkCount.update(numChunksTotal);
-      if (options != null && options.getBlobOptions.getRange() != null) {
-        routerMetrics.getBlobWithRangeSizeBytes.update(bytesWritten.get());
-        routerMetrics.getBlobWithRangeTotalBlobSizeBytes.update(totalSize);
+      if (options != null) {
+        if (options.getBlobOptions.getRange() != null) {
+          routerMetrics.getBlobWithRangeSizeBytes.update(bytesWritten.get());
+          routerMetrics.getBlobWithRangeTotalBlobSizeBytes.update(totalSize);
+        }
+        if (options.getBlobOptions.hasBlobSegmentIdx()) {
+          routerMetrics.getBlobWithSegmentSizeBytes.update(bytesWritten.get());
+          routerMetrics.getBlobWithSegmentTotalBlobSizeBytes.update(totalSize);
+        }
       }
       if (!options.getBlobOptions.isRawMode()) {
         if (numChunksTotal == 1) {
