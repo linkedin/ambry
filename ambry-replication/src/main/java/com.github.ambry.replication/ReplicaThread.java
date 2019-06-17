@@ -879,6 +879,8 @@ public class ReplicaThread implements Runnable {
               totalBlobsFixed += messageInfoList.size();
               remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
               remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
+              replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
+                  exchangeMetadataResponse.localLagFromRemoteInBytes);
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
             } catch (StoreException e) {

@@ -608,20 +608,18 @@ public class AmbryRequests implements RequestAPI {
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
-            replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath,
-                findInfo.getFindToken().getBytesRead());
+            long totalBytesRead = store.getSizeInBytes() - findInfo.getFindToken().getBytesRead();
+            replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath, totalBytesRead);
             logger.trace("{} Time used to update total bytes read: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
-            long remoteReplicaLagInBytes =
-                replicationManager.getRemoteReplicaLagFromLocalInBytes(partitionId, hostName, replicaPath);
             logger.trace("{} Time used to get remote replica lag in bytes: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
                 new ReplicaMetadataResponseInfo(partitionId, findInfo.getFindToken(), findInfo.getMessageEntries(),
-                    remoteReplicaLagInBytes);
+                    store.getSizeInBytes() - totalBytesRead);
             if (replicaMetadataResponseInfo.getTotalSizeOfAllMessages()
                 > 5 * replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes()) {
               logger.debug("{} generated a metadata response {} where the cumulative size of messages is {}",

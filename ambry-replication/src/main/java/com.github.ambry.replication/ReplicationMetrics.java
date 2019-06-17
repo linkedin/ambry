@@ -22,10 +22,12 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 
@@ -127,12 +129,14 @@ public class ReplicationMetrics {
   private Map<String, Counter> getRequestErrorMap;
   private Map<String, Counter> localStoreErrorMap;
   private Map<PartitionId, Counter> partitionIdToInvalidMessageStreamErrorCounter;
+  private Map<PartitionId, Map<DataNodeId, Long>> partitionLags;
 
   public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
-    metadataRequestErrorMap = new HashMap<String, Counter>();
-    getRequestErrorMap = new HashMap<String, Counter>();
-    localStoreErrorMap = new HashMap<String, Counter>();
-    partitionIdToInvalidMessageStreamErrorCounter = new HashMap<PartitionId, Counter>();
+    metadataRequestErrorMap = new HashMap<>();
+    getRequestErrorMap = new HashMap<>();
+    localStoreErrorMap = new HashMap<>();
+    partitionIdToInvalidMessageStreamErrorCounter = new HashMap<>();
+    partitionLags = new HashMap<>();
     intraColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesRate"));
     plainTextIntraColoReplicationBytesRate =
@@ -406,6 +410,15 @@ public class ReplicationMetrics {
     }
   }
 
+  public void addMetricsForPartition(PartitionId partitionId) {
+    if (partitionLags.put(partitionId, new HashMap<>()) == null) {
+      // Set up metrics if and only if no mapping for this partition before.
+      Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
+      registry.register(MetricRegistry.name(ReplicationMetrics.class,
+          "Partition-" + partitionId.toString() + "-maxLagFromPeersInBytes"), replicaLag);
+    }
+  }
+
   public void addMetricsForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
     ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
     DataNodeId dataNodeId = replicaId.getDataNodeId();
@@ -430,7 +443,7 @@ public class ReplicationMetrics {
     localStoreErrorMap.put(localStoreErrorMetricName, localStoreError);
 
     Gauge<Long> replicaLag = remoteReplicaInfo::getRemoteLagFromLocalInBytes;
-    registry.register(MetricRegistry.name(ReplicationMetrics.class, metricNamePrefix + "-replicaLagInBytes"),
+    registry.register(MetricRegistry.name(ReplicationMetrics.class, metricNamePrefix + "-remoteLagInBytes"),
         replicaLag);
   }
 
@@ -603,5 +616,23 @@ public class ReplicationMetrics {
         plainTextIntraColoBatchStoreWriteTime.update(batchStoreWriteTime);
       }
     }
+  }
+
+  public void updateLagMetricForRemoteReplica(RemoteReplicaInfo remoteReplicaInfo, long lag) {
+    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+    if (partitionLags.containsKey(replicaId.getPartitionId())) {
+      // update the partition's lag if and only if it was tracked.
+      partitionLags.get(replicaId.getPartitionId()).put(replicaId.getDataNodeId(), lag);
+    }
+  }
+
+  public long getMaxLagForPartition(PartitionId partitionId) {
+    Map<DataNodeId, Long> perDataNodeLag = partitionLags.get(partitionId);
+    if (perDataNodeLag == null || perDataNodeLag.size() == 0) {
+      return -1;
+    }
+    Optional<Map.Entry<DataNodeId, Long>> maxEntry =
+        perDataNodeLag.entrySet().stream().max(Comparator.comparing(Map.Entry::getValue));
+    return maxEntry.get().getValue();
   }
 }
