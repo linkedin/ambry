@@ -608,7 +608,7 @@ public class AmbryRequests implements RequestAPI {
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
-            long totalBytesRead = store.getSizeInBytes() - findInfo.getFindToken().getBytesRead();
+            long totalBytesRead = findInfo.getFindToken().getBytesRead();
             replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath, totalBytesRead);
             logger.trace("{} Time used to update total bytes read: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
