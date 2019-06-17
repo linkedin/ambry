@@ -211,7 +211,7 @@ public class FrontendMetrics {
     getAccountsMetricsGroup =
         new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, false, metricRegistry);
     getSegmentMetricsGroup =
-        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "GetSegment", true, false, metricRegistry);
+        new RestRequestMetricsGroup(AmbryBlobStorageService.class, "GetSegment", true, true, metricRegistry);
     // HEAD
     headBlobMetricsGroup =
         new RestRequestMetricsGroup(AmbryBlobStorageService.class, "HeadBlob", false, false, metricRegistry);
