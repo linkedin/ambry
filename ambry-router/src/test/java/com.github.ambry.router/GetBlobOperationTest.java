@@ -81,6 +81,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.router.GetBlobOptions.*;
 import static com.github.ambry.router.PutManagerTest.*;
 import static com.github.ambry.router.RouterTestHelpers.*;
 import static org.junit.Assume.*;
@@ -920,7 +921,7 @@ public class GetBlobOperationTest {
     testRangeRequestOffsetRange(blobSize, blobSize + 20, false);
     // 1 byte ranges
     testRangeRequestOffsetRange(0, 0, true);
-    testRangeRequestOffsetRange(blobSize/2, blobSize/2, true);
+    testRangeRequestOffsetRange(blobSize / 2, blobSize / 2, true);
     testRangeRequestOffsetRange(blobSize - 1, blobSize - 1, true);
     testRangeRequestFromStartOffset(blobSize - 1, true);
     testRangeRequestLastNBytes(1, true);

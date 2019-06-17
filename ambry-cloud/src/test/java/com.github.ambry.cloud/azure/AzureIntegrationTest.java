@@ -66,6 +66,7 @@ public class AzureIntegrationTest {
   // one day retention
   private int retentionPeriodDays = 1;
 
+  private String cosmosCollectionLink;
   private String propFileName = "azure-test.properties";
   private String tokenFileName = "replicaTokens";
 
@@ -80,7 +81,7 @@ public class AzureIntegrationTest {
     } catch (IOException ex) {
       throw new IllegalStateException("Could not load properties from resource: " + propFileName);
     }
-    props.setProperty("clustermap.cluster.name", "main");
+    props.setProperty("clustermap.cluster.name", "Integration-Test");
     props.setProperty("clustermap.datacenter.name", "uswest");
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
@@ -95,7 +96,7 @@ public class AzureIntegrationTest {
    */
   @Test
   public void testNormalFlow() throws Exception {
-    PartitionId partitionId = new MockPartitionId();
+    PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     BlobId blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
     InputStream inputStream = getBlobInputStream(blobSize);
@@ -258,7 +259,7 @@ public class AzureIntegrationTest {
   /** Persist tokens to Azure, then read them back and verify they match. */
   @Test
   public void testTokens() throws Exception {
-    String partitionPath = "666";
+    String partitionPath = String.valueOf(testPartition);
     InputStream input = this.getClass().getClassLoader().getResourceAsStream(tokenFileName);
     if (input == null) {
       throw new IllegalStateException("Could not find resource: " + tokenFileName);

@@ -19,5 +19,5 @@ package com.github.ambry.router;
  * kept in a single Histogram)
  */
 public enum OperationTrackerScope {
-  Datacenter, Partition
+  Datacenter, Partition, DataNode, Disk
 }

@@ -21,7 +21,10 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.Resource;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.utils.SystemTime;
 import java.util.HashMap;
@@ -182,12 +185,12 @@ public class NonBlockingRouterMetrics {
   public final CryptoJobMetrics encryptJobMetrics;
   public final CryptoJobMetrics decryptJobMetrics;
 
-  // Partition-level Histogram for operation tracker
-  Map<PartitionId, Histogram> getBlobLocalDcPartitionToLatency;
-  Map<PartitionId, Histogram> getBlobCrossDcPartitionToLatency;
+  // Resource to latency histogram map. Here resource can be DataNode, Partition, Disk, Replica etc.
+  Map<Resource, Histogram> getBlobLocalDcResourceToLatency;
+  Map<Resource, Histogram> getBlobCrossDcResourceToLatency;
 
-  Map<PartitionId, Histogram> getBlobInfoLocalDcPartitionToLatency;
-  Map<PartitionId, Histogram> getBlobInfoCrossDcPartitionToLatency;
+  Map<Resource, Histogram> getBlobInfoLocalDcResourceToLatency;
+  Map<Resource, Histogram> getBlobInfoCrossDcResourceToLatency;
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -396,10 +399,8 @@ public class NonBlockingRouterMetrics {
     }
 
     // AdaptiveOperationTracker trackers
-    getBlobLocalDcLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "LocalDcLatencyMs"));
-    getBlobCrossDcLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "CrossDcLatencyMs"));
+    getBlobLocalDcLatencyMs = metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "LocalDcLatencyMs"));
+    getBlobCrossDcLatencyMs = metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "CrossDcLatencyMs"));
     getBlobPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "PastDueCount"));
 
     getBlobInfoLocalDcLatencyMs =
@@ -429,29 +430,67 @@ public class NonBlockingRouterMetrics {
           routerConfig.routerOperationTrackerCustomPercentiles);
     }
 
-    if (routerConfig != null && routerConfig.routerOperationTrackerMetricScope == OperationTrackerScope.Partition) {
-      // pre-populate all partition-to-histogram maps here to allow lock-free hashmap in adaptive operation tracker
-      initializePartitionToHistogramMap(clusterMap, routerConfig);
+    if (routerConfig != null && routerConfig.routerOperationTrackerMetricScope != OperationTrackerScope.Datacenter) {
+      // pre-populate all resource-to-histogram maps here to allow lock-free hashmap in adaptive operation tracker
+      initializeResourceToHistogramMap(clusterMap, routerConfig);
     }
   }
 
   /**
-   * Initialize partition-level histogram for all partitions in cluster map.
-   * @param clusterMap the {@link ClusterMap} that contains info of all partitions.
+   * Initialize resource-to-latency-histogram maps based on given resource type. Here resource can be {@link PartitionId},
+   * {@link DataNodeId}, etc. The resource type is defined by {@link RouterConfig#routerOperationTrackerMetricScope}.
+   * @param clusterMap the {@link ClusterMap} that contains info of all resources.
    * @param routerConfig the {@link RouterConfig} that specifies histogram parameters.
    */
-  private void initializePartitionToHistogramMap(ClusterMap clusterMap, RouterConfig routerConfig) {
+  private void initializeResourceToHistogramMap(ClusterMap clusterMap, RouterConfig routerConfig) {
     int reservoirSize = routerConfig.routerOperationTrackerReservoirSize;
     double decayFactor = routerConfig.routerOperationTrackerReservoirDecayFactor;
-    getBlobLocalDcPartitionToLatency = new HashMap<>();
-    getBlobInfoLocalDcPartitionToLatency = new HashMap<>();
-    getBlobCrossDcPartitionToLatency = new HashMap<>();
-    getBlobInfoCrossDcPartitionToLatency = new HashMap<>();
-    for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
-      getBlobLocalDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
-      getBlobInfoLocalDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
-      getBlobCrossDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
-      getBlobInfoCrossDcPartitionToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+    String localDatacenterName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+    getBlobLocalDcResourceToLatency = new HashMap<>();
+    getBlobInfoLocalDcResourceToLatency = new HashMap<>();
+    getBlobCrossDcResourceToLatency = new HashMap<>();
+    getBlobInfoCrossDcResourceToLatency = new HashMap<>();
+    switch (routerConfig.routerOperationTrackerMetricScope) {
+      case Partition:
+        for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
+          getBlobLocalDcResourceToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+          getBlobInfoLocalDcResourceToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+          getBlobCrossDcResourceToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+          getBlobInfoCrossDcResourceToLatency.put(partitionId, createHistogram(reservoirSize, decayFactor));
+        }
+        break;
+      case DataNode:
+        List<? extends DataNodeId> dataNodeIds = clusterMap.getDataNodeIds();
+        for (DataNodeId dataNodeId : dataNodeIds) {
+          if (dataNodeId.getDatacenterName().equals(localDatacenterName)) {
+            getBlobLocalDcResourceToLatency.put(dataNodeId, createHistogram(reservoirSize, decayFactor));
+            getBlobInfoLocalDcResourceToLatency.put(dataNodeId, createHistogram(reservoirSize, decayFactor));
+          } else {
+            getBlobCrossDcResourceToLatency.put(dataNodeId, createHistogram(reservoirSize, decayFactor));
+            getBlobInfoCrossDcResourceToLatency.put(dataNodeId, createHistogram(reservoirSize, decayFactor));
+          }
+        }
+        break;
+      case Disk:
+        for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
+          for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+            DiskId diskId = replicaId.getDiskId();
+            if (getBlobLocalDcResourceToLatency.containsKey(diskId) || getBlobCrossDcResourceToLatency.containsKey(
+                diskId)) {
+              continue;
+            }
+            if (replicaId.getDataNodeId().getDatacenterName().equals(localDatacenterName)) {
+              getBlobLocalDcResourceToLatency.put(diskId, createHistogram(reservoirSize, decayFactor));
+              getBlobInfoLocalDcResourceToLatency.put(diskId, createHistogram(reservoirSize, decayFactor));
+            } else {
+              getBlobCrossDcResourceToLatency.put(diskId, createHistogram(reservoirSize, decayFactor));
+              getBlobInfoCrossDcResourceToLatency.put(diskId, createHistogram(reservoirSize, decayFactor));
+            }
+          }
+        }
+      default:
+        // if routerOperationTrackerMetricScope = Datacenter, do nothing in this method because datacenter-level
+        // histograms and pastDueCounter are always instantiated.
     }
   }
 
