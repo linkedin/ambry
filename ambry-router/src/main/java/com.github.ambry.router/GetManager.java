@@ -169,6 +169,11 @@ class GetManager {
           : routerMetrics.getBlobWithRangeOperationRate;
       blobWithRangeOperationRate.mark();
     }
+    if (options.hasBlobSegmentIdx()) {
+      Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithSegmentOperationRate
+          : routerMetrics.getBlobWithSegmentOperationRate;
+      blobWithRangeOperationRate.mark();
+    }
   }
 
   /**

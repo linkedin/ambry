@@ -400,7 +400,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private static RestRequestMetricsGroup getMetricsGroupForGet(FrontendMetrics frontendMetrics,
       SubResource subResource) {
     RestRequestMetricsGroup group = null;
-    if (subResource == null) {
+    if (subResource == null || subResource.equals(SubResource.Segment)) {
       group = frontendMetrics.getBlobMetricsGroup;
     } else {
       switch (subResource) {
@@ -701,6 +701,7 @@ class AmbryBlobStorageService implements BlobStorageService {
             switch (subResource) {
               case BlobInfo:
               case UserMetadata:
+              case Segment:
                 getCallback.markStartTime();
                 router.getBlob(convertedId, getCallback.options, getCallback);
                 break;
