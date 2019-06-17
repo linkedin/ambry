@@ -424,13 +424,22 @@ class AzureCloudDestination implements CloudDestination {
       // delete blob from storage
       CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobFileName);
-      azureBlob.deleteIfExists();
+      boolean deletedSomething = azureBlob.deleteIfExists();
 
       // Delete the document too
       String docLink = cosmosCollectionLink + "/docs/" + blobId;
-      documentClient.deleteDocument(docLink, options);
-      azureMetrics.blobDeletedCount.inc();
-      return true;
+      try {
+        documentClient.deleteDocument(docLink, options);
+        deletedSomething = true;
+      } catch (DocumentClientException dex) {
+        if (dex.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
+          logger.warn("Could not find metadata for blob {} to delete", blobId);
+        } else {
+          throw dex;
+        }
+      }
+      azureMetrics.blobDeletedCount.inc(deletedSomething ? 1 : 0);
+      return deletedSomething;
     } catch (Exception e) {
       azureMetrics.blobDeleteErrorCount.inc();
       String error = (e instanceof DocumentClientException) ? "Failed to delete metadata document for blob " + blobId

@@ -159,7 +159,7 @@ public class AzureCloudDestinationTest {
     assertEquals(1, azureMetrics.documentUpdateTime.getCount());
   }
 
-  /** Test purge. */
+  /** Test purge success. */
   @Test
   public void testPurge() throws Exception {
     when(mockBlob.deleteIfExists()).thenReturn(true);
@@ -168,6 +168,21 @@ public class AzureCloudDestinationTest {
             CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
     assertTrue("Expected success", azureDest.purgeBlob(cloudBlobMetadata));
     assertEquals(1, azureMetrics.blobDeletedCount.getCount());
+    assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
+  }
+
+  /** Test purge not found. */
+  @Test
+  public void testPurgeNotFound() throws Exception {
+    // Unsuccessful case
+    when(mockBlob.deleteIfExists()).thenReturn(false);
+    when(mockumentClient.deleteDocument(anyString(), any(RequestOptions.class))).thenThrow(
+        new DocumentClientException(404));
+    CloudBlobMetadata cloudBlobMetadata =
+        new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
+            CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+    assertFalse("Expected false", azureDest.purgeBlob(cloudBlobMetadata));
+    assertEquals(0, azureMetrics.blobDeletedCount.getCount());
     assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
   }
 
