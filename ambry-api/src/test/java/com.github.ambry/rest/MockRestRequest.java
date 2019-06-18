@@ -256,6 +256,11 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
+  public long getBlobBytesReceived() {
+    return bytesReceived.get();
+  }
+
+  @Override
   public boolean isOpen() {
     onEventComplete(Event.IsOpen);
     return channelOpen.get();

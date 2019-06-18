@@ -80,7 +80,7 @@ class NettyRequest implements RestRequest {
   private final RestMethod restMethod;
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
-  private final AtomicLong bytesReceived = new AtomicLong(0);
+  protected final AtomicLong bytesReceived = new AtomicLong(0);
   private final AtomicLong bytesBuffered = new AtomicLong(0);
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final RecvByteBufAllocator recvByteBufAllocator = new DefaultMaxBytesRecvByteBufAllocator();
@@ -388,6 +388,11 @@ class NettyRequest implements RestRequest {
 
   @Override
   public long getBytesReceived() {
+    return bytesReceived.get();
+  }
+
+  @Override
+  public long getBlobBytesReceived() {
     return bytesReceived.get();
   }
 

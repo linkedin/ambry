@@ -142,6 +142,16 @@ public interface RestRequest extends ReadableStreamChannel {
   long getBytesReceived();
 
   /**
+   * Gets the number of bytes read as part of the blob data at this point in time. After the request has been fully read,
+   * this can be used to determine the full blob size in bytes. The result of this method is only valid for requests
+   * that have blob data in them.
+   * @return the current number of blob bytes read from the request body.
+   */
+  default long getBlobBytesReceived() {
+    return 0;
+  }
+
+  /**
    * @return {@code true} if SSL was used for this request (i.e. the request has an associated {@link SSLSession})
    */
   default boolean isSslUsed() {

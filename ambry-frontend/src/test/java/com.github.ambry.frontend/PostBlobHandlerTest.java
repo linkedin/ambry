@@ -389,6 +389,8 @@ public class PostBlobHandlerTest {
       InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
       assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
       assertEquals("Unexpected ttl stored", blobTtlSecs, blob.getBlobProperties().getTimeToLiveInSeconds());
+      //check that blob size matches the actual upload size
+      assertEquals("Invalid blob size", Integer.toString(contentLength), restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     } else {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
           errorChecker);
@@ -469,6 +471,19 @@ public class PostBlobHandlerTest {
   }
 
   /**
+   * Caculate the blob size for a stitched blob from the individual chunks.
+   * @param stitchedChunks list of chunks stitched to form the blob.
+   * @return size of the stitched blob
+   */
+  private long getStitchedBlobSize(List<ChunkInfo> stitchedChunks) {
+    long blobSize = 0;
+    for(ChunkInfo chunkInfo : stitchedChunks) {
+      blobSize += chunkInfo.getChunkSizeInBytes();
+    }
+    return blobSize;
+  }
+
+  /**
    * Make a stitch blob call using {@link PostBlobHandler} and verify the result of the operation.
    * @param requestBody the body of the stitch request to supply.
    * @param expectedStitchedChunks the expected chunks stitched together.
@@ -496,6 +511,9 @@ public class PostBlobHandlerTest {
           .map(chunkInfo -> router.getActiveBlobs().get(chunkInfo.getBlobId()).getBlob().array())
           .forEach(buf -> expectedContent.write(buf, 0, buf.length));
       assertEquals("Unexpected blob content stored", ByteBuffer.wrap(expectedContent.toByteArray()), blob.getBlob());
+      //check actual size of stitched blob
+      assertEquals("Unexpected blob size", Long.toString(getStitchedBlobSize(expectedStitchedChunks)),
+          restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     } else {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
           errorChecker);
