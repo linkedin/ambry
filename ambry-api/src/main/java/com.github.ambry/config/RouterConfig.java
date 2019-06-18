@@ -298,6 +298,11 @@ public class RouterConfig {
   @Default("1000")
   public final long routerOperationTrackerMinDataPointsRequired;
 
+  /**
+   * If this config is set to {@code true} the operation tracker would terminate operations when there are more than 2
+   * NOT_FOUND responses returned from originating dc. Notice that some of the blob ids don't have the datacenter id, it
+   * will have no effect on those blobs.
+   */
   @Config("router.operation.tracker.originatingdc.notfound.enabled")
   @Default("true")
   public final boolean routerOperationTrackerOriginatingDcNotFoundEnabled;
