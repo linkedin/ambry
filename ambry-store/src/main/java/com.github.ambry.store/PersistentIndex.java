@@ -1026,8 +1026,8 @@ class PersistentIndex {
   }
 
   /**
-   * Gets the total number of bytes read from the log at the position of {@code token}. This includes any overhead due
-   * to headers and empty space.
+   * Gets the total number of bytes from the beginning of the log to the position of {@code token}. This includes any
+   * overhead due to headers and empty space.
    * @param token the point until which the log has been read.
    * @param messageEntries the list of {@link MessageInfo} that were read when producing {@code token}.
    * @param logEndOffsetBeforeFind the end offset of the log before a find was attempted.

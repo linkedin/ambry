@@ -618,6 +618,11 @@ public class ReplicationMetrics {
     }
   }
 
+  /**
+   * Update the lag between local and {@link RemoteReplicaInfo}.
+   * @param remoteReplicaInfo the remote replica
+   * @param lag the new lag
+   */
   public void updateLagMetricForRemoteReplica(RemoteReplicaInfo remoteReplicaInfo, long lag) {
     ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
     if (partitionLags.containsKey(replicaId.getPartitionId())) {
@@ -626,6 +631,10 @@ public class ReplicationMetrics {
     }
   }
 
+  /**
+   * Get a partition's maximum lag between local and its {@link RemoteReplicaInfo}s.
+   * @param partitionId the partition to check
+   */
   public long getMaxLagForPartition(PartitionId partitionId) {
     Map<DataNodeId, Long> perDataNodeLag = partitionLags.get(partitionId);
     if (perDataNodeLag == null || perDataNodeLag.size() == 0) {
