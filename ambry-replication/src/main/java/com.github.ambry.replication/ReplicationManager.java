@@ -72,6 +72,9 @@ public class ReplicationManager extends ReplicationEngine {
           addRemoteReplicaInfoToReplicaThread(remoteReplicas, false);
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, partition, store, replicaId);
           partitionToPartitionInfo.put(partition, partitionInfo);
+          if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
+            replicationMetrics.addMetricsForPartition(partition);
+          }
           mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> new ArrayList<>())
               .add(partitionInfo);
         }
@@ -79,9 +82,8 @@ public class ReplicationManager extends ReplicationEngine {
         logger.error("Not replicating to partition " + partition + " because an initialized store could not be found");
       }
     }
-    persistor =
-        new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-            factory);
+    persistor = new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
+        factory);
   }
 
   @Override
