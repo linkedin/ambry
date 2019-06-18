@@ -33,6 +33,7 @@ import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.QueryIterable;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
+import com.microsoft.azure.documentdb.SqlQuerySpec;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobClient;
@@ -230,7 +231,8 @@ public class AzureCloudDestinationTest {
     when(mockIterable.iterator()).thenReturn(docList.iterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
-    when(mockumentClient.queryDocuments(anyString(), anyString(), any(FeedOptions.class))).thenReturn(feedResponse);
+    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
+        feedResponse);
     Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(Collections.singletonList(blobId));
     assertEquals("Expected single entry", 1, metadataMap.size());
     CloudBlobMetadata outputMetadata = metadataMap.get(blobId.getID());

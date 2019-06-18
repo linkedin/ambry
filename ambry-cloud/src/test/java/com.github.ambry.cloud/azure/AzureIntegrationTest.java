@@ -23,6 +23,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.microsoft.azure.documentdb.SqlQuerySpec;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -178,7 +179,6 @@ public class AzureIntegrationTest {
 
     int bucketCount = 10;
     PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    long retentionPeriodMs = TimeUnit.DAYS.toMillis(retentionPeriodDays);
 
     // Upload blobs in various lifecycle states
     long now = System.currentTimeMillis();
@@ -252,7 +252,8 @@ public class AzureIntegrationTest {
 
   private void cleanup() throws Exception {
     String partitionPath = String.valueOf(testPartition);
-    List<CloudBlobMetadata> allBlobsInPartition = azureDest.runMetadataQuery(partitionPath, "SELECT * FROM c");
+    List<CloudBlobMetadata> allBlobsInPartition =
+        azureDest.runMetadataQuery(partitionPath, new SqlQuerySpec("SELECT * FROM c"));
     azureDest.purgeBlobs(allBlobsInPartition);
   }
 

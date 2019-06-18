@@ -30,6 +30,9 @@ import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.PartitionKey;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
+import com.microsoft.azure.documentdb.SqlParameter;
+import com.microsoft.azure.documentdb.SqlParameterCollection;
+import com.microsoft.azure.documentdb.SqlQuerySpec;
 import com.microsoft.azure.storage.AccessCondition;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.OperationContext;
@@ -69,10 +72,11 @@ import org.slf4j.LoggerFactory;
 class AzureCloudDestination implements CloudDestination {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
+  private static final String THRESHOLD_PARAM = "@threshold";
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
   static final String DEAD_BLOBS_QUERY_TEMPLATE =
-      "SELECT * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND %d)" + " OR (c."
-          + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND %d)";
+      "SELECT * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")"
+          + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")";
   private static final String SEPARATOR = "-";
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
@@ -291,8 +295,9 @@ class AzureCloudDestination implements CloudDestination {
     try {
       String quotedBlobIds =
           String.join(",", blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.toList()));
-      String querySpec = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
-      List<CloudBlobMetadata> metadataList = runMetadataQuery(blobIds.get(0).getPartition().toPathString(), querySpec);
+      String query = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
+      List<CloudBlobMetadata> metadataList =
+          runMetadataQuery(blobIds.get(0).getPartition().toPathString(), new SqlQuerySpec(query));
       return metadataList.stream().collect(Collectors.toMap(m -> m.getId(), Function.identity()));
     } finally {
       queryTimer.stop();
@@ -305,7 +310,8 @@ class AzureCloudDestination implements CloudDestination {
     long retentionThreshold = now - retentionPeriodMs;
     Timer.Context queryTimer = azureMetrics.deadBlobsQueryTime.time();
     try {
-      String deadBlobsQuery = String.format(DEAD_BLOBS_QUERY_TEMPLATE, retentionThreshold, retentionThreshold);
+      SqlQuerySpec deadBlobsQuery = new SqlQuerySpec(DEAD_BLOBS_QUERY_TEMPLATE,
+          new SqlParameterCollection(new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
       return runMetadataQuery(partitionPath, deadBlobsQuery);
     } finally {
       queryTimer.stop();
@@ -315,15 +321,15 @@ class AzureCloudDestination implements CloudDestination {
   /**
    * Get the list of blobs in the specified partition matching the specified DocumentDB query.
    * @param partitionPath the partition to query.
-   * @param query the DocumentDB query to execute.
+   * @param querySpec the DocumentDB query to execute.
    * @return a List of {@link CloudBlobMetadata} referencing the matching blobs.
    * @throws CloudStorageException
    */
-  List<CloudBlobMetadata> runMetadataQuery(String partitionPath, String query) throws CloudStorageException {
+  List<CloudBlobMetadata> runMetadataQuery(String partitionPath, SqlQuerySpec querySpec) throws CloudStorageException {
     azureMetrics.documentQueryCount.inc();
     FeedOptions feedOptions = new FeedOptions();
     feedOptions.setPartitionKey(new PartitionKey(partitionPath));
-    FeedResponse<Document> response = documentClient.queryDocuments(cosmosCollectionLink, query, feedOptions);
+    FeedResponse<Document> response = documentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions);
     try {
       // Note: internal query iterator wraps DocumentClientException in IllegalStateException!
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
@@ -454,8 +460,9 @@ class AzureCloudDestination implements CloudDestination {
   public int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws CloudStorageException {
     int numPurged = 0;
     for (CloudBlobMetadata blobMetadata : blobMetadataList) {
-      purgeBlob(blobMetadata);
-      numPurged++;
+      if (purgeBlob(blobMetadata)) {
+        numPurged++;
+      }
     }
     logger.info("Purged {} blobs", numPurged);
     return numPurged;
