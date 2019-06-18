@@ -168,13 +168,14 @@ class TtlUpdateOperation {
     if (responseInfo.getError() != null) {
       LOGGER.debug("TtlUpdateRequest with response correlationId {} timed out for replica {} ",
           ttlUpdateRequest.getCorrelationId(), replica.getDataNodeId());
-      updateOperationState(replica, RouterErrorCode.OperationTimedOut);
+      onErrorResponse(replica, new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
     } else {
       if (ttlUpdateResponse == null) {
         LOGGER.debug(
             "TtlUpdateRequest with response correlationId {} received UnexpectedInternalError on response deserialization for replica {} ",
             ttlUpdateRequest.getCorrelationId(), replica.getDataNodeId());
-        updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
+        onErrorResponse(replica, new RouterException("Response deserialization received an unexpected error",
+            RouterErrorCode.UnexpectedInternalError));
       } else {
         // The true case below should not really happen. This means a response has been received
         // not for its original request. We will immediately fail this operation.
@@ -183,15 +184,30 @@ class TtlUpdateOperation {
               + " is not the same as the correlation id in the associated TtlUpdateRequest: "
               + ttlUpdateRequest.getCorrelationId());
           routerMetrics.unknownReplicaResponseError.inc();
-          setOperationException(
+          onErrorResponse(replica,
               new RouterException("Received wrong response that is not for the corresponding request.",
                   RouterErrorCode.UnexpectedInternalError));
-          updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
         } else {
-          // The status of operation tracker will be updated within the processServerError method.
-          processServerError(replica, ttlUpdateResponse.getError(), ttlUpdateResponse.getCorrelationId());
-          if (ttlUpdateResponse.getError() == ServerErrorCode.Blob_Authorization_Failure) {
-            operationCompleted = true;
+          ServerErrorCode getError = ttlUpdateResponse.getError();
+          if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Already_Updated) {
+            operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
+            if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
+              LOGGER.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
+                  replica.getDataNodeId().getDatacenterName());
+              routerMetrics.crossColoSuccessCount.inc();
+            }
+          } else {
+              LOGGER.debug("Replica {} returned an error {} for a Ttl update request with response correlationId : {} ",
+                  replica.getDataNodeId(), getError, ttlUpdateResponse.getCorrelationId());
+            RouterErrorCode routerErrorCode = processServerError(getError);
+            if (ttlUpdateResponse.getError() == ServerErrorCode.Blob_Authorization_Failure) {
+              // this is a successful response and one that completes the operation regardless of whether the
+              // success target has been reached or not.
+              operationCompleted = true;
+            }
+            // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
+            // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
+            onErrorResponse(replica, new RouterException("Server returned: " + getError, routerErrorCode));
           }
         }
       }
@@ -228,83 +244,55 @@ class TtlUpdateOperation {
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
         // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
         // response and the response handler will be notified accordingly.
-        updateOperationState(ttlUpdateRequestInfo.replica, RouterErrorCode.OperationTimedOut);
+        onErrorResponse(ttlUpdateRequestInfo.replica,
+            new RouterException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut));
+      } else {
+        // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
+        break;
       }
     }
   }
 
   /**
    * Processes {@link ServerErrorCode} received from {@code replica}. This method maps a {@link ServerErrorCode}
-   * to a {@link RouterErrorCode}, and then makes corresponding state update.
-   * @param replica The replica for which the ServerErrorCode was generated.
+   * to a {@link RouterErrorCode}
    * @param serverErrorCode The ServerErrorCode received from the replica.
-   * @param correlationId the correlationId of the request
+   * @return the {@link RouterErrorCode} mapped from server error code.
    */
-  private void processServerError(ReplicaId replica, ServerErrorCode serverErrorCode, int correlationId) {
+  private RouterErrorCode processServerError(ServerErrorCode serverErrorCode) {
     switch (serverErrorCode) {
-      case No_Error:
-      case Blob_Already_Updated:
-        operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
-        if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
-          LOGGER.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
-              replica.getDataNodeId().getDatacenterName());
-          routerMetrics.crossColoSuccessCount.inc();
-        }
-        break;
       case Blob_Authorization_Failure:
-        updateOperationState(replica, RouterErrorCode.BlobAuthorizationFailure);
-        break;
+        return RouterErrorCode.BlobAuthorizationFailure;
       case Blob_Deleted:
-        updateOperationState(replica, RouterErrorCode.BlobDeleted);
-        break;
+        return RouterErrorCode.BlobDeleted;
       case Blob_Expired:
-        updateOperationState(replica, RouterErrorCode.BlobExpired);
-        break;
+        return RouterErrorCode.BlobExpired;
       case Blob_Not_Found:
-        updateOperationState(replica, RouterErrorCode.BlobDoesNotExist);
-        break;
+        return RouterErrorCode.BlobDoesNotExist;
       case Disk_Unavailable:
       case Replica_Unavailable:
-        updateOperationState(replica, RouterErrorCode.AmbryUnavailable);
-        break;
+        return RouterErrorCode.AmbryUnavailable;
       case Blob_Update_Not_Allowed:
-        updateOperationState(replica, RouterErrorCode.BlobUpdateNotAllowed);
-        break;
+        return RouterErrorCode.BlobUpdateNotAllowed;
       default:
-        updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
-        break;
-    }
-    if (serverErrorCode != ServerErrorCode.No_Error) {
-      LOGGER.debug("Replica {} returned an error {} for a Ttl update request with response correlationId : {} ",
-          replica.getDataNodeId(), serverErrorCode, correlationId);
+        return RouterErrorCode.UnexpectedInternalError;
     }
   }
 
   /**
-   * Updates the state of the {@link TtlUpdateOperation}. This includes two parts: 1) resolves the
-   * {@link RouterErrorCode} depending on the precedence level of the new router error code from
-   * {@code replica} and the current {@code resolvedRouterErrorCode}. An error code with a smaller
-   * precedence level overrides an error code with a larger precedence level. 2) updates the
-   * {@link TtlUpdateOperation} based on the {@link RouterErrorCode}, and the source {@link ReplicaId}
-   * for which the {@link RouterErrorCode} is generated.
-   * @param replica The replica for which the RouterErrorCode was generated.
-   * @param error {@link RouterErrorCode} that indicates the error for the replica.
+   * Perform the necessary actions when a request to a replica fails.
+   * @param replicaId the {@link ReplicaId} associated with the failed response.
+   * @param exception the {@link RouterException} associated with the failed response.
    */
-  private void updateOperationState(ReplicaId replica, RouterErrorCode error) {
-    if (resolvedRouterErrorCode == null) {
-      resolvedRouterErrorCode = error;
-    } else {
-      if (getPrecedenceLevel(error) < getPrecedenceLevel(resolvedRouterErrorCode)) {
-        resolvedRouterErrorCode = error;
-      }
-    }
-    operationTracker.onResponse(replica,
-        resolvedRouterErrorCode == RouterErrorCode.OperationTimedOut ? TrackedRequestFinalState.TIMED_OUT
-            : TrackedRequestFinalState.FAILURE);
-    if (error != RouterErrorCode.BlobDeleted && error != RouterErrorCode.BlobExpired) {
+  void onErrorResponse(ReplicaId replicaId, RouterException exception) {
+    operationTracker.onResponse(replicaId,
+        TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
+    setOperationException(exception);
+    if (exception.getErrorCode() != RouterErrorCode.BlobDeleted
+        && exception.getErrorCode() != RouterErrorCode.BlobExpired) {
       routerMetrics.routerRequestErrorCount.inc();
     }
-    routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).ttlUpdateRequestErrorCount.inc();
+    routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).ttlUpdateRequestErrorCount.inc();
   }
 
   /**
@@ -313,11 +301,28 @@ class TtlUpdateOperation {
   private void checkAndMaybeComplete() {
     // operationCompleted is true if Blob_Authorization_Failure was received.
     if (operationTracker.isDone() || operationCompleted) {
-      if (!operationTracker.hasSucceeded()) {
-        setOperationException(
-            new RouterException("The TtlUpdateOperation could not be completed.", resolvedRouterErrorCode));
+      if (operationTracker.hasSucceeded()) {
+        operationException.set(null);
+      } else if (operationTracker.hasFailedOnNotFound()) {
+        operationException.set(new RouterException("", RouterErrorCode.BlobDoesNotExist));
       }
       operationCompleted = true;
+    }
+  }
+
+  /**
+   * Set the exception associated with this operation.
+   * First, if current operationException is null, directly set operationException as exception;
+   * Second, if operationException exists, compare ErrorCodes of exception and existing operation Exception depending
+   * on precedence level. An ErrorCode with a smaller precedence level overrides an ErrorCode with a larger precedence
+   * level. Update the operationException if necessary.
+   * @param exception the {@link RouterException} to possibly set.
+   */
+  void setOperationException(Exception exception) {
+    if (exception instanceof RouterException) {
+      RouterUtils.replaceOperationException(operationException, (RouterException) exception, this::getPrecedenceLevel);
+    } else {
+      operationException.compareAndSet(null, exception);
     }
   }
 
@@ -406,14 +411,6 @@ class TtlUpdateOperation {
    */
   Void getOperationResult() {
     return operationResult;
-  }
-
-  /**
-   * Sets the exception associated with this operation. When this is called, the operation has failed.
-   * @param exception the irrecoverable exception associated with this operation.
-   */
-  void setOperationException(Exception exception) {
-    operationException.set(exception);
   }
 
   /**

@@ -432,6 +432,79 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Test the case when NotFound Error should be disabled since the cross colo is disabled.
+   */
+  @Test
+  public void originatingDcNotFoundColoDisableTest() {
+    initialize();
+    originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
+    OperationTracker ot = getOperationTracker(false, 1, 3, false, Integer.MAX_VALUE);
+    sendRequests(ot, 3, false);
+    assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
+    for (int i = 0; i < 3; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      // fail first 3 requests to local replicas
+      ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+      assertEquals("Should be local DC", localDcName, replica.getDataNodeId().getDatacenterName());
+    }
+    assertFalse("Operation should have not succeeded", ot.hasSucceeded());
+    assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
+   * Test the case when NotFound Error should be disabled since the originating DC is unknown.
+   */
+  @Test
+  public void originatingDcNotFoundUnknownOriginatingDcTest() {
+    initialize();
+    originatingDcName = null;
+    OperationTracker ot = getOperationTracker(true, 1, 12, false, Integer.MAX_VALUE);
+    sendRequests(ot, 12, false);
+    assertEquals("Should have 12 replicas", 12, inflightReplicas.size());
+    for (int i = 0; i < 12; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      // fail first 3 requests to local replicas
+      ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+    }
+    assertFalse("Operation should have not succeeded", ot.hasSucceeded());
+    assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
+   * Test the case when NotFound Error triggered.
+   */
+  @Test
+  public void originatingDcNotFoundTriggeredTest() {
+    initialize();
+    originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
+    OperationTracker ot = getOperationTracker(true, 2, 3, true, Integer.MAX_VALUE);
+    sendRequests(ot, 3, false);
+    assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
+    for (int i = 0; i < 3; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      // fail first 3 requests to local replicas
+      ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+    }
+    assertFalse("Operation should have not succeeded", ot.hasSucceeded());
+    assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertFalse("Operation should be done", ot.isDone());
+
+    sendRequests(ot, 3, false);
+    assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
+    // Only send two not found response, it will terminate the operation.
+    for (int i = 0; i < 2; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      // fail first 3 requests to local replicas
+      ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
+      assertEquals("Should be originatingDcName DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
+    }
+    assertTrue("Operation should have failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
    * Tests the case when the success target > number of replicas.
    */
   @Test
@@ -471,8 +544,8 @@ public class OperationTrackerTest {
     props.setProperty("router.datacenter.name", "dc-0");
     props.setProperty("router.get.success.target", "1");
     props.setProperty("router.put.success.target", "2");
-    props.setProperty("router.delete.success.target", "3");
-    props.setProperty("router.ttl.update.success.target", "4");
+    props.setProperty("router.delete.success.target", "2");
+    props.setProperty("router.ttl.update.success.target", "2");
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
     initialize();
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
@@ -480,8 +553,8 @@ public class OperationTrackerTest {
     operationAndSuccessTarget.put(RouterOperation.GetBlobOperation, 1);
     operationAndSuccessTarget.put(RouterOperation.GetBlobInfoOperation, 1);
     operationAndSuccessTarget.put(RouterOperation.PutOperation, 2);
-    operationAndSuccessTarget.put(RouterOperation.DeleteOperation, 3);
-    operationAndSuccessTarget.put(RouterOperation.TtlUpdateOperation, 4);
+    operationAndSuccessTarget.put(RouterOperation.DeleteOperation, 2);
+    operationAndSuccessTarget.put(RouterOperation.TtlUpdateOperation, 2);
     for (Map.Entry<RouterOperation, Integer> entry : operationAndSuccessTarget.entrySet()) {
       SimpleOperationTracker operationTracker = null;
       switch (operationTrackerType) {

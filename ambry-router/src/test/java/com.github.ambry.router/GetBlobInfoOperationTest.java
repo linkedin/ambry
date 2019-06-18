@@ -343,7 +343,7 @@ public class GetBlobInfoOperationTest {
    * @throws Exception
    */
   @Test
-  public void testTimeoutAndBlobNotFound() throws Exception {
+  public void testTimeoutAndBlobNotFoundLocalTimeout() throws Exception {
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     correlationIdToGetOperation.clear();
     for (MockServer server : mockServerLayout.getMockServers()) {
@@ -380,6 +380,104 @@ public class GetBlobInfoOperationTest {
     // the count of data points in Histogram should be 5 because 9(total replicas) - 4(# of timed out request) = 5
     Assert.assertEquals("The number of data points in cross colo latency histogram is not expected", 5,
         tracker.getLatencyHistogram(remoteReplica).getCount());
+  }
+
+  /**
+   * Test the case where originating replicas return Blob_Not_found and the rest returns IO_Error.
+   * @throws Exception
+   */
+  @Test
+  public void testIOErrorAndBlobNotFoundOriginatingNotFound() throws Exception {
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    correlationIdToGetOperation.clear();
+
+    // Pick a remote DC as the new local DC.
+    String newLocal = "DC1";
+    String oldLocal = localDcName;
+    Properties props = getNonBlockingRouterProperties();
+    props.setProperty("router.datacenter.name", newLocal);
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      if (server.getDataCenter().equals(oldLocal)) {
+        // for originating DC, always return Blob_Not_Found;
+        server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+      } else {
+        // otherwise, return IO_Error.
+        server.setServerErrorForAllRequests(ServerErrorCode.IO_Error);
+      }
+    }
+
+    NonBlockingRouter.currentOperationsCount.incrementAndGet();
+    GetBlobInfoOperation op =
+        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+            routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
+    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
+
+    completeOp(op);
+    RouterException routerException = (RouterException) op.getOperationException();
+    // error code should be OperationTimedOut because it precedes BlobDoesNotExist
+    Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
+    // localReplica now becomes remote replica.
+    Assert.assertEquals("The number of data points in remote colo latency histogram is not expected", 2,
+        tracker.getLatencyHistogram(localReplica).getCount());
+
+    props = getNonBlockingRouterProperties();
+    props.setProperty("router.datacenter.name", oldLocal);
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+  }
+
+
+  /**
+   * Test the case where originating replicas return Blob_Not_found and the rest times out.
+   * @throws Exception
+   */
+  @Test
+  public void testTimeoutAndBlobNotFoundOriginatingNotFound() throws Exception {
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    correlationIdToGetOperation.clear();
+
+    // Pick a remote DC as the new local DC.
+    String newLocal = "DC1";
+    String oldLocal = localDcName;
+    Properties props = getNonBlockingRouterProperties();
+    props.setProperty("router.datacenter.name", newLocal);
+    props.setProperty("router.get.request.parallelism", "3");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      if (server.getDataCenter().equals(oldLocal)) {
+        // for originating DC, always return Blob_Not_Found;
+        server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+      } else {
+        // Randomly set something here, it will not be used.
+        server.setServerErrorForAllRequests(ServerErrorCode.No_Error);
+      }
+    }
+
+    NonBlockingRouter.currentOperationsCount.incrementAndGet();
+    GetBlobInfoOperation op =
+        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+            routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
+    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
+
+    // First three requests would come from local datacenter and they will all time out.
+    op.poll(requestRegistrationCallback);
+    Assert.assertEquals("There should only be as many requests at this point as requestParallelism", 3,
+        correlationIdToGetOperation.size());
+    time.sleep(routerConfig.routerRequestTimeoutMs + 1);
+
+    completeOp(op);
+    RouterException routerException = (RouterException) op.getOperationException();
+    // error code should be OperationTimedOut because it precedes BlobDoesNotExist
+    Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
+
+    props = getNonBlockingRouterProperties();
+    props.setProperty("router.datacenter.name", oldLocal);
+    props.setProperty("router.get.request.parallelism", Integer.toString(requestParallelism));
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
   }
 
   /**
@@ -426,7 +524,9 @@ public class GetBlobInfoOperationTest {
     mockServerLayout.getMockServers()
         .forEach(server -> server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found));
     assertOperationFailure(RouterErrorCode.BlobDoesNotExist);
-    Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
+    // Blob is created by putBlob function so the local datacenter will be the originating datecenter.
+    // Thus only need two Blob_Not_Found to terminate the operation.
+    Assert.assertEquals("Must have attempted sending requests to all replicas", 2,
         correlationIdToGetOperation.size());
   }
 
@@ -448,7 +548,7 @@ public class GetBlobInfoOperationTest {
         if (j == indexToSetCustomError) {
           serverErrorCodesInOrder[j] = serverErrorCodesToTest[i];
         } else {
-          serverErrorCodesInOrder[j] = ServerErrorCode.Blob_Not_Found;
+          serverErrorCodesInOrder[j] = ServerErrorCode.Replica_Unavailable;
         }
       }
       testErrorPrecedence(serverErrorCodesInOrder, routerErrorCodesToExpect[i]);

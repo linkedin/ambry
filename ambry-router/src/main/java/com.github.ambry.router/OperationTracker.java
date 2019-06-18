@@ -54,6 +54,14 @@ interface OperationTracker {
   boolean hasSucceeded();
 
   /**
+   * Return {@code true} only if the number of NOT_FOUND responses from originating DC pass the threshold.
+   * It also means hasSucceeded would return {@code false}.
+   *
+   * @return {@code true} if the operation failed because of {@link TrackedRequestFinalState#NOT_FOUND}.
+   */
+  boolean hasFailedOnNotFound();
+
+  /**
    * Determines if an operation has completed (either succeeded or failed).
    *
    * @return {@code true} if the operation has completed.

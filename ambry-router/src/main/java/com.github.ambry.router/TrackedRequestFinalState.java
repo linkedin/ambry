@@ -19,5 +19,16 @@ package com.github.ambry.router;
  * consumed by operation tracker to change success/failure counter and determine whether to update Histograms.
  */
 public enum TrackedRequestFinalState {
-  SUCCESS, FAILURE, TIMED_OUT
+  SUCCESS, FAILURE, TIMED_OUT, NOT_FOUND;
+
+  public static TrackedRequestFinalState fromRouterErrorCodeToFinalState(RouterErrorCode code) {
+    switch(code){
+      case OperationTimedOut:
+        return TIMED_OUT;
+      case BlobDoesNotExist:
+        return NOT_FOUND;
+      default:
+        return FAILURE;
+    }
+  }
 }

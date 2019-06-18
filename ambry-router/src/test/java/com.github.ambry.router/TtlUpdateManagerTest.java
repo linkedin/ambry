@@ -17,7 +17,9 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
@@ -194,17 +196,16 @@ public class TtlUpdateManagerTest {
     Map<ServerErrorCode, RouterErrorCode> errorCodeMap = new HashMap<>();
     errorCodeMap.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
     errorCodeMap.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
-    errorCodeMap.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
     errorCodeMap.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
     errorCodeMap.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
     errorCodeMap.put(ServerErrorCode.Blob_Update_Not_Allowed, RouterErrorCode.BlobUpdateNotAllowed);
     errorCodeMap.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
     for (ServerErrorCode errorCode : ServerErrorCode.values()) {
-      if (errorCode == ServerErrorCode.No_Error || errorCode == ServerErrorCode.Blob_Already_Updated) {
+      if (errorCode == ServerErrorCode.No_Error || errorCode == ServerErrorCode.Blob_Already_Updated  || errorCode == ServerErrorCode.Blob_Not_Found) {
         continue;
       }
       ArrayList<ServerErrorCode> serverErrorCodes =
-          new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found));
+          new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.IO_Error));
       // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
       serverErrorCodes.set(3, errorCode);
       serverErrorCodes.set(5, errorCode);
@@ -454,7 +455,7 @@ public class TtlUpdateManagerTest {
       throw new IllegalStateException("Cannot run test because there aren't enough servers for the given codes");
     }
     List<ServerErrorCode> serverErrorCodes =
-        new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found));
+        new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.IO_Error));
     List<RouterErrorCode> expected = new ArrayList<>(codesToSetAndTest.size());
     // fill in the array with all the error codes that need resolution and knock them off one by one
     // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
@@ -465,15 +466,15 @@ public class TtlUpdateManagerTest {
       expected.add(entry.getValue());
       serverIdx += 2;
     }
-    expected.add(RouterErrorCode.BlobDoesNotExist);
+    expected.add(RouterErrorCode.UnexpectedInternalError);
     for (int i = 0; i < expected.size(); i++) {
       List<ServerErrorCode> shuffled = new ArrayList<>(serverErrorCodes);
       Collections.shuffle(shuffled);
       setServerErrorCodes(shuffled, serverLayout);
       executeOpAndVerify(blobIds, expected.get(i), false, true, true, false);
       if (i * 2 + 1 < serverErrorCodes.size()) {
-        serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
-        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
+        serverErrorCodes.set(i * 2, ServerErrorCode.IO_Error);
+        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.IO_Error);
       }
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);

@@ -519,7 +519,7 @@ public class GetBlobOperationTest {
    * @throws Exception
    */
   @Test
-  public void testRequestTimeoutAndBlobNotFound() throws Exception {
+  public void testRequestTimeoutAndBlobNotFoundLocalTimeout() throws Exception {
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     doPut();
     GetBlobOperation op = createOperation(routerConfig, null);
@@ -556,6 +556,54 @@ public class GetBlobOperationTest {
     // the count of data points in cross colo Histogram should be 6 because all remote replicas respond with proper error code
     Assert.assertEquals("The number of data points in cross colo latency histogram is not expected", 6,
         crossColoTracker.getCount());
+  }
+
+  /**
+   * Test the case where originating replicas return Blob_Not_found and the rest times out.
+   * @throws Exception
+   */
+  @Test
+  public void testTimeoutAndBlobNotFoundOriginatingNotFound() throws Exception {
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    doPut();
+
+    // Pick a remote DC as the new local DC.
+    String newLocal = "DC1";
+    String oldLocal = localDcName;
+    Properties props = getDefaultNonBlockingRouterProperties();
+    props.setProperty("router.datacenter.name", newLocal);
+    props.setProperty("router.get.request.parallelism", "3");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    GetBlobOperation op = createOperation(null);
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
+    correlationIdToGetOperation.clear();
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    }
+    op.poll(requestRegistrationCallback);
+    time.sleep(routerConfig.routerRequestTimeoutMs + 1);
+
+    // 3 requests have been sent out and all of them timed out. Nest, complete operation on remaining replicas
+    // The request should have response from all remote replicas.
+    while (!op.isOperationComplete()) {
+      op.poll(requestRegistrationCallback);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+            new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+        op.handleResponse(responseInfo, getResponse);
+      }
+    }
+
+    RouterException routerException = (RouterException) op.getOperationException();
+    // error code should be OperationTimedOut because it precedes BlobDoesNotExist
+    Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
+
+    props = getDefaultNonBlockingRouterProperties();
+    props.setProperty("router.datacenter.name", oldLocal);
+    props.setProperty("router.get.request.parallelism", "2");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
   }
 
   /**
@@ -598,7 +646,8 @@ public class GetBlobOperationTest {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             GetBlobOperation op = createOperationAndComplete(null);
-            Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
+            // Local dc is the originating DC, only two NOT_FOUND would terminate the operation.
+            Assert.assertEquals("Must have attempted sending requests to all replicas", 2,
                 correlationIdToGetOperation.size());
             assertFailureAndCheckErrorCode(op, expectedError);
           }
@@ -619,7 +668,7 @@ public class GetBlobOperationTest {
     serverErrorToRouterError.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
     for (Map.Entry<ServerErrorCode, RouterErrorCode> entry : serverErrorToRouterError.entrySet()) {
       Map<ServerErrorCode, Integer> errorCounts = new HashMap<>();
-      errorCounts.put(ServerErrorCode.Blob_Not_Found, replicasCount - 1);
+      errorCounts.put(ServerErrorCode.Replica_Unavailable, replicasCount - 1);
       errorCounts.put(entry.getKey(), 1);
       testWithErrorCodes(errorCounts, mockServerLayout, entry.getValue(), getErrorCodeChecker);
     }

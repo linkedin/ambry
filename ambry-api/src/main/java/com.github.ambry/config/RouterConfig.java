@@ -298,6 +298,10 @@ public class RouterConfig {
   @Default("1000")
   public final long routerOperationTrackerMinDataPointsRequired;
 
+  @Config("router.operation.tracker.originatingdc.notfound.enabled")
+  @Default("true")
+  public final boolean routerOperationTrackerOriginatingDcNotFoundEnabled;
+
   /**
    * The maximum number of inflight requests that allowed for adaptive tracker. If current number of inflight requests
    * is larger than or equal to this threshold, tracker shouldn't send out any request even though the oldest is past due.
@@ -418,5 +422,7 @@ public class RouterConfig {
       throw new IllegalArgumentException(
           "Operation tracker parallelism is larger than operation tracker max inflight number");
     }
+    routerOperationTrackerOriginatingDcNotFoundEnabled =
+        verifiableProperties.getBoolean("router.operation.tracker.originatingdc.notfound.enabled", true);
   }
 }
