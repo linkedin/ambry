@@ -441,19 +441,6 @@ public class ClusterMapUtils {
       return selectedPartition;
     }
 
-    private boolean areEnoughLocalReplicasForPartitionUp(PartitionId partition) {
-      return getUpLocalReplicaCountForPartition(partition) == 2;
-    }
-
-    private int getUpLocalReplicaCountForPartition(PartitionId partition) {
-      int numLocalReplicasUp = 0;
-      for(ReplicaId replica : partition.getReplicaIds()) {
-        if(!replica.isDown() && replica.getDataNodeId().getDatacenterName().equals(localDatacenterName))
-          numLocalReplicasUp++;
-      }
-      return numLocalReplicasUp;
-    }
-
     /**
      * Returns the partitions belonging to the {@code partitionClass}. Returns all partitions if {@code partitionClass}
      * is {@code null}.
