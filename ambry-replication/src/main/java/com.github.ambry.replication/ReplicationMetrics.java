@@ -410,8 +410,13 @@ public class ReplicationMetrics {
     }
   }
 
-  public void addMetricsForPartition(PartitionId partitionId) {
-    if (partitionLags.put(partitionId, new HashMap<>()) == null) {
+  /**
+   * Add replication lag metric(local from remote) for given partitionId.
+   * @param partitionId partition to add metric for.
+   */
+  public void addLagMetricsForPartition(PartitionId partitionId) {
+    if (!partitionLags.containsKey(partitionId)) {
+      partitionLags.put(partitionId, new HashMap<>());
       // Set up metrics if and only if no mapping for this partition before.
       Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
       registry.register(MetricRegistry.name(ReplicationMetrics.class,
@@ -645,3 +650,4 @@ public class ReplicationMetrics {
     return maxEntry.get().getValue();
   }
 }
+

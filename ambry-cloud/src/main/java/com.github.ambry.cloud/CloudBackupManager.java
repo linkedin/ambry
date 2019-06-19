@@ -209,7 +209,7 @@ public class CloudBackupManager extends ReplicationEngine {
     // Add remoteReplicaInfos to {@link ReplicaThread}.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
     if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
-      replicationMetrics.addMetricsForPartition(partitionId);
+      replicationMetrics.addLagMetricsForPartition(partitionId);
     }
     logger.info("PartitionId {} added to {}", partitionId, dataNodeId);
   }
