@@ -1328,7 +1328,7 @@ class PutOperation {
      * @return the chosen {@link PartitionId}
      * @throws RouterException
      */
-    protected PartitionId getPartitionForPut(String partitionClass, List<? extends PartitionId> partitionIdsToExclude)
+    protected PartitionId getPartitionForPut(String partitionClass, List<PartitionId> partitionIdsToExclude)
         throws RouterException {
       PartitionId selected = clusterMap.getRandomWritablePartition(partitionClass, partitionIdsToExclude);
       if(selected == null) {

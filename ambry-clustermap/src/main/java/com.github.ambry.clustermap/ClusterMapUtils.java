@@ -408,35 +408,38 @@ public class ClusterMapUtils {
 
     /**
      * Returns a writable partition selected at random, that belongs to the specified partition class and that is in the
-     * state {@link PartitionState#READ_WRITE} AND has all replicas up.
+     * state {@link PartitionState#READ_WRITE} AND has all replicas up. In case none of the partitions have all replicas
+     * up, any writable partition is returned.
      * @param partitionClass the class of the partitions desired. Can be {@code null}.
      * @param partitionsToExclude partitions that should be excluded from the result. Can be {@code null} or empty.
      * @return A writable partition or {@code null} if no writable partition with given criteria found
      */
-    PartitionId getRandomWritablePartition(String partitionClass, List<? extends PartitionId> partitionsToExclude) {
+    PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
       PartitionId selectedPartition = null;
-      List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, false);
-      if (partitionsToExclude != null && partitionsToExclude.size() != 0) {
-        partitionsInClass.removeAll(partitionsToExclude);
-      }
+      PartitionId anyWritablePartition = null;
+      List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, true);
+
       int workingSize = partitionsInClass.size();
       while(true) {
-        int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
-        PartitionId selected = partitionsInClass.get(randomIndex);
-        if (selected.getPartitionState() == PartitionState.READ_WRITE &&
-            areAllReplicasForPartitionUp(selected)) { //TODO: maybe use routerConfig.routerPutSuccessTarget here
-          selectedPartition = selected;
-          break;
-        } else {
-          if (randomIndex != workingSize - 1) {
-            partitionsInClass.set(randomIndex, partitionsInClass.get(workingSize - 1));
-          }
-          workingSize--;
-        }
         if(workingSize == 0)
           break;
+        int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
+        PartitionId selected = partitionsInClass.get(randomIndex);
+        if(partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(selected)) {
+          if (selected.getPartitionState() == PartitionState.READ_WRITE) {
+            anyWritablePartition = selected;
+            if(areAllReplicasForPartitionUp(selected)) {
+              selectedPartition = selected;
+              break;
+            }
+          }
+        }
+        if (randomIndex != workingSize - 1) {
+          partitionsInClass.set(randomIndex, partitionsInClass.get(workingSize - 1));
+        }
+        workingSize--;
       }
-      return selectedPartition;
+      return (selectedPartition == null) ? anyWritablePartition : selectedPartition;
     }
 
     /**

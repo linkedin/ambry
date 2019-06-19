@@ -371,7 +371,7 @@ class HelixClusterManager implements ClusterMap {
   }
 
   @Override
-  public PartitionId getRandomWritablePartition(String partitionClass, List<? extends PartitionId> partitionsToExclude) {
+  public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
     return partitionSelectionHelper.getRandomWritablePartition(partitionClass, partitionsToExclude);
   }
 

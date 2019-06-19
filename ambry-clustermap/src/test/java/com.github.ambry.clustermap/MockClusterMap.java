@@ -246,8 +246,12 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public PartitionId getRandomWritablePartition(String partitionClass, List<? extends PartitionId> partitionsToExclude) {
-    return partitionSelectionHelper.getRandomWritablePartition(partitionClass, partitionsToExclude);
+  public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+    lastRequestedPartitionClasses.add(partitionClass);
+    if (!partitionsUnavailable) {
+      return partitionSelectionHelper.getRandomWritablePartition(partitionClass, partitionsToExclude);
+    }
+    return null;
   }
 
   @Override

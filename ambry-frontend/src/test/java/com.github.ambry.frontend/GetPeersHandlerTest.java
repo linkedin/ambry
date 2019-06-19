@@ -313,7 +313,7 @@ class TailoredPeersClusterMap implements ClusterMap {
   }
 
   @Override
-  public PartitionId getRandomWritablePartition(String partitionClass, List<? extends PartitionId> partitionsToExclude) {
+  public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
     throw new IllegalStateException();
   }
 

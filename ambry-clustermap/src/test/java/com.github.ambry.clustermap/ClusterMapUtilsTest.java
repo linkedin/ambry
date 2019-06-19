@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.UtilsTest;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -135,6 +136,12 @@ public class ClusterMapUtilsTest {
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
       }
+      try {
+        psh.getRandomWritablePartition(UtilsTest.getRandomString(3), null);
+        fail("partition class is invalid, should have thrown");
+      } catch (IllegalArgumentException e) {
+        // expected. Nothing to do.
+      }
       verifyWritablePartitionsReturned(psh, allPartitionIds, maxReplicasAllSites, everywhere1, everywhere2,
           maxLocalOneRemote, expectedWritableForMaxLocalOneRemote);
       if (candidate1 != null && candidate2 != null) {
@@ -180,6 +187,17 @@ public class ClusterMapUtilsTest {
   }
 
   /**
+   * Asserts that element {@code actual} is equal to the one of the elements in {@code expected} collection.
+   * @param message the message to print if not found.
+   * @param expected the expected elements
+   * @param actual the actual element
+   */
+  private void assertInCollection(String message, Collection<? extends PartitionId> expected,
+      PartitionId actual) {
+    assertTrue(message, expected.contains(actual));
+  }
+
+  /**
    * Checks that the {@code partitionClass} is treated in a case insensitive way.
    * @param psh the {@link ClusterMapUtils.PartitionSelectionHelper} to use.
    * @param allPartitions if {@code true}, calls {@link ClusterMapUtils.PartitionSelectionHelper#getPartitions(String)}.
@@ -220,25 +238,41 @@ public class ClusterMapUtilsTest {
       Set<MockPartitionId> expectedReturnForClassNotBeingTested) {
     Set<MockPartitionId> expectedReturnForClassBeingTested = new HashSet<>(Arrays.asList(testedPart1, testedPart2));
     // no problematic scenarios
-    assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getWritablePartitions(null));
+    assertCollectionEquals("Partitions returned not as expected", allPartitionIds,
+        psh.getWritablePartitions(null));
     assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassBeingTested,
         psh.getWritablePartitions(classBeingTested));
+    assertInCollection("Random partition returned not as expected", allPartitionIds,
+        psh.getRandomWritablePartition(null, null));
+    assertInCollection("Random partition returned not as expected", expectedReturnForClassBeingTested,
+        psh.getRandomWritablePartition(classBeingTested, null));
+    assertNull(psh.getRandomWritablePartition(null, new ArrayList<>(allPartitionIds)));
     checkCaseInsensitivityForPartitionSelectionHelper(psh, false, classBeingTested, expectedReturnForClassBeingTested);
     // one replica of one partition of "classBeingTested" down
     ((MockReplicaId) testedPart1.getReplicaIds().get(0)).markReplicaDownStatus(true);
     allPartitionIds.remove(testedPart1);
     expectedReturnForClassBeingTested.remove(testedPart1);
-    assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getWritablePartitions(null));
+    assertCollectionEquals("Partitions returned not as expected", allPartitionIds,
+        psh.getWritablePartitions(null));
     assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassBeingTested,
         psh.getWritablePartitions(classBeingTested));
+    assertInCollection("Partitions returned not as expected", allPartitionIds,
+        psh.getRandomWritablePartition(null, null));
+    assertInCollection("Partitions returned not as expected", expectedReturnForClassBeingTested,
+        psh.getRandomWritablePartition(classBeingTested, null));
     // one replica of other partition of "classBeingTested" down too
     ((MockReplicaId) testedPart2.getReplicaIds().get(0)).markReplicaDownStatus(true);
     allPartitionIds.remove(testedPart2);
     // if both have a replica down, then even though both are unhealthy, they are both returned.
     expectedReturnForClassBeingTested.add(testedPart1);
-    assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getWritablePartitions(null));
+    assertCollectionEquals("Partitions returned not as expected", allPartitionIds,
+        psh.getWritablePartitions(null));
     assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassBeingTested,
         psh.getWritablePartitions(classBeingTested));
+    assertInCollection("Partitions returned not as expected", allPartitionIds,
+        psh.getRandomWritablePartition(null, null));
+    assertInCollection("Partitions returned not as expected", expectedReturnForClassBeingTested,
+        psh.getRandomWritablePartition(classBeingTested, null));
     if (expectedReturnForClassNotBeingTested != null) {
       assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassNotBeingTested,
           psh.getWritablePartitions(classsNotBeingTested));
@@ -252,16 +286,26 @@ public class ClusterMapUtilsTest {
     ((MockReplicaId) testedPart1.getReplicaIds().get(0)).setSealedState(true);
     allPartitionIds.remove(testedPart1);
     expectedReturnForClassBeingTested.remove(testedPart1);
-    assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getWritablePartitions(null));
+    assertCollectionEquals("Partitions returned not as expected", allPartitionIds,
+        psh.getWritablePartitions(null));
     assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassBeingTested,
         psh.getWritablePartitions(classBeingTested));
+    assertInCollection("Partitions returned not as expected", allPartitionIds,
+        psh.getRandomWritablePartition(null, null));
+    assertInCollection("Partitions returned not as expected", expectedReturnForClassBeingTested,
+        psh.getRandomWritablePartition(classBeingTested, null));
     // all READ_ONLY
     ((MockReplicaId) testedPart2.getReplicaIds().get(0)).setSealedState(true);
     allPartitionIds.remove(testedPart2);
     expectedReturnForClassBeingTested.remove(testedPart2);
-    assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getWritablePartitions(null));
+    assertCollectionEquals("Partitions returned not as expected", allPartitionIds,
+        psh.getWritablePartitions(null));
     assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassBeingTested,
         psh.getWritablePartitions(classBeingTested));
+    assertInCollection("Partitions returned not as expected", allPartitionIds,
+        psh.getRandomWritablePartition(null, null));
+    assertNull("Partitions returned not as expected",
+        psh.getRandomWritablePartition(classBeingTested, null));
     if (expectedReturnForClassNotBeingTested != null) {
       assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassNotBeingTested,
           psh.getWritablePartitions(classsNotBeingTested));

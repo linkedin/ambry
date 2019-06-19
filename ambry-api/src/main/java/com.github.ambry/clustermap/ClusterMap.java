@@ -47,7 +47,7 @@ public interface ClusterMap extends AutoCloseable {
    * @param partitionsToExclude list of partitions that shouldnt be considered as a possible partition returned
    * @return chosen random partition. Can be {@code null}
    */
-  PartitionId getRandomWritablePartition(String partitionClass, List<? extends PartitionId> partitionsToExclude);
+  PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude);
 
   /**
    * Gets a list of all partitions in the cluster.  Gets a mutable shallow copy of the list of all partitions.

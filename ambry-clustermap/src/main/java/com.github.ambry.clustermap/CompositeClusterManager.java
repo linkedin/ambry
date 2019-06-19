@@ -122,7 +122,7 @@ class CompositeClusterManager implements ClusterMap {
    * @return A writable parition id object. Can be {@code null}
    */
   @Override
-  public PartitionId getRandomWritablePartition(String partitionClass, List<? extends PartitionId> partitionsToExclude) {
+  public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
     List<? extends PartitionId> partitions = getWritablePartitionIds(partitionClass);
     partitions.removeAll(partitionsToExclude);
     return partitions.isEmpty()?null:partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
