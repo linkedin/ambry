@@ -248,9 +248,10 @@ public class ConnectionTrackerTest {
 
     // replenish connections again
     connectionTracker.replenishConnections(this::mockNewConnection);
+    totalConnectionsCount += 2;
+    assertCounts(totalConnectionsCount, availableCount);
     newConnections = getNewlyEstablishedConnections();
     newConnections.forEach(connectionTracker::checkInConnection);
-    totalConnectionsCount += 2;
     availableCount += 2;
     assertCounts(totalConnectionsCount, availableCount);
 
@@ -262,7 +263,7 @@ public class ConnectionTrackerTest {
     availableCount -= 2;
     assertCounts(totalConnectionsCount, availableCount);
 
-    // destroy one and return the otheer and then replenish
+    // destroy one and return the other and then replenish
     connectionTracker.removeConnection(conn1);
     connectionTracker.checkInConnection(conn2);
     totalConnectionsCount -= 1;
