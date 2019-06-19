@@ -73,7 +73,7 @@ public class ReplicationManager extends ReplicationEngine {
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, partition, store, replicaId);
           partitionToPartitionInfo.put(partition, partitionInfo);
           if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
-            replicationMetrics.addLagMetricsForPartition(partition);
+            replicationMetrics.addLagMetricForPartition(partition);
           }
           mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> new ArrayList<>())
               .add(partitionInfo);

@@ -414,7 +414,7 @@ public class ReplicationMetrics {
    * Add replication lag metric(local from remote) for given partitionId.
    * @param partitionId partition to add metric for.
    */
-  public void addLagMetricsForPartition(PartitionId partitionId) {
+  public void addLagMetricForPartition(PartitionId partitionId) {
     if (!partitionLags.containsKey(partitionId)) {
       partitionLags.put(partitionId, new HashMap<>());
       // Set up metrics if and only if no mapping for this partition before.
@@ -650,4 +650,3 @@ public class ReplicationMetrics {
     return maxEntry.get().getValue();
   }
 }
-
