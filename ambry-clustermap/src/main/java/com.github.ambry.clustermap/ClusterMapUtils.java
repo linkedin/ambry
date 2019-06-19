@@ -334,7 +334,6 @@ public class ClusterMapUtils {
   static class PartitionSelectionHelper {
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
-    private String localDatacenterName;
 
     /**
      * @param allPartitions the list of all {@link PartitionId}s
@@ -353,7 +352,6 @@ public class ClusterMapUtils {
      */
     void updatePartitions(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
       this.allPartitions = allPartitions;
-      this.localDatacenterName = localDatacenterName;
       partitionIdsByClassAndLocalReplicaCount = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       for (PartitionId partition : allPartitions) {
         String partitionClass = partition.getPartitionClass();
