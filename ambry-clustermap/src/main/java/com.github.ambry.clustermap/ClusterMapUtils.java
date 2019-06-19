@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.concurrent.ThreadLocalRandom;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -333,6 +334,7 @@ public class ClusterMapUtils {
   static class PartitionSelectionHelper {
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
+    private String localDatacenterName;
 
     /**
      * @param allPartitions the list of all {@link PartitionId}s
@@ -351,6 +353,7 @@ public class ClusterMapUtils {
      */
     void updatePartitions(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
       this.allPartitions = allPartitions;
+      this.localDatacenterName = localDatacenterName;
       partitionIdsByClassAndLocalReplicaCount = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       for (PartitionId partition : allPartitions) {
         String partitionClass = partition.getPartitionClass();
@@ -403,6 +406,52 @@ public class ClusterMapUtils {
         }
       }
       return healthyWritablePartitions.isEmpty() ? writablePartitions : healthyWritablePartitions;
+    }
+
+    /**
+     * Returns a writable partition selected at random, that belongs to the specified partition class and that is in the
+     * state {@link PartitionState#READ_WRITE} AND has all replicas up.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @param partitionsToExclude partitions that should be excluded from the result. Can be {@code null} or empty.
+     * @return A writable partition or {@code null} if no writable partition with given criteria found
+     */
+    PartitionId getRandomWritablePartition(String partitionClass, List<? extends PartitionId> partitionsToExclude) {
+      PartitionId selectedPartition = null;
+      List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, false);
+      if (partitionsToExclude != null && partitionsToExclude.size() != 0) {
+        partitionsInClass.removeAll(partitionsToExclude);
+      }
+      int workingSize = partitionsInClass.size();
+      while(true) {
+        int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
+        PartitionId selected = partitionsInClass.get(randomIndex);
+        if (selected.getPartitionState() == PartitionState.READ_WRITE &&
+            areAllReplicasForPartitionUp(selected)) { //TODO: maybe use routerConfig.routerPutSuccessTarget here
+          selectedPartition = selected;
+          break;
+        } else {
+          if (randomIndex != workingSize - 1) {
+            partitionsInClass.set(randomIndex, partitionsInClass.get(workingSize - 1));
+          }
+          workingSize--;
+        }
+        if(workingSize == 0)
+          break;
+      }
+      return selectedPartition;
+    }
+
+    private boolean areEnoughLocalReplicasForPartitionUp(PartitionId partition) {
+      return getUpLocalReplicaCountForPartition(partition) == 2;
+    }
+
+    private int getUpLocalReplicaCountForPartition(PartitionId partition) {
+      int numLocalReplicasUp = 0;
+      for(ReplicaId replica : partition.getReplicaIds()) {
+        if(!replica.isDown() && replica.getDataNodeId().getDatacenterName().equals(localDatacenterName))
+          numLocalReplicasUp++;
+      }
+      return numLocalReplicasUp;
     }
 
     /**

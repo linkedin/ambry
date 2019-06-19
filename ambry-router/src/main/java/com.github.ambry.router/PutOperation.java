@@ -1330,14 +1330,11 @@ class PutOperation {
      */
     protected PartitionId getPartitionForPut(String partitionClass, List<? extends PartitionId> partitionIdsToExclude)
         throws RouterException {
-      // getWritablePartitions creates and returns a new list, so it is safe to manipulate it.
-      List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds(partitionClass);
-      partitions.removeAll(partitionIdsToExclude);
-      if (partitions.isEmpty()) {
+      PartitionId selected = clusterMap.getRandomWritablePartition(partitionClass, partitionIdsToExclude);
+      if(selected == null) {
         throw new RouterException("No writable partitions of class " + partitionClass + " available.",
             RouterErrorCode.AmbryUnavailable);
       }
-      PartitionId selected = partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
       if (!partitionClass.equals(selected.getPartitionClass())) {
         throw new IllegalStateException(
             "Selected partition's class [" + selected.getPartitionClass() + "] is not as required: " + partitionClass);
