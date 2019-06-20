@@ -23,12 +23,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.documentdb.Document;
-import com.microsoft.azure.documentdb.DocumentClient;
-import com.microsoft.azure.documentdb.FeedOptions;
-import com.microsoft.azure.documentdb.FeedResponse;
-import com.microsoft.azure.documentdb.PartitionKey;
-import com.microsoft.azure.documentdb.RequestOptions;
+import com.microsoft.azure.documentdb.SqlQuerySpec;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -39,6 +34,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -68,6 +64,9 @@ public class AzureIntegrationTest {
   private short accountId = 101;
   private short containerId = 5;
   private long testPartition = 666;
+  // one day retention
+  private int retentionPeriodDays = 1;
+
   private String cosmosCollectionLink;
   private String propFileName = "azure-test.properties";
   private String tokenFileName = "replicaTokens";
@@ -86,10 +85,10 @@ public class AzureIntegrationTest {
     props.setProperty("clustermap.cluster.name", "Integration-Test");
     props.setProperty("clustermap.datacenter.name", "uswest");
     props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty(CloudConfig.CLOUD_DELETED_BLOB_RETENTION_DAYS, String.valueOf(retentionPeriodDays));
     VerifiableProperties verProps = new VerifiableProperties(props);
     azureDest =
         (AzureCloudDestination) new AzureCloudDestinationFactory(verProps, new MetricRegistry()).getCloudDestination();
-    cosmosCollectionLink = verProps.getString(AzureCloudConfig.COSMOS_COLLECTION_LINK);
   }
 
   /**
@@ -120,6 +119,9 @@ public class AzureIntegrationTest {
     metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
     assertEquals(deletionTime, metadata.getDeletionTime());
     assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
+    azureDest.purgeBlob(metadata);
+    assertTrue("Expected empty set after purge",
+        azureDest.getBlobMetadata(Collections.singletonList(blobId)).isEmpty());
   }
 
   /**
@@ -128,6 +130,8 @@ public class AzureIntegrationTest {
    */
   @Test
   public void testBatchQuery() throws Exception {
+    cleanup();
+
     int numBlobs = 100;
     PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     List<BlobId> blobIdList = new ArrayList<>();
@@ -162,20 +166,95 @@ public class AzureIntegrationTest {
       assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
     }
 
-    // Cleanup
-    DocumentClient documentClient = azureDest.getDocumentClient();
-    FeedOptions feedOptions = new FeedOptions();
-    feedOptions.setPartitionKey(new PartitionKey(partitionId.toPathString()));
-    RequestOptions requestOptions = new RequestOptions();
-    requestOptions.setPartitionKey(feedOptions.getPartitionKey());
-    FeedResponse<Document> feedResponse =
-        documentClient.queryDocuments(cosmosCollectionLink, "SELECT * FROM c", feedOptions);
-    int numDeletes = 0;
-    for (Document document : feedResponse.getQueryIterable().toList()) {
-      documentClient.deleteDocument(document.getSelfLink(), requestOptions);
-      numDeletes++;
+    cleanup();
+  }
+
+  /**
+   * Test blob compaction.
+   * @throws Exception on error
+   */
+  @Test
+  public void testPurgeDeadBlobs() throws Exception {
+    cleanup();
+
+    int bucketCount = 10;
+    PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
+
+    // Upload blobs in various lifecycle states
+    long now = System.currentTimeMillis();
+    long creationTime = now - TimeUnit.DAYS.toMillis(7);
+    int expectedDeadBlobs = 0;
+    for (int j = 0; j < bucketCount; j++) {
+      // Active blob
+      BlobId blobId =
+          new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+              BlobDataType.DATACHUNK);
+      InputStream inputStream = getBlobInputStream(blobSize);
+      CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
+      assertTrue("Expected upload to return true",
+          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+
+      // Blob deleted before retention cutoff (should match)
+      long timeOfDeath = now - TimeUnit.DAYS.toMillis(retentionPeriodDays + 1);
+      blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+          BlobDataType.DATACHUNK);
+      inputStream = getBlobInputStream(blobSize);
+      cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
+      cloudBlobMetadata.setDeletionTime(timeOfDeath);
+      assertTrue("Expected upload to return true",
+          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+      expectedDeadBlobs++;
+
+      // Blob expired before retention cutoff (should match)
+      blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+          BlobDataType.DATACHUNK);
+      inputStream = getBlobInputStream(blobSize);
+      cloudBlobMetadata =
+          new CloudBlobMetadata(blobId, creationTime, timeOfDeath, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR,
+              vcrKmsContext, cryptoAgentFactory);
+      assertTrue("Expected upload to return true",
+          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+      expectedDeadBlobs++;
+
+      // Blob deleted after retention cutoff
+      timeOfDeath = now - TimeUnit.HOURS.toMillis(1);
+      blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+          BlobDataType.DATACHUNK);
+      inputStream = getBlobInputStream(blobSize);
+      cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
+      cloudBlobMetadata.setDeletionTime(timeOfDeath);
+      assertTrue("Expected upload to return true",
+          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+
+      // Blob expired after retention cutoff
+      blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+          BlobDataType.DATACHUNK);
+      inputStream = getBlobInputStream(blobSize);
+      cloudBlobMetadata =
+          new CloudBlobMetadata(blobId, creationTime, timeOfDeath, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR,
+              vcrKmsContext, cryptoAgentFactory);
+      assertTrue("Expected upload to return true",
+          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     }
-    logger.info("Deleted {} metadata documents in partition {}", numDeletes, partitionId.toPathString());
+
+    // run getDeadBlobs query, should return 20
+    String partitionPath = String.valueOf(testPartition);
+    List<CloudBlobMetadata> deadBlobs = azureDest.getDeadBlobs(partitionPath);
+    assertEquals("Unexpected number of dead blobs", expectedDeadBlobs, deadBlobs.size());
+
+    int numPurged = azureDest.purgeBlobs(deadBlobs);
+    assertEquals("Not all blobs were purged", expectedDeadBlobs, numPurged);
+    cleanup();
+  }
+
+  private void cleanup() throws Exception {
+    String partitionPath = String.valueOf(testPartition);
+    List<CloudBlobMetadata> allBlobsInPartition =
+        azureDest.runMetadataQuery(partitionPath, new SqlQuerySpec("SELECT * FROM c"));
+    azureDest.purgeBlobs(allBlobsInPartition);
   }
 
   /** Persist tokens to Azure, then read them back and verify they match. */

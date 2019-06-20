@@ -38,7 +38,7 @@ public interface CloudDestination {
       throws CloudStorageException;
 
   /**
-   * Delete blob in the cloud destination.
+   * Mark a blob as deleted in the cloud destination.
    * @param blobId id of the Ambry blob
    * @param deletionTime time of blob deletion
    * @return flag indicating whether the blob was deleted
@@ -64,6 +64,31 @@ public interface CloudDestination {
   Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException;
 
   /**
+   * Get the list of blobs in the specified partition that have been deleted or expired for at least the
+   * configured retention period.
+   * @param partitionPath the partition to query.
+   * @return a List of {@link CloudBlobMetadata} referencing the dead blobs found.
+   * @throws CloudStorageException
+   */
+  List<CloudBlobMetadata> getDeadBlobs(String partitionPath) throws CloudStorageException;
+
+  /**
+   * Permanently delete the specified blob in the cloud destination.
+   * @param blobMetadata the {@link CloudBlobMetadata} referencing the blob to purge.
+   * @return flag indicating whether the blob was successfully purged.
+   * @throws CloudStorageException if the purge operation fails.
+   */
+  boolean purgeBlob(CloudBlobMetadata blobMetadata) throws CloudStorageException;
+
+  /**
+   * Permanently delete the specified blobs in the cloud destination.
+   * @param blobMetadataList the list of {@link CloudBlobMetadata} referencing the blobs to purge.
+   * @return the number of blobs successfully purged.
+   * @throws CloudStorageException if the purge operation fails for any blob.
+   */
+  int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws CloudStorageException;
+
+  /**
    * Checks whether the blob exists in the cloud destination.
    * @param blobId id of the Ambry blob to check.
    * @return {@code true} if the blob exists, otherwise {@code false}.
@@ -78,8 +103,7 @@ public interface CloudDestination {
    * @param inputStream the InputStream containing the replica tokens.
    * @throws CloudStorageException if the upload encounters an error.
    */
-  void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream)
-      throws CloudStorageException;
+  void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream) throws CloudStorageException;
 
   /**
    * Retrieve the persisted replica tokens, if any, for the specified Ambry partition.

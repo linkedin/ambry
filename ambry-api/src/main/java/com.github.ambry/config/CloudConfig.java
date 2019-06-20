@@ -28,23 +28,25 @@ public class CloudConfig {
   public static final String VCR_CRYPTO_SERVICE_FACTORY = "vcr.crypto.service.factory";
 
   public static final String VCR_MIN_TTL_DAYS = "vcr.min.ttl.days";
+  public static final String CLOUD_DELETED_BLOB_RETENTION_DAYS = "cloud.deleted.blob.retention.days";
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
   public static final String VCR_PROXY_HOST = "vcr.proxy.host";
   public static final String VCR_PROXY_PORT = "vcr.proxy.port";
 
-  private static final String DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS =
+  public static final String DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS =
       "com.github.ambry.cloud.StaticVcrClusterFactory";
-  private static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
+  public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
       "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
   public static final String KMS_SERVICE_KEY_CONTEXT = "kms.service.key.context";
   public static final String DEFAULT_KMS_SERVICE_KEY_CONTEXT = "default-backup";
   public static final String CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS = "cloud.blob.crypto.agent.factory.class";
   public static final String DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS =
       "com.github.ambry.cloud.CloudBlobCryptoAgentFactoryImpl";
-  private static final String DEFAULT_VCR_CLUSTER_ZK_CONNECT_STRING = "localhost:2181";
-  private static final String DEFAULT_VCR_CLUSTER_NAME = "VCRCluster";
-  private static final int DEFAULT_MIN_TTL_DAYS = 14;
-  private static final int DEFAULT_VCR_PROXY_PORT = 3128;
+  public static final String DEFAULT_VCR_CLUSTER_ZK_CONNECT_STRING = "localhost:2181";
+  public static final String DEFAULT_VCR_CLUSTER_NAME = "VCRCluster";
+  public static final int DEFAULT_MIN_TTL_DAYS = 14;
+  public static final int DEFAULT_RETENTION_DAYS = 7;
+  public static final int DEFAULT_VCR_PROXY_PORT = 3128;
 
   /**
    * The virtual replicator cluster factory class name.
@@ -124,6 +126,13 @@ public class CloudConfig {
   public final int vcrMinTtlDays;
 
   /**
+   * How long (in days) a blob must be in deleted state before it is compacted.
+   */
+  @Config(CLOUD_DELETED_BLOB_RETENTION_DAYS)
+  @Default("7")
+  public final int cloudDeletedBlobRetentionDays;
+
+  /**
    * The comma-separated list of statically assigned partitions.  Optional.
    */
   @Config(VCR_ASSIGNED_PARTITIONS)
@@ -163,6 +172,7 @@ public class CloudConfig {
     cloudBlobCryptoAgentFactoryClass = verifiableProperties.getString(CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
         DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS);
     vcrMinTtlDays = verifiableProperties.getInt(VCR_MIN_TTL_DAYS, DEFAULT_MIN_TTL_DAYS);
+    cloudDeletedBlobRetentionDays = verifiableProperties.getInt(CLOUD_DELETED_BLOB_RETENTION_DAYS, DEFAULT_RETENTION_DAYS);
 
     // Proxy settings
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);
