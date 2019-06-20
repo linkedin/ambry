@@ -172,6 +172,8 @@ public class NonBlockingRouterTest {
     properties.setProperty("router.delete.success.target", Integer.toString(DELETE_SUCCESS_TARGET));
     properties.setProperty("router.connection.checkout.timeout.ms", Integer.toString(CHECKOUT_TIMEOUT_MS));
     properties.setProperty("router.request.timeout.ms", Integer.toString(REQUEST_TIMEOUT_MS));
+    properties.setProperty("router.connections.local.dc.warm.up.percentage", Integer.toString(67));
+    properties.setProperty("router.connections.remote.dc.warm.up.percentage", Integer.toString(34));
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "dc1");
     properties.setProperty("clustermap.host.name", "localhost");
@@ -859,12 +861,8 @@ public class NonBlockingRouterTest {
     MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
     mockSelectorState.set(MockSelectorState.FailConnectionInitiationOnPoll);
     setRouter(props, mockServerLayout, new LoggingNotificationSystem());
-    List<DataNodeId> localNodes = mockClusterMap.getDataNodes()
-        .stream()
-        .filter(node -> node.getDatacenterName().equals("DC3"))
-        .collect(Collectors.toList());
-    for (DataNodeId node : localNodes) {
-      assertTrue("Local node should be marked as timed out by ResponseHandler.", ((MockDataNodeId) node).isTimedOut());
+    for (DataNodeId node : mockClusterMap.getDataNodes()) {
+      assertTrue("Node should be marked as timed out by ResponseHandler.", ((MockDataNodeId) node).isTimedOut());
     }
     router.close();
     mockSelectorState.set(MockSelectorState.Good);
