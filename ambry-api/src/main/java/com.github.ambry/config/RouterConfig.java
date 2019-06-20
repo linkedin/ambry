@@ -66,13 +66,23 @@ public class RouterConfig {
 
   /**
    * The percentage of {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortSsl} or
-   * {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortPlainText} to warm up in the startup.
+   * {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortPlainText} to warm up for data nodes in the local
+   * datacenter during startup.
    * {@link RouterConfig#routerConnectionsWarmUpTimeoutMs} may need to be adjusted.
    */
-  @Config("router.connections.warm.up.percentage.per.port")
+  @Config("router.connections.local.dc.warm.up.percentage")
   @Default("25")
-  public final int routerConnectionsWarmUpPercentagePerPort;
+  public final int routerConnectionsLocalDcWarmUpPercentage;
 
+  /**
+   * The percentage of {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortSsl} or
+   * {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortPlainText} to warm up for data nodes in the local
+   * datacenter during startup.
+   * {@link RouterConfig#routerConnectionsWarmUpTimeoutMs} may need to be adjusted.
+   */
+  @Config("router.connections.remote.dc.warm.up.percentage")
+  @Default("25")
+  public final int routerConnectionsRemoteDcWarmUpPercentage;
   /**
    * The max time allowed to establish connections to local DC in the startup
    */
@@ -300,8 +310,10 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.plain.text", 5, 1, 100);
     routerScalingUnitMaxConnectionsPerPortSsl =
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.ssl", 2, 1, 100);
-    routerConnectionsWarmUpPercentagePerPort =
-        verifiableProperties.getIntInRange("router.connections.warm.up.percentage.per.port", 25, 0, 100);
+    routerConnectionsLocalDcWarmUpPercentage =
+        verifiableProperties.getIntInRange("router.connections.local.dc.warm.up.percentage", 25, 0, 100);
+    routerConnectionsRemoteDcWarmUpPercentage =
+        verifiableProperties.getIntInRange("router.connections.remote.dc.warm.up.percentage", 0, 0, 100);
     routerConnectionsWarmUpTimeoutMs =
         verifiableProperties.getIntInRange("router.connections.warm.up.timeout.ms", 5000, 0, Integer.MAX_VALUE);
     routerConnectionCheckoutTimeoutMs =
