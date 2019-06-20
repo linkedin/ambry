@@ -76,12 +76,12 @@ public class RouterConfig {
 
   /**
    * The percentage of {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortSsl} or
-   * {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortPlainText} to warm up for data nodes in the local
-   * datacenter during startup.
+   * {@link RouterConfig#routerScalingUnitMaxConnectionsPerPortPlainText} to warm up for data nodes in remote
+   * datacenters during startup.
    * {@link RouterConfig#routerConnectionsWarmUpTimeoutMs} may need to be adjusted.
    */
   @Config("router.connections.remote.dc.warm.up.percentage")
-  @Default("25")
+  @Default("0")
   public final int routerConnectionsRemoteDcWarmUpPercentage;
   /**
    * The max time allowed to establish connections to local DC in the startup
