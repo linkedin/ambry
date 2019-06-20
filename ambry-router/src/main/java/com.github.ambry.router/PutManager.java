@@ -17,22 +17,18 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -231,7 +227,9 @@ class PutManager {
    */
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
-    PutResponse putResponse = extractPutResponseAndNotifyResponseHandler(responseInfo);
+    PutResponse putResponse =
+        RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
+            PutResponse::readFrom, PutResponse::getError);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     int correlationId = ((PutRequest) routerRequestInfo.getRequest()).getCorrelationId();
     // Get the PutOperation that generated the request.
@@ -252,30 +250,6 @@ class PutManager {
     } else {
       routerMetrics.ignoredResponseCount.inc();
     }
-  }
-
-  /**
-   * Extract the {@link PutResponse} from the given {@link ResponseInfo}
-   * @param responseInfo the {@link ResponseInfo} from which the {@link PutResponse} is to be extracted.
-   * @return the extracted {@link PutResponse} if there is one; null otherwise.
-   */
-  private PutResponse extractPutResponseAndNotifyResponseHandler(ResponseInfo responseInfo) {
-    PutResponse putResponse = null;
-    ReplicaId replicaId = responseInfo.getRequestInfo().getReplicaId();
-    NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
-    if (networkClientErrorCode == null) {
-      try {
-        putResponse = PutResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())));
-        responseHandler.onEvent(replicaId, putResponse.getError());
-      } catch (Exception e) {
-        // Ignore. There is no value in notifying the response handler.
-        logger.error("Response deserialization received unexpected error", e);
-        routerMetrics.responseDeserializationErrorCount.inc();
-      }
-    } else {
-      responseHandler.onEvent(replicaId, networkClientErrorCode);
-    }
-    return putResponse;
   }
 
   /**

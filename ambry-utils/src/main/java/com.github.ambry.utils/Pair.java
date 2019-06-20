@@ -14,6 +14,9 @@
 
 package com.github.ambry.utils;
 
+import java.util.Objects;
+
+
 /**
  * Represents a pair of two objects
  * @param <A> The type of the first object in the pair.
@@ -61,10 +64,10 @@ public class Pair<A, B> {
       return false;
     }
     Pair<?, ?> pair = (Pair<?, ?>) o;
-    if (first != null ? !first.equals(pair.first) : pair.first != null) {
+    if (!Objects.equals(first, pair.first)) {
       return false;
     }
-    return second != null ? second.equals(pair.second) : pair.second == null;
+    return Objects.equals(second, pair.second);
   }
 
   @Override

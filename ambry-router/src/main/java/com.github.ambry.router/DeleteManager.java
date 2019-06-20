@@ -18,22 +18,17 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
-import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.RequestOrResponse;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
-import java.io.DataInputStream;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
@@ -99,8 +94,8 @@ class DeleteManager {
     this.routerMetrics = routerMetrics;
     this.routerCallback = routerCallback;
     this.time = time;
-    deleteOperations = Collections.newSetFromMap(new ConcurrentHashMap<DeleteOperation, Boolean>());
-    correlationIdToDeleteOperation = new HashMap<Integer, DeleteOperation>();
+    deleteOperations = ConcurrentHashMap.newKeySet();
+    correlationIdToDeleteOperation = new HashMap<>();
   }
 
   /**
@@ -158,7 +153,9 @@ class DeleteManager {
    */
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
-    DeleteResponse deleteReponse = extractDeleteResponseAndNotifyResponseHandler(responseInfo);
+    DeleteResponse deleteResponse =
+        RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
+            DeleteResponse::readFrom, DeleteResponse::getError);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     int correlationId = ((DeleteRequest) routerRequestInfo.getRequest()).getCorrelationId();
     DeleteOperation deleteOperation = correlationIdToDeleteOperation.remove(correlationId);
@@ -166,7 +163,7 @@ class DeleteManager {
     if (deleteOperations.contains(deleteOperation)) {
       boolean exceptionEncountered = false;
       try {
-        deleteOperation.handleResponse(responseInfo, deleteReponse);
+        deleteOperation.handleResponse(responseInfo, deleteResponse);
       } catch (Exception e) {
         exceptionEncountered = true;
         deleteOperation.setOperationException(
@@ -182,31 +179,6 @@ class DeleteManager {
     } else {
       routerMetrics.ignoredResponseCount.inc();
     }
-  }
-
-  /**
-   * Extract the {@link DeleteResponse} from the given {@link ResponseInfo}
-   * @param responseInfo the {@link ResponseInfo} from which the {@link DeleteResponse} is to be extracted.
-   * @return the extracted {@link DeleteResponse} if there is one; null otherwise.
-   */
-  private DeleteResponse extractDeleteResponseAndNotifyResponseHandler(ResponseInfo responseInfo) {
-    DeleteResponse deleteResponse = null;
-    ReplicaId replicaId = responseInfo.getRequestInfo().getReplicaId();
-    NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
-    if (networkClientErrorCode == null) {
-      try {
-        deleteResponse =
-            DeleteResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())));
-        responseHandler.onEvent(replicaId, deleteResponse.getError());
-      } catch (Exception e) {
-        // Ignore. There is no value in notifying the response handler.
-        logger.error("Response deserialization received unexpected error", e);
-        routerMetrics.responseDeserializationErrorCount.inc();
-      }
-    } else {
-      responseHandler.onEvent(replicaId, networkClientErrorCode);
-    }
-    return deleteResponse;
   }
 
   /**
