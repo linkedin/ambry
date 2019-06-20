@@ -117,6 +117,13 @@ public class ReplicationConfig {
   @Default("true")
   public final boolean replicationPersistTokenOnShutdownOrReplicaRemove;
 
+  /**
+   * If true, replication will register metric for each partition to track lag between local and remote replicas.
+   */
+  @Config("replication.track.per.partition.lag.from.remote")
+  @Default("false")
+  public final boolean replicationTrackPerPartitionLagFromRemote;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -146,5 +153,7 @@ public class ReplicationConfig {
     replicationIncludeAll = verifiableProperties.getBoolean("replication.include.all", true);
     replicationPersistTokenOnShutdownOrReplicaRemove =
         verifiableProperties.getBoolean("replication.persist.token.on.shutdown.or.replica.remove", true);
+    replicationTrackPerPartitionLagFromRemote =
+        verifiableProperties.getBoolean("replication.track.per.partition.lag.from.remote", false);
   }
 }
