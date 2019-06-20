@@ -214,19 +214,22 @@ class AzureCloudDestination implements CloudDestination {
     try {
       Timer.Context backupTimer = azureMetrics.backupSuccessLatency.time();
       boolean uploaded = uploadIfNotExists(blobId, inputLength, cloudBlobMetadata, blobInputStream);
-      if (!uploaded) {
-        return false;
-      }
+      // Note: if uploaded is false, still attempt to insert the metadata document
+      // since it is possible that a previous attempt failed.
 
       Timer.Context docTimer = azureMetrics.documentCreateTime.time();
       try {
-        documentClient.upsertDocument(cosmosCollectionLink, cloudBlobMetadata, defaultRequestOptions, true);
+        RequestOptions options = new RequestOptions();
+        options.setPartitionKey(new PartitionKey(blobId.getPartition().toPathString()));
+        documentClient.upsertDocument(cosmosCollectionLink, cloudBlobMetadata, options, true);
       } finally {
         docTimer.stop();
       }
       backupTimer.stop();
-      azureMetrics.backupSuccessByteRate.mark(inputLength);
-      return true;
+      if (uploaded) {
+        azureMetrics.backupSuccessByteRate.mark(inputLength);
+      }
+      return uploaded;
     } catch (URISyntaxException | StorageException | DocumentClientException | IOException e) {
       azureMetrics.backupErrorCount.inc();
       updateErrorMetrics(e);
