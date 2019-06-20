@@ -954,10 +954,6 @@ public class ReplicationTest {
     Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
     MockHost localHost = localAndRemoteHosts.getFirst();
     MockHost remoteHost = localAndRemoteHosts.getSecond();
-    long expectedThrottleDurationMs =
-        localHost.dataNodeId.getDatacenterName().equals(remoteHost.dataNodeId.getDatacenterName())
-            ? config.replicationIntraReplicaThreadThrottleSleepDurationMs
-            : config.replicationInterReplicaThreadThrottleSleepDurationMs;
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     storeKeyConverterFactory.setReturnInputIfAbsent(true);
@@ -1197,6 +1193,61 @@ public class ReplicationTest {
   }
 
   /**
+   * Tests {@link ReplicationMetrics#getMaxLagForPartition(PartitionId)}
+   * @throws Exception
+   */
+  @Test
+  public void replicationLagMetricTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+    int batchSize = 4;
+
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    for (int i = 0; i < partitionIds.size(); i++) {
+      PartitionId partitionId = partitionIds.get(i);
+      // add batchSize + 1 messages to the remote host so that two round of replication is needed.
+      addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), batchSize + 1);
+    }
+
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
+            null);
+    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    List<ReplicaThread.ExchangeMetadataResponse> response =
+        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+            replicasToReplicate.get(remoteHost.dataNodeId));
+    replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+        replicasToReplicate.get(remoteHost.dataNodeId), response);
+    for (PartitionId partitionId : partitionIds) {
+      List<MessageInfo> allMessageInfos = localAndRemoteHosts.getSecond().infosByPartition.get(partitionId);
+      long expectedLag =
+          allMessageInfos.subList(batchSize, allMessageInfos.size()).stream().mapToLong(i -> i.getSize()).sum();
+      assertEquals("Replication lag doesn't match expected value", expectedLag,
+          replicaThread.getReplicationMetrics().getMaxLagForPartition(partitionId));
+    }
+
+    response = replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+        replicasToReplicate.get(remoteHost.dataNodeId));
+    replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
+        replicasToReplicate.get(remoteHost.dataNodeId), response);
+    for (PartitionId partitionId : partitionIds) {
+      assertTrue("Replication lag should equal to 0",
+          replicaThread.getReplicationMetrics().getMaxLagForPartition(partitionId) == 0);
+    }
+  }
+
+  /**
    * Tests that replica tokens are set correctly and go through different stages correctly.
    * @throws InterruptedException
    */
@@ -1285,6 +1336,9 @@ public class ReplicationTest {
             new ResponseHandler(clusterMap), time);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
+    }
+    for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
+      replicationMetrics.addLagMetricForPartition(partitionId);
     }
     return new Pair<>(replicasToReplicate, replicaThread);
   }

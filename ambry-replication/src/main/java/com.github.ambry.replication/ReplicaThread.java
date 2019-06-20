@@ -595,8 +595,8 @@ public class ReplicaThread implements Runnable {
       }
     });
     if (messageInfoList.size() != 0 && missingRemoteStoreKeys.size() == 0) {
-        // Catching up
-        replicationMetrics.allResponsedKeysExist.inc();
+      // Catching up
+      replicationMetrics.allResponsedKeysExist.inc();
     }
     replicationMetrics.updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime,
         replicatingFromRemoteColo, datacenterName);
@@ -962,6 +962,13 @@ public class ReplicaThread implements Runnable {
       notification.onBlobReplicaUpdated(dataNodeId.getHostname(), dataNodeId.getPort(),
           messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED, UpdateType.TTL_UPDATE, messageInfo);
     }
+  }
+
+  /**
+   * Return associated {@link ReplicationMetrics}. Used in test.
+   */
+  ReplicationMetrics getReplicationMetrics() {
+    return replicationMetrics;
   }
 
   static class ExchangeMetadataResponse {

@@ -210,21 +210,23 @@ public class MockConnectionPool implements ConnectionPool {
         List<ReplicaMetadataResponseInfo> responseInfoList = new ArrayList<>();
         for (ReplicaMetadataRequestInfo requestInfo : metadataRequest.getReplicaMetadataRequestInfoList()) {
           List<MessageInfo> messageInfosToReturn = new ArrayList<>();
-          List<MessageInfo> partitionInfos = host.infosByPartition.get(requestInfo.getPartitionId());
+          List<MessageInfo> allMessageInfos = host.infosByPartition.get(requestInfo.getPartitionId());
           int startIndex = ((MockFindToken) (requestInfo.getToken())).getIndex();
-          int endIndex = Math.min(partitionInfos.size(), startIndex + maxSizeToReturn);
+          int endIndex = Math.min(allMessageInfos.size(), startIndex + maxSizeToReturn);
           int indexRequested = 0;
           Set<StoreKey> processedKeys = new HashSet<>();
           for (int i = startIndex; i < endIndex; i++) {
-            StoreKey key = partitionInfos.get(i).getStoreKey();
+            StoreKey key = allMessageInfos.get(i).getStoreKey();
             if (processedKeys.add(key)) {
-              messageInfosToReturn.add(getMergedMessageInfo(key, partitionInfos));
+              messageInfosToReturn.add(getMergedMessageInfo(key, allMessageInfos));
             }
             indexRequested = i;
           }
+          long bytesRead = allMessageInfos.subList(0, indexRequested + 1).stream().mapToLong(i -> i.getSize()).sum();
+          long total = allMessageInfos.stream().mapToLong(i -> i.getSize()).sum();
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
               new ReplicaMetadataResponseInfo(requestInfo.getPartitionId(),
-                  new MockFindToken(indexRequested, requestInfo.getToken().getBytesRead()), messageInfosToReturn, 0);
+                  new MockFindToken(indexRequested, bytesRead), messageInfosToReturn, total - bytesRead);
           responseInfoList.add(replicaMetadataResponseInfo);
         }
         response = new ReplicaMetadataResponse(1, "replicametadata", ServerErrorCode.No_Error, responseInfoList);
