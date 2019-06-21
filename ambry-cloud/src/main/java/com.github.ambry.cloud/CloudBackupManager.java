@@ -118,10 +118,9 @@ public class CloudBackupManager extends ReplicationEngine {
         } catch (Exception e) {
           // Helix will run into error state if exception throws in Helix context.
           vcrMetrics.removePartitionErrorCount.inc();
-          logger.error("Unknown Exception on removing Partition {}: {}", partitionId, e);
+          logger.error("Unknown Exception on removing Partition {} from {}: {}", partitionId, dataNodeId, e);
         }
       }
-
     });
 
     try {
@@ -182,7 +181,8 @@ public class CloudBackupManager extends ReplicationEngine {
       try {
         cloudStore.shutdown();
       } finally {
-        throw new ReplicationException("Failed to add Partition " + partitionId + ", because no peer replicas found.");
+        throw new ReplicationException(
+            "Failed to add Partition " + partitionId + " on " + dataNodeId + " , because no peer replicas found.");
       }
     }
     // Reload replication token if exist.
