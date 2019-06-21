@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.HashMap;
@@ -91,14 +92,17 @@ class ConnectionTracker {
     while (iter.hasNext()) {
       HostPortPoolManager poolManager = iter.next();
       try {
-        while (!poolManager.hasMinActiveConnections()) {
-          String connId = connectionFactory.connect(poolManager.host, poolManager.port);
-          poolManager.incrementPoolCount();
-          connectionIdToPoolManager.put(connId, poolManager);
-          totalManagedConnectionsCount++;
-          connectionsInitiated++;
+        // avoid continuously attempting to connect to down nodes.
+        if (poolManager.dataNodeId.getState() == HardwareState.AVAILABLE) {
+          while (!poolManager.hasMinActiveConnections()) {
+            String connId = connectionFactory.connect(poolManager.host, poolManager.port);
+            poolManager.incrementPoolCount();
+            connectionIdToPoolManager.put(connId, poolManager);
+            totalManagedConnectionsCount++;
+            connectionsInitiated++;
+          }
+          iter.remove();
         }
-        iter.remove();
       } catch (IOException e) {
         LOGGER.warn("Encountered exception while replenishing connections to {}:{}.", poolManager.host,
             poolManager.port.getPort(), e);
