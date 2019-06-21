@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -132,7 +133,7 @@ public class ReplicationMetrics {
   private Map<PartitionId, Map<DataNodeId, Long>> partitionLags;
 
   public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
-    metadataRequestErrorMap = new HashMap<>();
+    metadataRequestErrorMap = new ConcurrentHashMap<>();
     getRequestErrorMap = new HashMap<>();
     localStoreErrorMap = new HashMap<>();
     partitionIdToInvalidMessageStreamErrorCounter = new HashMap<>();
