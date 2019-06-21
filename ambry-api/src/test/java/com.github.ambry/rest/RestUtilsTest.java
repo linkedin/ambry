@@ -925,13 +925,13 @@ public class RestUtilsTest {
    * @param expectedRange the {@link ByteRange} expected to be parsed if the call should succeed, or {@code null} if no
    *                      range is expected.
    * @param shouldSucceedWithoutSubResource {@code true} if the call should succeed with no specified sub-resource.
-   * @param shouldSucceedWithSubResource {@code true} if the call should succeed with a specified sub-resource.
+   * @param shouldSucceedWithNonSegmentSubResource {@code true} if the call should succeed with a specified non-Segment sub-resource.
    * @param shouldSucceedWithSegment {@code true} if the call should succeed with a specified Segment sub-resource
    *                                             (used if different than shouldSucceedWithSubResource).
    * @throws RestServiceException
    */
   private void doBuildGetBlobOptionsTest(String rangeHeader, ByteRange expectedRange,
-      boolean shouldSucceedWithoutSubResource, boolean shouldSucceedWithSubResource, boolean shouldSucceedWithSegment)
+      boolean shouldSucceedWithoutSubResource, boolean shouldSucceedWithNonSegmentSubResource, boolean shouldSucceedWithSegment)
       throws RestServiceException {
     Map<String, Object> args = new HashMap<>();
     if (rangeHeader != null) {
@@ -945,7 +945,7 @@ public class RestUtilsTest {
             shouldSucceedWithSegment);
       } else {
         doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, GetBlobOptions.OperationType.BlobInfo,
-            shouldSucceedWithSubResource);
+            shouldSucceedWithNonSegmentSubResource);
       }
     }
   }
