@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -132,11 +133,12 @@ public class ReplicationMetrics {
   private Map<PartitionId, Map<DataNodeId, Long>> partitionLags;
 
   public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
-    metadataRequestErrorMap = new HashMap<>();
+    // ConcurrentHashMap is used to avoid cache incoherence.
+    partitionLags = new ConcurrentHashMap<>();
+    metadataRequestErrorMap = new ConcurrentHashMap<>();
     getRequestErrorMap = new HashMap<>();
     localStoreErrorMap = new HashMap<>();
     partitionIdToInvalidMessageStreamErrorCounter = new HashMap<>();
-    partitionLags = new HashMap<>();
     intraColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesRate"));
     plainTextIntraColoReplicationBytesRate =
