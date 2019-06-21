@@ -850,7 +850,7 @@ class AmbryBlobStorageService implements BlobStorageService {
                 ReadableStreamChannel response = routerResult.getBlobDataChannel();
                 try {
                   if (securityException == null) {
-                    if (subResource != null) {
+                    if (subResource != null && !subResource.equals(SubResource.Segment)) {
                       BlobInfo blobInfo = routerResult.getBlobInfo();
                       if (restRequest.getArgs().containsKey(SEND_USER_METADATA_AS_RESPONSE_BODY)
                           && (boolean) restRequest.getArgs().get(SEND_USER_METADATA_AS_RESPONSE_BODY)) {
