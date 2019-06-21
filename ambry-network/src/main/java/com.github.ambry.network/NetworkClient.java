@@ -106,8 +106,10 @@ public class NetworkClient implements Closeable {
         pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, clientNetworkRequestMetrics));
       }
       List<NetworkSend> sends = prepareSends(responseInfoList);
-      int connectionsInitiated = connectionTracker.replenishConnections(this::connect);
-      networkMetrics.connectionReplenished.inc(connectionsInitiated);
+      if (networkConfig.networkClientEnableConnectionReplenishment) {
+        int connectionsInitiated = connectionTracker.replenishConnections(this::connect);
+        networkMetrics.connectionReplenished.inc(connectionsInitiated);
+      }
       selector.poll(pollTimeoutMs, sends);
       handleSelectorEvents(responseInfoList);
     } catch (Exception e) {

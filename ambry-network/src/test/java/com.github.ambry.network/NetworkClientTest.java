@@ -81,6 +81,7 @@ public class NetworkClientTest {
 
   public NetworkClientTest() throws IOException {
     Properties props = new Properties();
+    props.setProperty("network.client.enable.connection.replenishment", "true");
     VerifiableProperties vprops = new VerifiableProperties(props);
     NetworkConfig networkConfig = new NetworkConfig(vprops);
     selector = new MockSelector();

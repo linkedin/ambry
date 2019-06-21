@@ -68,6 +68,14 @@ public class NetworkConfig {
   @Default("104857600")
   public final int socketRequestMaxBytes;
 
+  /**
+   * Whether the client should attempt to replenish connections when the number of connections to a host drops below
+   * a minimum number of active connections.
+   */
+  @Config("network.client.enable.connection.replenishment")
+  @Default("false")
+  public final boolean networkClientEnableConnectionReplenishment;
+
   public NetworkConfig(VerifiableProperties verifiableProperties) {
 
     numIoThreads = verifiableProperties.getIntInRange("num.io.threads", 8, 1, Integer.MAX_VALUE);
@@ -78,5 +86,7 @@ public class NetworkConfig {
     socketRequestMaxBytes =
         verifiableProperties.getIntInRange("socket.request.max.bytes", 100 * 1024 * 1024, 1, Integer.MAX_VALUE);
     queuedMaxRequests = verifiableProperties.getIntInRange("queued.max.requests", 500, 1, Integer.MAX_VALUE);
+    networkClientEnableConnectionReplenishment =
+        verifiableProperties.getBoolean("network.client.enable.connection.replenishment", false);
   }
 }
