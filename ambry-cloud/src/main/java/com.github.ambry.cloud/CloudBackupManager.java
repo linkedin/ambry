@@ -86,11 +86,11 @@ public class CloudBackupManager extends ReplicationEngine {
           logger.info("Partition {} added to {}", partitionId, dataNodeId);
         } catch (ReplicationException e) {
           vcrMetrics.addPartitionErrorCount.inc();
-          logger.error("Exception on adding Partition {} to {}: {}", partitionId, dataNodeId, e);
+          logger.error("Exception on adding Partition {} to {}: ", partitionId, dataNodeId, e);
         } catch (Exception e) {
           // Helix will run into error state if exception throws in Helix context.
           vcrMetrics.addPartitionErrorCount.inc();
-          logger.error("Unknown Exception on adding Partition {} to {}: {}", partitionId, dataNodeId, e);
+          logger.error("Unknown Exception on adding Partition {} to {}: ", partitionId, dataNodeId, e);
         }
       }
 
@@ -108,7 +108,7 @@ public class CloudBackupManager extends ReplicationEngine {
             try {
               persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
             } catch (IOException | ReplicationException e) {
-              logger.error("Exception on token write when remove Partition {} from {}: {}", partitionId, dataNodeId, e);
+              logger.error("Exception on token write when remove Partition {} from {}: ", partitionId, dataNodeId, e);
               vcrMetrics.removePartitionErrorCount.inc();
             }
           }
@@ -118,7 +118,7 @@ public class CloudBackupManager extends ReplicationEngine {
         } catch (Exception e) {
           // Helix will run into error state if exception throws in Helix context.
           vcrMetrics.removePartitionErrorCount.inc();
-          logger.error("Unknown Exception on removing Partition {} from {}: {}", partitionId, dataNodeId, e);
+          logger.error("Unknown Exception on removing Partition {} from {}: ", partitionId, dataNodeId, e);
         }
       }
     });
