@@ -14,7 +14,7 @@
 package com.github.ambry.network;
 
 /**
- * Represents a port containing port number and {@PortType}
+ * Represents a port containing port number and {@link PortType}
  */
 public class Port {
   private final int port;
@@ -50,5 +50,10 @@ public class Port {
 
     Port p = (Port) o;
     return p.port == port && p.type.equals(type);
+  }
+
+  @Override
+  public int hashCode() {
+    return Integer.hashCode(port);
   }
 }

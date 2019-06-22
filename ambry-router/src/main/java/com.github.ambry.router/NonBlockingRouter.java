@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
@@ -147,14 +148,11 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     try {
       if (isOpen.get()) {
-        getOperationController().getBlob(blobIdStr, internalOptions, new Callback<GetBlobResultInternal>() {
-          @Override
-          public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
-            GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
-            futureResult.done(getBlobResult, exception);
-            if (callback != null) {
-              callback.onCompletion(getBlobResult, exception);
-            }
+        getOperationController().getBlob(blobIdStr, internalOptions, (internalResult, exception) -> {
+          GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
+          futureResult.done(getBlobResult, exception);
+          if (callback != null) {
+            callback.onCompletion(getBlobResult, exception);
           }
         });
       } else {
@@ -553,14 +551,21 @@ class NonBlockingRouter implements Router {
      */
     OperationController(String suffix, String defaultPartitionClass, AccountService accountService) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
-      // Warm up connections to dataNodes in local DC.
+      // Warm up connections to dataNodes in local and remote DCs.
       List<ResponseInfo> responseInfos = new ArrayList<>();
-      networkClient.warmUpConnections(clusterMap.getDataNodeIds()
-              .stream()
-              .filter(dataNodeId -> clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId())
-                  .equals(dataNodeId.getDatacenterName()))
-              .collect(Collectors.toList()), routerConfig.routerConnectionsWarmUpPercentagePerPort,
-          routerConfig.routerConnectionsWarmUpTimeoutMs, responseInfos);
+
+      String localDatacenter = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+      Map<Boolean, List<DataNodeId>> localAndRemoteNodes = clusterMap.getDataNodeIds()
+          .stream()
+          .collect(Collectors.partitioningBy(dataNodeId -> localDatacenter.equals(dataNodeId.getDatacenterName())));
+      logger.info("Warming up local datacenter connections to {} nodes", localAndRemoteNodes.get(true).size());
+      networkClient.warmUpConnections(localAndRemoteNodes.get(true),
+          routerConfig.routerConnectionsLocalDcWarmUpPercentage, routerConfig.routerConnectionsWarmUpTimeoutMs,
+          responseInfos);
+      logger.info("Warming up remote datacenter connections to {} nodes", localAndRemoteNodes.get(false).size());
+      networkClient.warmUpConnections(localAndRemoteNodes.get(false),
+          routerConfig.routerConnectionsRemoteDcWarmUpPercentage, routerConfig.routerConnectionsWarmUpTimeoutMs,
+          responseInfos);
       // Update ResponseHandler immediately if connections lost to certain nodes.
       for (ResponseInfo responseInfo : responseInfos) {
         if (responseInfo.getRequestInfo() == null) {

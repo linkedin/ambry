@@ -42,6 +42,7 @@ import com.microsoft.azure.storage.blob.CloudBlockBlob;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -193,7 +194,7 @@ public class AzureCloudDestinationTest {
   /** Test upload of existing blob. */
   @Test
   public void testUploadExists() throws Exception {
-    Mockito.doThrow(new StorageException("Exists", "Exists", 409, null, null))
+    Mockito.doThrow(new StorageException("Exists", "Exists", HttpURLConnection.HTTP_CONFLICT, null, null))
         .when(mockBlob)
         .upload(any(), anyLong(), any(), any(), any());
     assertFalse("Upload of existing blob should return false", uploadDefaultBlob());
@@ -201,6 +202,8 @@ public class AzureCloudDestinationTest {
     assertEquals(0, azureMetrics.blobUploadSuccessCount.getCount());
     assertEquals(1, azureMetrics.blobUploadConflictCount.getCount());
     assertEquals(0, azureMetrics.backupErrorCount.getCount());
+    // Make sure the metadata doc was created
+    assertEquals(1, azureMetrics.documentCreateTime.getCount());
   }
 
   /** Test delete of nonexistent blob. */

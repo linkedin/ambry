@@ -92,6 +92,7 @@ public class NetworkMetrics {
   public final Counter connectionNotAvailable;
   public final Counter connectionReachLimit;
   public final Counter connectionDisconnected;
+  public final Counter connectionReplenished;
   public final Counter networkClientIOError;
   public final Counter networkClientException;
   private List<AtomicLong> networkClientPendingRequestList;
@@ -152,6 +153,7 @@ public class NetworkMetrics {
     connectionNotAvailable = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionNotAvailable"));
     connectionReachLimit = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionReachLimit"));
     connectionDisconnected = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionDisconnected"));
+    connectionReplenished = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionReplenished"));
     networkClientIOError = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientIOError"));
     networkClientException = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientException"));
 

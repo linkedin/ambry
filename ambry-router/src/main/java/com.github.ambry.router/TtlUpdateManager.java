@@ -19,21 +19,17 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
-import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
-import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -174,7 +170,9 @@ class TtlUpdateManager {
    */
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
-    TtlUpdateResponse ttlUpdateResponse = extractTtlUpdateResponseAndNotifyResponseHandler(responseInfo);
+    TtlUpdateResponse ttlUpdateResponse =
+        RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
+            TtlUpdateResponse::readFrom, TtlUpdateResponse::getError);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     int correlationId = ((TtlUpdateRequest) routerRequestInfo.getRequest()).getCorrelationId();
     TtlUpdateOperation ttlUpdateOperation = correlationIdToTtlUpdateOperation.remove(correlationId);
@@ -198,31 +196,6 @@ class TtlUpdateManager {
     } else {
       routerMetrics.ignoredResponseCount.inc();
     }
-  }
-
-  /**
-   * Extract the {@link TtlUpdateResponse} from the given {@link ResponseInfo}
-   * @param responseInfo the {@link ResponseInfo} from which the {@link TtlUpdateResponse} is to be extracted.
-   * @return the extracted {@link TtlUpdateResponse} if there is one; null otherwise.
-   */
-  private TtlUpdateResponse extractTtlUpdateResponseAndNotifyResponseHandler(ResponseInfo responseInfo) {
-    TtlUpdateResponse ttlUpdateResponse = null;
-    ReplicaId replicaId = responseInfo.getRequestInfo().getReplicaId();
-    NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
-    if (networkClientErrorCode == null) {
-      try {
-        ttlUpdateResponse =
-            TtlUpdateResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())));
-        responseHandler.onEvent(replicaId, ttlUpdateResponse.getError());
-      } catch (Exception e) {
-        // Ignore. There is no value in notifying the response handler.
-        logger.error("Response deserialization received unexpected error", e);
-        routerMetrics.responseDeserializationErrorCount.inc();
-      }
-    } else {
-      responseHandler.onEvent(replicaId, networkClientErrorCode);
-    }
-    return ttlUpdateResponse;
   }
 
   /**

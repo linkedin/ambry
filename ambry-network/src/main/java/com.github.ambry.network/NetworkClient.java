@@ -106,6 +106,10 @@ public class NetworkClient implements Closeable {
         pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, clientNetworkRequestMetrics));
       }
       List<NetworkSend> sends = prepareSends(responseInfoList);
+      if (networkConfig.networkClientEnableConnectionReplenishment) {
+        int connectionsInitiated = connectionTracker.replenishConnections(this::connect);
+        networkMetrics.connectionReplenished.inc(connectionsInitiated);
+      }
       selector.poll(pollTimeoutMs, sends);
       handleSelectorEvents(responseInfoList);
     } catch (Exception e) {
@@ -167,10 +171,7 @@ public class NetworkClient implements Closeable {
           networkMetrics.connectionNotAvailable.inc();
           if (requestMetadata.pendingConnectionId == null) {
             if (connectionTracker.mayCreateNewConnection(host, port, replicaId.getDataNodeId())) {
-              connId =
-                  selector.connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
-                      networkConfig.socketReceiveBufferBytes, port.getPortType());
-              connectionTracker.startTrackingInitiatedConnection(host, port, connId, replicaId.getDataNodeId());
+              connId = connectionTracker.connectAndTrack(this::connect, host, port, replicaId.getDataNodeId());
               requestMetadata.pendingConnectionId = connId;
               pendingConnectionsToAssociatedRequests.put(connId, requestMetadata);
               logger.trace("Initiated a connection to host {} port {} ", host, port);
@@ -205,39 +206,26 @@ public class NetworkClient implements Closeable {
    * If a connection breaks after successfully established, it's counted as a failedConnection. This impact the
    * counting in the method, but this is tolerable as other good/bad connections can be handled in next selector.poll().
    * If a connection established after this time window of timeForWarmUp, it can be handled in next selector.poll().
+   * <p>
+   * This will also set the minimum number of active connections for each of the data nodes. This means that the
+   * NetworkClient will attempt to keep a percentage of connections ready for use at all times by initiating extra
+   * connections in {@link NetworkClient#sendAndPoll} when a pool drops below this number.
    * @param dataNodeIds warm up target nodes.
    * @param connectionWarmUpPercentagePerDataNode percentage of max connections would like to establish in the warmup.
-   * @param timeForWarmUp max time to wait for connections' establish.
+   * @param timeForWarmUp max time to wait for connections' establish in milliseconds.
    * @param responseInfoList records responses from disconnected connections.
    * @return number of connections established successfully.
    */
   public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionWarmUpPercentagePerDataNode,
       long timeForWarmUp, List<ResponseInfo> responseInfoList) {
-    int expectedConnections = 0;
     logger.info("Connection warm up start.");
     if (dataNodeIds.size() == 0) {
       return 0;
     }
-    int numberOfConnections = connectionWarmUpPercentagePerDataNode == 0 ? 0 : Math.max(1,
-        connectionWarmUpPercentagePerDataNode * (
-            dataNodeIds.get(0).getPortToConnectTo().getPortType() == PortType.PLAINTEXT
-                ? connectionTracker.getMaxConnectionsPerPortPlainText()
-                : connectionTracker.getMaxConnectionsPerPortSsl()) / 100);
-    for (DataNodeId dataNodeId : dataNodeIds) {
-      for (int i = 0; i < numberOfConnections; i++) {
-        try {
-          String connId = selector.connect(
-              new InetSocketAddress(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo().getPort()),
-              networkConfig.socketSendBufferBytes, networkConfig.socketReceiveBufferBytes,
-              dataNodeId.getPortToConnectTo().getPortType());
-          connectionTracker.startTrackingInitiatedConnection(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(),
-              connId, dataNodeId);
-          expectedConnections++;
-        } catch (IOException e) {
-          logger.error("Received exception while warming up connection: ", e);
-        }
-      }
-    }
+    dataNodeIds.forEach(dataNodeId -> connectionTracker.setMinimumActiveConnectionsPercentage(dataNodeId,
+        connectionWarmUpPercentagePerDataNode));
+    int expectedConnections = connectionTracker.replenishConnections(this::connect);
+
     long startTime = System.currentTimeMillis();
     int successfulConnections = 0;
     int failedConnections = 0;
@@ -258,6 +246,18 @@ public class NetworkClient implements Closeable {
         expectedConnections, successfulConnections, failedConnections, System.currentTimeMillis() - startTime);
 
     return successfulConnections;
+  }
+
+  /**
+   * Start creating a connection to a host using {@link Selector#connect}.
+   * @param host the hostname to connect to.
+   * @param port the port to connect to.
+   * @return the connection ID.
+   * @throws IOException if DNS resolution fails on the hostname or if the server is down
+   */
+  private String connect(String host, Port port) throws IOException {
+    return selector.connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
+        networkConfig.socketReceiveBufferBytes, port.getPortType());
   }
 
   /**

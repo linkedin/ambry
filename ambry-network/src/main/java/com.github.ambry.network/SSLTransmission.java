@@ -109,7 +109,6 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
 
   /**
    * Sends a SSL close message and closes socketChannel.
-   * @throws IOException if an I/O error occurs
    */
   @Override
   public void close() {
@@ -138,7 +137,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       socketChannel.close();
     } catch (IOException ie) {
       metrics.selectorCloseSocketErrorCount.inc();
-      logger.warn("Failed to send SSL close message ", ie);
+      logger.debug("Failed to send SSL close message ", ie);
     }
     key.attach(null);
     key.cancel();
