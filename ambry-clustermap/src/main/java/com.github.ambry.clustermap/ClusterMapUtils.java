@@ -326,6 +326,23 @@ public class ClusterMapUtils {
   }
 
   /**
+   * Check whether all local replicas of the given {@link PartitionId} are up.
+   * @param partition the {@link PartitionId} to check.
+   * @param localDatacenterName Name of the local datacenter
+   * @return true if all associated replicas are up; false otherwise.
+   */
+  static boolean areAllLocalReplicasForPartitionUp(PartitionId partition, String localDatacenterName) {
+    for (ReplicaId replica : partition.getReplicaIds()) {
+      if (replica.getDataNodeId().getDatacenterName().equals(localDatacenterName) && replica.isDown()) {
+        logger.debug("Replica [{}] on {} {} is down", replica.getPartitionId().toPathString(),
+            replica.getDataNodeId().getHostname(), replica.getMountPath());
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
    * Helper class to perform common operations like maintaining partitions by partition class and returning all/writable
    * partitions.
    * <p/>
@@ -334,6 +351,7 @@ public class ClusterMapUtils {
   static class PartitionSelectionHelper {
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
+    private String localDatacenterName;
 
     /**
      * @param allPartitions the list of all {@link PartitionId}s
@@ -341,6 +359,7 @@ public class ClusterMapUtils {
      *                            are not required.
      */
     PartitionSelectionHelper(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
+      this.localDatacenterName = localDatacenterName;
       updatePartitions(allPartitions, localDatacenterName);
     }
 
@@ -420,15 +439,13 @@ public class ClusterMapUtils {
       List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, true);
 
       int workingSize = partitionsInClass.size();
-      while(true) {
-        if(workingSize == 0)
-          break;
+      while(workingSize > 0) {
         int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
         PartitionId selected = partitionsInClass.get(randomIndex);
         if(partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(selected)) {
           if (selected.getPartitionState() == PartitionState.READ_WRITE) {
             anyWritablePartition = selected;
-            if(areAllReplicasForPartitionUp(selected)) {
+            if(areAllLocalReplicasForPartitionUp(selected, localDatacenterName)) {
               selectedPartition = selected;
               break;
             }

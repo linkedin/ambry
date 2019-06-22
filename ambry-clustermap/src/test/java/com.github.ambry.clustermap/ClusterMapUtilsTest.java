@@ -258,6 +258,8 @@ public class ClusterMapUtilsTest {
         psh.getWritablePartitions(classBeingTested));
     assertInCollection("Partitions returned not as expected", allPartitionIds,
         psh.getRandomWritablePartition(null, null));
+    //for getRandomWritablePartition one replica being down doesnt change anything unless its a local replica
+    expectedReturnForClassBeingTested.add(testedPart1);
     assertInCollection("Partitions returned not as expected", expectedReturnForClassBeingTested,
         psh.getRandomWritablePartition(classBeingTested, null));
     // one replica of other partition of "classBeingTested" down too
