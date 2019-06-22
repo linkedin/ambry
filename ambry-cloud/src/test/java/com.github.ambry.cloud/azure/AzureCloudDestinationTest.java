@@ -146,6 +146,7 @@ public class AzureCloudDestinationTest {
     assertEquals(1, azureMetrics.blobUpdatedCount.getCount());
     assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
     assertEquals(1, azureMetrics.blobUpdateTime.getCount());
+    assertEquals(1, azureMetrics.documentReadTime.getCount());
     assertEquals(1, azureMetrics.documentUpdateTime.getCount());
   }
 
@@ -157,6 +158,7 @@ public class AzureCloudDestinationTest {
     assertEquals(1, azureMetrics.blobUpdatedCount.getCount());
     assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
     assertEquals(1, azureMetrics.blobUpdateTime.getCount());
+    assertEquals(1, azureMetrics.documentReadTime.getCount());
     assertEquals(1, azureMetrics.documentUpdateTime.getCount());
   }
 
@@ -170,6 +172,7 @@ public class AzureCloudDestinationTest {
     assertTrue("Expected success", azureDest.purgeBlob(cloudBlobMetadata));
     assertEquals(1, azureMetrics.blobDeletedCount.getCount());
     assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
+    assertEquals(1, azureMetrics.documentDeleteTime.getCount());
   }
 
   /** Test purge not found. */

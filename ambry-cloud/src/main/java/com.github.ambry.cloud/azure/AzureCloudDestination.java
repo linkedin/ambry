@@ -24,11 +24,6 @@ import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.DocumentCollection;
-import com.microsoft.azure.documentdb.FeedOptions;
-import com.microsoft.azure.documentdb.FeedResponse;
-import com.microsoft.azure.documentdb.PartitionKey;
-import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
 import com.microsoft.azure.documentdb.SqlParameter;
 import com.microsoft.azure.documentdb.SqlParameterCollection;
@@ -50,7 +45,6 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -81,8 +75,7 @@ class AzureCloudDestination implements CloudDestination {
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
   private final DocumentClient documentClient;
-  private final String cosmosCollectionLink;
-  private final RequestOptions defaultRequestOptions = new RequestOptions();
+  private final CosmosDataAccessor cosmosDataAccessor;
   private final OperationContext blobOpContext = new OperationContext();
   private final AzureMetrics azureMetrics;
   private final String clusterName;
@@ -112,7 +105,6 @@ class AzureCloudDestination implements CloudDestination {
           new Proxy(Proxy.Type.HTTP, new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort)));
     }
     // Set up CosmosDB connection, including any proxy setting
-    cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
     if (cloudConfig.vcrProxyHost != null) {
       connectionPolicy.setProxy(new HttpHost(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
@@ -120,6 +112,7 @@ class AzureCloudDestination implements CloudDestination {
     }
     documentClient = new DocumentClient(azureCloudConfig.cosmosEndpoint, azureCloudConfig.cosmosKey, connectionPolicy,
         ConsistencyLevel.Session);
+    cosmosDataAccessor = new CosmosDataAccessor(documentClient, azureCloudConfig, azureMetrics);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     logger.info("Created Azure destination");
   }
@@ -137,13 +130,15 @@ class AzureCloudDestination implements CloudDestination {
       String clusterName, AzureMetrics azureMetrics) {
     this.azureAccount = azureAccount;
     this.documentClient = documentClient;
-    this.cosmosCollectionLink = cosmosCollectionLink;
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
 
     // Create a blob client to interact with Blob storage
     azureBlobClient = azureAccount.createCloudBlobClient();
+    cosmosDataAccessor =
+        new CosmosDataAccessor(documentClient, cosmosCollectionLink, AzureCloudConfig.DEFAULT_COSMOS_MAX_RETRIES,
+            azureMetrics);
   }
 
   /**
@@ -177,21 +172,12 @@ class AzureCloudDestination implements CloudDestination {
    * Test connectivity to Azure CosmosDB
    */
   void testCosmosConnectivity() {
-    try {
-      ResourceResponse<DocumentCollection> response =
-          documentClient.readCollection(cosmosCollectionLink, defaultRequestOptions);
-      if (response.getResource() == null) {
-        throw new IllegalStateException("CosmosDB collection not found: " + cosmosCollectionLink);
-      }
-      logger.info("CosmosDB connection test succeeded.");
-    } catch (DocumentClientException ex) {
-      throw new IllegalStateException("CosmosDB connection test failed", ex);
-    }
+    cosmosDataAccessor.testConnectivity();
   }
 
   /**
    * Visible for test.
-   * @return the CosmosDB DocumentClient.
+   * @return the CosmosDB DocumentClient
    */
   DocumentClient getDocumentClient() {
     return documentClient;
@@ -218,12 +204,7 @@ class AzureCloudDestination implements CloudDestination {
         return false;
       }
 
-      Timer.Context docTimer = azureMetrics.documentCreateTime.time();
-      try {
-        documentClient.upsertDocument(cosmosCollectionLink, cloudBlobMetadata, defaultRequestOptions, true);
-      } finally {
-        docTimer.stop();
-      }
+      cosmosDataAccessor.upsertMetadata(cloudBlobMetadata);
       backupTimer.stop();
       azureMetrics.backupSuccessByteRate.mark(inputLength);
       return true;
@@ -326,24 +307,10 @@ class AzureCloudDestination implements CloudDestination {
    * @throws CloudStorageException
    */
   List<CloudBlobMetadata> runMetadataQuery(String partitionPath, SqlQuerySpec querySpec) throws CloudStorageException {
-    azureMetrics.documentQueryCount.inc();
-    FeedOptions feedOptions = new FeedOptions();
-    feedOptions.setPartitionKey(new PartitionKey(partitionPath));
-    FeedResponse<Document> response = documentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions);
     try {
-      // Note: internal query iterator wraps DocumentClientException in IllegalStateException!
-      List<CloudBlobMetadata> metadataList = new ArrayList<>();
-      response.getQueryIterable()
-          .iterator()
-          .forEachRemaining(doc -> metadataList.add(doc.toObject(CloudBlobMetadata.class)));
-      return metadataList;
-    } catch (RuntimeException rex) {
-      if (rex.getCause() instanceof DocumentClientException) {
-        azureMetrics.documentErrorCount.inc();
-        throw new CloudStorageException("Failed to query blob metadata", rex.getCause());
-      } else {
-        throw rex;
-      }
+      return cosmosDataAccessor.queryMetadata(partitionPath, querySpec);
+    } catch (DocumentClientException dex) {
+      throw new CloudStorageException("Failed to query blob metadata", dex);
     }
   }
 
@@ -386,25 +353,17 @@ class AzureCloudDestination implements CloudDestination {
         storageTimer.stop();
       }
 
-      Timer.Context docTimer = azureMetrics.documentUpdateTime.time();
-      try {
-        String docLink = cosmosCollectionLink + "/docs/" + blobId.getID();
-        RequestOptions options = new RequestOptions();
-        options.setPartitionKey(new PartitionKey(blobId.getPartition().toPathString()));
-        ResourceResponse<Document> response = documentClient.readDocument(docLink, options);
-        //CloudBlobMetadata blobMetadata = response.getResource().toObject(CloudBlobMetadata.class);
-        Document doc = response.getResource();
-        if (doc == null) {
-          logger.warn("Blob metadata record not found: " + docLink);
-          return false;
-        }
-        // Update only if value has changed
-        if (!value.equals(doc.get(fieldName))) {
-          doc.set(fieldName, value);
-          documentClient.replaceDocument(doc, options);
-        }
-      } finally {
-        docTimer.stop();
+      ResourceResponse<Document> response = cosmosDataAccessor.readMetadata(blobId);
+      //CloudBlobMetadata blobMetadata = response.getResource().toObject(CloudBlobMetadata.class);
+      Document doc = response.getResource();
+      if (doc == null) {
+        logger.warn("Blob metadata record not found: " + blobId.getID());
+        return false;
+      }
+      // Update only if value has changed
+      if (!value.equals(doc.get(fieldName))) {
+        doc.set(fieldName, value);
+        cosmosDataAccessor.replaceMetadata(blobId, doc);
       }
       logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
       azureMetrics.blobUpdatedCount.inc();
@@ -422,8 +381,6 @@ class AzureCloudDestination implements CloudDestination {
     String blobFileName = blobMetadata.getCloudBlobName();
     String partitionPath = blobMetadata.getPartitionId();
     String containerName = getAzureContainerName(partitionPath);
-    RequestOptions options = new RequestOptions();
-    options.setPartitionKey(new PartitionKey(partitionPath));
     azureMetrics.blobDeleteRequestCount.inc();
     Timer.Context deleteTimer = azureMetrics.blobDeletionTime.time();
     try {
@@ -433,9 +390,8 @@ class AzureCloudDestination implements CloudDestination {
       boolean deletionDone = azureBlob.deleteIfExists();
 
       // Delete the document too
-      String docLink = cosmosCollectionLink + "/docs/" + blobId;
       try {
-        documentClient.deleteDocument(docLink, options);
+        cosmosDataAccessor.deleteMetadata(blobMetadata);
         deletionDone = true;
         logger.debug("Purged blob {} from partition {}.", blobId, partitionPath);
       } catch (DocumentClientException dex) {
