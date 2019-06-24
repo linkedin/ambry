@@ -421,7 +421,7 @@ public class ReplicationMetrics {
       partitionLags.put(partitionId, new HashMap<>());
       // Set up metrics if and only if no mapping for this partition before.
       Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
-      registry.register(MetricRegistry.name(ReplicationMetrics.class,
+      registry.register(MetricRegistry.name(ReplicaThread.class,
           "Partition-" + partitionId.toString() + "-maxLagFromPeersInBytes"), replicaLag);
     }
   }
