@@ -21,6 +21,11 @@ package com.github.ambry.router;
 public enum TrackedRequestFinalState {
   SUCCESS, FAILURE, TIMED_OUT, NOT_FOUND;
 
+  /**
+   *  Return the corresponding {@link TrackedRequestFinalState}  for the given {@link RouterErrorCode}.
+   * @param code The {@link RouterErrorCode} to handle.
+   * @return The corresponding {@link TrackedRequestFinalState}.
+   */
   public static TrackedRequestFinalState fromRouterErrorCodeToFinalState(RouterErrorCode code) {
     switch(code){
       case OperationTimedOut:

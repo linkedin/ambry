@@ -303,8 +303,8 @@ public class RouterConfig {
    * NOT_FOUND responses returned from originating dc. Notice that some of the blob ids don't have the datacenter id, it
    * will have no effect on those blobs.
    */
-  @Config("router.operation.tracker.originatingdc.notfound.enabled")
-  @Default("true")
+  @Config("router.operation.tracker.originating.dc.notfound.enabled")
+  @Default("false")
   public final boolean routerOperationTrackerOriginatingDcNotFoundEnabled;
 
   /**
@@ -428,6 +428,6 @@ public class RouterConfig {
           "Operation tracker parallelism is larger than operation tracker max inflight number");
     }
     routerOperationTrackerOriginatingDcNotFoundEnabled =
-        verifiableProperties.getBoolean("router.operation.tracker.originatingdc.notfound.enabled", true);
+        verifiableProperties.getBoolean("router.operation.tracker.originating.dc.notfound.enabled", false);
   }
 }

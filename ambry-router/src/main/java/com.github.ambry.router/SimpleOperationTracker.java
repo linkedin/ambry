@@ -67,8 +67,6 @@ class SimpleOperationTracker implements OperationTracker {
   protected final int parallelism;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
 
-  protected Set<ReplicaId> respondedReplicas = new HashSet<>();
-
   protected int totalReplicaCount = 0;
   protected int inflightCount = 0;
   protected int succeededCount = 0;
@@ -148,6 +146,9 @@ class SimpleOperationTracker implements OperationTracker {
     for (ReplicaId replicaId : replicas) {
       examinedReplicas.add(replicaId);
       String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
+      if (replicaDcName.equals(originatingDcName)) {
+        numReplicasInOriginatingDc++;
+      }
       if (!replicaId.isDown()) {
         if (replicaDcName.equals(datacenterName)) {
           replicaPool.addFirst(replicaId);
@@ -155,9 +156,6 @@ class SimpleOperationTracker implements OperationTracker {
           replicaPool.addLast(replicaId);
         } else if (crossColoEnabled) {
           backupReplicas.addFirst(replicaId);
-        }
-        if (replicaDcName.equals(originatingDcName)) {
-          numReplicasInOriginatingDc++;
         }
       } else {
         if (replicaDcName.equals(datacenterName)) {
@@ -195,10 +193,7 @@ class SimpleOperationTracker implements OperationTracker {
       int minTarget = Collections.min(
           Arrays.asList(routerConfig.routerPutSuccessTarget, routerConfig.routerDeleteSuccessTarget,
               routerConfig.routerTtlUpdateSuccessTarget));
-      this.originatingDcNotFoundFailureThreshold = numReplicasInOriginatingDc - minTarget + 1;
-      if (this.originatingDcNotFoundFailureThreshold < 0) {
-        this.originatingDcNotFoundFailureThreshold = 0;
-      }
+      this.originatingDcNotFoundFailureThreshold = Math.max(numReplicasInOriginatingDc - minTarget + 1, 0);
     }
     this.otIterator = new OpTrackerIterator();
   }
@@ -221,10 +216,6 @@ class SimpleOperationTracker implements OperationTracker {
 
   @Override
   public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
-    if (respondedReplicas.contains(replicaId)) {
-      return;
-    }
-    respondedReplicas.add(replicaId);
     inflightCount--;
     if (trackedRequestFinalState == TrackedRequestFinalState.SUCCESS) {
       succeededCount++;
@@ -234,7 +225,7 @@ class SimpleOperationTracker implements OperationTracker {
       // be sure the operation will ends up with a NOT_FOUND error.
       if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND && replicaId.getDataNodeId()
           .getDatacenterName()
-          .equals(this.originatingDcName)) {
+          .equals(originatingDcName)) {
         originatingDcNotFoundCount++;
       }
     }

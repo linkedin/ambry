@@ -284,7 +284,7 @@ class TtlUpdateOperation {
    * @param replicaId the {@link ReplicaId} associated with the failed response.
    * @param exception the {@link RouterException} associated with the failed response.
    */
-  void onErrorResponse(ReplicaId replicaId, RouterException exception) {
+  private void onErrorResponse(ReplicaId replicaId, RouterException exception) {
     operationTracker.onResponse(replicaId,
         TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
     setOperationException(exception);

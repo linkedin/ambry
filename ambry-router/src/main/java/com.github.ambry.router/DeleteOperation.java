@@ -287,8 +287,7 @@ class DeleteOperation {
    * @param replicaId the {@link ReplicaId} associated with the failed response.
    * @param exception the {@link RouterException} associated with the failed response.
    */
-  void onErrorResponse(ReplicaId replicaId, RouterException exception) {
-    logger.info("Get exception: " + exception);
+  private void onErrorResponse(ReplicaId replicaId, RouterException exception) {
     operationTracker.onResponse(replicaId,
         TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
     setOperationException(exception);
@@ -308,7 +307,7 @@ class DeleteOperation {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
       } else if (operationTracker.hasFailedOnNotFound()) {
-        operationException.set(new RouterException("", RouterErrorCode.BlobDoesNotExist));
+        operationException.set(new RouterException("Operation failed on BlobNotFound", RouterErrorCode.BlobDoesNotExist));
       }
       operationCompleted = true;
     }

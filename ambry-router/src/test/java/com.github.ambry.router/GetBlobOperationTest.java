@@ -1563,6 +1563,7 @@ public class GetBlobOperationTest {
     properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
     properties.setProperty("router.request.timeout.ms", Integer.toString(20));
     properties.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
+    properties.setProperty("router.operation.tracker.originating.dc.notfound.enabled", "true");
     return properties;
   }
 }

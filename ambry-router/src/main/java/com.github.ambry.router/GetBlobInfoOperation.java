@@ -313,7 +313,7 @@ class GetBlobInfoOperation extends GetOperation {
    * @param replicaId the {@link ReplicaId} associated with the failed response.
    * @param exception the {@link RouterException} associated with the failed response.
    */
-  void onErrorResponse(ReplicaId replicaId, RouterException exception) {
+  private void onErrorResponse(ReplicaId replicaId, RouterException exception) {
     logger.info("DC: " + replicaId.getDataNodeId().getDatacenterName() + " exception: " + exception);
     operationTracker.onResponse(replicaId,
         TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));

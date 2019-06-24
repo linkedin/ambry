@@ -471,6 +471,7 @@ public class DeleteManagerTest {
     assertCloseCleanup(router);
     Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.delete.request.parallelism", "1");
+    props.setProperty("router.operation.tracker.originating.dc.notfound.enabled",  "true");
     VerifiableProperties vProps = new VerifiableProperties(props);
     RouterConfig routerConfig = new RouterConfig(vProps);
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),

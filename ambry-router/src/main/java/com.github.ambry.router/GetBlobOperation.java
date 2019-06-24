@@ -917,7 +917,7 @@ class GetBlobOperation extends GetOperation {
      * @param replicaId the {@link ReplicaId} associated with the failed response.
      * @param exception the {@link RouterException} associated with the failed response.
      */
-    void onErrorResponse(ReplicaId replicaId, RouterException exception) {
+    private void onErrorResponse(ReplicaId replicaId, RouterException exception) {
       chunkOperationTracker.onResponse(replicaId,
           TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
       setChunkException(exception);

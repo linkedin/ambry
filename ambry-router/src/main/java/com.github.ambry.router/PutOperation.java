@@ -1436,7 +1436,7 @@ class PutOperation {
      * Perform the necessary actions when a request to a replica fails.
      * @param replicaId the {@link ReplicaId} associated with the failed response.
      */
-    void onErrorResponse(ReplicaId replicaId) {
+    private void onErrorResponse(ReplicaId replicaId) {
       operationTracker.onResponse(replicaId, TrackedRequestFinalState.FAILURE);
       routerMetrics.routerRequestErrorCount.inc();
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestErrorCount.inc();
