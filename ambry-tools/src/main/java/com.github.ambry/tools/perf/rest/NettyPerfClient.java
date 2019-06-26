@@ -15,10 +15,10 @@ package com.github.ambry.tools.perf.rest;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
+import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Snapshot;
-import com.codahale.metrics.jmx.JmxReporter;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
