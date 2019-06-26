@@ -699,7 +699,8 @@ class GetBlobOperation extends GetOperation {
         if (progressTracker.hasSucceeded() && !retainChunkExceptionOnSuccess) {
           chunkException = null;
         } else if (chunkOperationTracker.hasFailedOnNotFound()) {
-          chunkException = new RouterException("", RouterErrorCode.BlobDoesNotExist);
+          chunkException =
+              new RouterException("Get Chunk failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist);
         }
         chunkCompleted = true;
       }
@@ -803,7 +804,8 @@ class GetBlobOperation extends GetOperation {
             }
           }
         }
-      } checkAndMaybeComplete();
+      }
+      checkAndMaybeComplete();
     }
 
     /**
@@ -908,7 +910,7 @@ class GetBlobOperation extends GetOperation {
         logger.trace("Replica {} returned an error {} for a GetBlobRequest with response correlationId : {} ",
             getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
         // process and set the most relevant exception.
-        onErrorResponse(getRequestInfo.replicaId, new RouterException("", processServerError(getError)));
+        onErrorResponse(getRequestInfo.replicaId, new RouterException("Server returned", processServerError(getError)));
       }
     }
 

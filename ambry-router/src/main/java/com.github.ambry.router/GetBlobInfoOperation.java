@@ -205,14 +205,16 @@ class GetBlobInfoOperation extends GetOperation {
     if (responseInfo.getError() != null) {
       logger.trace("GetBlobInfoRequest with response correlationId {} timed out for replica {} ", correlationId,
           getRequestInfo.replicaId.getDataNodeId());
-      onErrorResponse(getRequestInfo.replicaId, new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
+      onErrorResponse(getRequestInfo.replicaId,
+          new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
     } else {
       if (getResponse == null) {
         logger.trace(
             "GetBlobInfoRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
             correlationId, getRequestInfo.replicaId.getDataNodeId());
-        onErrorResponse(getRequestInfo.replicaId, new RouterException("Response deserialization received an unexpected error",
-            RouterErrorCode.UnexpectedInternalError));
+        onErrorResponse(getRequestInfo.replicaId,
+            new RouterException("Response deserialization received an unexpected error",
+                RouterErrorCode.UnexpectedInternalError));
       } else {
         if (getResponse.getCorrelationId() != correlationId) {
           // The NetworkClient associates a response with a request based on the fact that only one request is sent
@@ -237,8 +239,9 @@ class GetBlobInfoOperation extends GetOperation {
                 "GetBlobInfoRequest with response correlationId {} response deserialization failed for replica {} ",
                 correlationId, getRequestInfo.replicaId.getDataNodeId());
             routerMetrics.responseDeserializationErrorCount.inc();
-            onErrorResponse(getRequestInfo.replicaId, new RouterException("Response deserialization received an unexpected error", e,
-                RouterErrorCode.UnexpectedInternalError));
+            onErrorResponse(getRequestInfo.replicaId,
+                new RouterException("Response deserialization received an unexpected error", e,
+                    RouterErrorCode.UnexpectedInternalError));
           }
         }
       }
@@ -304,7 +307,7 @@ class GetBlobInfoOperation extends GetOperation {
     } else {
       logger.trace("Replica {} returned an error {} for a GetBlobInfoRequest with response correlationId : {} ",
           getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
-      onErrorResponse(getRequestInfo.replicaId, new RouterException("", processServerError(getError)));
+      onErrorResponse(getRequestInfo.replicaId, new RouterException("Server returned", processServerError(getError)));
     }
   }
 
@@ -314,7 +317,6 @@ class GetBlobInfoOperation extends GetOperation {
    * @param exception the {@link RouterException} associated with the failed response.
    */
   private void onErrorResponse(ReplicaId replicaId, RouterException exception) {
-    logger.info("DC: " + replicaId.getDataNodeId().getDatacenterName() + " exception: " + exception);
     operationTracker.onResponse(replicaId,
         TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
     setOperationException(exception);
@@ -417,7 +419,8 @@ class GetBlobInfoOperation extends GetOperation {
       if (progressTracker.hasSucceeded()) {
         operationException.set(null);
       } else if (operationTracker.hasFailedOnNotFound()) {
-        operationException.set(new RouterException("", RouterErrorCode.BlobDoesNotExist));
+        operationException.set(new RouterException("GetBlobInfoOperation failed because of BlobNotFound",
+            RouterErrorCode.BlobDoesNotExist));
       }
       operationCompleted = true;
     }

@@ -189,7 +189,7 @@ class SimpleOperationTracker implements OperationTracker {
       throw new IllegalArgumentException(
           generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck));
     }
-    if (routerConfig.routerOperationTrackerOriginatingDcNotFoundEnabled && numReplicasInOriginatingDc > 0) {
+    if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled && numReplicasInOriginatingDc > 0) {
       this.originatingDcNotFoundFailureThreshold = Math.max(numReplicasInOriginatingDc - routerConfig.routerPutSuccessTarget + 1, 0);
     }
     this.otIterator = new OpTrackerIterator();

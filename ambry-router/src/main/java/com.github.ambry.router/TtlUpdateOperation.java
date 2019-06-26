@@ -197,8 +197,8 @@ class TtlUpdateOperation {
               routerMetrics.crossColoSuccessCount.inc();
             }
           } else {
-              LOGGER.debug("Replica {} returned an error {} for a Ttl update request with response correlationId : {} ",
-                  replica.getDataNodeId(), getError, ttlUpdateResponse.getCorrelationId());
+            LOGGER.debug("Replica {} returned an error {} for a Ttl update request with response correlationId : {} ",
+                replica.getDataNodeId(), getError, ttlUpdateResponse.getCorrelationId());
             RouterErrorCode routerErrorCode = processServerError(getError);
             if (ttlUpdateResponse.getError() == ServerErrorCode.Blob_Authorization_Failure) {
               // this is a successful response and one that completes the operation regardless of whether the
@@ -304,7 +304,8 @@ class TtlUpdateOperation {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
       } else if (operationTracker.hasFailedOnNotFound()) {
-        operationException.set(new RouterException("", RouterErrorCode.BlobDoesNotExist));
+        operationException.set(
+            new RouterException("TtlUpdateOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
       }
       operationCompleted = true;
     }

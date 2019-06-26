@@ -28,6 +28,7 @@ import com.github.ambry.utils.Time;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +60,7 @@ class DeleteOperation {
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
-  private final HashMap<Integer, DeleteRequestInfo> deleteRequestInfos;
+  private final Map<Integer, DeleteRequestInfo> deleteRequestInfos;
   // The result of this operation to be set into FutureResult.
   private final Void operationResult = null;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
@@ -94,7 +95,7 @@ class DeleteOperation {
     this.callback = callback;
     this.time = time;
     this.deletionTimeMs = time.milliseconds();
-    this.deleteRequestInfos = new HashMap<Integer, DeleteRequestInfo>();
+    this.deleteRequestInfos = new TreeMap<Integer, DeleteRequestInfo>();
     byte blobDcId = blobId.getDatacenterId();
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
@@ -213,7 +214,6 @@ class DeleteOperation {
               operationCompleted = true;
             }
             // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
-            // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
             onErrorResponse(replica, new RouterException("Server returned: " + getError, routerErrorCode));
           }
         }
@@ -291,10 +291,7 @@ class DeleteOperation {
     operationTracker.onResponse(replicaId,
         TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
     setOperationException(exception);
-    if (exception.getErrorCode() != RouterErrorCode.BlobDeleted
-        && exception.getErrorCode() != RouterErrorCode.BlobExpired) {
-      routerMetrics.routerRequestErrorCount.inc();
-    }
+    routerMetrics.routerRequestErrorCount.inc();
     routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).deleteRequestErrorCount.inc();
   }
 
@@ -307,7 +304,7 @@ class DeleteOperation {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
       } else if (operationTracker.hasFailedOnNotFound()) {
-        operationException.set(new RouterException("Operation failed on BlobNotFound", RouterErrorCode.BlobDoesNotExist));
+        operationException.set(new RouterException("DeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
       }
       operationCompleted = true;
     }
