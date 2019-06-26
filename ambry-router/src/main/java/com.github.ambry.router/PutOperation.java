@@ -1331,7 +1331,7 @@ class PutOperation {
     protected PartitionId getPartitionForPut(String partitionClass, List<PartitionId> partitionIdsToExclude)
         throws RouterException {
       PartitionId selected = clusterMap.getRandomWritablePartition(partitionClass, partitionIdsToExclude);
-      if(selected == null) {
+      if (selected == null) {
         throw new RouterException("No writable partitions of class " + partitionClass + " available.",
             RouterErrorCode.AmbryUnavailable);
       }

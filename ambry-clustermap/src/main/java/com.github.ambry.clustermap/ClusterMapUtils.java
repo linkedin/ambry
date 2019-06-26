@@ -434,20 +434,18 @@ public class ClusterMapUtils {
      * @return A writable partition or {@code null} if no writable partition with given criteria found
      */
     PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
-      PartitionId selectedPartition = null;
       PartitionId anyWritablePartition = null;
       List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, true);
 
       int workingSize = partitionsInClass.size();
-      while(workingSize > 0) {
+      while (workingSize > 0) {
         int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
         PartitionId selected = partitionsInClass.get(randomIndex);
-        if(partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(selected)) {
+        if (partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(selected)) {
           if (selected.getPartitionState() == PartitionState.READ_WRITE) {
             anyWritablePartition = selected;
-            if(areAllLocalReplicasForPartitionUp(selected, localDatacenterName)) {
-              selectedPartition = selected;
-              break;
+            if (areAllLocalReplicasForPartitionUp(selected, localDatacenterName)) {
+              return selected;
             }
           }
         }
@@ -456,7 +454,8 @@ public class ClusterMapUtils {
         }
         workingSize--;
       }
-      return (selectedPartition == null) ? anyWritablePartition : selectedPartition;
+      //if we are here then that means we couldn't find any partition with all local replicas up
+      return anyWritablePartition;
     }
 
     /**

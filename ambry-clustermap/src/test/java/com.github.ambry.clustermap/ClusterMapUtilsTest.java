@@ -192,12 +192,12 @@ public class ClusterMapUtilsTest {
    * @param expected the expected elements
    * @param actual the actual element
    */
-  private void assertInCollection(String message, Collection<? extends PartitionId> expected,
-      PartitionId actual) {
-    if(expected != null)
+  private void assertInCollection(String message, Collection<? extends PartitionId> expected, PartitionId actual) {
+    if (expected != null) {
       assertTrue(message, expected.contains(actual));
-    else
-      assertEquals(message,null, expected);
+    } else {
+      assertEquals(message, null, expected);
+    }
   }
 
   /**
@@ -234,8 +234,7 @@ public class ClusterMapUtilsTest {
   private void verifyGetWritablePartition(ClusterMapUtils.PartitionSelectionHelper psh,
       Set<MockPartitionId> allPartitionIds, String classBeingTested,
       Set<MockPartitionId> expectedReturnForClassBeingTested) {
-    assertCollectionEquals("Partitions returned not as expected", allPartitionIds,
-        psh.getWritablePartitions(null));
+    assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getWritablePartitions(null));
     assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassBeingTested,
         psh.getWritablePartitions(classBeingTested));
   }
