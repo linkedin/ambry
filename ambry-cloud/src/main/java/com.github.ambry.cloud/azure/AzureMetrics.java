@@ -29,7 +29,9 @@ public class AzureMetrics {
   public static final String BLOB_UPDATE_TIME = "BlobUpdateTime";
   public static final String BLOB_UPDATED_COUNT = "BlobUpdatedCount";
   public static final String DOCUMENT_CREATE_TIME = "DocumentCreateTime";
+  public static final String DOCUMENT_READ_TIME = "DocumentReadTime";
   public static final String DOCUMENT_UPDATE_TIME = "DocumentUpdateTime";
+  public static final String DOCUMENT_DELETE_TIME = "DocumentDeleteTime";
   public static final String DOCUMENT_QUERY_COUNT = "DocumentQueryCount";
   public static final String MISSING_KEYS_QUERY_TIME = "MissingKeysQueryTime";
   public static final String DEAD_BLOBS_QUERY_TIME = "DeadBlobsQueryTime";
@@ -44,6 +46,8 @@ public class AzureMetrics {
   public static final String BACKUP_SUCCESS_LATENCY = "BackupSuccessLatency";
   public static final String BACKUP_SUCCESS_BYTE_RATE = "BackupSuccessByteRate";
   public static final String BACKUP_ERROR_COUNT = "BackupErrorCount";
+  public static final String RETRY_COUNT = "RetryCount";
+  public static final String RETRY_WAIT_TIME = "RetryWaitTime";
 
   // Metrics
   public final Counter blobUploadRequestCount;
@@ -53,7 +57,9 @@ public class AzureMetrics {
   public final Timer blobUploadTime;
   public final Timer blobUpdateTime;
   public final Timer documentCreateTime;
+  public final Timer documentReadTime;
   public final Timer documentUpdateTime;
+  public final Timer documentDeleteTime;
   public final Timer missingKeysQueryTime;
   public final Counter documentQueryCount;
   public final Timer deadBlobsQueryTime;
@@ -68,6 +74,8 @@ public class AzureMetrics {
   public final Timer backupSuccessLatency;
   public final Meter backupSuccessByteRate;
   public final Counter backupErrorCount;
+  public final Counter retryCount;
+  public final Timer retryWaitTime;
 
   public AzureMetrics(MetricRegistry registry) {
     blobUploadRequestCount =
@@ -80,7 +88,9 @@ public class AzureMetrics {
     blobUploadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_TIME));
     blobUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TIME));
     documentCreateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_CREATE_TIME));
+    documentReadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_READ_TIME));
     documentUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_UPDATE_TIME));
+    documentDeleteTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_DELETE_TIME));
     documentQueryCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_QUERY_COUNT));
     missingKeysQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, MISSING_KEYS_QUERY_TIME));
     deadBlobsQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DEAD_BLOBS_QUERY_TIME));
@@ -96,5 +106,7 @@ public class AzureMetrics {
     backupSuccessByteRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BACKUP_SUCCESS_BYTE_RATE));
     backupSuccessLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BACKUP_SUCCESS_LATENCY));
     backupErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BACKUP_ERROR_COUNT));
+    retryCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, RETRY_COUNT));
+    retryWaitTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, RETRY_WAIT_TIME));
   }
 }

@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.github.ambry.config.Config;
+import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
 
 
@@ -26,6 +27,8 @@ public class AzureCloudConfig {
   public static final String COSMOS_ENDPOINT = "cosmos.endpoint";
   public static final String COSMOS_COLLECTION_LINK = "cosmos.collection.link";
   public static final String COSMOS_KEY = "cosmos.key";
+  public static final String COSMOS_MAX_RETRIES = "cosmos.max.retries";
+  public static final int DEFAULT_COSMOS_MAX_RETRIES = 5;
 
   /**
    * The Azure Blob Storage connection string.
@@ -51,10 +54,18 @@ public class AzureCloudConfig {
   @Config(COSMOS_KEY)
   public final String cosmosKey;
 
+  /**
+   * The maximum number of retries for Cosmos DB requests.
+   */
+  @Config(COSMOS_MAX_RETRIES)
+  @Default("5")
+  public final int cosmosMaxRetries;
+
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING);
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
     cosmosCollectionLink = verifiableProperties.getString(COSMOS_COLLECTION_LINK);
     cosmosKey = verifiableProperties.getString(COSMOS_KEY);
+    cosmosMaxRetries = verifiableProperties.getInt(COSMOS_MAX_RETRIES, DEFAULT_COSMOS_MAX_RETRIES);
   }
 }
