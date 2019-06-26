@@ -19,7 +19,6 @@ import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.FindTokenFactory;
-import com.github.ambry.store.StoreFindToken;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

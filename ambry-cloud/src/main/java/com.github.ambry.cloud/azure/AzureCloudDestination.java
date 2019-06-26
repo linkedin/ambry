@@ -146,7 +146,7 @@ class AzureCloudDestination implements CloudDestination {
    */
   void testAzureConnectivity() {
     testStorageConnectivity();
-    testCosmosConnectivity();
+    cosmosDataAccessor.testConnectivity();
   }
 
   /**
@@ -169,18 +169,19 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   /**
-   * Test connectivity to Azure CosmosDB
-   */
-  void testCosmosConnectivity() {
-    cosmosDataAccessor.testConnectivity();
-  }
-
-  /**
    * Visible for test.
    * @return the CosmosDB DocumentClient
    */
   DocumentClient getDocumentClient() {
     return documentClient;
+  }
+
+  /**
+   * Visible for test.
+   * @return the {@link CosmosDataAccessor}
+   */
+  CosmosDataAccessor getCosmosDataAccessor() {
+    return cosmosDataAccessor;
   }
 
   /**
@@ -273,16 +274,16 @@ class AzureCloudDestination implements CloudDestination {
     if (blobIds.isEmpty()) {
       return Collections.emptyMap();
     }
-    Timer.Context queryTimer = azureMetrics.missingKeysQueryTime.time();
+    String quotedBlobIds =
+        String.join(",", blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.toList()));
+    String query = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
+    String partitionPath = blobIds.get(0).getPartition().toPathString();
     try {
-      String quotedBlobIds =
-          String.join(",", blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.toList()));
-      String query = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
       List<CloudBlobMetadata> metadataList =
-          runMetadataQuery(blobIds.get(0).getPartition().toPathString(), new SqlQuerySpec(query));
+          cosmosDataAccessor.queryMetadata(partitionPath, new SqlQuerySpec(query), azureMetrics.missingKeysQueryTime);
       return metadataList.stream().collect(Collectors.toMap(m -> m.getId(), Function.identity()));
-    } finally {
-      queryTimer.stop();
+    } catch (DocumentClientException dex) {
+      throw new CloudStorageException("Failed to query blob metadata for partition " + partitionPath, dex);
     }
   }
 
@@ -290,28 +291,12 @@ class AzureCloudDestination implements CloudDestination {
   public List<CloudBlobMetadata> getDeadBlobs(String partitionPath) throws CloudStorageException {
     long now = System.currentTimeMillis();
     long retentionThreshold = now - retentionPeriodMs;
-    Timer.Context queryTimer = azureMetrics.deadBlobsQueryTime.time();
+    SqlQuerySpec deadBlobsQuery = new SqlQuerySpec(DEAD_BLOBS_QUERY_TEMPLATE,
+        new SqlParameterCollection(new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
     try {
-      SqlQuerySpec deadBlobsQuery = new SqlQuerySpec(DEAD_BLOBS_QUERY_TEMPLATE,
-          new SqlParameterCollection(new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
-      return runMetadataQuery(partitionPath, deadBlobsQuery);
-    } finally {
-      queryTimer.stop();
-    }
-  }
-
-  /**
-   * Get the list of blobs in the specified partition matching the specified DocumentDB query.
-   * @param partitionPath the partition to query.
-   * @param querySpec the DocumentDB query to execute.
-   * @return a List of {@link CloudBlobMetadata} referencing the matching blobs.
-   * @throws CloudStorageException
-   */
-  List<CloudBlobMetadata> runMetadataQuery(String partitionPath, SqlQuerySpec querySpec) throws CloudStorageException {
-    try {
-      return cosmosDataAccessor.queryMetadata(partitionPath, querySpec);
+      return cosmosDataAccessor.queryMetadata(partitionPath, deadBlobsQuery, azureMetrics.deadBlobsQueryTime);
     } catch (DocumentClientException dex) {
-      throw new CloudStorageException("Failed to query blob metadata", dex);
+      throw new CloudStorageException("Failed to query dead blobs for partition " + partitionPath, dex);
     }
   }
 
@@ -358,7 +343,7 @@ class AzureCloudDestination implements CloudDestination {
       //CloudBlobMetadata blobMetadata = response.getResource().toObject(CloudBlobMetadata.class);
       Document doc = response.getResource();
       if (doc == null) {
-        logger.warn("Blob metadata record not found: " + blobId.getID());
+        logger.warn("Blob metadata record not found: {}", blobId.getID());
         return false;
       }
       // Update only if value has changed

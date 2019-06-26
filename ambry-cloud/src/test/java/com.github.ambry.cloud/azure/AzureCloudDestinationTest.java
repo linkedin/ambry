@@ -286,7 +286,7 @@ public class AzureCloudDestinationTest {
     } catch (IllegalStateException expected) {
     }
     try {
-      dest.testCosmosConnectivity();
+      dest.getCosmosDataAccessor().testConnectivity();
       fail("Expected exception");
     } catch (IllegalStateException expected) {
     }

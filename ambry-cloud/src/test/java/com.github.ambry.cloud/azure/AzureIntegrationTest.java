@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -66,8 +67,6 @@ public class AzureIntegrationTest {
   private long testPartition = 666;
   // one day retention
   private int retentionPeriodDays = 1;
-
-  private String cosmosCollectionLink;
   private String propFileName = "azure-test.properties";
   private String tokenFileName = "replicaTokens";
 
@@ -252,8 +251,9 @@ public class AzureIntegrationTest {
 
   private void cleanup() throws Exception {
     String partitionPath = String.valueOf(testPartition);
+    Timer dummyTimer = new Timer();
     List<CloudBlobMetadata> allBlobsInPartition =
-        azureDest.runMetadataQuery(partitionPath, new SqlQuerySpec("SELECT * FROM c"));
+        azureDest.getCosmosDataAccessor().queryMetadata(partitionPath, new SqlQuerySpec("SELECT * FROM c"), dummyTimer);
     azureDest.purgeBlobs(allBlobsInPartition);
   }
 

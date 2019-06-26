@@ -46,10 +46,7 @@ public class CosmosDataAccessor {
   /** Production constructor */
   public CosmosDataAccessor(DocumentClient documentClient, AzureCloudConfig azureCloudConfig,
       AzureMetrics azureMetrics) {
-    this.documentClient = documentClient;
-    this.cosmosCollectionLink = azureCloudConfig.cosmosCollectionLink;
-    this.azureMetrics = azureMetrics;
-    this.maxRetries = azureCloudConfig.cosmosMaxRetries;
+    this(documentClient, azureCloudConfig.cosmosCollectionLink, azureCloudConfig.cosmosMaxRetries, azureMetrics);
   }
 
   /** Test constructor */
@@ -77,42 +74,75 @@ public class CosmosDataAccessor {
     }
   }
 
+  /**
+   * Upsert the blob metadata document in the CosmosDB collection, retrying as necessary.
+   * @param blobMetadata the blob metadata document.
+   * @return the {@link ResourceResponse} returned by the operation, if successful.
+   * @throws DocumentClientException if the operation failed, or retry limit is exhausted.
+   */
   public ResourceResponse<Document> upsertMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
     RequestOptions options = getRequestOptions(blobMetadata.getPartitionId());
-    return retryWithThrottling(() -> documentClient.upsertDocument(cosmosCollectionLink, blobMetadata, options, true),
+    return retryOperationWithThrottling(
+        () -> documentClient.upsertDocument(cosmosCollectionLink, blobMetadata, options, true),
         azureMetrics.documentCreateTime);
   }
 
+  /**
+   * Delete the blob metadata document in the CosmosDB collection, retrying as necessary.
+   * @param blobMetadata the blob metadata document.
+   * @return the {@link ResourceResponse} returned by the operation, if successful.
+   * @throws DocumentClientException if the operation failed, or retry limit is exhausted.
+   */
   public ResourceResponse<Document> deleteMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
     String docLink = getDocumentLink(blobMetadata.getId());
     RequestOptions options = getRequestOptions(blobMetadata.getPartitionId());
     options.setPartitionKey(new PartitionKey(blobMetadata.getPartitionId()));
-    return retryWithThrottling(() -> documentClient.deleteDocument(docLink, options), azureMetrics.documentDeleteTime);
+    return retryOperationWithThrottling(() -> documentClient.deleteDocument(docLink, options),
+        azureMetrics.documentDeleteTime);
   }
 
+  /**
+   * Read the blob metadata document in the CosmosDB collection, retrying as necessary.
+   * @param blobId the {@link BlobId} for which metadata is requested.
+   * @return the {@link ResourceResponse} containing the metadata document.
+   * @throws DocumentClientException if the operation failed, or retry limit is exhausted.
+   */
   public ResourceResponse<Document> readMetadata(BlobId blobId) throws DocumentClientException {
     String docLink = getDocumentLink(blobId.getID());
     RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
-    return retryWithThrottling(() -> documentClient.readDocument(docLink, options), azureMetrics.documentReadTime);
+    return retryOperationWithThrottling(() -> documentClient.readDocument(docLink, options),
+        azureMetrics.documentReadTime);
   }
 
+  /**
+   * Replace the blob metadata document in the CosmosDB collection, retrying as necessary.
+   * @param blobId the {@link BlobId} for which metadata is replaced.
+   * @param doc the blob metadata document.
+   * @return the {@link ResourceResponse} returned by the operation, if successful.
+   * @throws DocumentClientException if the operation failed, or retry limit is exhausted.
+   */
   public ResourceResponse<Document> replaceMetadata(BlobId blobId, Document doc) throws DocumentClientException {
     RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
-    return retryWithThrottling(() -> documentClient.replaceDocument(doc, options), azureMetrics.documentUpdateTime);
+    return retryOperationWithThrottling(() -> documentClient.replaceDocument(doc, options),
+        azureMetrics.documentUpdateTime);
   }
 
   /**
    * Get the list of blobs in the specified partition matching the specified DocumentDB query.
    * @param partitionPath the partition to query.
    * @param querySpec the DocumentDB query to execute.
+   * @param timer the {@link Timer} to use to record query time (excluding waiting).
    * @return a List of {@link CloudBlobMetadata} referencing the matching blobs.
    * @throws DocumentClientException
    */
-  List<CloudBlobMetadata> queryMetadata(String partitionPath, SqlQuerySpec querySpec) throws DocumentClientException {
+  List<CloudBlobMetadata> queryMetadata(String partitionPath, SqlQuerySpec querySpec, Timer timer)
+      throws DocumentClientException {
     azureMetrics.documentQueryCount.inc();
     FeedOptions feedOptions = new FeedOptions();
     feedOptions.setPartitionKey(new PartitionKey(partitionPath));
-    FeedResponse<Document> response = documentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions);
+    FeedResponse<Document> response =
+        retryQueryWithThrottling(() -> documentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions),
+            timer);
     try {
       // Note: internal query iterator wraps DocumentClientException in IllegalStateException!
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
@@ -130,6 +160,92 @@ public class CosmosDataAccessor {
     }
   }
 
+  /**
+   * Run the supplied DocumentClient action. If CosmosDB returns status 429 (TOO_MANY_REQUESTS),
+   * retry after the requested wait period, up to the configured retry limit.
+   * @param operation the DocumentClient resource operation to execute, wrapped in a {@link Callable}.
+   * @param timer the {@link Timer} to use to record execution time (excluding waiting).
+   * @return the {@link ResourceResponse} returned by the operation, if successful.
+   * @throws DocumentClientException if Cosmos returns a different error status, or if the retry limit is reached.
+   */
+  private ResourceResponse<Document> retryOperationWithThrottling(Callable<ResourceResponse<Document>> operation,
+      Timer timer) throws DocumentClientException {
+    return (ResourceResponse<Document>) retryWithThrottling(operation, timer);
+  }
+
+  /**
+   * Run the supplied DocumentClient query. If CosmosDB returns status 429 (TOO_MANY_REQUESTS),
+   * retry after the requested wait period, up to the configured retry limit.
+   * @param query the DocumentClient query to execute, wrapped in a {@link Callable}.
+   * @param timer the {@link Timer} to use to record execution time (excluding waiting).
+   * @return the {@link FeedResponse} returned by the query, if successful.
+   * @throws DocumentClientException if Cosmos returns a different error status, or if the retry limit is reached.
+   */
+  private FeedResponse<Document> retryQueryWithThrottling(Callable<FeedResponse<Document>> query, Timer timer)
+      throws DocumentClientException {
+    return (FeedResponse<Document>) retryWithThrottling(query, timer);
+  }
+
+  /**
+   * Run the supplied DocumentClient action. If CosmosDB returns status 429 (TOO_MANY_REQUESTS),
+   * retry after the requested wait period, up to the configured retry limit.
+   * @param action the DocumentClient action to execute, wrapped in a {@link Callable}.
+   * @param timer the {@link Timer} to use to record execution time (excluding waiting).
+   * @return the {@link Object} returned by the action, if successful.
+   * @throws DocumentClientException if Cosmos returns a different error status, or if the retry limit is reached.
+   */
+  private Object retryWithThrottling(Callable<? extends Object> action, Timer timer) throws DocumentClientException {
+    int count = 0;
+    long waitTime = 0;
+    do {
+      try {
+        waitForMs(waitTime);
+        Timer.Context docTimer = timer.time();
+        Object response = executeCosmosAction(action);
+        docTimer.stop();
+        return response;
+      } catch (DocumentClientException dex) {
+        // Azure tells us how long to wait before retrying.
+        if (dex.getStatusCode() == HTTP_TOO_MANY_REQUESTS) {
+          waitTime = dex.getRetryAfterInMilliseconds();
+          azureMetrics.retryCount.inc();
+          logger.debug("Got {} from Cosmos, will wait {} ms before retrying.", HTTP_TOO_MANY_REQUESTS, waitTime);
+        } else {
+          // Something else, not retryable.
+          throw dex;
+        }
+      } catch (Exception e) {
+        azureMetrics.documentErrorCount.inc();
+        throw new RuntimeException("Exception calling action " + action, e);
+      }
+      count++;
+    } while (count <= maxRetries);
+    azureMetrics.retryCount.dec(); // number of retries, not total tries
+    azureMetrics.documentErrorCount.inc();
+    String message = "Max number of retries reached while retrying with action " + action;
+    throw new RuntimeException(message);
+  }
+
+  /**
+   * Utility method to call a Cosmos method and extract any nested DocumentClientException.
+   * @param action the action to call.
+   * @return the result of the action.
+   * @throws Exception
+   */
+  private Object executeCosmosAction(Callable<? extends Object> action) throws Exception {
+    try {
+      return action.call();
+    } catch (DocumentClientException dex) {
+      throw dex;
+    } catch (IllegalStateException ex) {
+      if (ex.getCause() instanceof DocumentClientException) {
+        throw (DocumentClientException) ex.getCause();
+      } else {
+        throw ex;
+      }
+    }
+  }
+
   private String getDocumentLink(String documentId) {
     return cosmosCollectionLink + DOCS + documentId;
   }
@@ -141,57 +257,18 @@ public class CosmosDataAccessor {
   }
 
   /**
-   * Run the supplied DocumentClient action. If CosmosDB returns status 429 (TOO_MANY_REQUESTS),
-   * retry after the requested wait period, up to the configured retry limit.
-   * @param action the DocumentClient action to execute, wrapped in a {@link Callable}.
-   * @param timer the {@link Timer} to use to record execution time (excluding waiting).
-   * @return the {@link ResourceResponse} returned by the action, if successful.
-   * @throws DocumentClientException if Cosmos returns a different error status, or if the retry limit is reached.
-   */
-  private ResourceResponse<Document> retryWithThrottling(Callable<ResourceResponse<Document>> action, Timer timer)
-      throws DocumentClientException {
-    int count = 0;
-    long waitTime = 0;
-    do {
-      try {
-        Timer.Context waitTimer = azureMetrics.retryWaitTime.time();
-        waitForMs(waitTime);
-        waitTimer.stop();
-        Timer.Context docTimer = timer.time();
-        ResourceResponse<Document> response = action.call();
-        docTimer.stop();
-        return response;
-      } catch (DocumentClientException dex) {
-        azureMetrics.retryCount.inc();
-        // Azure tells us how long to wait before retrying.
-        if (dex.getStatusCode() == HTTP_TOO_MANY_REQUESTS) {
-          waitTime = dex.getRetryAfterInMilliseconds();
-          logger.debug("Got {} from Cosmos, will wait {} ms before retrying.", HTTP_TOO_MANY_REQUESTS, waitTime);
-        } else {
-          // Something else, not retryable.
-          throw dex;
-        }
-      } catch (Exception e) {
-        azureMetrics.documentErrorCount.inc();
-        throw new RuntimeException("Hit an Exception while retrying with action " + action, e);
-      }
-      count++;
-    } while (count < maxRetries);
-
-    azureMetrics.documentErrorCount.inc();
-    String message = "Max number of retries reached while retrying with action " + action;
-    throw new RuntimeException(message);
-  }
-
-  /**
    * Wait for the specified time, or until interrupted.
    * @param waitTimeInMillis the time to wait.
    */
   void waitForMs(long waitTimeInMillis) {
-    try {
-      TimeUnit.MILLISECONDS.sleep(waitTimeInMillis);
-    } catch (InterruptedException e) {
-      logger.warn("Interrupted while waiting for retry");
+    if (waitTimeInMillis > 0) {
+      Timer.Context waitTimer = azureMetrics.retryWaitTime.time();
+      try {
+        TimeUnit.MILLISECONDS.sleep(waitTimeInMillis);
+      } catch (InterruptedException e) {
+        logger.warn("Interrupted while waiting for retry");
+      }
+      waitTimer.stop();
     }
   }
 }
