@@ -28,6 +28,7 @@ import com.github.ambry.utils.Time;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +52,7 @@ class TtlUpdateOperation {
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
-  private final Map<Integer, TtlUpdateRequestInfo> ttlUpdateRequestInfos = new HashMap<>();
+  private final Map<Integer, TtlUpdateRequestInfo> ttlUpdateRequestInfos = new TreeMap<>();
   // The result of this operation to be set into FutureResult.
   private final Void operationResult = null;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
