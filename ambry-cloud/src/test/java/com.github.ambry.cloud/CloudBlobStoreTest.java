@@ -96,9 +96,10 @@ public class CloudBlobStoreTest {
   /**
    * Setup the cloud blobstore.
    * @param requireEncryption value of requireEncryption flag in CloudConfig.
+   * @param inMemoryDestination whether to use in-memory cloud destination instead of mock
    * @param start whether to start the store.
    */
-  private void setupCloudStore(boolean requireEncryption, boolean start) throws Exception {
+  private void setupCloudStore(boolean inMemoryDestination, boolean requireEncryption, boolean start) throws Exception {
     Properties properties = new Properties();
     // Required clustermap properties
     setBasicProperties(properties);
@@ -107,7 +108,8 @@ public class CloudBlobStoreTest {
     properties.setProperty(CloudConfig.CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
         TestCloudBlobCryptoAgentFactory.class.getName());
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    dest = mock(CloudDestination.class);
+    dest = inMemoryDestination ? new LatchBasedInMemoryCloudDestination(Collections.emptyList())
+        : mock(CloudDestination.class);
     vcrMetrics = new VcrMetrics(new MetricRegistry());
     store = new CloudBlobStore(verifiableProperties, partitionId, dest, vcrMetrics);
     if (start) {
@@ -135,34 +137,38 @@ public class CloudBlobStoreTest {
   }
 
   private void testStorePuts(boolean requireEncryption) throws Exception {
-    setupCloudStore(requireEncryption, true);
+    setupCloudStore(true, requireEncryption, true);
     // Put blobs with and without expiration and encryption
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 5;
     int expectedUploads = 0;
+    long expectedBytesUploaded = 0;
     int expectedEncryptions = 0;
     for (int j = 0; j < count; j++) {
       long size = Math.abs(random.nextLong()) % 10000;
       // Permanent and encrypted, should be uploaded and not reencrypted
       addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, true);
       expectedUploads++;
+      expectedBytesUploaded += size;
       // Permanent and unencrypted
       addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, false);
       expectedUploads++;
+      expectedBytesUploaded += size;
       if (requireEncryption) {
         expectedEncryptions++;
       }
     }
     store.put(messageWriteSet);
-    verify(dest, times(expectedUploads)).uploadBlob(any(BlobId.class), anyLong(), any(CloudBlobMetadata.class),
-        any(InputStream.class));
+    LatchBasedInMemoryCloudDestination inMemoryDest = (LatchBasedInMemoryCloudDestination) dest;
+    assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
+    assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
     assertEquals("Unexpected encryption count", expectedEncryptions, vcrMetrics.blobEncryptionCount.getCount());
   }
 
   /** Test the CloudBlobStore delete method. */
   @Test
   public void testStoreDeletes() throws Exception {
-    setupCloudStore(true, true);
+    setupCloudStore(false, true, true);
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
@@ -176,7 +182,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore updateTtl method. */
   @Test
   public void testStoreTtlUpdates() throws Exception {
-    setupCloudStore(true, true);
+    setupCloudStore(false, true, true);
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
@@ -191,7 +197,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore findMissingKeys method. */
   @Test
   public void testFindMissingKeys() throws Exception {
-    setupCloudStore(true, true);
+    setupCloudStore(false, true, true);
     int count = 10;
     List<StoreKey> keys = new ArrayList<>();
     Map<String, CloudBlobMetadata> metadataMap = new HashMap<>();
@@ -216,7 +222,7 @@ public class CloudBlobStoreTest {
   @Test
   public void testStoreNotStarted() throws Exception {
     // Create store and don't start it.
-    setupCloudStore(true, false);
+    setupCloudStore(false, true, false);
     List<StoreKey> keys = Collections.singletonList(getUniqueId());
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     addBlobToSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId, true);

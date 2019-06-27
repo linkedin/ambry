@@ -26,6 +26,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.commons.io.IOUtils;
 
 
@@ -38,6 +40,8 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final CountDownLatch latch;
   private final Set<BlobId> blobIdsToTrack = ConcurrentHashMap.newKeySet();
   private final Map<String, byte[]> tokenMap = new ConcurrentHashMap<>();
+  private final AtomicLong bytesUploadedCounter = new AtomicLong(0);
+  private final AtomicInteger blobsUploadedCounter = new AtomicInteger(0);
 
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
@@ -52,6 +56,19 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   synchronized public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) {
     map.put(blobId, new Pair<>(cloudBlobMetadata, blobInputStream));
+    // read inputstream and track bytes read
+    // Note: blobSize may be -1 so don't rely on it
+    byte[] buffer = new byte[1024];
+    int bytesRead = 0;
+    try {
+      do {
+        bytesRead = blobInputStream.read(buffer);
+        bytesUploadedCounter.addAndGet(Math.max(bytesRead, 0));
+      } while (bytesRead > 0);
+    } catch (IOException ex) {
+      throw new RuntimeException(ex);
+    }
+    blobsUploadedCounter.incrementAndGet();
     if (blobIdsToTrack.remove(blobId)) {
       latch.countDown();
     }
@@ -130,6 +147,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   public Map<String, byte[]> getTokenMap() {
     return tokenMap;
+  }
+
+  public int getBlobsUploaded() {
+    return blobsUploadedCounter.get();
+  }
+  public long getBytesUploaded() {
+    return bytesUploadedCounter.get();
   }
 
   public boolean await(long duration, TimeUnit timeUnit) throws InterruptedException {
