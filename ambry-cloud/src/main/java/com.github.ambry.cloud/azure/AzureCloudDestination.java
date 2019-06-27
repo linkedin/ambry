@@ -37,6 +37,7 @@ import com.microsoft.azure.storage.blob.BlobRequestOptions;
 import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 import com.microsoft.azure.storage.blob.CloudBlockBlob;
+import com.microsoft.azure.storage.blob.DeleteSnapshotsOption;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -168,30 +169,6 @@ class AzureCloudDestination implements CloudDestination {
     }
   }
 
-  /**
-   * Visible for test.
-   * @return the CosmosDB DocumentClient
-   */
-  DocumentClient getDocumentClient() {
-    return documentClient;
-  }
-
-  /**
-   * Visible for test.
-   * @return the {@link CosmosDataAccessor}
-   */
-  CosmosDataAccessor getCosmosDataAccessor() {
-    return cosmosDataAccessor;
-  }
-
-  /**
-   * Visible for test.
-   * @return the blob storage operation context.
-   */
-  OperationContext getBlobOpContext() {
-    return blobOpContext;
-  }
-
   @Override
   public boolean uploadBlob(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) throws CloudStorageException {
@@ -312,7 +289,7 @@ class AzureCloudDestination implements CloudDestination {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     Objects.requireNonNull(fieldName, "Field name cannot be null");
 
-    // We update the blob deletion time in two places:
+    // We update the blob metadata value in two places:
     // 1) the CosmosDB metadata collection
     // 2) the blob storage entry metadata (to enable rebuilding the database)
 
@@ -321,19 +298,19 @@ class AzureCloudDestination implements CloudDestination {
       String azureBlobName = getAzureBlobName(blobId);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
 
-      if (!azureBlob.exists()) {
+      if (!azureBlob.exists(null, null, blobOpContext)) {
         logger.debug("Blob {} not found in Azure container {}.", blobId, azureContainer.getName());
         return false;
       }
 
       Timer.Context storageTimer = azureMetrics.blobUpdateTime.time();
       try {
-        azureBlob.downloadAttributes(); // Makes sure we have latest
+        azureBlob.downloadAttributes(null, null, blobOpContext); // Makes sure we have latest
         // Update only if value has changed
         String textValue = String.valueOf(value);
         if (!textValue.equals(azureBlob.getMetadata().get(fieldName))) {
           azureBlob.getMetadata().put(fieldName, textValue);
-          azureBlob.uploadMetadata();
+          azureBlob.uploadMetadata(null, null, blobOpContext);
         }
       } finally {
         storageTimer.stop();
@@ -373,7 +350,7 @@ class AzureCloudDestination implements CloudDestination {
       // delete blob from storage
       CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobFileName);
-      boolean deletionDone = azureBlob.deleteIfExists();
+      boolean deletionDone = azureBlob.deleteIfExists(DeleteSnapshotsOption.NONE, null, null, blobOpContext);
 
       // Delete the document too
       try {
@@ -417,7 +394,7 @@ class AzureCloudDestination implements CloudDestination {
       CloudBlobContainer azureContainer = getContainer(blobId, false);
       String azureBlobName = getAzureBlobName(blobId);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
-      return azureBlob.exists();
+      return azureBlob.exists(null, null, blobOpContext);
     } catch (URISyntaxException | StorageException e) {
       throw new CloudStorageException("Could not check existence of blob: " + blobId, e);
     }
@@ -483,7 +460,7 @@ class AzureCloudDestination implements CloudDestination {
       String containerName = getAzureContainerName(partitionPath);
       CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(tokenFileName);
-      if (!azureBlob.exists()) {
+      if (!azureBlob.exists(null, null, blobOpContext)) {
         return false;
       }
       azureBlob.download(outputStream, null, null, blobOpContext);
@@ -513,6 +490,30 @@ class AzureCloudDestination implements CloudDestination {
     // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
     String blobIdStr = blobId.getID();
     return blobIdStr.substring(blobIdStr.length() - 4) + SEPARATOR + blobIdStr;
+  }
+
+  /**
+   * Visible for test.
+   * @return the CosmosDB DocumentClient
+   */
+  DocumentClient getDocumentClient() {
+    return documentClient;
+  }
+
+  /**
+   * Visible for test.
+   * @return the {@link CosmosDataAccessor}
+   */
+  CosmosDataAccessor getCosmosDataAccessor() {
+    return cosmosDataAccessor;
+  }
+
+  /**
+   * Visible for test.
+   * @return the blob storage operation context.
+   */
+  OperationContext getBlobOpContext() {
+    return blobOpContext;
   }
 
   /**

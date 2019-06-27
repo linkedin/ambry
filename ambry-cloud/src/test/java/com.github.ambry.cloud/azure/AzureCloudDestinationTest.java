@@ -96,7 +96,7 @@ public class AzureCloudDestinationTest {
     when(mockAzureContainer.createIfNotExists(any(), any(), any())).thenReturn(true);
     when(mockAzureContainer.getName()).thenReturn("666");
     when(mockAzureContainer.getBlockBlobReference(anyString())).thenReturn(mockBlob);
-    when(mockBlob.exists()).thenReturn(false);
+    mockBlobExistence(false);
     when(mockBlob.getMetadata()).thenReturn(new HashMap<>());
     Mockito.doNothing().when(mockBlob).upload(any(), anyLong(), any(), any(), any());
 
@@ -142,7 +142,7 @@ public class AzureCloudDestinationTest {
   /** Test normal delete. */
   @Test
   public void testDelete() throws Exception {
-    when(mockBlob.exists()).thenReturn(true);
+    mockBlobExistence(true);
     assertTrue("Expected success", azureDest.deleteBlob(blobId, deletionTime));
     assertEquals(1, azureMetrics.blobUpdatedCount.getCount());
     assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
@@ -154,7 +154,7 @@ public class AzureCloudDestinationTest {
   /** Test normal expiration. */
   @Test
   public void testExpire() throws Exception {
-    when(mockBlob.exists()).thenReturn(true);
+    mockBlobExistence(true);
     assertTrue("Expected success", azureDest.updateBlobExpiration(blobId, expirationTime));
     assertEquals(1, azureMetrics.blobUpdatedCount.getCount());
     assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
@@ -166,7 +166,7 @@ public class AzureCloudDestinationTest {
   /** Test purge success. */
   @Test
   public void testPurge() throws Exception {
-    when(mockBlob.deleteIfExists()).thenReturn(true);
+    when(mockBlob.deleteIfExists(any(), any(), any(), any())).thenReturn(true);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
             CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
@@ -180,7 +180,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testPurgeNotFound() throws Exception {
     // Unsuccessful case
-    when(mockBlob.deleteIfExists()).thenReturn(false);
+    when(mockBlob.deleteIfExists(any(), any(), any(), any())).thenReturn(false);
     when(mockumentClient.deleteDocument(anyString(), any(RequestOptions.class))).thenThrow(
         new DocumentClientException(404));
     CloudBlobMetadata cloudBlobMetadata =
@@ -209,7 +209,7 @@ public class AzureCloudDestinationTest {
   /** Test delete of nonexistent blob. */
   @Test
   public void testDeleteNotExists() throws Exception {
-    when(mockBlob.exists()).thenReturn(false);
+    mockBlobExistence(false);
     assertFalse("Delete of nonexistent blob should return false", azureDest.deleteBlob(blobId, deletionTime));
     assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
     assertEquals(0, azureMetrics.blobUpdateTime.getCount());
@@ -219,7 +219,7 @@ public class AzureCloudDestinationTest {
   /** Test update of nonexistent blob. */
   @Test
   public void testUpdateNotExists() throws Exception {
-    when(mockBlob.exists()).thenReturn(false);
+    mockBlobExistence(false);
     assertFalse("Update of nonexistent blob should return false",
         azureDest.updateBlobExpiration(blobId, expirationTime));
     assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
@@ -256,11 +256,15 @@ public class AzureCloudDestinationTest {
   /** Test blob existence check. */
   @Test
   public void testExistenceCheck() throws Exception {
-    when(mockBlob.exists()).thenReturn(true);
+    mockBlobExistence(true);
     assertTrue("Expected doesBlobExist to return true", azureDest.doesBlobExist(blobId));
 
-    when(mockBlob.exists()).thenReturn(false);
+    mockBlobExistence(false);
     assertFalse("Expected doesBlobExist to return false", azureDest.doesBlobExist(blobId));
+  }
+
+  private void mockBlobExistence(boolean exists) throws Exception {
+    when(mockBlob.exists(any(), any(), any())).thenReturn(exists);
   }
 
   /** Test constructor with invalid connection string. */
@@ -363,7 +367,7 @@ public class AzureCloudDestinationTest {
   /** Test update methods when doc client throws exception. */
   @Test
   public void testUpdateDocClientException() throws Exception {
-    when(mockBlob.exists()).thenReturn(true);
+    mockBlobExistence(true);
     when(mockumentClient.readDocument(anyString(), any())).thenThrow(DocumentClientException.class);
     expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime), DocumentClientException.class);
     expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
@@ -378,9 +382,9 @@ public class AzureCloudDestinationTest {
     String tokenFile = "replicaTokens";
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream(100);
     azureDest.persistTokens(path, tokenFile, new ByteArrayInputStream(new byte[100]));
-    when(mockBlob.exists()).thenReturn(true);
+    mockBlobExistence(true);
     assertTrue("Expected retrieveTokens to return true", azureDest.retrieveTokens(path, tokenFile, outputStream));
-    when(mockBlob.exists()).thenReturn(false);
+    mockBlobExistence(false);
     assertFalse("Expected retrieveTokens to return false", azureDest.retrieveTokens(path, tokenFile, outputStream));
   }
 

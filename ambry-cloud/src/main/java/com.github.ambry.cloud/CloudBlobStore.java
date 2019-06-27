@@ -344,6 +344,7 @@ class CloudBlobStore implements Store {
           }
           bytesRead += readResult;
         }
+        messageBuf.flip();
         cloudBlobStore.putBlob(messageInfo, messageBuf, size);
         messageIndex++;
       } catch (IOException | CloudStorageException | GeneralSecurityException e) {
