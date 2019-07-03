@@ -54,6 +54,7 @@ public class CloudBackupManager extends ReplicationEngine {
   private final CloudDestination cloudDestination;
   private final VcrMetrics vcrMetrics;
   private final VirtualReplicatorCluster virtualReplicatorCluster;
+  private final CloudStorageCompactor cloudStorageCompactor;
 
   public CloudBackupManager(VerifiableProperties properties, CloudConfig cloudConfig,
       ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
@@ -73,6 +74,8 @@ public class CloudBackupManager extends ReplicationEngine {
     this.persistor =
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             factory, cloudDestination);
+    this.cloudStorageCompactor =
+        new CloudStorageCompactor(cloudDestination, partitionToPartitionInfo, vcrMetrics, false);
   }
 
   @Override
@@ -133,6 +136,14 @@ public class CloudBackupManager extends ReplicationEngine {
     // start scheduler thread to persist index in the background
     scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
         replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
+
+    // Schedule thread to purge dead blobs for this VCR's partitions
+    // TODO: set delay to stagger the schedule across VCR's (between now and now+1d/1h)
+    long delaySec = TimeUnit.DAYS.toSeconds(1);
+    long intervalSec = TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours);
+    scheduler.scheduleAtFixedRate(cloudStorageCompactor, delaySec, intervalSec, TimeUnit.SECONDS);
+    logger.info("Scheduled compaction task to run every {} hours starting in {} seconds.",
+        cloudConfig.cloudBlobCompactionIntervalHours, delaySec);
   }
 
   /**
