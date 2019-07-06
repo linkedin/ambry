@@ -160,7 +160,8 @@ public class LogTest {
 
     // Store exception occurred during construction
     DiskSpaceAllocator mockDiskAllocator = Mockito.mock(DiskSpaceAllocator.class);
-    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockDiskAllocator).allocate(any(File.class), anyLong());
+    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockDiskAllocator)
+        .allocate(any(File.class), anyLong(), anyString(), anyBoolean());
     List<LogSegment> segmentsToLoad = Collections.emptyList();
     try {
       new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, mockDiskAllocator,
@@ -378,7 +379,8 @@ public class LogTest {
 
     // verify that dropSegment method can catch IOException and correctly convert it to StoreException.
     DiskSpaceAllocator mockDiskAllocator = Mockito.mock(DiskSpaceAllocator.class);
-    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockDiskAllocator).free(any(File.class), anyLong());
+    doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockDiskAllocator)
+        .free(any(File.class), anyLong(), anyString(), anyBoolean());
     segmentsToLoad = Collections.singletonList(
         getLogSegment(LogSegmentNameHelper.getName(activeSegmentPos, 0), SEGMENT_CAPACITY, true));
     Log mockLog = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, mockDiskAllocator,
@@ -465,7 +467,7 @@ public class LogTest {
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, true,
         Collections.singletonList(segment), segmentNameAndFileNamesDesired.iterator());
     Log mockLog = Mockito.spy(log);
-    when(mockLog.allocate(anyString(), anyLong())).thenReturn(mockFile);
+    when(mockLog.allocate(anyString(), anyLong(), anyBoolean())).thenReturn(mockFile);
     long initialUnallocatedSegments = mockLog.getRemainingUnallocatedSegments();
 
     // write enough so that all segments are allocated
@@ -487,7 +489,8 @@ public class LogTest {
     }
 
     // Test 2: the segment with exception is freed successfully and remainingUnallocatedSegments counter is restored.
-    doAnswer((Answer) invocation -> null).when(mockDiskAllocator).free(any(File.class), any(Long.class));
+    doAnswer((Answer) invocation -> null).when(mockDiskAllocator)
+        .free(any(File.class), any(Long.class), anyString(), anyBoolean());
     try {
       buffer.rewind();
       CHANNEL_APPENDER.append(mockLog, buffer);
