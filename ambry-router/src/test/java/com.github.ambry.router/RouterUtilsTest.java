@@ -47,7 +47,7 @@ public class RouterUtilsTest {
     } catch (Exception e) {
       fail("Should not get any exception.");
     }
-    partition = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    partition = clusterMap.getRandomWritablePartition(MockClusterMap.DEFAULT_PARTITION_CLASS, null);
     originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         clusterMap.getLocalDatacenterId(), Utils.getRandomShort(random), Utils.getRandomShort(random), partition, false,
         BlobId.BlobDataType.DATACHUNK);

@@ -125,6 +125,10 @@ class PartitionLayout {
     return partitionSelectionHelper.getWritablePartitions(partitionClass);
   }
 
+  public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> toExclude) {
+    return partitionSelectionHelper.getRandomWritablePartition(partitionClass, toExclude);
+  }
+
   public long getAllocatedRawCapacityInBytes() {
     return allocatedRawCapacityInBytes;
   }

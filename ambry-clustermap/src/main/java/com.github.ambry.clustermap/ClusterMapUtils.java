@@ -21,10 +21,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.concurrent.ThreadLocalRandom;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -333,6 +335,8 @@ public class ClusterMapUtils {
   static class PartitionSelectionHelper {
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
+    private Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas;
+    private String localDatacenterName;
 
     /**
      * @param allPartitions the list of all {@link PartitionId}s
@@ -340,6 +344,7 @@ public class ClusterMapUtils {
      *                            are not required.
      */
     PartitionSelectionHelper(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
+      this.localDatacenterName = localDatacenterName;
       updatePartitions(allPartitions, localDatacenterName);
     }
 
@@ -352,6 +357,7 @@ public class ClusterMapUtils {
     void updatePartitions(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
       this.allPartitions = allPartitions;
       partitionIdsByClassAndLocalReplicaCount = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+      partitionIdToLocalReplicas = new HashMap<>();
       for (PartitionId partition : allPartitions) {
         String partitionClass = partition.getPartitionClass();
         int localReplicaCount = 0;
@@ -359,6 +365,7 @@ public class ClusterMapUtils {
           if (localDatacenterName != null && !localDatacenterName.isEmpty() && replicaId.getDataNodeId()
               .getDatacenterName()
               .equals(localDatacenterName)) {
+            partitionIdToLocalReplicas.computeIfAbsent(partition, key -> new LinkedList<>()).add(replicaId);
             localReplicaCount++;
           }
         }
@@ -403,6 +410,69 @@ public class ClusterMapUtils {
         }
       }
       return healthyWritablePartitions.isEmpty() ? writablePartitions : healthyWritablePartitions;
+    }
+
+    /**
+     * Returns a writable partition selected at random, that belongs to the specified partition class and that is in the
+     * state {@link PartitionState#READ_WRITE} AND has enough replicas up. In case none of the partitions have enough
+     * replicas up, any writable partition is returned. Enough replicas is considered to be all local replicas if such
+     * information is available. In case localDatacenterName is not available, all of the partition's replicas should be up.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @param partitionsToExclude partitions that should be excluded from the result. Can be {@code null} or empty.
+     * @return A writable partition or {@code null} if no writable partition with given criteria found
+     */
+    PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+      PartitionId anyWritablePartition = null;
+      List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, true);
+
+      int workingSize = partitionsInClass.size();
+      while (workingSize > 0) {
+        int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
+        PartitionId selected = partitionsInClass.get(randomIndex);
+        if (partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(selected)) {
+          if (selected.getPartitionState() == PartitionState.READ_WRITE) {
+            anyWritablePartition = selected;
+            if(areEnoughReplicasForPartitionUp(selected)) {
+              return selected;
+            }
+          }
+        }
+        if (randomIndex != workingSize - 1) {
+          partitionsInClass.set(randomIndex, partitionsInClass.get(workingSize - 1));
+        }
+        workingSize--;
+      }
+      //if we are here then that means we couldn't find any partition with all local replicas up
+      return anyWritablePartition;
+    }
+
+    /**
+     * Check whether the parition has has enough replicas up for write operations to try. Enough replicas is considered
+     * to be all local replicas if such information is available. In case localDatacenterName is not available, all of
+     * the partition's replicas should be up.
+     * @param partitionId the {@link PartitionId} to check.
+     * @return true if enough replicas are up; false otherwise.
+     */
+    private boolean areEnoughReplicasForPartitionUp(PartitionId partitionId) {
+      if (localDatacenterName != null && !localDatacenterName.isEmpty()) {
+        return areAllLocalReplicasForPartitionUp(partitionId);
+      } else {
+        return areAllReplicasForPartitionUp(partitionId);
+      }
+    }
+
+    /**
+     * Check whether all local replicas of the given {@link PartitionId} are up.
+     * @param partitionId the {@link PartitionId} to check.
+     * @return true if all local replicas are up; false otherwise.
+     */
+    private boolean areAllLocalReplicasForPartitionUp(PartitionId partitionId) {
+      for (ReplicaId replica : partitionIdToLocalReplicas.get(partitionId)) {
+        if (replica.isDown()) {
+          return false;
+        }
+      }
+      return true;
     }
 
     /**

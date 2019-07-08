@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -107,6 +108,24 @@ class CompositeClusterManager implements ClusterMap {
       }
     }
     return staticWritablePartitionIds;
+  }
+
+  /**
+   * Randomly select a writable partition from a list of writable partition ids obtained from both the underlying
+   * {@link StaticClusterManager} and the underlying {@link HelixClusterManager}. This implementation can add to put
+   * latency because getWritablePartitionIds called within this method, scans all the partitions to get writable paritions.
+   * However, since {@link CompositeClusterManager} is used only during migrations, when both static and helix cluster
+   * managers co-exist, the latency can be a acceptable trade off for the extra metrics obtained from
+   * getWritablePartitionIds.
+   * @param partitionClass the partition class whose writable partitions are required. Can be {@code null}
+   * @param partitionsToExclude A list of partitions that should be excluded from consideration.
+   * @return A writable partition id object. Can be {@code null}
+   */
+  @Override
+  public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+    List<? extends PartitionId> partitions = getWritablePartitionIds(partitionClass);
+    partitions.removeAll(partitionsToExclude);
+    return partitions.isEmpty() ? null : partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
   }
 
   /**

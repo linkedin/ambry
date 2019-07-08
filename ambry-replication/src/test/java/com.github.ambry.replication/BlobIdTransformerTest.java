@@ -637,6 +637,10 @@ public class BlobIdTransformerTest {
       return null;
     }
 
+    public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+      return null;
+    }
+
     public List<? extends PartitionId> getAllPartitionIds(String partitionClass) {
       return null;
     }

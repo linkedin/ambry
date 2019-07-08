@@ -310,7 +310,7 @@ class RouterTestHelpers {
    * @return a new blob ID with the specified {@link BlobId.BlobDataType} and a random UUID.
    */
   private static String getRandomBlobId(ClusterMap clusterMap, BlobId.BlobDataType blobDataType) {
-    PartitionId partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    PartitionId partitionId = clusterMap.getRandomWritablePartition(MockClusterMap.DEFAULT_PARTITION_CLASS, null);
     return new BlobId(BLOB_ID_VERSION, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
         Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partitionId, false, blobDataType).getID();
   }
