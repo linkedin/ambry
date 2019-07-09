@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Tool to purge dead blobs for an Ambry partition from Azure storage.
+ * Usage: java -cp /path/to/ambry.jar -propsFile <property-file-path> [-purge] partitionPath
  */
 public class AzureCompactionTool {
 

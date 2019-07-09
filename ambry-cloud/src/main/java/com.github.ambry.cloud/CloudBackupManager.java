@@ -39,6 +39,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.apache.helix.InstanceType;
@@ -138,8 +139,9 @@ public class CloudBackupManager extends ReplicationEngine {
         replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
 
     // Schedule thread to purge dead blobs for this VCR's partitions
-    // TODO: set delay to stagger the schedule across VCR's (between now and now+1d/1h)
-    long delaySec = TimeUnit.DAYS.toSeconds(1);
+    // Set random delay (between now and now+2h) to stagger the schedule across VCR's
+    Random random = new Random(System.currentTimeMillis());
+    long delaySec = random.nextInt((int) TimeUnit.HOURS.toSeconds(2));
     long intervalSec = TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours);
     scheduler.scheduleAtFixedRate(cloudStorageCompactor, delaySec, intervalSec, TimeUnit.SECONDS);
     logger.info("Scheduled compaction task to run every {} hours starting in {} seconds.",
