@@ -196,8 +196,8 @@ class CuratedLogIndexState {
    */
   void destroy() throws IOException, StoreException {
     shutDownExecutorService(scheduler, 30, TimeUnit.SECONDS);
-    index.close();
-    log.close();
+    index.close(false);
+    log.close(false);
     assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, false));
   }
 
@@ -842,7 +842,7 @@ class CuratedLogIndexState {
    */
   void reloadIndex(boolean closeBeforeReload, boolean deleteCleanShutdownFile) throws StoreException {
     if (closeBeforeReload) {
-      index.close();
+      index.close(false);
       if (deleteCleanShutdownFile) {
         assertTrue("The clean shutdown file could not be deleted",
             new File(tempDir, PersistentIndex.CLEAN_SHUTDOWN_FILENAME).delete());
@@ -860,8 +860,8 @@ class CuratedLogIndexState {
    */
   void reloadLog(boolean initIndex) throws IOException, StoreException {
     long segmentCapacity = log.getSegmentCapacity();
-    index.close();
-    log.close();
+    index.close(false);
+    log.close(false);
     log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, metrics);
     index = null;
     if (initIndex) {
@@ -874,7 +874,7 @@ class CuratedLogIndexState {
    * @throws StoreException
    */
   void closeAndClearIndex() throws StoreException {
-    index.close();
+    index.close(false);
     // delete all index files
     File[] indexSegmentFiles = tempDir.listFiles(new FilenameFilter() {
       @Override

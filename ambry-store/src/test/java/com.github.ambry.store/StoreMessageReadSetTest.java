@@ -232,7 +232,7 @@ public class StoreMessageReadSetTest {
         // expected. Nothing to do.
       }
     } finally {
-      log.close();
+      log.close(false);
     }
   }
 
@@ -297,7 +297,7 @@ public class StoreMessageReadSetTest {
           // expected. Nothing to do.
         }
       } finally {
-        log.close();
+        log.close(false);
         assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, false));
       }
     }

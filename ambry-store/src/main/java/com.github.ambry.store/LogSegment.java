@@ -30,6 +30,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import net.smacke.jaydio.DirectRandomAccessFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -55,6 +57,8 @@ class LogSegment implements Read, Write {
   private final AtomicLong endOffset;
   private final AtomicLong refCount = new AtomicLong(0);
   private final AtomicBoolean open = new AtomicBoolean(true);
+  private final Logger logger = LoggerFactory.getLogger(getClass());
+
   static final int BYTE_BUFFER_SIZE_FOR_APPEND = 1024 * 1024;
   private ByteBuffer byteBufferForAppend = null;
   static final AtomicInteger byteBufferForAppendTotalCount = new AtomicInteger(0);
@@ -99,7 +103,7 @@ class LogSegment implements Read, Write {
    * @param name the desired name of the segment. The name signifies the handle/ID of the LogSegment and may be
    *             different from the filename of the {@code file}.
    * @param file the backing {@link File} for this segment.
-   * @param metrics he {@link StoreMetrics} instance to use.
+   * @param metrics the {@link StoreMetrics} instance to use.
    * @throws StoreException
    */
   LogSegment(String name, File file, StoreMetrics metrics) throws StoreException {
@@ -140,6 +144,28 @@ class LogSegment implements Read, Write {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while creating log segment", e, errorCode);
     }
+  }
+
+  /**
+   * Creates a LogSegment abstraction with the given file and given file channel (for testing purpose currently)
+   * @param file the backing {@link File} for this segment.
+   * @param capacityInBytes the intended capacity of the segment
+   * @param metrics the {@link StoreMetrics} instance to use.
+   * @param fileChannel the {@link FileChannel} associated with this segment.
+   * @throws StoreException
+   */
+  LogSegment(File file, long capacityInBytes, StoreMetrics metrics, FileChannel fileChannel) throws StoreException {
+    this.file = file;
+    this.name = file.getName();
+    this.capacityInBytes = capacityInBytes;
+    this.metrics = metrics;
+    this.fileChannel = fileChannel;
+    segmentView = new Pair<>(file, fileChannel);
+    // externals will set the correct value of end offset.
+    endOffset = new AtomicLong(0);
+    // update end offset
+    writeHeader(capacityInBytes);
+    startOffset = endOffset.get();
   }
 
   /**
@@ -463,11 +489,24 @@ class LogSegment implements Read, Write {
 
   /**
    * Closes this log segment
+   * @param shouldSkipDiskFlush whether to skip any disk flush operations.
+   * @throws IOException if there is an I/O error while closing the log segment.
    */
-  void close() throws IOException {
+  void close(boolean shouldSkipDiskFlush) throws IOException {
     if (open.compareAndSet(true, false)) {
-      flush();
-      fileChannel.close();
+      if (!shouldSkipDiskFlush) {
+        flush();
+      }
+      try {
+        // attempt to close file descriptors even when there is a disk I/O error.
+        fileChannel.close();
+      } catch (IOException e) {
+        if (!shouldSkipDiskFlush) {
+          throw e;
+        }
+        logger.warn(
+            "I/O exception occurred when closing file channel in log segment. Skipping it to complete store shutdown process");
+      }
       dropBufferForAppend();
     }
   }

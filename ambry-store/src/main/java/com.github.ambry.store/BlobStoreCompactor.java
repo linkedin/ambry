@@ -386,8 +386,8 @@ class BlobStoreCompactor {
       long savedBytes = srcLog.getSegmentCapacity() * segmentCountDiff;
       srcMetrics.compactionBytesReclaimedCount.inc(savedBytes);
     }
-    tgtIndex.close();
-    tgtLog.close();
+    tgtIndex.close(false);
+    tgtLog.close(false);
     // persist the bloom of the "latest" index segment if it exists
     if (numSwapsUsed > 0) {
       tgtIndex.getIndexSegments().lastEntry().getValue().seal();

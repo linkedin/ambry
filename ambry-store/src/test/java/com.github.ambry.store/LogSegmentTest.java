@@ -32,8 +32,10 @@ import java.util.Arrays;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -69,6 +71,7 @@ public class LogSegmentTest {
       }
     }
     assertTrue("The directory [" + tempDir.getAbsolutePath() + "] could not be deleted", tempDir.delete());
+    validateMockitoUsage();
   }
 
   /**
@@ -125,7 +128,7 @@ public class LogSegmentTest {
       // ensure flush doesn't throw any errors.
       segment.flush();
       // close and reopen segment and ensure persistence.
-      segment.close();
+      segment.close(false);
       segment = new LogSegment(segmentName, new File(tempDir, segmentName), metrics);
       segment.setEndOffset(writeStartOffset + buf.length);
       readAndEnsureMatch(segment, writeStartOffset, buf);
@@ -319,7 +322,7 @@ public class LogSegmentTest {
         }
       }
 
-      segment.close();
+      segment.close(false);
       // read after close
       buffer = ByteBuffer.allocate(1);
       try {
@@ -409,7 +412,7 @@ public class LogSegmentTest {
         }
       }
 
-      segment.close();
+      segment.close(false);
       // ensure that writeFrom fails.
       try {
         segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), writeStartOffset, buffer.remaining());
@@ -420,6 +423,72 @@ public class LogSegmentTest {
     } finally {
       closeSegmentAndDeleteFile(segment);
     }
+  }
+
+  /**
+   * Test a normal shutdown of log segment. Verify that disk flush operation is invoked.
+   * @throws Exception
+   */
+  @Test
+  public void closeLogSegmentTest() throws Exception {
+    Pair<LogSegment, FileChannel> segmentAndFileChannel = getSegmentAndFileChannel("log_current1");
+    LogSegment segment = segmentAndFileChannel.getFirst();
+    FileChannel mockFileChannel = segmentAndFileChannel.getSecond();
+
+    // test that log segment is closed successfully, ensure that the flush method is invoked
+    segment.close(false);
+    verify(mockFileChannel).force(true);
+    assertFalse("File channel is not closed", segment.getView().getSecond().isOpen());
+    assertTrue("File couldn't be deleted.", (new File(tempDir, segment.getName()).delete()));
+  }
+
+  /**
+   * Test that closing log segment and skip any disk flush operation. Verify that flush method is never invoked.
+   * @throws Exception
+   */
+  @Test
+  public void closeLogSegmentAndSkipFlushTest() throws Exception {
+    Pair<LogSegment, FileChannel> segmentAndFileChannel = getSegmentAndFileChannel("log_current2");
+    LogSegment segment = segmentAndFileChannel.getFirst();
+    FileChannel mockFileChannel = segmentAndFileChannel.getSecond();
+
+    // test that log segment is being closed due to disk I/O error and flush operation should be skipped
+    segment.close(true);
+    verify(mockFileChannel, times(0)).force(true);
+    assertFalse("File channel is not closed", segment.getView().getSecond().isOpen());
+    assertTrue("File couldn't be deleted.", (new File(tempDir, segment.getName()).delete()));
+  }
+
+  /**
+   * Test that closing log segment (skip disk flush) and exception occurs. The shutdown process should continue.
+   */
+  @Test
+  public void closeLogSegmentWithExceptionTest() throws Exception {
+    Pair<LogSegment, FileChannel> segmentAndFileChannel = getSegmentAndFileChannel("log_current3");
+    LogSegment segment = segmentAndFileChannel.getFirst();
+    FileChannel mockFileChannel = segmentAndFileChannel.getSecond();
+
+    // test that log segment is being closed due to disk I/O error (shouldSkipDiskFlush = true) and exception occurs
+    // when closing file channel
+    doThrow(new IOException("close channel failure")).when(mockFileChannel).close();
+    segment.close(true);
+    verify(mockFileChannel, times(0)).force(true);
+    assertTrue("File couldn't be deleted.", (new File(tempDir, segment.getName()).delete()));
+
+    segmentAndFileChannel = getSegmentAndFileChannel("log_current4");
+    segment = segmentAndFileChannel.getFirst();
+    mockFileChannel = segmentAndFileChannel.getSecond();
+
+    // test that log segment is being closed during normal shutdown (shouldSkipDiskFlush = false) and exception occurs
+    doThrow(new IOException("close channel failure")).when(mockFileChannel).close();
+    try {
+      segment.close(false);
+      fail("should fail because IOException occurred");
+    } catch (IOException e) {
+      //expected
+    }
+    verify(mockFileChannel).force(true);
+    assertTrue("File couldn't be deleted.", (new File(tempDir, segment.getName()).delete()));
   }
 
   /**
@@ -544,6 +613,25 @@ public class LogSegmentTest {
   }
 
   /**
+   * Create a {@link LogSegment} and a mock file channel associated with it for testing.
+   * @param name the name of log segment
+   * @return a pair that contains log segment and mock file channel
+   * @throws Exception
+   */
+  private Pair<LogSegment, FileChannel> getSegmentAndFileChannel(String name) throws Exception {
+    File file = new File(tempDir, name);
+    if (file.exists()) {
+      assertTrue(file.getAbsolutePath() + " already exists and could not be deleted", file.delete());
+    }
+    assertTrue("Segment file could not be created at path " + file.getAbsolutePath(), file.createNewFile());
+    file.deleteOnExit();
+    FileChannel fileChannel = Utils.openChannel(file, true);
+    FileChannel mockFileChannel = Mockito.spy(fileChannel);
+    LogSegment segment = new LogSegment(file, STANDARD_SEGMENT_SIZE, metrics, mockFileChannel);
+    return new Pair<>(segment, mockFileChannel);
+  }
+
+  /**
    * Appends random data of size {@code size} to given {@code segment}.
    * @param segment the {@link LogSegment} to append data to.
    * @param size the size of the data that should be appended.
@@ -591,7 +679,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   private void closeSegmentAndDeleteFile(LogSegment segment) throws IOException {
-    segment.close();
+    segment.close(false);
     assertFalse("File channel is not closed", segment.getView().getSecond().isOpen());
     File segmentFile = new File(tempDir, segment.getName());
     assertTrue("The segment file [" + segmentFile.getAbsolutePath() + "] could not be deleted", segmentFile.delete());
@@ -673,7 +761,7 @@ public class LogSegmentTest {
       readDirectlyAndEnsureMatch(segment, writeStartOffset + bufOne.length, bufTwo);
       readDirectlyAndEnsureMatch(segment, writeStartOffset + bufOne.length + bufTwo.length, bufThree);
 
-      segment.close();
+      segment.close(false);
       // ensure that append fails.
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1));
       try {
