@@ -684,6 +684,15 @@ class BlobStore implements Store {
 
   @Override
   public void shutdown() throws StoreException {
+    shutdown(false);
+  }
+
+  /**
+   * Shuts down the store.
+   * @param skipDiskFlush {@code true} should skip any disk flush operations during shutdown. {@code false} otherwise.
+   * @throws StoreException
+   */
+  private void shutdown(boolean skipDiskFlush) throws StoreException {
     long startTimeInMs = time.milliseconds();
     synchronized (storeWriteLock) {
       checkStarted();
@@ -691,8 +700,8 @@ class BlobStore implements Store {
         logger.info("Store : " + dataDir + " shutting down");
         blobStoreStats.close();
         compactor.close(30);
-        index.close();
-        log.close();
+        index.close(skipDiskFlush);
+        log.close(skipDiskFlush);
         metrics.deregisterMetrics(storeId);
         started = false;
       } catch (Exception e) {
@@ -715,7 +724,7 @@ class BlobStore implements Store {
     int count = errorCount.incrementAndGet();
     if (count == config.storeIoErrorCountToTriggerShutdown) {
       logger.error("Shutting down BlobStore {} because IO error count exceeds threshold", storeId);
-      shutdown();
+      shutdown(true);
       metrics.storeIoErrorTriggeredShutdownCount.inc();
     }
   }

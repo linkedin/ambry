@@ -269,13 +269,13 @@ public class CompactionVerifier implements Closeable {
   @Override
   public void close() throws IOException {
     try {
-      srcIndex.close();
-      tgtIndex.close();
+      srcIndex.close(false);
+      tgtIndex.close(false);
     } catch (StoreException e) {
       throw new IOException(e);
     }
-    srcLog.close();
-    tgtLog.close();
+    srcLog.close(false);
+    tgtLog.close(false);
     cLog.close();
   }
 

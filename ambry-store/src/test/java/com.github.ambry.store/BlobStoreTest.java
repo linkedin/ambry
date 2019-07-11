@@ -942,6 +942,8 @@ public class BlobStoreTest {
   @Test
   public void shutdownTest() throws StoreException {
     store.shutdown();
+    File cleanShutDownFile = new File(tempDir, PersistentIndex.CLEAN_SHUTDOWN_FILENAME);
+    assertTrue("Clean shutdown file should exist.", cleanShutDownFile.exists());
     // no operations should be possible if store is not up or has been shutdown
     verifyOperationFailuresOnInactiveStore(store);
     store = createBlobStore(getMockReplicaId(tempDirStr));
@@ -1027,6 +1029,10 @@ public class BlobStoreTest {
     // verify error count would be reset after successful Put operation
     testStore1.put(validWriteSet1);
     assertEquals("Error count should be reset", 0, testStore1.getErrorCount().get());
+    // trigger a normal shutdown to persist data (otherwise following delete/ttl update operation will encounter ID_Not_Found error)
+    testStore1.shutdown();
+    // restart for subsequent tests
+    testStore1.start();
     // verify consecutive two failed Puts would make store shutdown (storeIoErrorCountToTriggerShutdown = 2)
     for (int i = 0; i < 2; ++i) {
       try {
@@ -1178,7 +1184,9 @@ public class BlobStoreTest {
   // general
 
   /**
-   * Verify store method can capture store exception and correctly handle it.
+   * Verify store method can capture store exception and correctly handle it. The method also verifies that if exception
+   * is really caused by disk I/O error, store shutdown process would skip any disk flush operation and no clean shutdown
+   * file should exist in directory.
    * @param methodCaller the method caller to invoke store methods to trigger store exception
    * @throws StoreException
    */
@@ -1187,8 +1195,14 @@ public class BlobStoreTest {
     MockBlobStore mockBlobStore =
         new MockBlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)),
             mock(ReplicaStatusDelegate.class), new StoreMetrics(new MetricRegistry()));
+    // First, verify that a normal shutdown will create a clean shutdown file in the store directory.
     mockBlobStore.start();
-    // Verify that store won't be shut down if Unknown_Error occurred.
+    mockBlobStore.shutdown();
+    File shutdownFile = new File(tempDir, PersistentIndex.CLEAN_SHUTDOWN_FILENAME);
+    assertTrue("Clean shutdown file should exist", shutdownFile.exists());
+
+    mockBlobStore.start();
+    // Second, verify that store won't be shut down if Unknown_Error occurred.
     StoreException storeExceptionInIndex = new StoreException("Mock Unknown error", StoreErrorCodes.Unknown_Error);
     mockBlobStore.setPersistentIndex(storeExceptionInIndex);
     try {
@@ -1197,18 +1211,22 @@ public class BlobStoreTest {
     } catch (StoreException e) {
       assertEquals("Mismatch in StoreErrorCode", StoreErrorCodes.Unknown_Error, e.getErrorCode());
     }
+    assertTrue("Store should not be shut down", mockBlobStore.isStarted());
     assertEquals("Mismatch in store io error count", 0, mockBlobStore.getErrorCount().get());
-    // Verify that store will be shut down if IOError occurred
+
+    // Third, verify that store will be shut down if IOError occurred (disk I/O error)
     storeExceptionInIndex = new StoreException("Mock disk I/O error", StoreErrorCodes.IOError);
     mockBlobStore.setPersistentIndex(storeExceptionInIndex);
     try {
       methodCaller.invoke(mockBlobStore);
-      //mockBlobStore.findMissingKeys(idsToProvide);
       fail("should fail");
     } catch (StoreException e) {
       assertEquals("Mismatch in StoreErrorCode", StoreErrorCodes.IOError, e.getErrorCode());
     }
     assertFalse("Store should be shutdown after error count exceeded threshold", mockBlobStore.isStarted());
+
+    // In the end, verify that store shutdown would skip any disk flush operation if it is triggered by a real disk I/O error.
+    assertFalse("When encountering disk I/O error, clean shutdown file shouldn't exist", shutdownFile.exists());
   }
 
   /**

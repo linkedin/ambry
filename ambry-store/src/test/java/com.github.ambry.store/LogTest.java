@@ -185,7 +185,7 @@ public class LogTest {
         assertEquals("Position of buffer has changed", 0, buffer.position());
       }
     } finally {
-      log.close();
+      log.close(false);
       cleanDirectory(tempDir);
     }
   }
@@ -206,7 +206,7 @@ public class LogTest {
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     } finally {
-      log.close();
+      log.close(false);
       cleanDirectory(tempDir);
     }
   }
@@ -227,7 +227,7 @@ public class LogTest {
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     } finally {
-      log.close();
+      log.close(false);
       cleanDirectory(tempDir);
     }
   }
@@ -248,7 +248,7 @@ public class LogTest {
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     } finally {
-      log.close();
+      log.close(false);
       cleanDirectory(tempDir);
     }
   }
@@ -283,7 +283,7 @@ public class LogTest {
         // expected. Nothing to do.
       }
     } finally {
-      log.close();
+      log.close(false);
       cleanDirectory(tempDir);
     }
   }
@@ -579,7 +579,7 @@ public class LogTest {
     if (numFinalSegments == 1) {
       String name = LogSegmentNameHelper.generateFirstSegmentName(false);
       File file = create(LogSegmentNameHelper.nameToFilename(name));
-      new LogSegment(name, file, segmentCapacity, metrics, false).close();
+      new LogSegment(name, file, segmentCapacity, metrics, false).close(false);
       segmentNames.add(name);
     } else {
       for (int i = 0; i < numToCreate; i++) {
@@ -591,7 +591,7 @@ public class LogTest {
         long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
         String name = LogSegmentNameHelper.getName(pos, gen);
         File file = create(LogSegmentNameHelper.nameToFilename(name));
-        new LogSegment(name, file, segmentCapacity, metrics, true).close();
+        new LogSegment(name, file, segmentCapacity, metrics, true).close(false);
         segmentNames.add(name);
       }
     }
@@ -657,7 +657,7 @@ public class LogTest {
       flushCloseAndValidate(log);
       checkLogReload(logCapacity, Math.min(logCapacity, segmentCapacity), allSegmentNames);
     } finally {
-      log.close();
+      log.close(false);
       cleanDirectory(tempDir);
     }
   }
@@ -807,7 +807,7 @@ public class LogTest {
         // the new config should be ignored.
         checkLog(log, originalSegmentCapacity, allSegmentNames);
       } finally {
-        log.close();
+        log.close(false);
       }
     }
   }
@@ -821,7 +821,7 @@ public class LogTest {
     // flush should not throw any exceptions
     log.flush();
     // close log and ensure segments are closed
-    log.close();
+    log.close(false);
     LogSegment segment = log.getFirstSegment();
     while (segment != null) {
       assertFalse("LogSegment has not been closed", segment.getView().getSecond().isOpen());
