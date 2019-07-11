@@ -559,11 +559,11 @@ public class GetBlobOperationTest {
   }
 
   /**
-   * Test the case where originating replicas return Blob_Not_found and the rest times out.
+   * Test the case where origin replicas return Blob_Not_found and the rest times out.
    * @throws Exception
    */
   @Test
-  public void testTimeoutAndBlobNotFoundOriginatingNotFound() throws Exception {
+  public void testTimeoutAndBlobNotFoundInOriginDc() throws Exception {
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     doPut();
 
@@ -646,7 +646,7 @@ public class GetBlobOperationTest {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             GetBlobOperation op = createOperationAndComplete(null);
-            // Local dc is the originating DC, only two NOT_FOUND would terminate the operation.
+            // Local dc is the origin DC, only two NOT_FOUND would terminate the operation.
             Assert.assertEquals("Must have attempted sending requests to all replicas", 2,
                 correlationIdToGetOperation.size());
             assertFailureAndCheckErrorCode(op, expectedError);

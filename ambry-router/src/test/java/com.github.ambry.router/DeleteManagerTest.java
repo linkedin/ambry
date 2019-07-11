@@ -466,8 +466,11 @@ public class DeleteManagerTest {
         });
   }
 
+  /**
+   * Test the case  when getting NOT_FOUND error from origin DC while termination on NOT_FOUND is enabled.
+   */
   @Test
-  public void testOriginatingDcNotFoundError() throws Exception {
+  public void testOriginDcNotFoundError() throws Exception {
     assertCloseCleanup(router);
     Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.delete.request.parallelism", "1");

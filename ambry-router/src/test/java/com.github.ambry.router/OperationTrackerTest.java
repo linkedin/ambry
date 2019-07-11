@@ -435,7 +435,7 @@ public class OperationTrackerTest {
    * Test the case when NotFound Error should be disabled since the cross colo is disabled.
    */
   @Test
-  public void originatingDcNotFoundColoDisableTest() {
+  public void blobNotFoundInOriginDcAndCrossColoDisabledTest() {
     initialize();
     originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
     OperationTracker ot = getOperationTracker(false, 1, 3, false, Integer.MAX_VALUE);
@@ -453,10 +453,10 @@ public class OperationTrackerTest {
   }
 
   /**
-   * Test the case when NotFound Error should be disabled since the originating DC is unknown.
+   * Test the case when NotFound Error should be disabled since the origin DC is unknown.
    */
   @Test
-  public void originatingDcNotFoundUnknownOriginatingDcTest() {
+  public void originDcNotFoundUnknownOriginDcTest() {
     initialize();
     originatingDcName = null;
     OperationTracker ot = getOperationTracker(true, 1, 12, false, Integer.MAX_VALUE);
@@ -476,7 +476,7 @@ public class OperationTrackerTest {
    * Test the case when NotFound Error triggered.
    */
   @Test
-  public void originatingDcNotFoundTriggeredTest() {
+  public void originDcNotFoundTriggeredTest() {
     initialize();
     originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
     OperationTracker ot = getOperationTracker(true, 2, 3, true, Integer.MAX_VALUE);

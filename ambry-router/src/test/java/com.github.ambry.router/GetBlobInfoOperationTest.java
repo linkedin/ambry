@@ -383,11 +383,11 @@ public class GetBlobInfoOperationTest {
   }
 
   /**
-   * Test the case where originating replicas return Blob_Not_found and the rest returns IO_Error.
+   * Test the case where origin replicas return Blob_Not_found and the rest returns IO_Error.
    * @throws Exception
    */
   @Test
-  public void testIOErrorAndBlobNotFoundOriginatingNotFound() throws Exception {
+  public void testIOErrorAndBlobNotFoundInOriginDc() throws Exception {
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     correlationIdToGetOperation.clear();
 
@@ -400,7 +400,7 @@ public class GetBlobInfoOperationTest {
 
     for (MockServer server : mockServerLayout.getMockServers()) {
       if (server.getDataCenter().equals(oldLocal)) {
-        // for originating DC, always return Blob_Not_Found;
+        // for origin DC, always return Blob_Not_Found;
         server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
       } else {
         // otherwise, return IO_Error.
@@ -430,11 +430,11 @@ public class GetBlobInfoOperationTest {
 
 
   /**
-   * Test the case where originating replicas return Blob_Not_found and the rest times out.
+   * Test the case where origin replicas return Blob_Not_found and the rest times out.
    * @throws Exception
    */
   @Test
-  public void testTimeoutAndBlobNotFoundOriginatingNotFound() throws Exception {
+  public void testTimeoutAndBlobNotFoundInOriginDc() throws Exception {
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     correlationIdToGetOperation.clear();
 
@@ -448,7 +448,7 @@ public class GetBlobInfoOperationTest {
 
     for (MockServer server : mockServerLayout.getMockServers()) {
       if (server.getDataCenter().equals(oldLocal)) {
-        // for originating DC, always return Blob_Not_Found;
+        // for origin DC, always return Blob_Not_Found;
         server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
       } else {
         // Randomly set something here, it will not be used.
@@ -524,7 +524,7 @@ public class GetBlobInfoOperationTest {
     mockServerLayout.getMockServers()
         .forEach(server -> server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found));
     assertOperationFailure(RouterErrorCode.BlobDoesNotExist);
-    // Blob is created by putBlob function so the local datacenter will be the originating datecenter.
+    // Blob is created by putBlob function so the local datacenter will be the origin datecenter.
     // Thus only need two Blob_Not_Found to terminate the operation.
     Assert.assertEquals("Must have attempted sending requests to all replicas", 2,
         correlationIdToGetOperation.size());

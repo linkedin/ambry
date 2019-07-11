@@ -206,7 +206,7 @@ class DeleteOperation {
             }
           } else {
             logger.trace("Replica {} returned an error {} for a delete request with response correlationId : {} ",
-                replica.getDataNodeId(), getError, deleteRequest.getCorrelationId());
+                replica, getError, deleteRequest.getCorrelationId());
             RouterErrorCode routerErrorCode = processServerError(getError);
             if (getError == ServerErrorCode.Blob_Authorization_Failure) {
               // this is a successful response and one that completes the operation regardless of whether the
