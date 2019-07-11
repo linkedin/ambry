@@ -314,18 +314,13 @@ class TtlUpdateOperation {
 
   /**
    * Set the exception associated with this operation.
-   * First, if current operationException is null, directly set operationException as exception;
-   * Second, if operationException exists, compare ErrorCodes of exception and existing operation Exception depending
+   * If operationException exists, compare ErrorCodes of exception and existing operation Exception depending
    * on precedence level. An ErrorCode with a smaller precedence level overrides an ErrorCode with a larger precedence
    * level. Update the operationException if necessary.
    * @param exception the {@link RouterException} to possibly set.
    */
   void setOperationException(Exception exception) {
-    if (exception instanceof RouterException) {
-      RouterUtils.replaceOperationException(operationException, (RouterException) exception, this::getPrecedenceLevel);
-    } else {
-      operationException.compareAndSet(null, exception);
-    }
+    RouterUtils.replaceOperationException(operationException, (RouterException) exception, this::getPrecedenceLevel);
   }
 
   /**
