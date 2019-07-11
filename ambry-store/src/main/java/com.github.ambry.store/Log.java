@@ -284,12 +284,12 @@ class Log implements Write {
 
   /**
    * Closes the Log and all its segments.
-   * @param shouldSkipDiskFlush whether to skip any disk flush operations.
+   * @param skipDiskFlush whether to skip any disk flush operations.
    * @throws IOException if the flush encountered an I/O error.
    */
-  void close(boolean shouldSkipDiskFlush) throws IOException {
+  void close(boolean skipDiskFlush) throws IOException {
     for (LogSegment segment : segmentsByName.values()) {
-      segment.close(shouldSkipDiskFlush);
+      segment.close(skipDiskFlush);
     }
   }
 

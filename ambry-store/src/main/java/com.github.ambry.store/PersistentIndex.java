@@ -1330,16 +1330,16 @@ class PersistentIndex {
 
   /**
    * Closes the index
-   * @param shouldSkipDiskFlush whether to skip any disk flush operations.
+   * @param skipDiskFlush whether to skip any disk flush operations.
    * @throws StoreException
    */
-  void close(boolean shouldSkipDiskFlush) throws StoreException {
+  void close(boolean skipDiskFlush) throws StoreException {
     long startTimeInMs = time.milliseconds();
     try {
       if (persistorTask != null) {
         persistorTask.cancel(false);
       }
-      if (!shouldSkipDiskFlush) {
+      if (!skipDiskFlush) {
         persistor.write();
         if (hardDeleter != null) {
           try {

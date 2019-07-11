@@ -689,10 +689,10 @@ class BlobStore implements Store {
 
   /**
    * Shuts down the store.
-   * @param shouldSkipDiskFlush {@code true} should skip any disk flush operations during shutdown. {@code false} otherwise.
+   * @param skipDiskFlush {@code true} should skip any disk flush operations during shutdown. {@code false} otherwise.
    * @throws StoreException
    */
-  private void shutdown(boolean shouldSkipDiskFlush) throws StoreException {
+  private void shutdown(boolean skipDiskFlush) throws StoreException {
     long startTimeInMs = time.milliseconds();
     synchronized (storeWriteLock) {
       checkStarted();
@@ -700,8 +700,8 @@ class BlobStore implements Store {
         logger.info("Store : " + dataDir + " shutting down");
         blobStoreStats.close();
         compactor.close(30);
-        index.close(shouldSkipDiskFlush);
-        log.close(shouldSkipDiskFlush);
+        index.close(skipDiskFlush);
+        log.close(skipDiskFlush);
         metrics.deregisterMetrics(storeId);
         started = false;
       } catch (Exception e) {

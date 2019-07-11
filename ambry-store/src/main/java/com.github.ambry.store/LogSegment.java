@@ -57,11 +57,11 @@ class LogSegment implements Read, Write {
   private final AtomicLong endOffset;
   private final AtomicLong refCount = new AtomicLong(0);
   private final AtomicBoolean open = new AtomicBoolean(true);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   static final int BYTE_BUFFER_SIZE_FOR_APPEND = 1024 * 1024;
   private ByteBuffer byteBufferForAppend = null;
   static final AtomicInteger byteBufferForAppendTotalCount = new AtomicInteger(0);
+  private static final Logger logger = LoggerFactory.getLogger(LogSegment.class);
 
   /**
    * Creates a LogSegment abstraction with the given capacity.
@@ -489,19 +489,19 @@ class LogSegment implements Read, Write {
 
   /**
    * Closes this log segment
-   * @param shouldSkipDiskFlush whether to skip any disk flush operations.
+   * @param skipDiskFlush whether to skip any disk flush operations.
    * @throws IOException if there is an I/O error while closing the log segment.
    */
-  void close(boolean shouldSkipDiskFlush) throws IOException {
+  void close(boolean skipDiskFlush) throws IOException {
     if (open.compareAndSet(true, false)) {
-      if (!shouldSkipDiskFlush) {
+      if (!skipDiskFlush) {
         flush();
       }
       try {
         // attempt to close file descriptors even when there is a disk I/O error.
         fileChannel.close();
       } catch (IOException e) {
-        if (!shouldSkipDiskFlush) {
+        if (!skipDiskFlush) {
           throw e;
         }
         logger.warn(
