@@ -68,8 +68,7 @@ import org.slf4j.LoggerFactory;
  * determined after the first chunk is fetched, based on whether the first chunk turns out to be a metadata chunk or
  * a data chunk.
  *
- * As soon as the first data chunk is fetched (which could be the first chunk in the case of simple blobs and the
- * second chunk fetched in the case of composite blobs), the operation callback is invoked (and the future is marked
+ * As soon as the first chunk is fetched, the operation callback is invoked (and the future is marked
  * as done) so that the caller can start reading in data. The rest of the chunks are asynchronously fetched and
  * buffered up to the maximum that can be buffered. When fetched chunks are consumed by the caller, subsequent chunks
  * become eligible to be fetched.

@@ -32,15 +32,43 @@ public class GetRequest extends RequestOrResponse {
   private MessageFormatFlags flags;
   private GetOption getOption;
   private List<PartitionRequestInfo> partitionRequestInfoList;
+  private final Long ifModifiedSince;
   private int sizeSent;
   private int totalPartitionRequestInfoListSize;
 
   private static final int MessageFormat_Size_In_Bytes = 2;
   private static final int GetOption_Size_In_Bytes = 2;
   private static final int Partition_Request_Info_List_Size = 4;
+  private static final int IfModifiedSince_Size_In_Bytes = 8;
   private static final short Get_Request_Version_V2 = 2;
+  private static final short Get_Request_Version_V3 = 3;
   public static final String Replication_Client_Id_Prefix = "replication-fetch-";
   public static final String Cloud_Replica_Keyword = "vcr";
+  public static final Long DEFAULT_IF_MODIFED_SINCE = new Long(-1);
+
+  public GetRequest(int correlationId, String clientId, MessageFormatFlags flags,
+      List<PartitionRequestInfo> partitionRequestInfoList, GetOption getOption, Long ifModifiedSince) {
+    super(RequestOrResponseType.GetRequest, Get_Request_Version_V3, correlationId, clientId);
+
+    this.flags = flags;
+    this.getOption = getOption;
+    this.ifModifiedSince = ifModifiedSince;
+    if (partitionRequestInfoList == null) {
+      throw new IllegalArgumentException("No partition info specified in GetRequest");
+    }
+    // Make sure partition request info list only have one partition and one blob
+    if (this.ifModifiedSince != DEFAULT_IF_MODIFED_SINCE && this.partitionRequestInfoList.size() > 1) {
+      throw new IllegalArgumentException("If-Modified-Since should be used with one partition and one blob");
+    }
+    this.partitionRequestInfoList = partitionRequestInfoList;
+    for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
+      if (this.ifModifiedSince != DEFAULT_IF_MODIFED_SINCE && partitionRequestInfo.getBlobIds().size()>1) {
+        throw new IllegalArgumentException("If-Modified-Since should be used with one partition and one blob");
+      }
+      totalPartitionRequestInfoListSize += partitionRequestInfo.sizeInBytes();
+    }
+    this.sizeSent = 0;
+  }
 
   public GetRequest(int correlationId, String clientId, MessageFormatFlags flags,
       List<PartitionRequestInfo> partitionRequestInfoList, GetOption getOption) {
@@ -48,6 +76,7 @@ public class GetRequest extends RequestOrResponse {
 
     this.flags = flags;
     this.getOption = getOption;
+    this.ifModifiedSince = DEFAULT_IF_MODIFED_SINCE;
     if (partitionRequestInfoList == null) {
       throw new IllegalArgumentException("No partition info specified in GetRequest");
     }
@@ -70,6 +99,10 @@ public class GetRequest extends RequestOrResponse {
     return getOption;
   }
 
+  public Long getIfModifiedSince() {
+    return ifModifiedSince;
+  }
+
   public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.GetRequest;
     Short versionId = stream.readShort();
@@ -84,11 +117,18 @@ public class GetRequest extends RequestOrResponse {
       partitionRequestInfoList.add(partitionRequestInfo);
     }
     GetOption getOption = GetOption.None;
-    if (versionId == Get_Request_Version_V2) {
+    if (versionId >= Get_Request_Version_V2) {
       getOption = GetOption.values()[stream.readShort()];
     }
-    // ignore version for now
-    return new GetRequest(correlationId, clientId, messageType, partitionRequestInfoList, getOption);
+    Long ifModifiedSince = DEFAULT_IF_MODIFED_SINCE;
+    if (versionId == Get_Request_Version_V3) {
+      ifModifiedSince = stream.readLong();
+    }
+    if (versionId == Get_Request_Version_V2) {
+      return new GetRequest(correlationId, clientId, messageType, partitionRequestInfoList, getOption);
+    } else {
+      return new GetRequest(correlationId, clientId, messageType, partitionRequestInfoList, getOption, ifModifiedSince);
+    }
   }
 
   @Override
@@ -103,6 +143,9 @@ public class GetRequest extends RequestOrResponse {
         partitionRequestInfo.writeTo(bufferToSend);
       }
       bufferToSend.putShort((short) getOption.ordinal());
+      if (versionId == Get_Request_Version_V3) {
+        bufferToSend.putLong(ifModifiedSince);
+      }
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
@@ -119,9 +162,10 @@ public class GetRequest extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    // header + message format size + partition request info size + total partition request info list size
+    int ifModifiedSinceSize = versionId == Get_Request_Version_V3 ? IfModifiedSince_Size_In_Bytes : 0;
+    // header + message format size + partition request info size + total partition request info list
     return super.sizeInBytes() + MessageFormat_Size_In_Bytes + Partition_Request_Info_List_Size
-        + totalPartitionRequestInfoListSize + GetOption_Size_In_Bytes;
+        + totalPartitionRequestInfoListSize + GetOption_Size_In_Bytes + ifModifiedSinceSize;
   }
 
   @Override
