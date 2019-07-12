@@ -51,7 +51,7 @@ public class CloudStorageCompactorTest {
 
   public CloudStorageCompactorTest(boolean testMode) {
     this.testMode = testMode;
-    compactor = new CloudStorageCompactor(mockDest, partitionMap, vcrMetrics, testMode);
+    compactor = new CloudStorageCompactor(mockDest, partitionMap.keySet(), vcrMetrics, testMode);
   }
 
   /**

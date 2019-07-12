@@ -59,7 +59,7 @@ public class AzureCompactionTool {
       CloudDestination azureDest =
           new AzureCloudDestinationFactory(verifiableProperties, new MetricRegistry()).getCloudDestination();
       CloudStorageCompactor compactor =
-          new CloudStorageCompactor(azureDest, Collections.emptyMap(), new VcrMetrics(new MetricRegistry()), testMode);
+          new CloudStorageCompactor(azureDest, Collections.emptySet(), new VcrMetrics(new MetricRegistry()), testMode);
       int result = compactor.compactPartition(partitionPath);
       String resultMessage =
           String.format("In partition %s: %d blobs %s", partitionPath, result, testMode ? "ready to purge" : "purged");

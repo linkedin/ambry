@@ -76,7 +76,7 @@ public class CloudBackupManager extends ReplicationEngine {
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             factory, cloudDestination);
     this.cloudStorageCompactor =
-        new CloudStorageCompactor(cloudDestination, partitionToPartitionInfo, vcrMetrics, false);
+        new CloudStorageCompactor(cloudDestination, partitionToPartitionInfo.keySet(), vcrMetrics, false);
   }
 
   @Override

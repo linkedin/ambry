@@ -15,10 +15,8 @@ package com.github.ambry.cloud;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.replication.PartitionInfo;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,32 +25,34 @@ import org.slf4j.LoggerFactory;
 public class CloudStorageCompactor implements Runnable {
   private static final Logger logger = LoggerFactory.getLogger(CloudStorageCompactor.class);
   private final CloudDestination cloudDestination;
-  private final Map<PartitionId, PartitionInfo> partitionMap;
+  private final Set<PartitionId> partitions;
   private final VcrMetrics vcrMetrics;
   private final boolean testMode;
 
   /**
    * Public constructor.
    * @param cloudDestination the cloud destination to use.
-   * @param partitionMap the map whose keys are the partitions to compact.
+   * @param partitions the set of partitions to compact.
    * @param vcrMetrics the metrics to update.
    * @param testMode if true, the compaction methods only perform the query but do not actually remove the blobs.
    */
-  public CloudStorageCompactor(CloudDestination cloudDestination, Map<PartitionId, PartitionInfo> partitionMap,
-      VcrMetrics vcrMetrics, boolean testMode) {
+  public CloudStorageCompactor(CloudDestination cloudDestination, Set<PartitionId> partitions, VcrMetrics vcrMetrics,
+      boolean testMode) {
     this.cloudDestination = cloudDestination;
-    this.partitionMap = partitionMap;
+    this.partitions = partitions;
     this.vcrMetrics = vcrMetrics;
     this.testMode = testMode;
   }
 
   @Override
   public void run() {
-    Timer.Context docTimer = vcrMetrics.blobCompactionTime.time();
+    Timer.Context timer = vcrMetrics.blobCompactionTime.time();
     try {
       compactPartitions();
+    } catch (Throwable th) {
+      logger.error("Hit exception running compaction task", th);
     } finally {
-      docTimer.stop();
+      timer.stop();
     }
   }
 
@@ -61,17 +61,17 @@ public class CloudStorageCompactor implements Runnable {
    * @return the total number of blobs purged.
    */
   public int compactPartitions() {
-    if (partitionMap.isEmpty()) {
+    if (partitions.isEmpty()) {
       logger.info("Skipping compaction as no partitions are assigned.");
       return 0;
     }
-    Set<PartitionId> partitions = new HashSet<>(partitionMap.keySet());
+    Set<PartitionId> partitionsSnapshot = new HashSet<>(partitions);
     logger.info("Beginning dead blob compaction for {} partitions", partitions.size());
     long startTime = System.currentTimeMillis();
     int totalBlobsPurged = 0;
-    for (PartitionId partitionId : partitions) {
+    for (PartitionId partitionId : partitionsSnapshot) {
       String partitionPath = partitionId.toPathString();
-      if (!partitionMap.containsKey(partitionId)) {
+      if (!partitions.contains(partitionId)) {
         // Looks like partition was reassigned since the loop started, so skip it
         continue;
       }
@@ -83,7 +83,7 @@ public class CloudStorageCompactor implements Runnable {
       }
     }
     long compactionTime = (System.currentTimeMillis() - startTime) / 1000;
-    logger.info("Purged {} blobs in {} partitions taking {} seconds", totalBlobsPurged, partitions.size(),
+    logger.info("Purged {} blobs in {} partitions taking {} seconds", totalBlobsPurged, partitionsSnapshot.size(),
         compactionTime);
     return totalBlobsPurged;
   }
