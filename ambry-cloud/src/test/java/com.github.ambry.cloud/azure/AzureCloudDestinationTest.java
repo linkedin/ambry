@@ -43,11 +43,13 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpHost;
 import org.junit.Before;
@@ -251,6 +253,33 @@ public class AzureCloudDestinationTest {
     assertEquals("Expected no dead blobs", 0, metadataList.size());
     assertEquals(2, azureMetrics.documentQueryCount.getCount());
     assertEquals(1, azureMetrics.deadBlobsQueryTime.getCount());
+  }
+
+  /** Test findEntriesSince. */
+  @Test
+  public void testFindEntriesSince() throws Exception {
+
+    long chunkSize = 110000;
+    long maxTotalSize = 1000000; // between 9 and 10 chunks
+    long timeSince = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
+
+    // create metadata list where total size > maxTotalSize
+    List<Document> docList = new ArrayList<>();
+    for (int j = 0; j < 20; j++) {
+      CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
+          CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+      docList.add(new Document(objectMapper.writeValueAsString(inputMetadata)));
+    }
+    QueryIterable<Document> mockIterable = mock(QueryIterable.class);
+    when(mockIterable.iterator()).thenReturn(docList.iterator());
+    FeedResponse<Document> feedResponse = mock(FeedResponse.class);
+    when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
+    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
+        feedResponse);
+    // Run the query
+    List<CloudBlobMetadata> metadataList =
+        azureDest.findEntriesSince(blobId.getPartition().toPathString(), timeSince, maxTotalSize);
+    assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, metadataList.size());
   }
 
   /** Test blob existence check. */

@@ -218,6 +218,8 @@ public class CloudBlobStoreTest {
     assertEquals("Wrong number of missing keys", count, missingKeys.size());
   }
 
+  // TODO: test CloudBlobStore.findEntriesSince
+
   /** Test verifying behavior when store not started. */
   @Test
   public void testStoreNotStarted() throws Exception {

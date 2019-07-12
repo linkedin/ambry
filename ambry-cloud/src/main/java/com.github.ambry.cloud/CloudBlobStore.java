@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.Timer;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
@@ -37,6 +38,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -58,6 +61,7 @@ class CloudBlobStore implements Store {
   private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
+  private final ClusterMap clusterMap;
   private final CloudBlobCryptoAgentFactory cryptoAgentFactory;
   private final CloudBlobCryptoAgent cryptoAgent;
   private final VcrMetrics vcrMetrics;
@@ -75,9 +79,10 @@ class CloudBlobStore implements Store {
    */
   CloudBlobStore(VerifiableProperties properties, PartitionId partitionId, CloudDestination cloudDestination,
       VcrMetrics vcrMetrics) throws IllegalStateException {
-
+    // TODO: need clusterMap too
     CloudConfig cloudConfig = new CloudConfig(properties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
+    clusterMap = null;
     this.cloudDestination = Objects.requireNonNull(cloudDestination, "cloudDestination is required");
     this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
     this.vcrMetrics = Objects.requireNonNull(vcrMetrics, "vcrMetrics is required");
@@ -236,7 +241,35 @@ class CloudBlobStore implements Store {
 
   @Override
   public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
-    throw new UnsupportedOperationException("Method not supported");
+    CloudFindToken inputToken = (CloudFindToken) token;
+    try {
+      List<CloudBlobMetadata> results =
+          cloudDestination.findEntriesSince(partitionId.toPathString(), inputToken.getLatestUploadTime(),
+              maxTotalSizeOfEntries);
+      if (results.isEmpty()) {
+        return new FindInfo(Collections.emptyList(), inputToken);
+      } else {
+        List<MessageInfo> messageEntries = new ArrayList<>();
+        long bytesReadThisQuery = 0;
+        for (CloudBlobMetadata metadata : results) {
+          BlobId blobId = new BlobId(metadata.getId(), clusterMap);
+          long operationTime = (metadata.getDeletionTime() > 0) ? metadata.getDeletionTime()
+              : (metadata.getCreationTime() > 0) ? metadata.getCreationTime() : metadata.getUploadTime();
+          boolean isDeleted = metadata.getDeletionTime() > 0;
+          boolean isTtlUpdated = false;  // No way to know
+          MessageInfo messageInfo =
+              new MessageInfo(blobId, metadata.getSize(), isDeleted, isTtlUpdated, metadata.getExpirationTime(),
+                  (short) metadata.getAccountId(), (short) metadata.getContainerId(), operationTime);
+          messageEntries.add(messageInfo);
+          bytesReadThisQuery += metadata.getSize();
+        }
+        CloudFindToken outputToken = new CloudFindToken(results.get(results.size() - 1).getUploadTime(),
+            inputToken.getBytesRead() + bytesReadThisQuery);
+        return new FindInfo(messageEntries, outputToken);
+      }
+    } catch (CloudStorageException | IOException ex) {
+      throw new StoreException(ex, StoreErrorCodes.IOError);
+    }
   }
 
   @Override
