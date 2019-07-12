@@ -17,7 +17,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
+import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -82,6 +84,10 @@ public class AzureCloudDestinationTest {
   private DocumentClient mockumentClient;
   private AzureMetrics azureMetrics;
   private int blobSize = 1024;
+  byte dataCenterId = 66;
+  short accountId = 101;
+  short containerId = 5;
+  long partition = 666;
   private BlobId blobId;
   private long creationTime = System.currentTimeMillis();
   private long deletionTime = creationTime + 10000;
@@ -108,10 +114,7 @@ public class AzureCloudDestinationTest {
     when(mockResponse.getResource()).thenReturn(metadataDoc);
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
 
-    byte dataCenterId = 66;
-    short accountId = 101;
-    short containerId = 5;
-    PartitionId partitionId = new MockPartitionId();
+    PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
 
@@ -265,7 +268,10 @@ public class AzureCloudDestinationTest {
 
     // create metadata list where total size > maxTotalSize
     List<Document> docList = new ArrayList<>();
+    List<String> blobIdList = new ArrayList<>();
     for (int j = 0; j < 20; j++) {
+      BlobId blobId = generateBlobId();
+      blobIdList.add(blobId.getID());
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
           CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
       docList.add(new Document(objectMapper.writeValueAsString(inputMetadata)));
@@ -276,10 +282,24 @@ public class AzureCloudDestinationTest {
     when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
         feedResponse);
+    CloudFindToken findToken = new CloudFindToken();
     // Run the query
-    List<CloudBlobMetadata> metadataList =
-        azureDest.findEntriesSince(blobId.getPartition().toPathString(), timeSince, maxTotalSize);
-    assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, metadataList.size());
+    List<CloudBlobMetadata> firstResult =
+        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
+
+    when(mockIterable.iterator()).thenReturn(docList.iterator());
+    String lastBlobId = firstResult.get(firstResult.size() - 1).getId();
+    findToken = new CloudFindToken(timeSince, lastBlobId, maxTotalSize);
+    List<CloudBlobMetadata> secondResult =
+        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, secondResult.size());
+    assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
+
+    // Rerun with max size below blob size, and make sure it returns one result
+    when(mockIterable.iterator()).thenReturn(docList.iterator());
+    assertEquals("Expected one result", 1,
+        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2).size());
   }
 
   /** Test blob existence check. */
@@ -469,6 +489,15 @@ public class AzureCloudDestinationTest {
     } catch (Exception ex) {
       fail("Expected CloudStorageException, got " + ex.getClass().getSimpleName());
     }
+  }
+
+  /**
+   * Utility method to generate a BlobId.
+   * @return a BlobId for the default attributes.
+   */
+  private BlobId generateBlobId() {
+    return new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, blobId.getPartition(), false,
+        BlobDataType.DATACHUNK);
   }
 
   /**

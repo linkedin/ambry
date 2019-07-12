@@ -42,27 +42,32 @@ public class AmbryStateModel extends StateModel {
 
   @Transition(to = "STANDBY", from = "OFFLINE")
   public void onBecomeStandbyFromOffline(Message message, NotificationContext context) {
-    logger.info("Becoming STANDBY from OFFLINE");
+    logger.info("Partition {} in resource {} is becoming STANDBY from OFFLINE", message.getPartitionName(),
+        message.getResourceName());
   }
 
   @Transition(to = "LEADER", from = "STANDBY")
   public void onBecomeLeaderFromStandby(Message message, NotificationContext context) {
-    logger.info("Becoming LEADER from STANDBY");
+    logger.info("Partition {} in resource {} is becoming LEADER from STANDBY", message.getPartitionName(),
+        message.getResourceName());
   }
 
   @Transition(to = "STANDBY", from = "LEADER")
   public void onBecomeStandbyFromLeader(Message message, NotificationContext context) {
-    logger.info("Becoming STANDBY from LEADER");
+    logger.info("Partition {} in resource {} is becoming STANDBY from LEADER", message.getPartitionName(),
+        message.getResourceName());
   }
 
   @Transition(to = "OFFLINE", from = "STANDBY")
   public void onBecomeOfflineFromStandby(Message message, NotificationContext context) {
-    logger.info("Becoming OFFLINE from STANDBY");
+    logger.info("Partition {} in resource {} is becoming OFFLINE from STANDBY", message.getPartitionName(),
+        message.getResourceName());
   }
 
   @Transition(to = "OFFLINE", from = "LEADER")
   public void onBecomeOfflineFromLeader(Message message, NotificationContext context) {
-    logger.info("Becoming OFFLINE from LEADER");
+    logger.info("Partition {} in resource {} is becoming OFFLINE from LEADER", message.getPartitionName(),
+        message.getResourceName());
   }
 
   @Override

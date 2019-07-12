@@ -76,12 +76,12 @@ public interface CloudDestination {
    * Returns a sequenced list of blobs in the specified partition, ordered by upload time starting from the
    * specified time.
    * @param partitionPath the partition to query.
-   * @param timeSince the start time for the query (blob upload time must be >= this value).
+   * @param findToken the {@link CloudFindToken} specifying the boundary for the query.
    * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
    * @return a List of {@link CloudBlobMetadata} referencing the blobs returned by the query.
    * @throws CloudStorageException
    */
-  List<CloudBlobMetadata> findEntriesSince(String partitionPath, long timeSince, long maxTotalSizeOfEntries)
+  List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries)
       throws CloudStorageException;
 
   /**

@@ -54,7 +54,7 @@ import org.slf4j.LoggerFactory;
 public abstract class ReplicationEngine {
 
   protected final ReplicationConfig replicationConfig;
-  private final ClusterMap clusterMap;
+  protected final ClusterMap clusterMap;
   protected final ScheduledExecutorService scheduler;
   private final AtomicInteger correlationIdGenerator;
   private final ConnectionPool connectionPool;

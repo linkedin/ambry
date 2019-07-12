@@ -186,8 +186,8 @@ public class HardDeleterTest {
   @After
   public void cleanup() throws StoreException, IOException {
     scheduler.shutdown();
-    index.close();
-    log.close();
+    index.close(false);
+    log.close(false);
   }
 
   /**
@@ -357,7 +357,7 @@ public class HardDeleterTest {
         // reset the internal tokens
         index.resetHardDeleterTokens();
       }
-      index.close();
+      index.close(false);
     } catch (Exception e) {
       e.printStackTrace();
       assertEquals(false, true);

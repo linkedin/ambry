@@ -74,15 +74,15 @@ class CloudBlobStore implements Store {
    * @param properties the {@link VerifiableProperties} to use.
    * @param partitionId partition associated with BlobStore.
    * @param cloudDestination the {@link CloudDestination} to use.
+   * @param clusterMap the {@link ClusterMap} to use.
    * @param vcrMetrics the {@link VcrMetrics} to use.
    * @throws IllegalStateException if construction failed.
    */
   CloudBlobStore(VerifiableProperties properties, PartitionId partitionId, CloudDestination cloudDestination,
-      VcrMetrics vcrMetrics) throws IllegalStateException {
-    // TODO: need clusterMap too
+      ClusterMap clusterMap, VcrMetrics vcrMetrics) throws IllegalStateException {
     CloudConfig cloudConfig = new CloudConfig(properties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
-    clusterMap = null;
+    this.clusterMap = clusterMap;
     this.cloudDestination = Objects.requireNonNull(cloudDestination, "cloudDestination is required");
     this.partitionId = Objects.requireNonNull(partitionId, "partitionId is required");
     this.vcrMetrics = Objects.requireNonNull(vcrMetrics, "vcrMetrics is required");
@@ -244,14 +244,15 @@ class CloudBlobStore implements Store {
     CloudFindToken inputToken = (CloudFindToken) token;
     try {
       List<CloudBlobMetadata> results =
-          cloudDestination.findEntriesSince(partitionId.toPathString(), inputToken.getLatestUploadTime(),
-              maxTotalSizeOfEntries);
+          cloudDestination.findEntriesSince(partitionId.toPathString(), inputToken, maxTotalSizeOfEntries);
       if (results.isEmpty()) {
         return new FindInfo(Collections.emptyList(), inputToken);
       } else {
         List<MessageInfo> messageEntries = new ArrayList<>();
         long bytesReadThisQuery = 0;
+        String latestBlobIdString = null;
         for (CloudBlobMetadata metadata : results) {
+          latestBlobIdString = metadata.getId();
           BlobId blobId = new BlobId(metadata.getId(), clusterMap);
           long operationTime = (metadata.getDeletionTime() > 0) ? metadata.getDeletionTime()
               : (metadata.getCreationTime() > 0) ? metadata.getCreationTime() : metadata.getUploadTime();
@@ -263,8 +264,9 @@ class CloudBlobStore implements Store {
           messageEntries.add(messageInfo);
           bytesReadThisQuery += metadata.getSize();
         }
-        CloudFindToken outputToken = new CloudFindToken(results.get(results.size() - 1).getUploadTime(),
-            inputToken.getBytesRead() + bytesReadThisQuery);
+        CloudFindToken outputToken =
+            new CloudFindToken(results.get(results.size() - 1).getUploadTime(), latestBlobIdString,
+                inputToken.getBytesRead() + bytesReadThisQuery);
         return new FindInfo(messageEntries, outputToken);
       }
     } catch (CloudStorageException | IOException ex) {

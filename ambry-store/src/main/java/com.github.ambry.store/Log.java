@@ -284,11 +284,12 @@ class Log implements Write {
 
   /**
    * Closes the Log and all its segments.
+   * @param skipDiskFlush whether to skip any disk flush operations.
    * @throws IOException if the flush encountered an I/O error.
    */
-  void close() throws IOException {
+  void close(boolean skipDiskFlush) throws IOException {
     for (LogSegment segment : segmentsByName.values()) {
-      segment.close();
+      segment.close(skipDiskFlush);
     }
   }
 
@@ -406,7 +407,7 @@ class Log implements Write {
   private void free(LogSegment logSegment) throws StoreException {
     File segmentFile = logSegment.getView().getFirst();
     try {
-      logSegment.close();
+      logSegment.close(false);
       diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);

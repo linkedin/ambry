@@ -238,7 +238,8 @@ project(':ambry-tools') {
                 project(':ambry-store'),
                 project(':ambry-server'),
                 project(':ambry-rest'),
-                project(':ambry-frontend')
+                project(':ambry-frontend'),
+                project(':ambry-cloud')
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-account').sourceSets.test.output

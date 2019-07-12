@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
@@ -302,18 +303,33 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, long timeSince, long maxTotalSizeOfEntries)
-      throws CloudStorageException {
+  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken,
+      long maxTotalSizeOfEntries) throws CloudStorageException {
     SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
-        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, 1000), new SqlParameter(TIME_SINCE_PARAM, timeSince)));
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, 1000),
+            new SqlParameter(TIME_SINCE_PARAM, findToken.getLatestUploadTime())));
     try {
       List<CloudBlobMetadata> results =
           cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
-      // cap results at max size
+      if (results.isEmpty()) {
+        return results;
+      }
       long totalSize = 0;
       List<CloudBlobMetadata> cappedResults = new ArrayList<>();
+      boolean foundLastBlob = (findToken.getLatestBlobId() == null);
       for (CloudBlobMetadata metadata : results) {
+        // Skip the first results until we pass the last blobId in the token
+        if (!foundLastBlob) {
+          foundLastBlob = metadata.getId().equals(findToken.getLatestBlobId());
+          continue;
+        }
+
+        // Cap results at max size
         if (totalSize + metadata.getSize() > maxTotalSizeOfEntries) {
+          // If we have no results yet, must add at least one regardless of size
+          if (cappedResults.isEmpty()) {
+            cappedResults.add(metadata);
+          }
           break;
         }
         cappedResults.add(metadata);

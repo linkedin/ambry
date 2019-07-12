@@ -1169,7 +1169,7 @@ public class IndexTest {
     state.reloadIndex(true, false);
     try {
       doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockLog).flush();
-      state.index.close();
+      state.index.close(false);
       fail("Should have thrown exception due to I/O error");
     } catch (StoreException e) {
       assertEquals("StoreException error code mismatch ", StoreErrorCodes.IOError, e.getErrorCode());
@@ -1177,7 +1177,7 @@ public class IndexTest {
     // test that when IOException's error message is null, the error code should be Unknown_Error
     try {
       doThrow(new IOException()).when(mockLog).flush();
-      state.index.close();
+      state.index.close(false);
       fail("Should have thrown exception due to I/O error");
     } catch (StoreException e) {
       assertEquals("StoreException error code mismatch ", StoreErrorCodes.Unknown_Error, e.getErrorCode());
@@ -1273,7 +1273,7 @@ public class IndexTest {
   }
 
   /**
-   * Tests {@link PersistentIndex#close()} can correctly cancel the scheduled persistor task and makes sure no persistor
+   * Tests {@link PersistentIndex#close(boolean)} can correctly cancel the scheduled persistor task and makes sure no persistor
    * is running background after index closed.
    * @throws StoreException
    * @throws InterruptedException
@@ -1281,7 +1281,7 @@ public class IndexTest {
   @Test
   public void closeIndexToCancelPersistorTest() throws StoreException, InterruptedException {
     long SCHEDULER_PERIOD_MS = 10;
-    state.index.close();
+    state.index.close(false);
     // re-initialize index by using mock scheduler (the intention is to speed up testing by using shorter period)
     ScheduledThreadPoolExecutor scheduler = (ScheduledThreadPoolExecutor) Utils.newScheduler(1, false);
     ScheduledThreadPoolExecutor mockScheduler = Mockito.spy(scheduler);
@@ -1307,7 +1307,7 @@ public class IndexTest {
     // verify that the persistor task is successfully scheduled
     assertTrue("The persistor task wasn't invoked within the expected time",
         mockPersistor.invokeCountDown.await(2 * SCHEDULER_PERIOD_MS, TimeUnit.MILLISECONDS));
-    state.index.close();
+    state.index.close(false);
     mockPersistor.invokeCountDown = new CountDownLatch(1);
     // verify that the persisitor task is canceled after index closed and is never invoked again.
     assertTrue("The persistor task should be canceled after index closed", persistorTask.get().isCancelled());
@@ -1322,7 +1322,7 @@ public class IndexTest {
    */
   @Test
   public void cleanupIndexSegmentFilesForLogSegmentTest() throws StoreException {
-    state.index.close();
+    state.index.close(false);
     LogSegment logSegment = state.log.getFirstSegment();
     while (logSegment != null) {
       LogSegment nextSegment = state.log.getNextSegment(logSegment);
