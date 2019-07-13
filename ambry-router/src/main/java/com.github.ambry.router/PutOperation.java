@@ -51,6 +51,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
@@ -796,6 +797,15 @@ class PutOperation {
    */
   String getServiceId() {
     return passedInBlobProperties.getServiceId();
+  }
+
+  /**
+   * This will return a view of the correlation IDs of requests that may still be in flight. This is not threadsafe
+   * and should only be called from the main event loop.
+   * @return the set of correlation IDs of requests that are still in flight.
+   */
+  Set<Integer> getInFlightCorrelationIds() {
+    return correlationIdToPutChunk.keySet();
   }
 
   /**

@@ -45,6 +45,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.net.ssl.SSLSession;
 import javax.servlet.http.Cookie;
@@ -642,7 +643,7 @@ class NettyRequest implements RestRequest {
      */
     public final FutureResult<Long> futureResult = new FutureResult<Long>();
 
-    private final Callback<Long> callback;
+    private Callback<Long> callback;
     private final AtomicLong totalBytesRead = new AtomicLong(0);
     private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
@@ -673,6 +674,9 @@ class NettyRequest implements RestRequest {
         futureResult.done(totalBytesRead.get(), exception);
         if (callback != null) {
           callback.onCompletion(totalBytesRead.get(), exception);
+          // the callback may hold a reference to a large buffer. Setting the callback to null allows for memory to be
+          // freed before the next request comes over this connection.
+          callback = null;
         }
       }
     }
