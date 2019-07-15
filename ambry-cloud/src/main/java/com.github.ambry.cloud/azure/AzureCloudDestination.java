@@ -77,7 +77,7 @@ class AzureCloudDestination implements CloudDestination {
       "SELECT * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")"
           + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")";
   static final String ENTRIES_SINCE_QUERY_TEMPLATE =
-      "SELECT TOP " + LIMIT_PARAM + " * WHERE c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " >= " + TIME_SINCE_PARAM
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " >= " + TIME_SINCE_PARAM
           + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
   private static final String SEPARATOR = "-";
   private final CloudStorageAccount azureAccount;
