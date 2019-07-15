@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -246,6 +247,56 @@ public class AzureIntegrationTest {
 
     int numPurged = azureDest.purgeBlobs(deadBlobs);
     assertEquals("Not all blobs were purged", expectedDeadBlobs, numPurged);
+    cleanup();
+  }
+
+  /**
+   * Test findEntriesSince.
+   * @throws Exception on error
+   */
+  @Test
+  public void testFindEntriesSince() throws Exception {
+    cleanup();
+
+    PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    String partitionPath = String.valueOf(testPartition);
+
+    // Upload some blobs with different upload times
+    int blobCount = 90;
+    int chunkSize = 1000;
+    int maxTotalSize = 20000;
+    int expectedNumQueries = (blobCount * chunkSize) / maxTotalSize + 2;
+
+    long now = System.currentTimeMillis();
+    long startTime = now - TimeUnit.DAYS.toMillis(7);
+    for (int j = 0; j < blobCount; j++) {
+      BlobId blobId =
+          new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
+              BlobDataType.DATACHUNK);
+      InputStream inputStream = getBlobInputStream(chunkSize);
+      CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, chunkSize,
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
+      cloudBlobMetadata.setUploadTime(startTime + j * 1000);
+      assertTrue("Expected upload to return true",
+          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+    }
+
+    CloudFindToken findToken = new CloudFindToken();
+    // Call findEntriesSince in a loop until no new entries are returned
+    List<CloudBlobMetadata> results = Collections.emptyList();
+    int numQueries = 0;
+    int totalBlobsReturned = 0;
+    do {
+      results = azureDest.findEntriesSince(partitionPath, findToken, maxTotalSize);
+      numQueries++;
+      totalBlobsReturned += results.size();
+      findToken = CloudFindToken.getUpdatedToken(findToken, results);
+    } while (!results.isEmpty());
+
+    assertEquals("Wrong number of queries", expectedNumQueries, numQueries);
+    assertEquals("Wrong number of blobs", blobCount, totalBlobsReturned);
+    assertEquals("Wrong byte count", blobCount * chunkSize, findToken.getBytesRead());
+
     cleanup();
   }
 

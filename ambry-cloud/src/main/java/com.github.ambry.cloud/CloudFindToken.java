@@ -2,6 +2,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.store.FindToken;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Objects;
 
 
@@ -19,7 +20,7 @@ public class CloudFindToken implements FindToken {
 
   /** Constructor for start token */
   public CloudFindToken() {
-    this(0,null, 0);
+    this(0, null, 0);
   }
 
   /** Constructor for in-progress token */
@@ -28,6 +29,22 @@ public class CloudFindToken implements FindToken {
     this.latestUploadTime = latestUploadTime;
     this.latestBlobId = latestBlobId;
     this.bytesRead = bytesRead;
+  }
+
+  /**
+   * Utility to construct a new CloudFindToken from a previous instance and the results of a findEntriesSince query.
+   * @param prevToken the previous CloudFindToken.
+   * @param queryResults the results of a findEntriesSince query.
+   * @return the updated token.
+   */
+  public static CloudFindToken getUpdatedToken(CloudFindToken prevToken, List<CloudBlobMetadata> queryResults) {
+    if (queryResults.isEmpty()) {
+      return prevToken;
+    } else {
+      CloudBlobMetadata lastResult = queryResults.get(queryResults.size() - 1);
+      long bytesReadThisQuery = queryResults.stream().mapToLong(CloudBlobMetadata::getSize).sum();
+      return new CloudFindToken(lastResult.getUploadTime(), lastResult.getId(), prevToken.getBytesRead() + bytesReadThisQuery);
+    }
   }
 
   @Override

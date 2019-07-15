@@ -74,8 +74,9 @@ class AzureCloudDestination implements CloudDestination {
   private static final String TIME_SINCE_PARAM = "@timesince";
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
   static final String DEAD_BLOBS_QUERY_TEMPLATE =
-      "SELECT * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")"
-          + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")";
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")"
+          + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")"
+          + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
   static final String ENTRIES_SINCE_QUERY_TEMPLATE =
       "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " >= " + TIME_SINCE_PARAM
           + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
@@ -88,6 +89,7 @@ class AzureCloudDestination implements CloudDestination {
   private final AzureMetrics azureMetrics;
   private final String clusterName;
   private final long retentionPeriodMs;
+  private final int deadBlobsQueryLimit;
   // Containers known to exist in the storage account
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
 
@@ -122,6 +124,7 @@ class AzureCloudDestination implements CloudDestination {
         ConsistencyLevel.Session);
     cosmosDataAccessor = new CosmosDataAccessor(documentClient, azureCloudConfig, azureMetrics);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
+    this.deadBlobsQueryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
     logger.info("Created Azure destination");
   }
 
@@ -141,6 +144,7 @@ class AzureCloudDestination implements CloudDestination {
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
+    this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
 
     // Create a blob client to interact with Blob storage
     azureBlobClient = azureAccount.createCloudBlobClient();
@@ -294,7 +298,8 @@ class AzureCloudDestination implements CloudDestination {
     long now = System.currentTimeMillis();
     long retentionThreshold = now - retentionPeriodMs;
     SqlQuerySpec deadBlobsQuery = new SqlQuerySpec(DEAD_BLOBS_QUERY_TEMPLATE,
-        new SqlParameterCollection(new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, deadBlobsQueryLimit),
+            new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
     try {
       return cosmosDataAccessor.queryMetadata(partitionPath, deadBlobsQuery, azureMetrics.deadBlobsQueryTime);
     } catch (DocumentClientException dex) {

@@ -249,10 +249,7 @@ class CloudBlobStore implements Store {
         return new FindInfo(Collections.emptyList(), inputToken);
       } else {
         List<MessageInfo> messageEntries = new ArrayList<>();
-        long bytesReadThisQuery = 0;
-        String latestBlobIdString = null;
         for (CloudBlobMetadata metadata : results) {
-          latestBlobIdString = metadata.getId();
           BlobId blobId = new BlobId(metadata.getId(), clusterMap);
           long operationTime = (metadata.getDeletionTime() > 0) ? metadata.getDeletionTime()
               : (metadata.getCreationTime() > 0) ? metadata.getCreationTime() : metadata.getUploadTime();
@@ -262,11 +259,10 @@ class CloudBlobStore implements Store {
               new MessageInfo(blobId, metadata.getSize(), isDeleted, isTtlUpdated, metadata.getExpirationTime(),
                   (short) metadata.getAccountId(), (short) metadata.getContainerId(), operationTime);
           messageEntries.add(messageInfo);
-          bytesReadThisQuery += metadata.getSize();
         }
-        CloudFindToken outputToken =
-            new CloudFindToken(results.get(results.size() - 1).getUploadTime(), latestBlobIdString,
-                inputToken.getBytesRead() + bytesReadThisQuery);
+
+        // Build the new find token from the original one and the query results
+        CloudFindToken outputToken = CloudFindToken.getUpdatedToken(inputToken, results);
         return new FindInfo(messageEntries, outputToken);
       }
     } catch (CloudStorageException | IOException ex) {

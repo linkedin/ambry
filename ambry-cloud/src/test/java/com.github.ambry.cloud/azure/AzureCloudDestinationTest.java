@@ -264,7 +264,7 @@ public class AzureCloudDestinationTest {
 
     long chunkSize = 110000;
     long maxTotalSize = 1000000; // between 9 and 10 chunks
-    long timeSince = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
+    long startTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
 
     // create metadata list where total size > maxTotalSize
     List<Document> docList = new ArrayList<>();
@@ -274,6 +274,7 @@ public class AzureCloudDestinationTest {
       blobIdList.add(blobId.getID());
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
           CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+      inputMetadata.setUploadTime(startTime + j);
       docList.add(new Document(objectMapper.writeValueAsString(inputMetadata)));
     }
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
@@ -290,7 +291,7 @@ public class AzureCloudDestinationTest {
 
     when(mockIterable.iterator()).thenReturn(docList.iterator());
     String lastBlobId = firstResult.get(firstResult.size() - 1).getId();
-    findToken = new CloudFindToken(timeSince, lastBlobId, maxTotalSize);
+    findToken = new CloudFindToken(startTime, lastBlobId, maxTotalSize);
     List<CloudBlobMetadata> secondResult =
         azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
     assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, secondResult.size());
