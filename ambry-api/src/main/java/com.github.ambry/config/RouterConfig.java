@@ -298,6 +298,22 @@ public class RouterConfig {
   @Default("1000")
   public final long routerOperationTrackerMinDataPointsRequired;
 
+  @Config("router.adaptive.tracker.max.inflight.requests")
+  @Default("2")
+  public final int routerAdaptiveTrackerMaxInflightRequests;
+
+  @Config("router.operation.tracker.exclude.timeout.enabled")
+  @Default("false")
+  public final boolean routerOperationTrackerExcludeTimeoutEnabled;
+
+  @Config("router.operation.tracker.histogram.dump.enabled")
+  @Default("false")
+  public final boolean routerOperationTrackerHistogramDumpEnabled;
+
+  @Config("router.operation.tracker.histogram.dump.period")
+  @Default("600")
+  public final long routerOperationTrackerHistogramDumpPeriod;
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -371,5 +387,13 @@ public class RouterConfig {
         verifiableProperties.getDouble("router.operation.tracker.reservoir.decay.factor", 0.015);
     routerOperationTrackerMinDataPointsRequired =
         verifiableProperties.getLong("router.operation.tracker.min.data.points.required", 1000L);
+    routerAdaptiveTrackerMaxInflightRequests =
+        verifiableProperties.getIntInRange("router.adaptive.tracker.max.inflight.requests", 2, 1, Integer.MAX_VALUE);
+    routerOperationTrackerExcludeTimeoutEnabled =
+        verifiableProperties.getBoolean("router.operation.tracker.exclude.timeout.enabled", false);
+    routerOperationTrackerHistogramDumpEnabled =
+        verifiableProperties.getBoolean("router.operation.tracker.histogram.dump.enabled", false);
+    routerOperationTrackerHistogramDumpPeriod =
+        verifiableProperties.getLongInRange("router.operation.tracker.histogram.dump.period", 600L, 1L, Long.MAX_VALUE);
   }
 }

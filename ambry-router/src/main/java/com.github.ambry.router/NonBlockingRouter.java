@@ -410,6 +410,8 @@ class NonBlockingRouter implements Router {
     if (cryptoJobHandler != null) {
       cryptoJobHandler.close();
     }
+    // close router metrics
+    routerMetrics.close();
   }
 
   /**

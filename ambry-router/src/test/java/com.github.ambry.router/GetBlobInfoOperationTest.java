@@ -137,7 +137,7 @@ public class GetBlobInfoOperationTest {
   public GetBlobInfoOperationTest(String operationTrackerType, boolean testEncryption) throws Exception {
     this.operationTrackerType = operationTrackerType;
     this.testEncryption = testEncryption;
-    VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
+    VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties(true));
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
     localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
@@ -224,7 +224,7 @@ public class GetBlobInfoOperationTest {
     Assert.assertEquals("Blob ids must match", blobId.getID(), op.getBlobIdStr());
 
     // test the case where the tracker type is bad
-    Properties properties = getNonBlockingRouterProperties();
+    Properties properties = getNonBlockingRouterProperties(true);
     properties.setProperty("router.get.operation.tracker.type", "NonExistentTracker");
     RouterConfig badConfig = new RouterConfig(new VerifiableProperties(properties));
     try {
@@ -299,12 +299,38 @@ public class GetBlobInfoOperationTest {
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     RouterException routerException = (RouterException) op.getOperationException();
     Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
-    // test that time out response shouldn't update the Histogram
+    // test that time out response shouldn't update the Histogram if exclude timeout is enabled
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
     Assert.assertEquals("Timed-out response shouldn't be counted into local colo latency histogram", 0,
         tracker.getLatencyHistogram(localReplica).getCount());
     Assert.assertEquals("Timed-out response shouldn't be counted into cross colo latency histogram", 0,
+        tracker.getLatencyHistogram(remoteReplica).getCount());
+  }
+
+  @Test
+  public void testTimeoutRequestUpdateHistogramByDefault() {
+    NonBlockingRouter.currentOperationsCount.incrementAndGet();
+    VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties(false));
+    RouterConfig routerConfig = new RouterConfig(vprops);
+    GetBlobInfoOperation op =
+        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+            routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
+    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    op.poll(requestRegistrationCallback);
+    while (!op.isOperationComplete()) {
+      time.sleep(routerConfig.routerRequestTimeoutMs + 1);
+      op.poll(requestRegistrationCallback);
+    }
+    Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
+        correlationIdToGetOperation.size());
+    Assert.assertEquals(RouterErrorCode.OperationTimedOut,
+        ((RouterException) op.getOperationException()).getErrorCode());
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
+    Assert.assertEquals("Number of data points in local colo latency histogram is not expected", 3,
+        tracker.getLatencyHistogram(localReplica).getCount());
+    Assert.assertEquals("Number of data points in cross colo latency histogram is not expected", 6,
         tracker.getLatencyHistogram(remoteReplica).getCount());
   }
 
@@ -435,7 +461,7 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testBlobAuthorizationFailureOverrideAll() throws Exception {
     successTarget = 2; // set it to 2 for more coverage
-    Properties props = getNonBlockingRouterProperties();
+    Properties props = getNonBlockingRouterProperties(true);
     routerConfig = new RouterConfig(new VerifiableProperties(props));
 
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
@@ -519,17 +545,17 @@ public class GetBlobInfoOperationTest {
     String dcWherePutHappened = routerConfig.routerDatacenterName;
 
     // test requests coming in from local dc as well as cross-colo.
-    Properties props = getNonBlockingRouterProperties();
+    Properties props = getNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", "DC1");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
     testVariousErrors(dcWherePutHappened);
 
-    props = getNonBlockingRouterProperties();
+    props = getNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", "DC2");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
     testVariousErrors(dcWherePutHappened);
 
-    props = getNonBlockingRouterProperties();
+    props = getNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", "DC3");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
     testVariousErrors(dcWherePutHappened);
@@ -642,9 +668,10 @@ public class GetBlobInfoOperationTest {
 
   /**
    * Get the properties for the {@link NonBlockingRouter}.
+   * @param excludeTimeout whether to exclude timed out request data point in Histogram.
    * @return the constructed properties.
    */
-  private Properties getNonBlockingRouterProperties() {
+  private Properties getNonBlockingRouterProperties(boolean excludeTimeout) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC3");
@@ -652,6 +679,7 @@ public class GetBlobInfoOperationTest {
     properties.setProperty("router.get.success.target", Integer.toString(successTarget));
     properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
     properties.setProperty("router.request.timeout.ms", Integer.toString(20));
+    properties.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     return properties;
   }
 }

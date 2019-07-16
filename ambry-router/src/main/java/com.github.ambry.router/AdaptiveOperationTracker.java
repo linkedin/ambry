@@ -84,6 +84,10 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       localDcResourceToHistogram = getResourceToLatencyMap(routerOperation, true);
       crossDcResourceToHistogram = getResourceToLatencyMap(routerOperation, false);
     }
+    if (parallelism > routerConfig.routerAdaptiveTrackerMaxInflightRequests) {
+      throw new IllegalArgumentException(
+          "Operation tracker parallelism is larger than adaptive tracker max inflight number");
+    }
   }
 
   @Override
@@ -95,7 +99,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     } else {
       elapsedTime = time.milliseconds() - expiredRequestSendTimes.remove(replicaId);
     }
-    if (trackedRequestFinalState != TrackedRequestFinalState.TIMED_OUT) {
+    if (trackedRequestFinalState != TrackedRequestFinalState.TIMED_OUT
+        || !routerConfig.routerOperationTrackerExcludeTimeoutEnabled) {
       getLatencyHistogram(replicaId).update(elapsedTime);
       if (routerConfig.routerOperationTrackerMetricScope != OperationTrackerScope.Datacenter) {
         // This is only used to report whole datacenter histogram for monitoring purpose
@@ -219,7 +224,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
 
     @Override
     public boolean hasNext() {
-      return replicaIterator.hasNext() && (inflightCount < parallelism || isOldestRequestPastDue());
+      return replicaIterator.hasNext() && (inflightCount < parallelism || (isOldestRequestPastDue()
+          && inflightCount < routerConfig.routerAdaptiveTrackerMaxInflightRequests));
     }
 
     @Override
