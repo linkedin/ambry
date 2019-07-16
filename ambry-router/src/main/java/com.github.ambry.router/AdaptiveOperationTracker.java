@@ -224,8 +224,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
 
     @Override
     public boolean hasNext() {
-      return replicaIterator.hasNext() && (inflightCount < parallelism || (isOldestRequestPastDue()
-          && inflightCount < routerConfig.routerAdaptiveTrackerMaxInflightRequests));
+      return replicaIterator.hasNext() && (inflightCount < parallelism || (
+          inflightCount < routerConfig.routerAdaptiveTrackerMaxInflightRequests && isOldestRequestPastDue()));
     }
 
     @Override

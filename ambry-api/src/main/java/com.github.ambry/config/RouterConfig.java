@@ -298,18 +298,31 @@ public class RouterConfig {
   @Default("1000")
   public final long routerOperationTrackerMinDataPointsRequired;
 
+  /**
+   * The maximum number of inflight requests that allowed for adaptive tracker. If current number of inflight requests
+   * is larger than or equal to this threshold, tracker shouldn't send out any request even though the oldest is past due.
+   */
   @Config("router.adaptive.tracker.max.inflight.requests")
   @Default("2")
   public final int routerAdaptiveTrackerMaxInflightRequests;
 
+  /**
+   * Indicates whether to enable excluding timed out requests in Histogram reservoir.
+   */
   @Config("router.operation.tracker.exclude.timeout.enabled")
   @Default("false")
   public final boolean routerOperationTrackerExcludeTimeoutEnabled;
 
+  /**
+   * Indicates whether to dump resource-level histogram to log file.
+   */
   @Config("router.operation.tracker.histogram.dump.enabled")
   @Default("false")
   public final boolean routerOperationTrackerHistogramDumpEnabled;
 
+  /**
+   * The period of dumping resource-level histogram (if enabled).
+   */
   @Config("router.operation.tracker.histogram.dump.period")
   @Default("600")
   public final long routerOperationTrackerHistogramDumpPeriod;

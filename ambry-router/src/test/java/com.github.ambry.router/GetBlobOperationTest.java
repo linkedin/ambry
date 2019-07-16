@@ -485,6 +485,10 @@ public class GetBlobOperationTest {
         crossColoTracker.getCount());
   }
 
+  /**
+   * Test that timed out requests are allowed to update Histogram by default.
+   * @throws Exception
+   */
   @Test
   public void testTimeoutRequestUpdateHistogramByDefault() throws Exception {
     doPut();

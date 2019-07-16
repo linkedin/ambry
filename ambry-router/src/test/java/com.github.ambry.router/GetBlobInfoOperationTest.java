@@ -308,6 +308,9 @@ public class GetBlobInfoOperationTest {
         tracker.getLatencyHistogram(remoteReplica).getCount());
   }
 
+  /**
+   * Test that timed out requests are allowed to update Histogram by default.
+   */
   @Test
   public void testTimeoutRequestUpdateHistogramByDefault() {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();

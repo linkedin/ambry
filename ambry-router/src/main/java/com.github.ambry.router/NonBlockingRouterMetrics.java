@@ -916,40 +916,47 @@ public class NonBlockingRouterMetrics {
     }
   }
 
+  /**
+   * Close {@link NonBlockingRouterMetrics} by shutting down scheduler (if present) in this class.
+   */
   public void close() {
-    if (histogramDumper != null) {
-      histogramDumper.cancel();
-    }
     if (scheduler != null) {
       shutDownExecutorService(scheduler, 5, TimeUnit.SECONDS);
     }
   }
 
+  /**
+   * A thread that helps periodically dump resource-level histogram (with given percentile) into log file.
+   */
   private class HistogramDumper implements Runnable {
-    private volatile boolean cancelled = false;
 
     @Override
     public void run() {
-      if (!cancelled) {
-        for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobLocalDcResourceToLatency.entrySet()) {
-          Resource resource = resourceToHistogram.getKey();
-          Histogram histogram = resourceToHistogram.getValue();
-          logger.info("{} GetBlob local DC latency histogram {}th percentile in ms: {}", resource.toString(),
-              routerConfig.routerLatencyToleranceQuantile * 100,
-              histogram.getSnapshot().getValue(routerConfig.routerLatencyToleranceQuantile));
-        }
-        for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobCrossDcResourceToLatency.entrySet()) {
-          Resource resource = resourceToHistogram.getKey();
-          Histogram histogram = resourceToHistogram.getValue();
-          logger.info("{} GetBlob cross DC latency histogram {}th percentile  in ms: {}", resource.toString(),
-              routerConfig.routerLatencyToleranceQuantile * 100,
-              histogram.getSnapshot().getValue(routerConfig.routerLatencyToleranceQuantile));
-        }
+      double quantile = routerConfig.routerLatencyToleranceQuantile;
+      for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobLocalDcResourceToLatency.entrySet()) {
+        Resource resource = resourceToHistogram.getKey();
+        Histogram histogram = resourceToHistogram.getValue();
+        logger.info("{} GetBlob local DC latency histogram {}th percentile in ms: {}", resource.toString(),
+            quantile * 100, histogram.getSnapshot().getValue(quantile));
       }
-    }
-
-    void cancel() {
-      cancelled = true;
+      for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobCrossDcResourceToLatency.entrySet()) {
+        Resource resource = resourceToHistogram.getKey();
+        Histogram histogram = resourceToHistogram.getValue();
+        logger.info("{} GetBlob cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
+            quantile * 100, histogram.getSnapshot().getValue(quantile));
+      }
+      for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobInfoLocalDcResourceToLatency.entrySet()) {
+        Resource resource = resourceToHistogram.getKey();
+        Histogram histogram = resourceToHistogram.getValue();
+        logger.info("{} GetBlobInfo local DC latency histogram {}th percentile in ms: {}", resource.toString(),
+            quantile * 100, histogram.getSnapshot().getValue(quantile));
+      }
+      for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobInfoCrossDcResourceToLatency.entrySet()) {
+        Resource resource = resourceToHistogram.getKey();
+        Histogram histogram = resourceToHistogram.getValue();
+        logger.info("{} GetBlobInfo cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
+            quantile * 100, histogram.getSnapshot().getValue(quantile));
+      }
     }
   }
 }
