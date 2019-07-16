@@ -37,5 +37,6 @@ public enum ServerErrorCode {
   Blob_Already_Updated,
   Blob_Update_Not_Allowed,
   Replica_Unavailable,
-  Blob_Authorization_Failure
+  Blob_Authorization_Failure,
+  Blob_Not_Modified
 }
