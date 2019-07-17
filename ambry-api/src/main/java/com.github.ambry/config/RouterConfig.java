@@ -407,7 +407,7 @@ public class RouterConfig {
     routerOperationTrackerMinDataPointsRequired =
         verifiableProperties.getLong("router.operation.tracker.min.data.points.required", 1000L);
     routerOperationTrackerMaxInflightRequests =
-        verifiableProperties.getIntInRange("router.adaptive.tracker.max.inflight.requests", 2, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("router.operation.tracker.max.inflight.requests", 2, 1, Integer.MAX_VALUE);
     routerOperationTrackerExcludeTimeoutEnabled =
         verifiableProperties.getBoolean("router.operation.tracker.exclude.timeout.enabled", false);
     routerOperationTrackerHistogramDumpEnabled =

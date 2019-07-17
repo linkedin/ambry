@@ -555,7 +555,7 @@ public class OperationTrackerTest {
         Boolean.toString(includeNonOriginatingDcReplicas));
     props.setProperty("router.get.replicas.required", Integer.toString(replicasRequired));
     props.setProperty("router.latency.tolerance.quantile", Double.toString(QUANTILE));
-    props.setProperty("router.adaptive.tracker.max.inflight.requests", Integer.toString(parallelism));
+    props.setProperty("router.operation.tracker.max.inflight.requests", Integer.toString(parallelism));
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     OperationTracker tracker;

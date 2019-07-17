@@ -701,7 +701,7 @@ public class AdaptiveOperationTrackerTest {
     props.setProperty("router.get.replicas.required", Integer.toString(Integer.MAX_VALUE));
     props.setProperty("router.latency.tolerance.quantile", Double.toString(QUANTILE));
     props.setProperty("router.operation.tracker.metric.scope", trackerScope.toString());
-    props.setProperty("router.adaptive.tracker.max.inflight.requests", Integer.toString(maxInflightNum));
+    props.setProperty("router.operation.tracker.max.inflight.requests", Integer.toString(maxInflightNum));
     props.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     if (customPercentiles != null) {
       props.setProperty("router.operation.tracker.custom.percentiles", customPercentiles);
