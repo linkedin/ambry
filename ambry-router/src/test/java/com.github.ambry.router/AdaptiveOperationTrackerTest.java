@@ -646,14 +646,14 @@ public class AdaptiveOperationTrackerTest {
     tracker.onResponse(partitionAndInflightReplicas.get(mockPartition).poll(), TrackedRequestFinalState.SUCCESS);
     assertTrue("Operation should have succeeded", tracker.hasSucceeded());
     // test that no other resource-level metrics have been instantiated.
-    assertNull("Partition histogram in RouterMetrics should be null",
-        routerMetrics.getBlobInfoLocalDcResourceToLatency);
-    assertNull("Partition histogram in RouterMetrics should be null",
-        routerMetrics.getBlobInfoCrossDcResourceToLatency);
-    assertNull("Partition histogram in OperationTracker should be null",
-        tracker.getResourceToLatencyMap(RouterOperation.GetBlobInfoOperation, true));
-    assertNull("Partition histogram in OperationTracker should be null",
-        tracker.getResourceToLatencyMap(RouterOperation.GetBlobInfoOperation, false));
+    assertTrue("Partition histogram in RouterMetrics should be empty",
+        routerMetrics.getBlobInfoLocalDcResourceToLatency.isEmpty());
+    assertTrue("Partition histogram in RouterMetrics should be empty",
+        routerMetrics.getBlobInfoCrossDcResourceToLatency.isEmpty());
+    assertTrue("Partition histogram in OperationTracker should be empty",
+        tracker.getResourceToLatencyMap(RouterOperation.GetBlobInfoOperation, true).isEmpty());
+    assertTrue("Partition histogram in OperationTracker should be empty",
+        tracker.getResourceToLatencyMap(RouterOperation.GetBlobInfoOperation, false).isEmpty());
     // extra test: invalid router operation
     try {
       tracker.getResourceToLatencyMap(RouterOperation.PutOperation, true);
