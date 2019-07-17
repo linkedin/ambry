@@ -81,6 +81,7 @@ class AzureCloudDestination implements CloudDestination {
       "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " >= " + TIME_SINCE_PARAM
           + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
   private static final String SEPARATOR = "-";
+  private static final int findSinceQueryLimit = 1000;
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
   private final DocumentClient documentClient;
@@ -256,24 +257,6 @@ class AzureCloudDestination implements CloudDestination {
     return updateBlobMetadata(blobId, CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime);
   }
 
-  //@Override
-  public CloudBlobMetadata getBlob(String partitionPath, String blobFileName, OutputStream outputStream)
-      throws CloudStorageException {
-    try {
-      String containerName = getAzureContainerName(partitionPath);
-      CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
-      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobFileName);
-      if (!azureBlob.exists(null, null, blobOpContext)) {
-        return null;
-      }
-      azureBlob.download(outputStream, null, null, blobOpContext);
-      azureBlob.getMetadata(); // convert to CBM
-      return null;
-    } catch (URISyntaxException | StorageException e) {
-      throw new CloudStorageException("Could not retrieve token: " + partitionPath, e);
-    }
-  }
-
   @Override
   public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
     Objects.requireNonNull(blobIds, "blobIds cannot be null");
@@ -311,7 +294,7 @@ class AzureCloudDestination implements CloudDestination {
   public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken,
       long maxTotalSizeOfEntries) throws CloudStorageException {
     SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
-        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, 1000),
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, findSinceQueryLimit),
             new SqlParameter(TIME_SINCE_PARAM, findToken.getLatestUploadTime())));
     try {
       List<CloudBlobMetadata> results =
