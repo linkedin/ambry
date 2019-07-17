@@ -301,10 +301,16 @@ public class RouterConfig {
   /**
    * The maximum number of inflight requests that allowed for adaptive tracker. If current number of inflight requests
    * is larger than or equal to this threshold, tracker shouldn't send out any request even though the oldest is past due.
+   * {@link RouterConfig#routerGetRequestParallelism} is a suggestive number that operation tracker uses to determine how
+   * many requests can be outstanding in parallel (assuming request gets response in time). Adaptive tracker is allowed
+   * to issue more requests (total inflight requests may exceed #routerGetRequestParallelism) if old request is past due.
+   * {@link RouterConfig#routerOperationTrackerMaxInflightRequests} is the strict upper bound that at any point of time,
+   * number of inflight requests issued by adaptive tracker should not exceed this number. Hence, for adaptive tracker,
+   * inflight requests number should always be within [0, #routerOperationTrackerMaxInflightRequests]
    */
-  @Config("router.adaptive.tracker.max.inflight.requests")
+  @Config("router.operation.tracker.max.inflight.requests")
   @Default("2")
-  public final int routerAdaptiveTrackerMaxInflightRequests;
+  public final int routerOperationTrackerMaxInflightRequests;
 
   /**
    * Indicates whether to enable excluding timed out requests in Histogram reservoir.
@@ -400,7 +406,7 @@ public class RouterConfig {
         verifiableProperties.getDouble("router.operation.tracker.reservoir.decay.factor", 0.015);
     routerOperationTrackerMinDataPointsRequired =
         verifiableProperties.getLong("router.operation.tracker.min.data.points.required", 1000L);
-    routerAdaptiveTrackerMaxInflightRequests =
+    routerOperationTrackerMaxInflightRequests =
         verifiableProperties.getIntInRange("router.adaptive.tracker.max.inflight.requests", 2, 1, Integer.MAX_VALUE);
     routerOperationTrackerExcludeTimeoutEnabled =
         verifiableProperties.getBoolean("router.operation.tracker.exclude.timeout.enabled", false);
@@ -408,5 +414,9 @@ public class RouterConfig {
         verifiableProperties.getBoolean("router.operation.tracker.histogram.dump.enabled", false);
     routerOperationTrackerHistogramDumpPeriod =
         verifiableProperties.getLongInRange("router.operation.tracker.histogram.dump.period", 600L, 1L, Long.MAX_VALUE);
+    if (routerGetRequestParallelism > routerOperationTrackerMaxInflightRequests) {
+      throw new IllegalArgumentException(
+          "Operation tracker parallelism is larger than operation tracker max inflight number");
+    }
   }
 }

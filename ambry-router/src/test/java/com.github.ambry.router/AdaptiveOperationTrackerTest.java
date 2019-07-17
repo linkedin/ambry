@@ -184,7 +184,7 @@ public class AdaptiveOperationTrackerTest {
     sendRequests(ot, 0);
     // push it over the edge
     time.sleep(5);
-    // should only send one request because (inflight num + 1) == routerConfig.routerAdaptiveTrackerMaxInflightRequests
+    // should only send one request because (inflight num + 1) == routerConfig.routerOperationTrackerMaxInflightRequests
     sendRequests(ot, 1);
     // 0-3-0-0; 3-0-0-0
     // mark one request TIMED_OUT

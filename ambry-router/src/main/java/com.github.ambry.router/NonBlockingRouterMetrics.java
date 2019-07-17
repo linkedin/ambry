@@ -199,11 +199,11 @@ public class NonBlockingRouterMetrics {
   public final CryptoJobMetrics decryptJobMetrics;
 
   // Resource to latency histogram map. Here resource can be DataNode, Partition, Disk, Replica etc.
-  Map<Resource, Histogram> getBlobLocalDcResourceToLatency;
-  Map<Resource, Histogram> getBlobCrossDcResourceToLatency;
+  Map<Resource, Histogram> getBlobLocalDcResourceToLatency = new HashMap<>();
+  Map<Resource, Histogram> getBlobCrossDcResourceToLatency = new HashMap<>();
 
-  Map<Resource, Histogram> getBlobInfoLocalDcResourceToLatency;
-  Map<Resource, Histogram> getBlobInfoCrossDcResourceToLatency;
+  Map<Resource, Histogram> getBlobInfoLocalDcResourceToLatency = new HashMap<>();
+  Map<Resource, Histogram> getBlobInfoCrossDcResourceToLatency = new HashMap<>();
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -487,10 +487,6 @@ public class NonBlockingRouterMetrics {
     int reservoirSize = routerConfig.routerOperationTrackerReservoirSize;
     double decayFactor = routerConfig.routerOperationTrackerReservoirDecayFactor;
     String localDatacenterName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
-    getBlobLocalDcResourceToLatency = new HashMap<>();
-    getBlobInfoLocalDcResourceToLatency = new HashMap<>();
-    getBlobCrossDcResourceToLatency = new HashMap<>();
-    getBlobInfoCrossDcResourceToLatency = new HashMap<>();
     switch (routerConfig.routerOperationTrackerMetricScope) {
       case Partition:
         for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
