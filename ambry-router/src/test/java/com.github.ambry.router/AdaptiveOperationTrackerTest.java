@@ -123,7 +123,7 @@ public class AdaptiveOperationTrackerTest {
     double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
     double crossColoCutoff = crossColoTracker.getSnapshot().getValue(QUANTILE);
 
-    OperationTracker ot = getOperationTracker(createRouterConfig(true, REPLICA_COUNT, 2, null), mockPartition);
+    OperationTracker ot = getOperationTracker(createRouterConfig(true, REPLICA_COUNT, 2, 6, null, true), mockPartition);
     // 3-0-0-0; 3-0-0-0
     sendRequests(ot, 2);
     // 1-2-0-0; 3-0-0-0
@@ -165,6 +165,53 @@ public class AdaptiveOperationTrackerTest {
   }
 
   /**
+   * Test that the max number of inflight requests should not exceed configured number.
+   * @throws InterruptedException
+   */
+  @Test
+  public void clampMaxInflightRequestsTest() throws InterruptedException {
+    primeTracker(localColoTracker, MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
+    primeTracker(crossColoTracker, MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
+    double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
+    double crossColoCutoff = crossColoTracker.getSnapshot().getValue(QUANTILE);
+    // set max inflight number = 2 and excludeTimeout = false in this test
+    OperationTracker ot = getOperationTracker(createRouterConfig(true, 3, 2, 3, null, false), mockPartition);
+    // 3-0-0-0; 3-0-0-0
+    sendRequests(ot, 2);
+    // 1-2-0-0; 3-0-0-0
+    // sleep for less than the cutoff
+    time.sleep((long) localColoCutoff - 2);
+    sendRequests(ot, 0);
+    // push it over the edge
+    time.sleep(5);
+    // should only send one request because (inflight num + 1) == routerConfig.routerOperationTrackerMaxInflightRequests
+    sendRequests(ot, 1);
+    // 0-3-0-0; 3-0-0-0
+    // mark one request TIMED_OUT
+    ot.onResponse(partitionAndInflightReplicas.get(mockPartition).poll(), TrackedRequestFinalState.TIMED_OUT);
+    // should send out 1 request
+    sendRequests(ot, 1);
+    // 0-2-0-1; 2-1-0-0
+
+    // mark one request FAILURE
+    ot.onResponse(partitionAndInflightReplicas.get(mockPartition).poll(), TrackedRequestFinalState.FAILURE);
+    time.sleep((long) (crossColoCutoff - localColoCutoff) + 2);
+
+    // should send out 1 request
+    sendRequests(ot, 1);
+    // 0-1-0-2; 1-2-0-0
+
+    // mark 3 inflight requests SUCCESS
+    while (!partitionAndInflightReplicas.get(mockPartition).isEmpty()) {
+      assertFalse("Operation should not be done", ot.isDone());
+      ot.onResponse(partitionAndInflightReplicas.get(mockPartition).poll(), TrackedRequestFinalState.SUCCESS);
+    }
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    // past due counter should be 3 (note that pastDueCounter is updated only when Iterator.remove() is called)
+    assertEquals("Past due counter is not expected", 3, pastDueCounter.getCount());
+  }
+
+  /**
    * Tests that adaptive tracker uses separate partition-level histogram to determine if inflight requests are past due.
    * @throws Exception
    */
@@ -179,7 +226,7 @@ public class AdaptiveOperationTrackerTest {
     MockClusterMap clusterMap =
         new MockClusterMap(false, datanodes, 3, Arrays.asList(mockPartition1, mockPartition2), localDcName);
     trackerScope = OperationTrackerScope.Partition;
-    RouterConfig routerConfig = createRouterConfig(true, 2, 1, null);
+    RouterConfig routerConfig = createRouterConfig(true, 2, 1, 6, null, true);
     NonBlockingRouterMetrics originalMetrics = routerMetrics;
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     Counter pastDueCount = routerMetrics.getBlobPastDueCount;
@@ -279,7 +326,7 @@ public class AdaptiveOperationTrackerTest {
     MockClusterMap clusterMap =
         new MockClusterMap(false, datanodes, 3, Arrays.asList(mockPartition1, mockPartition2), localDcName);
     trackerScope = OperationTrackerScope.DataNode;
-    RouterConfig routerConfig = createRouterConfig(true, 1, 1, null);
+    RouterConfig routerConfig = createRouterConfig(true, 1, 1, 6, null, true);
     NonBlockingRouterMetrics originalMetrics = routerMetrics;
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     Counter pastDueCount = routerMetrics.getBlobPastDueCount;
@@ -371,7 +418,7 @@ public class AdaptiveOperationTrackerTest {
     MockClusterMap clusterMap =
         new MockClusterMap(false, datanodes, 2, Arrays.asList(mockPartition1, mockPartition2), localDcName);
     trackerScope = OperationTrackerScope.Disk;
-    RouterConfig routerConfig = createRouterConfig(true, 1, 1, null);
+    RouterConfig routerConfig = createRouterConfig(true, 1, 1, 6, null, true);
     NonBlockingRouterMetrics originalMetrics = routerMetrics;
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     Counter pastDueCount = routerMetrics.getBlobPastDueCount;
@@ -471,7 +518,7 @@ public class AdaptiveOperationTrackerTest {
     primeTracker(crossColoTracker, MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
     double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
 
-    OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, null), mockPartition);
+    OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, 6, null, true), mockPartition);
     // 3-0-0-0
     sendRequests(ot, 1);
     // 2-1-0-0
@@ -503,7 +550,7 @@ public class AdaptiveOperationTrackerTest {
     primeTracker(crossColoTracker, MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
     double localColoCutoff = localColoTracker.getSnapshot().getValue(1);
 
-    OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, null), mockPartition);
+    OperationTracker ot = getOperationTracker(createRouterConfig(false, 1, 1, 6, null, true), mockPartition);
     // 3-0-0-0
     sendRequests(ot, 1);
     // 2-1-0-0
@@ -549,7 +596,7 @@ public class AdaptiveOperationTrackerTest {
     assertTrue("No gauges should be created because custom percentile is not set", gauges.isEmpty());
     // test that dedicated gauges are correctly created for custom percentiles.
     String customPercentiles = "0.91,0.97";
-    RouterConfig routerConfig = createRouterConfig(false, 1, 1, customPercentiles);
+    RouterConfig routerConfig = createRouterConfig(false, 1, 1, 6, customPercentiles, true);
     String[] percentileArray = customPercentiles.split(",");
     Arrays.sort(percentileArray);
     List<String> sortedPercentiles =
@@ -599,14 +646,14 @@ public class AdaptiveOperationTrackerTest {
     tracker.onResponse(partitionAndInflightReplicas.get(mockPartition).poll(), TrackedRequestFinalState.SUCCESS);
     assertTrue("Operation should have succeeded", tracker.hasSucceeded());
     // test that no other resource-level metrics have been instantiated.
-    assertNull("Partition histogram in RouterMetrics should be null",
-        routerMetrics.getBlobInfoLocalDcResourceToLatency);
-    assertNull("Partition histogram in RouterMetrics should be null",
-        routerMetrics.getBlobInfoCrossDcResourceToLatency);
-    assertNull("Partition histogram in OperationTracker should be null",
-        tracker.getResourceToLatencyMap(RouterOperation.GetBlobInfoOperation, true));
-    assertNull("Partition histogram in OperationTracker should be null",
-        tracker.getResourceToLatencyMap(RouterOperation.GetBlobInfoOperation, false));
+    assertTrue("Partition histogram in RouterMetrics should be empty",
+        routerMetrics.getBlobInfoLocalDcResourceToLatency.isEmpty());
+    assertTrue("Partition histogram in RouterMetrics should be empty",
+        routerMetrics.getBlobInfoCrossDcResourceToLatency.isEmpty());
+    assertTrue("Partition histogram in OperationTracker should be empty",
+        tracker.getResourceToLatencyMap(RouterOperation.GetBlobInfoOperation, true).isEmpty());
+    assertTrue("Partition histogram in OperationTracker should be empty",
+        tracker.getResourceToLatencyMap(RouterOperation.GetBlobInfoOperation, false).isEmpty());
     // extra test: invalid router operation
     try {
       tracker.getResourceToLatencyMap(RouterOperation.PutOperation, true);
@@ -636,12 +683,14 @@ public class AdaptiveOperationTrackerTest {
    * @param crossColoEnabled {@code true} if cross colo needs to be enabled. {@code false} otherwise.
    * @param successTarget the number of successful responses required for the operation to succeed.
    * @param parallelism the number of parallel requests that can be in flight.
+   * @param maxInflightNum the maximum number of inflight requests for adaptive tracker.
    * @param customPercentiles the custom percentiles to be reported. Percentiles are specified in a comma-separated
    *                          string, i.e "0.94,0.96,0.97".
+   * @param excludeTimeout whether to exclude timed out requests in Histogram.
    * @return an instance of {@link RouterConfig}
    */
   private RouterConfig createRouterConfig(boolean crossColoEnabled, int successTarget, int parallelism,
-      String customPercentiles) {
+      int maxInflightNum, String customPercentiles, boolean excludeTimeout) {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", localDcName);
@@ -652,6 +701,8 @@ public class AdaptiveOperationTrackerTest {
     props.setProperty("router.get.replicas.required", Integer.toString(Integer.MAX_VALUE));
     props.setProperty("router.latency.tolerance.quantile", Double.toString(QUANTILE));
     props.setProperty("router.operation.tracker.metric.scope", trackerScope.toString());
+    props.setProperty("router.operation.tracker.max.inflight.requests", Integer.toString(maxInflightNum));
+    props.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     if (customPercentiles != null) {
       props.setProperty("router.operation.tracker.custom.percentiles", customPercentiles);
     }
@@ -708,7 +759,7 @@ public class AdaptiveOperationTrackerTest {
   private void doTrackerUpdateTest(boolean succeedRequests) throws InterruptedException {
     long timeIncrement = 10;
     OperationTracker ot =
-        getOperationTracker(createRouterConfig(true, REPLICA_COUNT, REPLICA_COUNT, null), mockPartition);
+        getOperationTracker(createRouterConfig(true, REPLICA_COUNT, REPLICA_COUNT, 6, null, true), mockPartition);
     // 3-0-0-0; 3-0-0-0
     sendRequests(ot, REPLICA_COUNT);
     // 0-3-0-0; 0-3-0-0

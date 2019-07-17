@@ -27,11 +27,17 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.Resource;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -41,6 +47,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class NonBlockingRouterMetrics {
   private final MetricRegistry metricRegistry;
+  private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterMetrics.class);
 
   // Operation rate.
   public final Meter putBlobOperationRate;
@@ -192,17 +199,21 @@ public class NonBlockingRouterMetrics {
   public final CryptoJobMetrics decryptJobMetrics;
 
   // Resource to latency histogram map. Here resource can be DataNode, Partition, Disk, Replica etc.
-  Map<Resource, Histogram> getBlobLocalDcResourceToLatency;
-  Map<Resource, Histogram> getBlobCrossDcResourceToLatency;
+  Map<Resource, Histogram> getBlobLocalDcResourceToLatency = new HashMap<>();
+  Map<Resource, Histogram> getBlobCrossDcResourceToLatency = new HashMap<>();
 
-  Map<Resource, Histogram> getBlobInfoLocalDcResourceToLatency;
-  Map<Resource, Histogram> getBlobInfoCrossDcResourceToLatency;
+  Map<Resource, Histogram> getBlobInfoLocalDcResourceToLatency = new HashMap<>();
+  Map<Resource, Histogram> getBlobInfoCrossDcResourceToLatency = new HashMap<>();
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
+  private final RouterConfig routerConfig;
+  private final HistogramDumper histogramDumper;
+  private ScheduledExecutorService scheduler = null;
 
   public NonBlockingRouterMetrics(ClusterMap clusterMap, RouterConfig routerConfig) {
     metricRegistry = clusterMap.getMetricRegistry();
+    this.routerConfig = routerConfig;
 
     // Operation Rate.
     putBlobOperationRate = metricRegistry.meter(MetricRegistry.name(PutOperation.class, "PutBlobOperationRate"));
@@ -436,8 +447,9 @@ public class NonBlockingRouterMetrics {
     encryptJobMetrics = new CryptoJobMetrics(PutOperation.class, "Encrypt", metricRegistry);
     decryptJobMetrics = new CryptoJobMetrics(GetOperation.class, "Decrypt", metricRegistry);
 
-    // Custom percentiles
+    // Record type of adaptive tracker and configure custom percentiles
     if (routerConfig != null) {
+      logger.info("The metric scope of adaptive tracker is {}", routerConfig.routerOperationTrackerMetricScope);
       registerCustomPercentiles(GetBlobOperation.class, "LocalDcLatencyMs", getBlobLocalDcLatencyMs,
           routerConfig.routerOperationTrackerCustomPercentiles);
       registerCustomPercentiles(GetBlobOperation.class, "CrossDcLatencyMs", getBlobCrossDcLatencyMs,
@@ -452,6 +464,17 @@ public class NonBlockingRouterMetrics {
       // pre-populate all resource-to-histogram maps here to allow lock-free hashmap in adaptive operation tracker
       initializeResourceToHistogramMap(clusterMap, routerConfig);
     }
+
+    if (routerConfig != null && routerConfig.routerOperationTrackerHistogramDumpEnabled) {
+      histogramDumper = new HistogramDumper();
+      scheduler = Utils.newScheduler(1, false);
+      logger.info("Scheduling histogram dumper with a period of {} secs",
+          routerConfig.routerOperationTrackerHistogramDumpPeriod);
+      scheduler.scheduleAtFixedRate(histogramDumper, 0, routerConfig.routerOperationTrackerHistogramDumpPeriod,
+          TimeUnit.SECONDS);
+    } else {
+      histogramDumper = null;
+    }
   }
 
   /**
@@ -464,10 +487,6 @@ public class NonBlockingRouterMetrics {
     int reservoirSize = routerConfig.routerOperationTrackerReservoirSize;
     double decayFactor = routerConfig.routerOperationTrackerReservoirDecayFactor;
     String localDatacenterName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
-    getBlobLocalDcResourceToLatency = new HashMap<>();
-    getBlobInfoLocalDcResourceToLatency = new HashMap<>();
-    getBlobCrossDcResourceToLatency = new HashMap<>();
-    getBlobInfoCrossDcResourceToLatency = new HashMap<>();
     switch (routerConfig.routerOperationTrackerMetricScope) {
       case Partition:
         for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
@@ -889,6 +908,50 @@ public class NonBlockingRouterMetrics {
         betweenSixMonthsAndYearOld.inc();
       } else {
         moreThanYearOld.inc();
+      }
+    }
+  }
+
+  /**
+   * Close {@link NonBlockingRouterMetrics} by shutting down scheduler (if present) in this class.
+   */
+  public void close() {
+    if (scheduler != null) {
+      shutDownExecutorService(scheduler, 5, TimeUnit.SECONDS);
+    }
+  }
+
+  /**
+   * A thread that helps periodically dump resource-level histogram (with given percentile) into log file.
+   */
+  private class HistogramDumper implements Runnable {
+
+    @Override
+    public void run() {
+      double quantile = routerConfig.routerLatencyToleranceQuantile;
+      for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobLocalDcResourceToLatency.entrySet()) {
+        Resource resource = resourceToHistogram.getKey();
+        Histogram histogram = resourceToHistogram.getValue();
+        logger.info("{} GetBlob local DC latency histogram {}th percentile in ms: {}", resource.toString(),
+            quantile * 100, histogram.getSnapshot().getValue(quantile));
+      }
+      for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobCrossDcResourceToLatency.entrySet()) {
+        Resource resource = resourceToHistogram.getKey();
+        Histogram histogram = resourceToHistogram.getValue();
+        logger.info("{} GetBlob cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
+            quantile * 100, histogram.getSnapshot().getValue(quantile));
+      }
+      for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobInfoLocalDcResourceToLatency.entrySet()) {
+        Resource resource = resourceToHistogram.getKey();
+        Histogram histogram = resourceToHistogram.getValue();
+        logger.info("{} GetBlobInfo local DC latency histogram {}th percentile in ms: {}", resource.toString(),
+            quantile * 100, histogram.getSnapshot().getValue(quantile));
+      }
+      for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobInfoCrossDcResourceToLatency.entrySet()) {
+        Resource resource = resourceToHistogram.getKey();
+        Histogram histogram = resourceToHistogram.getValue();
+        logger.info("{} GetBlobInfo cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
+            quantile * 100, histogram.getSnapshot().getValue(quantile));
       }
     }
   }

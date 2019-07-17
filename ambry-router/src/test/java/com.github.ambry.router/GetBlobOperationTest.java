@@ -81,7 +81,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.router.GetBlobOptions.*;
 import static com.github.ambry.router.PutManagerTest.*;
 import static com.github.ambry.router.RouterTestHelpers.*;
 import static org.junit.Assume.*;
@@ -201,7 +200,7 @@ public class GetBlobOperationTest {
     // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
     blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
     mockSelectorState.set(MockSelectorState.Good);
-    VerifiableProperties vprops = new VerifiableProperties(getDefaultNonBlockingRouterProperties());
+    VerifiableProperties vprops = new VerifiableProperties(getDefaultNonBlockingRouterProperties(true));
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
     localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
@@ -316,7 +315,7 @@ public class GetBlobOperationTest {
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
 
     // test the case where the tracker type is bad
-    Properties properties = getDefaultNonBlockingRouterProperties();
+    Properties properties = getDefaultNonBlockingRouterProperties(true);
     properties.setProperty("router.get.operation.tracker.type", "NonExistentTracker");
     RouterConfig badConfig = new RouterConfig(new VerifiableProperties(properties));
     try {
@@ -461,7 +460,7 @@ public class GetBlobOperationTest {
   @Test
   public void testRouterRequestTimeoutAllFailure() throws Exception {
     doPut();
-    GetBlobOperation op = createOperation(null);
+    GetBlobOperation op = createOperation(routerConfig, null);
     op.poll(requestRegistrationCallback);
     while (!op.isOperationComplete()) {
       time.sleep(routerConfig.routerRequestTimeoutMs + 1);
@@ -473,7 +472,7 @@ public class GetBlobOperationTest {
         correlationIdToGetOperation.size());
     assertFailureAndCheckErrorCode(op, RouterErrorCode.OperationTimedOut);
 
-    // test that timed out response won't update latency histogram
+    // test that timed out response won't update latency histogram if exclude timeout is enabled.
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
     Histogram localColoTracker =
@@ -487,6 +486,34 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test that timed out requests are allowed to update Histogram by default.
+   * @throws Exception
+   */
+  @Test
+  public void testTimeoutRequestUpdateHistogramByDefault() throws Exception {
+    doPut();
+    VerifiableProperties vprops = new VerifiableProperties(getDefaultNonBlockingRouterProperties(false));
+    RouterConfig routerConfig = new RouterConfig(vprops);
+    GetBlobOperation op = createOperation(routerConfig, null);
+    op.poll(requestRegistrationCallback);
+    while (!op.isOperationComplete()) {
+      time.sleep(routerConfig.routerRequestTimeoutMs + 1);
+      op.poll(requestRegistrationCallback);
+    }
+    Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
+        correlationIdToGetOperation.size());
+    Assert.assertEquals(RouterErrorCode.OperationTimedOut,
+        ((RouterException) op.getOperationException()).getErrorCode());
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
+
+    Assert.assertEquals("Number of data points in local colo latency histogram is not expected", 3,
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, true, localDcName)).getCount());
+    Assert.assertEquals("Number of data points in cross colo latency histogram is not expected", 6,
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, false, localDcName)).getCount());
+  }
+
+  /**
    * Test the case where 2 local replicas timed out. The remaining one local replica and rest remote replicas respond
    * with Blob_Not_Found.
    * @throws Exception
@@ -495,7 +522,7 @@ public class GetBlobOperationTest {
   public void testRequestTimeoutAndBlobNotFound() throws Exception {
     assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
     doPut();
-    GetBlobOperation op = createOperation(null);
+    GetBlobOperation op = createOperation(routerConfig, null);
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
     correlationIdToGetOperation.clear();
     for (MockServer server : mockServerLayout.getMockServers()) {
@@ -538,7 +565,7 @@ public class GetBlobOperationTest {
   @Test
   public void testNetworkClientTimeoutAllFailure() throws Exception {
     doPut();
-    GetBlobOperation op = createOperation(null);
+    GetBlobOperation op = createOperation(routerConfig, null);
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
       for (RequestInfo requestInfo : requestRegistrationCallback.requestListToFill) {
@@ -639,17 +666,17 @@ public class GetBlobOperationTest {
     String dcWherePutHappened = routerConfig.routerDatacenterName;
 
     // test requests coming in from local dc as well as cross-colo.
-    Properties props = getDefaultNonBlockingRouterProperties();
+    Properties props = getDefaultNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", "DC1");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
     doTestSuccessInThePresenceOfVariousErrors(dcWherePutHappened);
 
-    props = getDefaultNonBlockingRouterProperties();
+    props = getDefaultNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", "DC2");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
     doTestSuccessInThePresenceOfVariousErrors(dcWherePutHappened);
 
-    props = getDefaultNonBlockingRouterProperties();
+    props = getDefaultNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", "DC3");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
     doTestSuccessInThePresenceOfVariousErrors(dcWherePutHappened);
@@ -960,7 +987,7 @@ public class GetBlobOperationTest {
   @Test
   public void testSetOperationException() throws Exception {
     doPut();
-    GetBlobOperation op = createOperation(null);
+    GetBlobOperation op = createOperation(routerConfig, null);
     RouterErrorCode[] routerErrorCodes = new RouterErrorCode[8];
     routerErrorCodes[0] = RouterErrorCode.BlobDoesNotExist;
     routerErrorCodes[1] = RouterErrorCode.OperationTimedOut;
@@ -1297,7 +1324,7 @@ public class GetBlobOperationTest {
    * @throws Exception
    */
   private GetBlobOperation createOperationAndComplete(Callback<GetBlobResultInternal> callback) throws Exception {
-    GetBlobOperation op = createOperation(callback);
+    GetBlobOperation op = createOperation(routerConfig, callback);
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
@@ -1312,11 +1339,11 @@ public class GetBlobOperationTest {
 
   /**
    * Create a getBlob operation with the specified callback
+   * @param routerConfig the routerConfig used to instantiate GetBlobOperation.
    * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
    * @return the operation
-   * @throws Exception
    */
-  private GetBlobOperation createOperation(Callback<GetBlobResultInternal> callback) throws Exception {
+  private GetBlobOperation createOperation(RouterConfig routerConfig, Callback<GetBlobResultInternal> callback) {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
@@ -1472,9 +1499,10 @@ public class GetBlobOperationTest {
 
   /**
    * Get the default {@link Properties} for the {@link NonBlockingRouter}.
+   * @param excludeTimeout whether to exclude timed out request in Histogram.
    * @return the constructed {@link Properties}
    */
-  private Properties getDefaultNonBlockingRouterProperties() {
+  private Properties getDefaultNonBlockingRouterProperties(boolean excludeTimeout) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC3");
@@ -1485,6 +1513,7 @@ public class GetBlobOperationTest {
     properties.setProperty("router.get.success.target", Integer.toString(1));
     properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
     properties.setProperty("router.request.timeout.ms", Integer.toString(20));
+    properties.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     return properties;
   }
 }
