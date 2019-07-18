@@ -805,7 +805,7 @@ class PutOperation {
    * @return the set of correlation IDs of requests that are still in flight.
    */
   Set<Integer> getInFlightCorrelationIds() {
-    return correlationIdToPutChunk.keySet();
+    return Collections.unmodifiableSet(correlationIdToPutChunk.keySet());
   }
 
   /**
