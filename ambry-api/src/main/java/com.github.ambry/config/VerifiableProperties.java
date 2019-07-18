@@ -243,6 +243,19 @@ public class VerifiableProperties {
     }
   }
 
+  /**
+   * Read an enum value from the properties instance.
+   * @param name the property name.
+   * @param enumClass the {@link Class} of the enum.
+   * @param defaultVal the default value to use if the property is not found
+   * @param <E> the enum type.
+   * @return the enum value.
+   */
+  public <E extends Enum<E>> E getEnum(String name, Class<E> enumClass, E defaultVal) {
+    String v = getString(name, defaultVal.name());
+    return Enum.valueOf(enumClass, v);
+  }
+
   public void verify() {
     logger.info("Verifying properties");
     Enumeration keys = props.propertyNames();

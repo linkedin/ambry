@@ -13,125 +13,64 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.SystemTime;
-import java.io.IOException;
-import java.io.InputStream;
+import com.github.ambry.utils.Time;
 import java.util.ArrayList;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-// The request at the network layer
-class SocketServerRequest implements Request {
-  private final int processor;
-  private final String connectionId;
-  private final InputStream input;
-  private final long startTimeInMs;
-  private Logger logger = LoggerFactory.getLogger(getClass());
-
-  public SocketServerRequest(int processor, String connectionId, InputStream input) throws IOException {
-    this.processor = processor;
-    this.connectionId = connectionId;
-    this.input = input;
-    this.startTimeInMs = SystemTime.getInstance().milliseconds();
-    logger.trace("Processor {} received request : {}", processor, connectionId);
-  }
-
-  @Override
-  public InputStream getInputStream() {
-    return input;
-  }
-
-  @Override
-  public long getStartTimeInMs() {
-    return startTimeInMs;
-  }
-
-  public int getProcessor() {
-    return processor;
-  }
-
-  public String getConnectionId() {
-    return connectionId;
-  }
-}
-
-// The response at the network layer
-class SocketServerResponse implements Response {
-
-  private final int processor;
-  private final Request request;
-  private final Send output;
-  private final ServerNetworkResponseMetrics metrics;
-  private long startQueueTimeInMs;
-
-  public SocketServerResponse(Request request, Send output, ServerNetworkResponseMetrics metrics) {
-    this.request = request;
-    this.output = output;
-    this.processor = ((SocketServerRequest) request).getProcessor();
-    this.metrics = metrics;
-  }
-
-  public Send getPayload() {
-    return output;
-  }
-
-  public Request getRequest() {
-    return request;
-  }
-
-  public int getProcessor() {
-    return processor;
-  }
-
-  public void onEnqueueIntoResponseQueue() {
-    this.startQueueTimeInMs = SystemTime.getInstance().milliseconds();
-  }
-
-  public void onDequeueFromResponseQueue() {
-    if (metrics != null) {
-      metrics.updateQueueTime(SystemTime.getInstance().milliseconds() - startQueueTimeInMs);
-    }
-  }
-
-  public ServerNetworkResponseMetrics getMetrics() {
-    return metrics;
-  }
-}
-
-interface ResponseListener {
-  public void onResponse(int processorId);
-}
-
 /**
  * RequestResponse channel for socket server
  */
 public class SocketRequestResponseChannel implements RequestResponseChannel {
+
+  interface ResponseListener {
+    void onResponse(int processorId);
+  }
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(SocketRequestResponseChannel.class);
+
   private final int numProcessors;
-  private final int queueSize;
-  private final ArrayBlockingQueue<Request> requestQueue;
+  private final RequestQueue requestQueue;
   private final ArrayList<BlockingQueue<Response>> responseQueues;
   private final ArrayList<ResponseListener> responseListeners;
+  private final Queue<Request> unqueuedRequests = new ConcurrentLinkedQueue<>();
 
-  public SocketRequestResponseChannel(int numProcessors, int queueSize) {
-    this.numProcessors = numProcessors;
-    this.queueSize = queueSize;
-    this.requestQueue = new ArrayBlockingQueue<Request>(this.queueSize);
-    responseQueues = new ArrayList<BlockingQueue<Response>>(this.numProcessors);
-    responseListeners = new ArrayList<ResponseListener>();
+  public SocketRequestResponseChannel(NetworkConfig config) {
+    numProcessors = config.numIoThreads;
+    Time time = SystemTime.getInstance();
+    switch (config.requestQueueType) {
+      case ADAPTIVE_LIFO_CO_DEL:
+        this.requestQueue =
+            new AdaptiveLifoCoDelRequestQueue(config.queuedMaxRequests, 0.7, 5, config.requestQueueTimeoutMs, time);
+        break;
+      case BASIC_FIFO:
+        this.requestQueue = new FifoRequestQueue(config.queuedMaxRequests, config.requestQueueTimeoutMs, time);
+        break;
+      default:
+        throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);
+    }
+    responseQueues = new ArrayList<>(this.numProcessors);
+    responseListeners = new ArrayList<>();
 
     for (int i = 0; i < this.numProcessors; i++) {
-      responseQueues.add(i, new LinkedBlockingQueue<Response>());
+      responseQueues.add(i, new LinkedBlockingQueue<>());
     }
   }
 
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
-  public void sendRequest(Request request) throws InterruptedException {
-    requestQueue.put(request);
+  public void sendRequest(Request request) {
+    if (!requestQueue.offer(request)) {
+      LOGGER.debug("Request queue is full, dropping incoming request: {}", request);
+      unqueuedRequests.add(request);
+    }
   }
 
   /** Send a response back to the socket server to be sent over the network */
@@ -160,12 +99,17 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
 
   /** Get the next request or block until there is one */
   @Override
-  public Request receiveRequest() throws InterruptedException {
-    return requestQueue.take();
+  public RequestBundle receiveRequest() throws InterruptedException {
+    RequestBundle requestBundle = requestQueue.take();
+    Request unqueuedRequest;
+    while ((unqueuedRequest = unqueuedRequests.poll()) != null) {
+      requestBundle.getRequestsToDrop().add(unqueuedRequest);
+    }
+    return requestBundle;
   }
 
   /** Get a response for the given processor if there is one */
-  public Response receiveResponse(int processor) throws InterruptedException {
+  public Response receiveResponse(int processor) {
     return responseQueues.get(processor).poll();
   }
 
@@ -183,10 +127,6 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
 
   public int getNumberOfProcessors() {
     return numProcessors;
-  }
-
-  public void shutdown() {
-    requestQueue.clear();
   }
 }
 

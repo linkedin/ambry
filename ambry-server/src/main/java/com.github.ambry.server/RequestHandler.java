@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import com.github.ambry.network.Request;
+import com.github.ambry.network.RequestBundle;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
@@ -38,13 +39,23 @@ public class RequestHandler implements Runnable {
   public void run() {
     while (true) {
       try {
-        Request req = requestChannel.receiveRequest();
-        if (req.equals(EmptyRequest.getInstance())) {
-          logger.debug("Request handler {} received shut down command", id);
-          return;
+        RequestBundle requestBundle = requestChannel.receiveRequest();
+        for (Request droppedRequest : requestBundle.getRequestsToDrop()) {
+          if (droppedRequest.equals(EmptyRequest.getInstance())) {
+            logger.debug("Request handler {} received shut down command", id);
+            return;
+          }
+          requests.handleRequests(droppedRequest, true);
         }
-        requests.handleRequests(req);
-        logger.trace("Request handler {} handling request {}", id, req);
+        Request req = requestBundle.getRequestToServe();
+        if (req != null) {
+          if (req.equals(EmptyRequest.getInstance())) {
+            logger.debug("Request handler {} received shut down command", id);
+            return;
+          }
+          requests.handleRequests(req, false);
+          logger.trace("Request handler {} handling request {}", id, req);
+        }
       } catch (Throwable e) {
         // TODO add metric to track background threads
         logger.error("Exception when handling request", e);
@@ -87,7 +98,7 @@ class RequestHandlerPool {
       }
       logger.info("shut down completely");
     } catch (Exception e) {
-      logger.error("error when shutting down request handler pool {}", e);
+      logger.error("error when shutting down request handler pool", e);
     }
   }
 }

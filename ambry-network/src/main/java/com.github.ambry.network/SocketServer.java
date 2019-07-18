@@ -66,21 +66,21 @@ public class SocketServer implements NetworkServer {
   private SSLFactory sslFactory;
 
   public SocketServer(NetworkConfig config, SSLConfig sslConfig, MetricRegistry registry, ArrayList<Port> portList) {
-    this.host = config.hostName;
-    this.port = config.port;
-    this.numProcessorThreads = config.numIoThreads;
-    this.maxQueuedRequests = config.queuedMaxRequests;
-    this.sendBufferSize = config.socketSendBufferBytes;
-    this.recvBufferSize = config.socketReceiveBufferBytes;
-    this.maxRequestSize = config.socketRequestMaxBytes;
+    host = config.hostName;
+    port = config.port;
+    numProcessorThreads = config.numIoThreads;
+    maxQueuedRequests = config.queuedMaxRequests;
+    sendBufferSize = config.socketSendBufferBytes;
+    recvBufferSize = config.socketReceiveBufferBytes;
+    maxRequestSize = config.socketRequestMaxBytes;
     this.selectorExecutorPoolSize = config.selectorExecutorPoolSize;
-    processors = new ArrayList<Processor>(numProcessorThreads);
-    requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
+    processors = new ArrayList<>(numProcessorThreads);
+    requestResponseChannel = new SocketRequestResponseChannel(config);
     metrics = new ServerNetworkMetrics(requestResponseChannel, registry, processors);
-    this.acceptors = new ArrayList<Acceptor>();
-    this.ports = new HashMap<PortType, Port>();
-    this.validatePorts(portList);
-    this.initializeSSLFactory(sslConfig);
+    acceptors = new ArrayList<>();
+    ports = new HashMap<>();
+    validatePorts(portList);
+    initializeSSLFactory(sslConfig);
   }
 
   public String getHost() {
@@ -156,12 +156,7 @@ public class SocketServer implements NetworkServer {
       Utils.newThread("ambry-processor-" + port + " " + i, processors.get(i), false).start();
     }
 
-    requestResponseChannel.addResponseListener(new ResponseListener() {
-      @Override
-      public void onResponse(int processorId) {
-        processors.get(processorId).wakeup();
-      }
-    });
+    requestResponseChannel.addResponseListener(processorId -> processors.get(processorId).wakeup());
 
     // start accepting connections
     logger.info("Starting acceptor threads on port {}", port);

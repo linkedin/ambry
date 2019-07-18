@@ -153,7 +153,12 @@ public class AmbryRequests implements RequestAPI {
     localPartitionToReplicaMap = Collections.unmodifiableMap(partitionToReplica);
   }
 
-  public void handleRequests(Request request) throws InterruptedException {
+  /**
+   * @param request the {@link Request} to parse and handle.
+   * @param drop if the request should be dropped (just send an error response immediately)
+   * @throws InterruptedException
+   */
+  public void handleRequests(Request request, boolean drop) throws InterruptedException {
     try {
       DataInputStream stream = new DataInputStream(request.getInputStream());
       RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];

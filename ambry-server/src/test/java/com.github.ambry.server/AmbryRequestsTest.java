@@ -29,6 +29,7 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -616,7 +617,7 @@ public class AmbryRequestsTest {
   // general
 
   /**
-   * Calls {@link AmbryRequests#handleRequests(Request)} with {@code request} and returns the {@link Response} received.
+   * Calls {@link AmbryRequests#handleRequests} with {@code request} and returns the {@link Response} received.
    * @param request the {@link Request} to process
    * @param expectedServerErrorCode the expected {@link ServerErrorCode} in the server response.
    * @return the {@link Response} received.
@@ -626,7 +627,7 @@ public class AmbryRequestsTest {
   private Response sendRequestGetResponse(RequestOrResponse request, ServerErrorCode expectedServerErrorCode)
       throws InterruptedException, IOException {
     Request mockRequest = MockRequest.fromRequest(request);
-    ambryRequests.handleRequests(mockRequest);
+    ambryRequests.handleRequests(mockRequest, false);
     assertEquals("Request accompanying response does not match original request", mockRequest,
         requestResponseChannel.lastOriginalRequest);
     assertNotNull("Response not sent", requestResponseChannel.lastResponse);
@@ -1193,7 +1194,7 @@ public class AmbryRequestsTest {
     Send lastResponse = null;
 
     MockRequestResponseChannel() {
-      super(1, 1);
+      super(new NetworkConfig(new VerifiableProperties(new Properties())));
     }
 
     @Override
