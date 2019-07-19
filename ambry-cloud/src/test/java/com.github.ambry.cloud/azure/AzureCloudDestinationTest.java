@@ -17,7 +17,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
+import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -43,11 +45,13 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpHost;
 import org.junit.Before;
@@ -80,6 +84,10 @@ public class AzureCloudDestinationTest {
   private DocumentClient mockumentClient;
   private AzureMetrics azureMetrics;
   private int blobSize = 1024;
+  byte dataCenterId = 66;
+  short accountId = 101;
+  short containerId = 5;
+  long partition = 666;
   private BlobId blobId;
   private long creationTime = System.currentTimeMillis();
   private long deletionTime = creationTime + 10000;
@@ -106,10 +114,7 @@ public class AzureCloudDestinationTest {
     when(mockResponse.getResource()).thenReturn(metadataDoc);
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
 
-    byte dataCenterId = 66;
-    short accountId = 101;
-    short containerId = 5;
-    PartitionId partitionId = new MockPartitionId();
+    PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
 
@@ -230,27 +235,107 @@ public class AzureCloudDestinationTest {
   /** Test querying metadata. */
   @Test
   public void testQueryMetadata() throws Exception {
+    int batchSize = AzureCloudDestination.ID_QUERY_BATCH_SIZE;
+    testQueryMetadata(0, 0);
+    testQueryMetadata(batchSize, 1);
+    testQueryMetadata(batchSize + 1, 2);
+    testQueryMetadata(batchSize * 2 - 1, 2);
+    testQueryMetadata(batchSize * 2, 2);
+  }
+
+  /**
+   * Test metadata query for different input count.
+   * @param numBlobs the number of blobs to query.
+   * @param expectedQueries the number of internal queries made after batching.
+   * @throws Exception
+   */
+  private void testQueryMetadata(int numBlobs, int expectedQueries) throws Exception {
+    // Reset metrics
+    azureMetrics = new AzureMetrics(new MetricRegistry());
+    azureDest = new AzureCloudDestination(mockAzureAccount, mockumentClient, "foo", clusterName, azureMetrics);
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
-    CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-        CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
-    List<Document> docList = Collections.singletonList(new Document(objectMapper.writeValueAsString(inputMetadata)));
+    List<BlobId> blobIdList = new ArrayList<>();
+    List<Document> docList = new ArrayList<>();
+    for (int j = 0; j < numBlobs; j++) {
+      BlobId blobId = generateBlobId();
+      blobIdList.add(blobId);
+      CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
+          CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+      docList.add(new Document(objectMapper.writeValueAsString(inputMetadata)));
+    }
     when(mockIterable.iterator()).thenReturn(docList.iterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
         feedResponse);
-    Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(Collections.singletonList(blobId));
-    assertEquals("Expected single entry", 1, metadataMap.size());
-    CloudBlobMetadata outputMetadata = metadataMap.get(blobId.getID());
-    assertEquals("Returned metadata does not match original", inputMetadata, outputMetadata);
-    assertEquals(1, azureMetrics.documentQueryCount.getCount());
-    assertEquals(1, azureMetrics.missingKeysQueryTime.getCount());
+    Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(blobIdList);
+    assertEquals("Wrong map size", blobIdList.size(), metadataMap.size());
+    for (BlobId blobId : blobIdList) {
+      assertEquals("Unexpected id in metadata", blobId.getID(), metadataMap.get(blobId.getID()).getId());
+    }
+    assertEquals(expectedQueries, azureMetrics.documentQueryCount.getCount());
+    assertEquals(expectedQueries, azureMetrics.missingKeysQueryTime.getCount());
+  }
 
-    // Test getDeadBlobs
+  /** Test getDeadBlobs */
+  @Test
+  public void testGetDeadBlobs() throws Exception {
+    QueryIterable<Document> mockIterable = mock(QueryIterable.class);
+    when(mockIterable.iterator()).thenReturn(Collections.<Document>emptyList().iterator());
+    FeedResponse<Document> feedResponse = mock(FeedResponse.class);
+    when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
+    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
+        feedResponse);
     List<CloudBlobMetadata> metadataList = azureDest.getDeadBlobs(blobId.getPartition().toPathString());
     assertEquals("Expected no dead blobs", 0, metadataList.size());
-    assertEquals(2, azureMetrics.documentQueryCount.getCount());
+    assertEquals(1, azureMetrics.documentQueryCount.getCount());
     assertEquals(1, azureMetrics.deadBlobsQueryTime.getCount());
+  }
+
+  /** Test findEntriesSince. */
+  @Test
+  public void testFindEntriesSince() throws Exception {
+
+    long chunkSize = 110000;
+    long maxTotalSize = 1000000; // between 9 and 10 chunks
+    long startTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
+
+    // create metadata list where total size > maxTotalSize
+    List<Document> docList = new ArrayList<>();
+    List<String> blobIdList = new ArrayList<>();
+    for (int j = 0; j < 20; j++) {
+      BlobId blobId = generateBlobId();
+      blobIdList.add(blobId.getID());
+      CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
+          CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+      inputMetadata.setUploadTime(startTime + j);
+      docList.add(new Document(objectMapper.writeValueAsString(inputMetadata)));
+    }
+    QueryIterable<Document> mockIterable = mock(QueryIterable.class);
+    when(mockIterable.iterator()).thenReturn(docList.iterator());
+    FeedResponse<Document> feedResponse = mock(FeedResponse.class);
+    when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
+    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
+        feedResponse);
+    CloudFindToken findToken = new CloudFindToken();
+    // Run the query
+    List<CloudBlobMetadata> firstResult =
+        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
+
+    docList = docList.subList(firstResult.size(), docList.size());
+    when(mockIterable.iterator()).thenReturn(docList.iterator());
+    String lastBlobId = firstResult.get(firstResult.size() - 1).getId();
+    findToken = new CloudFindToken(startTime, lastBlobId, maxTotalSize);
+    List<CloudBlobMetadata> secondResult =
+        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
+    assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
+    assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
+
+    // Rerun with max size below blob size, and make sure it returns one result
+    when(mockIterable.iterator()).thenReturn(docList.iterator());
+    assertEquals("Expected one result", 1,
+        azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2).size());
   }
 
   /** Test blob existence check. */
@@ -440,6 +525,15 @@ public class AzureCloudDestinationTest {
     } catch (Exception ex) {
       fail("Expected CloudStorageException, got " + ex.getClass().getSimpleName());
     }
+  }
+
+  /**
+   * Utility method to generate a BlobId.
+   * @return a BlobId for the default attributes.
+   */
+  private BlobId generateBlobId() {
+    return new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, blobId.getPartition(), false,
+        BlobDataType.DATACHUNK);
   }
 
   /**

@@ -30,6 +30,7 @@ public class CloudConfig {
   public static final String VCR_MIN_TTL_DAYS = "vcr.min.ttl.days";
   public static final String CLOUD_DELETED_BLOB_RETENTION_DAYS = "cloud.deleted.blob.retention.days";
   public static final String CLOUD_BLOB_COMPACTION_INTERVAL_HOURS = "cloud.blob.compaction.interval.hours";
+  public static final String CLOUD_BLOB_COMPACTION_QUERY_LIMIT = "cloud.blob.compaction.query.limit";
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
   public static final String VCR_PROXY_HOST = "vcr.proxy.host";
   public static final String VCR_PROXY_PORT = "vcr.proxy.port";
@@ -47,6 +48,7 @@ public class CloudConfig {
   public static final String DEFAULT_VCR_CLUSTER_NAME = "VCRCluster";
   public static final int DEFAULT_MIN_TTL_DAYS = 14;
   public static final int DEFAULT_RETENTION_DAYS = 7;
+  public static final int DEFAULT_COMPACTION_QUERY_LIMIT = 100000;
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
 
   /**
@@ -134,6 +136,12 @@ public class CloudConfig {
   public final int cloudDeletedBlobRetentionDays;
 
   /**
+   * The result set limit to set on the dead blobs query used in compaction.
+   */
+  @Config(CLOUD_BLOB_COMPACTION_QUERY_LIMIT)
+  @Default("100000")
+  public final int cloudBlobCompactionQueryLimit;
+  /**
    * The dead blob compaction interval in hours
    */
   @Config(CLOUD_BLOB_COMPACTION_INTERVAL_HOURS)
@@ -180,8 +188,11 @@ public class CloudConfig {
     cloudBlobCryptoAgentFactoryClass = verifiableProperties.getString(CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
         DEFAULT_CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS);
     vcrMinTtlDays = verifiableProperties.getInt(VCR_MIN_TTL_DAYS, DEFAULT_MIN_TTL_DAYS);
-    cloudDeletedBlobRetentionDays = verifiableProperties.getInt(CLOUD_DELETED_BLOB_RETENTION_DAYS, DEFAULT_RETENTION_DAYS);
+    cloudDeletedBlobRetentionDays =
+        verifiableProperties.getInt(CLOUD_DELETED_BLOB_RETENTION_DAYS, DEFAULT_RETENTION_DAYS);
     cloudBlobCompactionIntervalHours = verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_INTERVAL_HOURS, 24);
+    cloudBlobCompactionQueryLimit =
+        verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_QUERY_LIMIT, DEFAULT_COMPACTION_QUERY_LIMIT);
 
     // Proxy settings
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);

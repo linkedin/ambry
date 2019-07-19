@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -37,6 +38,8 @@ import com.github.ambry.replication.MockHost;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationMetrics;
+import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
@@ -82,6 +85,7 @@ public class CloudBlobStoreTest {
   private Store store;
   private CloudDestination dest;
   private PartitionId partitionId;
+  private ClusterMap clusterMap;
   private VcrMetrics vcrMetrics;
   private Random random = new Random();
   private short refAccountId = 50;
@@ -91,6 +95,7 @@ public class CloudBlobStoreTest {
   @Before
   public void setup() throws Exception {
     partitionId = new MockPartitionId();
+    clusterMap = new MockClusterMap();
   }
 
   /**
@@ -111,7 +116,7 @@ public class CloudBlobStoreTest {
     dest = inMemoryDestination ? new LatchBasedInMemoryCloudDestination(Collections.emptyList())
         : mock(CloudDestination.class);
     vcrMetrics = new VcrMetrics(new MetricRegistry());
-    store = new CloudBlobStore(verifiableProperties, partitionId, dest, vcrMetrics);
+    store = new CloudBlobStore(verifiableProperties, partitionId, dest, clusterMap, vcrMetrics);
     if (start) {
       store.start();
     }
@@ -218,6 +223,56 @@ public class CloudBlobStoreTest {
     assertEquals("Wrong number of missing keys", count, missingKeys.size());
   }
 
+  /** Test the CloudBlobStore findEntriesSince method. */
+  @Test
+  public void testFindEntriesSince() throws Exception {
+    setupCloudStore(false, true, true);
+    long maxTotalSize = 1000000;
+    // 1) start with empty token, call find, return some data
+    long startTime = System.currentTimeMillis();
+    long blobSize = 200000;
+    int numBlobsFound = 5;
+    List<CloudBlobMetadata> metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
+    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(metadataList);
+    CloudFindToken startToken = new CloudFindToken();
+    FindInfo findInfo = store.findEntriesSince(startToken, maxTotalSize);
+    assertEquals(numBlobsFound, findInfo.getMessageEntries().size());
+    CloudFindToken outputToken = (CloudFindToken) findInfo.getFindToken();
+    assertEquals(startTime + numBlobsFound - 1, outputToken.getLatestUploadTime());
+    assertEquals(blobSize * numBlobsFound, outputToken.getBytesRead());
+    assertEquals(metadataList.get(numBlobsFound - 1).getId(), outputToken.getLatestBlobId());
+
+    // 2) call find with new token, return more data including lastBlob, verify token updated
+    startTime += 1000;
+    metadataList = generateMetadataList(startTime, blobSize, numBlobsFound);
+    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(metadataList);
+    findInfo = store.findEntriesSince(outputToken, maxTotalSize);
+    outputToken = (CloudFindToken) findInfo.getFindToken();
+    assertEquals(startTime + numBlobsFound - 1, outputToken.getLatestUploadTime());
+    assertEquals(blobSize * 2 * numBlobsFound, outputToken.getBytesRead());
+    assertEquals(metadataList.get(numBlobsFound - 1).getId(), outputToken.getLatestBlobId());
+
+    // 3) call find with new token, no more data, verify token unchanged
+    when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(Collections.emptyList());
+    findInfo = store.findEntriesSince(outputToken, maxTotalSize);
+    assertTrue(findInfo.getMessageEntries().isEmpty());
+    FindToken finalToken = (CloudFindToken) findInfo.getFindToken();
+    assertEquals(outputToken, finalToken);
+  }
+
+  private List<CloudBlobMetadata> generateMetadataList(long startTime, long blobSize, int count) {
+    List<CloudBlobMetadata> metadataList = new ArrayList<>();
+    for (int j = 0; j < count; j++) {
+      BlobId blobId = getUniqueId();
+      CloudBlobMetadata metadata =
+          new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE,
+              null, null);
+      metadata.setUploadTime(startTime + j);
+      metadataList.add(metadata);
+    }
+    return metadataList;
+  }
+
   /** Test verifying behavior when store not started. */
   @Test
   public void testStoreNotStarted() throws Exception {
@@ -260,7 +315,8 @@ public class CloudBlobStoreTest {
     props.setProperty(CloudConfig.CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
         TestCloudBlobCryptoAgentFactory.class.getName());
     vcrMetrics = new VcrMetrics(new MetricRegistry());
-    CloudBlobStore exStore = new CloudBlobStore(new VerifiableProperties(props), partitionId, exDest, vcrMetrics);
+    CloudBlobStore exStore =
+        new CloudBlobStore(new VerifiableProperties(props), partitionId, exDest, clusterMap, vcrMetrics);
     exStore.start();
     List<StoreKey> keys = Collections.singletonList(getUniqueId());
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
@@ -336,7 +392,7 @@ public class CloudBlobStoreTest {
         new LatchBasedInMemoryCloudDestination(blobIdList);
     CloudReplica cloudReplica = new CloudReplica(cloudConfig, partitionId, cloudDataNode);
     CloudBlobStore cloudBlobStore =
-        new CloudBlobStore(new VerifiableProperties(props), partitionId, latchBasedInMemoryCloudDestination,
+        new CloudBlobStore(new VerifiableProperties(props), partitionId, latchBasedInMemoryCloudDestination, clusterMap,
             new VcrMetrics(new MetricRegistry()));
     cloudBlobStore.start();
 

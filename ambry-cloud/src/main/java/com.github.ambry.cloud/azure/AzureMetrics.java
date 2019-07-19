@@ -35,6 +35,7 @@ public class AzureMetrics {
   public static final String DOCUMENT_QUERY_COUNT = "DocumentQueryCount";
   public static final String MISSING_KEYS_QUERY_TIME = "MissingKeysQueryTime";
   public static final String DEAD_BLOBS_QUERY_TIME = "DeadBlobsQueryTime";
+  public static final String FIND_SINCE_QUERY_TIME = "FindSinceQueryTime";
   public static final String BLOB_UPDATE_ERROR_COUNT = "BlobUpdateErrorCount";
   public static final String STORAGE_ERROR_COUNT = "StorageErrorCount";
   public static final String DOCUMENT_ERROR_COUNT = "DocumentErrorCount";
@@ -63,6 +64,7 @@ public class AzureMetrics {
   public final Timer missingKeysQueryTime;
   public final Counter documentQueryCount;
   public final Timer deadBlobsQueryTime;
+  public final Timer findSinceQueryTime;
   public final Counter blobUpdateErrorCount;
   public final Counter storageErrorCount;
   public final Counter documentErrorCount;
@@ -94,6 +96,7 @@ public class AzureMetrics {
     documentQueryCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_QUERY_COUNT));
     missingKeysQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, MISSING_KEYS_QUERY_TIME));
     deadBlobsQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DEAD_BLOBS_QUERY_TIME));
+    findSinceQueryTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, FIND_SINCE_QUERY_TIME));
     blobUpdateErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_ERROR_COUNT));
     storageErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, STORAGE_ERROR_COUNT));
     documentErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_ERROR_COUNT));

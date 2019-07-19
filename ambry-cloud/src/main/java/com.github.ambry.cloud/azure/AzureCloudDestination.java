@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
@@ -46,6 +47,7 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -68,11 +70,23 @@ class AzureCloudDestination implements CloudDestination {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureCloudDestination.class);
   private static final String THRESHOLD_PARAM = "@threshold";
+  private static final String LIMIT_PARAM = "@limit";
+  private static final String TIME_SINCE_PARAM = "@timesince";
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
+  static final int ID_QUERY_BATCH_SIZE = 1000;
   static final String DEAD_BLOBS_QUERY_TEMPLATE =
-      "SELECT * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")"
-          + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")";
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND "
+          + THRESHOLD_PARAM + ")" + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND "
+          + THRESHOLD_PARAM + ")" + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
+  // Note: ideally would like to order by uploadTime and id, but Cosmos doesn't allow without composite index.
+  // It is unlikely (but not impossible) for two blobs in same partition to have the same uploadTime (would have to
+  // be multiple VCR's uploading same partition).  We track the lastBlobId in the CloudFindToken and skip it if
+  // is returned in successive queries.
+  static final String ENTRIES_SINCE_QUERY_TEMPLATE =
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " >= "
+          + TIME_SINCE_PARAM + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
   private static final String SEPARATOR = "-";
+  private static final int findSinceQueryLimit = 1000;
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
   private final DocumentClient documentClient;
@@ -81,6 +95,7 @@ class AzureCloudDestination implements CloudDestination {
   private final AzureMetrics azureMetrics;
   private final String clusterName;
   private final long retentionPeriodMs;
+  private final int deadBlobsQueryLimit;
   // Containers known to exist in the storage account
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
 
@@ -115,6 +130,7 @@ class AzureCloudDestination implements CloudDestination {
         ConsistencyLevel.Session);
     cosmosDataAccessor = new CosmosDataAccessor(documentClient, azureCloudConfig, azureMetrics);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
+    this.deadBlobsQueryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
     logger.info("Created Azure destination");
   }
 
@@ -134,6 +150,7 @@ class AzureCloudDestination implements CloudDestination {
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
+    this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
 
     // Create a blob client to interact with Blob storage
     azureBlobClient = azureAccount.createCloudBlobClient();
@@ -251,14 +268,39 @@ class AzureCloudDestination implements CloudDestination {
     if (blobIds.isEmpty()) {
       return Collections.emptyMap();
     }
+
+    // CosmosDB has query size limit of 256k chars.
+    // Break list into chunks if necessary to avoid overflow.
+    List<CloudBlobMetadata> metadataList;
+    if (blobIds.size() > ID_QUERY_BATCH_SIZE) {
+      metadataList = new ArrayList<>();
+      for (int j = 0; j < blobIds.size() / ID_QUERY_BATCH_SIZE + 1; j++) {
+        int start = j * ID_QUERY_BATCH_SIZE;
+        if (start >= blobIds.size()) {
+          break;
+        }
+        int end = Math.min((j + 1) * ID_QUERY_BATCH_SIZE, blobIds.size());
+        List<BlobId> someBlobIds = blobIds.subList(start, end);
+        metadataList.addAll(getBlobMetadataChunked(someBlobIds));
+      }
+    } else {
+      metadataList = getBlobMetadataChunked(blobIds);
+    }
+
+    return metadataList.stream().collect(Collectors.toMap(m -> m.getId(), Function.identity()));
+  }
+
+  private List<CloudBlobMetadata> getBlobMetadataChunked(List<BlobId> blobIds) throws CloudStorageException {
+    if (blobIds.isEmpty() || blobIds.size() > ID_QUERY_BATCH_SIZE) {
+      throw new IllegalArgumentException("Invalid input list size: " + blobIds.size());
+    }
     String quotedBlobIds =
         String.join(",", blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.toList()));
     String query = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
     String partitionPath = blobIds.get(0).getPartition().toPathString();
     try {
-      List<CloudBlobMetadata> metadataList =
-          cosmosDataAccessor.queryMetadata(partitionPath, new SqlQuerySpec(query), azureMetrics.missingKeysQueryTime);
-      return metadataList.stream().collect(Collectors.toMap(m -> m.getId(), Function.identity()));
+      return cosmosDataAccessor.queryMetadata(partitionPath, new SqlQuerySpec(query),
+          azureMetrics.missingKeysQueryTime);
     } catch (DocumentClientException dex) {
       throw new CloudStorageException("Failed to query blob metadata for partition " + partitionPath, dex);
     }
@@ -269,11 +311,49 @@ class AzureCloudDestination implements CloudDestination {
     long now = System.currentTimeMillis();
     long retentionThreshold = now - retentionPeriodMs;
     SqlQuerySpec deadBlobsQuery = new SqlQuerySpec(DEAD_BLOBS_QUERY_TEMPLATE,
-        new SqlParameterCollection(new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, deadBlobsQueryLimit),
+            new SqlParameter(THRESHOLD_PARAM, retentionThreshold)));
     try {
       return cosmosDataAccessor.queryMetadata(partitionPath, deadBlobsQuery, azureMetrics.deadBlobsQueryTime);
     } catch (DocumentClientException dex) {
       throw new CloudStorageException("Failed to query dead blobs for partition " + partitionPath, dex);
+    }
+  }
+
+  @Override
+  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken,
+      long maxTotalSizeOfEntries) throws CloudStorageException {
+    SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
+        new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, findSinceQueryLimit),
+            new SqlParameter(TIME_SINCE_PARAM, findToken.getLatestUploadTime())));
+    try {
+      List<CloudBlobMetadata> results =
+          cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
+      if (results.isEmpty()) {
+        return results;
+      }
+      long totalSize = 0;
+      List<CloudBlobMetadata> cappedResults = new ArrayList<>();
+      for (CloudBlobMetadata metadata : results) {
+        // Skip the last blobId in the token
+        if (metadata.getId().equals(findToken.getLatestBlobId())) {
+          continue;
+        }
+
+        // Cap results at max size
+        if (totalSize + metadata.getSize() > maxTotalSizeOfEntries) {
+          // If we have no results yet, must add at least one regardless of size
+          if (cappedResults.isEmpty()) {
+            cappedResults.add(metadata);
+          }
+          break;
+        }
+        cappedResults.add(metadata);
+        totalSize += metadata.getSize();
+      }
+      return cappedResults;
+    } catch (DocumentClientException dex) {
+      throw new CloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
     }
   }
 

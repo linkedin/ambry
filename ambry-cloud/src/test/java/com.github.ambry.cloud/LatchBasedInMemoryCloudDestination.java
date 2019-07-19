@@ -107,6 +107,11 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
+  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries) {
+    return Collections.emptyList();
+  }
+
+  @Override
   public boolean purgeBlob(CloudBlobMetadata blobMetadata) {
     return true;
   }

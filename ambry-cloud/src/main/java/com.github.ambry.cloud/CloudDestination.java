@@ -73,6 +73,18 @@ public interface CloudDestination {
   List<CloudBlobMetadata> getDeadBlobs(String partitionPath) throws CloudStorageException;
 
   /**
+   * Returns a sequenced list of blobs in the specified partition, ordered by upload time starting from the
+   * specified time.
+   * @param partitionPath the partition to query.
+   * @param findToken the {@link CloudFindToken} specifying the boundary for the query.
+   * @param maxTotalSizeOfEntries the cumulative size limit for the list of blobs returned.
+   * @return a List of {@link CloudBlobMetadata} referencing the blobs returned by the query.
+   * @throws CloudStorageException
+   */
+  List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries)
+      throws CloudStorageException;
+
+  /**
    * Permanently delete the specified blob in the cloud destination.
    * @param blobMetadata the {@link CloudBlobMetadata} referencing the blob to purge.
    * @return flag indicating whether the blob was successfully purged.
