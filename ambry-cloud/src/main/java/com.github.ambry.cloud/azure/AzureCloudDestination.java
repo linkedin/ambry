@@ -78,6 +78,10 @@ class AzureCloudDestination implements CloudDestination {
       "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
+  // Note: ideally would like to order by uploadTime and id, but Cosmos doesn't allow without composite index.
+  // It is unlikely (but not impossible) for two blobs in same partition to have the same uploadTime (would have to
+  // be multiple VCR's uploading same partition).  We track the lastBlobId in the CloudFindToken and skip it if
+  // is returned in successive queries.
   static final String ENTRIES_SINCE_QUERY_TEMPLATE =
       "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " >= "
           + TIME_SINCE_PARAM + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
@@ -330,7 +334,6 @@ class AzureCloudDestination implements CloudDestination {
       }
       long totalSize = 0;
       List<CloudBlobMetadata> cappedResults = new ArrayList<>();
-      boolean foundLastBlob = (findToken.getLatestBlobId() == null);
       for (CloudBlobMetadata metadata : results) {
         // Skip the last blobId in the token
         if (metadata.getId().equals(findToken.getLatestBlobId())) {
