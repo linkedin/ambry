@@ -73,13 +73,14 @@ class AzureCloudDestination implements CloudDestination {
   private static final String LIMIT_PARAM = "@limit";
   private static final String TIME_SINCE_PARAM = "@timesince";
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
+  static final int ID_QUERY_BATCH_SIZE = 1000;
   static final String DEAD_BLOBS_QUERY_TEMPLATE =
-      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")"
-          + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND " + THRESHOLD_PARAM + ")"
-          + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND "
+          + THRESHOLD_PARAM + ")" + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND "
+          + THRESHOLD_PARAM + ")" + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
   static final String ENTRIES_SINCE_QUERY_TEMPLATE =
-      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " >= " + TIME_SINCE_PARAM
-          + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " >= "
+          + TIME_SINCE_PARAM + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
   private static final String SEPARATOR = "-";
   private static final int findSinceQueryLimit = 1000;
   private final CloudStorageAccount azureAccount;
@@ -263,14 +264,39 @@ class AzureCloudDestination implements CloudDestination {
     if (blobIds.isEmpty()) {
       return Collections.emptyMap();
     }
+
+    // CosmosDB has query size limit of 256k chars.
+    // Break list into chunks if necessary to avoid overflow.
+    List<CloudBlobMetadata> metadataList;
+    if (blobIds.size() > ID_QUERY_BATCH_SIZE) {
+      metadataList = new ArrayList<>();
+      for (int j = 0; j < blobIds.size() / ID_QUERY_BATCH_SIZE + 1; j++) {
+        int start = j * ID_QUERY_BATCH_SIZE;
+        if (start >= blobIds.size()) {
+          break;
+        }
+        int end = Math.min((j + 1) * ID_QUERY_BATCH_SIZE, blobIds.size());
+        List<BlobId> someBlobIds = blobIds.subList(start, end);
+        metadataList.addAll(getBlobMetadataChunked(someBlobIds));
+      }
+    } else {
+      metadataList = getBlobMetadataChunked(blobIds);
+    }
+
+    return metadataList.stream().collect(Collectors.toMap(m -> m.getId(), Function.identity()));
+  }
+
+  private List<CloudBlobMetadata> getBlobMetadataChunked(List<BlobId> blobIds) throws CloudStorageException {
+    if (blobIds.isEmpty() || blobIds.size() > ID_QUERY_BATCH_SIZE) {
+      throw new IllegalArgumentException("Invalid input list size: " + blobIds.size());
+    }
     String quotedBlobIds =
         String.join(",", blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.toList()));
     String query = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
     String partitionPath = blobIds.get(0).getPartition().toPathString();
     try {
-      List<CloudBlobMetadata> metadataList =
-          cosmosDataAccessor.queryMetadata(partitionPath, new SqlQuerySpec(query), azureMetrics.missingKeysQueryTime);
-      return metadataList.stream().collect(Collectors.toMap(m -> m.getId(), Function.identity()));
+      return cosmosDataAccessor.queryMetadata(partitionPath, new SqlQuerySpec(query),
+          azureMetrics.missingKeysQueryTime);
     } catch (DocumentClientException dex) {
       throw new CloudStorageException("Failed to query blob metadata for partition " + partitionPath, dex);
     }
@@ -306,9 +332,8 @@ class AzureCloudDestination implements CloudDestination {
       List<CloudBlobMetadata> cappedResults = new ArrayList<>();
       boolean foundLastBlob = (findToken.getLatestBlobId() == null);
       for (CloudBlobMetadata metadata : results) {
-        // Skip the first results until we pass the last blobId in the token
-        if (!foundLastBlob) {
-          foundLastBlob = metadata.getId().equals(findToken.getLatestBlobId());
+        // Skip the last blobId in the token
+        if (metadata.getId().equals(findToken.getLatestBlobId())) {
           continue;
         }
 
