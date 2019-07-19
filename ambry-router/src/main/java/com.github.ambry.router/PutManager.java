@@ -235,7 +235,8 @@ class PutManager {
     // Get the PutOperation that generated the request.
     PutOperation putOperation = correlationIdToPutOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
-    if (putOperations.contains(putOperation)) {
+    // putOperation may be null if the operation was already completed in a previous event loop iteration.
+    if (putOperation != null && putOperations.contains(putOperation)) {
       try {
         putOperation.handleResponse(responseInfo, putResponse);
       } catch (Exception e) {
@@ -258,7 +259,7 @@ class PutManager {
    * performing the callback and notification.
    * @param op the {@link PutOperation} that has completed.
    */
-  void onComplete(PutOperation op) {
+  private void onComplete(PutOperation op) {
     Exception e = op.getOperationException();
     String blobId = op.getBlobIdString();
     op.maybeNotifyForBlobCreation();
@@ -281,6 +282,11 @@ class PutManager {
     } else {
       (op.isEncryptionEnabled() ? routerMetrics.putEncryptedBlobOperationLatencyMs
           : routerMetrics.putBlobOperationLatencyMs).update(operationLatencyMs);
+    }
+    // Preemptively clean up of correlation IDs to avoid retaining a reference to the PutOperation for longer than
+    // required. We do not care about any other
+    for (Integer correlationId : op.getInFlightCorrelationIds()) {
+      correlationIdToPutOperation.remove(correlationId);
     }
     NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }

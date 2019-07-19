@@ -642,7 +642,7 @@ class NettyRequest implements RestRequest {
      */
     public final FutureResult<Long> futureResult = new FutureResult<Long>();
 
-    private final Callback<Long> callback;
+    private Callback<Long> callback;
     private final AtomicLong totalBytesRead = new AtomicLong(0);
     private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
@@ -673,6 +673,9 @@ class NettyRequest implements RestRequest {
         futureResult.done(totalBytesRead.get(), exception);
         if (callback != null) {
           callback.onCompletion(totalBytesRead.get(), exception);
+          // the callback may hold a reference to a large buffer. Setting the callback to null allows for memory to be
+          // freed before the next request comes over this connection.
+          callback = null;
         }
       }
     }
