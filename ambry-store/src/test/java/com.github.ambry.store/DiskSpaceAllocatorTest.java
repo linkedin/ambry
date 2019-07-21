@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -299,6 +300,48 @@ public class DiskSpaceAllocatorTest {
   }
 
   /**
+   * Test that {@link DiskSpaceAllocator#inventoryExistingReserveFiles()} can correctly delete invalid directories/files
+   * and inventory valid ones.
+   * @throws Exception
+   */
+  @Test
+  public void inventoryExistingFilesTest() throws Exception {
+    assertTrue("Couldn't create reserve file directory", reserveFileDir.mkdir());
+    // create valid existing store reserve directory and swap directory
+    File storeReserveDir = new File(reserveFileDir, DiskSpaceAllocator.STORE_DIR_PREFIX + storeId0);
+    File swapReserveDir = new File(reserveFileDir, DiskSpaceAllocator.SWAP_DIR_NAME);
+    assertTrue("Couldn't create store reserve directory", storeReserveDir.mkdir());
+    assertTrue("Couldn't create swap reserve directory", swapReserveDir.mkdir());
+    // create sub-directories in store and swap reserve directories
+    File fileSizeDir1 = new File(storeReserveDir, DiskSpaceAllocator.FILE_SIZE_DIR_PREFIX + 50);
+    File fileSizeDir2 = new File(swapReserveDir, DiskSpaceAllocator.FILE_SIZE_DIR_PREFIX + 30);
+    assertTrue("Couldn't create file size directory", fileSizeDir1.mkdir());
+    assertTrue("Couldn't create file size directory", fileSizeDir2.mkdir());
+    // create files in above directories
+    File reserveFile1 = new File(fileSizeDir1, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
+    File reserveFile2 = new File(fileSizeDir2, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
+    assertTrue("Couldn't create file", reserveFile1.createNewFile());
+    assertTrue("Couldn't create file", reserveFile2.createNewFile());
+    // create invalid directory and file for testing
+    File invalidDir = new File(reserveFileDir, DiskSpaceAllocator.FILE_SIZE_DIR_PREFIX + 50);
+    File invalidFile = new File(reserveFileDir, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
+    assertTrue(invalidDir.mkdir());
+    assertTrue(invalidFile.createNewFile());
+    // instantiate DiskSpaceAllocator
+    alloc = constructAllocator();
+    // verify invalid directories and files no longer exist
+    assertFalse("Invalid directory shouldn't exist after inventory", invalidDir.exists());
+    assertFalse("Invalid file shouldn't exist after inventory", invalidFile.exists());
+    // verify inventoried in-mem store/swap reserve file maps match those existing valid files
+    Map<String, DiskSpaceAllocator.ReserveFileMap> storeFileMap = alloc.getStoreReserveFileMap();
+    assertTrue("Store reserve file map doesn't match existing directory/file",
+        storeFileMap.containsKey(storeId0) && storeFileMap.keySet().size() == 1);
+    DiskSpaceAllocator.ReserveFileMap swapFileMap = alloc.getSwapReserveFileMap();
+    assertTrue("Swap reserve file map doesn't match existing directory/file",
+        swapFileMap.getCount(30) == 1 && swapFileMap.getFileSizeSet().size() == 1);
+  }
+
+  /**
    * Exercises different failure cases for {@link DiskSpaceAllocator#initializePool(Collection)}.
    * @throws Exception
    */
@@ -553,7 +596,7 @@ public class DiskSpaceAllocatorTest {
       assertFalse("Reserve directory should not exist", reserveFileDir.exists());
     } else {
       assertEquals("Wrong number of dirs", expectedState.storeReserveMap.size() + 1, reserveFileDir.list().length);
-      File swapFileDir = new File(reserveFileDir, "reserve_swap");
+      File swapFileDir = new File(reserveFileDir, DiskSpaceAllocator.SWAP_DIR_NAME);
       for (Map.Entry<Long, Integer> entry : expectedState.swapMap.entrySet()) {
         long size = entry.getKey();
         int count = entry.getValue();

@@ -48,15 +48,16 @@ import org.slf4j.LoggerFactory;
  * runtime if the current pool does not include a segment of the correct size.
  */
 class DiskSpaceAllocator {
-  private static final Logger logger = LoggerFactory.getLogger(DiskSpaceAllocator.class);
-  private static final String SWAP_DIR_NAME = "reserve_swap";
-  private static final String FILE_SIZE_DIR_PREFIX = "reserve_size_";
-  private static final String RESERVE_FILE_PREFIX = "reserve_";
   static final String STORE_DIR_PREFIX = "reserve_store_";
-  static final FileFilter RESERVE_FILE_FILTER =
+  static final String SWAP_DIR_NAME = "reserve_swap";
+  static final String FILE_SIZE_DIR_PREFIX = "reserve_size_";
+  static final String RESERVE_FILE_PREFIX = "reserve_";
+  private static final FileFilter RESERVE_FILE_FILTER =
       pathname -> pathname.isFile() && pathname.getName().startsWith(RESERVE_FILE_PREFIX);
-  static final FileFilter FILE_SIZE_DIR_FILTER =
+  private static final FileFilter FILE_SIZE_DIR_FILTER =
       pathname -> pathname.isDirectory() && getFileSizeForDirName(pathname.getName()) != null;
+  private static final Logger logger = LoggerFactory.getLogger(DiskSpaceAllocator.class);
+
   private final boolean enablePooling;
   private final File reserveDir;
   private final File swapReserveDir;
@@ -173,7 +174,7 @@ class DiskSpaceAllocator {
             destinationFile.getAbsolutePath());
         metrics.diskSpaceAllocatorAllocBeforeInitCount.inc();
       } else {
-        logger.debug("Allocating segment of size {} to {}", sizeInBytes, destinationFile.getAbsolutePath());
+        logger.info("Allocating segment of size {} to {}", sizeInBytes, destinationFile.getAbsolutePath());
       }
       if (destinationFile.exists()) {
         throw new IOException("Destination file already exists: " + destinationFile.getAbsolutePath());
@@ -192,13 +193,16 @@ class DiskSpaceAllocator {
       }
       if (reserveFile == null) {
         if (enablePooling) {
-          logger.info(
-              "Segment of size {} not found in pool; attempting to create a new preallocated file; poolState: {}",
-              sizeInBytes, poolState);
+          logger.info("Segment of size {} not found in {}; attempting to create a new preallocated file; poolState: {}",
+              sizeInBytes, isSwapSegment ? SWAP_DIR_NAME + " directory" : STORE_DIR_PREFIX + storeId + " directory",
+              poolState);
           metrics.diskSpaceAllocatorSegmentNotFoundCount.inc();
         }
         Utils.preAllocateFileIfNeeded(destinationFile, sizeInBytes);
       } else {
+        logger.info("Moving segment with size {} from {} to {}", sizeInBytes,
+            isSwapSegment ? SWAP_DIR_NAME + " directory" : STORE_DIR_PREFIX + storeId + " directory",
+            destinationFile.getAbsolutePath());
         try {
           Files.move(reserveFile.toPath(), destinationFile.toPath());
         } catch (Exception e) {
@@ -213,7 +217,7 @@ class DiskSpaceAllocator {
       }
     } finally {
       long elapsedTime = System.currentTimeMillis() - startTime;
-      logger.debug("allocate took {} ms", elapsedTime);
+      logger.debug("allocating new segment took {} ms for {}", elapsedTime, "store[" + storeId + "]");
       metrics.diskSpaceAllocatorAllocTimeMs.update(elapsedTime);
     }
   }
@@ -235,7 +239,8 @@ class DiskSpaceAllocator {
             fileToReturn.getAbsolutePath());
         metrics.diskSpaceAllocatorFreeBeforeInitCount.inc();
       } else {
-        logger.debug("Freeing segment of size {} from {}", sizeInBytes, fileToReturn.getAbsolutePath());
+        logger.info("Freeing {} segment of size {} from {}", isSwapSegment ? "swap" : "store[" + storeId + "]",
+            sizeInBytes, fileToReturn.getAbsolutePath());
       }
       // For now, we delete the file and create a new one. Newer linux kernel versions support
       // additional fallocate flags, which will be useful for cleaning up returned files.
@@ -254,7 +259,7 @@ class DiskSpaceAllocator {
       }
     } finally {
       long elapsedTime = System.currentTimeMillis() - startTime;
-      logger.debug("free took {} ms", elapsedTime);
+      logger.debug("free took {} ms for {}", elapsedTime, "store[" + storeId + "]");
       metrics.diskSpaceAllocatorFreeTimeMs.update(elapsedTime);
     }
   }
@@ -273,7 +278,7 @@ class DiskSpaceAllocator {
    *       |--- reserve_store_n
    *       |              |--- reserve_size_2147483648
    *       |
-   *       |--- reserve_swap
+   *       |--- reserve_swap (# shared by all stores on same disk)
    *                      |--- reserve_size_2147483648
    *                      |--- reserve_size_8589934592
    * </pre>
@@ -473,6 +478,20 @@ class DiskSpaceAllocator {
   }
 
   /**
+   * @return store reserve files map in this DiskSpaceAllocator
+   */
+  Map<String, ReserveFileMap> getStoreReserveFileMap() {
+    return storeReserveFiles;
+  }
+
+  /**
+   * @return swap reserve files map in this DiskSpaceAllocator
+   */
+  ReserveFileMap getSwapReserveFileMap() {
+    return swapReserveFiles;
+  }
+
+  /**
    * Create and preallocate (if supported) a reserve file of the specified size.
    * @param sizeInBytes the size to preallocate for the reserve file.
    * @return the created file.
@@ -547,7 +566,7 @@ class DiskSpaceAllocator {
   /**
    * This is a thread safe data structure that is used to keep track of the files in the reserve pool.
    */
-  private static class ReserveFileMap {
+  static class ReserveFileMap {
     private final ConcurrentMap<Long, Queue<File>> internalMap = new ConcurrentHashMap<>();
     private final ReentrantLock removeLock = new ReentrantLock();
 
