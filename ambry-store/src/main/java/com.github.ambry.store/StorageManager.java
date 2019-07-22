@@ -28,6 +28,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -39,10 +41,20 @@ import org.slf4j.LoggerFactory;
  * {@link DiskManager}
  */
 public class StorageManager {
-  private final Map<PartitionId, DiskManager> partitionToDiskManager = new HashMap<>();
-  private final Map<DiskId, DiskManager> diskToDiskManager = new HashMap<>();
+  private final ConcurrentMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
+  private final ConcurrentMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
   private final StorageManagerMetrics metrics;
   private final Time time;
+  private final StoreConfig storeConfig;
+  private final DiskManagerConfig diskManagerConfig;
+  private final ScheduledExecutorService scheduler;
+  private final StoreMetrics storeMainMetrics;
+  private final StoreMetrics storeUnderCompactionMetrics;
+  private final StoreKeyFactory keyFactory;
+  private final MessageStoreRecovery recovery;
+  private final MessageStoreHardDelete hardDelete;
+  private final ReplicaStatusDelegate replicaStatusDelegate;
+  private final List<String> stoppedReplicas;
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
 
   /**
@@ -62,12 +74,19 @@ public class StorageManager {
       StoreKeyFactory keyFactory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       ReplicaStatusDelegate replicaStatusDelegate, Time time) throws StoreException {
     verifyConfigs(storeConfig, diskManagerConfig);
-    metrics = new StorageManagerMetrics(registry);
-    StoreMetrics storeMainMetrics = new StoreMetrics(registry);
-    StoreMetrics storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
-    List<String> stoppedReplicas =
-        replicaStatusDelegate == null ? Collections.emptyList() : replicaStatusDelegate.getStoppedReplicas();
+    this.storeConfig = storeConfig;
+    this.diskManagerConfig = diskManagerConfig;
+    this.scheduler = scheduler;
     this.time = time;
+    this.keyFactory = keyFactory;
+    this.recovery = recovery;
+    this.hardDelete = hardDelete;
+    this.replicaStatusDelegate = replicaStatusDelegate;
+    metrics = new StorageManagerMetrics(registry);
+    storeMainMetrics = new StoreMetrics(registry);
+    storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
+    stoppedReplicas =
+        replicaStatusDelegate == null ? Collections.emptyList() : replicaStatusDelegate.getStoppedReplicas();
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
       DiskId disk = replica.getDiskId();
@@ -218,6 +237,39 @@ public class StorageManager {
     } finally {
       metrics.storageManagerShutdownTimeMs.update(time.milliseconds() - startTimeMs);
     }
+  }
+
+  /**
+   * Add a new BlobStore with given {@link ReplicaId}. The new BlobStore is allowed to be placed on a brand new disk if
+   * certain disk is available.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  public boolean addBlobStore(ReplicaId replica) {
+    if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
+      return false;
+    }
+    DiskManager diskManager = diskToDiskManager.computeIfAbsent(replica.getDiskId(), disk -> {
+      DiskManager newDiskManager =
+          new DiskManager(disk, Collections.emptyList(), storeConfig, diskManagerConfig, scheduler, metrics,
+              storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
+              stoppedReplicas, time);
+      logger.info("Creating new DiskManager on {} for new added store", replica.getDiskId().getMountPath());
+      try {
+        newDiskManager.start();
+      } catch (Exception e) {
+        logger.error("Error while starting the new DiskManager for " + disk.getMountPath(), e);
+        return null;
+      }
+      return newDiskManager;
+    });
+    if (diskManager == null || !diskManager.addBlobStore(replica)) {
+      logger.error("Failed to add new store into DiskManager");
+      return false;
+    }
+    partitionToDiskManager.put(replica.getPartitionId(), diskManager);
+    logger.info("New store is successfully added into StorageManager");
+    return true;
   }
 
   /**

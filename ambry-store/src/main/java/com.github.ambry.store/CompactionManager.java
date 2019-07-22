@@ -42,7 +42,7 @@ class CompactionManager {
   private final String mountPath;
   private final StoreConfig storeConfig;
   private final Time time;
-  private final Collection<BlobStore> stores;
+  private final Set<BlobStore> stores = ConcurrentHashMap.newKeySet();
   private final CompactionExecutor compactionExecutor;
   private final StorageManagerMetrics metrics;
   private final CompactionPolicy compactionPolicy;
@@ -53,7 +53,7 @@ class CompactionManager {
   /**
    * Creates a CompactionManager that handles scheduling and executing compaction.
    * @param mountPath the mount path of all the stores for which compaction may be executed.
-   * @param storeConfig the {@link StoreConfig} that contains configurationd details.
+   * @param storeConfig the {@link StoreConfig} that contains configuration details.
    * @param stores the {@link Collection} of {@link BlobStore} that compaction needs to be executed for.
    * @param metrics the {@link StorageManagerMetrics} to use.
    * @param time the {@link Time} instance to use.
@@ -62,7 +62,7 @@ class CompactionManager {
       StorageManagerMetrics metrics, Time time) {
     this.mountPath = mountPath;
     this.storeConfig = storeConfig;
-    this.stores = stores;
+    this.stores.addAll(stores);
     this.time = time;
     this.metrics = metrics;
     if (!storeConfig.storeCompactionTriggers[0].isEmpty()) {
@@ -155,13 +155,23 @@ class CompactionManager {
 
   /**
    * Get compaction details for a given {@link BlobStore} if any
-   * @param blobStore the {@link BlobStore} for which compation details are requested
+   * @param blobStore the {@link BlobStore} for which compaction details are requested
    * @return the {@link CompactionDetails} containing the details about log segments that needs to be compacted.
    * {@code null} if compaction is not required
    * @throws StoreException when {@link BlobStore} is not started
    */
   private CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
     return blobStore.getCompactionDetails(compactionPolicy);
+  }
+
+  /**
+   * Add a new BlobStore into Compaction Manager.
+   * @param store the {@link BlobStore} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  boolean addBlobStore(BlobStore store) {
+    stores.add(store);
+    return compactionExecutor == null || compactionExecutor.controlCompactionForBlobStore(store, false);
   }
 
   /**
@@ -239,7 +249,7 @@ class CompactionManager {
                     compactionStarted = true;
                     store.compact(details, bundleReadBuffer);
                   } else {
-                    logger.info("{} is not eligible for compaction", store);
+                    logger.info("{} is not eligible for compaction due to empty compaction details", store);
                   }
                 }
               } catch (Exception e) {
@@ -332,7 +342,7 @@ class CompactionManager {
     }
 
     /**
-     * Disable the compaction on given blobstore
+     * Disable/Enable the compaction on given BlobStore
      * @param store the {@link BlobStore} on which the compaction is enabled or disabled.
      * @param enable whether to enable ({@code true}) or disable.
      * @return {@code true} if the disabling was successful. {@code false} if not.
