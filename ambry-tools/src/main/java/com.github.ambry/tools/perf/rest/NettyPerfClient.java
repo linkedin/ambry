@@ -472,11 +472,16 @@ public class NettyPerfClient {
         String hostname = hostAndRequestCount.getKey();
         AtomicLong requestCount = hostAndRequestCount.getValue();
         Long hostSleepTime = hostToSleepTime.get(hostname);
-        logger.info("For host {}, request count per sec is {}, current sleep time is {} ms", hostname,
-            requestCount.get(), hostSleepTime);
-        if (targetQPS > 0 && requestCount.get() > 0) {
-          long val = requestCount.get() * 100 * hostSleepTime / targetQPS;
-          hostSleepTime = val / 100 + (val > 100 && (val % 100 >= 50 || hostSleepTime == 1) ? 1 : 0);
+        long currentQPS = requestCount.get();
+        logger.info("For host {}, request count per sec is {}, current sleep time is {} ms", hostname, currentQPS,
+            hostSleepTime);
+        if (targetQPS > 0 && currentQPS > 0) {
+          // formula to update sleep time is: new sleep time = (currentQPS / targetQPS) * (current sleep time)
+          long newSleepTime = currentQPS * hostSleepTime / targetQPS;
+          // if currentQPS is already higher than target one and new sleep time still equals current sleep time, we
+          // explicitly plus one more millisecond.
+          newSleepTime = newSleepTime + ((currentQPS > targetQPS && newSleepTime == hostSleepTime) ? 1 : 0);
+          hostSleepTime = newSleepTime;
           requestCount.set(0);
           logger.info("Updated sleep time is {} ms for host {}", hostSleepTime, hostname);
         }
