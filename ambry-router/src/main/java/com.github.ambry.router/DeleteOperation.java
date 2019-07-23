@@ -318,7 +318,7 @@ class DeleteOperation {
    * @param exception the {@link RouterException} to possibly set.
    */
   void setOperationException(RouterException exception) {
-    RouterUtils.replaceOperationException(operationException, (RouterException) exception, this::getPrecedenceLevel);
+    RouterUtils.replaceOperationException(operationException, exception, this::getPrecedenceLevel);
   }
 
   /**

@@ -394,7 +394,7 @@ public class GetBlobInfoOperationTest {
     // Pick a remote DC as the new local DC.
     String newLocal = "DC1";
     String oldLocal = localDcName;
-    Properties props = getNonBlockingRouterProperties();
+    Properties props = getNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", newLocal);
     routerConfig = new RouterConfig(new VerifiableProperties(props));
 
@@ -423,7 +423,7 @@ public class GetBlobInfoOperationTest {
     Assert.assertEquals("The number of data points in remote colo latency histogram is not expected", 2,
         tracker.getLatencyHistogram(localReplica).getCount());
 
-    props = getNonBlockingRouterProperties();
+    props = getNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", oldLocal);
     routerConfig = new RouterConfig(new VerifiableProperties(props));
   }
@@ -441,9 +441,10 @@ public class GetBlobInfoOperationTest {
     // Pick a remote DC as the new local DC.
     String newLocal = "DC1";
     String oldLocal = localDcName;
-    Properties props = getNonBlockingRouterProperties();
+    Properties props = getNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", newLocal);
     props.setProperty("router.get.request.parallelism", "3");
+    props.setProperty("router.operation.tracker.max.inflight.requests", "3");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
 
     for (MockServer server : mockServerLayout.getMockServers()) {
@@ -474,9 +475,10 @@ public class GetBlobInfoOperationTest {
     // error code should be OperationTimedOut because it precedes BlobDoesNotExist
     Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
 
-    props = getNonBlockingRouterProperties();
+    props = getNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", oldLocal);
     props.setProperty("router.get.request.parallelism", Integer.toString(requestParallelism));
+    props.setProperty("router.operation.tracker.max.inflight.requests", "2");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
   }
 

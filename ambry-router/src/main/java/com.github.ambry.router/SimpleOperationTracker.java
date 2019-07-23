@@ -219,7 +219,7 @@ class SimpleOperationTracker implements OperationTracker {
     } else {
       failedCount++;
       // NOT_FOUND is a special error. When tracker sees more than 2 NOT_FOUND from the originating DC, we can
-      // be sure the operation will ends up with a NOT_FOUND error.
+      // be sure the operation will end up with a NOT_FOUND error.
       if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND && replicaId.getDataNodeId()
           .getDatacenterName()
           .equals(originatingDcName)) {

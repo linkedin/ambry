@@ -319,8 +319,8 @@ class TtlUpdateOperation {
    * level. Update the operationException if necessary.
    * @param exception the {@link RouterException} to possibly set.
    */
-  void setOperationException(Exception exception) {
-    RouterUtils.replaceOperationException(operationException, (RouterException) exception, this::getPrecedenceLevel);
+  void setOperationException(RouterException exception) {
+    RouterUtils.replaceOperationException(operationException, exception, this::getPrecedenceLevel);
   }
 
   /**

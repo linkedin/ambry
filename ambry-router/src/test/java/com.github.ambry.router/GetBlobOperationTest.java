@@ -570,12 +570,13 @@ public class GetBlobOperationTest {
     // Pick a remote DC as the new local DC.
     String newLocal = "DC1";
     String oldLocal = localDcName;
-    Properties props = getDefaultNonBlockingRouterProperties();
+    Properties props = getDefaultNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", newLocal);
     props.setProperty("router.get.request.parallelism", "3");
+    props.setProperty("router.operation.tracker.max.inflight.requests", "3");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
 
-    GetBlobOperation op = createOperation(null);
+    GetBlobOperation op = createOperation(routerConfig, null);
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
     correlationIdToGetOperation.clear();
     for (MockServer server : mockServerLayout.getMockServers()) {
@@ -600,9 +601,10 @@ public class GetBlobOperationTest {
     // error code should be OperationTimedOut because it precedes BlobDoesNotExist
     Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
 
-    props = getDefaultNonBlockingRouterProperties();
+    props = getDefaultNonBlockingRouterProperties(true);
     props.setProperty("router.datacenter.name", oldLocal);
     props.setProperty("router.get.request.parallelism", "2");
+    props.setProperty("router.operation.tracker.max.inflight.requests", "2");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
   }
 
