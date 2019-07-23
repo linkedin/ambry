@@ -15,6 +15,7 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.store.Message;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -44,7 +45,7 @@ public class GetRequest extends RequestOrResponse {
   private static final short Get_Request_Version_V3 = 3;
   public static final String Replication_Client_Id_Prefix = "replication-fetch-";
   public static final String Cloud_Replica_Keyword = "vcr";
-  public static final Long DEFAULT_IF_MODIFED_SINCE = new Long(-1);
+  public static final Long EMPTY_IF_MODIFED_SINCE = new Long(-1);
 
   public GetRequest(int correlationId, String clientId, MessageFormatFlags flags,
       List<PartitionRequestInfo> partitionRequestInfoList, GetOption getOption, Long ifModifiedSince) {
@@ -56,13 +57,21 @@ public class GetRequest extends RequestOrResponse {
     if (partitionRequestInfoList == null) {
       throw new IllegalArgumentException("No partition info specified in GetRequest");
     }
-    // Make sure partition request info list only have one partition and one blob
-    if (this.ifModifiedSince != DEFAULT_IF_MODIFED_SINCE && this.partitionRequestInfoList.size() > 1) {
-      throw new IllegalArgumentException("If-Modified-Since should be used with one partition and one blob");
+    if (this.ifModifiedSince != EMPTY_IF_MODIFED_SINCE) {
+      // Make sure partition request info list only have one partition and one blob
+      if (this.partitionRequestInfoList.size() > 1) {
+        throw new IllegalArgumentException("If-Modified-Since should be used with one partition and one blob");
+      }
+      if (this.flags != MessageFormatFlags.All) {
+        throw new IllegalArgumentException("If-Modified-Since should be used with blob or all message format flag");
+      }
+      if (this.getOption == GetOption.Include_All || this.getOption == GetOption.Include_Deleted_Blobs) {
+        throw new IllegalArgumentException("If-Modified-Since shouldn't be used with deleted blob");
+      }
     }
     this.partitionRequestInfoList = partitionRequestInfoList;
     for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
-      if (this.ifModifiedSince != DEFAULT_IF_MODIFED_SINCE && partitionRequestInfo.getBlobIds().size()>1) {
+      if (this.ifModifiedSince != EMPTY_IF_MODIFED_SINCE && partitionRequestInfo.getBlobIds().size() > 1) {
         throw new IllegalArgumentException("If-Modified-Since should be used with one partition and one blob");
       }
       totalPartitionRequestInfoListSize += partitionRequestInfo.sizeInBytes();
@@ -76,7 +85,7 @@ public class GetRequest extends RequestOrResponse {
 
     this.flags = flags;
     this.getOption = getOption;
-    this.ifModifiedSince = DEFAULT_IF_MODIFED_SINCE;
+    this.ifModifiedSince = EMPTY_IF_MODIFED_SINCE;
     if (partitionRequestInfoList == null) {
       throw new IllegalArgumentException("No partition info specified in GetRequest");
     }
@@ -120,7 +129,7 @@ public class GetRequest extends RequestOrResponse {
     if (versionId >= Get_Request_Version_V2) {
       getOption = GetOption.values()[stream.readShort()];
     }
-    Long ifModifiedSince = DEFAULT_IF_MODIFED_SINCE;
+    Long ifModifiedSince = EMPTY_IF_MODIFED_SINCE;
     if (versionId == Get_Request_Version_V3) {
       ifModifiedSince = stream.readLong();
     }
@@ -179,6 +188,7 @@ public class GetRequest extends RequestOrResponse {
     sb.append(", ").append("CorrelationId=").append(correlationId);
     sb.append(", ").append("MessageFormatFlags=").append(flags);
     sb.append(", ").append("GetOption=").append(getOption);
+    sb.append(", ").append("IfModifiedSince=").append(ifModifiedSince);
     sb.append("]");
     return sb.toString();
   }

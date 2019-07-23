@@ -381,9 +381,27 @@ public class AmbryRequests implements RequestAPI {
           }
         }
       }
-      CompositeSend compositeSend = new CompositeSend(messagesToSendList);
-      response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,
-          compositeSend, ServerErrorCode.No_Error);
+      if (getRequest.getIfModifiedSince() != GetRequest.EMPTY_IF_MODIFED_SINCE
+        && partitionResponseInfoList.get(0).getErrorCode() == ServerErrorCode.No_Error) {
+          // IfModifedSince is not empty, then
+          // 1. GetRequest only has one blob to fetch
+          // 2. GetRequest is for BlobAll
+          // There are two scenarios here
+          // 1. GetRequest excludes deleted blob, then the operationTimeMs is the creationTimeMs
+          // 2. GetRequest includes deleted blob and this blob is deleted. Then the operationTimeMs would still be the
+          // creationTimeMs since this is guaranteed by the the implementation of BlobStore.
+          MessageInfo info = partitionResponseInfoList.get(0).getMessageInfoList().get(0);
+          long creationTime = info.getOperationTimeMs();
+          long creationTimeInSecond = creationTime - creationTime % 1000;
+          if (creationTimeInSecond <= getRequest.getIfModifiedSince()) {
+            response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.Blob_Not_Modified);
+          }
+      }
+      if (response == null) {
+        CompositeSend compositeSend = new CompositeSend(messagesToSendList);
+        response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,
+            compositeSend, ServerErrorCode.No_Error);
+      }
     } catch (Exception e) {
       logger.error("Unknown exception for request " + getRequest, e);
       response =
