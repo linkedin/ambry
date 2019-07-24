@@ -265,7 +265,6 @@ class PersistentIndex {
     LogSegment logSegment = log.getFirstSegment();
     while (logSegment != null) {
       File[] files = getIndexSegmentFilesForLogSegment(dataDir, logSegment.getName());
-      // TODO change file permission here
       if (files == null) {
         throw new StoreException("Could not read index files from directory [" + dataDir + "]",
             StoreErrorCodes.Index_Creation_Failure);

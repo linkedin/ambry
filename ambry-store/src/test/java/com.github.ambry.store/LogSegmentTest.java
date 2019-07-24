@@ -30,9 +30,12 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Arrays;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import org.junit.After;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -77,6 +80,28 @@ public class LogSegmentTest {
     }
     assertTrue("The directory [" + tempDir.getAbsolutePath() + "] could not be deleted", tempDir.delete());
     validateMockitoUsage();
+  }
+
+  /**
+   * Test that the file permissions are correctly set based on permissions specified in {@link StoreConfig}.
+   * @throws Exception
+   */
+  @Test
+  public void setFilePermissionsTest() throws Exception {
+    Properties props = new Properties();
+    props.setProperty("store.data.file.permission", "rw-rw-r--");
+    StoreConfig initialConfig = new StoreConfig(new VerifiableProperties(props));
+    File segmentFile = new File(tempDir, "test_segment");
+    assertTrue("Fail to create segment file", segmentFile.createNewFile());
+    segmentFile.deleteOnExit();
+    // create log segment instance by writing into brand new file (using initialConfig, file permission = "rw-rw-r--")
+    new LogSegment(segmentFile.getName(), segmentFile, STANDARD_SEGMENT_SIZE, initialConfig, metrics, true);
+    Set<PosixFilePermission> filePerm = Files.getPosixFilePermissions(segmentFile.toPath());
+    assertEquals("File permissions are not expected", "rw-rw-r--", PosixFilePermissions.toString(filePerm));
+    // create log segment instance by reading from existing file (using default store config, file permission = "rw-rw----")
+    new LogSegment(segmentFile.getName(), segmentFile, config, metrics);
+    filePerm = Files.getPosixFilePermissions(segmentFile.toPath());
+    assertEquals("File permissions are not expected", "rw-rw----", PosixFilePermissions.toString(filePerm));
   }
 
   /**

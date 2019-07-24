@@ -893,13 +893,15 @@ public class Utils {
     }
   }
 
-  public static void setFilePermission(List<File> files, Set<PosixFilePermission> permissions) {
+  /**
+   *
+   * @param files
+   * @param permissions
+   * @throws IOException
+   */
+  public static void setFilePermission(List<File> files, Set<PosixFilePermission> permissions) throws IOException {
     for (File file : files) {
-      try {
-        Files.setPosixFilePermissions(file.toPath(), permissions);
-      } catch (IOException e) {
-        logger.error("Exception occurs when setting permissions for {}", file.getPath(), e);
-      }
+      Files.setPosixFilePermissions(file.toPath(), permissions);
     }
   }
 

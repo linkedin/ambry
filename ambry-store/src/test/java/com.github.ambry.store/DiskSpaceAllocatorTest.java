@@ -15,18 +15,9 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.utils.CrcOutputStream;
-import com.github.ambry.utils.FilterFactory;
-import com.github.ambry.utils.IFilter;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Utils;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -34,7 +25,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -71,38 +61,6 @@ public class DiskSpaceAllocatorTest {
     if (exec != null) {
       exec.shutdownNow();
     }
-  }
-
-  @Test
-  public void testonly() throws Exception {
-    File dir = new File("/Users/yinzhang/DirForTest");
-    if (!dir.exists()) {
-      assertTrue("fail to make dir", dir.mkdir());
-    }
-    //dir.deleteOnExit();
-    File testFile = new File(dir, "testFile");
-    IFilter bloomFilter = FilterFactory.getFilter(100, 0.01);
-    if (!testFile.exists()) {
-      assertTrue("Fail to create file", testFile.createNewFile());
-    }
-    try {
-      CrcOutputStream crcStream = new CrcOutputStream(new FileOutputStream(testFile));
-      DataOutputStream stream = new DataOutputStream(crcStream);
-      FilterFactory.serialize(bloomFilter, stream);
-      long crcValue = crcStream.getValue();
-      stream.writeLong(crcValue);
-      stream.close();
-    } catch (IOException e) {
-      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
-      throw new StoreException(errorCode.toString() + " while trying to persist bloom filter", e, errorCode);
-    }
-    Set<PosixFilePermission> permissions = PosixFilePermissions.fromString("rw-rw-r--");
-    Utils.setFilePermission(Collections.singletonList(testFile), permissions);
-    //Files.setPosixFilePermissions(testFile.toPath(), permissions);
-    permissions = PosixFilePermissions.fromString("rw-rw----");
-    Utils.setFilePermission(Collections.singletonList(testFile), permissions);
-
-    //Files.setPosixFilePermissions(testFile.toPath(), permissions);
   }
 
   /**

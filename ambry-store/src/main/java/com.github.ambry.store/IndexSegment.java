@@ -140,7 +140,6 @@ class IndexSegment {
     indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix(startOffset);
     indexFile = new File(dataDir, indexSegmentFilenamePrefix + INDEX_SEGMENT_FILE_NAME_SUFFIX);
     bloomFile = new File(dataDir, indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
-    Utils.setFilePermission(Arrays.asList(indexFile, bloomFile), config.storeDataFilePermission);
   }
 
   /**
@@ -189,6 +188,7 @@ class IndexSegment {
           }
           stream.close();
         }
+        Utils.setFilePermission(Arrays.asList(this.indexFile, bloomFile), config.storeDataFilePermission);
       } else {
         index = new ConcurrentSkipListMap<>();
         bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
@@ -207,7 +207,6 @@ class IndexSegment {
           }
         }
       }
-      Utils.setFilePermission(Arrays.asList(this.indexFile, bloomFile), config.storeDataFilePermission);
     } catch (Exception e) {
       throw new StoreException(
           "Index Segment : " + indexFile.getAbsolutePath() + " error while loading index from file", e,
@@ -402,6 +401,7 @@ class IndexSegment {
       long crcValue = crcStream.getValue();
       stream.writeLong(crcValue);
       stream.close();
+      Utils.setFilePermission(Collections.singletonList(bloomFile), config.storeDataFilePermission);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while trying to persist bloom filter", e, errorCode);
@@ -651,7 +651,6 @@ class IndexSegment {
             "SafeEndOffSet " + safeEndPoint + " is greater than current end offset for current " + "index segment "
                 + getEndOffset(), StoreErrorCodes.Illegal_Index_Operation);
       }
-      // TODO change file permission
       File temp = new File(getFile().getAbsolutePath() + ".tmp");
       FileOutputStream fileStream = new FileOutputStream(temp);
       CrcOutputStream crc = new CrcOutputStream(fileStream);
@@ -699,6 +698,7 @@ class IndexSegment {
         fileStream.getChannel().force(true);
         // swap temp file with the original file
         temp.renameTo(getFile());
+        Utils.setFilePermission(Collections.singletonList(getFile()), config.storeDataFilePermission);
       } catch (IOException e) {
         StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(
