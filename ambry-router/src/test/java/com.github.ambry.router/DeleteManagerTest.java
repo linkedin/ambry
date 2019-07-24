@@ -241,12 +241,6 @@ public class DeleteManagerTest {
    */
   @Test
   public void routerErrorCodeResolutionTest() throws Exception {
-    // create a blobId with a random datacenter id. Setting this would disable originatingDc NotFound error.
-    blobId =
-        new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), partition, false,
-            BlobId.BlobDataType.DATACHUNK);
-    blobIdString = blobId.getID();
     LinkedHashMap<ServerErrorCode, RouterErrorCode> codesToSetAndTest = new LinkedHashMap<>();
     // test 4 codes
     codesToSetAndTest.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
@@ -262,13 +256,6 @@ public class DeleteManagerTest {
     codesToSetAndTest.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
     codesToSetAndTest.put(ServerErrorCode.Partition_Unknown, RouterErrorCode.UnexpectedInternalError);
     doRouterErrorCodeResolutionTest(codesToSetAndTest);
-
-    // create a blobId with a random datacenter id. Setting this would disable originatingDc NotFound error.
-    blobId =
-        new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), partition, false,
-            BlobId.BlobDataType.DATACHUNK);
-    blobIdString = blobId.getID();
   }
 
   /**
@@ -474,17 +461,16 @@ public class DeleteManagerTest {
     assertCloseCleanup(router);
     Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.delete.request.parallelism", "1");
-    props.setProperty("router.operation.tracker.terminate.on.not.found.enabled",  "true");
+    props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "true");
     VerifiableProperties vProps = new VerifiableProperties(props);
     RouterConfig routerConfig = new RouterConfig(vProps);
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
         new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    blobId =
-        new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE, (byte)0,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), partition, false,
-            BlobId.BlobDataType.DATACHUNK);
+    blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE, (byte) 0,
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), partition, false,
+        BlobId.BlobDataType.DATACHUNK);
     blobIdString = blobId.getID();
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);

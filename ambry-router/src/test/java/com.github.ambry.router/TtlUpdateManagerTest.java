@@ -71,11 +71,6 @@ public class TtlUpdateManagerTest {
   private static final int BLOBS_COUNT = 5;
   private static final String UPDATE_SERVICE_ID = "update-service-id";
   private static final String LOCAL_DC = "DC1";
-
-  static {
-    TestUtils.RANDOM.nextBytes(PUT_CONTENT);
-  }
-
   private final NonBlockingRouter router;
   private final TtlUpdateManager ttlUpdateManager;
   private final NetworkClient networkClient;
@@ -296,9 +291,6 @@ public class TtlUpdateManagerTest {
     }
   }
 
-  // helpers
-  // general
-
   /**
    * Executes a ttl update operations and verifies results
    * @param ids the collection of ids to ttl update
@@ -342,6 +334,9 @@ public class TtlUpdateManagerTest {
       assertTtl(router, ids, expectedTtlSecs);
     }
   }
+
+  // helpers
+  // general
 
   /**
    * Sends all the requests that the {@code manager} may have ready
@@ -411,8 +406,6 @@ public class TtlUpdateManagerTest {
     return properties;
   }
 
-  // fixedCountSuccessfulResponseTest() helpers
-
   /**
    * Does the fixed count successful response test by setting the appropriate number of successful responses
    * @param successfulResponsesCount the number of successful responses
@@ -440,7 +433,7 @@ public class TtlUpdateManagerTest {
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
 
-  // routerErrorCodeResolutionTest() helpers
+  // fixedCountSuccessfulResponseTest() helpers
 
   /**
    * Runs the router code resolution test based on the input
@@ -478,6 +471,12 @@ public class TtlUpdateManagerTest {
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
     assertTtl(router, blobIds, TTL_SECS);
+  }
+
+  // routerErrorCodeResolutionTest() helpers
+
+  static {
+    TestUtils.RANDOM.nextBytes(PUT_CONTENT);
   }
 }
 
