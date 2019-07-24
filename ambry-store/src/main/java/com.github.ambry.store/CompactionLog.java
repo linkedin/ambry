@@ -13,9 +13,11 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -25,6 +27,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import org.slf4j.Logger;
@@ -76,8 +79,10 @@ class CompactionLog implements Closeable {
    * @param storeId the ID of the store.
    * @param time the {@link Time} instance to use.
    * @param compactionDetails the details about the compaction.
+   * @param config the store config to use in this compaction log.
    */
-  CompactionLog(String dir, String storeId, Time time, CompactionDetails compactionDetails) throws IOException {
+  CompactionLog(String dir, String storeId, Time time, CompactionDetails compactionDetails, StoreConfig config)
+      throws IOException {
     this.time = time;
     file = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
     if (!file.createNewFile()) {
@@ -87,6 +92,7 @@ class CompactionLog implements Closeable {
     cycleLogs = new ArrayList<>();
     cycleLogs.add(new CycleLog(compactionDetails));
     flush();
+    Utils.setFilePermission(Collections.singletonList(file), config.storeOperationFilePermission);
     logger.trace("Created compaction log: {}", file);
   }
 
@@ -96,8 +102,10 @@ class CompactionLog implements Closeable {
    * @param storeId the ID of the store.
    * @param storeKeyFactory the {@link StoreKeyFactory} that is used for keys in the {@link BlobStore} being compacted.
    * @param time the {@link Time} instance to use.
+   * @param config the store config to use in this compaction log.
    */
-  CompactionLog(String dir, String storeId, StoreKeyFactory storeKeyFactory, Time time) throws IOException {
+  CompactionLog(String dir, String storeId, StoreKeyFactory storeKeyFactory, Time time, StoreConfig config)
+      throws IOException {
     this.time = time;
     file = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
     if (!file.exists()) {
@@ -140,6 +148,7 @@ class CompactionLog implements Closeable {
         default:
           throw new IllegalArgumentException("Unrecognized version");
       }
+      Utils.setFilePermission(Collections.singletonList(file), config.storeOperationFilePermission);
       logger.trace("Loaded compaction log: {}", file);
     }
   }

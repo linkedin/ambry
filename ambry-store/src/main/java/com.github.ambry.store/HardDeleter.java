@@ -18,6 +18,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -27,6 +28,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
@@ -53,6 +55,7 @@ public class HardDeleter implements Runnable {
   final AtomicBoolean enabled = new AtomicBoolean(true);
   private volatile boolean awaitingAfterCaughtUp = false;
 
+  private final StoreConfig config;
   private final StoreMetrics metrics;
   private final String dataDir;
   private final Log log;
@@ -99,6 +102,7 @@ public class HardDeleter implements Runnable {
 
   HardDeleter(StoreConfig config, StoreMetrics metrics, String dataDir, Log log, PersistentIndex index,
       MessageStoreHardDelete hardDelete, StoreKeyFactory factory, DiskIOScheduler diskIOScheduler, Time time) {
+    this.config = config;
     this.metrics = metrics;
     this.dataDir = dataDir;
     this.log = log;
@@ -302,7 +306,7 @@ public class HardDeleter implements Runnable {
         FindInfo info =
             index.findDeletedEntriesSince(startToken, scanSizeInBytes, time.seconds() - messageRetentionSeconds);
         endToken = info.getFindToken();
-        logger.trace("New range for hard deletes : startToken {}, endToken for {}", startToken, info.getFindToken(),
+        logger.trace("New range for hard deletes : startToken {}, endToken {} for {}", startToken, info.getFindToken(),
             dataDir);
         pruneHardDeleteRecoveryRange();
         if (hardDeleteRecoveryRange.getSize() > 0) {
@@ -428,6 +432,7 @@ public class HardDeleter implements Runnable {
     StoreFindToken recoveryStartToken = recoveryEndToken = new StoreFindToken();
     startToken = startTokenBeforeLogFlush = startTokenSafeToPersist = endToken = new StoreFindToken();
     if (cleanupTokenFile.exists()) {
+      Utils.setFilePermission(Collections.singletonList(cleanupTokenFile), config.storeDataFilePermission);
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
       DataInputStream stream = new DataInputStream(crcStream);
       try {
@@ -538,6 +543,7 @@ public class HardDeleter implements Runnable {
       writer.writeLong(crcValue);
       fileStream.getChannel().force(true);
       tempFile.renameTo(actual);
+      Utils.setFilePermission(Collections.singletonList(actual), config.storeDataFilePermission);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(

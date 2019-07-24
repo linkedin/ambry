@@ -34,6 +34,7 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -139,6 +140,7 @@ class IndexSegment {
     indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix(startOffset);
     indexFile = new File(dataDir, indexSegmentFilenamePrefix + INDEX_SEGMENT_FILE_NAME_SUFFIX);
     bloomFile = new File(dataDir, indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
+    Utils.setFilePermission(Arrays.asList(indexFile, bloomFile), config.storeDataFilePermission);
   }
 
   /**
@@ -205,6 +207,7 @@ class IndexSegment {
           }
         }
       }
+      Utils.setFilePermission(Arrays.asList(this.indexFile, bloomFile), config.storeDataFilePermission);
     } catch (Exception e) {
       throw new StoreException(
           "Index Segment : " + indexFile.getAbsolutePath() + " error while loading index from file", e,
@@ -648,6 +651,7 @@ class IndexSegment {
             "SafeEndOffSet " + safeEndPoint + " is greater than current end offset for current " + "index segment "
                 + getEndOffset(), StoreErrorCodes.Illegal_Index_Operation);
       }
+      // TODO change file permission
       File temp = new File(getFile().getAbsolutePath() + ".tmp");
       FileOutputStream fileStream = new FileOutputStream(temp);
       CrcOutputStream crc = new CrcOutputStream(fileStream);

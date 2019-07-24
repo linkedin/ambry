@@ -52,6 +52,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.github.ambry.store.StoreTestUtils.*;
 import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 
@@ -173,8 +174,8 @@ class CuratedLogIndexState {
     tempDirStr = tempDir.getAbsolutePath();
     long segmentCapacity = isLogSegmented ? CuratedLogIndexState.SEGMENT_CAPACITY : CuratedLogIndexState.LOG_CAPACITY;
     metrics = new StoreMetrics(metricRegistry);
-    log = new Log(tempDirStr, CuratedLogIndexState.LOG_CAPACITY, segmentCapacity,
-        StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, metrics);
+    log = new Log(tempDirStr, CuratedLogIndexState.LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+        createStoreConfig(segmentCapacity), metrics);
     properties.put("store.index.max.number.of.inmem.elements",
         Integer.toString(CuratedLogIndexState.DEFAULT_MAX_IN_MEM_ELEMENTS));
     properties.put("store.enable.hard.delete", Boolean.toString(hardDeleteEnabled));
@@ -208,10 +209,9 @@ class CuratedLogIndexState {
    * @param size the size of each PUT entry.
    * @param expiresAtMs the time at which each of the PUT entries expires.
    * @return the list of the added entries.
-   * @throws IOException
    * @throws StoreException
    */
-  List<IndexEntry> addPutEntries(int count, long size, long expiresAtMs) throws IOException, StoreException {
+  List<IndexEntry> addPutEntries(int count, long size, long expiresAtMs) throws StoreException {
     if (count <= 0) {
       throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
     }
@@ -862,7 +862,8 @@ class CuratedLogIndexState {
     long segmentCapacity = log.getSegmentCapacity();
     index.close(false);
     log.close(false);
-    log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, metrics);
+    log = new Log(tempDirStr, LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+        createStoreConfig(segmentCapacity), metrics);
     index = null;
     if (initIndex) {
       initIndex(null);

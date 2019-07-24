@@ -145,11 +145,12 @@ public class IndexReadPerformance {
       ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
       DiskSpaceAllocator diskSpaceAllocator =
           new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(metricRegistry));
-      Log log = new Log(System.getProperty("user.dir"), 1000, 1000, diskSpaceAllocator, metrics);
-
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "1048576");
+      props.setProperty("store.segment.size.in.bytes", "1000");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      Log log = new Log(System.getProperty("user.dir"), 1000, diskSpaceAllocator, config, metrics);
+
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
       final CountDownLatch latch = new CountDownLatch(numberOfReaders);

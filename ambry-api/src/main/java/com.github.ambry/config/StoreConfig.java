@@ -14,6 +14,9 @@
 package com.github.ambry.config;
 
 import com.github.ambry.store.IndexMemState;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Set;
 
 
 /**
@@ -265,6 +268,14 @@ public class StoreConfig {
   @Default("Integer.MAX_VALUE")
   public final int storeIoErrorCountToTriggerShutdown;
 
+  @Config("store.data.file.permission")
+  @Default("rw-rw----")
+  public final Set<PosixFilePermission> storeDataFilePermission;
+
+  @Config("store.operation.file.permission")
+  @Default("rw-rw-r--")
+  public final Set<PosixFilePermission> storeOperationFilePermission;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -322,6 +333,11 @@ public class StoreConfig {
     storeIoErrorCountToTriggerShutdown =
         verifiableProperties.getIntInRange("store.io.error.count.to.trigger.shutdown", Integer.MAX_VALUE, 1,
             Integer.MAX_VALUE);
+    String storeDataFilePermissionStr = verifiableProperties.getString("store.data.file.permission", "rw-rw----");
+    storeDataFilePermission = PosixFilePermissions.fromString(storeDataFilePermissionStr);
+    String storeOperationFilePermissionStr =
+        verifiableProperties.getString("store.operation.file.permission", "rw-rw-r--");
+    storeOperationFilePermission = PosixFilePermissions.fromString(storeOperationFilePermissionStr);
   }
 }
 

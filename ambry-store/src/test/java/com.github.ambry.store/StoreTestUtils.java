@@ -18,10 +18,13 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Properties;
 import org.json.JSONObject;
 
 import static org.mockito.Mockito.*;
@@ -164,5 +167,16 @@ class StoreTestUtils {
       success = file.delete() && success;
     }
     return deleteDirectory ? dir.delete() && success : success;
+  }
+
+  /**
+   * Create store config with given segment size.
+   * @param segmentSize the size of each log segment
+   * @return {@link StoreConfig}
+   */
+  static StoreConfig createStoreConfig(long segmentSize) {
+    Properties properties = new Properties();
+    properties.setProperty("store.segment.size.in.bytes", Long.toString(segmentSize));
+    return new StoreConfig(new VerifiableProperties(properties));
   }
 }

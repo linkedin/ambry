@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Pair;
@@ -26,6 +27,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -69,12 +71,13 @@ class LogSegment implements Read, Write {
    *             different from the filename of the {@code file}.
    * @param file the backing {@link File} for this segment.
    * @param capacityInBytes the intended capacity of the segment
+   * @param config the store config to use in this log segment
    * @param metrics the {@link StoreMetrics} instance to use.
    * @param writeHeader if {@code true}, headers are written that provide metadata about the segment.
    * @throws StoreException if the file cannot be read or created
    */
-  LogSegment(String name, File file, long capacityInBytes, StoreMetrics metrics, boolean writeHeader)
-      throws StoreException {
+  LogSegment(String name, File file, long capacityInBytes, StoreConfig config, StoreMetrics metrics,
+      boolean writeHeader) throws StoreException {
     if (!file.exists() || !file.isFile()) {
       throw new StoreException(file.getAbsolutePath() + " does not exist or is not a file",
           StoreErrorCodes.File_Not_Found);
@@ -83,6 +86,7 @@ class LogSegment implements Read, Write {
     this.name = name;
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
+    Utils.setFilePermission(Collections.singletonList(this.file), config.storeDataFilePermission);
     try {
       fileChannel = Utils.openChannel(file, true);
       segmentView = new Pair<>(file, fileChannel);
@@ -103,10 +107,11 @@ class LogSegment implements Read, Write {
    * @param name the desired name of the segment. The name signifies the handle/ID of the LogSegment and may be
    *             different from the filename of the {@code file}.
    * @param file the backing {@link File} for this segment.
+   * @param config the store config to use in this log segment.
    * @param metrics the {@link StoreMetrics} instance to use.
    * @throws StoreException
    */
-  LogSegment(String name, File file, StoreMetrics metrics) throws StoreException {
+  LogSegment(String name, File file, StoreConfig config, StoreMetrics metrics) throws StoreException {
     if (!file.exists() || !file.isFile()) {
       throw new StoreException(file.getAbsolutePath() + " does not exist or is not a file",
           StoreErrorCodes.File_Not_Found);
@@ -133,8 +138,8 @@ class LogSegment implements Read, Write {
       this.file = file;
       this.name = name;
       this.metrics = metrics;
+      Utils.setFilePermission(Collections.singletonList(this.file), config.storeDataFilePermission);
       fileChannel = Utils.openChannel(file, true);
-
       segmentView = new Pair<>(file, fileChannel);
       // externals will set the correct value of end offset.
       endOffset = new AtomicLong(startOffset);
@@ -150,16 +155,19 @@ class LogSegment implements Read, Write {
    * Creates a LogSegment abstraction with the given file and given file channel (for testing purpose currently)
    * @param file the backing {@link File} for this segment.
    * @param capacityInBytes the intended capacity of the segment
+   * @param config the store config to use in this log segment
    * @param metrics the {@link StoreMetrics} instance to use.
    * @param fileChannel the {@link FileChannel} associated with this segment.
    * @throws StoreException
    */
-  LogSegment(File file, long capacityInBytes, StoreMetrics metrics, FileChannel fileChannel) throws StoreException {
+  LogSegment(File file, long capacityInBytes, StoreConfig config, StoreMetrics metrics, FileChannel fileChannel)
+      throws StoreException {
     this.file = file;
     this.name = file.getName();
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
     this.fileChannel = fileChannel;
+    Utils.setFilePermission(Collections.singletonList(file), config.storeDataFilePermission);
     segmentView = new Pair<>(file, fileChannel);
     // externals will set the correct value of end offset.
     endOffset = new AtomicLong(0);
