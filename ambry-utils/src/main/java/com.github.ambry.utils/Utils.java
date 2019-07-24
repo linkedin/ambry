@@ -894,9 +894,9 @@ public class Utils {
   }
 
   /**
-   *
-   * @param files
-   * @param permissions
+   * Set permissions for given files.
+   * @param files a list of files that set specified permissions
+   * @param permissions a set of {@link PosixFilePermission} associated with given files
    * @throws IOException
    */
   public static void setFilePermission(List<File> files, Set<PosixFilePermission> permissions) throws IOException {

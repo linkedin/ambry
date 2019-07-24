@@ -257,6 +257,7 @@ public class CompactionVerifier implements Closeable {
     DiskSpaceAllocator diskSpaceAllocator =
         new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(metricRegistry));
     // load "src compaction" log and index
+    // the segment size is derived from existing log file not from store config, so it's safe to use passed-in store config
     srcLog =
         new Log(srcDir.getAbsolutePath(), verifierConfig.storeCapacity, diskSpaceAllocator, storeConfig, srcMetrics);
     srcIndex = new PersistentIndex(srcDir.getAbsolutePath(), "src", null, srcLog, storeConfig, storeKeyFactory, null,
