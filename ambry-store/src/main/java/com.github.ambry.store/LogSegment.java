@@ -87,7 +87,6 @@ class LogSegment implements Read, Write {
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
     try {
-      Utils.setFilePermission(Collections.singletonList(this.file), config.storeDataFilePermission);
       fileChannel = Utils.openChannel(file, true);
       segmentView = new Pair<>(file, fileChannel);
       // externals will set the correct value of end offset.
@@ -97,6 +96,9 @@ class LogSegment implements Read, Write {
         writeHeader(capacityInBytes);
       }
       startOffset = endOffset.get();
+      if (config.storeSetFilePermissionEnabled) {
+        Utils.setFilePermission(Collections.singletonList(this.file), config.storeDataFilePermission);
+      }
     } catch (IOException e) {
       throw new StoreException("File not found while creating the log segment", e, StoreErrorCodes.File_Not_Found);
     }
@@ -138,11 +140,13 @@ class LogSegment implements Read, Write {
       this.file = file;
       this.name = name;
       this.metrics = metrics;
-      Utils.setFilePermission(Collections.singletonList(this.file), config.storeDataFilePermission);
       fileChannel = Utils.openChannel(file, true);
       segmentView = new Pair<>(file, fileChannel);
       // externals will set the correct value of end offset.
       endOffset = new AtomicLong(startOffset);
+      if (config.storeSetFilePermissionEnabled) {
+        Utils.setFilePermission(Collections.singletonList(this.file), config.storeDataFilePermission);
+      }
     } catch (FileNotFoundException e) {
       throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);
     } catch (IOException e) {
@@ -168,13 +172,15 @@ class LogSegment implements Read, Write {
     this.metrics = metrics;
     this.fileChannel = fileChannel;
     try {
-      Utils.setFilePermission(Collections.singletonList(file), config.storeDataFilePermission);
       segmentView = new Pair<>(file, fileChannel);
       // externals will set the correct value of end offset.
       endOffset = new AtomicLong(0);
       // update end offset
       writeHeader(capacityInBytes);
       startOffset = endOffset.get();
+      if (config.storeSetFilePermissionEnabled) {
+        Utils.setFilePermission(Collections.singletonList(file), config.storeDataFilePermission);
+      }
     } catch (IOException e) {
       // the IOException comes from Utils.setFilePermission which happens when file not found
       throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);

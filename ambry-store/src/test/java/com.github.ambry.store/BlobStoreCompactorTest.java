@@ -2260,7 +2260,7 @@ public class BlobStoreCompactorTest {
     InterruptionInducingLog(int addSegmentCallCountToInterruptAt, int dropSegmentCallCountToInterruptAt)
         throws StoreException {
       super(tempDirStr, state.log.getCapacityInBytes(), StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-          createStoreConfig(state.log.getSegmentCapacity()), new StoreMetrics(new MetricRegistry()));
+          createStoreConfig(state.log.getSegmentCapacity(), true), new StoreMetrics(new MetricRegistry()));
       // set end offsets correctly
       LogSegment original = state.log.getFirstSegment();
       while (original != null) {

@@ -172,11 +172,13 @@ class StoreTestUtils {
   /**
    * Create store config with given segment size.
    * @param segmentSize the size of each log segment
+   * @param setFilePermission {@code true} if setting file permission is enabled. {@code false} otherwise.
    * @return {@link StoreConfig}
    */
-  static StoreConfig createStoreConfig(long segmentSize) {
+  static StoreConfig createStoreConfig(long segmentSize, boolean setFilePermission) {
     Properties properties = new Properties();
     properties.setProperty("store.segment.size.in.bytes", Long.toString(segmentSize));
+    properties.setProperty("store.set.file.permission.enabled", Boolean.toString(setFilePermission));
     return new StoreConfig(new VerifiableProperties(properties));
   }
 }

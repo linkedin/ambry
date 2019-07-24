@@ -1350,7 +1350,9 @@ class PersistentIndex {
         }
         try {
           cleanShutdownFile.createNewFile();
-          Utils.setFilePermission(Collections.singletonList(cleanShutdownFile), config.storeOperationFilePermission);
+          if (config.storeSetFilePermissionEnabled) {
+            Utils.setFilePermission(Collections.singletonList(cleanShutdownFile), config.storeOperationFilePermission);
+          }
         } catch (IOException e) {
           logger.error("Index : " + dataDir + " error while creating clean shutdown file ", e);
         }

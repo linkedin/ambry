@@ -92,7 +92,9 @@ class CompactionLog implements Closeable {
     cycleLogs = new ArrayList<>();
     cycleLogs.add(new CycleLog(compactionDetails));
     flush();
-    Utils.setFilePermission(Collections.singletonList(file), config.storeOperationFilePermission);
+    if (config.storeSetFilePermissionEnabled) {
+      Utils.setFilePermission(Collections.singletonList(file), config.storeOperationFilePermission);
+    }
     logger.trace("Created compaction log: {}", file);
   }
 
@@ -148,7 +150,9 @@ class CompactionLog implements Closeable {
         default:
           throw new IllegalArgumentException("Unrecognized version");
       }
-      Utils.setFilePermission(Collections.singletonList(file), config.storeOperationFilePermission);
+      if (config.storeSetFilePermissionEnabled) {
+        Utils.setFilePermission(Collections.singletonList(file), config.storeOperationFilePermission);
+      }
       logger.trace("Loaded compaction log: {}", file);
     }
   }

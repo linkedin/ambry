@@ -269,6 +269,13 @@ public class StoreConfig {
   public final int storeIoErrorCountToTriggerShutdown;
 
   /**
+   * Whether to set certain permissions for files in store.
+   */
+  @Config("store.set.file.permission.enabled")
+  @Default("false")
+  public final boolean storeSetFilePermissionEnabled;
+
+  /**
    * Specifies the permissions for data files in store. (Data files are user data related files for example, log segment,
    * index segment and bloom filter etc)
    */
@@ -341,6 +348,7 @@ public class StoreConfig {
     storeIoErrorCountToTriggerShutdown =
         verifiableProperties.getIntInRange("store.io.error.count.to.trigger.shutdown", Integer.MAX_VALUE, 1,
             Integer.MAX_VALUE);
+    storeSetFilePermissionEnabled = verifiableProperties.getBoolean("store.set.file.permission.enabled", false);
     String storeDataFilePermissionStr = verifiableProperties.getString("store.data.file.permission", "rw-rw----");
     storeDataFilePermission = PosixFilePermissions.fromString(storeDataFilePermissionStr);
     String storeOperationFilePermissionStr =

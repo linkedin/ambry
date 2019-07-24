@@ -68,7 +68,9 @@ class StoreDescriptor {
         default:
           throw new IllegalArgumentException("Unrecognized version in StoreDescriptor: " + version);
       }
-      Utils.setFilePermission(Collections.singletonList(storeDescriptorFile), config.storeOperationFilePermission);
+      if (config.storeSetFilePermissionEnabled) {
+        Utils.setFilePermission(Collections.singletonList(storeDescriptorFile), config.storeOperationFilePermission);
+      }
     } else {
       incarnationId = UUID.randomUUID();
       File tempFile = new File(dataDir, STORE_DESCRIPTOR_FILENAME + ".tmp");
@@ -85,7 +87,9 @@ class StoreDescriptor {
           throw new IllegalStateException(
               "File " + tempFile.getAbsolutePath() + " renaming to " + actual.getAbsolutePath() + " failed ");
         }
-        Utils.setFilePermission(Collections.singletonList(actual), config.storeOperationFilePermission);
+        if (config.storeSetFilePermissionEnabled) {
+          Utils.setFilePermission(Collections.singletonList(actual), config.storeOperationFilePermission);
+        }
       } else {
         throw new IllegalStateException("File " + tempFile.getAbsolutePath() + " creation failed ");
       }

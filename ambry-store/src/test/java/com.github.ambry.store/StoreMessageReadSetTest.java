@@ -53,7 +53,7 @@ public class StoreMessageReadSetTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{false, true}, {true, true}, {false, false}, {true, false}});
   }
 
   private static final StoreKeyFactory STORE_KEY_FACTORY;
@@ -69,16 +69,18 @@ public class StoreMessageReadSetTest {
   private final File tempDir;
   private final StoreMetrics metrics;
   private final boolean doDataPrefetch;
+  private final boolean setFilePermission;
 
   /**
    * Creates a temporary directory.
    * @throws IOException
    */
-  public StoreMessageReadSetTest(boolean doDataPrefetch) throws IOException {
+  public StoreMessageReadSetTest(boolean doDataPrefetch, boolean setFilePermission) throws IOException {
     tempDir = StoreTestUtils.createTempDirectory("storeMessageReadSetDir-" + UtilsTest.getRandomString(10));
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
     this.doDataPrefetch = doDataPrefetch;
+    this.setFilePermission = setFilePermission;
   }
 
   /**
@@ -100,7 +102,7 @@ public class StoreMessageReadSetTest {
     int logCapacity = 2000;
     int segCapacity = 1000;
     Log log = new Log(tempDir.getAbsolutePath(), logCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-        createStoreConfig(segCapacity), metrics);
+        createStoreConfig(segCapacity, setFilePermission), metrics);
     try {
       LogSegment firstSegment = log.getFirstSegment();
       int availableSegCapacity = (int) (segCapacity - firstSegment.getStartOffset());
@@ -247,7 +249,7 @@ public class StoreMessageReadSetTest {
     int[] segCapacities = {2000, 1000};
     for (int segCapacity : segCapacities) {
       Log log = new Log(tempDir.getAbsolutePath(), logCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-          createStoreConfig(segCapacity), metrics);
+          createStoreConfig(segCapacity, setFilePermission), metrics);
       try {
         LogSegment firstSegment = log.getFirstSegment();
         int availableSegCapacity = (int) (segCapacity - firstSegment.getStartOffset());

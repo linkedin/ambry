@@ -432,7 +432,6 @@ public class HardDeleter implements Runnable {
     StoreFindToken recoveryStartToken = recoveryEndToken = new StoreFindToken();
     startToken = startTokenBeforeLogFlush = startTokenSafeToPersist = endToken = new StoreFindToken();
     if (cleanupTokenFile.exists()) {
-      Utils.setFilePermission(Collections.singletonList(cleanupTokenFile), config.storeDataFilePermission);
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
       DataInputStream stream = new DataInputStream(crcStream);
       try {
@@ -462,6 +461,9 @@ public class HardDeleter implements Runnable {
           throw new StoreException(
               "Crc check does not match for cleanup token file for dataDir " + dataDir + " aborting. ",
               StoreErrorCodes.Illegal_Index_State);
+        }
+        if (config.storeSetFilePermissionEnabled) {
+          Utils.setFilePermission(Collections.singletonList(cleanupTokenFile), config.storeDataFilePermission);
         }
       } catch (IOException e) {
         hardDeleteRecoveryRange.clear();
@@ -543,7 +545,9 @@ public class HardDeleter implements Runnable {
       writer.writeLong(crcValue);
       fileStream.getChannel().force(true);
       tempFile.renameTo(actual);
-      Utils.setFilePermission(Collections.singletonList(actual), config.storeDataFilePermission);
+      if (config.storeSetFilePermissionEnabled) {
+        Utils.setFilePermission(Collections.singletonList(actual), config.storeDataFilePermission);
+      }
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(

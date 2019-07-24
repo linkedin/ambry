@@ -62,7 +62,9 @@ public class LogSegmentTest {
   public LogSegmentTest() throws IOException {
     tempDir = Files.createTempDirectory("logSegmentDir-" + UtilsTest.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
-    config = new StoreConfig(new VerifiableProperties(new Properties()));
+    Properties props = new Properties();
+    props.setProperty("store.set.file.permission.enabled", Boolean.toString(true));
+    config = new StoreConfig(new VerifiableProperties(props));
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
   }
@@ -89,6 +91,7 @@ public class LogSegmentTest {
   @Test
   public void setFilePermissionsTest() throws Exception {
     Properties props = new Properties();
+    props.setProperty("store.set.file.permission.enabled", Boolean.toString(true));
     props.setProperty("store.data.file.permission", "rw-rw-r--");
     StoreConfig initialConfig = new StoreConfig(new VerifiableProperties(props));
     File segmentFile = new File(tempDir, "test_segment");

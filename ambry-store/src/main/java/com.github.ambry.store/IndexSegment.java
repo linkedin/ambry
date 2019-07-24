@@ -188,7 +188,9 @@ class IndexSegment {
           }
           stream.close();
         }
-        Utils.setFilePermission(Arrays.asList(this.indexFile, bloomFile), config.storeDataFilePermission);
+        if (config.storeSetFilePermissionEnabled) {
+          Utils.setFilePermission(Arrays.asList(this.indexFile, bloomFile), config.storeDataFilePermission);
+        }
       } else {
         index = new ConcurrentSkipListMap<>();
         bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
@@ -401,7 +403,9 @@ class IndexSegment {
       long crcValue = crcStream.getValue();
       stream.writeLong(crcValue);
       stream.close();
-      Utils.setFilePermission(Collections.singletonList(bloomFile), config.storeDataFilePermission);
+      if (config.storeSetFilePermissionEnabled) {
+        Utils.setFilePermission(Collections.singletonList(bloomFile), config.storeDataFilePermission);
+      }
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while trying to persist bloom filter", e, errorCode);
@@ -698,7 +702,9 @@ class IndexSegment {
         fileStream.getChannel().force(true);
         // swap temp file with the original file
         temp.renameTo(getFile());
-        Utils.setFilePermission(Collections.singletonList(getFile()), config.storeDataFilePermission);
+        if (config.storeSetFilePermissionEnabled) {
+          Utils.setFilePermission(Collections.singletonList(getFile()), config.storeDataFilePermission);
+        }
       } catch (IOException e) {
         StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(

@@ -433,6 +433,7 @@ public class IndexSegmentTest {
    */
   private void setIndexMemState(IndexMemState state) {
     properties.setProperty(StoreConfig.storeIndexMemStateName, state.name());
+    properties.setProperty("store.set.file.permission.enabled", Boolean.toString(true));
     config = new StoreConfig(new VerifiableProperties(properties));
   }
 
