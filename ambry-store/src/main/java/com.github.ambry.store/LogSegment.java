@@ -182,7 +182,7 @@ class LogSegment implements Read, Write {
         Files.setPosixFilePermissions(file.toPath(), config.storeDataFilePermission);
       }
     } catch (IOException e) {
-      // the IOException comes from Utils.setFilePermission which happens when file not found
+      // the IOException comes from Files.setPosixFilePermissions which happens when file not found
       throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);
     }
   }

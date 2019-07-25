@@ -899,7 +899,7 @@ public class Utils {
    * @param permissions a set of {@link PosixFilePermission} associated with given files
    * @throws IOException
    */
-  public static void setFilePermission(List<File> files, Set<PosixFilePermission> permissions) throws IOException {
+  public static void setFilesPermission(List<File> files, Set<PosixFilePermission> permissions) throws IOException {
     for (File file : files) {
       Files.setPosixFilePermissions(file.toPath(), permissions);
     }

@@ -190,7 +190,7 @@ class IndexSegment {
           stream.close();
         }
         if (config.storeSetFilePermissionEnabled) {
-          Utils.setFilePermission(Arrays.asList(this.indexFile, bloomFile), config.storeDataFilePermission);
+          Utils.setFilesPermission(Arrays.asList(this.indexFile, bloomFile), config.storeDataFilePermission);
         }
       } else {
         index = new ConcurrentSkipListMap<>();
