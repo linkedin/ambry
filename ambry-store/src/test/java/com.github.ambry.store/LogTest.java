@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.After;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 import org.mockito.stubbing.Answer;
@@ -47,6 +48,7 @@ import static org.mockito.Mockito.*;
 /**
  * Tests for {@link Log}.
  */
+@RunWith(Parameterized.class)
 public class LogTest {
   private static final long SEGMENT_CAPACITY = 512;
   private static final long LOG_CAPACITY = 12 * SEGMENT_CAPACITY;
@@ -307,7 +309,8 @@ public class LogTest {
     LogSegment loadedSegment = getLogSegment(LogSegmentNameHelper.getName(activeSegmentPos, 0), SEGMENT_CAPACITY, true);
     List<LogSegment> segmentsToLoad = Collections.singletonList(loadedSegment);
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-        createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, true, segmentsToLoad, Collections.EMPTY_LIST.iterator());
+        createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, true, segmentsToLoad,
+        Collections.EMPTY_LIST.iterator());
 
     // add a segment
     String segmentName = LogSegmentNameHelper.getName(0, 0);
@@ -378,9 +381,9 @@ public class LogTest {
     doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockDiskAllocator).free(any(File.class), anyLong());
     segmentsToLoad = Collections.singletonList(
         getLogSegment(LogSegmentNameHelper.getName(activeSegmentPos, 0), SEGMENT_CAPACITY, true));
-    Log mockLog =
-        new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, mockDiskAllocator, createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled),
-            metrics, true, segmentsToLoad, Collections.EMPTY_LIST.iterator());
+    Log mockLog = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, mockDiskAllocator,
+        createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, true, segmentsToLoad,
+        Collections.EMPTY_LIST.iterator());
     mockLog.addSegment(getLogSegment(LogSegmentNameHelper.getName(1, 0), SEGMENT_CAPACITY, true), true);
     try {
       mockLog.dropSegment(mockLog.getFirstSegment().getName(), true);
@@ -419,8 +422,8 @@ public class LogTest {
     }
 
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-        createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, true, Collections.singletonList(segment),
-        segmentNameAndFileNamesDesired.iterator());
+        createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, true,
+        Collections.singletonList(segment), segmentNameAndFileNamesDesired.iterator());
     // write enough so that all segments are allocated
     ByteBuffer buffer = ByteBuffer.allocate((int) (segment.getCapacityInBytes() - segment.getStartOffset()));
     for (int i = 0; i < numSegments; i++) {
@@ -458,9 +461,9 @@ public class LogTest {
     File mockFile = Mockito.spy(file);
     when(mockFile.exists()).thenReturn(false);
     DiskSpaceAllocator mockDiskAllocator = Mockito.spy(StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR);
-    Log log =
-        new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, mockDiskAllocator, createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled),
-            metrics, true, Collections.singletonList(segment), segmentNameAndFileNamesDesired.iterator());
+    Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, mockDiskAllocator,
+        createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, true,
+        Collections.singletonList(segment), segmentNameAndFileNamesDesired.iterator());
     Log mockLog = Mockito.spy(log);
     when(mockLog.allocate(anyString(), anyLong())).thenReturn(mockFile);
     long initialUnallocatedSegments = mockLog.getRemainingUnallocatedSegments();
@@ -527,7 +530,8 @@ public class LogTest {
   private LogSegment getLogSegment(String name, long capacityInBytes, boolean writeHeader)
       throws IOException, StoreException {
     File file = create(LogSegmentNameHelper.nameToFilename(name));
-    return new LogSegment(name, file, capacityInBytes, createStoreConfig(capacityInBytes, setFilePermissionEnabled), metrics, writeHeader);
+    return new LogSegment(name, file, capacityInBytes, createStoreConfig(capacityInBytes, setFilePermissionEnabled),
+        metrics, writeHeader);
   }
 
   // comprehensiveTest() helpers
@@ -589,8 +593,8 @@ public class LogTest {
     if (numFinalSegments == 1) {
       String name = LogSegmentNameHelper.generateFirstSegmentName(false);
       File file = create(LogSegmentNameHelper.nameToFilename(name));
-      new LogSegment(name, file, segmentCapacity, createStoreConfig(segmentCapacity, setFilePermissionEnabled), metrics, false).close(
-          false);
+      new LogSegment(name, file, segmentCapacity, createStoreConfig(segmentCapacity, setFilePermissionEnabled), metrics,
+          false).close(false);
       segmentNames.add(name);
     } else {
       for (int i = 0; i < numToCreate; i++) {
@@ -602,8 +606,8 @@ public class LogTest {
         long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
         String name = LogSegmentNameHelper.getName(pos, gen);
         File file = create(LogSegmentNameHelper.nameToFilename(name));
-        new LogSegment(name, file, segmentCapacity, createStoreConfig(segmentCapacity, setFilePermissionEnabled), metrics, true).close(
-            false);
+        new LogSegment(name, file, segmentCapacity, createStoreConfig(segmentCapacity, setFilePermissionEnabled),
+            metrics, true).close(false);
         segmentNames.add(name);
       }
     }
