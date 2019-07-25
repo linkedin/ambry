@@ -33,6 +33,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -404,7 +405,7 @@ class IndexSegment {
       stream.writeLong(crcValue);
       stream.close();
       if (config.storeSetFilePermissionEnabled) {
-        Utils.setFilePermission(Collections.singletonList(bloomFile), config.storeDataFilePermission);
+        Files.setPosixFilePermissions(bloomFile.toPath(), config.storeDataFilePermission);
       }
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
@@ -703,7 +704,7 @@ class IndexSegment {
         // swap temp file with the original file
         temp.renameTo(getFile());
         if (config.storeSetFilePermissionEnabled) {
-          Utils.setFilePermission(Collections.singletonList(getFile()), config.storeDataFilePermission);
+          Files.setPosixFilePermissions(getFile().toPath(), config.storeDataFilePermission);
         }
       } catch (IOException e) {
         StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);

@@ -24,7 +24,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Collections;
+import java.nio.file.Files;
 import java.util.UUID;
 
 
@@ -69,7 +69,7 @@ class StoreDescriptor {
           throw new IllegalArgumentException("Unrecognized version in StoreDescriptor: " + version);
       }
       if (config.storeSetFilePermissionEnabled) {
-        Utils.setFilePermission(Collections.singletonList(storeDescriptorFile), config.storeOperationFilePermission);
+        Files.setPosixFilePermissions(storeDescriptorFile.toPath(), config.storeOperationFilePermission);
       }
     } else {
       incarnationId = UUID.randomUUID();
@@ -88,7 +88,7 @@ class StoreDescriptor {
               "File " + tempFile.getAbsolutePath() + " renaming to " + actual.getAbsolutePath() + " failed ");
         }
         if (config.storeSetFilePermissionEnabled) {
-          Utils.setFilePermission(Collections.singletonList(actual), config.storeOperationFilePermission);
+          Files.setPosixFilePermissions(actual.toPath(), config.storeOperationFilePermission);
         }
       } else {
         throw new IllegalStateException("File " + tempFile.getAbsolutePath() + " creation failed ");

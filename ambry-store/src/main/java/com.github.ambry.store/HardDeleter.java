@@ -18,7 +18,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -27,8 +26,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
@@ -463,7 +462,7 @@ public class HardDeleter implements Runnable {
               StoreErrorCodes.Illegal_Index_State);
         }
         if (config.storeSetFilePermissionEnabled) {
-          Utils.setFilePermission(Collections.singletonList(cleanupTokenFile), config.storeDataFilePermission);
+          Files.setPosixFilePermissions(cleanupTokenFile.toPath(), config.storeDataFilePermission);
         }
       } catch (IOException e) {
         hardDeleteRecoveryRange.clear();
@@ -546,7 +545,7 @@ public class HardDeleter implements Runnable {
       fileStream.getChannel().force(true);
       tempFile.renameTo(actual);
       if (config.storeSetFilePermissionEnabled) {
-        Utils.setFilePermission(Collections.singletonList(actual), config.storeDataFilePermission);
+        Files.setPosixFilePermissions(actual.toPath(), config.storeDataFilePermission);
       }
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);

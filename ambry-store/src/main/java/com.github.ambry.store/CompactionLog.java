@@ -17,7 +17,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -26,8 +25,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import org.slf4j.Logger;
@@ -93,7 +92,7 @@ class CompactionLog implements Closeable {
     cycleLogs.add(new CycleLog(compactionDetails));
     flush();
     if (config.storeSetFilePermissionEnabled) {
-      Utils.setFilePermission(Collections.singletonList(file), config.storeOperationFilePermission);
+      Files.setPosixFilePermissions(file.toPath(), config.storeOperationFilePermission);
     }
     logger.trace("Created compaction log: {}", file);
   }
@@ -151,7 +150,7 @@ class CompactionLog implements Closeable {
           throw new IllegalArgumentException("Unrecognized version");
       }
       if (config.storeSetFilePermissionEnabled) {
-        Utils.setFilePermission(Collections.singletonList(file), config.storeOperationFilePermission);
+        Files.setPosixFilePermissions(file.toPath(), config.storeOperationFilePermission);
       }
       logger.trace("Loaded compaction log: {}", file);
     }

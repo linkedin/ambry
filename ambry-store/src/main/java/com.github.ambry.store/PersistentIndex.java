@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1351,7 +1352,7 @@ class PersistentIndex {
         try {
           cleanShutdownFile.createNewFile();
           if (config.storeSetFilePermissionEnabled) {
-            Utils.setFilePermission(Collections.singletonList(cleanShutdownFile), config.storeOperationFilePermission);
+            Files.setPosixFilePermissions(cleanShutdownFile.toPath(), config.storeOperationFilePermission);
           }
         } catch (IOException e) {
           logger.error("Index : " + dataDir + " error while creating clean shutdown file ", e);

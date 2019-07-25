@@ -27,7 +27,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
-import java.util.Collections;
+import java.nio.file.Files;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -97,7 +97,7 @@ class LogSegment implements Read, Write {
       }
       startOffset = endOffset.get();
       if (config.storeSetFilePermissionEnabled) {
-        Utils.setFilePermission(Collections.singletonList(this.file), config.storeDataFilePermission);
+        Files.setPosixFilePermissions(this.file.toPath(), config.storeDataFilePermission);
       }
     } catch (IOException e) {
       throw new StoreException("File not found while creating the log segment", e, StoreErrorCodes.File_Not_Found);
@@ -145,7 +145,7 @@ class LogSegment implements Read, Write {
       // externals will set the correct value of end offset.
       endOffset = new AtomicLong(startOffset);
       if (config.storeSetFilePermissionEnabled) {
-        Utils.setFilePermission(Collections.singletonList(this.file), config.storeDataFilePermission);
+        Files.setPosixFilePermissions(this.file.toPath(), config.storeDataFilePermission);
       }
     } catch (FileNotFoundException e) {
       throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);
@@ -179,7 +179,7 @@ class LogSegment implements Read, Write {
       writeHeader(capacityInBytes);
       startOffset = endOffset.get();
       if (config.storeSetFilePermissionEnabled) {
-        Utils.setFilePermission(Collections.singletonList(file), config.storeDataFilePermission);
+        Files.setPosixFilePermissions(file.toPath(), config.storeDataFilePermission);
       }
     } catch (IOException e) {
       // the IOException comes from Utils.setFilePermission which happens when file not found
