@@ -205,8 +205,8 @@ class BlobStore implements Store {
               StoreErrorCodes.Initialization_Error);
         }
 
-        StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir);
-        log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, diskSpaceAllocator, metrics);
+        StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir, config);
+        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics);
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId());
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,

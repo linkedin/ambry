@@ -13,6 +13,8 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataOutputStream;
@@ -21,6 +23,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.util.Properties;
 import java.util.UUID;
 import org.junit.Test;
 
@@ -38,11 +41,12 @@ public class StoreDescriptorTest {
    */
   @Test
   public void testStoreDescriptor() throws IOException {
+    StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
     File tempDir = StoreTestUtils.createTempDirectory("storeDir");
     File storeDescriptorFile = new File(tempDir.getAbsolutePath(), StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
-    StoreDescriptor storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
+    StoreDescriptor storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath(), config);
     // store descriptor file should have been created.
-    StoreDescriptor newStoreDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
+    StoreDescriptor newStoreDescriptor = new StoreDescriptor(tempDir.getAbsolutePath(), config);
     assertEquals("IncarnationId mismatch ", storeDescriptor.getIncarnationId(), newStoreDescriptor.getIncarnationId());
 
     assertTrue("Store descriptor file could not be deleted", storeDescriptorFile.delete());
@@ -54,7 +58,7 @@ public class StoreDescriptorTest {
     assertTrue("Store descriptor file could not be created", storeDescriptorFile.createNewFile());
     createStoreFile(storeDescriptorFile, toBytes);
 
-    storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
+    storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath(), config);
     assertEquals("IncarnationId mismatch ", incarnationIdUUID, storeDescriptor.getIncarnationId());
 
     // check for wrong version
@@ -63,7 +67,7 @@ public class StoreDescriptorTest {
     assertTrue("Store descriptor file could not be created", storeDescriptorFile.createNewFile());
     createStoreFile(storeDescriptorFile, toBytes);
     try {
-      new StoreDescriptor(tempDir.getAbsolutePath());
+      new StoreDescriptor(tempDir.getAbsolutePath(), config);
       fail("Wrong version should have thrown IllegalArgumentException ");
     } catch (IllegalArgumentException e) {
     }
@@ -78,7 +82,7 @@ public class StoreDescriptorTest {
     dataOutputStream.writeLong(crcOutputStream.getValue() + 1);
     dataOutputStream.close();
     try {
-      new StoreDescriptor(tempDir.getAbsolutePath());
+      new StoreDescriptor(tempDir.getAbsolutePath(), config);
       fail("Wrong CRC should have thrown IllegalStateException ");
     } catch (IllegalStateException e) {
     }

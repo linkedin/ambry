@@ -194,7 +194,7 @@ public class CompactionVerifier implements Closeable {
    * @param args CLI arguments
    * @throws Exception if the verifier encountered problems.
    */
-  public static void main(String args[]) throws Exception {
+  public static void main(String[] args) throws Exception {
     VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
     CompactionVerifierConfig verifierConfig = new CompactionVerifierConfig(verifiableProperties);
     StoreConfig storeConfig = new StoreConfig(verifiableProperties);
@@ -224,8 +224,9 @@ public class CompactionVerifier implements Closeable {
     tgtDir = new File(verifierConfig.tgtStoreDirPath);
 
     // load compaction log and perform basic checks
-    cLog = new CompactionLog(verifierConfig.cLogDirPath, verifierConfig.storeId, storeKeyFactory,
-        SystemTime.getInstance());
+    cLog =
+        new CompactionLog(verifierConfig.cLogDirPath, verifierConfig.storeId, storeKeyFactory, SystemTime.getInstance(),
+            storeConfig);
     assert cLog.getCompactionPhase().equals(CompactionLog.Phase.DONE) : "Compaction is not finished!";
     assert cLog.cycleLogs.size() > 0 : "There should be at least one cycle of compaction in the compaction log";
     compactionStartTimeMs = cLog.startTime;
@@ -256,12 +257,15 @@ public class CompactionVerifier implements Closeable {
     DiskSpaceAllocator diskSpaceAllocator =
         new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(metricRegistry));
     // load "src compaction" log and index
-    srcLog = new Log(srcDir.getAbsolutePath(), verifierConfig.storeCapacity, -1, diskSpaceAllocator, srcMetrics);
+    // the segment size is derived from existing log file not from store config, so it's safe to use passed-in store config
+    srcLog =
+        new Log(srcDir.getAbsolutePath(), verifierConfig.storeCapacity, diskSpaceAllocator, storeConfig, srcMetrics);
     srcIndex = new PersistentIndex(srcDir.getAbsolutePath(), "src", null, srcLog, storeConfig, storeKeyFactory, null,
         hardDelete, diskIOScheduler, srcMetrics, SystemTime.getInstance(), sessionId, incarnationId);
 
     // load "tgt" compaction log and index
-    tgtLog = new Log(tgtDir.getAbsolutePath(), verifierConfig.storeCapacity, -1, diskSpaceAllocator, tgtMetrics);
+    tgtLog =
+        new Log(tgtDir.getAbsolutePath(), verifierConfig.storeCapacity, diskSpaceAllocator, storeConfig, tgtMetrics);
     tgtIndex = new PersistentIndex(tgtDir.getAbsolutePath(), "tgt", null, tgtLog, storeConfig, storeKeyFactory, null,
         hardDelete, diskIOScheduler, tgtMetrics, SystemTime.getInstance(), sessionId, incarnationId);
   }

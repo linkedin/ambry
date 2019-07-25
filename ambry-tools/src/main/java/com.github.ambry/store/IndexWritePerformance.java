@@ -127,16 +127,17 @@ public class IndexWritePerformance {
       StoreMetrics metrics = new StoreMetrics(metricRegistry);
       DiskSpaceAllocator diskSpaceAllocator =
           new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(metricRegistry));
-      Log log = new Log(System.getProperty("user.dir"), 10, 10, diskSpaceAllocator, metrics);
+      Properties props = new Properties();
+      props.setProperty("store.index.memory.size.bytes", "2097152");
+      props.setProperty("store.segment.size.in.bytes", "10");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      Log log = new Log(System.getProperty("user.dir"), 10, diskSpaceAllocator, config, metrics);
 
       ScheduledExecutorService s = Utils.newScheduler(numberOfWriters, "index", false);
 
       ArrayList<BlobIndexMetrics> indexWithMetrics = new ArrayList<BlobIndexMetrics>(numberOfIndexes);
-      Properties props = new Properties();
-      props.setProperty("store.index.memory.size.bytes", "2097152");
-      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-      for (Integer i = 0; i < numberOfIndexes; i++) {
-        File indexFile = new File(System.getProperty("user.dir"), i.toString());
+      for (int i = 0; i < numberOfIndexes; i++) {
+        File indexFile = new File(System.getProperty("user.dir"), Integer.toString(i));
         if (indexFile.exists()) {
           for (File c : indexFile.listFiles()) {
             c.delete();

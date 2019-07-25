@@ -38,6 +38,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.store.StoreTestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -52,7 +53,7 @@ public class StoreMessageReadSetTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{false, true}, {true, true}, {false, false}, {true, false}});
   }
 
   private static final StoreKeyFactory STORE_KEY_FACTORY;
@@ -68,16 +69,18 @@ public class StoreMessageReadSetTest {
   private final File tempDir;
   private final StoreMetrics metrics;
   private final boolean doDataPrefetch;
+  private final boolean setFilePermissionEnabled;
 
   /**
    * Creates a temporary directory.
    * @throws IOException
    */
-  public StoreMessageReadSetTest(boolean doDataPrefetch) throws IOException {
+  public StoreMessageReadSetTest(boolean doDataPrefetch, boolean setFilePermissionEnabled) throws IOException {
     tempDir = StoreTestUtils.createTempDirectory("storeMessageReadSetDir-" + UtilsTest.getRandomString(10));
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
     this.doDataPrefetch = doDataPrefetch;
+    this.setFilePermissionEnabled = setFilePermissionEnabled;
   }
 
   /**
@@ -98,8 +101,8 @@ public class StoreMessageReadSetTest {
   public void storeMessageReadSetTest() throws IOException, StoreException {
     int logCapacity = 2000;
     int segCapacity = 1000;
-    Log log = new Log(tempDir.getAbsolutePath(), logCapacity, segCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-        metrics);
+    Log log = new Log(tempDir.getAbsolutePath(), logCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+        createStoreConfig(segCapacity, setFilePermissionEnabled), metrics);
     try {
       LogSegment firstSegment = log.getFirstSegment();
       int availableSegCapacity = (int) (segCapacity - firstSegment.getStartOffset());
@@ -245,9 +248,8 @@ public class StoreMessageReadSetTest {
     int logCapacity = 2000;
     int[] segCapacities = {2000, 1000};
     for (int segCapacity : segCapacities) {
-      Log log =
-          new Log(tempDir.getAbsolutePath(), logCapacity, segCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-              metrics);
+      Log log = new Log(tempDir.getAbsolutePath(), logCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+          createStoreConfig(segCapacity, setFilePermissionEnabled), metrics);
       try {
         LogSegment firstSegment = log.getFirstSegment();
         int availableSegCapacity = (int) (segCapacity - firstSegment.getStartOffset());
