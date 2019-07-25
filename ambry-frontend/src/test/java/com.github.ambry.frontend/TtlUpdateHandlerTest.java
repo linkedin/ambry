@@ -61,6 +61,7 @@ public class TtlUpdateHandlerTest {
   private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
   private static final ClusterMap CLUSTER_MAP;
   private static final String SERVICE_ID = "TtlUpdateHandlerTest";
+  private static final String CLUSTER_NAME = "test-cluster";
 
   private static final BlobProperties BLOB_PROPERTIES =
       new BlobProperties(100, SERVICE_ID, null, null, false, TTL_SECS, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),
@@ -88,7 +89,7 @@ public class TtlUpdateHandlerTest {
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            accountAndContainerInjector, metrics, CLUSTER_MAP);
+            accountAndContainerInjector, metrics, CLUSTER_MAP, CLUSTER_NAME, config);
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
     blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build())
         .get(1, TimeUnit.SECONDS);
@@ -105,6 +106,20 @@ public class TtlUpdateHandlerTest {
     restRequest.setArg(RestUtils.Headers.BLOB_ID, blobId);
     restRequest.setArg(RestUtils.Headers.SERVICE_ID, SERVICE_ID);
     verifyTtlUpdate(restRequest, REF_ACCOUNT, REF_CONTAINER);
+  }
+
+  /**
+   * Test that if blob id in Header starts with cluster name prefix, the TtlUpdateHandler can correctly remove it before
+   * passing id into IdConverter
+   * @throws Exception
+   */
+  @Test
+  public void blobIdWithClusterPrefixInRequestHeaderTest() throws Exception {
+    RestRequest restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
+    restRequest.setArg(RestUtils.Headers.BLOB_ID, "/" + CLUSTER_NAME + "/" + blobId);
+    restRequest.setArg(RestUtils.Headers.SERVICE_ID, SERVICE_ID);
+    verifyTtlUpdate(restRequest, REF_ACCOUNT, REF_CONTAINER);
+    assertEquals("Blob id in IdConverter is not expected", "/" + blobId, idConverterFactory.lastInput);
   }
 
   /**

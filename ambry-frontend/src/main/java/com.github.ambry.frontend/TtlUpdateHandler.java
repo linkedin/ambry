@@ -15,6 +15,8 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
@@ -22,6 +24,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
+import java.util.Collections;
 import java.util.GregorianCalendar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +44,8 @@ class TtlUpdateHandler {
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final FrontendMetrics metrics;
   private final ClusterMap clusterMap;
+  private final String clusterName;
+  private final FrontendConfig frontendConfig;
 
   /**
    * Constructs a handler for handling requests for updating TTLs of blobs
@@ -50,15 +55,20 @@ class TtlUpdateHandler {
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    * @param metrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterMap the {@link ClusterMap} in use.
+   * @param clusterName the name of the storage cluster that the router communicates with
+   * @param frontendConfig the {@link FrontendConfig} with configuration parameters.
    */
   TtlUpdateHandler(Router router, SecurityService securityService, IdConverter idConverter,
-      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap) {
+      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
+      String clusterName, FrontendConfig frontendConfig) {
     this.router = router;
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.metrics = metrics;
     this.clusterMap = clusterMap;
+    this.clusterName = clusterName;
+    this.frontendConfig = frontendConfig;
   }
 
   /**
@@ -109,7 +119,10 @@ class TtlUpdateHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.updateBlobTtlSecurityProcessRequestMetrics, result -> {
-        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        String blobIdHeader = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        String blobIdStr =
+            RequestPath.parse(blobIdHeader, Collections.emptyMap(), frontendConfig.pathPrefixesToRemove, clusterName)
+                .getOperationOrBlobId(false);
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
