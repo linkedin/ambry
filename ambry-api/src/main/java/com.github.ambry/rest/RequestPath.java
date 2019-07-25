@@ -16,8 +16,7 @@ package com.github.ambry.rest;
 import java.util.List;
 import java.util.Map;
 
-import static com.github.ambry.rest.RestUtils.SubResource;
-
+import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.router.GetBlobOptions.*;
 
 
@@ -50,6 +49,15 @@ public class RequestPath {
    */
   public static RequestPath parse(RestRequest restRequest, List<String> prefixesToRemove, String clusterName)
       throws RestServiceException {
+    String blobIdHeader = RestUtils.getHeader(restRequest.getArgs(), Headers.BLOB_ID, false);
+    if (blobIdHeader != null) {
+      // If blob id is specified in the rest request header and it has cluster name prefix, we remove its prefix and
+      // use this id (with no prefix now) to update "x-ambry-blob-id" header. The purpose is to ensure IdConverter and
+      // IdSigningService can receive a valid blob id and correctly identify it.
+      int nextOffset = matchPathSegments(blobIdHeader, 0, clusterName, true);
+      String blobIdStr = nextOffset >= 0 ? blobIdHeader.substring(nextOffset) : blobIdHeader;
+      restRequest.setArg(Headers.BLOB_ID, blobIdStr);
+    }
     return parse(restRequest.getPath(), restRequest.getArgs(), prefixesToRemove, clusterName);
   }
 

@@ -146,13 +146,13 @@ class AmbryBlobStorageService implements BlobStorageService {
     getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
     getSignedUrlHandler =
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
-            frontendMetrics, clusterMap, clusterName, frontendConfig);
+            frontendMetrics, clusterMap);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
-            SystemTime.getInstance(), frontendConfig, frontendMetrics);
+            SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
-            clusterMap, clusterName, frontendConfig);
+            clusterMap);
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);

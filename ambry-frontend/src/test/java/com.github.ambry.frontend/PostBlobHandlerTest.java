@@ -205,56 +205,61 @@ public class PostBlobHandlerTest {
     long creationTimeMs = System.currentTimeMillis();
     time.setCurrentMilliseconds(creationTimeMs);
 
-    // success cases
-    // multiple chunks
-    List<ChunkInfo> chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45, 10, 200, 19, 0, 50);
-    List<String> signedChunkIds =
-        chunksToStitch.stream().map(chunkInfo -> getSignedId(chunkInfo, uploadSession)).collect(Collectors.toList());
-    stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), chunksToStitch, null);
-    // one chunk
-    chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45);
-    signedChunkIds =
-        chunksToStitch.stream().map(chunkInfo -> getSignedId(chunkInfo, uploadSession)).collect(Collectors.toList());
-    stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), chunksToStitch, null);
+    String[] prefixToTest = new String[]{"/" + CLUSTER_NAME, ""};
+    for (String prefix : prefixToTest) {
+      // success cases
+      // multiple chunks
+      List<ChunkInfo> chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45, 10, 200, 19, 0, 50);
+      List<String> signedChunkIds = chunksToStitch.stream()
+          .map(chunkInfo -> prefix + getSignedId(chunkInfo, uploadSession))
+          .collect(Collectors.toList());
+      stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), chunksToStitch, null);
+      // one chunk
+      chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45);
+      signedChunkIds = chunksToStitch.stream()
+          .map(chunkInfo -> prefix + getSignedId(chunkInfo, uploadSession))
+          .collect(Collectors.toList());
+      stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), chunksToStitch, null);
 
-    // failure cases
-    // invalid json input
-    stitchBlobAndVerify("badjsonbadjson".getBytes(StandardCharsets.UTF_8), null,
-        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
-    // no chunk ids in request
-    stitchBlobAndVerify(getStitchRequestBody(Collections.emptyList()), null,
-        restServiceExceptionChecker(RestServiceErrorCode.MissingArgs));
-    stitchBlobAndVerify(new JSONObject().toString().getBytes(StandardCharsets.UTF_8), null,
-        restServiceExceptionChecker(RestServiceErrorCode.MissingArgs));
-    // differing session IDs
-    signedChunkIds = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45, 22).stream()
-        .map(chunkInfo -> getSignedId(chunkInfo, UUID.randomUUID().toString()))
-        .collect(Collectors.toList());
-    stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
-        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
-    // differing containers
-    signedChunkIds = Stream.concat(uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 50, 50).stream(),
-        uploadChunksViaRouter(creationTimeMs, REF_CONTAINER_WITH_TTL_REQUIRED, 50).stream())
-        .map(chunkInfo -> getSignedId(chunkInfo, uploadSession))
-        .collect(Collectors.toList());
-    stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
-        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
-    // differing accounts
-    Container altAccountContainer =
-        ACCOUNT_SERVICE.createAndAddRandomAccount().getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
-    signedChunkIds = Stream.concat(uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 50, 50).stream(),
-        uploadChunksViaRouter(creationTimeMs, altAccountContainer, 50).stream())
-        .map(chunkInfo -> getSignedId(chunkInfo, uploadSession))
-        .collect(Collectors.toList());
-    stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
-        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
-    // invalid blob ID
-    stitchBlobAndVerify(
-        getStitchRequestBody(Collections.singletonList(getSignedId(new ChunkInfo("abcd", 200, -1), uploadSession))),
-        null, restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
-    // unsigned ID
-    stitchBlobAndVerify(getStitchRequestBody(Collections.singletonList("/notASignedId")), null,
-        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+      // failure cases
+      // invalid json input
+      stitchBlobAndVerify("badjsonbadjson".getBytes(StandardCharsets.UTF_8), null,
+          restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+      // no chunk ids in request
+      stitchBlobAndVerify(getStitchRequestBody(Collections.emptyList()), null,
+          restServiceExceptionChecker(RestServiceErrorCode.MissingArgs));
+      stitchBlobAndVerify(new JSONObject().toString().getBytes(StandardCharsets.UTF_8), null,
+          restServiceExceptionChecker(RestServiceErrorCode.MissingArgs));
+      // differing session IDs
+      signedChunkIds = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45, 22).stream()
+          .map(chunkInfo -> prefix + getSignedId(chunkInfo, UUID.randomUUID().toString()))
+          .collect(Collectors.toList());
+      stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
+          restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+      // differing containers
+      signedChunkIds = Stream.concat(uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 50, 50).stream(),
+          uploadChunksViaRouter(creationTimeMs, REF_CONTAINER_WITH_TTL_REQUIRED, 50).stream())
+          .map(chunkInfo -> prefix + getSignedId(chunkInfo, uploadSession))
+          .collect(Collectors.toList());
+      stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
+          restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+      // differing accounts
+      Container altAccountContainer =
+          ACCOUNT_SERVICE.createAndAddRandomAccount().getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
+      signedChunkIds = Stream.concat(uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 50, 50).stream(),
+          uploadChunksViaRouter(creationTimeMs, altAccountContainer, 50).stream())
+          .map(chunkInfo -> prefix + getSignedId(chunkInfo, uploadSession))
+          .collect(Collectors.toList());
+      stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), null,
+          restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+      // invalid blob ID
+      stitchBlobAndVerify(
+          getStitchRequestBody(Collections.singletonList(getSignedId(new ChunkInfo("abcd", 200, -1), uploadSession))),
+          null, restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+      // unsigned ID
+      stitchBlobAndVerify(getStitchRequestBody(Collections.singletonList("/notASignedId")), null,
+          restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+    }
   }
 
   // helpers
@@ -269,7 +274,7 @@ public class PostBlobHandlerTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     postBlobHandler =
         new PostBlobHandler(securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            idSigningService, router, injector, time, frontendConfig, metrics);
+            idSigningService, router, injector, time, frontendConfig, metrics, CLUSTER_NAME);
   }
 
   // ttlRequiredEnforcementTest() helpers
@@ -390,7 +395,8 @@ public class PostBlobHandlerTest {
       assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
       assertEquals("Unexpected ttl stored", blobTtlSecs, blob.getBlobProperties().getTimeToLiveInSeconds());
       //check that blob size matches the actual upload size
-      assertEquals("Invalid blob size", Integer.toString(contentLength), restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+      assertEquals("Invalid blob size", Integer.toString(contentLength),
+          restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     } else {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
           errorChecker);
@@ -477,7 +483,7 @@ public class PostBlobHandlerTest {
    */
   private long getStitchedBlobSize(List<ChunkInfo> stitchedChunks) {
     long blobSize = 0;
-    for(ChunkInfo chunkInfo : stitchedChunks) {
+    for (ChunkInfo chunkInfo : stitchedChunks) {
       blobSize += chunkInfo.getChunkSizeInBytes();
     }
     return blobSize;

@@ -15,8 +15,6 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.config.FrontendConfig;
-import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
@@ -27,7 +25,6 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.SystemTime;
-import java.util.Collections;
 import java.util.GregorianCalendar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,8 +43,6 @@ class GetSignedUrlHandler {
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final FrontendMetrics metrics;
   private final ClusterMap clusterMap;
-  private final String clusterName;
-  private final FrontendConfig frontendConfig;
 
   /**
    * Constructs a handler for handling requests for signed URLs.
@@ -57,20 +52,15 @@ class GetSignedUrlHandler {
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    * @param metrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterMap the {@link ClusterMap} in use.
-   * @param clusterName the name of the storage cluster that the router communicates with
-   * @param frontendConfig the {@link FrontendConfig} with configuration parameters.
    */
   GetSignedUrlHandler(UrlSigningService urlSigningService, SecurityService securityService, IdConverter idConverter,
-      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
-      String clusterName, FrontendConfig frontendConfig) {
+      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap) {
     this.urlSigningService = urlSigningService;
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.metrics = metrics;
     this.clusterMap = clusterMap;
-    this.clusterName = clusterName;
-    this.frontendConfig = frontendConfig;
   }
 
   /**
@@ -126,10 +116,7 @@ class GetSignedUrlHandler {
         if (exception == null) {
           switch (restMethodInUrl) {
             case GET:
-              String blobIdHeader = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
-              String blobIdStr =
-                  RequestPath.parse(blobIdHeader, Collections.emptyMap(), frontendConfig.pathPrefixesToRemove,
-                      clusterName).getOperationOrBlobId(false);
+              String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
               IdConverterCallback idConverterCallback =
                   new IdConverterCallback(restRequest, restResponseChannel, callback);
               idConverter.convert(restRequest, blobIdStr, idConverterCallback);

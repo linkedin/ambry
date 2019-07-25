@@ -79,7 +79,7 @@ public class GetSignedUrlHandlerTest {
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     getSignedUrlHandler = new GetSignedUrlHandler(urlSigningServiceFactory.getUrlSigningService(),
         securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(), accountAndContainerInjector,
-        metrics, CLUSTER_MAP, CLUSTER_NAME, config);
+        metrics, CLUSTER_MAP);
     testBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),
         CLUSTER_MAP.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
