@@ -31,6 +31,7 @@ public class CloudConfig {
   public static final String CLOUD_DELETED_BLOB_RETENTION_DAYS = "cloud.deleted.blob.retention.days";
   public static final String CLOUD_BLOB_COMPACTION_INTERVAL_HOURS = "cloud.blob.compaction.interval.hours";
   public static final String CLOUD_BLOB_COMPACTION_QUERY_LIMIT = "cloud.blob.compaction.query.limit";
+  public static final String CLOUD_RECENT_BLOB_CACHE_LIMIT = "cloud.recent.blob.cache.limit";
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
   public static final String VCR_PROXY_HOST = "vcr.proxy.host";
   public static final String VCR_PROXY_PORT = "vcr.proxy.port";
@@ -49,6 +50,7 @@ public class CloudConfig {
   public static final int DEFAULT_MIN_TTL_DAYS = 14;
   public static final int DEFAULT_RETENTION_DAYS = 7;
   public static final int DEFAULT_COMPACTION_QUERY_LIMIT = 100000;
+  public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 10000;
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
 
   /**
@@ -141,6 +143,7 @@ public class CloudConfig {
   @Config(CLOUD_BLOB_COMPACTION_QUERY_LIMIT)
   @Default("100000")
   public final int cloudBlobCompactionQueryLimit;
+
   /**
    * The dead blob compaction interval in hours
    */
@@ -149,7 +152,15 @@ public class CloudConfig {
   public final int cloudBlobCompactionIntervalHours;
 
   /**
-   * The comma-separated list of statically assigned partitions.  Optional.
+   * The max size of recently-accessed blob cache in each cloud blob store.
+   */
+  @Config(CLOUD_RECENT_BLOB_CACHE_LIMIT)
+  @Default("10000")
+  public final int recentBlobCacheLimit;
+
+  /**
+   * The comma-separated list of statically assigned partitions.
+   * Used by static VCR cluster only.
    */
   @Config(VCR_ASSIGNED_PARTITIONS)
   @Default("null")
@@ -193,6 +204,7 @@ public class CloudConfig {
     cloudBlobCompactionIntervalHours = verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_INTERVAL_HOURS, 24);
     cloudBlobCompactionQueryLimit =
         verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_QUERY_LIMIT, DEFAULT_COMPACTION_QUERY_LIMIT);
+    recentBlobCacheLimit = verifiableProperties.getInt(CLOUD_RECENT_BLOB_CACHE_LIMIT, DEFAULT_RECENT_BLOB_CACHE_LIMIT);
 
     // Proxy settings
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);

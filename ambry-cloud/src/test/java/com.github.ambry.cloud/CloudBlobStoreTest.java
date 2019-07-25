@@ -43,7 +43,6 @@ import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
-import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
@@ -82,7 +81,7 @@ import static org.mockito.Mockito.*;
  */
 public class CloudBlobStoreTest {
 
-  private Store store;
+  private CloudBlobStore store;
   private CloudDestination dest;
   private PartitionId partitionId;
   private ClusterMap clusterMap;
@@ -168,6 +167,13 @@ public class CloudBlobStoreTest {
     assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
     assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
     assertEquals("Unexpected encryption count", expectedEncryptions, vcrMetrics.blobEncryptionCount.getCount());
+
+    // Try to put the same blobs again (e.g. from another replica), should already be cached.
+    messageWriteSet.resetBuffers();
+    store.put(messageWriteSet);
+    assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
+    assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
+    assertEquals("Unexpected skipped count", expectedUploads, vcrMetrics.blobUploadSkippedCount.getCount());
   }
 
   /** Test the CloudBlobStore delete method. */
@@ -180,6 +186,10 @@ public class CloudBlobStoreTest {
       long size = 10;
       addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, true);
     }
+    store.delete(messageWriteSet);
+    verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime));
+
+    // Call second time, should all be cached causing deletions to be skipped.
     store.delete(messageWriteSet);
     verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime));
   }
@@ -195,6 +205,10 @@ public class CloudBlobStoreTest {
       long expirationTime = Math.abs(random.nextLong());
       addBlobToSet(messageWriteSet, size, expirationTime, refAccountId, refContainerId, true);
     }
+    store.updateTtl(messageWriteSet);
+    verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong());
+
+    // Call second time, should all be cached causing updates to be skipped.
     store.updateTtl(messageWriteSet);
     verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong());
   }
@@ -221,6 +235,15 @@ public class CloudBlobStoreTest {
     Set<StoreKey> missingKeys = store.findMissingKeys(keys);
     verify(dest).getBlobMetadata(anyList());
     assertEquals("Wrong number of missing keys", count, missingKeys.size());
+
+    // Add keys to cache and rerun (should be cached)
+    for (StoreKey storeKey : keys) {
+      store.addToCache(storeKey.getID(), CloudBlobStore.BlobState.CREATED);
+    }
+    missingKeys = store.findMissingKeys(keys);
+    assertTrue("Expected no missing keys", missingKeys.isEmpty());
+    // getBlobMetadata should not have been called a second time.
+    verify(dest).getBlobMetadata(anyList());
   }
 
   /** Test the CloudBlobStore findEntriesSince method. */
@@ -264,9 +287,8 @@ public class CloudBlobStoreTest {
     List<CloudBlobMetadata> metadataList = new ArrayList<>();
     for (int j = 0; j < count; j++) {
       BlobId blobId = getUniqueId();
-      CloudBlobMetadata metadata =
-          new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE,
-              null, null);
+      CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, blobSize,
+          CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
       metadata.setUploadTime(startTime + j);
       metadataList.add(metadata);
     }
