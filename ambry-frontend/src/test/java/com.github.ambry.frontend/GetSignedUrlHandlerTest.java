@@ -55,7 +55,6 @@ public class GetSignedUrlHandlerTest {
   private static final Account REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
   private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
   private static final ClusterMap CLUSTER_MAP;
-  private static final String CLUSTER_NAME = "test-cluster";
   private final BlobId testBlobId;
 
   static {
@@ -107,30 +106,6 @@ public class GetSignedUrlHandlerTest {
     // add a random string. IDConverter will convert it
     restRequest.setArg(RestUtils.Headers.BLOB_ID, UtilsTest.getRandomString(10));
     verifySigningUrl(restRequest, urlSigningServiceFactory.signedUrlToReturn, REF_ACCOUNT, REF_CONTAINER);
-  }
-
-  /**
-   * Test that if blob id specified in request header has cluster prefix, the SecurityProcessRequestCallback can correctly
-   * remove prefix and pass valid blob id into {@link IdConverter}
-   */
-  @Test
-  public void blobIdWithClusterPrefixInRequestHeaderTest() throws Exception {
-    urlSigningServiceFactory.signedUrlToReturn = UtilsTest.getRandomString(10);
-    idConverterFactory.translation = testBlobId.getID();
-    RestRequest restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
-    restRequest.setArg(RestUtils.Headers.URL_TYPE, RestMethod.GET.name());
-    // generate a random id with cluster name prefix. GetSignedUrlHandler should correctly handle it
-    String blobIdStr = UtilsTest.getRandomString(10);
-    String blobIdInHeader = "/" + CLUSTER_NAME + "/" + blobIdStr;
-    restRequest.setArg(RestUtils.Headers.BLOB_ID, blobIdInHeader);
-    verifySigningUrl(restRequest, urlSigningServiceFactory.signedUrlToReturn, REF_ACCOUNT, REF_CONTAINER);
-    // the id in IdConverter should have no prefix
-    assertEquals("Blob id in IdConverter is not expected", "/" + blobIdStr, idConverterFactory.lastInput);
-
-    // if blob id in header doesn't have cluster name prefix, it should be ok as well
-    restRequest.setArg(RestUtils.Headers.BLOB_ID, "/" + blobIdStr);
-    verifySigningUrl(restRequest, urlSigningServiceFactory.signedUrlToReturn, REF_ACCOUNT, REF_CONTAINER);
-    assertEquals("Blob id in IdConverter is not expected", "/" + blobIdStr, idConverterFactory.lastInput);
   }
 
   /**
