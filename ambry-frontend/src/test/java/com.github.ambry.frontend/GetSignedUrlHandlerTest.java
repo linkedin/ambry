@@ -55,6 +55,7 @@ public class GetSignedUrlHandlerTest {
   private static final Account REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
   private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
   private static final ClusterMap CLUSTER_MAP;
+  private final BlobId testBlobId;
 
   static {
     try {
@@ -78,6 +79,10 @@ public class GetSignedUrlHandlerTest {
     getSignedUrlHandler = new GetSignedUrlHandler(urlSigningServiceFactory.getUrlSigningService(),
         securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(), accountAndContainerInjector,
         metrics, CLUSTER_MAP);
+    testBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),
+        CLUSTER_MAP.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
   }
 
   /**
@@ -94,11 +99,7 @@ public class GetSignedUrlHandlerTest {
     restRequest.setArg(RestUtils.Headers.TARGET_CONTAINER_NAME, REF_CONTAINER.getName());
     verifySigningUrl(restRequest, urlSigningServiceFactory.signedUrlToReturn, REF_ACCOUNT, REF_CONTAINER);
 
-    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),
-        CLUSTER_MAP.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
-        BlobId.BlobDataType.DATACHUNK);
-    idConverterFactory.translation = blobId.getID();
+    idConverterFactory.translation = testBlobId.getID();
     // GET (also makes sure that the IDConverter is used)
     restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
     restRequest.setArg(RestUtils.Headers.URL_TYPE, RestMethod.GET.name());

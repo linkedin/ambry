@@ -19,6 +19,7 @@ import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -33,6 +34,7 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +75,7 @@ class PostBlobHandler {
   private final Time time;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
+  private final String clusterName;
 
   /**
    * Constructs a handler for handling requests for uploading or stitching blobs.
@@ -84,10 +87,11 @@ class PostBlobHandler {
    * @param time the {@link Time} instance to use.
    * @param frontendConfig the {@link FrontendConfig} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
+   * @param clusterName the name of the storage cluster that the router communicates with
    */
   PostBlobHandler(SecurityService securityService, IdConverter idConverter, IdSigningService idSigningService,
       Router router, AccountAndContainerInjector accountAndContainerInjector, Time time, FrontendConfig frontendConfig,
-      FrontendMetrics frontendMetrics) {
+      FrontendMetrics frontendMetrics, String clusterName) {
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.idSigningService = idSigningService;
@@ -96,6 +100,7 @@ class PostBlobHandler {
     this.time = time;
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
+    this.clusterName = clusterName;
   }
 
   /**
@@ -352,6 +357,9 @@ class PostBlobHandler {
       String expectedSession = null;
       long totalStitchedBlobSize = 0;
       for (String signedChunkId : signedChunkIds) {
+        signedChunkId =
+            RequestPath.parse(signedChunkId, Collections.emptyMap(), frontendConfig.pathPrefixesToRemove, clusterName)
+                .getOperationOrBlobId(false);
         if (!idSigningService.isIdSigned(signedChunkId)) {
           throw new RestServiceException("All chunks IDs must be signed: " + signedChunkId,
               RestServiceErrorCode.BadRequest);
