@@ -1281,7 +1281,7 @@ public class FrontendIntegrationTest {
         getBlobInfoAndVerify(id, GetOption.None, expectedGetHeaders, !container.isCacheable(), account.getName(),
             container.getName(), null);
       }
-      signedChunkIds.add(signedId);
+      signedChunkIds.add(addClusterPrefix ? "/" + CLUSTER_NAME + signedId : signedId);
       fullContentStream.write(contentArray);
     }
     return new Pair<>(signedChunkIds, fullContentStream.toByteArray());

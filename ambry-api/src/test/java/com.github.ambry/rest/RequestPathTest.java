@@ -13,16 +13,19 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.frontend.Operations;
 import com.github.ambry.utils.UtilsTest;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.stream.Stream;
+import org.json.JSONObject;
 import org.junit.Test;
 
 import static com.github.ambry.router.GetBlobOptions.*;
@@ -65,13 +68,13 @@ public class RequestPathTest {
           String path = prefixToUse + clusterNameToUse + opOrId;
           // the uri as is (e.g. "/expectedOp).
           parseRequestPathAndVerify(path, prefixesToRemove, CLUSTER_NAME,
-              new RequestPath(expectedPrefix, expectedClusterName, opOrId, opOrId, null,
-                  NO_BLOB_SEGMENT_IDX_SPECIFIED));
+              new RequestPath(expectedPrefix, expectedClusterName, opOrId, opOrId, null, NO_BLOB_SEGMENT_IDX_SPECIFIED),
+              null);
 
           // the uri with a query string (e.g. "/expectedOp?param=value").
           parseRequestPathAndVerify(path + queryString, prefixesToRemove, CLUSTER_NAME,
-              new RequestPath(expectedPrefix, expectedClusterName, opOrId, opOrId, null,
-                  NO_BLOB_SEGMENT_IDX_SPECIFIED));
+              new RequestPath(expectedPrefix, expectedClusterName, opOrId, opOrId, null, NO_BLOB_SEGMENT_IDX_SPECIFIED),
+              null);
           if (opOrId.length() > 1) {
             for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
               String subResourceStr = "/" + subResource.name();
@@ -83,18 +86,18 @@ public class RequestPathTest {
               }
               parseRequestPathAndVerify(path + subResourceStr, prefixesToRemove, CLUSTER_NAME,
                   new RequestPath(expectedPrefix, expectedClusterName, opOrId + subResourceStr, opOrId, subResource,
-                      segment));
+                      segment), null);
               parseRequestPathAndVerify(path + subResourceStr + queryString, prefixesToRemove, CLUSTER_NAME,
                   new RequestPath(expectedPrefix, expectedClusterName, opOrId + subResourceStr, opOrId, subResource,
-                      segment));
+                      segment), null);
             }
           } else {
             parseRequestPathAndVerify(path + "?" + blobIdQuery, prefixesToRemove, CLUSTER_NAME,
                 new RequestPath(expectedPrefix, expectedClusterName, opOrId, blobId, null,
-                    NO_BLOB_SEGMENT_IDX_SPECIFIED));
+                    NO_BLOB_SEGMENT_IDX_SPECIFIED), null);
             parseRequestPathAndVerify(path + queryString + "&" + blobIdQuery, prefixesToRemove, CLUSTER_NAME,
                 new RequestPath(expectedPrefix, expectedClusterName, opOrId, blobId, null,
-                    NO_BLOB_SEGMENT_IDX_SPECIFIED));
+                    NO_BLOB_SEGMENT_IDX_SPECIFIED), null);
           }
         });
       });
@@ -136,16 +139,46 @@ public class RequestPathTest {
    */
   @Test
   public void testBadSegmentSubResourceNumber() throws UnsupportedEncodingException, URISyntaxException {
-    String requestPath = "/mediaexpectedOpOrId/Segment/notAnInteger";
+    String requestPath = "/mediaExpectedOpOrId/Segment/notAnInteger";
     List<String> prefixesToRemove = new ArrayList<>();
     RestRequest restRequest = RestUtilsTest.createRestRequest(RestMethod.GET, requestPath, null);
     try {
       RequestPath.parse(restRequest, prefixesToRemove, CLUSTER_NAME);
       fail();
     } catch (RestServiceException e) {
-      assertTrue(e.getErrorCode().equals(RestServiceErrorCode.BadRequest));
+      assertEquals(RestServiceErrorCode.BadRequest, e.getErrorCode());
     }
+  }
 
+  /**
+   * Test that blob id string (with prefix and sub-resource) is specified in request header. The {@link RequestPath#parse(RestRequest, List, String)}
+   * should correctly remove prefix, sub-resource and use pure blob id to update request header.
+   */
+  @Test
+  public void testBlobIdInRequestHeader() {
+    String prefixToRemove = "media";
+    JSONObject headers = new JSONObject();
+    String blobId = UtilsTest.getRandomString(10);
+    // we purposely add prefix and sub resource into blob id string in request header
+    headers.putOpt(RestUtils.Headers.BLOB_ID,
+        prefixToRemove + "/" + CLUSTER_NAME + "/" + blobId + "/" + RestUtils.SubResource.Segment);
+
+    // test when operationOrBlobId is specified in url, then this operationOrBlobId should show up in expected RequestPath
+    String path = prefixToRemove + "/" + CLUSTER_NAME + "/" + Operations.GET_SIGNED_URL;
+    RequestPath expectedRequestPath =
+        new RequestPath(prefixToRemove, CLUSTER_NAME, "/" + Operations.GET_SIGNED_URL, "/" + Operations.GET_SIGNED_URL,
+            null, NO_BLOB_SEGMENT_IDX_SPECIFIED);
+    parseRequestPathAndVerify(path, Collections.singletonList(prefixToRemove), CLUSTER_NAME, expectedRequestPath,
+        headers);
+
+    // test when operationOrBlobId is not specified in url and blob id is provided in request header, we verify that
+    // RequestPath will take the updated "x-ambry-blob-id" header as operationOrBlobId.
+    path = prefixToRemove + "/" + CLUSTER_NAME;
+    // the operationOrBlobId in expected request path should be pure blob id without any prefix or SubResource.
+    expectedRequestPath =
+        new RequestPath(prefixToRemove, CLUSTER_NAME, "", "/" + blobId, null, NO_BLOB_SEGMENT_IDX_SPECIFIED);
+    parseRequestPathAndVerify(path, Collections.singletonList(prefixToRemove), CLUSTER_NAME, expectedRequestPath,
+        headers);
   }
 
   /**
@@ -154,11 +187,12 @@ public class RequestPathTest {
    * @param prefixesToRemove the prefix list to supply
    * @param clusterName the cluster name to supply
    * @param expected the expected {@link RequestPath}.
+   * @param headers any associated headers as a {@link org.json.JSONObject}
    */
   private void parseRequestPathAndVerify(String requestPath, List<String> prefixesToRemove, String clusterName,
-      RequestPath expected) {
+      RequestPath expected, JSONObject headers) {
     try {
-      RestRequest restRequest = RestUtilsTest.createRestRequest(RestMethod.GET, requestPath, null);
+      RestRequest restRequest = RestUtilsTest.createRestRequest(RestMethod.GET, requestPath, headers);
       RequestPath actual = RequestPath.parse(restRequest, prefixesToRemove, clusterName);
       assertEquals(
           "Unexpected result for testRequestPath(" + requestPath + ", " + prefixesToRemove + ", " + clusterName + ")",
