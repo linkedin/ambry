@@ -57,7 +57,7 @@ public class RequestPath {
       // to ensure IdConverter and IdSigningService can receive a valid blob id and correctly identify it.
       String blobIdStr =
           parse(blobIdHeader, Collections.emptyMap(), prefixesToRemove, clusterName).getOperationOrBlobId(false);
-      restRequest.setArg(RestUtils.Headers.BLOB_ID, blobIdStr);
+      restRequest.setArg(Headers.BLOB_ID, blobIdStr);
     }
     return parse(restRequest.getPath(), restRequest.getArgs(), prefixesToRemove, clusterName);
   }
