@@ -17,11 +17,14 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.RouterConfig;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 
 /**
@@ -59,6 +62,7 @@ import java.util.NoSuchElementException;
  */
 class SimpleOperationTracker implements OperationTracker {
   protected final String datacenterName;
+  protected final String originatingDcName;
   protected final int successTarget;
   protected final int parallelism;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
@@ -67,6 +71,11 @@ class SimpleOperationTracker implements OperationTracker {
   protected int inflightCount = 0;
   protected int succeededCount = 0;
   protected int failedCount = 0;
+
+  // How many NotFound responses from originating dc will terminate the operation.
+  // It's decided by the success target of each mutation operations, including put, delete, update ttl etc.
+  protected int originatingDcNotFoundFailureThreshold = 0;
+  protected int originatingDcNotFoundCount = 0;
 
   private final OpTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaIterator;
@@ -115,6 +124,7 @@ class SimpleOperationTracker implements OperationTracker {
       throw new IllegalArgumentException("Parallelism has to be > 0. Configured to be " + parallelism);
     }
     datacenterName = routerConfig.routerDatacenterName;
+    this.originatingDcName = originatingDcName;
 
     // Order the replicas so that local healthy replicas are ordered and returned first,
     // then the remote healthy ones, and finally the possibly down ones.
@@ -124,13 +134,21 @@ class SimpleOperationTracker implements OperationTracker {
     if (shuffleReplicas) {
       Collections.shuffle(replicas);
     }
+    // While iterating through the replica list, count the number of replicas from the originating DC. And subtract
+    // the success target of each mutation operation to get the not found failure threshold.
+    int numReplicasInOriginatingDc = 0;
+
     // The priority here is local dc replicas, originating dc replicas, other dc replicas, down replicas.
     // To improve read-after-write performance across DC, we prefer to take local and originating replicas only,
     // which can be done by setting includeNonOriginatingDcReplicas False.
     List<ReplicaId> examinedReplicas = new ArrayList<>();
+
     for (ReplicaId replicaId : replicas) {
       examinedReplicas.add(replicaId);
       String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
+      if (replicaDcName.equals(originatingDcName)) {
+        numReplicasInOriginatingDc++;
+      }
       if (!replicaId.isDown()) {
         if (replicaDcName.equals(datacenterName)) {
           replicaPool.addFirst(replicaId);
@@ -171,12 +189,21 @@ class SimpleOperationTracker implements OperationTracker {
       throw new IllegalArgumentException(
           generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck));
     }
+    if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled && numReplicasInOriginatingDc > 0) {
+      this.originatingDcNotFoundFailureThreshold = Math.max(numReplicasInOriginatingDc - routerConfig.routerPutSuccessTarget + 1, 0);
+    }
     this.otIterator = new OpTrackerIterator();
   }
 
   @Override
   public boolean hasSucceeded() {
     return succeededCount >= successTarget;
+  }
+
+  @Override
+  public boolean hasFailedOnNotFound() {
+    return originatingDcNotFoundFailureThreshold > 0
+        && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold;
   }
 
   @Override
@@ -191,6 +218,13 @@ class SimpleOperationTracker implements OperationTracker {
       succeededCount++;
     } else {
       failedCount++;
+      // NOT_FOUND is a special error. When tracker sees more than 2 NOT_FOUND from the originating DC, we can
+      // be sure the operation will end up with a NOT_FOUND error.
+      if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND && replicaId.getDataNodeId()
+          .getDatacenterName()
+          .equals(originatingDcName)) {
+        originatingDcNotFoundCount++;
+      }
     }
   }
 
@@ -222,7 +256,7 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   private boolean hasFailed() {
-    return (totalReplicaCount - failedCount) < successTarget;
+    return (totalReplicaCount - failedCount) < successTarget || hasFailedOnNotFound();
   }
 
   /**

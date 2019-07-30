@@ -184,7 +184,7 @@ abstract class GetOperation {
    * @param routerErrorCode The {@link RouterErrorCode} for which to get its precedence level.
    * @return The precedence level of the {@link RouterErrorCode}.
    */
-  private int getPrecedenceLevel(RouterErrorCode routerErrorCode) {
+  protected int getPrecedenceLevel(RouterErrorCode routerErrorCode) {
     switch (routerErrorCode) {
       case BlobAuthorizationFailure:
         return 1;
