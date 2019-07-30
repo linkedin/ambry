@@ -259,7 +259,7 @@ class DiskSpaceAllocator {
       }
     } finally {
       long elapsedTime = System.currentTimeMillis() - startTime;
-      logger.debug("free took {} ms for {}", elapsedTime, "store[" + storeId + "]");
+      logger.debug("free took {} ms for store[{}]", elapsedTime, storeId);
       metrics.diskSpaceAllocatorFreeTimeMs.update(elapsedTime);
     }
   }
