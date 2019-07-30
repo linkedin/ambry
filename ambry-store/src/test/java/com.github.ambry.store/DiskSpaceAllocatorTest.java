@@ -419,7 +419,7 @@ public class DiskSpaceAllocatorTest {
     sizeToFileNum.put(20L, 4L);
     sizeToFileNum.put(50L, 1L);
     requirements.put(storeId1, sizeToFileNum);
-    alloc.addRequiredSegments(requirements);
+    alloc.addRequiredSegments(requirements, true);
     verifyPoolState(
         new ExpectedState().addStoreSeg(storeId0, 50, 1).addStoreSeg(storeId1, 20, 4).addStoreSeg(storeId1, 50, 1));
     // test that segments associated with storeId0 can be correctly deleted
@@ -445,7 +445,7 @@ public class DiskSpaceAllocatorTest {
     sizeToFileNum.put(20L, 4L);
     sizeToFileNum.put(50L, 1L);
     requirements.put(storeId1, sizeToFileNum);
-    alloc.addRequiredSegments(requirements);
+    alloc.addRequiredSegments(requirements, true);
     verifyPoolState(null);
     // test that delete segments should be no-op
     alloc.deleteExtraSegments(requirements, false);

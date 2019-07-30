@@ -200,16 +200,16 @@ public class StorageManagerTest {
         storageManager.addBlobStore(newPartition2.getReplicaIds().get(0)));
     storageManager.getDiskManager(localReplicas.get(0).getPartitionId()).start();
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
-    // test add store but the store couldn't start, which should fail. (This is simulated by inducing initializePool failure to make store inaccessible)
+    // test add store but fail to add segment requirements to DiskSpaceAllocator. (This is simulated by inducing
+    // addRequiredSegments failure to make store inaccessible)
     List<String> mountPaths = localNode.getMountPaths();
     String diskToFail = mountPaths.get(0);
     File reservePoolDir = new File(diskToFail, diskManagerConfig.diskManagerReserveFileDirName);
-    File fileSizeDir =
-        new File(reservePoolDir, DiskSpaceAllocator.generateFileSizeDirName(storeConfig.storeSegmentSizeInBytes));
+    File storeReserveDir = new File(reservePoolDir, DiskSpaceAllocator.STORE_DIR_PREFIX + newPartition2.toString());
     StorageManager storageManager2 = createStorageManager(localReplicas, new MetricRegistry(), null);
     storageManager2.start();
-    Utils.deleteFileOrDirectory(fileSizeDir);
-    assertTrue("File creation should succeed", fileSizeDir.createNewFile());
+    Utils.deleteFileOrDirectory(storeReserveDir);
+    assertTrue("File creation should succeed", storeReserveDir.createNewFile());
 
     assertFalse("Add store should fail if store couldn't start due to initializePool failure",
         storageManager2.addBlobStore(newPartition2.getReplicaIds().get(0)));

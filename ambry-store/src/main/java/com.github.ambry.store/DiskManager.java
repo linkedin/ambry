@@ -26,6 +26,7 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -291,7 +292,9 @@ class DiskManager {
     try {
       // TODO In future PR, store.start() should contain logic for recovery  OFFLINE -> BOOTSTRAP -> STANDBY
       store.start();
-      // TODO collect segment requirements and add into DiskSpaceAllocator
+      // collect store segment requirements and add into DiskSpaceAllocator
+      List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
+      diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
     } catch (Exception e) {
       logger.error("Failed to start the new added store {}", replica.getPartitionId());
       succeed = false;
