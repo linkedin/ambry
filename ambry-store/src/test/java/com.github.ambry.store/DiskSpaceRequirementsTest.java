@@ -25,7 +25,7 @@ import static org.junit.Assert.*;
  * Test {@link DiskSpaceRequirements} for expected behavior.
  */
 public class DiskSpaceRequirementsTest {
-
+  private final String storeId = "0";
   /**
    * Test invalid constructor arguments
    */
@@ -44,7 +44,7 @@ public class DiskSpaceRequirementsTest {
     long segmentSizeInBytes = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE) + 1;
     long segmentsNeeded = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
     long swapUsed = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
-    DiskSpaceRequirements requirements = new DiskSpaceRequirements(segmentSizeInBytes, segmentsNeeded, swapUsed);
+    DiskSpaceRequirements requirements = new DiskSpaceRequirements(storeId, segmentSizeInBytes, segmentsNeeded, swapUsed);
     assertEquals("segment size doesn't match", segmentSizeInBytes, requirements.getSegmentSizeInBytes());
     assertEquals("segments needed doesn't match", segmentsNeeded, requirements.getSegmentsNeeded());
     assertEquals("swap used doesn't match", swapUsed, requirements.getSwapSegmentsInUse());
@@ -58,7 +58,7 @@ public class DiskSpaceRequirementsTest {
    */
   private void doInvalidArgumentsTest(long segmentSizeInBytes, long segmentsNeeded, long swapUsed) {
     try {
-      new DiskSpaceRequirements(segmentSizeInBytes, segmentsNeeded, swapUsed);
+      new DiskSpaceRequirements(storeId, segmentSizeInBytes, segmentsNeeded, swapUsed);
       fail("Should have encountered IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       // Expected

@@ -256,6 +256,7 @@ class BlobStoreCompactor {
    * @return the number of temporary log segment files this compactor is currently using.
    */
   int getSwapSegmentsInUse() throws StoreException {
+    // TODO: use this method to return swap segment to pool when removing store
     String[] tempSegments = dataDir.list(TEMP_LOG_SEGMENTS_FILTER);
     if (tempSegments == null) {
       throw new StoreException("Error occurred while listing files in data dir:" + dataDir.getAbsolutePath(),
@@ -339,11 +340,10 @@ class BlobStoreCompactor {
    * <p/>
    * Splits the compaction into two cycles if there aren't enough swap spaces and completes the copy for the current
    * cycle.
-   * @throws InterruptedException if the compaction was interrupted
    * @throws IOException if there were I/O errors during copying.
    * @throws StoreException if there were exceptions reading to writing to store components.
    */
-  private void copy() throws InterruptedException, IOException, StoreException {
+  private void copy() throws IOException, StoreException {
     setupState();
     List<String> logSegmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
     FileSpan duplicateSearchSpan = null;
@@ -405,10 +405,9 @@ class BlobStoreCompactor {
    * 2. Adding them to the log segments maintained by the application log.
    * 3. Atomically switching the old set of index segments for the new ones (if not recovering).
    * @param recovering {@code true} if this function was called in the context of recovery. {@code false} otherwise.
-   * @throws IOException if there were I/O errors during committing.
    * @throws StoreException if there were exceptions reading to writing to store components.
    */
-  private void commit(boolean recovering) throws IOException, StoreException {
+  private void commit(boolean recovering) throws StoreException {
     List<String> logSegmentNames = getTargetLogSegmentNames();
     logger.debug("Target log segments are {} for {}", logSegmentNames, storeId);
     renameLogSegments(logSegmentNames);

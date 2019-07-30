@@ -487,10 +487,11 @@ public class StorageManagerTest {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<String> mountPaths = dataNode.getMountPaths();
-    // There should be 1 unallocated segment per replica on a mount path (each replica can have 2 segments) and the
-    // swap segments.
-    int expectedSegmentsInPool =
-        (replicas.size() / mountPaths.size()) + diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize;
+    Map<String, List<ReplicaId>> replicasByMountPath = new HashMap<>();
+    for (ReplicaId replica : replicas) {
+      replicasByMountPath.computeIfAbsent(replica.getMountPath(), key -> new ArrayList<>()).add(replica);
+    }
+
     // Test that StorageManager starts correctly when segments are created in the reserve pool.
     // Startup/shutdown one more time to verify the restart scenario.
     for (int i = 0; i < 2; i++) {
@@ -505,9 +506,16 @@ public class StorageManagerTest {
       assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
       assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
       for (String mountPath : dataNode.getMountPaths()) {
+        List<ReplicaId> replicasOnDisk = replicasByMountPath.get(mountPath);
+        DiskSpaceAllocatorTest.ExpectedState expectedState = new DiskSpaceAllocatorTest.ExpectedState();
+        // There should be 1 unallocated segment per replica on a mount path (each replica can have 2 segments) and the
+        // swap segments.
+        expectedState.addSwapSeg(storeConfig.storeSegmentSizeInBytes, 1);
+        for (ReplicaId replica : replicasOnDisk) {
+          expectedState.addStoreSeg(replica.getPartitionId().toPathString(), storeConfig.storeSegmentSizeInBytes, 1);
+        }
         DiskSpaceAllocatorTest.verifyPoolState(new File(mountPath, diskManagerConfig.diskManagerReserveFileDirName),
-            new DiskSpaceAllocatorTest.ExpectedState().add(storeConfig.storeSegmentSizeInBytes,
-                expectedSegmentsInPool));
+            expectedState);
       }
       shutdownAndAssertStoresInaccessible(storageManager, replicas);
       assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
@@ -522,8 +530,13 @@ public class StorageManagerTest {
     metricRegistry = new MetricRegistry();
     String diskToFail = mountPaths.get(RANDOM.nextInt(mountPaths.size()));
     File reservePoolDir = new File(diskToFail, diskManagerConfig.diskManagerReserveFileDirName);
+    File storeReserveDir = new File(reservePoolDir,
+        DiskSpaceAllocator.STORE_DIR_PREFIX + replicasByMountPath.get(diskToFail)
+            .get(0)
+            .getPartitionId()
+            .toPathString());
     File fileSizeDir =
-        new File(reservePoolDir, DiskSpaceAllocator.generateFileSizeDirName(storeConfig.storeSegmentSizeInBytes));
+        new File(storeReserveDir, DiskSpaceAllocator.generateFileSizeDirName(storeConfig.storeSegmentSizeInBytes));
     Utils.deleteFileOrDirectory(fileSizeDir);
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     assertTrue("File creation should have succeeded", fileSizeDir.createNewFile());
