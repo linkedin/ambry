@@ -414,21 +414,19 @@ public class DiskSpaceAllocatorTest {
     alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(storeId0, 50, 1, 0)));
     verifyPoolState(new ExpectedState().addStoreSeg(storeId0, 50, 1));
     // add requirements for new store (storeId1)
-    Map<String, Map<Long, Long>> requirements = new HashMap<>();
-    Map<Long, Long> sizeToFileNum = new HashMap<>();
-    sizeToFileNum.put(20L, 4L);
-    sizeToFileNum.put(50L, 1L);
-    requirements.put(storeId1, sizeToFileNum);
-    alloc.addRequiredSegments(requirements, true);
-    verifyPoolState(
-        new ExpectedState().addStoreSeg(storeId0, 50, 1).addStoreSeg(storeId1, 20, 4).addStoreSeg(storeId1, 50, 1));
+    DiskSpaceRequirements requirements1 = new DiskSpaceRequirements(storeId1, 20L, 3L, 1L);
+    alloc.addRequiredSegments(alloc.getOverallRequirements(Collections.singletonList(requirements1)), false);
+    verifyPoolState(new ExpectedState().addStoreSeg(storeId0, 50, 1).addStoreSeg(storeId1, 20, 3));
+    // verify that swapSegmentNumBySize map has two entries and there is one segment for size 20L
+    assertTrue("The number of swap segments in map is not expected",
+        alloc.getSwapSegmentBySizeMap().size() == 2 && alloc.getSwapSegmentBySizeMap().get(20L) == 1L);
     // test that segments associated with storeId0 can be correctly deleted
     Map<String, Map<Long, Long>> deleteStoreRequirement = new HashMap<>();
     Map<Long, Long> sizeAndFileNum = new HashMap<>();
     sizeAndFileNum.put(50L, 1L);
     deleteStoreRequirement.put(storeId0, sizeAndFileNum);
     alloc.deleteExtraSegments(deleteStoreRequirement, false);
-    verifyPoolState(new ExpectedState().addStoreSeg(storeId1, 20, 4).addStoreSeg(storeId1, 50, 1));
+    verifyPoolState(new ExpectedState().addStoreSeg(storeId1, 20, 3));
   }
 
   /**
@@ -450,6 +448,37 @@ public class DiskSpaceAllocatorTest {
     // test that delete segments should be no-op
     alloc.deleteExtraSegments(requirements, false);
     verifyPoolState(null);
+  }
+
+  /**
+   * Test that failure occurs when adding required segments for new store. SwapSegmentBySize map is supposed to reduce
+   * number of swap segments (including both swap segments in use and those available in pool)
+   * @throws Exception
+   */
+  @Test
+  public void addRequiredSegmentsFailureTest() throws Exception {
+    requiredSwapSegmentsPerSize = 2;
+    alloc = constructAllocator();
+    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(storeId0, 50, 1, 0)));
+    verifyPoolState(new ExpectedState().addStoreSeg(storeId0, 50, 1).addSwapSeg(50, 2));
+    assertEquals("Mismatch in number of swap segments", 2L, (long) alloc.getSwapSegmentBySizeMap().get(50L));
+    // create disk space requirements for store1
+    DiskSpaceRequirements requirements1 = new DiskSpaceRequirements(storeId1, 20L, 3L, 1L);
+    Map<String, Map<Long, Long>> overallRequirements =
+        alloc.getOverallRequirements(Collections.singletonList(requirements1));
+    assertEquals("Mismatch in number of swap segments", 2L, (long) alloc.getSwapSegmentBySizeMap().get(20L));
+
+    File swapReserveDir = new File(reserveFileDir, DiskSpaceAllocator.SWAP_DIR_NAME);
+    File swapSegSizeDir = new File(swapReserveDir, DiskSpaceAllocator.FILE_SIZE_DIR_PREFIX + 20);
+    // create a file there to trigger add segments failure
+    assertTrue("Cannot create file", swapSegSizeDir.createNewFile());
+    try {
+      alloc.addRequiredSegments(overallRequirements, false);
+      fail("should fail");
+    } catch (IOException e) {
+      //expected
+    }
+    assertEquals("Mismatch in number of swap segments", 1L, (long) alloc.getSwapSegmentBySizeMap().get(20L));
   }
 
   /**
@@ -597,6 +626,8 @@ public class DiskSpaceAllocatorTest {
     } else {
       assertEquals("Wrong number of dirs", expectedState.storeReserveMap.size() + 1, reserveFileDir.list().length);
       File swapFileDir = new File(reserveFileDir, DiskSpaceAllocator.SWAP_DIR_NAME);
+      assertEquals("Wrong number of dirs in swap reserve pool", expectedState.swapMap.size(),
+          swapFileDir.list().length);
       for (Map.Entry<Long, Integer> entry : expectedState.swapMap.entrySet()) {
         long size = entry.getKey();
         int count = entry.getValue();

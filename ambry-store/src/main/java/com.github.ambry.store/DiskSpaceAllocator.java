@@ -440,6 +440,7 @@ class DiskSpaceAllocator {
       }
     } else {
       // delete the unneeded segments at runtime which is usually called during dynamic store removal.
+      // TODO use compactor in store to double check swap segments in use and return them to reserve pool
       for (String storeId : overallRequirements.keySet()) {
         File storeReserveDir = new File(reserveDir, STORE_DIR_PREFIX + storeId);
         Utils.deleteFileOrDirectory(storeReserveDir);
@@ -519,6 +520,14 @@ class DiskSpaceAllocator {
    */
   ReserveFileMap getSwapReserveFileMap() {
     return swapReserveFiles;
+  }
+
+  /**
+   * @return return the map kept in this DiskSpaceAllocator to record total number of swap segments by size. Here, total
+   * number of swap segments include both segments in use and segments available in reserve pool.
+   */
+  Map<Long, Long> getSwapSegmentBySizeMap() {
+    return swapSegmentNumBySize;
   }
 
   /**
