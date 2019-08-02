@@ -24,8 +24,11 @@ public class AzureMetrics {
   // Metric name constants
   public static final String BLOB_UPLOAD_REQUEST_COUNT = "BlobUploadRequestCount";
   public static final String BLOB_UPLOAD_SUCCESS_COUNT = "BlobUploadSuccessCount";
+  public static final String BLOB_DOWNLOAD_REQUEST_COUNT = "BlobDownloadRequestCount";
+  public static final String BLOB_DOWNLOAD_SUCCESS_COUNT = "BlobDownloadSuccessCount";
   public static final String BLOB_UPLOAD_CONFLICT_COUNT = "BlobUploadConflictCount";
   public static final String BLOB_UPLOAD_TIME = "BlobUploadTime";
+  public static final String BLOB_DOWNLOAD_TIME = "BlobDownloadTime";
   public static final String BLOB_UPDATE_TIME = "BlobUpdateTime";
   public static final String BLOB_UPDATED_COUNT = "BlobUpdatedCount";
   public static final String DOCUMENT_CREATE_TIME = "DocumentCreateTime";
@@ -53,9 +56,12 @@ public class AzureMetrics {
   // Metrics
   public final Counter blobUploadRequestCount;
   public final Counter blobUploadSuccessCount;
+  public final Counter blobDownloadRequestCount;
+  public final Counter blobDownloadSuccessCount;
   public final Counter blobUploadConflictCount;
   public final Counter blobUpdatedCount;
   public final Timer blobUploadTime;
+  public final Timer blobDownloadTime;
   public final Timer blobUpdateTime;
   public final Timer documentCreateTime;
   public final Timer documentReadTime;
@@ -84,10 +90,15 @@ public class AzureMetrics {
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_REQUEST_COUNT));
     blobUploadSuccessCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_SUCCESS_COUNT));
+    blobDownloadRequestCount =
+        registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_REQUEST_COUNT));
+    blobDownloadSuccessCount =
+        registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_SUCCESS_COUNT));
     blobUploadConflictCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_CONFLICT_COUNT));
     blobUpdatedCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATED_COUNT));
     blobUploadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_TIME));
+    blobDownloadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_TIME));
     blobUpdateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TIME));
     documentCreateTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_CREATE_TIME));
     documentReadTime = registry.timer(MetricRegistry.name(AzureCloudDestination.class, DOCUMENT_READ_TIME));

@@ -18,6 +18,7 @@ import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -73,6 +74,21 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       latch.countDown();
     }
     return true;
+  }
+
+  @Override
+  public BlobReadInfo downloadBlob(BlobId blobId) throws CloudStorageException {
+    BlobReadInfo blobReadInfo = null;
+    try {
+      if (map.containsKey(blobId)) {
+        byte[] blobData = new byte[(int)map.get(blobId).getFirst().getSize()];//TODO: possible loss of data?
+        map.get(blobId).getSecond().read(blobData);
+        blobReadInfo = new BlobReadInfo(map.get(blobId).getFirst(), ByteBuffer.wrap(blobData));
+      }
+    } catch (IOException ex) {
+      throw new CloudStorageException("Could not download blob for blobid " + blobId.getID() + " due to " + ex.toString());
+    }
+    return blobReadInfo;
   }
 
   @Override

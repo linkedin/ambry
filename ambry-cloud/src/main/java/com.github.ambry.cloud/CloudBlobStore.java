@@ -114,7 +114,24 @@ class CloudBlobStore implements Store {
 
   @Override
   public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
-    throw new UnsupportedOperationException("Method not supported");
+    checkStarted();
+    if (ids.size() > 1 && ids.size() != new HashSet<>(ids).size()) {
+      throw new IllegalArgumentException("The list of IDs provided contains duplicates");
+    }
+    List<BlobReadInfo> blobReadInfos = new ArrayList<>(ids.size());
+    List<MessageInfo> messageInfos = new ArrayList<>(ids.size());
+    try {
+      for(StoreKey id: ids) {
+        BlobReadInfo blobReadInfo = cloudDestination.downloadBlob((BlobId)id);
+        CloudBlobMetadata blobMetadata = blobReadInfo.getBlobMetadata();
+        MessageInfo messageInfo = new MessageInfo(id, blobMetadata.getSize(), blobMetadata.getExpirationTime(), (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), 0);
+        messageInfos.add(messageInfo);
+      }
+    } catch (CloudStorageException e) {
+      new StoreException(e, StoreErrorCodes.IOError);
+    }
+    CloudMessageReadSet messageReadSet = new CloudMessageReadSet(blobReadInfos, ids);
+    return new StoreInfo(messageReadSet, messageInfos);
   }
 
   @Override

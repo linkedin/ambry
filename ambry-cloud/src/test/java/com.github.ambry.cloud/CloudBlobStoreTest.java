@@ -45,6 +45,8 @@ import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
@@ -52,10 +54,12 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.microsoft.azure.documentdb.RequestOptions;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -613,5 +617,86 @@ public class CloudBlobStoreTest {
     byte dataCenterId = 66;
     return new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, encrypted,
         BlobDataType.DATACHUNK);
+  }
+
+  @Test
+  public void testGet() throws Exception {
+    // Set up remote host
+    MockClusterMap clusterMap = new MockClusterMap();
+    MockHost remoteHost = getLocalAndRemoteHosts(clusterMap).getSecond();
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    PartitionId partitionId = partitionIds.get(0);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
+        storeKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    hosts.put(remoteHost.dataNodeId, remoteHost);
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 4);
+
+    // Generate BlobIds for following PUT.
+    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
+    List<BlobId> blobIdList = new ArrayList<>();
+    for (int i = 0; i < 6; i++) {
+      blobIdList.add(
+          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
+              containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK));
+    }
+
+    // Set up VCR
+    Properties props = new Properties();
+    setBasicProperties(props);
+    props.setProperty("clustermap.port", "12300");
+    props.setProperty("vcr.ssl.port", "12345");
+
+    ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(props));
+    CloudDataNode cloudDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
+
+    LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
+        new LatchBasedInMemoryCloudDestination(blobIdList);
+    CloudReplica cloudReplica = new CloudReplica(cloudConfig, partitionId, cloudDataNode);
+    CloudBlobStore cloudBlobStore =
+        new CloudBlobStore(new VerifiableProperties(props), partitionId, latchBasedInMemoryCloudDestination,
+            new VcrMetrics(new MetricRegistry()));
+    cloudBlobStore.start();
+
+    // Create ReplicaThread and add RemoteReplicaInfo to it.
+    ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), Collections.emptyList());
+    ReplicaThread replicaThread =
+        new ReplicaThread("threadtest", new MockFindToken.MockFindTokenFactory(), clusterMap, new AtomicInteger(0),
+            cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
+            clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(), new ResponseHandler(clusterMap),
+            new MockTime());
+
+    for (ReplicaId replica : partitionId.getReplicaIds()) {
+      if (replica.getDataNodeId() == remoteHost.dataNodeId) {
+        RemoteReplicaInfo remoteReplicaInfo =
+            new RemoteReplicaInfo(replica, cloudReplica, cloudBlobStore, new MockFindToken(0, 0), Long.MAX_VALUE,
+                SystemTime.getInstance(), new Port(remoteHost.dataNodeId.getPort(), PortType.PLAINTEXT));
+        replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
+        break;
+      }
+    }
+
+    long referenceTime = System.currentTimeMillis();
+    BlobId id = blobIdList.get(0);
+    addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
+        referenceTime - 2000, referenceTime - 1000);
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+        Utils.Infinite_Time);
+    replicaThread.replicate();
+    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    List<BlobId> blobIds = new ArrayList<>(1);
+    blobIds.add(id);
+    StoreInfo storeInfo = cloudBlobStore.get(blobIds, null);
+    assert(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().getID().equals(id.getID()));
   }
 }

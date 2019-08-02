@@ -14,12 +14,16 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.Timer;
+import com.github.ambry.cloud.BlobReadInfo;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.ByteBufferOutputStream;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.Document;
@@ -46,8 +50,10 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -250,6 +256,31 @@ class AzureCloudDestination implements CloudDestination {
     } finally {
       storageTimer.stop();
     }
+  }
+
+  @Override
+  public BlobReadInfo downloadBlob(BlobId blobId) throws CloudStorageException {
+    azureMetrics.blobDownloadRequestCount.inc();
+    Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
+    BlobReadInfo blobReadInfo = null;
+    try {
+      List<BlobId> blobList = new ArrayList<>();
+      blobList.add(blobId);
+      CloudBlobMetadata blobMetadata = getBlobMetadata(blobList).values().iterator().next();
+      ByteBuffer outputBuffer = ByteBuffer.allocate((int)blobMetadata.getSize()); //TODO: can be an overflow error here
+      ByteBufferOutputStream outputStream = new ByteBufferOutputStream(outputBuffer);
+      CloudBlobContainer azureContainer = getContainer(blobId, false);
+      String azureBlobName = getAzureBlobName(blobId);
+      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
+      azureBlob.download(outputStream);
+      blobReadInfo = new BlobReadInfo(blobMetadata, outputBuffer);
+      azureMetrics.blobUploadSuccessCount.inc();
+    } catch (URISyntaxException | StorageException e) {
+      throw new CloudStorageException("Error donwloading blob " + blobId, e);
+    } finally {
+      storageTimer.stop();
+    }
+    return blobReadInfo;
   }
 
   @Override

@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Utils;
 import java.util.Objects;
 
