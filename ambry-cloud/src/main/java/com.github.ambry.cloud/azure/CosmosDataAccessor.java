@@ -83,7 +83,7 @@ public class CosmosDataAccessor {
   public ResourceResponse<Document> upsertMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
     RequestOptions options = getRequestOptions(blobMetadata.getPartitionId());
     return retryOperationWithThrottling(
-        () -> documentClient.upsertDocument(cosmosCollectionLink, blobMetadata, options, true),
+        () -> documentClient.upsertDocument(cosmosCollectionLink, blobMetadata, null, true),
         azureMetrics.documentCreateTime);
   }
 

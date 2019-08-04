@@ -384,6 +384,24 @@ task allJar(type: Jar, dependsOn: subprojects.assemble) {
     exclude 'META-INF/*.RSA', 'META-INF/*.SF','META-INF/*.DSA'
 }
 
+task allJarVcr(type: Jar, dependsOn: subprojects.assemble) {
+    manifest {
+        attributes 'Implementation-Title': 'Ambry',
+                   'Main-Class': 'com.github.ambry.cloud.VcrMain'
+    }
+    zip64 true
+    destinationDir = file('target')
+    baseName = 'ambry-vcr'
+    subprojects.each { subproject ->
+        from  {
+            (subproject.configurations.archives.allArtifacts.files + subproject.configurations.runtime).collect {
+                zipTree(it)
+            }
+        }
+    }
+    exclude 'META-INF/*.RSA', 'META-INF/*.SF','META-INF/*.DSA'
+}
+
 task codeCoverageReport(type: JacocoReport) {
     executionData fileTree(project.rootDir.absolutePath).include("**/build/jacoco/*.exec")
 
