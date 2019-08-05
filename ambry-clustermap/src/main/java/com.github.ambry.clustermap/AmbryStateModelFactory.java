@@ -13,25 +13,38 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import org.apache.helix.participant.statemachine.StateModel;
 import org.apache.helix.participant.statemachine.StateModelFactory;
 
 
 /**
- * A factory for creating {@link AmbryStateModel}
+ * A factory for creating {@link AmbryDefaultStateModel}
  */
 class AmbryStateModelFactory extends StateModelFactory<StateModel> {
+  private final String ambryStateModelDef;
+
+  AmbryStateModelFactory(ClusterMapConfig clusterMapConfig) {
+    ambryStateModelDef = clusterMapConfig.clustermapStateModelDefinition;
+  }
 
   /**
-   * Create and return an instance of {@link AmbryStateModel}
+   * Create and return an instance of {@link AmbryDefaultStateModel}
    * @param resourceName the resource name for which this state model is being created.
    * @param partitionName the partition name for which this state model is being created.
-   *
-   * @return an instance of {@link AmbryStateModel}.
+   * @return an instance of {@link AmbryDefaultStateModel}.
    */
   @Override
   public StateModel createNewStateModel(String resourceName, String partitionName) {
-    return new AmbryStateModel();
+    StateModel stateModelToReturn;
+    switch (ambryStateModelDef) {
+      case AmbryStateModelDefinition.AMBRY_LEADER_STANDBY_MODEL:
+        stateModelToReturn = new AmbryPartitionStateModel();
+        break;
+      default:
+        stateModelToReturn = new AmbryDefaultStateModel();
+    }
+    return stateModelToReturn;
   }
 }
 

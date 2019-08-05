@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.tools.util.ToolUtils;
 import java.util.ArrayList;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -88,7 +89,7 @@ public class HelixBootstrapUpgradeTool {
    *             the "reference" datacenter. If none provided, the tool simply chooses one of the datacenters in the
    *             layout as the reference datacenter.
    */
-  public static void main(String args[]) throws Exception {
+  public static void main(String[] args) throws Exception {
     OptionParser parser = new OptionParser();
 
     OptionSpec dropClusterOpt = parser.accepts("dropCluster",
@@ -103,6 +104,9 @@ public class HelixBootstrapUpgradeTool {
 
     OptionSpec uploadConfig = parser.accepts("uploadConfig",
         "Upload cluster configs to HelixPropertyStore based on the json files. This option will not touch instanceConfig");
+
+    OptionSpec addStateModel = parser.accepts("addStateModel",
+        "Attempt to add new state model to Helix StateModelDefs if it doesn't exist. This option will not touch instanceConfig");
 
     ArgumentAcceptingOptionSpec<String> hardwareLayoutPathOpt =
         parser.accepts("hardwareLayoutPath", "The path to the hardware layout json file")
@@ -155,6 +159,12 @@ public class HelixBootstrapUpgradeTool {
         .describedAs("max_partitions_in_one_resource")
         .ofType(String.class);
 
+    ArgumentAcceptingOptionSpec<String> stateModelDefinitionOpt = parser.accepts("stateModelDef",
+        "(Optional argument) The state model definition that should be created in cluster if doesn't exist")
+        .withRequiredArg()
+        .describedAs("state_model_definition")
+        .ofType(String.class);
+
     OptionSpecBuilder dryRun =
         parser.accepts("dryRun", "(Optional argument) Dry run, do not modify the cluster map in Helix.");
 
@@ -168,6 +178,11 @@ public class HelixBootstrapUpgradeTool {
     String clusterNamePrefix = options.valueOf(clusterNamePrefixOpt);
     String clusterName = options.valueOf(clusterNameOpt);
     String dcs = options.valueOf(dcsNameOpt);
+    int maxPartitionsInOneResource =
+        options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
+            : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt));
+    String stateModelDef = options.valueOf(stateModelDefinitionOpt) == null ? ClusterMapConfig.DEFAULT_STATE_MODEL_DEF
+        : options.valueOf(stateModelDefinitionOpt);
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
     listOpt.add(hardwareLayoutPathOpt);
     listOpt.add(partitionLayoutPathOpt);
@@ -204,13 +219,16 @@ public class HelixBootstrapUpgradeTool {
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.uploadClusterConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
           clusterNamePrefix, dcs, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
+    } else if (options.has(addStateModel)) {
+      listOpt.add(stateModelDefinitionOpt);
+      ToolUtils.ensureOrExit(listOpt, options, parser);
+      HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          clusterNamePrefix, dcs, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(), stateModelDef);
     } else {
       ToolUtils.ensureOrExit(listOpt, options, parser);
       HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, dcs,
-          options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
-              : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt)), options.has(dryRun),
-          options.has(forceRemove), new HelixAdminFactory(), !options.has(disableValidatingClusterManager));
+          clusterNamePrefix, dcs, maxPartitionsInOneResource, options.has(dryRun), options.has(forceRemove),
+          new HelixAdminFactory(), !options.has(disableValidatingClusterManager), stateModelDef);
     }
     System.out.println("======== HelixBootstrapUpgradeTool completed successfully! ========");
     System.out.println("( If program doesn't exit, please use Ctrl-c to terminate. )");

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,26 +23,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-/**
- * {@link StateModel} to use when the Ambry participants (datanodes) register to Helix. The methods are callbacks
- * that get called within a participant whenever its state changes in Helix. For now these are no-ops.
- *
- * In the critical path of puts and gets, there are no leader replicas in Ambry. Every replica can serve reads and
- * writes. However, going forward, it is useful to have one of the replicas chosen as a LEADER for purposes such as
- * replication.
- */
-@StateModelInfo(initialState = "OFFLINE", states = {"LEADER", "STANDBY"})
-public class AmbryStateModel extends StateModel {
+@StateModelInfo(initialState = "OFFLINE", states = {"BOOTSTRAP", "LEADER", "STANDBY", "INACTIVE"})
+public class AmbryPartitionStateModel extends StateModel {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  AmbryStateModel() {
+  AmbryPartitionStateModel() {
     StateModelParser parser = new StateModelParser();
-    _currentState = parser.getInitialState(AmbryStateModel.class);
+    _currentState = parser.getInitialState(AmbryDefaultStateModel.class);
   }
 
-  @Transition(to = "STANDBY", from = "OFFLINE")
-  public void onBecomeStandbyFromOffline(Message message, NotificationContext context) {
-    logger.info("Partition {} in resource {} is becoming STANDBY from OFFLINE", message.getPartitionName(),
+  @Transition(to = "BOOTSTRAP", from = "OFFLINE")
+  public void onBecomeBootstrapFromOffline(Message message, NotificationContext context) {
+    logger.info("Partition {} in resource {} is becoming BOOTSTRAP from OFFLINE", message.getPartitionName(),
+        message.getResourceName());
+  }
+
+  @Transition(to = "STANDBY", from = "BOOTSTRAP")
+  public void onBecomeStandbyFromBootstrap(Message message, NotificationContext context) {
+    logger.info("Partition {} in resource {} is becoming STANDBY from BOOTSTRAP", message.getPartitionName(),
         message.getResourceName());
   }
 
@@ -58,15 +56,21 @@ public class AmbryStateModel extends StateModel {
         message.getResourceName());
   }
 
-  @Transition(to = "OFFLINE", from = "STANDBY")
-  public void onBecomeOfflineFromStandby(Message message, NotificationContext context) {
-    logger.info("Partition {} in resource {} is becoming OFFLINE from STANDBY", message.getPartitionName(),
+  @Transition(to = "INACTIVE", from = "STANDBY")
+  public void onBecomeInactiveFromStandby(Message message, NotificationContext context) {
+    logger.info("Partition {} in resource {} is becoming INACTIVE from STANDBY", message.getPartitionName(),
         message.getResourceName());
   }
 
-  @Transition(to = "OFFLINE", from = "LEADER")
-  public void onBecomeOfflineFromLeader(Message message, NotificationContext context) {
-    logger.info("Partition {} in resource {} is becoming OFFLINE from LEADER", message.getPartitionName(),
+  @Transition(to = "OFFLINE", from = "INACTIVE")
+  public void onBecomeOfflineFromInactive(Message message, NotificationContext context) {
+    logger.info("Partition {} in resource {} is becoming OFFLINE from INACTIVE", message.getPartitionName(),
+        message.getResourceName());
+  }
+
+  @Transition(to = "DROPPED", from = "OFFLINE")
+  public void onBecomeDroppedFromOffline(Message message, NotificationContext context) {
+    logger.info("Partition {} in resource {} is becoming DROPPED from OFFLINE", message.getPartitionName(),
         message.getResourceName());
   }
 
@@ -75,4 +79,3 @@ public class AmbryStateModel extends StateModel {
     // no op
   }
 }
-

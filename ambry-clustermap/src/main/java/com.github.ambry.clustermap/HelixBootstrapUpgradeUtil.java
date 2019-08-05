@@ -41,6 +41,7 @@ import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.model.ResourceConfig;
+import org.apache.helix.model.StateModelDefinition;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -91,6 +92,7 @@ import org.slf4j.LoggerFactory;
 class HelixBootstrapUpgradeUtil {
   private final StaticClusterManager staticClusterMap;
   private final String zkLayoutPath;
+  private final String stateModelDef;
   private final Map<String, HelixAdmin> adminForDc = new HashMap<>();
   private final Map<String, Map<DiskId, SortedSet<Replica>>> instanceToDiskReplicasMap = new HashMap<>();
   private final Map<String, Map<String, DataNodeId>> dcToInstanceNameToDataNodeId = new HashMap<>();
@@ -156,19 +158,21 @@ class HelixBootstrapUpgradeUtil {
    * @param forceRemove if true, removes any hosts from Helix not present in the json files.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @param startValidatingClusterManager whether validation should include starting up a {@link HelixClusterManager}
+   * @param stateModelDef the state model definition to use in Ambry cluster.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
-      HelixAdminFactory helixAdminFactory, boolean startValidatingClusterManager) throws Exception {
+      HelixAdminFactory helixAdminFactory, boolean startValidatingClusterManager, String stateModelDef)
+      throws Exception {
     if (dryRun) {
       info("==== This is a dry run ====");
       info("No changes will be made to the information in Helix (except adding the cluster if it does not exist.");
     }
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            maxPartitionsInOneResource, dryRun, forceRemove, helixAdminFactory);
+            maxPartitionsInOneResource, dryRun, forceRemove, helixAdminFactory, stateModelDef);
     if (dryRun) {
       info("To drop the cluster, run this tool again with the '--dropCluster {}' argument.",
           clusterMapToHelixMapper.clusterName);
@@ -199,12 +203,25 @@ class HelixBootstrapUpgradeUtil {
       throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            maxPartitionsInOneResource, false, false, helixAdminFactory);
+            maxPartitionsInOneResource, false, false, helixAdminFactory, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
     Map<String, Map<String, String>> partitionOverrideInfos =
         clusterMapToHelixMapper.generatePartitionOverrideFromAllDCs();
     info("Uploading partition override to HelixPropertyStore based on override json file.");
     clusterMapToHelixMapper.uploadPartitionOverride(partitionOverrideInfos);
     info("Upload cluster configs completed.");
+  }
+
+  /**
+   * Add given state model def to ambry cluster in enabled datacenter(s)
+   */
+  static void addStateModelDef(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory,
+      String stateModelDef) throws Exception {
+    HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
+            maxPartitionsInOneResource, false, false, helixAdminFactory, stateModelDef);
+    clusterMapToHelixMapper.addStateModelDef();
+    info("State model def is successfully added");
   }
 
   /**
@@ -224,7 +241,7 @@ class HelixBootstrapUpgradeUtil {
       String clusterNamePrefix, String dcs, HelixAdminFactory helixAdminFactory) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs, 0,
-            false, false, helixAdminFactory);
+            false, false, helixAdminFactory, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
     clusterMapToHelixMapper.validateAndClose();
     clusterMapToHelixMapper.logSummary();
   }
@@ -259,16 +276,18 @@ class HelixBootstrapUpgradeUtil {
    * @param dryRun if true, perform a dry run; do not update anything in Helix.
    * @param forceRemove if true, removes any hosts from Helix not present in the json files.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
+   * @param stateModelDef the state model definition to use in Ambry cluster.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   private HelixBootstrapUpgradeUtil(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
-      HelixAdminFactory helixAdminFactory) throws Exception {
+      HelixAdminFactory helixAdminFactory, String stateModelDef) throws Exception {
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     this.dryRun = dryRun;
     this.forceRemove = forceRemove;
     this.zkLayoutPath = zkLayoutPath;
+    this.stateModelDef = stateModelDef;
     dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     Properties props = new Properties();
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
@@ -610,6 +629,26 @@ class HelixBootstrapUpgradeUtil {
   }
 
   /**
+   * Add new state model def to ambry cluster in enabled datacenter(s).
+   */
+  private void addStateModelDef() {
+    for (Map.Entry<String, HelixAdmin> entry : adminForDc.entrySet()) {
+      // Add a cluster entry in every enabled DC
+      String dcName = entry.getKey();
+      HelixAdmin admin = entry.getValue();
+      if (!admin.getClusters().contains(clusterName)) {
+        throw new IllegalStateException("Cluster " + clusterName + " in " + dcName + " doesn't exist!");
+      }
+      if (!admin.getStateModelDefs(clusterName).contains(stateModelDef)) {
+        info("Adding state model def {} in {} for cluster {}", stateModelDef, dcName, clusterName);
+        admin.addStateModelDef(clusterName, stateModelDef, getStateModelDefinition(stateModelDef));
+      } else {
+        info("{} in {} already has state model def {}, skip adding operation", clusterName, dcName, stateModelDef);
+      }
+    }
+  }
+
+  /**
    * A comparator for replicas that compares based on the partition ids.
    */
   private class ReplicaComparator implements Comparator<ReplicaId> {
@@ -706,9 +745,29 @@ class HelixBootstrapUpgradeUtil {
       if (!admin.getClusters().contains(clusterName)) {
         info("Adding cluster {} in {}", clusterName, dcName);
         admin.addCluster(clusterName);
-        admin.addStateModelDef(clusterName, LeaderStandbySMD.name, LeaderStandbySMD.build());
+        admin.addStateModelDef(clusterName, stateModelDef, getStateModelDefinition(stateModelDef));
       }
     }
+  }
+
+  /**
+   * Get state model definition based on given name.
+   * @param stateModelDefName the name of state model definition that would be employed by Ambry cluster.
+   * @return {@link StateModelDefinition}
+   */
+  private StateModelDefinition getStateModelDefinition(String stateModelDefName) {
+    StateModelDefinition stateModelDefinition = null;
+    switch (stateModelDefName) {
+      case ClusterMapConfig.DEFAULT_STATE_MODEL_DEF:
+        stateModelDefinition = LeaderStandbySMD.build();
+        break;
+      case ClusterMapConfig.AMBRY_STATE_MODEL_DEF:
+        stateModelDefinition = AmbryStateModelDefinition.getDefinition();
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported state model def: " + stateModelDefName);
+    }
+    return stateModelDefinition;
   }
 
   /**

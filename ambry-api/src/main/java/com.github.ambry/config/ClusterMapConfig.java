@@ -13,11 +13,15 @@
  */
 package com.github.ambry.config;
 
+import org.apache.helix.model.LeaderStandbySMD;
+
+
 /**
  * The configs for resource state.
  */
 public class ClusterMapConfig {
-
+  public static final String DEFAULT_STATE_MODEL_DEF = LeaderStandbySMD.name;
+  public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
@@ -178,6 +182,10 @@ public class ClusterMapConfig {
   @Default("true")
   public final boolean clustermapListenCrossColo;
 
+  @Config("clustermap.state.model.definition")
+  @Default(DEFAULT_STATE_MODEL_DEF)
+  public final String clustermapStateModelDefinition;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -210,5 +218,11 @@ public class ClusterMapConfig {
     clustermapCurrentXid = verifiableProperties.getLong("clustermap.current.xid", Long.MAX_VALUE);
     clusterMapEnablePartitionOverride = verifiableProperties.getBoolean("clustermap.enable.partition.override", false);
     clustermapListenCrossColo = verifiableProperties.getBoolean("clustermap.listen.cross.colo", true);
+    clustermapStateModelDefinition =
+        verifiableProperties.getString("clustermap.state.model.definition", DEFAULT_STATE_MODEL_DEF);
+    if (!clustermapStateModelDefinition.equals(DEFAULT_STATE_MODEL_DEF) && !clustermapStateModelDefinition.equals(
+        AMBRY_STATE_MODEL_DEF)) {
+      throw new IllegalArgumentException("Unsupported state model definition: " + clustermapStateModelDefinition);
+    }
   }
 }
