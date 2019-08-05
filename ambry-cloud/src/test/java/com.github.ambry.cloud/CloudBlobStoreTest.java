@@ -90,6 +90,7 @@ public class CloudBlobStoreTest {
   private short refAccountId = 50;
   private short refContainerId = 100;
   private long operationTime = System.currentTimeMillis();
+  private final int defaultCacheLimit = 1000;
 
   @Before
   public void setup() throws Exception {
@@ -99,11 +100,13 @@ public class CloudBlobStoreTest {
 
   /**
    * Setup the cloud blobstore.
-   * @param requireEncryption value of requireEncryption flag in CloudConfig.
    * @param inMemoryDestination whether to use in-memory cloud destination instead of mock
+   * @param requireEncryption value of requireEncryption flag in CloudConfig.
+   * @param cacheLimit size of the store's recent blob cache.
    * @param start whether to start the store.
    */
-  private void setupCloudStore(boolean inMemoryDestination, boolean requireEncryption, boolean start) throws Exception {
+  private void setupCloudStore(boolean inMemoryDestination, boolean requireEncryption, int cacheLimit, boolean start)
+      throws Exception {
     Properties properties = new Properties();
     // Required clustermap properties
     setBasicProperties(properties);
@@ -111,6 +114,7 @@ public class CloudBlobStoreTest {
     properties.setProperty(CloudConfig.VCR_REQUIRE_ENCRYPTION, Boolean.toString(requireEncryption));
     properties.setProperty(CloudConfig.CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
         TestCloudBlobCryptoAgentFactory.class.getName());
+    properties.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(cacheLimit));
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     dest = inMemoryDestination ? new LatchBasedInMemoryCloudDestination(Collections.emptyList())
         : mock(CloudDestination.class);
@@ -141,7 +145,7 @@ public class CloudBlobStoreTest {
   }
 
   private void testStorePuts(boolean requireEncryption) throws Exception {
-    setupCloudStore(true, requireEncryption, true);
+    setupCloudStore(true, requireEncryption, defaultCacheLimit, true);
     // Put blobs with and without expiration and encryption
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 5;
@@ -179,7 +183,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore delete method. */
   @Test
   public void testStoreDeletes() throws Exception {
-    setupCloudStore(false, true, true);
+    setupCloudStore(false, true, defaultCacheLimit, true);
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
@@ -197,7 +201,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore updateTtl method. */
   @Test
   public void testStoreTtlUpdates() throws Exception {
-    setupCloudStore(false, true, true);
+    setupCloudStore(false, true, defaultCacheLimit, true);
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 10;
     for (int j = 0; j < count; j++) {
@@ -216,7 +220,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore findMissingKeys method. */
   @Test
   public void testFindMissingKeys() throws Exception {
-    setupCloudStore(false, true, true);
+    setupCloudStore(false, true, defaultCacheLimit, true);
     int count = 10;
     List<StoreKey> keys = new ArrayList<>();
     Map<String, CloudBlobMetadata> metadataMap = new HashMap<>();
@@ -249,7 +253,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore findEntriesSince method. */
   @Test
   public void testFindEntriesSince() throws Exception {
-    setupCloudStore(false, true, true);
+    setupCloudStore(false, true, defaultCacheLimit, true);
     long maxTotalSize = 1000000;
     // 1) start with empty token, call find, return some data
     long startTime = System.currentTimeMillis();
@@ -283,23 +287,48 @@ public class CloudBlobStoreTest {
     assertEquals(outputToken, finalToken);
   }
 
-  private List<CloudBlobMetadata> generateMetadataList(long startTime, long blobSize, int count) {
-    List<CloudBlobMetadata> metadataList = new ArrayList<>();
-    for (int j = 0; j < count; j++) {
-      BlobId blobId = getUniqueId();
-      CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
-      metadata.setUploadTime(startTime + j);
-      metadataList.add(metadata);
+  /** Test CloudBlobStore cache eviction. */
+  @Test
+  public void testCacheEvictionOrder() throws Exception {
+    // setup store with small cache size
+    int cacheSize = 10;
+    long blobSize = 10;
+    setupCloudStore(false, false, cacheSize, true);
+    // put blobs to fill up cache
+    List<StoreKey> blobIdList = new ArrayList<>();
+    for (int j = 0; j < cacheSize; j++) {
+      blobIdList.add(getUniqueId());
+      store.addToCache(blobIdList.get(j).getID(), CloudBlobStore.BlobState.CREATED);
     }
-    return metadataList;
+
+    // findMissingKeys should stay in cache
+    store.findMissingKeys(blobIdList);
+    verify(dest, never()).getBlobMetadata(anyList());
+    // Perform access on first 5 blobs
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+    for (int j = 0; j < 5; j++) {
+      addBlobToSet(messageWriteSet, (BlobId) blobIdList.get(j), blobSize, Utils.Infinite_Time);
+    }
+    store.updateTtl(messageWriteSet);
+
+    // put 5 more blobs
+    for (int j = 10; j < 15; j++) {
+      blobIdList.add(getUniqueId());
+      store.addToCache(blobIdList.get(j).getID(), CloudBlobStore.BlobState.CREATED);
+    }
+    // get same 1-5 which should be still cached.
+    store.findMissingKeys(blobIdList.subList(0, 5));
+    verify(dest, never()).getBlobMetadata(anyList());
+    // call findMissingKeys on 6-10 which should trigger getBlobMetadata
+    store.findMissingKeys(blobIdList.subList(5, 10));
+    verify(dest).getBlobMetadata(anyList());
   }
 
   /** Test verifying behavior when store not started. */
   @Test
   public void testStoreNotStarted() throws Exception {
     // Create store and don't start it.
-    setupCloudStore(false, true, false);
+    setupCloudStore(false, true, defaultCacheLimit, false);
     List<StoreKey> keys = Collections.singletonList(getUniqueId());
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     addBlobToSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId, true);
@@ -512,6 +541,25 @@ public class CloudBlobStoreTest {
   }
 
   /**
+   * Utility method to generate a list of {@link CloudBlobMetadata} with a range of upload times.
+   * @param startTime the base time for the upload time range.
+   * @param blobSize the blob size.
+   * @param count the list size.
+   * @return the constructed list.
+   */
+  private List<CloudBlobMetadata> generateMetadataList(long startTime, long blobSize, int count) {
+    List<CloudBlobMetadata> metadataList = new ArrayList<>();
+    for (int j = 0; j < count; j++) {
+      BlobId blobId = getUniqueId();
+      CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, blobSize,
+          CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+      metadata.setUploadTime(startTime + j);
+      metadataList.add(metadata);
+    }
+    return metadataList;
+  }
+
+  /**
    * Utility method to generate a BlobId and byte buffer for a blob with specified properties and add them to the specified MessageWriteSet.
    * @param messageWriteSet the {@link MockMessageWriteSet} in which to store the data.
    * @param size the size of the byte buffer.
@@ -520,7 +568,6 @@ public class CloudBlobStoreTest {
    * @param containerId the container Id.
    * @param encrypted the encrypted bit.
    * @return the generated {@link BlobId}.
-   * @throws StoreException
    */
   private BlobId addBlobToSet(MockMessageWriteSet messageWriteSet, long size, long expiresAtMs, short accountId,
       short containerId, boolean encrypted) {
@@ -530,6 +577,21 @@ public class CloudBlobStoreTest {
     ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
     messageWriteSet.add(info, buffer);
     return id;
+  }
+
+  /**
+   * Utility method to add a BlobId and generated byte buffer to the specified MessageWriteSet.
+   * @param messageWriteSet the {@link MockMessageWriteSet} in which to store the data.
+   * @param blobId the blobId to add.
+   * @param size the size of the byte buffer.
+   * @param expiresAtMs the expiration time.
+   */
+  private void addBlobToSet(MockMessageWriteSet messageWriteSet, BlobId blobId, long size, long expiresAtMs) {
+    long crc = random.nextLong();
+    MessageInfo info =
+        new MessageInfo(blobId, size, false, true, expiresAtMs, crc, refAccountId, refContainerId, operationTime);
+    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
+    messageWriteSet.add(info, buffer);
   }
 
   /**

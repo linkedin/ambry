@@ -61,6 +61,8 @@ import static com.github.ambry.cloud.CloudBlobMetadata.*;
 class CloudBlobStore implements Store {
 
   private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
+  private static final int cacheInitialCapacity = 1000;
+  private static final float cacheLoadFactor = 0.75f;
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
   private final ClusterMap clusterMap;
@@ -69,9 +71,7 @@ class CloudBlobStore implements Store {
   private final VcrMetrics vcrMetrics;
 
   /** The lifecycle state of a recently seen blob. */
-  enum BlobState {
-    CREATED, TTL_UPDATED, DELETED
-  }
+  enum BlobState {CREATED, TTL_UPDATED, DELETED}
 
   // Map blobId to state (created, ttlUpdated, deleted)
   private final Map<String, BlobState> recentBlobCache;
@@ -98,7 +98,7 @@ class CloudBlobStore implements Store {
     this.vcrMetrics = Objects.requireNonNull(vcrMetrics, "vcrMetrics is required");
     minTtlMillis = TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays);
     requireEncryption = cloudConfig.vcrRequireEncryption;
-    recentBlobCache = Collections.synchronizedMap(new RecentBlobCache(1000, cloudConfig.recentBlobCacheLimit));
+    recentBlobCache = Collections.synchronizedMap(new RecentBlobCache(cloudConfig.recentBlobCacheLimit));
 
     String cryptoAgentFactoryClass = cloudConfig.cloudBlobCryptoAgentFactoryClass;
     try {
@@ -430,13 +430,14 @@ class CloudBlobStore implements Store {
   }
 
   /**
-   * A local LRU cache of recent blobs processed by this store.
+   * A local LRA cache of recent blobs processed by this store.
    */
   private class RecentBlobCache extends LinkedHashMap<String, BlobState> {
     private final int maxEntries;
 
-    public RecentBlobCache(int initialCapacity, int maxEntries) {
-      super(initialCapacity);
+    public RecentBlobCache(int maxEntries) {
+      // Use access order for eviction
+      super(cacheInitialCapacity, cacheLoadFactor, true);
       this.maxEntries = maxEntries;
     }
 
