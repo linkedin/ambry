@@ -125,6 +125,7 @@ class CloudBlobStore implements Store {
         BlobReadInfo blobReadInfo = cloudDestination.downloadBlob((BlobId)id);
         CloudBlobMetadata blobMetadata = blobReadInfo.getBlobMetadata();
         MessageInfo messageInfo = new MessageInfo(id, blobMetadata.getSize(), blobMetadata.getExpirationTime(), (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), 0);
+        blobReadInfos.add(blobReadInfo);
         messageInfos.add(messageInfo);
       }
     } catch (CloudStorageException e) {

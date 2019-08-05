@@ -691,9 +691,21 @@ public class CloudBlobStoreTest {
         Utils.Infinite_Time);
     replicaThread.replicate();
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+
+    //try get for a blob that exists
     List<BlobId> blobIds = new ArrayList<>(1);
     blobIds.add(id);
     StoreInfo storeInfo = cloudBlobStore.get(blobIds, null);
     assert(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().getID().equals(id.getID()));
+
+    //try get for a blob that doesnt exist
+    blobIds = new ArrayList<>(1);
+    id = blobIdList.get(1);
+    blobIds.add(id);
+    try {
+      storeInfo = cloudBlobStore.get(blobIds, null);
+      fail("A get for non existent blob should have thrown an exception");
+    } catch(StoreException ex) {
+    }
   }
 }

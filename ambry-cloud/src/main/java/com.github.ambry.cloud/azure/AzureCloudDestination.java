@@ -21,6 +21,7 @@ import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
@@ -263,7 +264,11 @@ class AzureCloudDestination implements CloudDestination {
     try {
       List<BlobId> blobList = new ArrayList<>();
       blobList.add(blobId);
-      CloudBlobMetadata blobMetadata = getBlobMetadata(blobList).values().iterator().next();
+      Map<String, CloudBlobMetadata> cloudBlobMetadataMap = getBlobMetadata(blobList);
+      if(cloudBlobMetadataMap.size() == 0) {
+        throw new CloudStorageException("Blob for BlobIb " + blobId.getID() + " not found in cloud metadata store");
+      }
+      CloudBlobMetadata blobMetadata = cloudBlobMetadataMap.values().iterator().next();
       ByteBuffer outputBuffer = ByteBuffer.allocate((int)blobMetadata.getSize());
       ByteBufferOutputStream outputStream = new ByteBufferOutputStream(outputBuffer);
       CloudBlobContainer azureContainer = getContainer(blobId, false);
