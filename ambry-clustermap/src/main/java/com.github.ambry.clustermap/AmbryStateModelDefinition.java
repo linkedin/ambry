@@ -21,7 +21,15 @@ import org.apache.helix.model.StateModelDefinition;
  * Define state model employed by Ambry.
  * Helix allows user to define custom state model which means Ambry is able to introduce custom states and define the
  * transition logic among these states. This class presents replica states, valid transitions and priorities that would
- * be used by Helix to manage Ambry partitions
+ * be used by Helix to manage Ambry partitions. Specifically, we add two custom states into new state model: BOOTSTRAP
+ * and INACTIVE. The valid transitions among states are depicted as follows:
+ *
+ *                  <--- INACTIVE <----
+ *                 |                   |
+ * DROPPED <--- OFFLINE              STANDBY  <----> LEADER
+ *                 |                   |
+ *                  ---> BOOTSTRAP --->
+ *
  */
 public class AmbryStateModelDefinition {
   public static final String AMBRY_LEADER_STANDBY_MODEL = "AmbryLeaderStandby";
