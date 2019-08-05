@@ -17,7 +17,6 @@ import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.InvocationOptions;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.util.Properties;
 import org.slf4j.Logger;
