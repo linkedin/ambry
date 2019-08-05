@@ -264,7 +264,7 @@ class AzureCloudDestination implements CloudDestination {
       List<BlobId> blobList = new ArrayList<>();
       blobList.add(blobId);
       CloudBlobMetadata blobMetadata = getBlobMetadata(blobList).values().iterator().next();
-      ByteBuffer outputBuffer = ByteBuffer.allocate((int)blobMetadata.getSize()); //TODO: can be an overflow error here
+      ByteBuffer outputBuffer = ByteBuffer.allocate((int)blobMetadata.getSize());
       ByteBufferOutputStream outputStream = new ByteBufferOutputStream(outputBuffer);
       CloudBlobContainer azureContainer = getContainer(blobId, false);
       String azureBlobName = getAzureBlobName(blobId);

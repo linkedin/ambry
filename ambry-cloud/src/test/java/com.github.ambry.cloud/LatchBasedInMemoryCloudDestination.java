@@ -81,7 +81,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     BlobReadInfo blobReadInfo = null;
     try {
       if (map.containsKey(blobId)) {
-        byte[] blobData = new byte[(int)map.get(blobId).getFirst().getSize()];//TODO: possible loss of data?
+        byte[] blobData = new byte[(int)map.get(blobId).getFirst().getSize()];
         map.get(blobId).getSecond().read(blobData);
         blobReadInfo = new BlobReadInfo(map.get(blobId).getFirst(), ByteBuffer.wrap(blobData));
       }

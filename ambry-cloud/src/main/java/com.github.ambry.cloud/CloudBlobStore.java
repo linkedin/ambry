@@ -128,7 +128,7 @@ class CloudBlobStore implements Store {
         messageInfos.add(messageInfo);
       }
     } catch (CloudStorageException e) {
-      new StoreException(e, StoreErrorCodes.IOError);
+      throw new StoreException(e, StoreErrorCodes.IOError);
     }
     CloudMessageReadSet messageReadSet = new CloudMessageReadSet(blobReadInfos, ids);
     return new StoreInfo(messageReadSet, messageInfos);
