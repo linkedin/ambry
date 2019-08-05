@@ -45,7 +45,6 @@ import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
-import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
@@ -54,12 +53,10 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.documentdb.RequestOptions;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -664,7 +661,7 @@ public class CloudBlobStoreTest {
         new LatchBasedInMemoryCloudDestination(blobIdList);
     CloudReplica cloudReplica = new CloudReplica(cloudConfig, partitionId, cloudDataNode);
     CloudBlobStore cloudBlobStore =
-        new CloudBlobStore(new VerifiableProperties(props), partitionId, latchBasedInMemoryCloudDestination,
+        new CloudBlobStore(new VerifiableProperties(props), partitionId, latchBasedInMemoryCloudDestination, clusterMap,
             new VcrMetrics(new MetricRegistry()));
     cloudBlobStore.start();
 

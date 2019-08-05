@@ -13,8 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.commons.BlobId;
-import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreKey;
 import java.io.IOException;
