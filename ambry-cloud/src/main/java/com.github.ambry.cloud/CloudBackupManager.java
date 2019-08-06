@@ -38,7 +38,9 @@ import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -56,6 +58,7 @@ public class CloudBackupManager extends ReplicationEngine {
   private final VcrMetrics vcrMetrics;
   private final VirtualReplicatorCluster virtualReplicatorCluster;
   private final CloudStorageCompactor cloudStorageCompactor;
+  private final Map<String, Store> partitionStoreMap = new HashMap<>();
 
   public CloudBackupManager(VerifiableProperties properties, CloudConfig cloudConfig,
       ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
@@ -115,6 +118,12 @@ public class CloudBackupManager extends ReplicationEngine {
               logger.error("Exception on token write when remove Partition {} from {}: ", partitionId, dataNodeId, e);
               vcrMetrics.removePartitionErrorCount.inc();
             }
+          }
+          Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
+          if (cloudStore != null) {
+            cloudStore.shutdown();
+          } else {
+            logger.warn("Store not found for partition {}", partitionId);
           }
           logger.info("Partition {} removed from {}", partitionId, dataNodeId);
           // We don't close cloudBlobStore because because replicate in ReplicaThread is using a copy of
@@ -190,6 +199,7 @@ public class CloudBackupManager extends ReplicationEngine {
         retList.add(partitionInfo);
         return retList;
       });
+      partitionStoreMap.put(partitionId.toPathString(), cloudStore);
     } else {
       try {
         cloudStore.shutdown();

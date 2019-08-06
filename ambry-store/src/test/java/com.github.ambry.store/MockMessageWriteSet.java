@@ -69,6 +69,15 @@ public class MockMessageWriteSet implements MessageWriteSet {
     buffers.add(buffer);
   }
 
+  /**
+   * Reset the buffers so they can be written again.
+   */
+  public void resetBuffers() {
+    for (ByteBuffer buffer : buffers) {
+      buffer.flip();
+    }
+  }
+
   @Override
   public long writeTo(Write writeChannel) throws StoreException {
     if (exception != null) {
