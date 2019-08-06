@@ -13,23 +13,23 @@
  */
 package com.github.ambry.cloud;
 
-import java.nio.ByteBuffer;
+import com.microsoft.azure.storage.blob.CloudBlockBlob;
 
 
 public class BlobReadInfo {
   private final CloudBlobMetadata blobMetadata;
-  private final ByteBuffer blobData;
+  private final CloudBlob blobRef;
 
-  public BlobReadInfo(CloudBlobMetadata blobMetadata, ByteBuffer blobData) {
+  public BlobReadInfo(CloudBlobMetadata blobMetadata, CloudBlob blobRef) {
     this.blobMetadata = blobMetadata;
-    this.blobData = blobData;
+    this.blobRef = blobRef;
   }
 
   public CloudBlobMetadata getBlobMetadata() {
     return blobMetadata;
   }
 
-  public ByteBuffer getBlobData() {
-    return blobData;
+  public CloudBlob getBlobRef() {
+    return blobRef;
   }
 }

@@ -36,9 +36,22 @@ class CloudMessageReadSet implements MessageReadSet {
   @Override
   public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
     validateIndex(index);
-    ByteBuffer buffer = blobReadInfoList.get(index).getBlobData();
-    buffer.flip();
-    return channel.write(buffer);
+    long written = 0;
+    CloudBlob cloudBlob = blobReadInfoList.get(index).getBlobRef();
+
+    ByteBuffer outputBuffer;
+    try {
+      if (cloudBlob.isPrefetched()) {
+        outputBuffer = cloudBlob.getPrefetchedData();
+      } else {
+        outputBuffer = cloudBlob.download();
+      }
+    } catch(CloudStorageException ex) {
+      throw new IOException("Download of cloud blob " + blobReadInfoList.get(index).getBlobMetadata().getId() + " failed");
+    }
+    logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written, blobReadInfoList.get(index).getBlobMetadata().getId());
+    outputBuffer.flip();
+    return channel.write(outputBuffer);
   }
 
   @Override
@@ -49,7 +62,7 @@ class CloudMessageReadSet implements MessageReadSet {
   @Override
   public long sizeInBytes(int index) {
     validateIndex(index);
-    return blobReadInfoList.get(index).getBlobData().remaining();
+    return blobReadInfoList.get(index).getBlobMetadata().getSize();
   }
 
   @Override
@@ -60,7 +73,11 @@ class CloudMessageReadSet implements MessageReadSet {
 
   @Override
   public void doPrefetch(int index, long relativeOffset, long size) throws IOException {
-    return;
+    try {
+      blobReadInfoList.get(index).getBlobRef().doPrefetch();
+    } catch(CloudStorageException ex) {
+      throw new IOException("Prefetch of cloud blob " + blobReadInfoList.get(index).getBlobMetadata().getId() + " failed");
+    }
   }
 
   private void validateIndex(int index) {

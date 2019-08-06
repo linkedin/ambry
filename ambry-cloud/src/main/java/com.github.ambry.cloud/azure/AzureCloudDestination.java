@@ -21,8 +21,6 @@ import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.store.StoreErrorCodes;
-import com.github.ambry.utils.ByteBufferOutputStream;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.Document;
@@ -49,7 +47,6 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -256,6 +253,7 @@ class AzureCloudDestination implements CloudDestination {
     }
   }
 
+  //TODO: create CloudBlobInfo interface. AzureBlobInfo should implement that.
   @Override
   public BlobReadInfo downloadBlob(BlobId blobId) throws CloudStorageException {
     azureMetrics.blobDownloadRequestCount.inc();
@@ -269,13 +267,10 @@ class AzureCloudDestination implements CloudDestination {
         throw new CloudStorageException("Blob for BlobIb " + blobId.getID() + " not found in cloud metadata store");
       }
       CloudBlobMetadata blobMetadata = cloudBlobMetadataMap.values().iterator().next();
-      ByteBuffer outputBuffer = ByteBuffer.allocate((int)blobMetadata.getSize());
-      ByteBufferOutputStream outputStream = new ByteBufferOutputStream(outputBuffer);
       CloudBlobContainer azureContainer = getContainer(blobId, false);
       String azureBlobName = getAzureBlobName(blobId);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
-      azureBlob.download(outputStream);
-      blobReadInfo = new BlobReadInfo(blobMetadata, outputBuffer);
+      blobReadInfo = new BlobReadInfo(blobMetadata, new AzureCloudBlob(azureBlob, blobMetadata.getSize()));
       azureMetrics.blobUploadSuccessCount.inc();
     } catch (URISyntaxException | StorageException e) {
       throw new CloudStorageException("Error donwloading blob " + blobId, e);
