@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import java.io.File;
 import java.io.IOException;
@@ -39,12 +40,14 @@ class Log implements Write {
   private final String dataDir;
   private final long capacityInBytes;
   private final DiskSpaceAllocator diskSpaceAllocator;
+  private final StoreConfig config;
   private final StoreMetrics metrics;
   private final Iterator<Pair<String, String>> segmentNameAndFileNameIterator;
   private final ConcurrentSkipListMap<String, LogSegment> segmentsByName =
       new ConcurrentSkipListMap<>(LogSegmentNameHelper.COMPARATOR);
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final AtomicLong remainingUnallocatedSegments = new AtomicLong(0);
+  private final String storeId;
 
   private boolean isLogSegmented;
   private LogSegment activeSegment = null;
@@ -53,39 +56,41 @@ class Log implements Write {
    * Create a Log instance
    * @param dataDir the directory where the segments of the log need to be loaded from.
    * @param totalCapacityInBytes the total capacity of this log.
-   * @param segmentCapacityInBytes the capacity of a single segment in the log.
    * @param diskSpaceAllocator the {@link DiskSpaceAllocator} to use to allocate new log segments.
+   * @param config The store config used to initialize this log.
    * @param metrics the {@link StoreMetrics} instance to use.
    * @throws StoreException if there is any store exception loading the segment files.
    * @throws IllegalArgumentException if {@code totalCapacityInBytes} or {@code segmentCapacityInBytes} <= 0 or if
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
-  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator,
+  Log(String dataDir, long totalCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator, StoreConfig config,
       StoreMetrics metrics) throws StoreException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
-    this.isLogSegmented = totalCapacityInBytes > segmentCapacityInBytes;
+    this.isLogSegmented = totalCapacityInBytes > config.storeSegmentSizeInBytes;
     this.diskSpaceAllocator = diskSpaceAllocator;
+    this.config = config;
     this.metrics = metrics;
     this.segmentNameAndFileNameIterator = Collections.EMPTY_LIST.iterator();
+    storeId = dataDir.substring(dataDir.lastIndexOf(File.separator) + File.separator.length());
 
     File dir = new File(dataDir);
     File[] segmentFiles = dir.listFiles(LogSegmentNameHelper.LOG_FILE_FILTER);
     if (segmentFiles == null) {
       throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.File_Not_Found);
     } else {
-      initialize(getSegmentsToLoad(segmentFiles), segmentCapacityInBytes);
+      initialize(getSegmentsToLoad(segmentFiles), config.storeSegmentSizeInBytes, false);
       this.isLogSegmented = isExistingLogSegmented();
     }
   }
 
   /**
-   * Create a Log instance
+   * Create a Log instance in COPY phase during compaction.
    * @param dataDir the directory where the segments of the log need to be loaded from.
    * @param totalCapacityInBytes the total capacity of this log.
-   * @param segmentCapacityInBytes the capacity of a single segment in the log.
    * @param diskSpaceAllocator the {@link DiskSpaceAllocator} to use to allocate new log segments.
+   * @param config the store config to initialize this log.
    * @param metrics the {@link StoreMetrics} instance to use.
    * @param isLogSegmented {@code true} if this log is segmented or needs to be segmented.
    * @param segmentsToLoad the list of pre-created {@link LogSegment} instances to load.
@@ -97,17 +102,19 @@ class Log implements Write {
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
-  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator,
+  Log(String dataDir, long totalCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator, StoreConfig config,
       StoreMetrics metrics, boolean isLogSegmented, List<LogSegment> segmentsToLoad,
       Iterator<Pair<String, String>> segmentNameAndFileNameIterator) throws StoreException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = isLogSegmented;
     this.diskSpaceAllocator = diskSpaceAllocator;
+    this.config = config;
     this.metrics = metrics;
     this.segmentNameAndFileNameIterator = segmentNameAndFileNameIterator;
+    storeId = dataDir.substring(dataDir.lastIndexOf(File.separator) + File.separator.length());
 
-    initialize(segmentsToLoad, segmentCapacityInBytes);
+    initialize(segmentsToLoad, config.storeSegmentSizeInBytes, true);
   }
 
   /**
@@ -174,7 +181,7 @@ class Log implements Write {
     while (iterator.hasNext()) {
       Map.Entry<String, LogSegment> entry = iterator.next();
       logger.info("Freeing extra segment with name [{}] ", entry.getValue().getName());
-      free(entry.getValue());
+      free(entry.getValue(), false);
       remainingUnallocatedSegments.getAndIncrement();
       iterator.remove();
     }
@@ -297,10 +304,11 @@ class Log implements Write {
    * Checks the provided arguments for consistency and allocates the first segment file and creates the
    * {@link LogSegment} instance for it.
    * @param segmentCapacity the intended capacity of each segment of the log.
+   * @param needSwapSegment whether a swap segment is needed by {@link BlobStoreCompactor}
    * @return the {@link LogSegment} instance that is created.
    * @throws StoreException if there is store exception when creating the segment files or creating {@link LogSegment} instances.
    */
-  private LogSegment checkArgsAndGetFirstSegment(long segmentCapacity) throws StoreException {
+  private LogSegment checkArgsAndGetFirstSegment(long segmentCapacity, boolean needSwapSegment) throws StoreException {
     if (capacityInBytes <= 0 || segmentCapacity <= 0) {
       throw new IllegalArgumentException(
           "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes [" + segmentCapacity
@@ -318,9 +326,10 @@ class Log implements Write {
     logger.info("Allocating first segment with name [{}], back by file {} and capacity {} bytes. Total number of "
             + "segments is {}", segmentNameAndFilename.getFirst(), segmentNameAndFilename.getSecond(), segmentCapacity,
         numSegments);
-    File segmentFile = allocate(segmentNameAndFilename.getSecond(), segmentCapacity);
+    File segmentFile = allocate(segmentNameAndFilename.getSecond(), segmentCapacity, needSwapSegment);
     // to be backwards compatible, headers are not written for a log segment if it is the only log segment.
-    return new LogSegment(segmentNameAndFilename.getFirst(), segmentFile, segmentCapacity, metrics, isLogSegmented);
+    return new LogSegment(segmentNameAndFilename.getFirst(), segmentFile, segmentCapacity, config, metrics,
+        isLogSegmented);
   }
 
   /**
@@ -338,9 +347,9 @@ class Log implements Write {
       if (name.isEmpty()) {
         // for backwards compatibility, a single segment log is loaded by providing capacity since the old logs have
         // no headers
-        segment = new LogSegment(name, segmentFile, capacityInBytes, metrics, false);
+        segment = new LogSegment(name, segmentFile, capacityInBytes, config, metrics, false);
       } else {
-        segment = new LogSegment(name, segmentFile, metrics);
+        segment = new LogSegment(name, segmentFile, config, metrics);
       }
       logger.info("Segment [{}] has capacity of {} bytes", name, segment.getCapacityInBytes());
       segments.add(segment);
@@ -360,12 +369,15 @@ class Log implements Write {
    * Initializes the log.
    * @param segmentsToLoad the {@link LogSegment} instances to include as a part of the log. These are not in any order
    * @param segmentCapacityInBytes the capacity of a single {@link LogSegment}.
+   * @param mayNeedSwapSegment whether compactor may need swap segment.
    * @throws StoreException if there is any store exception during initialization.
    */
-  private void initialize(List<LogSegment> segmentsToLoad, long segmentCapacityInBytes) throws StoreException {
+  private void initialize(List<LogSegment> segmentsToLoad, long segmentCapacityInBytes, boolean mayNeedSwapSegment)
+      throws StoreException {
     if (segmentsToLoad.size() == 0) {
       // bootstrapping log.
-      segmentsToLoad = Collections.singletonList(checkArgsAndGetFirstSegment(segmentCapacityInBytes));
+      segmentsToLoad =
+          Collections.singletonList(checkArgsAndGetFirstSegment(segmentCapacityInBytes, mayNeedSwapSegment));
     }
 
     LogSegment anySegment = segmentsToLoad.get(0);
@@ -383,14 +395,15 @@ class Log implements Write {
    * Allocates a file named {@code filename} and of capacity {@code size}.
    * @param filename the intended filename of the file.
    * @param size the intended size of the file.
+   * @param requestSwapSegment whether swap segment is requested by {@link BlobStoreCompactor}
    * @return a {@link File} instance that points to the created file named {@code filename} and capacity {@code size}.
    * @throws StoreException if the there is any store exception while allocating the file.
    */
-  File allocate(String filename, long size) throws StoreException {
+  File allocate(String filename, long size, boolean requestSwapSegment) throws StoreException {
     File segmentFile = new File(dataDir, filename);
     if (!segmentFile.exists()) {
       try {
-        diskSpaceAllocator.allocate(segmentFile, size);
+        diskSpaceAllocator.allocate(segmentFile, size, storeId, requestSwapSegment);
       } catch (IOException e) {
         StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(errorCode.toString() + " while allocating the file", e, errorCode);
@@ -402,13 +415,14 @@ class Log implements Write {
   /**
    * Frees the given {@link LogSegment} and its backing segment file.
    * @param logSegment the {@link LogSegment} instance whose backing file needs to be freed.
+   * @param isSwapSegment whether the segment to free is a swap segment.
    * @throws StoreException if there is any store exception when freeing the log segment.
    */
-  private void free(LogSegment logSegment) throws StoreException {
+  private void free(LogSegment logSegment, boolean isSwapSegment) throws StoreException {
     File segmentFile = logSegment.getView().getFirst();
     try {
       logSegment.close(false);
-      diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
+      diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes(), storeId, isSwapSegment);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while freeing log segment", e, errorCode);
@@ -463,14 +477,14 @@ class Log implements Write {
     logger.info("Allocating new segment with name: " + segmentNameAndFilename.getFirst());
     File newSegmentFile = null;
     try {
-      newSegmentFile = allocate(segmentNameAndFilename.getSecond(), segmentCapacity);
+      newSegmentFile = allocate(segmentNameAndFilename.getSecond(), segmentCapacity, false);
       LogSegment newSegment =
-          new LogSegment(segmentNameAndFilename.getFirst(), newSegmentFile, segmentCapacity, metrics, true);
+          new LogSegment(segmentNameAndFilename.getFirst(), newSegmentFile, segmentCapacity, config, metrics, true);
       segmentsByName.put(segmentNameAndFilename.getFirst(), newSegment);
     } catch (StoreException e) {
       try {
         if (newSegmentFile != null) {
-          diskSpaceAllocator.free(newSegmentFile, segmentCapacity);
+          diskSpaceAllocator.free(newSegmentFile, segmentCapacity, storeId, false);
         }
         remainingUnallocatedSegments.incrementAndGet();
         throw e;
@@ -537,7 +551,7 @@ class Log implements Write {
       throw new IllegalArgumentException("Segment does not exist or is the active segment: " + segmentName);
     }
     segmentsByName.remove(segmentName);
-    free(segment);
+    free(segment, !decreaseUsedSegmentCount);
     if (decreaseUsedSegmentCount) {
       remainingUnallocatedSegments.incrementAndGet();
     }

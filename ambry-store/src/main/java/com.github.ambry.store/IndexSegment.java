@@ -33,7 +33,9 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -186,6 +188,9 @@ class IndexSegment {
                 bloomFile.getAbsolutePath());
           }
           stream.close();
+        }
+        if (config.storeSetFilePermissionEnabled) {
+          Utils.setFilesPermission(Arrays.asList(this.indexFile, bloomFile), config.storeDataFilePermission);
         }
       } else {
         index = new ConcurrentSkipListMap<>();
@@ -399,6 +404,9 @@ class IndexSegment {
       long crcValue = crcStream.getValue();
       stream.writeLong(crcValue);
       stream.close();
+      if (config.storeSetFilePermissionEnabled) {
+        Files.setPosixFilePermissions(bloomFile.toPath(), config.storeDataFilePermission);
+      }
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while trying to persist bloom filter", e, errorCode);
@@ -695,6 +703,9 @@ class IndexSegment {
         fileStream.getChannel().force(true);
         // swap temp file with the original file
         temp.renameTo(getFile());
+        if (config.storeSetFilePermissionEnabled) {
+          Files.setPosixFilePermissions(getFile().toPath(), config.storeDataFilePermission);
+        }
       } catch (IOException e) {
         StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException(

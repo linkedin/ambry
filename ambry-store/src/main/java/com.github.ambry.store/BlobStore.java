@@ -205,8 +205,8 @@ class BlobStore implements Store {
               StoreErrorCodes.Initialization_Error);
         }
 
-        StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir);
-        log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, diskSpaceAllocator, metrics);
+        StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir, config);
+        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics);
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId());
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
@@ -751,9 +751,10 @@ class BlobStore implements Store {
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
     checkStarted();
-    DiskSpaceRequirements requirements = log.isLogSegmented() ? new DiskSpaceRequirements(log.getSegmentCapacity(),
+    DiskSpaceRequirements requirements = log.isLogSegmented() ? new DiskSpaceRequirements(
+        replicaId.getPartitionId().toPathString(), log.getSegmentCapacity(),
         log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse()) : null;
-    logger.debug("Store {} has disk space requirements: {}", storeId, requirements);
+    logger.info("Store {} has disk space requirements: {}", storeId, requirements);
     return requirements;
   }
 

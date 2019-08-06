@@ -13,6 +13,8 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
@@ -27,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.After;
@@ -52,6 +55,7 @@ public class CompactionLogTest {
   // Variables that represent the folder where the data resides
   private final File tempDir;
   private final String tempDirStr;
+  private final StoreConfig config;
   // the time instance that will be used in the index
   private final Time time = new MockTime();
   private final Set<String> generatedSegmentNames = new HashSet<>();
@@ -63,15 +67,15 @@ public class CompactionLogTest {
   public CompactionLogTest() throws IOException {
     tempDir = StoreTestUtils.createTempDirectory("storeDir-" + UtilsTest.getRandomString(10));
     tempDirStr = tempDir.getAbsolutePath();
+    config = new StoreConfig(new VerifiableProperties(new Properties()));
   }
 
   /**
    * Deletes the temporary directory.
-   * @throws InterruptedException
    * @throws IOException
    */
   @After
-  public void cleanup() throws InterruptedException, IOException, StoreException {
+  public void cleanup() throws IOException {
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
   }
 
@@ -85,7 +89,7 @@ public class CompactionLogTest {
     List<CompactionDetails> detailsList = getCompactionDetailsList(5);
     CompactionDetails combined = combineListOfDetails(detailsList);
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
-    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, combined);
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, combined, config);
     assertTrue("Compaction should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
     int currentIdx = 0;
     Iterator<CompactionDetails> detailsIterator = detailsList.iterator();
@@ -139,7 +143,7 @@ public class CompactionLogTest {
     List<CompactionDetails> detailsList = getCompactionDetailsList(5);
     CompactionDetails combined = combineListOfDetails(detailsList);
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
-    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, combined);
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, combined, config);
     assertTrue("Compaction should should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
     int currentIdx = 0;
     Iterator<CompactionDetails> detailsIterator = detailsList.iterator();
@@ -149,20 +153,20 @@ public class CompactionLogTest {
       assertEquals("CurrentIdx not as expected", currentIdx, cLog.getCurrentIdx());
 
       cLog.close();
-      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
       verifyEquality(combined, cLog.getCompactionDetails());
       assertEquals("Should be in the PREPARE phase", CompactionLog.Phase.PREPARE, cLog.getCompactionPhase());
       cLog.markCopyStart();
 
       cLog.close();
-      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
       assertEquals("Should be in the COPY phase", CompactionLog.Phase.COPY, cLog.getCompactionPhase());
       Offset offset = new Offset(LogSegmentNameHelper.generateFirstSegmentName(true),
           Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE));
       cLog.setStartOffsetOfLastIndexSegmentForDeleteCheck(offset);
 
       cLog.close();
-      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
       assertEquals("Offset that was set was not the one returned", offset,
           cLog.getStartOffsetOfLastIndexSegmentForDeleteCheck());
       StoreFindToken safeToken =
@@ -171,25 +175,25 @@ public class CompactionLogTest {
       cLog.setSafeToken(safeToken);
 
       cLog.close();
-      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
       assertEquals("Returned token not the same as the one that was set", safeToken, cLog.getSafeToken());
       CompactionDetails nextDetails = detailsIterator.hasNext() ? detailsIterator.next() : null;
       if (nextDetails != null) {
         cLog.splitCurrentCycle(nextDetails.getLogSegmentsUnderCompaction().get(0));
         verifyEquality(currDetails, cLog.getCompactionDetails());
         cLog.close();
-        cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+        cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
         verifyEquality(currDetails, cLog.getCompactionDetails());
       }
       cLog.markCommitStart();
 
       cLog.close();
-      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
       assertEquals("Should be in the SWITCH phase", CompactionLog.Phase.COMMIT, cLog.getCompactionPhase());
       cLog.markCleanupStart();
 
       cLog.close();
-      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
       assertEquals("Should be in the CLEANUP phase", CompactionLog.Phase.CLEANUP, cLog.getCompactionPhase());
       cLog.markCycleComplete();
 
@@ -211,7 +215,7 @@ public class CompactionLogTest {
   @Test
   public void phaseTransitionEnforcementTest() throws IOException {
     String storeName = "store";
-    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, getCompactionDetails());
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, getCompactionDetails(), config);
 
     assertEquals("Should be in the PREPARE phase", CompactionLog.Phase.PREPARE, cLog.getCompactionPhase());
     checkTransitionFailure(cLog, CompactionLog.Phase.COMMIT, CompactionLog.Phase.CLEANUP, CompactionLog.Phase.DONE);
@@ -242,18 +246,18 @@ public class CompactionLogTest {
   @Test
   public void constructionBadArgsTest() throws IOException {
     String storeName = "store";
-    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, getCompactionDetails());
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, getCompactionDetails(), config);
     cLog.close();
     // log file already exists
     try {
-      new CompactionLog(tempDirStr, storeName, time, getCompactionDetails());
+      new CompactionLog(tempDirStr, storeName, time, getCompactionDetails(), config);
       fail("Construction should have failed because compaction log file already exists");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // make sure file disappears
-    cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+    cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
     cLog.markCopyStart();
     cLog.markCommitStart();
     cLog.markCleanupStart();
@@ -263,7 +267,7 @@ public class CompactionLogTest {
 
     // log file does not exist
     try {
-      new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+      new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
       fail("Construction should have failed because compaction log file does not exist");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -295,7 +299,7 @@ public class CompactionLogTest {
             stream.writeLong(crcOutputStream.getValue());
             fileOutputStream.getChannel().force(true);
           }
-          CompactionLog cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+          CompactionLog cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
           verifyEquality(details, cLog.getCompactionDetails());
           assertEquals("Current Idx not as expected", 0, cLog.getCurrentIdx());
           break;

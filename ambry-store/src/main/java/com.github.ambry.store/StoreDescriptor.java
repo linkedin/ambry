@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Utils;
@@ -23,6 +24,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.util.UUID;
 
 
@@ -42,9 +44,10 @@ class StoreDescriptor {
    * Instantiates the {@link StoreDescriptor} for the store. If the respective file is present, reads the bytes
    * to understand the incarnationId. If not, creates a new one with a random Unique identifier as the new incarnationId
    * @param dataDir the directory path to locate the Store Descriptor file
+   * @param config the store config to use in this {@link StoreDescriptor}
    * @throws IOException when file creation or read or write to file fails
    */
-  StoreDescriptor(String dataDir) throws IOException {
+  StoreDescriptor(String dataDir, StoreConfig config) throws IOException {
     File storeDescriptorFile = new File(dataDir, STORE_DESCRIPTOR_FILENAME);
     if (storeDescriptorFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(storeDescriptorFile));
@@ -65,6 +68,9 @@ class StoreDescriptor {
         default:
           throw new IllegalArgumentException("Unrecognized version in StoreDescriptor: " + version);
       }
+      if (config.storeSetFilePermissionEnabled) {
+        Files.setPosixFilePermissions(storeDescriptorFile.toPath(), config.storeOperationFilePermission);
+      }
     } else {
       incarnationId = UUID.randomUUID();
       File tempFile = new File(dataDir, STORE_DESCRIPTOR_FILENAME + ".tmp");
@@ -80,6 +86,9 @@ class StoreDescriptor {
         if (!tempFile.renameTo(actual)) {
           throw new IllegalStateException(
               "File " + tempFile.getAbsolutePath() + " renaming to " + actual.getAbsolutePath() + " failed ");
+        }
+        if (config.storeSetFilePermissionEnabled) {
+          Files.setPosixFilePermissions(actual.toPath(), config.storeOperationFilePermission);
         }
       } else {
         throw new IllegalStateException("File " + tempFile.getAbsolutePath() + " creation failed ");

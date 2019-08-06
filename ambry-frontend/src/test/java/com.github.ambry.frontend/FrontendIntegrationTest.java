@@ -123,6 +123,7 @@ public class FrontendIntegrationTest {
       new InMemAccountServiceFactory(false, true).getAccountService();
   private static final String DATA_CENTER_NAME = "Datacenter-Name";
   private static final String HOST_NAME = "localhost";
+  private static final String CLUSTER_NAME = "Cluster-name";
 
   static {
     try {
@@ -144,6 +145,7 @@ public class FrontendIntegrationTest {
   private static NettyClient sslNettyClient = null;
 
   private final NettyClient nettyClient;
+  private final boolean addClusterPrefix;
 
   /**
    * Running it many times so that keep-alive bugs are caught.
@@ -154,8 +156,10 @@ public class FrontendIntegrationTest {
   public static List<Object[]> data() {
     List<Object[]> parameters = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
-      parameters.add(new Object[]{false});
-      parameters.add(new Object[]{true});
+      parameters.add(new Object[]{false, true});
+      parameters.add(new Object[]{true, true});
+      parameters.add(new Object[]{false, false});
+      parameters.add(new Object[]{true, false});
     }
     return parameters;
   }
@@ -193,8 +197,9 @@ public class FrontendIntegrationTest {
   /**
    * @param useSSL {@code true} if SSL should be tested.
    */
-  public FrontendIntegrationTest(boolean useSSL) {
+  public FrontendIntegrationTest(boolean useSSL, boolean addClusterPrefix) {
     nettyClient = useSSL ? sslNettyClient : plaintextNettyClient;
+    this.addClusterPrefix = addClusterPrefix;
   }
 
   /**
@@ -392,8 +397,7 @@ public class FrontendIntegrationTest {
     // Get signed URL
     HttpHeaders getHeaders = new DefaultHttpHeaders();
     getHeaders.add(RestUtils.Headers.URL_TYPE, RestMethod.GET.name());
-    blobId = blobId.startsWith("/") ? blobId.substring(1) : blobId;
-    getHeaders.add(RestUtils.Headers.BLOB_ID, blobId);
+    getHeaders.add(RestUtils.Headers.BLOB_ID, addClusterPrefix ? "/" + CLUSTER_NAME + blobId : blobId);
     httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, getHeaders, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     response = getHttpResponse(responseParts);
@@ -561,7 +565,7 @@ public class FrontendIntegrationTest {
     TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     // add key for singleKeyManagementService
     properties.put("kms.default.container.key", TestUtils.getRandomKey(32));
-    properties.setProperty("clustermap.cluster.name", "Cluster-Name");
+    properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
     return new VerifiableProperties(properties);
@@ -703,7 +707,8 @@ public class FrontendIntegrationTest {
     assertNotNull("Blob ID from POST should not be null", blobId);
     assertNoContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
-    assertEquals("Correct blob size should be returned in response", Long.toString(contentSize), response.headers().get(RestUtils.Headers.BLOB_SIZE));
+    assertEquals("Correct blob size should be returned in response", Long.toString(contentSize),
+        response.headers().get(RestUtils.Headers.BLOB_SIZE));
     verifyTrackingHeaders(response);
     return blobId;
   }
@@ -1025,7 +1030,7 @@ public class FrontendIntegrationTest {
   private void updateBlobTtlAndVerify(String blobId, HttpHeaders getExpectedHeaders, boolean isPrivate,
       String accountName, String containerName, byte[] usermetadata) throws ExecutionException, InterruptedException {
     HttpHeaders headers = new DefaultHttpHeaders();
-    headers.set(RestUtils.Headers.BLOB_ID, blobId);
+    headers.set(RestUtils.Headers.BLOB_ID, addClusterPrefix ? "/" + CLUSTER_NAME + blobId : blobId);
     headers.set(RestUtils.Headers.SERVICE_ID, "updateBlobTtlAndVerify");
     FullHttpRequest httpRequest = buildRequest(HttpMethod.PUT, "/" + Operations.UPDATE_TTL, headers, null);
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -1276,7 +1281,7 @@ public class FrontendIntegrationTest {
         getBlobInfoAndVerify(id, GetOption.None, expectedGetHeaders, !container.isCacheable(), account.getName(),
             container.getName(), null);
       }
-      signedChunkIds.add(signedId);
+      signedChunkIds.add(addClusterPrefix ? "/" + CLUSTER_NAME + signedId : signedId);
       fullContentStream.write(contentArray);
     }
     return new Pair<>(signedChunkIds, fullContentStream.toByteArray());

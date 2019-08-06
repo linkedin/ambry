@@ -22,13 +22,15 @@ class DiskSpaceRequirements {
   private final long segmentSizeInBytes;
   private final long segmentsNeeded;
   private final long swapSegmentsInUse;
+  private final String storeId;
 
   /**
+   * @param storeId the store which the {@link DiskSpaceRequirements} is associated with.
    * @param segmentSizeInBytes the size of each segment needed, in bytes.
    * @param segmentsNeeded the number of additional segments needed in the disk space pool.
    * @param swapSegmentsInUse the number of swap segments currently in use by this entity.
    */
-  DiskSpaceRequirements(long segmentSizeInBytes, long segmentsNeeded, long swapSegmentsInUse) {
+  DiskSpaceRequirements(String storeId, long segmentSizeInBytes, long segmentsNeeded, long swapSegmentsInUse) {
     if (segmentSizeInBytes <= 0 || segmentsNeeded < 0 || swapSegmentsInUse < 0) {
       throw new IllegalArgumentException(
           "Arguments cannot be negative. segmentSizeInBytes: " + segmentSizeInBytes + ", segmentsNeeded: "
@@ -37,6 +39,7 @@ class DiskSpaceRequirements {
     this.segmentSizeInBytes = segmentSizeInBytes;
     this.segmentsNeeded = segmentsNeeded;
     this.swapSegmentsInUse = swapSegmentsInUse;
+    this.storeId = storeId;
   }
 
   /**
@@ -58,6 +61,10 @@ class DiskSpaceRequirements {
    */
   long getSwapSegmentsInUse() {
     return swapSegmentsInUse;
+  }
+
+  String getStoreId() {
+    return storeId;
   }
 
   @Override

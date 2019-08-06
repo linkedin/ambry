@@ -26,6 +26,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.Iterator;
@@ -53,6 +54,7 @@ public class HardDeleter implements Runnable {
   final AtomicBoolean enabled = new AtomicBoolean(true);
   private volatile boolean awaitingAfterCaughtUp = false;
 
+  private final StoreConfig config;
   private final StoreMetrics metrics;
   private final String dataDir;
   private final Log log;
@@ -99,6 +101,7 @@ public class HardDeleter implements Runnable {
 
   HardDeleter(StoreConfig config, StoreMetrics metrics, String dataDir, Log log, PersistentIndex index,
       MessageStoreHardDelete hardDelete, StoreKeyFactory factory, DiskIOScheduler diskIOScheduler, Time time) {
+    this.config = config;
     this.metrics = metrics;
     this.dataDir = dataDir;
     this.log = log;
@@ -302,7 +305,7 @@ public class HardDeleter implements Runnable {
         FindInfo info =
             index.findDeletedEntriesSince(startToken, scanSizeInBytes, time.seconds() - messageRetentionSeconds);
         endToken = info.getFindToken();
-        logger.trace("New range for hard deletes : startToken {}, endToken for {}", startToken, info.getFindToken(),
+        logger.trace("New range for hard deletes : startToken {}, endToken {} for {}", startToken, info.getFindToken(),
             dataDir);
         pruneHardDeleteRecoveryRange();
         if (hardDeleteRecoveryRange.getSize() > 0) {
@@ -458,6 +461,9 @@ public class HardDeleter implements Runnable {
               "Crc check does not match for cleanup token file for dataDir " + dataDir + " aborting. ",
               StoreErrorCodes.Illegal_Index_State);
         }
+        if (config.storeSetFilePermissionEnabled) {
+          Files.setPosixFilePermissions(cleanupTokenFile.toPath(), config.storeDataFilePermission);
+        }
       } catch (IOException e) {
         hardDeleteRecoveryRange.clear();
         metrics.hardDeleteIncompleteRecoveryCount.inc();
@@ -538,6 +544,9 @@ public class HardDeleter implements Runnable {
       writer.writeLong(crcValue);
       fileStream.getChannel().force(true);
       tempFile.renameTo(actual);
+      if (config.storeSetFilePermissionEnabled) {
+        Files.setPosixFilePermissions(actual.toPath(), config.storeDataFilePermission);
+      }
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(

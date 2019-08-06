@@ -299,6 +299,15 @@ public class RouterConfig {
   public final long routerOperationTrackerMinDataPointsRequired;
 
   /**
+   * If this config is set to {@code true} the operation tracker would terminate operations when there are more than 2
+   * NOT_FOUND responses returned from originating dc. Notice that some of the blob ids don't have the datacenter id, it
+   * will have no effect on those blobs.
+   */
+  @Config("router.operation.tracker.terminate.on.not.found.enabled")
+  @Default("false")
+  public final boolean routerOperationTrackerTerminateOnNotFoundEnabled;
+
+  /**
    * The maximum number of inflight requests that allowed for adaptive tracker. If current number of inflight requests
    * is larger than or equal to this threshold, tracker shouldn't send out any request even though the oldest is past due.
    * {@link RouterConfig#routerGetRequestParallelism} is a suggestive number that operation tracker uses to determine how
@@ -418,5 +427,7 @@ public class RouterConfig {
       throw new IllegalArgumentException(
           "Operation tracker parallelism is larger than operation tracker max inflight number");
     }
+    routerOperationTrackerTerminateOnNotFoundEnabled =
+        verifiableProperties.getBoolean("router.operation.tracker.terminate.on.not.found.enabled", false);
   }
 }

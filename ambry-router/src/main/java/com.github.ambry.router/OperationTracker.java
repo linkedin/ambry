@@ -54,6 +54,14 @@ interface OperationTracker {
   boolean hasSucceeded();
 
   /**
+   * Return {@code true} only if the number of NOT_FOUND responses from originating DC passes the threshold.
+   * It also means hasSucceeded would return {@code false}.
+   *
+   * @return {@code true} if the operation failed because of {@link TrackedRequestFinalState#NOT_FOUND}.
+   */
+  boolean hasFailedOnNotFound();
+
+  /**
    * Determines if an operation has completed (either succeeded or failed).
    *
    * @return {@code true} if the operation has completed.
@@ -61,10 +69,11 @@ interface OperationTracker {
   boolean isDone();
 
   /**
-   * Accounts for successful, failed or timed-out response from a replica. Must invoke this method
-   * if a successful/failed/timed-out response is received for a replica.
+   * Accounts for all type of response from a replica. Must invoke this method if a
+   * successful/failed/timed-out/notfound response is received for a replica. Note
+   * that not callers should not pass more than one state from the same replica.
    * @param replicaId ReplicaId associated with this response.
-   * @param trackedRequestFinalState The final state of a single request being tracked (SUCCESS, FAILURE or TIMED_OUT).
+   * @param trackedRequestFinalState The final state of a single request being tracked (SUCCESS, FAILURE, TIMED_OUT or NOT_FOUND).
    */
   void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState);
 

@@ -34,10 +34,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -887,6 +890,18 @@ public class Utils {
           return FileVisitResult.CONTINUE;
         }
       });
+    }
+  }
+
+  /**
+   * Set permissions for given files.
+   * @param files a list of files that set specified permissions
+   * @param permissions a set of {@link PosixFilePermission} associated with given files
+   * @throws IOException
+   */
+  public static void setFilesPermission(List<File> files, Set<PosixFilePermission> permissions) throws IOException {
+    for (File file : files) {
+      Files.setPosixFilePermissions(file.toPath(), permissions);
     }
   }
 
