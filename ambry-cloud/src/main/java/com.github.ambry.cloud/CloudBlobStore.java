@@ -70,9 +70,6 @@ class CloudBlobStore implements Store {
   private final CloudBlobCryptoAgent cryptoAgent;
   private final VcrMetrics vcrMetrics;
 
-  /** The lifecycle state of a recently seen blob. */
-  enum BlobState {CREATED, TTL_UPDATED, DELETED}
-
   // Map blobId to state (created, ttlUpdated, deleted)
   private final Map<String, BlobState> recentBlobCache;
   private final long minTtlMillis;
@@ -428,6 +425,9 @@ class CloudBlobStore implements Store {
       }
     }
   }
+
+  /** The lifecycle state of a recently seen blob. */
+  enum BlobState {CREATED, TTL_UPDATED, DELETED}
 
   /**
    * A local LRA cache of recent blobs processed by this store.
