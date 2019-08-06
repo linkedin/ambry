@@ -63,8 +63,10 @@ class DiskSpaceAllocator {
   private final File swapReserveDir;
   private final long requiredSwapSegmentsPerSize;
   private final StorageManagerMetrics metrics;
-  // Each store's reserve pool should be thread-safe as well because different threads may perform operation on same store.
-  // For example, request handler thread and compaction manager thread operates on same store.
+  // In storeReserveFiles hashmap, key is store id and value is each store's reserve pool represented by ReserveFileMap.
+  // The reason to use ReserveFileMap here is to ensure reserve pool of each store is thread-safe. Note that different
+  // threads may perform operation on same store. For example, request handler thread and compaction manager thread operates
+  // on same store. Hence store's reserve pool should handle concurrent access in this case.
   private final Map<String, ReserveFileMap> storeReserveFiles = new HashMap<>();
   private final ReserveFileMap swapReserveFiles = new ReserveFileMap();
   // A map keeps total number of swap segments by size that include both segments in use and segments available in pool.
