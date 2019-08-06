@@ -31,12 +31,12 @@ import org.apache.helix.model.StateModelDefinition;
  *                  ---> BOOTSTRAP --->
  *
  */
-public class AmbryStateModelDefinition {
-  public static final String AMBRY_LEADER_STANDBY_MODEL = "AmbryLeaderStandby";
+class AmbryStateModelDefinition {
+  static final String AMBRY_LEADER_STANDBY_MODEL = "AmbryLeaderStandby";
 
   private static final String UPPER_BOUND_REPLICATION_FACTOR = "R";
 
-  public static StateModelDefinition getDefinition() {
+  static StateModelDefinition getDefinition() {
 
     StateModelDefinition.Builder builder = new StateModelDefinition.Builder(AMBRY_LEADER_STANDBY_MODEL);
     // Init state

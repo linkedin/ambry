@@ -164,6 +164,52 @@ public class HelixBootstrapUpgradeToolTest {
   }
 
   /**
+   * Test {@link HelixBootstrapUpgradeUtil} addStateModelDef() method.
+   */
+  @Test
+  public void testAddStateModelDef() throws Exception {
+    Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    // test add state model to non-exist cluster, which should fail
+    try {
+      HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
+          ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
+      fail("should fail due to non-exist cluster");
+    } catch (IllegalStateException e) {
+      // expected
+    }
+    // bootstrap a cluster
+    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), true,
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+    // add new state model def
+    HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
+        ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
+    // add existing state model def should be no-op
+    HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+    // ensure that active dcs have new state model def
+    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+    for (Datacenter dc : testHardwareLayout.getHardwareLayout().getDatacenters()) {
+      ZkInfo zkInfo = dcsToZkInfo.get(dc.getName());
+      ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+      if (!activeDcSet.contains(dc.getName())) {
+        Assert.assertFalse("Cluster should not be present, as dc " + dc.getName() + " is not enabled",
+            admin.getClusters().contains(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP));
+      } else {
+        assertEquals("Mismatch in number of state model defs in cluster", 2,
+            admin.getStateModelDefs(clusterName).size());
+        assertTrue("Missing ambry state model in cluster",
+            admin.getStateModelDefs(clusterName).contains(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+      }
+    }
+  }
+
+  /**
    * Test the case where the zkHosts JSON does not have an entry for every Datacenter in the static clustermap.
    */
   @Test
