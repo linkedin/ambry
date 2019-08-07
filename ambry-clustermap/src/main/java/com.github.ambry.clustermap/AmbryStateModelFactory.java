@@ -19,7 +19,7 @@ import org.apache.helix.participant.statemachine.StateModelFactory;
 
 
 /**
- * A factory for creating {@link DefaultLeaderStandbyStateModel}
+ * A factory for creating {@link StateModel}.
  */
 class AmbryStateModelFactory extends StateModelFactory<StateModel> {
   private final String ambryStateModelDef;
@@ -29,10 +29,10 @@ class AmbryStateModelFactory extends StateModelFactory<StateModel> {
   }
 
   /**
-   * Create and return an instance of {@link DefaultLeaderStandbyStateModel}
+   * Create and return an instance of {@link StateModel} based on given definition
    * @param resourceName the resource name for which this state model is being created.
    * @param partitionName the partition name for which this state model is being created.
-   * @return an instance of {@link DefaultLeaderStandbyStateModel}.
+   * @return an instance of {@link StateModel}.
    */
   @Override
   public StateModel createNewStateModel(String resourceName, String partitionName) {

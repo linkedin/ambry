@@ -420,7 +420,8 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     HelixBootstrapUpgradeUtil.uploadClusterConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
+        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
     // Check writable partitions in each datacenter
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
       HelixPropertyStore<ZNRecord> propertyStore =

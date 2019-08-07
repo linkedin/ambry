@@ -195,15 +195,16 @@ class HelixBootstrapUpgradeUtil {
    * @param dcs the comma-separated list of datacenters that needs to be upgraded/bootstrapped.
    * @param maxPartitionsInOneResource the maximum number of Ambry partitions to group under a single Helix resource.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
+   * @param stateModelDef the state model definition to use in Ambry cluster.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void uploadClusterConfigs(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory)
-      throws Exception {
+      String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory,
+      String stateModelDef) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            maxPartitionsInOneResource, false, false, helixAdminFactory, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+            maxPartitionsInOneResource, false, false, helixAdminFactory, stateModelDef);
     Map<String, Map<String, String>> partitionOverrideInfos =
         clusterMapToHelixMapper.generatePartitionOverrideFromAllDCs();
     info("Uploading partition override to HelixPropertyStore based on override json file.");
@@ -234,14 +235,16 @@ class HelixBootstrapUpgradeUtil {
    *                          will give the cluster name in Helix to bootstrap or upgrade.
    * @param dcs the comma-separated list of datacenters that needs to be upgraded/bootstrapped.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
+   * @param stateModelDef the state model definition to use in Ambry cluster.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void validate(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, String dcs, HelixAdminFactory helixAdminFactory) throws Exception {
+      String clusterNamePrefix, String dcs, HelixAdminFactory helixAdminFactory, String stateModelDef)
+      throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs, 0,
-            false, false, helixAdminFactory, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+            false, false, helixAdminFactory, stateModelDef);
     clusterMapToHelixMapper.validateAndClose();
     clusterMapToHelixMapper.logSummary();
   }

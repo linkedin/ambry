@@ -207,7 +207,7 @@ public class HelixBootstrapUpgradeTool {
       expectedOpts.add(dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-          new HelixAdminFactory());
+          new HelixAdminFactory(), stateModelDef);
     } else if (options.has(uploadConfig)) {
       ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
       expectedOpts.add(uploadConfig);
@@ -218,7 +218,7 @@ public class HelixBootstrapUpgradeTool {
       expectedOpts.add(dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.uploadClusterConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, dcs, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
+          clusterNamePrefix, dcs, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(), stateModelDef);
     } else if (options.has(addStateModel)) {
       listOpt.add(stateModelDefinitionOpt);
       ToolUtils.ensureOrExit(listOpt, options, parser);
