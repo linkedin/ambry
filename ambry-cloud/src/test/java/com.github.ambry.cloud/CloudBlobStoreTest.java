@@ -53,7 +53,6 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.storage.StorageException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
