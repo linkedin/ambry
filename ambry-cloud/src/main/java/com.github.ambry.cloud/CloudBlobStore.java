@@ -121,17 +121,18 @@ class CloudBlobStore implements Store {
     List<BlobReadInfo> blobReadInfos = new ArrayList<>(ids.size());
     List<MessageInfo> messageInfos = new ArrayList<>(ids.size());
     try {
-      for(StoreKey id: ids) {
-        BlobReadInfo blobReadInfo = cloudDestination.downloadBlob((BlobId)id);
-        CloudBlobMetadata blobMetadata = blobReadInfo.getBlobMetadata();
-        MessageInfo messageInfo = new MessageInfo(id, blobMetadata.getSize(), blobMetadata.getExpirationTime(), (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), 0);
-        blobReadInfos.add(blobReadInfo);
+      List<BlobId> blobIdList = ids.stream().map(key -> (BlobId) key).collect(Collectors.toList());
+      Map<String, CloudBlobMetadata> cloudBlobMetadataListMap = cloudDestination.getBlobMetadata(blobIdList);
+      for(BlobId blobId : blobIdList) {
+        CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
+        MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), blobMetadata.getExpirationTime(), (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), 0);
         messageInfos.add(messageInfo);
+        blobReadInfos.add(new BlobReadInfo(blobMetadata, blobId));
       }
     } catch (CloudStorageException e) {
       throw new StoreException(e, StoreErrorCodes.IOError);
     }
-    CloudMessageReadSet messageReadSet = new CloudMessageReadSet(blobReadInfos, ids);
+    CloudMessageReadSet messageReadSet = new CloudMessageReadSet(blobReadInfos, cloudDestination);
     return new StoreInfo(messageReadSet, messageInfos);
   }
 

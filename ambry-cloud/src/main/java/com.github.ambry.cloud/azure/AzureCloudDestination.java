@@ -253,31 +253,22 @@ class AzureCloudDestination implements CloudDestination {
     }
   }
 
-  //TODO: create CloudBlobInfo interface. AzureBlobInfo should implement that.
   @Override
-  public BlobReadInfo downloadBlob(BlobId blobId) throws CloudStorageException {
+  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
     azureMetrics.blobDownloadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
     BlobReadInfo blobReadInfo = null;
     try {
-      List<BlobId> blobList = new ArrayList<>();
-      blobList.add(blobId);
-      Map<String, CloudBlobMetadata> cloudBlobMetadataMap = getBlobMetadata(blobList);
-      if(cloudBlobMetadataMap.size() == 0) {
-        throw new CloudStorageException("Blob for BlobIb " + blobId.getID() + " not found in cloud metadata store");
-      }
-      CloudBlobMetadata blobMetadata = cloudBlobMetadataMap.values().iterator().next();
       CloudBlobContainer azureContainer = getContainer(blobId, false);
       String azureBlobName = getAzureBlobName(blobId);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
-      blobReadInfo = new BlobReadInfo(blobMetadata, new AzureCloudBlob(azureBlob, blobMetadata.getSize()));
+      azureBlob.download(outputStream);
       azureMetrics.blobUploadSuccessCount.inc();
     } catch (URISyntaxException | StorageException e) {
       throw new CloudStorageException("Error donwloading blob " + blobId, e);
     } finally {
       storageTimer.stop();
     }
-    return blobReadInfo;
   }
 
   @Override

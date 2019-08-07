@@ -43,7 +43,7 @@ public interface CloudDestination {
    * @return BlobReadInfo that has the data and metadata for the blob being downloaded
    * @throws CloudStorageException if the download encounters an error.
    */
-  BlobReadInfo downloadBlob(BlobId blobId) throws CloudStorageException;
+  void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException;
 
   /**
    * Mark a blob as deleted in the cloud destination.

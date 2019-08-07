@@ -25,31 +25,31 @@ import org.slf4j.LoggerFactory;
 class CloudMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadInfo> blobReadInfoList;
-  private final List<? extends StoreKey> storeKeys;
+  private final CloudDestination cloudDestination;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  CloudMessageReadSet(List<BlobReadInfo> blobReadInfoList, List<? extends StoreKey> storeKeys) {
+  CloudMessageReadSet(List<BlobReadInfo> blobReadInfoList, CloudDestination cloudDestination) {
     this.blobReadInfoList = blobReadInfoList;
-    this.storeKeys = storeKeys;
+    this.cloudDestination = cloudDestination;
   }
 
   @Override
   public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
     validateIndex(index);
     long written = 0;
-    CloudBlob cloudBlob = blobReadInfoList.get(index).getBlobRef();
+    BlobReadInfo blobReadInfo = blobReadInfoList.get(index);
 
     ByteBuffer outputBuffer;
     try {
-      if (cloudBlob.isPrefetched()) {
-        outputBuffer = cloudBlob.getPrefetchedData();
+      if (blobReadInfo.isPrefetched()) {
+        outputBuffer = blobReadInfo.getPrefetchedBuffer();
       } else {
-        outputBuffer = cloudBlob.download();
+        outputBuffer = blobReadInfo.downloadBlob(cloudDestination);
       }
     } catch(CloudStorageException ex) {
-      throw new IOException("Download of cloud blob " + blobReadInfoList.get(index).getBlobMetadata().getId() + " failed");
+      throw new IOException("Download of cloud blob " + blobReadInfoList.get(index).getBlobId().getID() + " failed");
     }
-    logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written, blobReadInfoList.get(index).getBlobMetadata().getId());
+    logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written, blobReadInfoList.get(index).getBlobId().getID());
     outputBuffer.flip();
     return channel.write(outputBuffer);
   }
@@ -62,21 +62,21 @@ class CloudMessageReadSet implements MessageReadSet {
   @Override
   public long sizeInBytes(int index) {
     validateIndex(index);
-    return blobReadInfoList.get(index).getBlobMetadata().getSize();
+    return blobReadInfoList.get(index).getBlobSize();
   }
 
   @Override
   public StoreKey getKeyAt(int index) {
     validateIndex(index);
-    return storeKeys.get(index);
+    return blobReadInfoList.get(index).getBlobId();
   }
 
   @Override
   public void doPrefetch(int index, long relativeOffset, long size) throws IOException {
     try {
-      blobReadInfoList.get(index).getBlobRef().doPrefetch();
+      blobReadInfoList.get(index).prefetchBlob(cloudDestination);
     } catch(CloudStorageException ex) {
-      throw new IOException("Prefetch of cloud blob " + blobReadInfoList.get(index).getBlobMetadata().getId() + " failed");
+      throw new IOException("Prefetch of cloud blob " + blobReadInfoList.get(index).getBlobId().getID() + " failed");
     }
   }
 

@@ -13,23 +13,50 @@
  */
 package com.github.ambry.cloud;
 
-import com.microsoft.azure.storage.blob.CloudBlockBlob;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.utils.ByteBufferOutputStream;
+import java.nio.ByteBuffer;
 
 
 public class BlobReadInfo {
   private final CloudBlobMetadata blobMetadata;
-  private final CloudBlob blobRef;
+  private final BlobId blobId;
+  private ByteBuffer prefetchedBuffer;
+  private boolean isPrefetched;
 
-  public BlobReadInfo(CloudBlobMetadata blobMetadata, CloudBlob blobRef) {
+  public BlobReadInfo(CloudBlobMetadata blobMetadata, BlobId blobId) {
     this.blobMetadata = blobMetadata;
-    this.blobRef = blobRef;
+    this.blobId = blobId;
+    this.isPrefetched = false;
   }
 
-  public CloudBlobMetadata getBlobMetadata() {
-    return blobMetadata;
+  public void prefetchBlob(CloudDestination cloudDestination) throws CloudStorageException {
+    prefetchedBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
+    ByteBufferOutputStream outputStream = new ByteBufferOutputStream(prefetchedBuffer);
+    cloudDestination.downloadBlob(blobId, outputStream);
+    isPrefetched = true;
   }
 
-  public CloudBlob getBlobRef() {
-    return blobRef;
+  public ByteBuffer downloadBlob(CloudDestination cloudDestination) throws CloudStorageException {
+    ByteBuffer blobByteBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
+    ByteBufferOutputStream outputStream = new ByteBufferOutputStream(blobByteBuffer);
+    cloudDestination.downloadBlob(blobId, outputStream);
+    return blobByteBuffer;
+  }
+
+  public ByteBuffer getPrefetchedBuffer() {
+    return prefetchedBuffer;
+  }
+
+  public boolean isPrefetched() {
+    return isPrefetched;
+  }
+
+  public BlobId getBlobId() {
+    return blobId;
+  }
+
+  public long getBlobSize() {
+    return blobMetadata.getSize();
   }
 }
