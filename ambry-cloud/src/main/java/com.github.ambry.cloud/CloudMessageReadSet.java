@@ -13,8 +13,10 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.ByteBufferOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
@@ -22,6 +24,49 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
+class BlobReadInfo {
+  private final CloudBlobMetadata blobMetadata;
+  private final BlobId blobId;
+  private ByteBuffer prefetchedBuffer;
+  private boolean isPrefetched;
+
+  public BlobReadInfo(CloudBlobMetadata blobMetadata, BlobId blobId) {
+    this.blobMetadata = blobMetadata;
+    this.blobId = blobId;
+    this.isPrefetched = false;
+  }
+
+  public void prefetchBlob(CloudDestination cloudDestination) throws CloudStorageException {
+    prefetchedBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
+    ByteBufferOutputStream outputStream = new ByteBufferOutputStream(prefetchedBuffer);
+    cloudDestination.downloadBlob(blobId, outputStream);
+    isPrefetched = true;
+  }
+
+  public ByteBuffer downloadBlob(CloudDestination cloudDestination) throws CloudStorageException {
+    ByteBuffer blobByteBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
+    ByteBufferOutputStream outputStream = new ByteBufferOutputStream(blobByteBuffer);
+    cloudDestination.downloadBlob(blobId, outputStream);
+    return blobByteBuffer;
+  }
+
+  public ByteBuffer getPrefetchedBuffer() {
+    return prefetchedBuffer;
+  }
+
+  public boolean isPrefetched() {
+    return isPrefetched;
+  }
+
+  public BlobId getBlobId() {
+    return blobId;
+  }
+
+  public long getBlobSize() {
+    return blobMetadata.getSize();
+  }
+}
 
 class CloudMessageReadSet implements MessageReadSet {
 
