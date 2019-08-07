@@ -14,7 +14,6 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.Timer;
-import com.github.ambry.cloud.BlobReadInfo;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudFindToken;
@@ -257,7 +256,6 @@ class AzureCloudDestination implements CloudDestination {
   public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
     azureMetrics.blobDownloadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
-    BlobReadInfo blobReadInfo = null;
     try {
       CloudBlobContainer azureContainer = getContainer(blobId, false);
       String azureBlobName = getAzureBlobName(blobId);
