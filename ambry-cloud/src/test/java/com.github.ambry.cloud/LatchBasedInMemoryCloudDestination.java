@@ -77,7 +77,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public BlobReadInfo downloadBlob(BlobId blobId) throws CloudStorageException {
+  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
     BlobReadInfo blobReadInfo = null;
     try {
       if (!map.containsKey(blobId)) {
@@ -85,11 +85,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       }
       byte[] blobData = new byte[(int)map.get(blobId).getFirst().getSize()];
       map.get(blobId).getSecond().read(blobData);
-      blobReadInfo = new BlobReadInfo(map.get(blobId).getFirst(), ByteBuffer.wrap(blobData));
+      outputStream.write(blobData);
     } catch (IOException ex) {
       throw new CloudStorageException("Could not download blob for blobid " + blobId.getID() + " due to " + ex.toString());
     }
-    return blobReadInfo;
   }
 
   @Override

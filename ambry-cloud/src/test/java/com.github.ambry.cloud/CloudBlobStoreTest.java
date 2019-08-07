@@ -53,6 +53,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.microsoft.azure.storage.StorageException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -689,23 +690,47 @@ public class CloudBlobStoreTest {
         referenceTime - 2000, referenceTime - 1000);
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
         Utils.Infinite_Time);
+    id = blobIdList.get(1);
+    addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
+        referenceTime - 2000, referenceTime - 1000);
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
+        Utils.Infinite_Time);
     replicaThread.replicate();
     assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
 
     //try get for a blob that exists
     List<BlobId> blobIds = new ArrayList<>(1);
-    blobIds.add(id);
+    blobIds.add(blobIdList.get(0));
     StoreInfo storeInfo = cloudBlobStore.get(blobIds, null);
-    assert(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().getID().equals(id.getID()));
+    assert(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
+
+    //try get for a list of blobs that exist
+    blobIds = new ArrayList<>(2);
+    blobIds.add(blobIdList.get(0));
+    blobIds.add(blobIdList.get(1));
+    storeInfo = cloudBlobStore.get(blobIds, null);
+    assert(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
+    assert(storeInfo.getMessageReadSetInfo().get(1).getStoreKey().equals(blobIdList.get(1)));
+
 
     //try get for a blob that doesnt exist
     blobIds = new ArrayList<>(1);
-    id = blobIdList.get(1);
+    id = blobIdList.get(2);
     blobIds.add(id);
     try {
       storeInfo = cloudBlobStore.get(blobIds, null);
       fail("A get for non existent blob should have thrown an exception");
     } catch(StoreException ex) {
+    }
+
+    //try get for a list of blob such that some of them dont exist
+    blobIds = new ArrayList<>(2);
+    blobIds.add(blobIdList.get(0));
+    blobIds.add(blobIdList.get(2));
+    try {
+      storeInfo = cloudBlobStore.get(blobIds, null);
+      fail("A get for non existent blob should have thrown an exception");
+    } catch (StoreException ex) {
     }
   }
 }

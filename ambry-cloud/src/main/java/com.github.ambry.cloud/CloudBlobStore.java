@@ -123,6 +123,14 @@ class CloudBlobStore implements Store {
     try {
       List<BlobId> blobIdList = ids.stream().map(key -> (BlobId) key).collect(Collectors.toList());
       Map<String, CloudBlobMetadata> cloudBlobMetadataListMap = cloudDestination.getBlobMetadata(blobIdList);
+      if(cloudBlobMetadataListMap.size() < ids.size()) {
+        Set<BlobId> missingBlobs = new HashSet<>();
+        for(BlobId blobId : blobIdList) {
+          if(!cloudBlobMetadataListMap.containsKey(blobId))
+            missingBlobs.add(blobId);
+        }
+        throw new StoreException("Some of the keys were missing in the cloud metadata store: " + missingBlobs, StoreErrorCodes.IOError);
+      }
       for(BlobId blobId : blobIdList) {
         CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
         MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), blobMetadata.getExpirationTime(), (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), 0);
