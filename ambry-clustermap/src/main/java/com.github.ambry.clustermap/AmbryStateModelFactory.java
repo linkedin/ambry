@@ -13,36 +13,39 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.config.ClusterMapConfig;
+import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.statemachine.StateModel;
 import org.apache.helix.participant.statemachine.StateModelFactory;
 
 
 /**
- * A factory for creating {@link AmbryDefaultStateModel}
+ * A factory for creating {@link DefaultLeaderStandbyStateModel}
  */
 class AmbryStateModelFactory extends StateModelFactory<StateModel> {
   private final String ambryStateModelDef;
 
-  AmbryStateModelFactory(ClusterMapConfig clusterMapConfig) {
-    ambryStateModelDef = clusterMapConfig.clustermapStateModelDefinition;
+  AmbryStateModelFactory(String stateModelDef) {
+    ambryStateModelDef = stateModelDef;
   }
 
   /**
-   * Create and return an instance of {@link AmbryDefaultStateModel}
+   * Create and return an instance of {@link DefaultLeaderStandbyStateModel}
    * @param resourceName the resource name for which this state model is being created.
    * @param partitionName the partition name for which this state model is being created.
-   * @return an instance of {@link AmbryDefaultStateModel}.
+   * @return an instance of {@link DefaultLeaderStandbyStateModel}.
    */
   @Override
   public StateModel createNewStateModel(String resourceName, String partitionName) {
     StateModel stateModelToReturn;
     switch (ambryStateModelDef) {
       case AmbryStateModelDefinition.AMBRY_LEADER_STANDBY_MODEL:
-        stateModelToReturn = new AmbryPartitionStateModel();
+        stateModelToReturn = new AmbryPartitionStateModel(resourceName, partitionName);
+        break;
+      case LeaderStandbySMD.name:
+        stateModelToReturn = new DefaultLeaderStandbyStateModel();
         break;
       default:
-        stateModelToReturn = new AmbryDefaultStateModel();
+        throw new IllegalArgumentException("Unsupported state model definition: " + ambryStateModelDef);
     }
     return stateModelToReturn;
   }

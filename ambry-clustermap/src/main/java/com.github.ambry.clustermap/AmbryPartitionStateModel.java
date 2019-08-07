@@ -26,10 +26,14 @@ import org.slf4j.LoggerFactory;
 @StateModelInfo(initialState = "OFFLINE", states = {"BOOTSTRAP", "LEADER", "STANDBY", "INACTIVE"})
 public class AmbryPartitionStateModel extends StateModel {
   private Logger logger = LoggerFactory.getLogger(getClass());
+  private final String resourceName;
+  private final String partitionName;
 
-  AmbryPartitionStateModel() {
+  AmbryPartitionStateModel(String resourceName, String partitionName) {
+    this.resourceName = resourceName;
+    this.partitionName = partitionName;
     StateModelParser parser = new StateModelParser();
-    _currentState = parser.getInitialState(AmbryDefaultStateModel.class);
+    _currentState = parser.getInitialState(DefaultLeaderStandbyStateModel.class);
   }
 
   @Transition(to = "BOOTSTRAP", from = "OFFLINE")
@@ -74,8 +78,14 @@ public class AmbryPartitionStateModel extends StateModel {
         message.getResourceName());
   }
 
+  @Transition(to = "DROPPED", from = "ERROR")
+  public void onBecomeDroppedFromError(Message message, NotificationContext context) {
+    logger.info("Partition {} in resource {} is becoming DROPPED from ERROR", message.getPartitionName(),
+        message.getResourceName());
+  }
+
   @Override
   public void reset() {
-    // no op
+    logger.info("Reset method invoked. Partition {} un resource {} is reset to OFFLINE", partitionName, resourceName);
   }
 }

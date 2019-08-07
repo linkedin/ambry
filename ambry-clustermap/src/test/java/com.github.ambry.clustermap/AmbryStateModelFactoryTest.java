@@ -14,10 +14,8 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.VerifiableProperties;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Properties;
 import org.apache.helix.participant.statemachine.StateModel;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -31,32 +29,39 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class AmbryStateModelFactoryTest {
-  private final ClusterMapConfig clustermapConfig;
+  private final String stateModelDef;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{ClusterMapConfig.DEFAULT_STATE_MODEL_DEF}, {ClusterMapConfig.AMBRY_STATE_MODEL_DEF}});
+        new Object[][]{{ClusterMapConfig.DEFAULT_STATE_MODEL_DEF}, {ClusterMapConfig.AMBRY_STATE_MODEL_DEF},
+            {"INVALID_STATE_MODEL_DEF"}});
   }
 
   public AmbryStateModelFactoryTest(String stateModelDef) {
-    Properties props = new Properties();
-    props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.port", "2200");
-    props.setProperty("clustermap.cluster.name", "AmbryStateModelFactoryTest");
-    props.setProperty("clustermap.state.model.definition", stateModelDef);
-    props.setProperty("clustermap.datacenter.name", "DC0");
-    clustermapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    this.stateModelDef = stateModelDef;
   }
 
   @Test
   public void testDifferentStateModelDefs() {
-    AmbryStateModelFactory factory = new AmbryStateModelFactory(clustermapConfig);
-    StateModel stateModel = factory.createNewStateModel("0", "1");
-    if ((clustermapConfig.clustermapStateModelDefinition).equals(ClusterMapConfig.DEFAULT_STATE_MODEL_DEF)) {
-      assertTrue("Unexpected state model def", stateModel instanceof AmbryDefaultStateModel);
-    } else {
-      assertTrue("Unexpected state model def", stateModel instanceof AmbryPartitionStateModel);
+    AmbryStateModelFactory factory = new AmbryStateModelFactory(stateModelDef);
+    StateModel stateModel;
+    switch (stateModelDef) {
+      case ClusterMapConfig.DEFAULT_STATE_MODEL_DEF:
+        stateModel = factory.createNewStateModel("0", "1");
+        assertTrue("Unexpected state model def", stateModel instanceof DefaultLeaderStandbyStateModel);
+        break;
+      case ClusterMapConfig.AMBRY_STATE_MODEL_DEF:
+        stateModel = factory.createNewStateModel("0", "1");
+        assertTrue("Unexpected state model def", stateModel instanceof AmbryPartitionStateModel);
+        break;
+      default:
+        try {
+          factory.createNewStateModel("0", "1");
+          fail("should fail due to invalid state model def");
+        } catch (IllegalArgumentException e) {
+          // expected
+        }
     }
   }
 }

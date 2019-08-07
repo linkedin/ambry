@@ -93,7 +93,7 @@ class HelixParticipant implements ClusterParticipant {
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig));
+        new AmbryStateModelFactory(clusterMapConfig.clustermapStateModelDefinition));
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
       synchronized (helixAdministrationLock) {
