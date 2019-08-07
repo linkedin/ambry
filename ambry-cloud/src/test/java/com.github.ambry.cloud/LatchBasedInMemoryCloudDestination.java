@@ -82,11 +82,12 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       if (!map.containsKey(blobId)) {
         throw new CloudStorageException("Blob with blobId " + blobId.getID() + " does not exist.");
       }
-      byte[] blobData = new byte[(int)map.get(blobId).getFirst().getSize()];
+      byte[] blobData = new byte[(int) map.get(blobId).getFirst().getSize()];
       map.get(blobId).getSecond().read(blobData);
       outputStream.write(blobData);
     } catch (IOException ex) {
-      throw new CloudStorageException("Could not download blob for blobid " + blobId.getID() + " due to " + ex.toString());
+      throw new CloudStorageException(
+          "Could not download blob for blobid " + blobId.getID() + " due to " + ex.toString());
     }
   }
 
@@ -122,7 +123,8 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries) {
+  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken,
+      long maxTotalSizeOfEntries) {
     return Collections.emptyList();
   }
 
@@ -172,6 +174,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   public int getBlobsUploaded() {
     return blobsUploadedCounter.get();
   }
+
   public long getBytesUploaded() {
     return bytesUploadedCounter.get();
   }

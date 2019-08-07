@@ -22,6 +22,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 class CloudMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadInfo> blobReadInfoList;
@@ -46,10 +47,11 @@ class CloudMessageReadSet implements MessageReadSet {
       } else {
         outputBuffer = blobReadInfo.downloadBlob(cloudDestination);
       }
-    } catch(CloudStorageException ex) {
+    } catch (CloudStorageException ex) {
       throw new IOException("Download of cloud blob " + blobReadInfoList.get(index).getBlobId().getID() + " failed");
     }
-    logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written, blobReadInfoList.get(index).getBlobId().getID());
+    logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written,
+        blobReadInfoList.get(index).getBlobId().getID());
     outputBuffer.flip();
     return channel.write(outputBuffer);
   }
@@ -75,13 +77,13 @@ class CloudMessageReadSet implements MessageReadSet {
   public void doPrefetch(int index, long relativeOffset, long size) throws IOException {
     try {
       blobReadInfoList.get(index).prefetchBlob(cloudDestination);
-    } catch(CloudStorageException ex) {
+    } catch (CloudStorageException ex) {
       throw new IOException("Prefetch of cloud blob " + blobReadInfoList.get(index).getBlobId().getID() + " failed");
     }
   }
 
   private void validateIndex(int index) {
-    if(index >= blobReadInfoList.size()) {
+    if (index >= blobReadInfoList.size()) {
       throw new IndexOutOfBoundsException("index [" + index + "] out of the messageset");
     }
   }

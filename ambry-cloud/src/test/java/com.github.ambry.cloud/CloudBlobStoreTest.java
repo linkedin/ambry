@@ -701,16 +701,15 @@ public class CloudBlobStoreTest {
     List<BlobId> blobIds = new ArrayList<>(1);
     blobIds.add(blobIdList.get(0));
     StoreInfo storeInfo = cloudBlobStore.get(blobIds, null);
-    assert(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
+    assert (storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
 
     //try get for a list of blobs that exist
     blobIds = new ArrayList<>(2);
     blobIds.add(blobIdList.get(0));
     blobIds.add(blobIdList.get(1));
     storeInfo = cloudBlobStore.get(blobIds, null);
-    assert(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
-    assert(storeInfo.getMessageReadSetInfo().get(1).getStoreKey().equals(blobIdList.get(1)));
-
+    assert (storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
+    assert (storeInfo.getMessageReadSetInfo().get(1).getStoreKey().equals(blobIdList.get(1)));
 
     //try get for a blob that doesnt exist
     blobIds = new ArrayList<>(1);
@@ -719,7 +718,7 @@ public class CloudBlobStoreTest {
     try {
       storeInfo = cloudBlobStore.get(blobIds, null);
       fail("A get for non existent blob should have thrown an exception");
-    } catch(StoreException ex) {
+    } catch (StoreException ex) {
     }
 
     //try get for a list of blob such that some of them dont exist
