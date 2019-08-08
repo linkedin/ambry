@@ -155,6 +155,29 @@ class CompactionManager {
   }
 
   /**
+   *
+   * @param store
+   * @return
+   */
+  boolean removeBlobStore(BlobStore store) {
+    boolean result;
+    if (compactionExecutor == null) {
+      stores.remove(store);
+      result = true;
+    } else {
+      if (!compactionExecutor.getStoresDisabledCompaction().contains(store)) {
+        logger.error("Fail to remove store ({}) from compaction manager because compaction on it is still enabled",
+            store);
+        result = false;
+      } else {
+        // stores.remove(store) is invoked within compactionExecutor.removeBlobStore() because it requires lock
+        result = compactionExecutor.removeBlobStore(store);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Get compaction details for a given {@link BlobStore} if any
    * @param blobStore the {@link BlobStore} for which compaction details are requested
    * @return the {@link CompactionDetails} containing the details about log segments that needs to be compacted.
@@ -364,6 +387,25 @@ class CompactionManager {
       } else {
         storesDisabledCompaction.add(store);
       }
+    }
+
+    boolean removeBlobStore(BlobStore store) {
+      lock.lock();
+      try {
+        stores.remove(store);
+        // It's ok to remove store from "storesDisabledCompaction" and "storesToSkip" list while executor thread is
+        // going through each store to check compaction eligibility. Note that the executor will first check if store
+        // is started, which is guaranteed to be false before removeBlobStore() is invoked.
+        storesDisabledCompaction.remove(store);
+        storesToSkip.remove(store);
+      } finally {
+        lock.unlock();
+      }
+      return true;
+    }
+
+    Set<BlobStore> getStoresDisabledCompaction() {
+      return storesDisabledCompaction;
     }
   }
 }

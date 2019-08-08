@@ -141,7 +141,7 @@ class DiskManager {
             partitionAndStore.getValue().start();
           } catch (Exception e) {
             numStoreFailures.incrementAndGet();
-            logger.error("Exception while starting store for the partition" + partitionAndStore.getKey(), e);
+            logger.error("Exception while starting store for the " + partitionAndStore.getKey(), e);
           }
         }, false);
         thread.start();
@@ -360,6 +360,32 @@ class DiskManager {
   }
 
   /**
+   * Given partition id, remove the corresponding blob store in disk manager
+   * @param id the {@link PartitionId} of the {@link BlobStore} which should be removed.
+   * @return {@code true} if store removal was successful. {@code false} if not.
+   */
+  boolean removeBlobStore(PartitionId id) {
+    BlobStore store = stores.get(id);
+    if (store == null) {
+      logger.info("Store {} is not found in disk manager", id);
+      return true;
+    }
+    if (!running || store.isStarted()) {
+      logger.error("Removing store {} failed. Disk running = {}, store running = {}", id, running, store.isStarted());
+      return false;
+    }
+    if (!compactionManager.removeBlobStore(store)) {
+      logger.error("Fail to remove store {} from compaction manager.", id);
+      return false;
+    }
+    stores.remove(id);
+    stoppedReplicas.remove(id.toPathString());
+    partitionToReplicaMap.remove(id);
+    logger.info("Store {} is successfully removed from disk manager", id);
+    return true;
+  }
+
+  /**
    * Set the BlobStore stopped state with given {@link PartitionId} {@code id}.
    * @param partitionIds a list of {@link PartitionId} of the {@link BlobStore} whose stopped state should be set.
    * @param markStop whether to mark BlobStore as stopped ({@code true}) or started.
@@ -441,6 +467,8 @@ class DiskManager {
 
   /**
    * Reports any unrecognized directories on disk
+   * TODO go to unrecognized dir and check if there is remove store event log. If yes, this method should clean up that
+   * store dir and return swap segment to reserve pool if needed.
    */
   private void reportUnrecognizedDirs() {
     File[] dirs = new File(disk.getMountPath()).listFiles(File::isDirectory);
