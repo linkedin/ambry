@@ -77,7 +77,7 @@ public class NetworkConfig {
   public final boolean networkClientEnableConnectionReplenishment;
 
   /**
-   * The size of the pool if selector executor pool. If the value is 0, executor pool won't be used.
+   * The size of the pool if selector executor pool is employed. When size is 0, executor pool won't be used.
    */
   @Config("selector.executor.pool.size")
   @Default("4")
