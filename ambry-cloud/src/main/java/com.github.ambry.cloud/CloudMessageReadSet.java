@@ -17,7 +17,9 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
@@ -25,49 +27,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-class BlobReadInfo {
-  private final CloudBlobMetadata blobMetadata;
-  private final BlobId blobId;
-  private ByteBuffer prefetchedBuffer;
-  private boolean isPrefetched;
-
-  public BlobReadInfo(CloudBlobMetadata blobMetadata, BlobId blobId) {
-    this.blobMetadata = blobMetadata;
-    this.blobId = blobId;
-    this.isPrefetched = false;
-  }
-
-  public void prefetchBlob(CloudDestination cloudDestination) throws CloudStorageException {
-    prefetchedBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
-    ByteBufferOutputStream outputStream = new ByteBufferOutputStream(prefetchedBuffer);
-    cloudDestination.downloadBlob(blobId, outputStream);
-    isPrefetched = true;
-  }
-
-  public ByteBuffer downloadBlob(CloudDestination cloudDestination) throws CloudStorageException {
-    ByteBuffer blobByteBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
-    ByteBufferOutputStream outputStream = new ByteBufferOutputStream(blobByteBuffer);
-    cloudDestination.downloadBlob(blobId, outputStream);
-    return blobByteBuffer;
-  }
-
-  public ByteBuffer getPrefetchedBuffer() {
-    return prefetchedBuffer;
-  }
-
-  public boolean isPrefetched() {
-    return isPrefetched;
-  }
-
-  public BlobId getBlobId() {
-    return blobId;
-  }
-
-  public long getBlobSize() {
-    return blobMetadata.getSize();
-  }
-}
-
+/**
+ * An implementation of {@code MessageReadSet} for cloud based storage
+ */
 class CloudMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadInfo> blobReadInfoList;
@@ -127,9 +89,87 @@ class CloudMessageReadSet implements MessageReadSet {
     }
   }
 
+  /**
+   * Validate that the index is withing the bounds of {@code blobReadInfoList}
+   * @param index The index to be verified
+   * @throws {@code IndexOutOfBoundsException} if the index is out of bounds
+   */
   private void validateIndex(int index) {
     if (index >= blobReadInfoList.size()) {
       throw new IndexOutOfBoundsException("index [" + index + "] out of the messageset");
+    }
+  }
+
+  /**
+   * A class to maintain download information about each blob
+   */
+  static class BlobReadInfo {
+    private final CloudBlobMetadata blobMetadata;
+    private final BlobId blobId;
+    private ByteBuffer prefetchedBuffer;
+    private boolean isPrefetched;
+
+    public BlobReadInfo(CloudBlobMetadata blobMetadata, BlobId blobId) {
+      this.blobMetadata = blobMetadata;
+      this.blobId = blobId;
+      this.isPrefetched = false;
+    }
+
+    /**
+     * Prefetch the {@code blob} from {@code CloudDestination} and put it in {@code prefetchedBuffer}
+     * @param cloudDestination {@code CloudDestination} implementation representing the cloud from which download will happen.
+     * @throws CloudStorageException if blob cloud not be downloaded
+     */
+    public void prefetchBlob(CloudDestination cloudDestination) throws CloudStorageException {
+      prefetchedBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
+      ByteBufferOutputStream outputStream = new ByteBufferOutputStream(prefetchedBuffer);
+      cloudDestination.downloadBlob(blobId, outputStream);
+      isPrefetched = true;
+    }
+
+    /**
+     * Donwload the blob from the {@code CloudDestination}
+     * @param cloudDestination cloudDestination {@code CloudDestination} implementation representing the cloud from which download will happen.
+     * @return {@code ByteBuffer} containing the blob data
+     * @throws CloudStorageException if blob download fails.
+     */
+    public ByteBuffer downloadBlob(CloudDestination cloudDestination) throws CloudStorageException {
+      ByteBuffer blobByteBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
+      ByteBufferOutputStream outputStream = new ByteBufferOutputStream(blobByteBuffer);
+      cloudDestination.downloadBlob(blobId, outputStream);
+      return blobByteBuffer;
+    }
+
+    /**
+     * Getter for {@code prefetchedBuffer}
+     * @return {@code ByteBuffer}
+     */
+    public ByteBuffer getPrefetchedBuffer() {
+      return prefetchedBuffer;
+    }
+
+    /**
+     * Getter for {@code isPrefetched}
+     * @return prefetch status
+     */
+    public boolean isPrefetched() {
+      return isPrefetched;
+    }
+
+    /**
+     * Getter for {@code blobId}
+     * @return {@code BlobId}
+     */
+    public BlobId getBlobId() {
+      return blobId;
+    }
+
+    /**
+     * Get the size of blob from metadata
+     * @return long size
+     */
+    public long getBlobSize() {
+      return blobMetadata.getSize();
     }
   }
 }

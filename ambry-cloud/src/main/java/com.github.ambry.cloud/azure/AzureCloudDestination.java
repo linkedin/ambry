@@ -19,6 +19,7 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
@@ -263,7 +264,7 @@ class AzureCloudDestination implements CloudDestination {
       azureBlob.download(outputStream);
       azureMetrics.blobUploadSuccessCount.inc();
     } catch (URISyntaxException | StorageException e) {
-      throw new CloudStorageException("Error donwloading blob " + blobId, e);
+      throw new CloudStorageException("Error downloading blob " + blobId, e);
     } finally {
       storageTimer.stop();
     }

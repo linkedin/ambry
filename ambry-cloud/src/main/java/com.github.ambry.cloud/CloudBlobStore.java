@@ -115,10 +115,8 @@ class CloudBlobStore implements Store {
   @Override
   public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
     checkStarted();
-    if (ids.size() > 1 && ids.size() != new HashSet<>(ids).size()) {
-      throw new IllegalArgumentException("The list of IDs provided contains duplicates");
-    }
-    List<BlobReadInfo> blobReadInfos = new ArrayList<>(ids.size());
+    checkDuplicates(ids);
+    List<CloudMessageReadSet.BlobReadInfo> blobReadInfos = new ArrayList<>(ids.size());
     List<MessageInfo> messageInfos = new ArrayList<>(ids.size());
     try {
       List<BlobId> blobIdList = ids.stream().map(key -> (BlobId) key).collect(Collectors.toList());
@@ -135,7 +133,7 @@ class CloudBlobStore implements Store {
         MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), blobMetadata.getExpirationTime(),
             (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), 0);
         messageInfos.add(messageInfo);
-        blobReadInfos.add(new BlobReadInfo(blobMetadata, blobId));
+        blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
       }
     } catch (CloudStorageException e) {
       throw new StoreException(e, StoreErrorCodes.IOError);
@@ -217,7 +215,7 @@ class CloudBlobStore implements Store {
     // TODO: would be more efficient to call blobId.isEncrypted()
     return blobId.getVersion() >= BlobId.BLOB_ID_V4 && BlobId.isEncrypted(blobId.getID());
   }
-
+  
   /**
    * Utility to decide whether a blob should be uploaded.
    * @param messageInfo The {@link MessageInfo} containing the blob metadata.
@@ -400,19 +398,51 @@ class CloudBlobStore implements Store {
   private void checkDuplicates(MessageWriteSet writeSet) {
     List<MessageInfo> infos = writeSet.getMessageSetInfo();
     if (infos.size() > 1) {
-      Set<StoreKey> seenKeys = new HashSet<>();
-      for (MessageInfo info : infos) {
-        if (!seenKeys.add(info.getStoreKey())) {
-          throw new IllegalArgumentException("WriteSet contains duplicates. Duplicate detected: " + info.getStoreKey());
-        }
+      List<StoreKey> keys = infos.stream().map(info -> info.getStoreKey()).collect(Collectors.toList());
+      Set<StoreKey> duplicates = getDuplicates(keys);
+      if (duplicates.size() > 0) {
+        throw new IllegalArgumentException("WriteSet contains duplicates. Duplicates detected: " + duplicates);
       }
     }
+  }
+
+  /**
+   * Detects duplicates in {@code keys}
+   * @param keys list of {@link StoreKey} to detect duplicates in
+   * @throws IllegalArgumentException if a duplicate is detected
+   */
+  private void checkDuplicates(List<? extends StoreKey> keys) {
+    if (keys.size() > 1) {
+      Set<StoreKey> duplicates = getDuplicates(keys);
+      if (duplicates.size() > 0) {
+        throw new IllegalArgumentException("StoreKey list contains duplicates. Duplicates detected: " + duplicates);
+      }
+    }
+  }
+
+  /**
+   * Get duplicates in a list of {@code StoreKey}
+   * @param keys keys list of {@link StoreKey} to find duplicates in
+   * @return {@code Set} of duplicate {@code StoreKey}
+   */
+  private Set<StoreKey> getDuplicates(List<? extends StoreKey> keys) {
+    Set<StoreKey> duplicates = new HashSet<>();
+    Set<StoreKey> seenKeys = new HashSet<>();
+    for (StoreKey key : keys) {
+      if (!seenKeys.add(key)) {
+        duplicates.add(key);
+      }
+    }
+    return duplicates;
   }
 
   @Override
   public String toString() {
     return "PartitionId: " + partitionId.toPathString() + " in the cloud";
   }
+
+  /** The lifecycle state of a recently seen blob. */
+  enum BlobState {CREATED, TTL_UPDATED, DELETED}
 
   /** A {@link Write} implementation used by this store to write data. */
   private class CloudWriteChannel implements Write {
@@ -457,9 +487,6 @@ class CloudBlobStore implements Store {
       }
     }
   }
-
-  /** The lifecycle state of a recently seen blob. */
-  enum BlobState {CREATED, TTL_UPDATED, DELETED}
 
   /**
    * A local LRA cache of recent blobs processed by this store.
