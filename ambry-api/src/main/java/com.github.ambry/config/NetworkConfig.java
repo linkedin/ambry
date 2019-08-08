@@ -76,6 +76,13 @@ public class NetworkConfig {
   @Default("false")
   public final boolean networkClientEnableConnectionReplenishment;
 
+  /**
+   * The size of the pool if selector executor pool. If the value is 0, executor pool won't be used.
+   */
+  @Config("selector.executor.pool.size")
+  @Default("4")
+  public final int selectorExecutorPoolSize;
+
   public NetworkConfig(VerifiableProperties verifiableProperties) {
 
     numIoThreads = verifiableProperties.getIntInRange("num.io.threads", 8, 1, Integer.MAX_VALUE);
@@ -88,5 +95,7 @@ public class NetworkConfig {
     queuedMaxRequests = verifiableProperties.getIntInRange("queued.max.requests", 500, 1, Integer.MAX_VALUE);
     networkClientEnableConnectionReplenishment =
         verifiableProperties.getBoolean("network.client.enable.connection.replenishment", false);
+    selectorExecutorPoolSize =
+        verifiableProperties.getIntInRange("selector.executor.pool.size", 4, 0, Integer.MAX_VALUE);
   }
 }

@@ -26,6 +26,7 @@ import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -33,11 +34,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static java.util.Arrays.*;
 import static org.junit.Assert.*;
 
 
+@RunWith(Parameterized.class)
 public class SSLSelectorTest {
 
   private static final int DEFAULT_SOCKET_BUF_SIZE = 4 * 1024;
@@ -47,7 +51,12 @@ public class SSLSelectorTest {
   private Selector selector;
   private final File trustStoreFile;
 
-  public SSLSelectorTest() throws Exception {
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{0}, {2}});
+  }
+
+  public SSLSelectorTest(int poolSize) throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
     SSLConfig sslConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
@@ -60,7 +69,8 @@ public class SSLSelectorTest {
     applicationBufferSize = clientSSLFactory.createSSLEngine("localhost", server.port, SSLFactory.Mode.CLIENT)
         .getSession()
         .getApplicationBufferSize();
-    selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), clientSSLFactory);
+    selector =
+        new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), clientSSLFactory, poolSize);
   }
 
   @After
@@ -163,6 +173,7 @@ public class SSLSelectorTest {
     while (responseCount < conns) {
       // do the i/o
       selector.poll(0L, sends);
+      Thread.sleep(100);
 
       assertEquals("No disconnects should have occurred.", 0, selector.disconnected().size());
 
@@ -307,6 +318,7 @@ public class SSLSelectorTest {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), socketBufSize, socketBufSize, PortType.SSL);
     while (!selector.connected().contains(connectionId)) {
+      System.out.println("here");
       selector.poll(10000L);
     }
     return connectionId;
@@ -327,7 +339,7 @@ public class SSLSelectorTest {
     selector.close();
     NetworkMetrics metrics = new NetworkMetrics(new MetricRegistry());
     Time time = SystemTime.getInstance();
-    selector = new Selector(metrics, time, clientSSLFactory) {
+    selector = new Selector(metrics, time, clientSSLFactory, 0) {
       @Override
       protected Transmission createTransmission(String connectionId, SelectionKey key, String hostname, int port,
           PortType portType, SSLFactory.Mode mode) throws IOException {
