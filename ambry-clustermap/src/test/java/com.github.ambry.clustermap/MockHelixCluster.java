@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -48,7 +49,7 @@ public class MockHelixCluster {
     this.partitionLayoutPath = partitionLayoutPath;
     this.zkLayoutPath = zkLayoutPath;
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        "all", 3, false, false, helixAdminFactory, false);
+        "all", 3, false, false, helixAdminFactory, false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
     this.clusterName = clusterName;
   }
 
@@ -59,7 +60,7 @@ public class MockHelixCluster {
    */
   void upgradeWithNewHardwareLayout(String hardwareLayoutPath) throws Exception {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        "all", 3, false, false, helixAdminFactory, false);
+        "all", 3, false, false, helixAdminFactory, false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
     triggerInstanceConfigChangeNotification();
   }
 
@@ -70,7 +71,7 @@ public class MockHelixCluster {
    */
   void upgradeWithNewPartitionLayout(String partitionLayoutPath) throws Exception {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        "all", 3, false, false, helixAdminFactory, false);
+        "all", 3, false, false, helixAdminFactory, false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
     triggerInstanceConfigChangeNotification();
   }
 

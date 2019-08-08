@@ -50,7 +50,6 @@ import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
 import org.apache.helix.messaging.handling.MessageHandler;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.InstanceConfig;
-import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.model.Message;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.participant.statemachine.StateModel;
@@ -59,6 +58,8 @@ import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.TestUtils.*;
@@ -69,13 +70,21 @@ import static org.mockito.Mockito.*;
 /**
  * Test for {@link HelixParticipant}
  */
+@RunWith(Parameterized.class)
 public class HelixParticipantTest {
   private final MockHelixManagerFactory helixManagerFactory;
   private final Properties props;
   private final String clusterName = "HelixParticipantTestCluster";
   private final JSONObject zkJson;
+  private final String stateModelDef;
 
-  public HelixParticipantTest() throws Exception {
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(
+        new Object[][]{{ClusterMapConfig.DEFAULT_STATE_MODEL_DEF}, {ClusterMapConfig.AMBRY_STATE_MODEL_DEF}});
+  }
+
+  public HelixParticipantTest(String stateModelDef) throws Exception {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
     zkJson = constructZkLayoutJSON(zkInfoList);
@@ -85,6 +94,8 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.cluster.name", clusterName);
     props.setProperty("clustermap.datacenter.name", "DC0");
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.state.model.definition", stateModelDef);
+    this.stateModelDef = stateModelDef;
     helixManagerFactory = new MockHelixManagerFactory();
   }
 
@@ -274,6 +285,15 @@ public class HelixParticipantTest {
    */
   @Test
   public void testBadCases() throws IOException {
+    // Invalid state model def
+    props.setProperty("clustermap.state.model.definition", "InvalidStateModelDef");
+    try {
+      new ClusterMapConfig(new VerifiableProperties(props));
+      fail("should fail due to invalid state model definition");
+    } catch (IllegalArgumentException e) {
+      //expected and restore previous props
+      props.setProperty("clustermap.state.model.definition", stateModelDef);
+    }
     // Connect failure.
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     helixManagerFactory.helixManager.beBad = true;
@@ -317,7 +337,7 @@ public class HelixParticipantTest {
     participant.participate(Collections.emptyList());
     MockHelixManager helixManager = helixManagerFactory.helixManager;
     assertTrue(helixManager.isConnected());
-    assertEquals(LeaderStandbySMD.name, helixManager.stateModelDef);
+    assertEquals(stateModelDef, helixManager.stateModelDef);
     assertEquals(AmbryStateModelFactory.class, helixManager.stateModelFactory.getClass());
     participant.close();
     assertFalse(helixManager.isConnected());

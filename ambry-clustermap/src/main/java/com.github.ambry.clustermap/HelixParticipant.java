@@ -28,7 +28,6 @@ import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.healthcheck.HealthReportProvider;
 import org.apache.helix.model.InstanceConfig;
-import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.task.Task;
 import org.apache.helix.task.TaskCallbackContext;
@@ -49,6 +48,7 @@ class HelixParticipant implements ClusterParticipant {
   private final String zkConnectStr;
   private final HelixFactory helixFactory;
   private final Object helixAdministrationLock = new Object();
+  private final ClusterMapConfig clusterMapConfig;
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
@@ -60,6 +60,7 @@ class HelixParticipant implements ClusterParticipant {
    * @throws IOException if there is an error in parsing the JSON serialized ZK connect string config.
    */
   HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) throws IOException {
+    this.clusterMapConfig = clusterMapConfig;
     clusterName = clusterMapConfig.clusterMapClusterName;
     instanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
@@ -88,9 +89,11 @@ class HelixParticipant implements ClusterParticipant {
    */
   @Override
   public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
-    logger.info("Initiating the participation");
+    logger.info("Initiating the participation. The specified state model is {}",
+        clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
-    stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
+    stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
+        new AmbryStateModelFactory(clusterMapConfig.clustermapStateModelDefinition));
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
       synchronized (helixAdministrationLock) {
