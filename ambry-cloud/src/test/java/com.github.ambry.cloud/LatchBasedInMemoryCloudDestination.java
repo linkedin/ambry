@@ -77,7 +77,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
-    BlobReadInfo blobReadInfo = null;
+    CloudMessageReadSet.BlobReadInfo blobReadInfo = null;
     try {
       if (!map.containsKey(blobId)) {
         throw new CloudStorageException("Blob with blobId " + blobId.getID() + " does not exist.");

@@ -45,6 +45,7 @@ import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
@@ -57,6 +58,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -683,6 +685,7 @@ public class CloudBlobStoreTest {
       }
     }
 
+    EnumSet<StoreGetOptions> getOptions = EnumSet.noneOf(StoreGetOptions.class);
     long referenceTime = System.currentTimeMillis();
     BlobId id = blobIdList.get(0);
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
@@ -700,23 +703,23 @@ public class CloudBlobStoreTest {
     //try get for a blob that exists
     List<BlobId> blobIds = new ArrayList<>(1);
     blobIds.add(blobIdList.get(0));
-    StoreInfo storeInfo = cloudBlobStore.get(blobIds, null);
-    assert (storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
+    StoreInfo storeInfo = cloudBlobStore.get(blobIds, getOptions);
+    assertTrue(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
 
     //try get for a list of blobs that exist
     blobIds = new ArrayList<>(2);
     blobIds.add(blobIdList.get(0));
     blobIds.add(blobIdList.get(1));
-    storeInfo = cloudBlobStore.get(blobIds, null);
-    assert (storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
-    assert (storeInfo.getMessageReadSetInfo().get(1).getStoreKey().equals(blobIdList.get(1)));
+    storeInfo = cloudBlobStore.get(blobIds, getOptions);
+    assertTrue(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
+    assertTrue(storeInfo.getMessageReadSetInfo().get(1).getStoreKey().equals(blobIdList.get(1)));
 
     //try get for a blob that doesnt exist
     blobIds = new ArrayList<>(1);
     id = blobIdList.get(2);
     blobIds.add(id);
     try {
-      storeInfo = cloudBlobStore.get(blobIds, null);
+      storeInfo = cloudBlobStore.get(blobIds, getOptions);
       fail("A get for non existent blob should have thrown an exception");
     } catch (StoreException ex) {
     }
@@ -726,7 +729,7 @@ public class CloudBlobStoreTest {
     blobIds.add(blobIdList.get(0));
     blobIds.add(blobIdList.get(2));
     try {
-      storeInfo = cloudBlobStore.get(blobIds, null);
+      storeInfo = cloudBlobStore.get(blobIds, getOptions);
       fail("A get for non existent blob should have thrown an exception");
     } catch (StoreException ex) {
     }

@@ -121,17 +121,18 @@ class CloudBlobStore implements Store {
     try {
       List<BlobId> blobIdList = ids.stream().map(key -> (BlobId) key).collect(Collectors.toList());
       Map<String, CloudBlobMetadata> cloudBlobMetadataListMap = cloudDestination.getBlobMetadata(blobIdList);
-      if (cloudBlobMetadataListMap.size() < ids.size()) {
+      if (cloudBlobMetadataListMap.size() < blobIdList.size()) {
         Set<BlobId> missingBlobs = blobIdList.stream()
             .filter(blobId -> !cloudBlobMetadataListMap.containsKey(blobId))
             .collect(Collectors.toSet());
         throw new StoreException("Some of the keys were missing in the cloud metadata store: " + missingBlobs,
-            StoreErrorCodes.IOError);
+            StoreErrorCodes.ID_Not_Found);
       }
+      validateCloudMetadata(cloudBlobMetadataListMap, storeGetOptions);
       for (BlobId blobId : blobIdList) {
         CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
         MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), blobMetadata.getExpirationTime(),
-            (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), 0);
+            (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), getOperationTime(blobMetadata));
         messageInfos.add(messageInfo);
         blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
       }
@@ -140,6 +141,58 @@ class CloudBlobStore implements Store {
     }
     CloudMessageReadSet messageReadSet = new CloudMessageReadSet(blobReadInfos, cloudDestination);
     return new StoreInfo(messageReadSet, messageInfos);
+  }
+
+  /**
+   * validate the {@code CloudBlobMetadata} map to make sure it has metadata for all keys, and they meet the {@code storeGetOptions} requirements.
+   * @param cloudBlobMetadataListMap
+   * @throws StoreException if the {@code CloudBlobMetadata} isnt valid
+   */
+  private void validateCloudMetadata(Map<String, CloudBlobMetadata> cloudBlobMetadataListMap,
+      EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
+    for (String key : cloudBlobMetadataListMap.keySet()) {
+      if (isBlobDeleted(cloudBlobMetadataListMap.get(key)) && !storeGetOptions.contains(
+          StoreGetOptions.Store_Include_Deleted)) {
+        throw new StoreException("Id " + key + " has been deleted on the cloud", StoreErrorCodes.ID_Deleted);
+      }
+      if (isBlobExpired(cloudBlobMetadataListMap.get(key)) && !storeGetOptions.contains(
+          StoreGetOptions.Store_Include_Expired)) {
+        throw new StoreException("Id " + key + " has expired on the cloud", StoreErrorCodes.TTL_Expired);
+      }
+    }
+  }
+
+  /**
+   * Gets the operation time for a blob from blob metadata based on the blob's current state and timestamp recorded for that state.
+   * @param metadata blob metadata from which to derive operation time.
+   * @return operation time.
+   */
+  private long getOperationTime(CloudBlobMetadata metadata) {
+    if (isBlobDeleted(metadata)) {
+      return metadata.getDeletionTime();
+    } else if (isBlobExpired(metadata)) {
+      return metadata.getExpirationTime();
+    }
+    return metadata.getCreationTime();
+  }
+
+  /**
+   * Check if the blob is marked for deletion in its metadata
+   * @param metadata to check for deletion
+   * @return true if deleted. false otherwise
+   */
+  static boolean isBlobDeleted(CloudBlobMetadata metadata) {
+    return metadata.getDeletionTime() != Utils.Infinite_Time;
+  }
+
+  /**
+   * Check if the blob is expired
+   * @param metadata to check for expiration
+   * @return true if expired. false otherwise
+   */
+  static boolean isBlobExpired(CloudBlobMetadata metadata) {
+    return metadata.getExpirationTime() != Utils.Infinite_Time
+        && metadata.getExpirationTime() < System.currentTimeMillis();
   }
 
   @Override
@@ -215,7 +268,7 @@ class CloudBlobStore implements Store {
     // TODO: would be more efficient to call blobId.isEncrypted()
     return blobId.getVersion() >= BlobId.BLOB_ID_V4 && BlobId.isEncrypted(blobId.getID());
   }
-  
+
   /**
    * Utility to decide whether a blob should be uploaded.
    * @param messageInfo The {@link MessageInfo} containing the blob metadata.

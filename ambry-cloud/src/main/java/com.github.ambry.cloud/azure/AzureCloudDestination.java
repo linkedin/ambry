@@ -19,7 +19,6 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;

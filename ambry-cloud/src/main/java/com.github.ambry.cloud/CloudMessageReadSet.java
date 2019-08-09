@@ -17,10 +17,10 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferOutputStream;
-import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
 import org.slf4j.Logger;
@@ -47,20 +47,21 @@ class CloudMessageReadSet implements MessageReadSet {
     long written = 0;
     BlobReadInfo blobReadInfo = blobReadInfoList.get(index);
 
-    ByteBuffer outputBuffer;
     try {
       if (blobReadInfo.isPrefetched()) {
-        outputBuffer = blobReadInfo.getPrefetchedBuffer();
+        ByteBuffer outputBuffer = blobReadInfo.getPrefetchedBuffer();
+        outputBuffer.flip();
+        written = channel.write(outputBuffer);
       } else {
-        outputBuffer = blobReadInfo.downloadBlob(cloudDestination);
+        blobReadInfo.downloadBlob(cloudDestination, Channels.newOutputStream(channel));
+        written = blobReadInfo.getBlobSize();
       }
     } catch (CloudStorageException ex) {
       throw new IOException("Download of cloud blob " + blobReadInfoList.get(index).getBlobId().getID() + " failed");
     }
     logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written,
         blobReadInfoList.get(index).getBlobId().getID());
-    outputBuffer.flip();
-    return channel.write(outputBuffer);
+    return written;
   }
 
   @Override
@@ -128,16 +129,14 @@ class CloudMessageReadSet implements MessageReadSet {
     }
 
     /**
-     * Donwload the blob from the {@code CloudDestination}
+     * Donwload the blob from the {@code CloudDestination} to the {@code OutputStream}
      * @param cloudDestination cloudDestination {@code CloudDestination} implementation representing the cloud from which download will happen.
-     * @return {@code ByteBuffer} containing the blob data
+     * @param outputStream OutputStream to download the blob to
      * @throws CloudStorageException if blob download fails.
      */
-    public ByteBuffer downloadBlob(CloudDestination cloudDestination) throws CloudStorageException {
-      ByteBuffer blobByteBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
-      ByteBufferOutputStream outputStream = new ByteBufferOutputStream(blobByteBuffer);
+    public void downloadBlob(CloudDestination cloudDestination, OutputStream outputStream)
+        throws CloudStorageException {
       cloudDestination.downloadBlob(blobId, outputStream);
-      return blobByteBuffer;
     }
 
     /**
