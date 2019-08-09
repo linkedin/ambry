@@ -378,8 +378,8 @@ public class CompactionManagerTest {
   public void testControlCompactionForBlobStore() {
     // without compaction enabled.
     compactionManager.enable();
-    assertTrue("Disable compaction on BlobStore should be true when compaction executor is not instantiated",
-        compactionManager.controlCompactionForBlobStore(blobStore, false));
+    //Disable compaction on BlobStore when compaction executor is not instantiated
+    compactionManager.controlCompactionForBlobStore(blobStore, false);
     compactionManager.disable();
     compactionManager.awaitTermination();
     // with compaction enabled.
@@ -388,12 +388,10 @@ public class CompactionManagerTest {
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
     compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
     compactionManager.enable();
-    assertTrue("Disable compaction on given BlobStore should succeed",
-        compactionManager.controlCompactionForBlobStore(blobStore, false));
+    compactionManager.controlCompactionForBlobStore(blobStore, false);
     assertFalse("BlobStore should not be scheduled after compaction is disabled on it",
         compactionManager.scheduleNextForCompaction(blobStore));
-    assertTrue("Enable compaction on given BlobStore should succeed",
-        compactionManager.controlCompactionForBlobStore(blobStore, true));
+    compactionManager.controlCompactionForBlobStore(blobStore, true);
     assertTrue("BlobStore should be scheduled after compaction is enabled on it",
         compactionManager.scheduleNextForCompaction(blobStore));
     compactionManager.disable();
@@ -409,8 +407,10 @@ public class CompactionManagerTest {
     BlobStore newAddedStore = new MockBlobStore(config, storeMetrics, time, null);
     // without compaction enabled.
     compactionManager.enable();
-    assertTrue("Add BlobStore should succeed when compaction executor is not instantiated",
-        compactionManager.addBlobStore(newAddedStore));
+    compactionManager.addBlobStore(newAddedStore);
+    // verify new store is correctly added into compaction manager
+    assertTrue("New store is not found in compaction manager",
+        compactionManager.getAllStores().contains(newAddedStore));
     compactionManager.disable();
     compactionManager.awaitTermination();
     // with compaction enabled.
@@ -419,8 +419,9 @@ public class CompactionManagerTest {
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
     compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
     compactionManager.enable();
-    assertTrue("Add BlobStore should succeed when compaction is enabled and executor is instantiated",
-        compactionManager.addBlobStore(newAddedStore));
+    compactionManager.addBlobStore(newAddedStore);
+    assertTrue("New store is not found in compaction manager",
+        compactionManager.getAllStores().contains(newAddedStore));
     assertFalse("BlobStore should not be scheduled for the new added store before it is started",
         compactionManager.scheduleNextForCompaction(newAddedStore));
     compactionManager.disable();

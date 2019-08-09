@@ -271,7 +271,11 @@ class DiskManager {
    */
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
     BlobStore store = stores.get(id);
-    return store != null && compactionManager.controlCompactionForBlobStore(store, enabled);
+    if (store == null) {
+      return false;
+    }
+    compactionManager.controlCompactionForBlobStore(store, enabled);
+    return true;
   }
 
   /**
@@ -296,14 +300,13 @@ class DiskManager {
       List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
       diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
     } catch (Exception e) {
-      logger.error("Failed to start the new added store {}", replica.getPartitionId());
-      succeed = false;
-    }
-    if (succeed && !compactionManager.addBlobStore(store)) {
-      logger.error("Failed to add store into CompactionManager.");
+      logger.error("Failed to start new added store {} or add requirements to disk allocator",
+          replica.getPartitionId());
       succeed = false;
     }
     if (succeed) {
+      // add store into CompactionManager
+      compactionManager.addBlobStore(store);
       // add new created store into in-memory data structures.
       stores.put(replica.getPartitionId(), store);
       partitionToReplicaMap.put(replica.getPartitionId(), replica);

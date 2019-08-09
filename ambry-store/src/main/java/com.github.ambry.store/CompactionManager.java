@@ -147,10 +147,11 @@ class CompactionManager {
    * Disable the given {@code store} for compaction.
    * @param store the {@link BlobStore} to be disabled or enabled.
    * @param enable whether to enable ({@code true}) or disable.
-   * @return {@code true} if the disabling was successful. {@code false} if not.
    */
-  boolean controlCompactionForBlobStore(BlobStore store, boolean enable) {
-    return compactionExecutor == null || compactionExecutor.controlCompactionForBlobStore(store, enable);
+  void controlCompactionForBlobStore(BlobStore store, boolean enable) {
+    if (compactionExecutor != null) {
+      compactionExecutor.controlCompactionForBlobStore(store, enable);
+    }
   }
 
   /**
@@ -167,11 +168,22 @@ class CompactionManager {
   /**
    * Add a new BlobStore into Compaction Manager.
    * @param store the {@link BlobStore} which would be added.
-   * @return {@code true} if adding store was successful. {@code false} if not.
    */
-  boolean addBlobStore(BlobStore store) {
-    stores.add(store);
-    return compactionExecutor == null || compactionExecutor.controlCompactionForBlobStore(store, false);
+  void addBlobStore(BlobStore store) {
+    if (compactionExecutor == null) {
+      stores.add(store);
+    } else {
+      // we first disable compaction on new store and then add it into stores set
+      compactionExecutor.controlCompactionForBlobStore(store, false);
+      stores.add(store);
+    }
+  }
+
+  /**
+   * @return all stores in compaction manager.
+   */
+  Set<BlobStore> getAllStores() {
+    return stores;
   }
 
   /**
@@ -345,15 +357,13 @@ class CompactionManager {
      * Disable/Enable the compaction on given BlobStore
      * @param store the {@link BlobStore} on which the compaction is enabled or disabled.
      * @param enable whether to enable ({@code true}) or disable.
-     * @return {@code true} if the disabling was successful. {@code false} if not.
      */
-    boolean controlCompactionForBlobStore(BlobStore store, boolean enable) {
+    void controlCompactionForBlobStore(BlobStore store, boolean enable) {
       if (enable) {
         storesDisabledCompaction.remove(store);
       } else {
         storesDisabledCompaction.add(store);
       }
-      return true;
     }
   }
 }

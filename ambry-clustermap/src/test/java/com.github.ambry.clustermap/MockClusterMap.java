@@ -41,6 +41,8 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 public class MockClusterMap implements ClusterMap {
   public static final String DEFAULT_PARTITION_CLASS = "defaultPartitionClass";
   public static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
+  public static final int PLAIN_TEXT_PORT_START_NUMBER = 62000;
+  public static final int SSL_PORT_START_NUMBER = 63000;
 
   protected final boolean enableSSLPorts;
   protected final Map<Long, PartitionId> partitions;
@@ -111,8 +113,8 @@ public class MockClusterMap implements ClusterMap {
     //Every group of 3 nodes will be put in the same DC.
     int dcIndex = 0;
     String dcName = null;
-    int currentPlainTextPort = 62000;
-    int currentSSLPort = 63000;
+    int currentPlainTextPort = PLAIN_TEXT_PORT_START_NUMBER;
+    int currentSSLPort = SSL_PORT_START_NUMBER;
     for (int i = 0; i < numNodes; i++) {
       if (i % 3 == 0) {
         dcIndex++;

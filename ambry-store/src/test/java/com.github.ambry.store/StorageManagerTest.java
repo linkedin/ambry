@@ -178,7 +178,8 @@ public class StorageManagerTest {
     int newMountPathIndex = 3;
     // add new MountPath to local node
     File f = File.createTempFile("ambry", ".tmp");
-    File mountFile = new File(f.getParent(), "mountpathfile" + 62000 + newMountPathIndex);
+    File mountFile =
+        new File(f.getParent(), "mountpathfile" + MockClusterMap.PLAIN_TEXT_PORT_START_NUMBER + newMountPathIndex);
     MockClusterMap.deleteFileOrDirectory(mountFile);
     assertTrue("Couldn't create mount path directory", mountFile.mkdir());
     localNode.addMountPaths(Collections.singletonList(mountFile.getAbsolutePath()));
