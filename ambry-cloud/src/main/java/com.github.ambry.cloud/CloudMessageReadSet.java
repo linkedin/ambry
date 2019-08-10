@@ -60,7 +60,7 @@ class CloudMessageReadSet implements MessageReadSet {
       throw new IOException("Download of cloud blob " + blobReadInfoList.get(index).getBlobId().getID() + " failed");
     }
     logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written,
-        blobReadInfoList.get(index).getBlobId().getID());
+        blobReadInfo.getBlobId().getID());
     return written;
   }
 
@@ -122,6 +122,8 @@ class CloudMessageReadSet implements MessageReadSet {
      * @throws CloudStorageException if blob cloud not be downloaded
      */
     public void prefetchBlob(CloudDestination cloudDestination) throws CloudStorageException {
+      // Casting blobsize to int, as blobs are chunked in Ambry, and chunk size is 4/8MB.
+      // However, if in future, if very large size of blobs are allowed, then prefetching logic should be changed.
       prefetchedBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
       ByteBufferOutputStream outputStream = new ByteBufferOutputStream(prefetchedBuffer);
       cloudDestination.downloadBlob(blobId, outputStream);

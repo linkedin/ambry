@@ -155,7 +155,8 @@ class CloudBlobStore implements Store {
           StoreGetOptions.Store_Include_Deleted)) {
         throw new StoreException("Id " + key + " has been deleted on the cloud", StoreErrorCodes.ID_Deleted);
       }
-      if (isBlobExpired(cloudBlobMetadataListMap.get(key)) && !storeGetOptions.contains(
+      long currentTimestamp = System.currentTimeMillis();
+      if (isBlobExpired(cloudBlobMetadataListMap.get(key), currentTimestamp) && !storeGetOptions.contains(
           StoreGetOptions.Store_Include_Expired)) {
         throw new StoreException("Id " + key + " has expired on the cloud", StoreErrorCodes.TTL_Expired);
       }
@@ -168,12 +169,13 @@ class CloudBlobStore implements Store {
    * @return operation time.
    */
   private long getOperationTime(CloudBlobMetadata metadata) {
+    long currentTimeStamp = System.currentTimeMillis();
     if (isBlobDeleted(metadata)) {
       return metadata.getDeletionTime();
-    } else if (isBlobExpired(metadata)) {
+    } else if (isBlobExpired(metadata, currentTimeStamp)) {
       return metadata.getExpirationTime();
     }
-    return metadata.getCreationTime();
+    return (metadata.getCreationTime() == Utils.Infinite_Time) ? metadata.getUploadTime() : metadata.getCreationTime();
   }
 
   /**
@@ -190,9 +192,8 @@ class CloudBlobStore implements Store {
    * @param metadata to check for expiration
    * @return true if expired. false otherwise
    */
-  static boolean isBlobExpired(CloudBlobMetadata metadata) {
-    return metadata.getExpirationTime() != Utils.Infinite_Time
-        && metadata.getExpirationTime() < System.currentTimeMillis();
+  static boolean isBlobExpired(CloudBlobMetadata metadata, long currentTimeStamp) {
+    return metadata.getExpirationTime() != Utils.Infinite_Time && metadata.getExpirationTime() < currentTimeStamp;
   }
 
   @Override
@@ -448,15 +449,10 @@ class CloudBlobStore implements Store {
    * @param writeSet the {@link MessageWriteSet} to detect duplicates in
    * @throws IllegalArgumentException if a duplicate is detected
    */
-  private void checkDuplicates(MessageWriteSet writeSet) {
+  private void checkDuplicates(MessageWriteSet writeSet) throws IllegalArgumentException {
     List<MessageInfo> infos = writeSet.getMessageSetInfo();
-    if (infos.size() > 1) {
-      List<StoreKey> keys = infos.stream().map(info -> info.getStoreKey()).collect(Collectors.toList());
-      Set<StoreKey> duplicates = getDuplicates(keys);
-      if (duplicates.size() > 0) {
-        throw new IllegalArgumentException("WriteSet contains duplicates. Duplicates detected: " + duplicates);
-      }
-    }
+    List<StoreKey> keys = infos.stream().map(info -> info.getStoreKey()).collect(Collectors.toList());
+    checkDuplicates(keys);
   }
 
   /**
@@ -464,29 +460,15 @@ class CloudBlobStore implements Store {
    * @param keys list of {@link StoreKey} to detect duplicates in
    * @throws IllegalArgumentException if a duplicate is detected
    */
-  private void checkDuplicates(List<? extends StoreKey> keys) {
+  private void checkDuplicates(List<? extends StoreKey> keys) throws IllegalArgumentException {
     if (keys.size() > 1) {
-      Set<StoreKey> duplicates = getDuplicates(keys);
+      new HashSet<>();
+      Set<StoreKey> seenKeys = new HashSet<>();
+      Set<StoreKey> duplicates = keys.stream().filter(key -> !seenKeys.add(key)).collect(Collectors.toSet());
       if (duplicates.size() > 0) {
-        throw new IllegalArgumentException("StoreKey list contains duplicates. Duplicates detected: " + duplicates);
+        throw new IllegalArgumentException("list contains duplicates. Duplicates detected: " + duplicates);
       }
     }
-  }
-
-  /**
-   * Get duplicates in a list of {@code StoreKey}
-   * @param keys keys list of {@link StoreKey} to find duplicates in
-   * @return {@code Set} of duplicate {@code StoreKey}
-   */
-  private Set<StoreKey> getDuplicates(List<? extends StoreKey> keys) {
-    Set<StoreKey> duplicates = new HashSet<>();
-    Set<StoreKey> seenKeys = new HashSet<>();
-    for (StoreKey key : keys) {
-      if (!seenKeys.add(key)) {
-        duplicates.add(key);
-      }
-    }
-    return duplicates;
   }
 
   @Override

@@ -26,6 +26,7 @@ public class AzureMetrics {
   public static final String BLOB_UPLOAD_SUCCESS_COUNT = "BlobUploadSuccessCount";
   public static final String BLOB_DOWNLOAD_REQUEST_COUNT = "BlobDownloadRequestCount";
   public static final String BLOB_DOWNLOAD_SUCCESS_COUNT = "BlobDownloadSuccessCount";
+  public static final String BLOB_DOWNLOAD_ERROR_COUNT = "BlobDownloadErrorCount";
   public static final String BLOB_UPLOAD_CONFLICT_COUNT = "BlobUploadConflictCount";
   public static final String BLOB_UPLOAD_TIME = "BlobUploadTime";
   public static final String BLOB_DOWNLOAD_TIME = "BlobDownloadTime";
@@ -58,6 +59,7 @@ public class AzureMetrics {
   public final Counter blobUploadSuccessCount;
   public final Counter blobDownloadRequestCount;
   public final Counter blobDownloadSuccessCount;
+  public final Counter blobDownloadErrorCount;
   public final Counter blobUploadConflictCount;
   public final Counter blobUpdatedCount;
   public final Timer blobUploadTime;
@@ -94,6 +96,8 @@ public class AzureMetrics {
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_REQUEST_COUNT));
     blobDownloadSuccessCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_SUCCESS_COUNT));
+    blobDownloadErrorCount =
+        registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_ERROR_COUNT));
     blobUploadConflictCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_CONFLICT_COUNT));
     blobUpdatedCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATED_COUNT));

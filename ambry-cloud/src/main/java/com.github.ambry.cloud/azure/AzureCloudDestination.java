@@ -261,8 +261,9 @@ class AzureCloudDestination implements CloudDestination {
       String azureBlobName = getAzureBlobName(blobId);
       CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
       azureBlob.download(outputStream);
-      azureMetrics.blobUploadSuccessCount.inc();
+      azureMetrics.blobDownloadSuccessCount.inc();
     } catch (URISyntaxException | StorageException e) {
+      azureMetrics.blobDownloadErrorCount.inc();
       throw new CloudStorageException("Error downloading blob " + blobId, e);
     } finally {
       storageTimer.stop();
