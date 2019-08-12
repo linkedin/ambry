@@ -339,7 +339,6 @@ public class StorageManagerTest {
     storageManager.start();
     // shut down replica[1] ~ replica[size - 2]. The replica[0] will be used to test removing store that disk is not running
     // Replica[1] will be used to test removing a started store. Replica[2] will be used to test a store with compaction enabled
-    System.out.println("size = " + replicas.size());
     for (int i = 3; i < replicas.size(); i++) {
       ReplicaId replica = replicas.get(i);
       PartitionId id = replica.getPartitionId();
@@ -359,10 +358,27 @@ public class StorageManagerTest {
     // test remove store that the disk manager is not running
     id = replicas.get(0).getPartitionId();
     storageManager.getDiskManager(id).shutdown();
-    assertFalse("Removing store should fail because disk mananager is not running", storageManager.removeBlobStore(id));
-    // test a store that doesn't exceed
+    assertFalse("Removing store should fail because disk manager is not running", storageManager.removeBlobStore(id));
+    // test a store that doesn't exist
     assertTrue("Removing not-found store should be considered success",
         storageManager.removeBlobStore(invalidPartition));
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
+
+    // test that remove store when compaction executor is not instantiated
+    // by default, storeCompactionTriggers = "" which makes compaction executor = null during initialization
+    VerifiableProperties vProps = new VerifiableProperties(new Properties());
+    storageManager =
+        new StorageManager(new StoreConfig(vProps), diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+            replicas, new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), null,
+            SystemTime.getInstance());
+    storageManager.start();
+    for (ReplicaId replica : replicas) {
+      id = replica.getPartitionId();
+      assertTrue("Disable compaction should succeed", storageManager.controlCompactionForBlobStore(id, false));
+      assertTrue("Shutdown should succeed on given store", storageManager.shutdownBlobStore(id));
+      assertTrue("Removing store should succeed", storageManager.removeBlobStore(id));
+      assertNull("The store should not exist", storageManager.getStore(id));
+    }
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 

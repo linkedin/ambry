@@ -112,6 +112,7 @@ public class StorageManagerMetrics {
    * Deregister the Metrics related to the compaction thread.
    */
   void deregisterCompactionThreadsTracker() {
+    registry.remove(MetricRegistry.name(CompactionManager.class, "CompactionsInProgress"));
     registry.remove(MetricRegistry.name(StorageManager.class, "CompactionThreadsAlive"));
     registry.remove(MetricRegistry.name(StorageManager.class, "CompactionHealth"));
   }

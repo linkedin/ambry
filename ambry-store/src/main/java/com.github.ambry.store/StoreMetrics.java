@@ -219,6 +219,8 @@ public class StoreMetrics {
     registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed"));
     registry.remove(MetricRegistry.name(Log.class, prefix + "PercentageUsedCapacity"));
     registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"));
+    registry.remove(MetricRegistry.name(Log.class, "ByteBufferForAppendTotalCount"));
+    registry.remove(MetricRegistry.name(Log.class, "UnderCompaction" + SEPERATOR + "ByteBufferForAppendTotalCount"));
   }
 
   void initializeHardDeleteMetric(String storeId, final HardDeleter hardDeleter, final PersistentIndex index) {
