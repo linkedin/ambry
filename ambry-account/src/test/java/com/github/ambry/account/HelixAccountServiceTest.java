@@ -132,9 +132,9 @@ public class HelixAccountServiceTest {
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     notifier = new MockNotifier<>();
-    mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, null);
     mockRouter = new MockRouter();
+    mockHelixAccountServiceFactory =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, null, mockRouter);
     deleteStoreIfExists();
     generateReferenceAccountsAndContainers();
   }
@@ -161,9 +161,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testStartUpWithoutMetadataExists() {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     // At time zero, no account metadata exists.
     assertEquals("The number of account in HelixAccountService is incorrect after clean startup", 0,
         accountService.getAllAccounts().size());
@@ -180,9 +177,6 @@ public class HelixAccountServiceTest {
     writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
     // When start, the helixAccountService should get the account metadata.
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
   }
 
@@ -193,9 +187,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testCreateAccount() {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
         accountService.getAllAccounts().size());
     boolean res = accountService.updateAccounts(idToRefAccountMap.values());
@@ -217,9 +208,6 @@ public class HelixAccountServiceTest {
     // pre-populate account metadata in ZK.
     writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
 
     // add a new account
@@ -415,9 +403,6 @@ public class HelixAccountServiceTest {
   @Test
   public void receiveBadMessage() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     updateAccountsAndAssertAccountExistence(idToRefAccountMap.values(), NUM_REF_ACCOUNT, true);
     notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, "badMessage");
     assertEquals("The number of account in HelixAccountService is different from expected", NUM_REF_ACCOUNT,
@@ -432,9 +417,6 @@ public class HelixAccountServiceTest {
   @Test
   public void receiveBadTopic() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     updateAccountsAndAssertAccountExistence(idToRefAccountMap.values(), NUM_REF_ACCOUNT, true);
     notifier.publish("badTopic", FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
     assertEquals("The number of account in HelixAccountService is different from expected", NUM_REF_ACCOUNT,
@@ -447,25 +429,22 @@ public class HelixAccountServiceTest {
   @Test
   public void testNullInputs() throws IOException {
     try {
-      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier, null).getAccountService();
+      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier, null, mockRouter).getAccountService();
       fail("should have thrown");
     } catch (NullPointerException e) {
       // expected
     }
 
     try {
-      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier, null).getAccountService();
+      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier, null, mockRouter).getAccountService();
       fail("should have thrown");
     } catch (NullPointerException e) {
       // expected
     }
     accountService =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null, null).getAccountService();
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null, null, mockRouter).getAccountService();
     accountService.close();
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     try {
       accountService.updateAccounts(null);
       fail("should have thrown");
@@ -488,9 +467,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testUpdateNameConflictingAccounts() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE).build());
@@ -505,9 +481,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testUpdateIdConflictingAccounts() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE).build());
@@ -521,9 +494,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testUpdateDuplicateAccounts() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
@@ -538,9 +508,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testNonConflictingUpdateCaseA() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Account accountToUpdate = accountService.getAccountById((short) 1);
@@ -558,9 +525,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testNonConflictingUpdateCaseB() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Account accountToUpdate = accountService.getAccountById((short) 1);
@@ -578,9 +542,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testNonConflictingUpdateCaseC() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> nonConflictAccounts =
@@ -596,9 +557,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testConflictingUpdateCaseD() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> conflictAccounts =
@@ -617,9 +575,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testConflictingUpdateCaseE() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> conflictAccounts =
@@ -636,9 +591,6 @@ public class HelixAccountServiceTest {
   @Test
   public void testConflictingSnapshotVersionUpdate() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Account expectedAccount = accountService.getAccountById((short) 1);
@@ -708,9 +660,6 @@ public class HelixAccountServiceTest {
     List<Account> accounts = Collections.singletonList(account1);
     writeAccountsToHelixPropertyStore(accounts, false);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     assertAccountInAccountService(account1, accountService);
 
     Account account2 = new AccountBuilder((short) 2, "b", AccountStatus.INACTIVE).build();
@@ -733,9 +682,6 @@ public class HelixAccountServiceTest {
     // pre-populate account metadata in ZK.
     writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
 
     // add consumer
@@ -790,11 +736,8 @@ public class HelixAccountServiceTest {
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix, mockRouter);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     CountDownLatch latch = new CountDownLatch(1);
     mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig).setReadLatch(latch);
     assertEquals("Wrong number of thread for account updater.", 1, numThreadsByThisName(updaterThreadPrefix));
@@ -813,11 +756,8 @@ public class HelixAccountServiceTest {
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix, mockRouter);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     assertEquals("Wrong number of thread for account updater.", 0, numThreadsByThisName(updaterThreadPrefix));
   }
 
@@ -834,11 +774,8 @@ public class HelixAccountServiceTest {
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix, mockRouter);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     updateAccountsAndAssertAccountExistence(Collections.singleton(refAccount), 1, true);
   }
 
@@ -882,9 +819,6 @@ public class HelixAccountServiceTest {
   private void readAndUpdateBadRecord(Collection<Account> accounts) throws Exception {
     writeAccountsToHelixPropertyStore(accounts, false);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     assertEquals("Wrong number of accounts in helixAccountService", 0, accountService.getAllAccounts().size());
     updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), 0, false);
     writeAccountsToHelixPropertyStore(accounts, true);
@@ -1069,9 +1003,6 @@ public class HelixAccountServiceTest {
   private void updateAndWriteZNRecord(ZNRecord zNRecord, boolean isGoodZNRecord) throws Exception {
     writeZNRecordToHelixPropertyStore(zNRecord, false);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    if (useNewZNodePath) {
-      ((HelixAccountService)accountService).setupRouter(mockRouter);
-    }
     assertEquals("Number of account is wrong", 0, accountService.getAllAccounts().size());
     updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), isGoodZNRecord ? 1 : 0,
         isGoodZNRecord);

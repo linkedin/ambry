@@ -80,7 +80,7 @@ import static com.github.ambry.utils.Utils.*;
  *   several previous versions. It keeps a list of blob ids in {@link HelixPropertyStore} and remove the earliest one
  *   when it reaches the limit of the version numbers. There are several benefits from this approach.
  *   <ul>
- *     <li>Revolting changes would be much easier.</li>
+ *     <li>Reverting changes would be much easier.</li>
  *     <li>There will no be size limit for {@link Account} metadata</li>
  *   </ul>
  * </p>
@@ -195,7 +195,7 @@ class HelixAccountService implements AccountService {
         accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
       }
     };
-      updater.run();
+    updater.run();
     if (scheduler != null) {
       int initialDelay = new Random().nextInt(config.updaterPollingIntervalMs + 1);
       scheduler.scheduleAtFixedRate(updater, initialDelay, config.updaterPollingIntervalMs, TimeUnit.MILLISECONDS);
@@ -821,7 +821,8 @@ class RouterStore implements AccountMetadataStore {
           if (accountMap == null) {
             logger.debug("BlobID={} to read but no account map returned");
           } else {
-            logger.trace("Start parsing remote account data from blob {} and versioned at {}.", blobIDAndVersion.blobID, blobIDAndVersion.version);
+            logger.trace("Start parsing remote account data from blob {} and versioned at {}.", blobIDAndVersion.blobID,
+                blobIDAndVersion.version);
             AccountInfoMap newAccountInfoMap = new AccountInfoMap(accountService, accountMap);
             AccountInfoMap oldAccountInfoMap = accountService.updateCache(newAccountInfoMap);
             accountService.notifyAccountUpdateConsumers(newAccountInfoMap, oldAccountInfoMap, isCalledFromListener);
@@ -838,7 +839,8 @@ class RouterStore implements AccountMetadataStore {
     Future<GetBlobResult> resultF = accountService.router.get().getBlob(blobID, new GetBlobOptionsBuilder().build());
     try {
       GetBlobResult result = resultF.get();
-      accountService.accountServiceMetrics.accountFetchFromAmbryTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+      accountService.accountServiceMetrics.accountFetchFromAmbryTimeInMs.update(
+          System.currentTimeMillis() - startTimeMs);
 
       int blobSize = (int) result.getBlobInfo().getBlobProperties().getBlobSize();
       InputStream input = new ReadableStreamChannelInputStream(result.getBlobDataChannel());
@@ -971,9 +973,8 @@ class RouterStore implements AccountMetadataStore {
         try {
           accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
         } catch (Exception e) {
-          String message =
-              "Updating accounts failed because unexpected exception occurred when updating accountId=" + account.getId()
-                  + " accountName=" + account.getName();
+          String message = "Updating accounts failed because unexpected exception occurred when updating accountId="
+              + account.getId() + " accountName=" + account.getName();
           // Do not depend on Helix to log, so log the error message here.
           logger.error(message, e);
           throw new IllegalStateException(message, e);
@@ -984,10 +985,12 @@ class RouterStore implements AccountMetadataStore {
       long startTimeMs = System.currentTimeMillis();
       try {
         this.newBlobID = writeAccountMapToRouter(accountMap, accountService.router.get());
-        accountService.accountServiceMetrics.accountUpdateToAmbryTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+        accountService.accountServiceMetrics.accountUpdateToAmbryTimeInMs.update(
+            System.currentTimeMillis() - startTimeMs);
       } catch (Exception e) {
         accountService.accountServiceMetrics.accountUpdatesToAmbryServerErrorCount.inc();
-        String message = "Updating accounts failed because unexpected error occurred when uploading AccountMetadata to ambry";
+        String message =
+            "Updating accounts failed because unexpected error occurred when uploading AccountMetadata to ambry";
         logger.error(message, e);
         throw new IllegalStateException(message, e);
       }
