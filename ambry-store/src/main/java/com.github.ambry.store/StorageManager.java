@@ -289,6 +289,11 @@ public class StorageManager {
     return diskManager != null && diskManager.shutdownBlobStore(id);
   }
 
+  /**
+   * Remove store from storage manager.
+   * @param id the {@link PartitionId} associated with store
+   * @return {@code ture} if removal succeeds. {@code false} otherwise.
+   */
   public boolean removeBlobStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     if (diskManager == null) {

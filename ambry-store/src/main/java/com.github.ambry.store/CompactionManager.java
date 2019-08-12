@@ -390,6 +390,10 @@ class CompactionManager {
       }
     }
 
+    /**
+     * Remove store from compaction executor.
+     * @param store the {@link BlobStore} to remove
+     */
     void removeBlobStore(BlobStore store) {
       lock.lock();
       try {
@@ -404,6 +408,9 @@ class CompactionManager {
       }
     }
 
+    /**
+     * @return a list of stores on which compaction is disabled.
+     */
     Set<BlobStore> getStoresDisabledCompaction() {
       return storesDisabledCompaction;
     }
