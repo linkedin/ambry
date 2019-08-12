@@ -22,8 +22,11 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -682,6 +685,36 @@ class BlobStore implements Store {
         LogSegment.HEADER_SIZE, index.getLogSegmentsNotInJournal(), blobStoreStats);
   }
 
+  /**
+   * Delete files of this store.
+   * This is the last step to remove store from this node. Return swap segments (if any) to reserve pool and delete all
+   * files/dirs associated with this store. This method is invoked by transition in AmbryStateModel (OFFLINE -> DROPPED)
+   */
+  public void deleteStoreFiles() throws StoreException, IOException {
+    // step0: ensure the store has been shut down
+    if (started) {
+      throw new IllegalStateException("Store is still started. Deleting store files is not allowed.");
+    }
+    // step1: return occupied swap segments (if any) to reserve pool
+    String[] swapSegmentsInUse = compactor.getSwapSegmentsInUse();
+    if (swapSegmentsInUse.length > 0) {
+      for (String fileName : swapSegmentsInUse) {
+        logger.trace("Returning swap segment {} to reserve pool", fileName);
+        File swapSegmentTempFile = new File(dataDir, fileName);
+        diskSpaceAllocator.free(swapSegmentTempFile, config.storeSegmentSizeInBytes, storeId, true);
+      }
+    }
+    // step2: delete all files
+    logger.info("Deleting store {} directory", storeId);
+    File storeDir = new File(dataDir);
+    try {
+      Files.walk(storeDir.toPath()).sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
+    } catch (Exception e) {
+      throw new IOException("Couldn't delete store directory " + dataDir);
+    }
+    logger.info("All files of store {} deleted", storeId);
+  }
+
   @Override
   public void shutdown() throws StoreException {
     shutdown(false);
@@ -751,9 +784,10 @@ class BlobStore implements Store {
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
     checkStarted();
-    DiskSpaceRequirements requirements = log.isLogSegmented() ? new DiskSpaceRequirements(
-        replicaId.getPartitionId().toPathString(), log.getSegmentCapacity(),
-        log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse()) : null;
+    DiskSpaceRequirements requirements =
+        log.isLogSegmented() ? new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(),
+            log.getSegmentCapacity(), log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse().length)
+            : null;
     logger.info("Store {} has disk space requirements: {}", storeId, requirements);
     return requirements;
   }

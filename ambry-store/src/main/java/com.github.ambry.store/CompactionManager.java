@@ -155,9 +155,9 @@ class CompactionManager {
   }
 
   /**
-   *
-   * @param store
-   * @return
+   * Remove store from compaction manager.
+   * @param store the {@link BlobStore} to remove
+   * @return {@code true} if store is removed successfully. {@code false} if not.
    */
   boolean removeBlobStore(BlobStore store) {
     boolean result;
@@ -166,12 +166,13 @@ class CompactionManager {
       result = true;
     } else {
       if (!compactionExecutor.getStoresDisabledCompaction().contains(store)) {
-        logger.error("Fail to remove store ({}) from compaction manager because compaction on it is still enabled",
+        logger.error("Fail to remove store ({}) from compaction manager because compaction of it is still enabled",
             store);
         result = false;
       } else {
         // stores.remove(store) is invoked within compactionExecutor.removeBlobStore() because it requires lock
-        result = compactionExecutor.removeBlobStore(store);
+        compactionExecutor.removeBlobStore(store);
+        result = true;
       }
     }
     return result;
@@ -389,7 +390,7 @@ class CompactionManager {
       }
     }
 
-    boolean removeBlobStore(BlobStore store) {
+    void removeBlobStore(BlobStore store) {
       lock.lock();
       try {
         stores.remove(store);
@@ -401,7 +402,6 @@ class CompactionManager {
       } finally {
         lock.unlock();
       }
-      return true;
     }
 
     Set<BlobStore> getStoresDisabledCompaction() {

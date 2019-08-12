@@ -66,6 +66,7 @@ class StoreTestUtils {
       this.filePath = filePath;
       partitionId = mock(PartitionId.class);
       when(partitionId.toString()).thenReturn(storeId);
+      when(partitionId.toPathString()).thenReturn(storeId);
     }
 
     @Override

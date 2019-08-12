@@ -209,7 +209,6 @@ public class StorageManager {
 
   /**
    * Shutdown the {@link DiskManager}s for the disks on this node.
-   * @throws StoreException
    * @throws InterruptedException
    */
   public void shutdown() throws InterruptedException {
