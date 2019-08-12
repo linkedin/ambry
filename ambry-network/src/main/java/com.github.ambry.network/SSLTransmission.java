@@ -160,9 +160,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private boolean flush(ByteBuffer buf) throws IOException {
     int remaining = buf.remaining();
     if (remaining > 0) {
-      long start = SystemTime.getInstance().nanoseconds();
+      long startNs = SystemTime.getInstance().nanoseconds();
       int written = socketChannel.write(buf);
-      logger.trace("Flushed {} bytes in {} ns", written, SystemTime.getInstance().nanoseconds() - start);
+      logger.trace("Flushed {} bytes in {} ns", written, SystemTime.getInstance().nanoseconds() - startNs);
       return written >= remaining;
     }
     return true;

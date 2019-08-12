@@ -318,7 +318,7 @@ public class Selector implements Selectable {
   /**
    * Process read/write events on current thread.
    */
-  public void pollOnMainThread(long timeoutMs, List<NetworkSend> sends) throws IOException {
+  private void pollOnMainThread(long timeoutMs, List<NetworkSend> sends) throws IOException {
     clear();
 
     // register for write interest on any new sends
@@ -389,7 +389,7 @@ public class Selector implements Selectable {
         }
       }
       checkUnreadyConnectionsStatus();
-      this.metrics.selectorIOCount.inc();
+      this.metrics.selectorIOCount.inc(readyKeys);
       this.metrics.selectorIOTime.update(time.milliseconds() - endSelect);
     }
     disconnected.addAll(closedConnections);
@@ -487,17 +487,15 @@ public class Selector implements Selectable {
               this.completedSends.add(networkSend);
             }
           }
-        } catch (InterruptedException | ExecutionException e) {
-          if (!(e.getCause() instanceof IOException)) {
-            logger.error("Hit unexpected exception on receive, ", e);
-          }
+        } catch (ExecutionException | InterruptedException e) {
+          logger.error("Hit Unexpected exception on selector event processing, ", e);
         }
       }
       for (SelectionKey keyWithError : readWriteKeySet) {
         close(keyWithError);
       }
       checkUnreadyConnectionsStatus();
-      this.metrics.selectorIOCount.inc(keys.size());
+      this.metrics.selectorIOCount.inc(readyKeys);
       this.metrics.selectorIOTime.update(time.milliseconds() - endSelect);
     }
     disconnected.addAll(closedConnections);
@@ -695,7 +693,7 @@ public class Selector implements Selectable {
    * Process reads from ready sockets
    * @return the {@link NetworkReceive} if no IOException during read().
    */
-  private NetworkReceive read(SelectionKey key, Transmission transmission) throws IOException {
+  private NetworkReceive read(SelectionKey key, Transmission transmission) {
     long startTimeToReadInMs = time.milliseconds();
     try {
       boolean readComplete = transmission.read();
@@ -719,7 +717,7 @@ public class Selector implements Selectable {
    * Process writes to ready sockets
    * @return the {@link NetworkSend} if no IOException during write().
    */
-  private NetworkSend write(SelectionKey key, Transmission transmission) throws IOException {
+  private NetworkSend write(SelectionKey key, Transmission transmission) {
     long startTimeToWriteInMs = time.milliseconds();
     try {
       boolean sendComplete = transmission.write();

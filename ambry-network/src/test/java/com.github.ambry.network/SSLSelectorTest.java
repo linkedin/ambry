@@ -50,6 +50,7 @@ public class SSLSelectorTest {
   private final EchoServer server;
   private Selector selector;
   private final File trustStoreFile;
+  private final int poolSize;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -57,6 +58,7 @@ public class SSLSelectorTest {
   }
 
   public SSLSelectorTest(int poolSize) throws Exception {
+    this.poolSize = poolSize;
     trustStoreFile = File.createTempFile("truststore", ".jks");
     SSLConfig sslConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
@@ -318,7 +320,6 @@ public class SSLSelectorTest {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), socketBufSize, socketBufSize, PortType.SSL);
     while (!selector.connected().contains(connectionId)) {
-      System.out.println("here");
       selector.poll(10000L);
     }
     return connectionId;
@@ -339,7 +340,7 @@ public class SSLSelectorTest {
     selector.close();
     NetworkMetrics metrics = new NetworkMetrics(new MetricRegistry());
     Time time = SystemTime.getInstance();
-    selector = new Selector(metrics, time, clientSSLFactory, 0) {
+    selector = new Selector(metrics, time, clientSSLFactory, poolSize) {
       @Override
       protected Transmission createTransmission(String connectionId, SelectionKey key, String hostname, int port,
           PortType portType, SSLFactory.Mode mode) throws IOException {
