@@ -36,7 +36,7 @@ import org.apache.commons.io.IOUtils;
  */
 public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
-  private final Map<BlobId, Pair<CloudBlobMetadata, InputStream>> map = new HashMap<>();
+  private final Map<BlobId, Pair<CloudBlobMetadata, byte[]>> map = new HashMap<>();
   private final CountDownLatch latch;
   private final Set<BlobId> blobIdsToTrack = ConcurrentHashMap.newKeySet();
   private final Map<String, byte[]> tokenMap = new ConcurrentHashMap<>();
@@ -55,10 +55,9 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   synchronized public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) {
-    map.put(blobId, new Pair<>(cloudBlobMetadata, blobInputStream));
-    // read inputstream and track bytes read
-    // Note: blobSize may be -1 so don't rely on it
-    byte[] buffer = new byte[1024];
+    // Note: for encrypted data, blobSize may be -1, so ideally we shouldn't use it here.
+    // However, till the time encrypted get is implemented, getting the buffer with metadata size helps with testing of unencrypted get.
+    byte[] buffer = new byte[(int) cloudBlobMetadata.getSize()];
     int bytesRead = 0;
     try {
       do {
@@ -68,6 +67,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
+    map.put(blobId, new Pair<>(cloudBlobMetadata, buffer));
     blobsUploadedCounter.incrementAndGet();
     if (blobIdsToTrack.remove(blobId)) {
       latch.countDown();
@@ -82,8 +82,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       if (!map.containsKey(blobId)) {
         throw new CloudStorageException("Blob with blobId " + blobId.getID() + " does not exist.");
       }
-      byte[] blobData = new byte[(int) map.get(blobId).getFirst().getSize()];
-      map.get(blobId).getSecond().read(blobData);
+      byte[] blobData = map.get(blobId).getSecond();
       outputStream.write(blobData);
     } catch (IOException ex) {
       throw new CloudStorageException(

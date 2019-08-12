@@ -50,12 +50,15 @@ import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -620,118 +623,75 @@ public class CloudBlobStoreTest {
 
   @Test
   public void testGet() throws Exception {
-    // Set up remote host
-    MockClusterMap clusterMap = new MockClusterMap();
-    MockHost remoteHost = getLocalAndRemoteHosts(clusterMap).getSecond();
-    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
-    PartitionId partitionId = partitionIds.get(0);
-    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
-    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
-    storeKeyConverterFactory.setConversionMap(new HashMap<>());
-    storeKeyConverterFactory.setReturnInputIfAbsent(true);
-    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter =
-        storeKeyConverterFactory.getStoreKeyConverter();
-    Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
-    Map<DataNodeId, MockHost> hosts = new HashMap<>();
-    hosts.put(remoteHost.dataNodeId, remoteHost);
-    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 4);
-
-    // Generate BlobIds for following PUT.
-    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
-    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
-    List<BlobId> blobIdList = new ArrayList<>();
-    for (int i = 0; i < 6; i++) {
-      blobIdList.add(
-          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-              containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK));
+    setupCloudStore(true, false, defaultCacheLimit, true);
+    // Put blobs with and without expiration and encryption
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+    int count = 5;
+    List<BlobId> blobIds = new ArrayList<>(count);
+    for (int j = 0; j < count; j++) {
+      long size = Math.abs(random.nextLong()) % 10000;
+      blobIds.add(addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, false));
     }
+    store.put(messageWriteSet);
 
-    // Set up VCR
-    Properties props = new Properties();
-    setBasicProperties(props);
-    props.setProperty("clustermap.port", "12300");
-    props.setProperty("vcr.ssl.port", "12345");
-
-    ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(props));
-    CloudDataNode cloudDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
-
-    LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
-        new LatchBasedInMemoryCloudDestination(blobIdList);
-    CloudReplica cloudReplica = new CloudReplica(cloudConfig, partitionId, cloudDataNode);
-    CloudBlobStore cloudBlobStore =
-        new CloudBlobStore(new VerifiableProperties(props), partitionId, latchBasedInMemoryCloudDestination, clusterMap,
-            new VcrMetrics(new MetricRegistry()));
-    cloudBlobStore.start();
-
-    // Create ReplicaThread and add RemoteReplicaInfo to it.
-    ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), Collections.emptyList());
-    ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindToken.MockFindTokenFactory(), clusterMap, new AtomicInteger(0),
-            cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
-            clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(), new ResponseHandler(clusterMap),
-            new MockTime());
-
-    for (ReplicaId replica : partitionId.getReplicaIds()) {
-      if (replica.getDataNodeId() == remoteHost.dataNodeId) {
-        RemoteReplicaInfo remoteReplicaInfo =
-            new RemoteReplicaInfo(replica, cloudReplica, cloudBlobStore, new MockFindToken(0, 0), Long.MAX_VALUE,
-                SystemTime.getInstance(), new Port(remoteHost.dataNodeId.getPort(), PortType.PLAINTEXT));
-        replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
-        break;
+    //test get for a list of blobs that exist
+    StoreInfo storeInfo = store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
+    assertTrue(
+        "Number of records returned by get should be " + count + " found " + storeInfo.getMessageReadSetInfo().size(),
+        storeInfo.getMessageReadSetInfo().size() == count);
+    for (MessageInfo messageInfo : storeInfo.getMessageReadSetInfo()) {
+      for (int i = 0; i < messageWriteSet.getMessageSetInfo().size(); i++) {
+        if (messageWriteSet.getMessageSetInfo().get(i).getStoreKey().equals(messageInfo.getStoreKey())) {
+          ByteBuffer uploadedData = messageWriteSet.getBuffers().get(i);
+          ByteBuffer downloadedData = ByteBuffer.allocate((int) messageWriteSet.getMessageSetInfo().get(i).getSize());
+          WritableByteChannel writableByteChannel = Channels.newChannel(new ByteBufferOutputStream(downloadedData));
+          storeInfo.getMessageReadSet().writeTo(i, writableByteChannel, -1, -1);
+          uploadedData.flip();
+          downloadedData.flip();
+          assertTrue(uploadedData.equals(downloadedData));
+          break;
+        }
       }
     }
 
-    EnumSet<StoreGetOptions> getOptions = EnumSet.noneOf(StoreGetOptions.class);
-    long referenceTime = System.currentTimeMillis();
-    BlobId id = blobIdList.get(0);
-    addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
-        referenceTime - 2000, referenceTime - 1000);
-    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
-        Utils.Infinite_Time);
-    id = blobIdList.get(1);
-    addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
-        referenceTime - 2000, referenceTime - 1000);
-    addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
-        Utils.Infinite_Time);
-    replicaThread.replicate();
-    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    //test get for one blob that exists
+    List<BlobId> singleIdList = new ArrayList<>(1);
+    singleIdList.add(blobIds.get(0));
+    storeInfo = store.get(singleIdList, EnumSet.noneOf(StoreGetOptions.class));
+    assertTrue(
+        "Number of records returned by get should be " + 1 + " found " + storeInfo.getMessageReadSetInfo().size(),
+        storeInfo.getMessageReadSetInfo().size() == 1);
+    MessageInfo messageInfo = storeInfo.getMessageReadSetInfo().get(0);
+    assertTrue(messageInfo.getStoreKey().equals(singleIdList.get(0)));
+    ByteBuffer uploadedData = messageWriteSet.getBuffers().get(0);
+    ByteBuffer downloadedData = ByteBuffer.allocate((int) messageWriteSet.getMessageSetInfo().get(0).getSize());
+    WritableByteChannel writableByteChannel = Channels.newChannel(new ByteBufferOutputStream(downloadedData));
+    storeInfo.getMessageReadSet().writeTo(0, writableByteChannel, -1, -1);
+    downloadedData.flip();
+    assertTrue(uploadedData.equals(downloadedData));
 
-    //try get for a blob that exists
-    List<BlobId> blobIds = new ArrayList<>(1);
-    blobIds.add(blobIdList.get(0));
-    StoreInfo storeInfo = cloudBlobStore.get(blobIds, getOptions);
-    assertTrue(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
-
-    //try get for a list of blobs that exist
-    blobIds = new ArrayList<>(2);
-    blobIds.add(blobIdList.get(0));
-    blobIds.add(blobIdList.get(1));
-    storeInfo = cloudBlobStore.get(blobIds, getOptions);
-    assertTrue(storeInfo.getMessageReadSetInfo().get(0).getStoreKey().equals(blobIdList.get(0)));
-    assertTrue(storeInfo.getMessageReadSetInfo().get(1).getStoreKey().equals(blobIdList.get(1)));
-
-    //try get for a blob that doesnt exist
-    blobIds = new ArrayList<>(1);
-    id = blobIdList.get(2);
-    blobIds.add(id);
+    //test get for one blob that doesnt exist
+    BlobId nonExistentId = getUniqueId(refAccountId, refContainerId, false);
+    singleIdList = new ArrayList<>(1);
+    singleIdList.add(nonExistentId);
     try {
-      storeInfo = cloudBlobStore.get(blobIds, getOptions);
-      fail("A get for non existent blob should have thrown an exception");
-    } catch (StoreException ex) {
+      storeInfo = store.get(singleIdList, EnumSet.noneOf(StoreGetOptions.class));
+      assertTrue("get with non existent id should fail", false);
+    } catch (StoreException e) {
+      assertTrue(
+          "get with non existent blob id should throw exception with " + StoreErrorCodes.ID_Not_Found + " error code.",
+          e.getErrorCode().equals(StoreErrorCodes.ID_Not_Found));
     }
 
-    //try get for a list of blob such that some of them dont exist
-    blobIds = new ArrayList<>(2);
-    blobIds.add(blobIdList.get(0));
-    blobIds.add(blobIdList.get(2));
+    //test get with one blob in list non-existent
+    blobIds.add(nonExistentId);
     try {
-      storeInfo = cloudBlobStore.get(blobIds, getOptions);
-      fail("A get for non existent blob should have thrown an exception");
-    } catch (StoreException ex) {
+      storeInfo = store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
+      assertTrue("get with any non existent id should fail", false);
+    } catch (StoreException e) {
+      assertTrue("get with any non existent blob id should throw exception with " + StoreErrorCodes.ID_Not_Found
+          + " error code.", e.getErrorCode().equals(StoreErrorCodes.ID_Not_Found));
     }
+    blobIds.remove(blobIds.remove(blobIds.size() - 1));
   }
 }
