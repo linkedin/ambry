@@ -24,6 +24,7 @@ import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Utils;
 import com.google.common.base.Charsets;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -60,7 +61,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.misc.IOUtils;
 
 import static com.github.ambry.account.AccountUtils.*;
 import static com.github.ambry.utils.Utils.*;
@@ -842,7 +842,7 @@ class RouterStore implements AccountMetadataStore {
 
       int blobSize = (int) result.getBlobInfo().getBlobProperties().getBlobSize();
       InputStream input = new ReadableStreamChannelInputStream(result.getBlobDataChannel());
-      byte[] bytes = IOUtils.readNBytes(input, blobSize);
+      byte[] bytes = Utils.readBytesFromStream(input, blobSize);
 
       JSONObject object = new JSONObject(new String(bytes, Charsets.UTF_8));
       Map<String, String> map = new HashMap<>();

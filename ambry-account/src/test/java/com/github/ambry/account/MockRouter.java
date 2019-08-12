@@ -28,6 +28,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,8 +43,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.misc.IOUtils;
-
 
 public class MockRouter implements Router {
   private final static Logger logger = LoggerFactory.getLogger(MockRouter.class);
@@ -106,7 +105,7 @@ public class MockRouter implements Router {
       long size = channel.getSize();
       try {
         InputStream input = new ReadableStreamChannelInputStream(channel);
-        byte[] bytes = IOUtils.readNBytes(input, (int) size);
+        byte[] bytes = Utils.readBytesFromStream(input, (int)size);
         BlobInfoAndData blob = new BlobInfoAndData(new BlobInfo(blobProperties, userMetadata), bytes);
         String id = null;
         for(;;) {
