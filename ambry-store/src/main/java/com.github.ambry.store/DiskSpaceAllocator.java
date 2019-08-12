@@ -63,8 +63,14 @@ class DiskSpaceAllocator {
   private final File swapReserveDir;
   private final long requiredSwapSegmentsPerSize;
   private final StorageManagerMetrics metrics;
+  // In storeReserveFiles hashmap, key is store id and value is each store's reserve pool represented by ReserveFileMap.
+  // The reason to use ReserveFileMap here is to ensure reserve pool of each store is thread-safe. Note that different
+  // threads may perform operation on same store. For example, request handler thread and compaction manager thread operates
+  // on same store. Hence store's reserve pool should handle concurrent access in this case.
   private final Map<String, ReserveFileMap> storeReserveFiles = new HashMap<>();
   private final ReserveFileMap swapReserveFiles = new ReserveFileMap();
+  // A map keeps total number of swap segments by size that include both segments in use and segments available in pool.
+  private final Map<Long, Long> swapSegmentNumBySize = new HashMap<>();
   private PoolState poolState = PoolState.NOT_INVENTORIED;
   private Exception inventoryException = null;
 
@@ -139,7 +145,7 @@ class DiskSpaceAllocator {
         // The requirements for each store and swap segments pool
         Map<String, Map<Long, Long>> overallRequirements = getOverallRequirements(requirementsList);
         deleteExtraSegments(overallRequirements, true);
-        addRequiredSegments(overallRequirements);
+        addRequiredSegments(overallRequirements, true);
         // TODO fill the disk with additional swap segments
         poolState = PoolState.INITIALIZED;
       } else {
@@ -356,7 +362,7 @@ class DiskSpaceAllocator {
    * @param requirementsList the collection of {@link DiskSpaceRequirements} objects to be accumulated
    * @return a {@link Map} from segment sizes to the number of reserve segments needed at that size.
    */
-  private Map<String, Map<Long, Long>> getOverallRequirements(Collection<DiskSpaceRequirements> requirementsList) {
+  Map<String, Map<Long, Long>> getOverallRequirements(Collection<DiskSpaceRequirements> requirementsList) {
     Map<String, Map<Long, Long>> overallRequirements = new HashMap<>();
     Map<Long, Long> swapSegmentsUsed = new HashMap<>();
     Map<Long, Long> swapSegmentsRequired = new HashMap<>();
@@ -372,7 +378,14 @@ class DiskSpaceAllocator {
     }
     for (Map.Entry<Long, Long> sizeAndSwapSegments : swapSegmentsUsed.entrySet()) {
       long sizeInBytes = sizeAndSwapSegments.getKey();
-      long swapSegmentsNeededNum = Math.max(requiredSwapSegmentsPerSize - swapSegmentsUsed.get(sizeInBytes), 0L);
+      long existingSegmentsNum = swapSegmentNumBySize.getOrDefault(sizeInBytes, 0L);
+      long swapSegmentsNeededNum =
+          Math.max(requiredSwapSegmentsPerSize - swapSegmentsUsed.get(sizeInBytes) - existingSegmentsNum, 0L);
+      // Update swapSegmentNumBySize map by adding up existing segments, segments in use and segments needed
+      // During server startup, existing segments = 0;
+      // During new store addition, segments in use = 0;
+      swapSegmentNumBySize.put(sizeInBytes,
+          existingSegmentsNum + swapSegmentsUsed.get(sizeInBytes) + swapSegmentsNeededNum);
       swapSegmentsRequired.put(sizeInBytes, swapSegmentsNeededNum);
     }
     overallRequirements.put(SWAP_DIR_NAME, swapSegmentsRequired);
@@ -429,6 +442,7 @@ class DiskSpaceAllocator {
       }
     } else {
       // delete the unneeded segments at runtime which is usually called during dynamic store removal.
+      // TODO use compactor in store to double check swap segments in use and return them to reserve pool
       for (String storeId : overallRequirements.keySet()) {
         File storeReserveDir = new File(reserveDir, STORE_DIR_PREFIX + storeId);
         Utils.deleteFileOrDirectory(storeReserveDir);
@@ -439,9 +453,10 @@ class DiskSpaceAllocator {
   /**
    * Add additional reserve files that are required by {@code overallRequirements}.
    * @param overallRequirements a map between segment sizes in bytes and the number of segments needed for that size.
+   * @param isInitialize whether the addition is called during initialization.
    * @throws IOException
    */
-  void addRequiredSegments(Map<String, Map<Long, Long>> overallRequirements) throws IOException {
+  void addRequiredSegments(Map<String, Map<Long, Long>> overallRequirements, boolean isInitialize) throws IOException {
     if (enablePooling) {
       for (Map.Entry<String, Map<Long, Long>> storeOrSwapRequirement : overallRequirements.entrySet()) {
         String storeOrSwapDirName = storeOrSwapRequirement.getKey();
@@ -452,8 +467,26 @@ class DiskSpaceAllocator {
           for (Map.Entry<Long, Long> sizeAndSegmentsNeeded : requirementBySize.entrySet()) {
             long sizeInBytes = sizeAndSegmentsNeeded.getKey();
             long segmentsNeeded = sizeAndSegmentsNeeded.getValue();
-            while (swapReserveFiles.getCount(sizeInBytes) < segmentsNeeded) {
-              swapReserveFiles.add(sizeInBytes, createReserveFile(sizeInBytes, swapReserveDir));
+            if (isInitialize) {
+              // if this method is called during server start up, there is no race condition when calling getCount() from swapReserveFiles
+              // and we still need to check swapReserveFiles.getCount() because there might be some inventoried segments
+              while (swapReserveFiles.getCount(sizeInBytes) < segmentsNeeded) {
+                swapReserveFiles.add(sizeInBytes, createReserveFile(sizeInBytes, swapReserveDir));
+              }
+            } else {
+              // if this method is called when adding new store, swapReserveFiles.getCount() is not reliable because other
+              // threads may concurrently check in and check out swap segments
+              for (int i = 0; i < segmentsNeeded; ++i) {
+                try {
+                  swapReserveFiles.add(sizeInBytes, createReserveFile(sizeInBytes, swapReserveDir));
+                } catch (IOException e) {
+                  // if fail to create file, decrease number of swap segment with this size in swapSegmentNumBySize map
+                  // we don't have to subtract # of swapSegmentsUsed because this exceptions happened when adding new store
+                  // and there shouldn't be any swap segment in use.
+                  swapSegmentNumBySize.put(sizeInBytes, swapSegmentNumBySize.get(sizeInBytes) - (segmentsNeeded - i));
+                  throw e;
+                }
+              }
             }
           }
         } else {
@@ -489,6 +522,14 @@ class DiskSpaceAllocator {
    */
   ReserveFileMap getSwapReserveFileMap() {
     return swapReserveFiles;
+  }
+
+  /**
+   * @return return the map kept in this DiskSpaceAllocator to record total number of swap segments by size. Here, total
+   * number of swap segments include both segments in use and segments available in reserve pool.
+   */
+  Map<Long, Long> getSwapSegmentBySizeMap() {
+    return swapSegmentNumBySize;
   }
 
   /**

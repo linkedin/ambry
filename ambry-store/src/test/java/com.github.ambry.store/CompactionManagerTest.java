@@ -48,9 +48,8 @@ public class CompactionManagerTest {
 
   /**
    * Instantiates {@link CompactionManagerTest} with the required cast
-   * @throws InterruptedException
    */
-  public CompactionManagerTest() throws InterruptedException {
+  public CompactionManagerTest() {
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
@@ -195,6 +194,7 @@ public class CompactionManagerTest {
     List<BlobStore> stores = new ArrayList<>();
     // one store that isn't started isn't going to get compact calls.
     // another store that throws an exception on resumeCompaction() isn't going to get a compact call.
+    // the new added store in storesDisabledCompaction isn't going to get compact calls.
     CountDownLatch compactCallsCountdown = new CountDownLatch(numStores - 3);
     properties.setProperty("store.compaction.triggers", ALL_COMPACTION_TRIGGERS);
     properties.setProperty("store.compaction.check.frequency.in.hours", Integer.toString(100));
@@ -223,6 +223,10 @@ public class CompactionManagerTest {
     // disable the third blobstore for compaction before starting the CompactionExecutor thread
     MockBlobStore controlCompactionTestStore = (MockBlobStore) stores.get(2);
     compactionManager.controlCompactionForBlobStore(controlCompactionTestStore, false);
+    // add a new blobstore into compaction manager but not started yet.
+    MockBlobStore newAddedStore =
+        new MockBlobStore(config, metrics, time, compactCallsCountdown, generateRandomCompactionDetails(2));
+    compactionManager.addBlobStore(newAddedStore);
     compactionManager.enable();
     assertNotNull("Compaction thread should be created",
         TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
@@ -242,6 +246,8 @@ public class CompactionManagerTest {
         assertFalse("Compact should not have been called", store.compactCalled);
       }
     }
+    // ensure compact is not called on new added store
+    assertFalse("Compact should not have been called", newAddedStore.compactCalled);
 
     // set all compact called to false
     for (BlobStore store : stores) {
@@ -271,14 +277,16 @@ public class CompactionManagerTest {
     compactionManager.disable();
     compactionManager.awaitTermination();
     assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
-    compactCallsCountdown = new CountDownLatch(2);
+    compactCallsCountdown = new CountDownLatch(3);
     // set all compact called to false
     for (BlobStore store : stores) {
       ((MockBlobStore) store).compactCalled = false;
       ((MockBlobStore) store).resumeCompactionCalled = false;
       ((MockBlobStore) store).compactCallsCountdown = compactCallsCountdown;
     }
+    newAddedStore.compactCallsCountdown = compactCallsCountdown;
     compactionManager.controlCompactionForBlobStore(controlCompactionTestStore, true);
+    compactionManager.controlCompactionForBlobStore(newAddedStore, true);
     // restart Compaction Manager to trigger Periodic Compaction
     compactionManager.enable();
     assertNotNull("Compaction thread should be created",
@@ -299,6 +307,8 @@ public class CompactionManagerTest {
         assertFalse("Compact should not have been called", store.compactCalled);
       }
     }
+    // ensure compact is called for new added store
+    assertTrue("Compact was not called", newAddedStore.compactCalled);
     compactionManager.disable();
     compactionManager.awaitTermination();
     assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
@@ -306,10 +316,9 @@ public class CompactionManagerTest {
 
   /**
    * Tests for cases where only certain triggers are enabled.
-   * @throws Exception
    */
   @Test
-  public void testDifferentTriggers() throws Exception {
+  public void testDifferentTriggers() {
     blobStore.details = generateRandomCompactionDetails(2);
     Runnable adminDisabledChecker =
         () -> assertFalse("Compaction should not be scheduled", compactionManager.scheduleNextForCompaction(blobStore));
@@ -369,8 +378,8 @@ public class CompactionManagerTest {
   public void testControlCompactionForBlobStore() {
     // without compaction enabled.
     compactionManager.enable();
-    assertTrue("Disable compaction on BlobStore should be true when compaction executor is not instantiated",
-        compactionManager.controlCompactionForBlobStore(blobStore, false));
+    //Disable compaction on BlobStore when compaction executor is not instantiated
+    compactionManager.controlCompactionForBlobStore(blobStore, false);
     compactionManager.disable();
     compactionManager.awaitTermination();
     // with compaction enabled.
@@ -379,14 +388,42 @@ public class CompactionManagerTest {
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
     compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
     compactionManager.enable();
-    assertTrue("Disable compaction on given BlobStore should succeed",
-        compactionManager.controlCompactionForBlobStore(blobStore, false));
+    compactionManager.controlCompactionForBlobStore(blobStore, false);
     assertFalse("BlobStore should not be scheduled after compaction is disabled on it",
         compactionManager.scheduleNextForCompaction(blobStore));
-    assertTrue("Enable compaction on given BlobStore should succeed",
-        compactionManager.controlCompactionForBlobStore(blobStore, true));
+    compactionManager.controlCompactionForBlobStore(blobStore, true);
     assertTrue("BlobStore should be scheduled after compaction is enabled on it",
         compactionManager.scheduleNextForCompaction(blobStore));
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+  }
+
+  /**
+   * Tests for adding new BlobStore with/without compaction enabled.
+   */
+  @Test
+  public void testAddBlobStore() {
+    StoreMetrics storeMetrics = new StoreMetrics(new MetricRegistry());
+    BlobStore newAddedStore = new MockBlobStore(config, storeMetrics, time, null);
+    // without compaction enabled.
+    compactionManager.enable();
+    compactionManager.addBlobStore(newAddedStore);
+    // verify new store is correctly added into compaction manager
+    assertTrue("New store is not found in compaction manager",
+        compactionManager.getAllStores().contains(newAddedStore));
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+    // with compaction enabled.
+    properties.setProperty("store.compaction.triggers", ALL_COMPACTION_TRIGGERS);
+    config = new StoreConfig(new VerifiableProperties(properties));
+    StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
+    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
+    compactionManager.enable();
+    compactionManager.addBlobStore(newAddedStore);
+    assertTrue("New store is not found in compaction manager",
+        compactionManager.getAllStores().contains(newAddedStore));
+    assertFalse("BlobStore should not be scheduled for the new added store before it is started",
+        compactionManager.scheduleNextForCompaction(newAddedStore));
     compactionManager.disable();
     compactionManager.awaitTermination();
   }
@@ -410,9 +447,8 @@ public class CompactionManagerTest {
   /**
    * Does the compaction triggers test by running each trigger in {@code triggerRunners} after resetting state.
    * @param triggerRunners the code that triggers compaction.
-   * @throws Exception
    */
-  private void doTestTrigger(List<Runnable> triggerRunners) throws Exception {
+  private void doTestTrigger(List<Runnable> triggerRunners) {
     blobStore.resumeCompactionCalled = false;
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
     config = new StoreConfig(new VerifiableProperties(properties));

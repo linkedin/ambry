@@ -26,11 +26,13 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -43,8 +45,8 @@ import org.slf4j.LoggerFactory;
  */
 class DiskManager {
 
-  private final Map<PartitionId, BlobStore> stores = new HashMap<>();
-  private final Map<PartitionId, ReplicaId> partitionToReplicaMap = new HashMap<>();
+  private final Map<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
+  private final Map<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
   private final Time time;
@@ -55,6 +57,13 @@ class DiskManager {
   private final List<String> stoppedReplicas;
   private final ReplicaStatusDelegate replicaStatusDelegate;
   private final Set<String> expectedDirs = new HashSet<>();
+  private final StoreConfig storeConfig;
+  private final ScheduledExecutorService scheduler;
+  private final StoreMetrics storeMainMetrics;
+  private final StoreMetrics storeUnderCompactionMetrics;
+  private final StoreKeyFactory keyFactory;
+  private final MessageStoreRecovery recovery;
+  private final MessageStoreHardDelete hardDelete;
   private boolean running = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -80,7 +89,14 @@ class DiskManager {
       MessageStoreHardDelete hardDelete, ReplicaStatusDelegate replicaStatusDelegate, List<String> stoppedReplicas,
       Time time) {
     this.disk = disk;
+    this.storeConfig = storeConfig;
+    this.scheduler = scheduler;
     this.metrics = metrics;
+    this.storeMainMetrics = storeMainMetrics;
+    this.storeUnderCompactionMetrics = storeUnderCompactionMetrics;
+    this.keyFactory = keyFactory;
+    this.recovery = recovery;
+    this.hardDelete = hardDelete;
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(storeConfig, time));
     longLivedTaskScheduler = Utils.newScheduler(1, true);
@@ -248,14 +264,55 @@ class DiskManager {
   }
 
   /**
-   * Disable compaction on the {@link PartitionId} {@code id}.
+   * Enable or disable compaction on the {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link BlobStore} on which compaction is disabled or enabled.
    * @param enabled whether to enable ({@code true}) or disable.
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
     BlobStore store = stores.get(id);
-    return store != null && compactionManager.controlCompactionForBlobStore(store, enabled);
+    if (store == null) {
+      return false;
+    }
+    compactionManager.controlCompactionForBlobStore(store, enabled);
+    return true;
+  }
+
+  /**
+   * Add a new BlobStore with given {@link ReplicaId}.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  boolean addBlobStore(ReplicaId replica) {
+    if (!running) {
+      logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
+      return false;
+    }
+    boolean succeed = true;
+    BlobStore store =
+        new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
+            storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
+            time);
+    try {
+      // TODO In future PR, store.start() should contain logic for recovery  OFFLINE -> BOOTSTRAP -> STANDBY
+      store.start();
+      // collect store segment requirements and add into DiskSpaceAllocator
+      List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
+      diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
+    } catch (Exception e) {
+      logger.error("Failed to start new added store {} or add requirements to disk allocator",
+          replica.getPartitionId());
+      succeed = false;
+    }
+    if (succeed) {
+      // add store into CompactionManager
+      compactionManager.addBlobStore(store);
+      // add new created store into in-memory data structures.
+      stores.put(replica.getPartitionId(), store);
+      partitionToReplicaMap.put(replica.getPartitionId(), replica);
+      logger.info("New store is successfully added into DiskManager.");
+    }
+    return succeed;
   }
 
   /**

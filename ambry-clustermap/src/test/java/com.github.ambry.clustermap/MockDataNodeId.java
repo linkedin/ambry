@@ -152,6 +152,14 @@ public class MockDataNodeId implements DataNodeId {
     return mountPaths;
   }
 
+  /**
+   * Add new mount paths to current datanode.
+   * @param pathsToAdd a list of mount paths to be added onto current node
+   */
+  public void addMountPaths(List<String> pathsToAdd) {
+    mountPaths.addAll(pathsToAdd);
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -183,7 +191,7 @@ public class MockDataNodeId implements DataNodeId {
     }
 
     MockDataNodeId other = (MockDataNodeId) o;
-    int compare = (portNum < other.portNum) ? -1 : ((portNum == other.portNum) ? 0 : 1);
+    int compare = Integer.compare(portNum, other.portNum);
     if (compare == 0) {
       compare = hostname.compareTo(other.hostname);
     }
