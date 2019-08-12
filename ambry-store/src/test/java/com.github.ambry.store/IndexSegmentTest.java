@@ -753,6 +753,9 @@ public class IndexSegmentTest {
       }
       getEntriesSinceTest(referenceIndex, segment, entry.getKey(), sizeLeftInSegment);
     }
+    // try to getEntriesSince a key that does not exist.
+    MockId id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE));
+    doGetEntriesSinceTest(referenceIndex, segment, id, Long.MAX_VALUE, 0, null);
   }
 
   /**
@@ -793,9 +796,6 @@ public class IndexSegmentTest {
     highestIdIncluded = referenceIndex.lastKey().equals(idToCheck) ? null : referenceIndex.lastKey();
     // check the case where maxSize is more than the number of entries in the segment
     doGetEntriesSinceTest(referenceIndex, segment, idToCheck, maxSize + 1, 0, highestIdIncluded);
-    // try to getEntriesSince a key that does not exist.
-    MockId id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE));
-    doGetEntriesSinceTest(referenceIndex, segment, id, Long.MAX_VALUE, 0, null);
   }
 
   /**
