@@ -92,6 +92,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime) throws CloudStorageException {
+    if (!map.containsKey(blobId)) {
+      return false;
+    }
+    map.get(blobId).getFirst().setDeletionTime(deletionTime);
     return true;
   }
 
