@@ -19,11 +19,14 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static java.util.Arrays.*;
 import static org.junit.Assert.*;
@@ -32,17 +35,28 @@ import static org.junit.Assert.*;
 /**
  * A set of tests for the selector. These use a test harness that runs a simple socket server that echos back responses.
  */
+@RunWith(Parameterized.class)
 public class SelectorTest {
-
   private static final int BUFFER_SIZE = 4 * 1024;
   private EchoServer server;
   private Selector selector;
+  private int selectorExecutorPoolSize;
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{0}, {2}});
+  }
+
+  public SelectorTest(int poolSize) {
+    selectorExecutorPoolSize = poolSize;
+  }
 
   @Before
   public void setup() throws Exception {
     this.server = new EchoServer(18283);
     this.server.start();
-    this.selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), null);
+    this.selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), null,
+        selectorExecutorPoolSize);
   }
 
   @After
@@ -170,7 +184,7 @@ public class SelectorTest {
     // loop until we complete all requests
     while (responseCount < conns * reqs) {
       // do the i/o
-      selector.poll(0L, sends);
+      selector.poll(100L, sends);
 
       assertEquals("No disconnects should have occurred.", 0, selector.disconnected().size());
 

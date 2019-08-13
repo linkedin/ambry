@@ -332,7 +332,7 @@ public class NetworkClientTest {
         .collect(Collectors.toList());
     // 1 host x 1 port x 3 connections x 100%
     int warmUpPercentage = 100;
-    AtomicInteger expectedConnectCalls = new AtomicInteger(warmUpPercentage * 3 /100);
+    AtomicInteger expectedConnectCalls = new AtomicInteger(warmUpPercentage * 3 / 100);
     Runnable checkConnectCalls = () -> Assert.assertEquals(expectedConnectCalls.get(), selector.connectCallCount());
 
     networkClient.warmUpConnections(Collections.singletonList(replicaOnSslNode.getDataNodeId()), warmUpPercentage,
@@ -647,7 +647,7 @@ class MockSelector extends Selector {
    * @throws IOException if {@link Selector} throws.
    */
   MockSelector() throws IOException {
-    super(new NetworkMetrics(new MetricRegistry()), new MockTime(), null);
+    super(new NetworkMetrics(new MetricRegistry()), new MockTime(), null, 0);
     super.close();
   }
 

@@ -32,6 +32,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,11 +85,12 @@ public class Selector implements Selectable {
   private final AtomicLong idGenerator;
   private final AtomicLong numActiveConnections;
   private final SSLFactory sslFactory;
+  private final ExecutorService executorPool;
 
   /**
    * Create a new selector
    */
-  public Selector(NetworkMetrics metrics, Time time, SSLFactory sslFactory) throws IOException {
+  public Selector(NetworkMetrics metrics, Time time, SSLFactory sslFactory, int executorPoolSize) throws IOException {
     this.nioSelector = java.nio.channels.Selector.open();
     this.time = time;
     this.keyMap = new HashMap<>();
@@ -99,6 +104,11 @@ public class Selector implements Selectable {
     idGenerator = new AtomicLong(0);
     numActiveConnections = new AtomicLong(0);
     unreadyConnections = new HashSet<>();
+    if (executorPoolSize > 0) {
+      executorPool = Executors.newFixedThreadPool(executorPoolSize);
+    } else {
+      executorPool = null;
+    }
     metrics.registerSelectorActiveConnections(numActiveConnections);
     metrics.registerSelectorUnreadyConnections(unreadyConnections);
   }
@@ -291,13 +301,24 @@ public class Selector implements Selectable {
    * completed I/O.
    *
    * @param timeoutMs The amount of time to wait, in milliseconds. If negative, wait indefinitely.
-   * @param sends The list of new sends to begin
+   * @param sends The list of new sends to initiate.
    *
    * @throws IOException If a send is given for which we have no existing connection or for which there is
    *         already an in-progress send
    */
   @Override
   public void poll(long timeoutMs, List<NetworkSend> sends) throws IOException {
+    if (executorPool != null) {
+      pollWithExecutorPool(timeoutMs, sends);
+    } else {
+      pollOnMainThread(timeoutMs, sends);
+    }
+  }
+
+  /**
+   * Process read/write events on current thread.
+   */
+  private void pollOnMainThread(long timeoutMs, List<NetworkSend> sends) throws IOException {
     clear();
 
     // register for write interest on any new sends
@@ -340,21 +361,26 @@ public class Selector implements Selectable {
           }
 
           if (key.isReadable() && transmission.ready()) {
-            read(key, transmission);
+            NetworkReceive networkReceive = read(key, transmission);
+            if (networkReceive == null) {
+              // Exception happened in read.
+              close(key);
+            } else if (networkReceive.getReceivedBytes().isReadComplete()) {
+              this.completedReceives.add(networkReceive);
+            }
           } else if (key.isWritable() && transmission.ready()) {
-            write(key, transmission);
+            NetworkSend networkSend = write(key, transmission);
+            if (networkSend == null) {
+              // Exception happened in write.
+              close(key);
+            } else if (networkSend.getPayload().isSendComplete()) {
+              this.completedSends.add(networkSend);
+            }
           } else if (!key.isValid()) {
             close(key);
           }
         } catch (IOException e) {
-          String socketDescription = socketDescription(channel(key));
-          if (e instanceof EOFException || e instanceof ConnectException) {
-            metrics.selectorDisconnectedErrorCount.inc();
-            logger.error("Connection {} disconnected", socketDescription, e);
-          } else {
-            metrics.selectorIOErrorCount.inc();
-            logger.warn("Error in I/O with connection to {}", socketDescription, e);
-          }
+          handleReadWriteIOException(e, key);
           close(key);
         } catch (Exception e) {
           metrics.selectorKeyOperationErrorCount.inc();
@@ -363,7 +389,111 @@ public class Selector implements Selectable {
         }
       }
       checkUnreadyConnectionsStatus();
-      this.metrics.selectorIOCount.inc();
+      this.metrics.selectorIOCount.inc(readyKeys);
+      this.metrics.selectorIOTime.update(time.milliseconds() - endSelect);
+    }
+    disconnected.addAll(closedConnections);
+    closedConnections.clear();
+  }
+
+  /**
+   * Use {@link ExecutorService} to process read/write events.
+   */
+  private void pollWithExecutorPool(long timeoutMs, List<NetworkSend> sends) throws IOException {
+    List<Future<NetworkSend>> completedSendsFutures = new ArrayList<>();
+    List<Future<NetworkReceive>> completedReceivesFutures = new ArrayList<>();
+    Set<SelectionKey> readWriteKeySet = new HashSet<>();
+    clear();
+
+    // register for write interest on any new sends
+    if (sends != null) {
+      for (NetworkSend networkSend : sends) {
+        send(networkSend);
+      }
+    }
+
+    // check ready keys
+    long startSelect = time.milliseconds();
+    int readyKeys = select(timeoutMs);
+    this.metrics.selectorSelectCount.inc();
+
+    if (readyKeys > 0) {
+      long endSelect = time.milliseconds();
+      this.metrics.selectorSelectTime.update(endSelect - startSelect);
+      Set<SelectionKey> keys = nioSelector.selectedKeys();
+      Iterator<SelectionKey> iter = keys.iterator();
+      while (iter.hasNext()) {
+        SelectionKey key = iter.next();
+        iter.remove();
+
+        Transmission transmission = getTransmission(key);
+        try {
+          if (key.isConnectable()) {
+            transmission.finishConnect();
+            if (transmission.ready()) {
+              connected.add(transmission.getConnectionId());
+              metrics.selectorConnectionCreated.inc();
+            } else {
+              unreadyConnections.add(transmission.getConnectionId());
+            }
+          }
+
+          /* if channel is not ready, finish prepare */
+          if (transmission.isConnected() && !transmission.ready()) {
+            transmission.prepare();
+            continue;
+          }
+
+          if (key.isReadable() && transmission.ready()) {
+            completedReceivesFutures.add(executorPool.submit(() -> read(key, transmission)));
+            readWriteKeySet.add(key);
+          } else if (key.isWritable() && transmission.ready()) {
+            completedSendsFutures.add(executorPool.submit(() -> write(key, transmission)));
+            readWriteKeySet.add(key);
+          } else if (!key.isValid()) {
+            close(key);
+          }
+        } catch (IOException e) {
+          // handles IOException from transmission.finishConnect() and transmission.prepare()
+          handleReadWriteIOException(e, key);
+          close(key);
+        } catch (Exception e) {
+          close(key);
+          metrics.selectorKeyOperationErrorCount.inc();
+          logger.error("closing key on exception remote host {}", channel(key).socket().getRemoteSocketAddress(), e);
+        }
+      }
+      for (Future<NetworkReceive> future : completedReceivesFutures) {
+        try {
+          NetworkReceive networkReceive = future.get();
+          if (networkReceive != null) {
+            readWriteKeySet.remove(keyForId(networkReceive.getConnectionId()));
+            if (networkReceive.getReceivedBytes().isReadComplete()) {
+              this.completedReceives.add(networkReceive);
+            }
+          }
+        } catch (InterruptedException | ExecutionException e) {
+          logger.error("Hit Unexpected exception on selector read, ", e);
+        }
+      }
+      for (Future<NetworkSend> future : completedSendsFutures) {
+        try {
+          NetworkSend networkSend = future.get();
+          if (networkSend != null) {
+            readWriteKeySet.remove(keyForId(networkSend.getConnectionId()));
+            if (networkSend.getPayload().isSendComplete()) {
+              this.completedSends.add(networkSend);
+            }
+          }
+        } catch (ExecutionException | InterruptedException e) {
+          logger.error("Hit Unexpected exception on selector write, ", e);
+        }
+      }
+      for (SelectionKey keyWithError : readWriteKeySet) {
+        close(keyWithError);
+      }
+      checkUnreadyConnectionsStatus();
+      this.metrics.selectorIOCount.inc(readyKeys);
       this.metrics.selectorIOTime.update(time.milliseconds() - endSelect);
     }
     disconnected.addAll(closedConnections);
@@ -435,7 +565,6 @@ public class Selector implements Selectable {
    * @param connectionId a unique ID for this connection.
    * @param key the {@link SelectionKey} used to communicate socket events.
    * @param hostname the remote hostname for the connection, used for SSL host verification.
-   * @param hostname the remote port for the connection, used for SSL host verification.
    * @param portType used to select between a plaintext or SSL transmission.
    * @param mode for SSL transmissions, whether to operate in client or server mode.
    * @return either a {@link Transmission} or {@link SSLTransmission}.
@@ -545,17 +674,37 @@ public class Selector implements Selectable {
   }
 
   /**
-   * Process reads from ready sockets
+   * Handle read/write IOException
    */
-  private void read(SelectionKey key, Transmission transmission) throws IOException {
+  private void handleReadWriteIOException(IOException e, SelectionKey key) {
+    String socketDescription = socketDescription(channel(key));
+    if (e instanceof EOFException || e instanceof ConnectException) {
+      metrics.selectorDisconnectedErrorCount.inc();
+      logger.error("Connection {} disconnected", socketDescription, e);
+    } else {
+      metrics.selectorIOErrorCount.inc();
+      logger.warn("Error in I/O with connection to {}", socketDescription, e);
+    }
+  }
+
+  /**
+   * Process reads from ready sockets
+   * @return the {@link NetworkReceive} if no IOException during read().
+   */
+  private NetworkReceive read(SelectionKey key, Transmission transmission) {
     long startTimeToReadInMs = time.milliseconds();
     try {
       boolean readComplete = transmission.read();
+      NetworkReceive networkReceive = transmission.getNetworkReceive();
       if (readComplete) {
-        this.completedReceives.add(transmission.getNetworkReceive());
         transmission.onReceiveComplete();
         transmission.clearReceive();
       }
+      return networkReceive;
+    } catch (IOException e) {
+      // We have key information if we log IOException here.
+      handleReadWriteIOException(e, key);
+      return null;
     } finally {
       long readTime = time.milliseconds() - startTimeToReadInMs;
       logger.trace("SocketServer time spent on read per key {} = {}", transmission.getConnectionId(), readTime);
@@ -564,19 +713,25 @@ public class Selector implements Selectable {
 
   /**
    * Process writes to ready sockets
+   * @return the {@link NetworkSend} if no IOException during write().
    */
-  private void write(SelectionKey key, Transmission transmission) throws IOException {
+  private NetworkSend write(SelectionKey key, Transmission transmission) {
     long startTimeToWriteInMs = time.milliseconds();
     try {
       boolean sendComplete = transmission.write();
+      NetworkSend networkSend = transmission.getNetworkSend();
       if (sendComplete) {
         logger.trace("Finished writing, registering for read on connection {}", transmission.getRemoteSocketAddress());
         transmission.onSendComplete();
-        this.completedSends.add(transmission.getNetworkSend());
         metrics.sendInFlight.dec();
         transmission.clearSend();
         key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE | SelectionKey.OP_READ);
       }
+      return networkSend;
+    } catch (IOException e) {
+      // We have key information if we log IOException here.
+      handleReadWriteIOException(e, key);
+      return null;
     } finally {
       long writeTime = time.milliseconds() - startTimeToWriteInMs;
       logger.trace("SocketServer time spent on write per key {} = {}", transmission.getConnectionId(), writeTime);

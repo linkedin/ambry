@@ -160,7 +160,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private boolean flush(ByteBuffer buf) throws IOException {
     int remaining = buf.remaining();
     if (remaining > 0) {
+      long startNs = SystemTime.getInstance().nanoseconds();
       int written = socketChannel.write(buf);
+      logger.trace("Flushed {} bytes in {} ns", written, SystemTime.getInstance().nanoseconds() - startNs);
       return written >= remaining;
     }
     return true;
@@ -531,13 +533,12 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     int written = 0;
     while (src.remaining() != 0) {
       netWriteBuffer.clear();
-      long startTimeMs = SystemTime.getInstance().milliseconds();
+      long startTimeNs = SystemTime.getInstance().nanoseconds();
       SSLEngineResult wrapResult = sslEngine.wrap(src, netWriteBuffer);
-      long encryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
-      logger.trace("SSL encryption time: {} ms for {} bytes", encryptionTimeMs, wrapResult.bytesConsumed());
+      long encryptionTimeNs = SystemTime.getInstance().nanoseconds() - startTimeNs;
+      logger.trace("SSL encryption time: {} ns for {} bytes", encryptionTimeNs, wrapResult.bytesConsumed());
       if (wrapResult.bytesConsumed() > 0) {
-        metrics.sslEncryptionTimeInUsPerKB.update(
-            TimeUnit.MILLISECONDS.toMicros(encryptionTimeMs) * 1024 / wrapResult.bytesConsumed());
+        metrics.sslEncryptionTimeInUsPerKB.update(encryptionTimeNs / wrapResult.bytesConsumed());
       }
       netWriteBuffer.flip();
       //handle ssl renegotiation

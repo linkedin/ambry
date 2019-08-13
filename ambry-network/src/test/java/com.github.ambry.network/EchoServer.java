@@ -85,6 +85,7 @@ public class EchoServer extends Thread {
           @Override
           public void run() {
             try {
+              socket.setSoTimeout(3000);
               DataInputStream input = new DataInputStream(socket.getInputStream());
               DataOutputStream output = new DataOutputStream(socket.getOutputStream());
               while (socket.isConnected() && !socket.isClosed()) {

@@ -55,7 +55,7 @@ class MockSelector extends Selector {
    * @throws IOException if {@link Selector} throws.
    */
   MockSelector(MockServerLayout serverLayout, AtomicReference<MockSelectorState> state, Time time) throws IOException {
-    super(new NetworkMetrics(new MetricRegistry()), time, null);
+    super(new NetworkMetrics(new MetricRegistry()), time, null, 0);
     // we don't need the actual selector, close it.
     super.close();
     this.serverLayout = serverLayout;

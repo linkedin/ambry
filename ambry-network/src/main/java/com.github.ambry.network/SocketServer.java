@@ -56,6 +56,7 @@ public class SocketServer implements NetworkServer {
   private final int sendBufferSize;
   private final int recvBufferSize;
   private final int maxRequestSize;
+  private final int selectorExecutorPoolSize;
   private final ArrayList<Processor> processors;
   private volatile ArrayList<Acceptor> acceptors;
   private final SocketRequestResponseChannel requestResponseChannel;
@@ -72,6 +73,7 @@ public class SocketServer implements NetworkServer {
     this.sendBufferSize = config.socketSendBufferBytes;
     this.recvBufferSize = config.socketReceiveBufferBytes;
     this.maxRequestSize = config.socketRequestMaxBytes;
+    this.selectorExecutorPoolSize = config.selectorExecutorPoolSize;
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
     metrics = new ServerNetworkMetrics(requestResponseChannel, registry, processors);
@@ -149,7 +151,8 @@ public class SocketServer implements NetworkServer {
   public void start() throws IOException, InterruptedException {
     logger.info("Starting {} processor threads", numProcessorThreads);
     for (int i = 0; i < numProcessorThreads; i++) {
-      processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel, metrics, sslFactory));
+      processors.add(i,
+          new Processor(i, maxRequestSize, requestResponseChannel, metrics, sslFactory, selectorExecutorPoolSize));
       Utils.newThread("ambry-processor-" + port + " " + i, processors.get(i), false).start();
     }
 
@@ -383,7 +386,6 @@ class SSLAcceptor extends Acceptor {
  * each of which has its own selectors
  */
 class Processor extends AbstractServerThread {
-  private final int maxRequestSize;
   private final SocketRequestResponseChannel channel;
   private final int id;
   private final Time time;
@@ -394,12 +396,11 @@ class Processor extends AbstractServerThread {
   private static final long pollTimeoutMs = 300;
 
   Processor(int id, int maxRequestSize, RequestResponseChannel channel, ServerNetworkMetrics metrics,
-      SSLFactory sslFactory) throws IOException {
-    this.maxRequestSize = maxRequestSize;
+      SSLFactory sslFactory, int selectorExecutorPoolSize) throws IOException {
     this.channel = (SocketRequestResponseChannel) channel;
     this.id = id;
     this.time = SystemTime.getInstance();
-    selector = new Selector(metrics, time, sslFactory);
+    selector = new Selector(metrics, time, sslFactory, selectorExecutorPoolSize);
     this.metrics = metrics;
   }
 

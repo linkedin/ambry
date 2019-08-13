@@ -57,7 +57,7 @@ public class NetworkClientFactory {
    * @throws IOException if the {@link Selector} could not be instantiated.
    */
   public NetworkClient getNetworkClient() throws IOException {
-    Selector selector = new Selector(networkMetrics, time, sslFactory);
+    Selector selector = new Selector(networkMetrics, time, sslFactory, networkConfig.selectorExecutorPoolSize);
     return new NetworkClient(selector, networkConfig, networkMetrics, maxConnectionsPerPortPlainText,
         maxConnectionsPerPortSsl, connectionCheckoutTimeoutMs, time);
   }
