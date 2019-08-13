@@ -129,10 +129,11 @@ class CloudBlobStore implements Store {
             StoreErrorCodes.ID_Not_Found);
       }
       validateCloudMetadata(cloudBlobMetadataListMap, storeGetOptions);
+      long currentTimeStamp = System.currentTimeMillis();
       for (BlobId blobId : blobIdList) {
         CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
         MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), blobMetadata.getExpirationTime(),
-            (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), getOperationTime(blobMetadata));
+            (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), getOperationTime(blobMetadata, currentTimeStamp));
         messageInfos.add(messageInfo);
         blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
       }
@@ -168,8 +169,7 @@ class CloudBlobStore implements Store {
    * @param metadata blob metadata from which to derive operation time.
    * @return operation time.
    */
-  private long getOperationTime(CloudBlobMetadata metadata) {
-    long currentTimeStamp = System.currentTimeMillis();
+  private long getOperationTime(CloudBlobMetadata metadata, long currentTimeStamp) {
     if (isBlobDeleted(metadata)) {
       return metadata.getDeletionTime();
     } else if (isBlobExpired(metadata, currentTimeStamp)) {

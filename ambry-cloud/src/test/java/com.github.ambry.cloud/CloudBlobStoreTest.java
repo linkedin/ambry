@@ -646,16 +646,14 @@ public class CloudBlobStoreTest {
     testGetForExistingBlobs(blobIds, blobIdToUploadedDataMap);
 
     //test get for one blob that exists
-    List<BlobId> singleIdList = new ArrayList<>(1);
-    singleIdList.add(blobIds.get(0));
+    List<BlobId> singleIdList = Collections.singletonList(blobIds.get(0));
     Map<BlobId, ByteBuffer> singleBlobIdToUploadedDataMap = new HashMap<>(1);
     singleBlobIdToUploadedDataMap.put(blobIds.get(0), blobIdToUploadedDataMap.get(blobIds.get(0)));
     testGetForExistingBlobs(singleIdList, singleBlobIdToUploadedDataMap);
 
     //test get for one blob that doesnt exist
     BlobId nonExistentId = getUniqueId(refAccountId, refContainerId, false);
-    singleIdList = new ArrayList<>(1);
-    singleIdList.add(nonExistentId);
+    singleIdList = Collections.singletonList(nonExistentId);
     testGetWithAtleastOneNonExistentBlob(singleIdList);
 
     //test get with one blob in list non-existent
