@@ -473,9 +473,7 @@ public class Selector implements Selectable {
             }
           }
         } catch (InterruptedException | ExecutionException e) {
-          if (!(e.getCause() instanceof IOException)) {
-            logger.error("Hit unexpected exception on receive, ", e);
-          }
+          logger.error("Hit Unexpected exception on selector read, ", e);
         }
       }
       for (Future<NetworkSend> future : completedSendsFutures) {
@@ -488,7 +486,7 @@ public class Selector implements Selectable {
             }
           }
         } catch (ExecutionException | InterruptedException e) {
-          logger.error("Hit Unexpected exception on selector event processing, ", e);
+          logger.error("Hit Unexpected exception on selector write, ", e);
         }
       }
       for (SelectionKey keyWithError : readWriteKeySet) {
