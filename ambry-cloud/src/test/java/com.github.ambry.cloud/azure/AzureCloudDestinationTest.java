@@ -389,7 +389,7 @@ public class AzureCloudDestinationTest {
     }
   }
 
-  @Test
+  //@Test
   public void testAzureConnection() throws Exception {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
@@ -478,7 +478,7 @@ public class AzureCloudDestinationTest {
   public void testDownloadContainerException() throws Exception {
     when(mockAzureContainer.getBlockBlobReference(anyString())).thenThrow(StorageException.class);
     expectCloudStorageException(() -> downloadBlob(blobId), StorageException.class);
-    verifyUploadErrorMetrics(false);
+    verifyDownloadErrorMetrics();
   }
 
   /** Test update methods when blob throws exception. */

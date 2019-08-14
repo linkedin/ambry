@@ -135,4 +135,13 @@ public interface CloudDestination {
    */
   boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream)
       throws CloudStorageException;
+
+  /**
+   * Gets the size of the blob as reported by the cloud destination.
+   * Note that the source of this information is not intended to be any metadata stored by client (ambry), rather its
+   * intended to be obtained from internal bookkeeping of the cloud destination. This is to be used when the actual size
+   * of the uploaded blob is not present in any metadata that the client might have saved.
+   * @param blobId id of the Ambry blob to get size of.
+   */
+  long getBlobSize(BlobId blobId) throws CloudStorageException;
 }

@@ -33,8 +33,10 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.security.GeneralSecurityException;
@@ -133,15 +135,33 @@ class CloudBlobStore implements Store {
       for (BlobId blobId : blobIdList) {
         CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
         MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), blobMetadata.getExpirationTime(),
-            (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), getOperationTime(blobMetadata, currentTimeStamp));
+            (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(),
+            getOperationTime(blobMetadata, currentTimeStamp));
         messageInfos.add(messageInfo);
         blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
       }
     } catch (CloudStorageException e) {
       throw new StoreException(e, StoreErrorCodes.IOError);
     }
-    CloudMessageReadSet messageReadSet = new CloudMessageReadSet(blobReadInfos, cloudDestination);
+    CloudMessageReadSet messageReadSet = new CloudMessageReadSet(blobReadInfos, this);
     return new StoreInfo(messageReadSet, messageInfos);
+  }
+
+  public void downloadBlob(CloudBlobMetadata cloudBlobMetadata, BlobId blobId, OutputStream outputStream)
+      throws StoreException {
+    try {
+      if (cloudBlobMetadata.getEncryptionOrigin().equals(EncryptionOrigin.VCR)) {
+        long encryptedBlobSize = cloudDestination.getBlobSize(blobId);
+        ByteBuffer encryptedBlob = ByteBuffer.allocate((int) encryptedBlobSize);
+        cloudDestination.downloadBlob(blobId, new ByteBufferOutputStream(encryptedBlob));
+        ByteBuffer decryptedBlob = cryptoAgent.decrypt(encryptedBlob);
+        outputStream.write(decryptedBlob.array());
+      } else {
+        cloudDestination.downloadBlob(blobId, outputStream);
+      }
+    } catch (CloudStorageException | GeneralSecurityException | IOException e) {
+      throw new StoreException("Error occured in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
+    }
   }
 
   /**
