@@ -151,6 +151,7 @@ class CloudBlobStore implements Store {
       throws StoreException {
     try {
       if (cloudBlobMetadata.getEncryptionOrigin().equals(EncryptionOrigin.VCR)) {
+        // the blob was encrytped by VCR during upload. So we need to download the blob and decrypt it here
         long encryptedBlobSize = cloudDestination.getBlobSize(blobId);
         ByteBuffer encryptedBlob = ByteBuffer.allocate((int) encryptedBlobSize);
         cloudDestination.downloadBlob(blobId, new ByteBufferOutputStream(encryptedBlob));
