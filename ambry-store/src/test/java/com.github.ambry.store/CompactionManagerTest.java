@@ -234,8 +234,12 @@ public class CompactionManagerTest {
     // compaction. The compact() method is called but exception hasn't been captured. At this point of time, cpu switches
     // back to this test thread and checks scheduleNextForCompaction() on each store. Since exception of store 3 hasn't
     // been captured, store 3 is not in storesToSkip set and assert fails)
-    CountDownLatch compactStopCountdown = new CountDownLatch(numStores + 2);
     MockStorageManagerMetrics mockMetrics = new MockStorageManagerMetrics(metricRegistry);
+    // The reason to set latch count = numStore + 2 is, stores[1 - 4] plus new added will be checked if resume compaction
+    // (store 0 won't be checked because it is not started). So markCompactionStop() is called on 4 + 1 stores when checking
+    // whether to resume compaction. After that only store 3 and store 4 are eligible to perform compact() and call
+    // markCompactionStop() twice.
+    CountDownLatch compactStopCountdown = new CountDownLatch(4 + 1 + 2);
     mockMetrics.compactStopCountdown = compactStopCountdown;
     // using real time here so that compaction is not scheduled more than once for a store during the test unless
     // asked for.
