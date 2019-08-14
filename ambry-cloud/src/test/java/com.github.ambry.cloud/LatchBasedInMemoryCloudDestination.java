@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Pair;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -55,19 +56,25 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   synchronized public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) {
-    // Note: for encrypted data, blobSize may be -1, so ideally we shouldn't use it here.
-    // However, till the time encrypted get is implemented, getting the buffer with metadata size helps with testing of unencrypted get.
-    byte[] buffer = new byte[(int) cloudBlobMetadata.getSize()];
+
+    // Note: blobSize can be -1 when we dont know the actual blob size being uploaded.
+    // So we have to do buffered reads to handle that case.
+    int bufferSz = (blobSize == -1) ? 1024 : (int) blobSize;
     int bytesRead = 0;
+    byte[] buffer = new byte[bufferSz];
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
     try {
-      do {
-        bytesRead = blobInputStream.read(buffer);
+      bytesRead = blobInputStream.read(buffer);
+      while (bytesRead > 0) {
+        outputStream.write(buffer, 0, bytesRead);
         bytesUploadedCounter.addAndGet(Math.max(bytesRead, 0));
-      } while (bytesRead > 0);
+        bytesRead = blobInputStream.read(buffer);
+      }
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
-    map.put(blobId, new Pair<>(cloudBlobMetadata, buffer));
+    map.put(blobId, new Pair<>(cloudBlobMetadata, outputStream.toByteArray()));
     blobsUploadedCounter.incrementAndGet();
     if (blobIdsToTrack.remove(blobId)) {
       latch.countDown();

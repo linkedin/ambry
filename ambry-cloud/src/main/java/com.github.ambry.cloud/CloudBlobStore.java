@@ -130,8 +130,8 @@ class CloudBlobStore implements Store {
         throw new StoreException("Some of the keys were missing in the cloud metadata store: " + missingBlobs,
             StoreErrorCodes.ID_Not_Found);
       }
-      validateCloudMetadata(cloudBlobMetadataListMap, storeGetOptions);
       long currentTimeStamp = System.currentTimeMillis();
+      validateCloudMetadata(cloudBlobMetadataListMap, storeGetOptions, currentTimeStamp);
       for (BlobId blobId : blobIdList) {
         CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
         MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), blobMetadata.getExpirationTime(),
@@ -170,13 +170,12 @@ class CloudBlobStore implements Store {
    * @throws StoreException if the {@code CloudBlobMetadata} isnt valid
    */
   private void validateCloudMetadata(Map<String, CloudBlobMetadata> cloudBlobMetadataListMap,
-      EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
+      EnumSet<StoreGetOptions> storeGetOptions, long currentTimestamp) throws StoreException {
     for (String key : cloudBlobMetadataListMap.keySet()) {
       if (isBlobDeleted(cloudBlobMetadataListMap.get(key)) && !storeGetOptions.contains(
           StoreGetOptions.Store_Include_Deleted)) {
         throw new StoreException("Id " + key + " has been deleted on the cloud", StoreErrorCodes.ID_Deleted);
       }
-      long currentTimestamp = System.currentTimeMillis();
       if (isBlobExpired(cloudBlobMetadataListMap.get(key), currentTimestamp) && !storeGetOptions.contains(
           StoreGetOptions.Store_Include_Expired)) {
         throw new StoreException("Id " + key + " has expired on the cloud", StoreErrorCodes.TTL_Expired);
