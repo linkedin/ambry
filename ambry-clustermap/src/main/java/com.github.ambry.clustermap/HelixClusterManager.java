@@ -454,6 +454,7 @@ class HelixClusterManager implements ClusterMap {
             try {
               initializeInstances(configs);
             } catch (Exception e) {
+              logger.error("Exception occurred when initializing instances in {}: ", dcName, e);
               initializationFailureMap.putIfAbsent(dcName, e);
             }
             instanceConfigInitialized.set(true);

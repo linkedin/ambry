@@ -95,7 +95,7 @@ public class ReplicationManager extends ReplicationEngine {
         retrieveReplicaTokensAndPersistIfNecessary(mountPath);
       }
       if (replicaThreadPoolByDc.size() == 0) {
-        logger.warn("Number of Datacenters to replicate from is 0, not starting any replica threads");
+        logger.warn("Number of data centers to replicate from is 0, not starting any replica threads");
         return;
       }
       // valid for replication manager.

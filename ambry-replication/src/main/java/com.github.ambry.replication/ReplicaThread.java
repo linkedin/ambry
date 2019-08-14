@@ -322,7 +322,8 @@ public class ReplicaThread implements Runnable {
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
         ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
         boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
-        if (replicationDisabledPartitions.contains(replicaId.getPartitionId()) || replicaId.isDown() || inBackoff) {
+        if (replicationDisabledPartitions.contains(replicaId.getPartitionId()) || replicaId.isDown() || inBackoff
+            || !remoteReplicaInfo.getLocalStore().isStarted()) {
           continue;
         }
         activeReplicasPerNode.add(remoteReplicaInfo);
@@ -438,6 +439,8 @@ public class ReplicaThread implements Runnable {
                   new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken(),
                       replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
+              replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
+                  exchangeMetadataResponse.localLagFromRemoteInBytes);
             } catch (Exception e) {
               logger.error(
                   "Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replica: " + remoteReplicaInfo
@@ -879,8 +882,6 @@ public class ReplicaThread implements Runnable {
               totalBlobsFixed += messageInfoList.size();
               remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
               remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
-              replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
-                  exchangeMetadataResponse.localLagFromRemoteInBytes);
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
             } catch (StoreException e) {

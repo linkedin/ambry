@@ -932,25 +932,25 @@ public class NonBlockingRouterMetrics {
       for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobLocalDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
         Histogram histogram = resourceToHistogram.getValue();
-        logger.info("{} GetBlob local DC latency histogram {}th percentile in ms: {}", resource.toString(),
+        logger.debug("{} GetBlob local DC latency histogram {}th percentile in ms: {}", resource.toString(),
             quantile * 100, histogram.getSnapshot().getValue(quantile));
       }
       for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobCrossDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
         Histogram histogram = resourceToHistogram.getValue();
-        logger.info("{} GetBlob cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
+        logger.trace("{} GetBlob cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
             quantile * 100, histogram.getSnapshot().getValue(quantile));
       }
       for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobInfoLocalDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
         Histogram histogram = resourceToHistogram.getValue();
-        logger.info("{} GetBlobInfo local DC latency histogram {}th percentile in ms: {}", resource.toString(),
+        logger.debug("{} GetBlobInfo local DC latency histogram {}th percentile in ms: {}", resource.toString(),
             quantile * 100, histogram.getSnapshot().getValue(quantile));
       }
       for (Map.Entry<Resource, Histogram> resourceToHistogram : getBlobInfoCrossDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
         Histogram histogram = resourceToHistogram.getValue();
-        logger.info("{} GetBlobInfo cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
+        logger.trace("{} GetBlobInfo cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
             quantile * 100, histogram.getSnapshot().getValue(quantile));
       }
     }

@@ -37,8 +37,8 @@ import java.util.function.Function;
  * Representation of a host. Contains all the data for all partitions.
  */
 public class MockHost {
+  final Map<PartitionId, InMemoryStore> storesByPartition = new HashMap<>();
   private final ClusterMap clusterMap;
-  private final Map<PartitionId, InMemoryStore> storesByPartition = new HashMap<>();
 
   public final DataNodeId dataNodeId;
   final Map<PartitionId, List<MessageInfo>> infosByPartition = new HashMap<>();
@@ -73,11 +73,11 @@ public class MockHost {
       for (ReplicaId peerReplicaId : replicaId.getPeerReplicaIds()) {
         if (peerReplicaId.getDataNodeId().equals(remoteHost.dataNodeId)) {
           PartitionId partitionId = replicaId.getPartitionId();
-          InMemoryStore store = storesByPartition.computeIfAbsent(partitionId, partitionId1 -> new InMemoryStore(partitionId,
-              infosByPartition.computeIfAbsent(partitionId1,
+          InMemoryStore store = storesByPartition.computeIfAbsent(partitionId,
+              partitionId1 -> new InMemoryStore(partitionId, infosByPartition.computeIfAbsent(partitionId1,
                   (Function<PartitionId, List<MessageInfo>>) partitionId2 -> new ArrayList<>()),
-              buffersByPartition.computeIfAbsent(partitionId1,
-                  (Function<PartitionId, List<ByteBuffer>>) partitionId22 -> new ArrayList<>()), listener));
+                  buffersByPartition.computeIfAbsent(partitionId1,
+                      (Function<PartitionId, List<ByteBuffer>>) partitionId22 -> new ArrayList<>()), listener));
           RemoteReplicaInfo remoteReplicaInfo =
               new RemoteReplicaInfo(peerReplicaId, replicaId, store, new MockFindToken(0, 0), Long.MAX_VALUE,
                   SystemTime.getInstance(), new Port(peerReplicaId.getDataNodeId().getPort(), PortType.PLAINTEXT));

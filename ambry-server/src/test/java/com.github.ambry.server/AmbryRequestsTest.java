@@ -1245,10 +1245,12 @@ public class AmbryRequestsTest {
      * An empty {@link Store} implementation.
      */
     private Store store = new Store() {
+      boolean started;
 
       @Override
       public void start() throws StoreException {
         throwExceptionIfRequired();
+        started = true;
       }
 
       @Override
@@ -1317,7 +1319,7 @@ public class AmbryRequestsTest {
         tokenReceived = token;
         maxTotalSizeOfEntriesReceived = maxTotalSizeOfEntries;
         throwExceptionIfRequired();
-        return new FindInfo(Collections.EMPTY_LIST, FIND_TOKEN_FACTORY.getNewFindToken());
+        return new FindInfo(Collections.emptyList(), FIND_TOKEN_FACTORY.getNewFindToken());
       }
 
       @Override
@@ -1345,8 +1347,14 @@ public class AmbryRequestsTest {
         return false;
       }
 
+      @Override
+      public boolean isStarted() {
+        return started;
+      }
+
       public void shutdown() throws StoreException {
         throwExceptionIfRequired();
+        started = false;
       }
 
       /**

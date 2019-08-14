@@ -354,6 +354,11 @@ class CloudBlobStore implements Store {
     started = false;
   }
 
+  @Override
+  public boolean isStarted() {
+    return started;
+  }
+
   private void checkStarted() throws StoreException {
     if (!started) {
       throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
