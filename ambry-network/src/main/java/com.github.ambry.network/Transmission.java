@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.net.SocketAddress;
@@ -35,6 +36,7 @@ public abstract class Transmission {
   protected SelectionKey key = null;
   protected final Time time;
   protected final NetworkMetrics metrics;
+  protected long sendCompleteTime;
 
   public Transmission(String connectionId, SocketChannel socketChannel, SelectionKey key, Time time,
       NetworkMetrics metrics) {
@@ -100,12 +102,25 @@ public abstract class Transmission {
   /**
    * Actions to be taken on completion of {@link Send} in {@link NetworkSend}
    */
-  public abstract void onSendComplete();
+  public void onSendComplete() {
+    networkSend.updateServerResponseMetrics();
+    sendCompleteTime = time.milliseconds();
+    long sendTimeMs = sendCompleteTime - networkSend.getSendStartTimeInMs();
+    metrics.transmissionSendAllTime.update(sendTimeMs);
+    double sendBytesRate = networkSend.getPayload().sizeInBytes() / ((double) sendTimeMs / SystemTime.MsPerSec);
+    metrics.transmissionSendBytesRate.mark((long) sendBytesRate);
+  }
 
   /**
    * Actions to be taken on completion of {@link BoundedByteBufferReceive} in {@link NetworkReceive}
    */
-  public abstract void onReceiveComplete();
+  public void onReceiveComplete() {
+    long receiveTimeMs = time.milliseconds() - networkReceive.getReceiveStartTimeInMs();
+    metrics.transmissionReceiveAllTime.update(receiveTimeMs);
+    double receiveBytesRate =
+        networkReceive.getReceivedBytes().sizeRead() / ((double) receiveTimeMs / SystemTime.MsPerSec);
+    metrics.transmissionReceiveBytesRate.mark((long) receiveBytesRate);
+  }
 
   /**
    * Returns true if {@link NetworkReceive} is read completely

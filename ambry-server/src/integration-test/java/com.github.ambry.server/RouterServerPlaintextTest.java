@@ -48,8 +48,8 @@ public class RouterServerPlaintextTest {
   private static MockCluster plaintextCluster;
   private static RouterServerTestFramework testFramework;
   private static MetricRegistry routerMetricRegistry;
-  private static long plainTextSendBytesCountBeforeTest;
-  private static long plainTextReceiveBytesCountBeforeTest;
+  private static long transmissionSendBytesCountBeforeTest;
+  private static long transmissionReceiveBytesCountBeforeTest;
 
   private static Account refAccount;
   private static List<Container> refContainers = new ArrayList<>();
@@ -119,20 +119,17 @@ public class RouterServerPlaintextTest {
   @Before
   public void before() {
     Map<String, Meter> meters = routerMetricRegistry.getMeters();
-    plainTextSendBytesCountBeforeTest = meters.get(plaintextSendBytesMetricName).getCount();
-    plainTextReceiveBytesCountBeforeTest = meters.get(plaintextReceiveBytesMetricName).getCount();
+    transmissionSendBytesCountBeforeTest = meters.get(transmissionSendBytesMetricName).getCount();
+    transmissionReceiveBytesCountBeforeTest = meters.get(transmissionReceiveBytesMetricName).getCount();
   }
 
   @After
   public void after() {
     Map<String, Meter> meters = routerMetricRegistry.getMeters();
-    Assert.assertTrue("Router should have sent over Plain Text",
-        meters.get(plaintextSendBytesMetricName).getCount() != plainTextSendBytesCountBeforeTest);
-    Assert.assertTrue("Router should have received over Plain Text",
-        meters.get(plaintextReceiveBytesMetricName).getCount() != plainTextReceiveBytesCountBeforeTest);
-    Assert.assertTrue("Router should not have sent over SSL", meters.get(sslSendBytesMetricName).getCount() == 0);
-    Assert.assertTrue("Router should not have received over SSL",
-        meters.get(sslReceiveBytesMetricName).getCount() == 0);
+    Assert.assertTrue("Router should have been sent",
+        meters.get(transmissionSendBytesMetricName).getCount() != transmissionSendBytesCountBeforeTest);
+    Assert.assertTrue("Router should have been sent",
+        meters.get(transmissionReceiveBytesMetricName).getCount() != transmissionReceiveBytesCountBeforeTest);
   }
 
   /**

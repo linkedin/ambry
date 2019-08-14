@@ -385,14 +385,16 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   public boolean read() throws IOException {
     if (!hasReceive()) {
       this.networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
+      metrics.transmissionRoundTripTime.update(time.milliseconds() - sendCompleteTime);
     }
-    long startTimeMs = SystemTime.getInstance().milliseconds();
+    long startTimeMs = time.milliseconds();
     long bytesRead = networkReceive.getReceivedBytes().readFrom(this);
-    long readTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
-    logger.trace("Bytes read {} from {} using key {} Time: {}", bytesRead,
+    long readTimeMs = time.milliseconds() - startTimeMs;
+    logger.trace("Bytes read {} from {} using key {} Time: {} Ms.", bytesRead,
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
     if (bytesRead > 0) {
-      metrics.sslReceiveTimeInUsPerKB.update(TimeUnit.MILLISECONDS.toMicros(readTimeMs) * 1024 / bytesRead);
+      metrics.transmissionReceiveTime.update(readTimeMs);
+      metrics.transmissionReceiveSize.update(bytesRead);
     }
     return networkReceive.getReceivedBytes().isReadComplete();
   }
@@ -435,7 +437,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         long decryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
         logger.trace("SSL decryption time: {} ms for {} bytes", decryptionTimeMs, unwrapResult.bytesProduced());
         if (unwrapResult.bytesProduced() > 0) {
-          metrics.sslDecryptionTimeInUsPerKB.update(
+          metrics.sslDecryptionTimeInUsPerKB.mark(
               TimeUnit.MILLISECONDS.toMicros(decryptionTimeMs) * 1024 / unwrapResult.bytesProduced());
         }
         netReadBuffer.compact();
@@ -498,14 +500,17 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         return false;
       }
     }
-    long startTimeMs = SystemTime.getInstance().milliseconds();
+    if (networkSend.maySetSendStartTimeInMs()) {
+      metrics.transmissionSendPendingTime.update(time.milliseconds() - networkSend.getSendCreateTimeInMs());
+    }
+    long startTimeMs = time.milliseconds();
     long bytesWritten = send.writeTo(this);
-    long writeTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
-    logger.trace("Bytes written {} to {} using key {} Time: {}", bytesWritten,
+    long writeTimeMs = time.milliseconds() - startTimeMs;
+    logger.trace("Bytes written {} to {} using key {} Time: {} ms", bytesWritten,
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
     if (bytesWritten > 0) {
-      metrics.sslSendTimeInUsPerKB.update(TimeUnit.MILLISECONDS.toMicros(writeTimeMs) * 1024 / bytesWritten);
-      metrics.sslSendTime.update(writeTimeMs);
+      metrics.transmissionSendTime.update(writeTimeMs);
+      metrics.transmissionSendSize.update(bytesWritten);
     }
     return (send.isSendComplete() && netWriteBuffer.remaining() == 0);
   }
@@ -538,7 +543,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       long encryptionTimeNs = SystemTime.getInstance().nanoseconds() - startTimeNs;
       logger.trace("SSL encryption time: {} ns for {} bytes", encryptionTimeNs, wrapResult.bytesConsumed());
       if (wrapResult.bytesConsumed() > 0) {
-        metrics.sslEncryptionTimeInUsPerKB.update(encryptionTimeNs / wrapResult.bytesConsumed());
+        metrics.sslEncryptionTimeInUsPerKB.mark(encryptionTimeNs / wrapResult.bytesConsumed());
       }
       netWriteBuffer.flip();
       //handle ssl renegotiation
@@ -674,27 +679,5 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     } catch (SSLException e) {
       logger.debug("SSLEngine.closeInBound() raised an exception.", e);
     }
-  }
-
-  /**
-   * Actions to be taken on completion of {@link Send} in {@link NetworkSend}
-   */
-  @Override
-  public void onSendComplete() {
-    long sendTimeMs = SystemTime.getInstance().milliseconds() - networkSend.getSendStartTimeInMs();
-    networkSend.onSendComplete();
-    double sendBytesRate = networkSend.getPayload().sizeInBytes() / ((double) sendTimeMs / SystemTime.MsPerSec);
-    metrics.sslSendBytesRate.mark((long) sendBytesRate);
-  }
-
-  /**
-   * Actions to be taken on completion of {@link BoundedByteBufferReceive} in {@link NetworkReceive}
-   */
-  @Override
-  public void onReceiveComplete() {
-    long receiveTimeMs = SystemTime.getInstance().milliseconds() - networkReceive.getReceiveStartTimeInMs();
-    double receiveBytesRate =
-        networkReceive.getReceivedBytes().sizeRead() / ((double) receiveTimeMs / SystemTime.MsPerSec);
-    metrics.sslReceiveBytesRate.mark((long) receiveBytesRate);
   }
 }

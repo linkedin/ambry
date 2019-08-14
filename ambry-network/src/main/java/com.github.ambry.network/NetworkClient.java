@@ -100,10 +100,7 @@ public class NetworkClient implements Closeable {
     List<ResponseInfo> responseInfoList = new ArrayList<>();
     try {
       for (RequestInfo requestInfo : requestInfos) {
-        ClientNetworkRequestMetrics clientNetworkRequestMetrics =
-            new ClientNetworkRequestMetrics(networkMetrics.requestQueueTime, networkMetrics.requestSendTime,
-                networkMetrics.requestSendTotalTime, 0);
-        pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, clientNetworkRequestMetrics));
+        pendingRequests.add(new RequestMetadata(requestInfo));
       }
       List<NetworkSend> sends = prepareSends(responseInfoList);
       if (networkConfig.networkClientEnableConnectionReplenishment) {
@@ -185,8 +182,7 @@ public class NetworkClient implements Closeable {
             requestMetadata.pendingConnectionId = null;
           }
           logger.trace("Connection checkout succeeded for {}:{} with connectionId {} ", host, port, connId);
-          sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(),
-              requestMetadata.clientNetworkRequestMetrics, time));
+          sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(), null, time));
           connectionIdToRequestInFlight.put(connId, requestMetadata);
           iter.remove();
           requestMetadata.onRequestDequeue();
@@ -340,8 +336,6 @@ public class NetworkClient implements Closeable {
    * A class that consists of a {@link RequestInfo} and some metadata related to the request
    */
   private class RequestMetadata {
-    // to track network request related metrics
-    ClientNetworkRequestMetrics clientNetworkRequestMetrics;
     // the RequestInfo associated with the request.
     RequestInfo requestInfo;
     // the time at which this request was queued.
@@ -358,11 +352,9 @@ public class NetworkClient implements Closeable {
     // check out this connection. This, however, does not affect correctness.
     private String pendingConnectionId;
 
-    RequestMetadata(long requestQueuedAtMs, RequestInfo requestInfo,
-        ClientNetworkRequestMetrics clientNetworkRequestMetrics) {
+    RequestMetadata(RequestInfo requestInfo) {
       this.requestInfo = requestInfo;
-      this.requestQueuedAtMs = requestQueuedAtMs;
-      this.clientNetworkRequestMetrics = clientNetworkRequestMetrics;
+      this.requestQueuedAtMs = time.milliseconds();
       this.pendingConnectionId = null;
     }
 
@@ -370,16 +362,16 @@ public class NetworkClient implements Closeable {
      * Actions to be done on dequeue of this request and ready to be sent
      */
     void onRequestDequeue() {
-      requestDequeuedAtMs = System.currentTimeMillis();
-      clientNetworkRequestMetrics.updateQueueTime(requestDequeuedAtMs - requestQueuedAtMs);
+      requestDequeuedAtMs = time.milliseconds();
+      networkMetrics.networkClientRequestQueueTime.update(requestDequeuedAtMs - requestQueuedAtMs);
     }
 
     /**
      * Actions to be done on receiving response for the request sent
      */
     void onResponseReceive() {
-      networkMetrics.requestResponseRoundTripTime.update(System.currentTimeMillis() - requestDequeuedAtMs);
-      networkMetrics.requestResponseTotalTime.update(System.currentTimeMillis() - requestQueuedAtMs);
+      networkMetrics.networkClientRoundTripTime.update(time.milliseconds() - requestDequeuedAtMs);
+      networkMetrics.networkClientTotalTime.update(time.milliseconds() - requestQueuedAtMs);
     }
   }
 }

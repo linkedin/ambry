@@ -97,7 +97,7 @@ class SocketServerResponse implements Response {
     }
   }
 
-  public NetworkSendMetrics getMetrics() {
+  public ServerNetworkResponseMetrics getMetrics() {
     return metrics;
   }
 }

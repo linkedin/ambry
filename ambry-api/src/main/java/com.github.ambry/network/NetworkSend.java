@@ -24,17 +24,32 @@ public class NetworkSend {
   private final String connectionId;
   // The bytes to be sent over the connection
   private final Send payload;
+  // The creation time of this send
+  private final long sendCreateTimeInMs;
   // The start time of this send
-  private final long sendStartTimeInMs;
-  private final NetworkSendMetrics metrics;
+  private long sendStartTimeInMs = -1;
   private final Time time;
+  private final ServerNetworkResponseMetrics metrics;
 
-  public NetworkSend(String connectionId, Send payload, NetworkSendMetrics metrics, Time time) {
+  public NetworkSend(String connectionId, Send payload, ServerNetworkResponseMetrics metrics, Time time) {
     this.connectionId = connectionId;
     this.payload = payload;
+    this.sendCreateTimeInMs = time.milliseconds();
     this.time = time;
-    this.sendStartTimeInMs = time.milliseconds();
     this.metrics = metrics;
+  }
+
+  public long getSendCreateTimeInMs() {
+    return sendCreateTimeInMs;
+  }
+
+  public boolean maySetSendStartTimeInMs() {
+    if (sendStartTimeInMs == -1) {
+      sendStartTimeInMs = time.milliseconds();
+      return true;
+    } else {
+      return false;
+    }
   }
 
   public long getSendStartTimeInMs() {
@@ -49,7 +64,7 @@ public class NetworkSend {
     return payload;
   }
 
-  public void onSendComplete() {
+  public void updateServerResponseMetrics() {
     if (metrics != null) {
       metrics.updateSendTime(time.milliseconds() - sendStartTimeInMs);
     }
