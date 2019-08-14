@@ -28,6 +28,7 @@ import org.slf4j.LoggerFactory;
  * A blocking channel that is used to communicate with a server
  */
 public class BlockingChannel implements ConnectedChannel {
+  protected static final Logger logger = LoggerFactory.getLogger(BlockingChannel.class);
   protected final String host;
   protected final int port;
   protected final int readBufferSize;
@@ -38,7 +39,6 @@ public class BlockingChannel implements ConnectedChannel {
   protected InputStream readChannel = null;
   protected WritableByteChannel writeChannel = null;
   protected Object lock = new Object();
-  protected Logger logger = LoggerFactory.getLogger(getClass());
   private SocketChannel channel = null;
 
   public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs,
