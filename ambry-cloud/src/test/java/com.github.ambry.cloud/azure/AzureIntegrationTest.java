@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudFindToken;
+import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -33,6 +34,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -100,12 +102,17 @@ public class AzureIntegrationTest {
     PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     BlobId blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
-    InputStream inputStream = getBlobInputStream(blobSize);
+    byte[] uploadData = TestUtils.getRandomBytes(blobSize);
+    InputStream inputStream = new ByteArrayInputStream(uploadData);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
             CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
     assertTrue("Expected upload to return true",
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+
+    // Get blob should return the same data
+    testDownload(blobId, uploadData);
+
     // Try to upload same blob again
     assertFalse("Expected duplicate upload to return false",
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
@@ -119,9 +126,17 @@ public class AzureIntegrationTest {
     metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
     assertEquals(deletionTime, metadata.getDeletionTime());
     assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
+
     azureDest.purgeBlob(metadata);
     assertTrue("Expected empty set after purge",
         azureDest.getBlobMetadata(Collections.singletonList(blobId)).isEmpty());
+
+    // Get blob should fail after purge
+    try {
+      testDownload(blobId, uploadData);
+    } catch (CloudStorageException csex) {
+      assertTrue(csex.getMessage().contains("Error downloading blob"));
+    }
   }
 
   /**
@@ -136,16 +151,18 @@ public class AzureIntegrationTest {
     PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     List<BlobId> blobIdList = new ArrayList<>();
     long creationTime = System.currentTimeMillis();
+    Map<BlobId, byte[]> blobIdtoDataMap = new HashMap<>();
     for (int j = 0; j < numBlobs; j++) {
       BlobId blobId =
           new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
               BlobDataType.DATACHUNK);
       blobIdList.add(blobId);
-      InputStream inputStream = getBlobInputStream(blobSize);
+      byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
+      blobIdtoDataMap.put(blobId, randomBytes);
       CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
           CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
       assertTrue("Expected upload to return true",
-          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, new ByteArrayInputStream(randomBytes)));
     }
     long uploadTime = System.currentTimeMillis() - creationTime;
     logger.info("Uploaded {} blobs in {} ms", numBlobs, uploadTime);
@@ -153,7 +170,7 @@ public class AzureIntegrationTest {
     assertEquals("Unexpected size of returned metadata map", numBlobs, metadataMap.size());
     for (BlobId blobId : blobIdList) {
       CloudBlobMetadata metadata = metadataMap.get(blobId.getID());
-      assertNotNull("No metadata found for blobId: " + blobId);
+      assertNotNull("No metadata found for blobId: " + blobId, metadata);
       assertEquals("Unexpected metadata id", blobId.getID(), metadata.getId());
       assertEquals("Unexpected metadata accountId", accountId, metadata.getAccountId());
       assertEquals("Unexpected metadata containerId", containerId, metadata.getContainerId());
@@ -164,6 +181,8 @@ public class AzureIntegrationTest {
       assertEquals("Unexpected metadata vcrKmsContext", vcrKmsContext, metadata.getVcrKmsContext());
       assertEquals("Unexpected metadata cryptoAgentFactory", cryptoAgentFactory, metadata.getCryptoAgentFactory());
       assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
+
+      testDownload(blobId, blobIdtoDataMap.get(blobId));
     }
 
     cleanup();
@@ -328,6 +347,19 @@ public class AzureIntegrationTest {
     outputStream.reset();
     assertFalse("Expected retrieve to return false for nonexistent path",
         azureDest.retrieveTokens("unknown-path", tokenFileName, outputStream));
+  }
+
+  /**
+   * test download matches the blob previously uploaded.
+   * @param blobId id of the blob to download
+   * @param uploadedData data uploaded to the blob
+   * @throws CloudStorageException
+   */
+  private void testDownload(BlobId blobId, byte[] uploadedData) throws CloudStorageException, IOException {
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream(blobSize);
+    azureDest.downloadBlob(blobId, outputStream);
+    assertTrue("Downloaded data should match the uploaded data",
+        Arrays.equals(uploadedData, outputStream.toByteArray()));
   }
 
   /**
