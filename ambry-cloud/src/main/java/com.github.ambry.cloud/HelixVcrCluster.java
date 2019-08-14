@@ -80,7 +80,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   }
 
   /**
-   * Add {@link PartitionId} to assignedPartitionIds set, if {@parm partitionIdStr} valid.
+   * Add {@link PartitionId} to assignedPartitionIds set, if {@param partitionIdStr} valid.
    * Used in {@link HelixVcrStateModel} if current VCR becomes leader of a partition.
    * @param partitionIdStr The partitionIdStr notified by Helix.
    */
@@ -104,7 +104,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   }
 
   /**
-   * Remove {@link PartitionId} from assignedPartitionIds set, if {@parm partitionIdStr} valid.
+   * Remove {@link PartitionId} from assignedPartitionIds set, if {@param partitionIdStr} valid.
    * Used in {@link HelixVcrStateModel} if current VCR becomes offline or standby a partition.
    * @param partitionIdStr The partitionIdStr notified by Helix.
    */
