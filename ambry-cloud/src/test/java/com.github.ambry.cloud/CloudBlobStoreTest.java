@@ -709,9 +709,8 @@ public class CloudBlobStoreTest {
   private void testGetForExistingBlobs(List<BlobId> blobIds, Map<BlobId, ByteBuffer> blobIdToUploadedDataMap)
       throws Exception {
     StoreInfo storeInfo = store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
-    assertTrue(
-        "Number of records returned by get should be " + blobIds.size() + " found " + storeInfo.getMessageReadSetInfo()
-            .size(), storeInfo.getMessageReadSetInfo().size() == blobIds.size());
+    assertEquals("Number of records returned by get should be same as uploaded",
+        storeInfo.getMessageReadSetInfo().size(), blobIds.size());
     for (int i = 0; i < storeInfo.getMessageReadSetInfo().size(); i++) {
       if (blobIdToUploadedDataMap.containsKey(storeInfo.getMessageReadSetInfo().get(i).getStoreKey())) {
         ByteBuffer uploadedData = blobIdToUploadedDataMap.get(storeInfo.getMessageReadSetInfo().get(i).getStoreKey());
@@ -719,7 +718,7 @@ public class CloudBlobStoreTest {
         WritableByteChannel writableByteChannel = Channels.newChannel(new ByteBufferOutputStream(downloadedData));
         storeInfo.getMessageReadSet().writeTo(i, writableByteChannel, -1, -1);
         downloadedData.flip();
-        assertTrue(uploadedData.equals(downloadedData));
+        assertEquals(uploadedData, downloadedData);
         break;
       }
     }
@@ -732,10 +731,10 @@ public class CloudBlobStoreTest {
   private void testGetWithAtleastOneNonExistentBlob(List<BlobId> blobIds) {
     try {
       store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
-      assertTrue("get with any non existent id should fail", false);
+      fail("get with any non existent id should fail");
     } catch (StoreException e) {
-      assertTrue("get with any non existent blob id should throw exception with " + StoreErrorCodes.ID_Not_Found
-          + " error code.", e.getErrorCode().equals(StoreErrorCodes.ID_Not_Found));
+      assertEquals("get with any non existent blob id should throw exception with " + StoreErrorCodes.ID_Not_Found
+          + " error code.", e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
     }
   }
 
@@ -746,13 +745,11 @@ public class CloudBlobStoreTest {
   private void testGetForDeletedBlobWithoutIncludeDeleteOption(List<BlobId> blobIds) {
     try {
       store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
-      assertTrue(
-          "get should fail for a deleted blob, if StoreGetOptions.Store_Include_Deleted is not set in get options",
-          false);
+      fail("get should fail for a deleted blob, if StoreGetOptions.Store_Include_Deleted is not set in get options");
     } catch (StoreException e) {
-      assertTrue(
+      assertEquals(
           "get for deleted blob with with Store_Include_Deleted not set in get options should throw exception with "
-              + StoreErrorCodes.ID_Deleted + " error code.", e.getErrorCode().equals(StoreErrorCodes.ID_Deleted));
+              + StoreErrorCodes.ID_Deleted + " error code.", e.getErrorCode(), StoreErrorCodes.ID_Deleted);
     }
   }
 
@@ -765,14 +762,12 @@ public class CloudBlobStoreTest {
   private void testGetForDeletedBlobWithIncludeDeleteOption(List<BlobId> blobIds, BlobId deletedBlobId)
       throws Exception {
     StoreInfo storeInfo = store.get(blobIds, EnumSet.of(StoreGetOptions.Store_Include_Deleted));
-    boolean getForDeletedBlobSuccessful = false;
     for (MessageInfo msgInfo : storeInfo.getMessageReadSetInfo()) {
       if (msgInfo.getStoreKey().equals(deletedBlobId)) {
-        getForDeletedBlobSuccessful = true;
+        return;
       }
     }
-    assertTrue("get should be successful for a deleted blob with Store_Include_Deleted set in get options",
-        getForDeletedBlobSuccessful);
+    fail("get should be successful for a deleted blob with Store_Include_Deleted set in get options");
   }
 
   /**
@@ -782,13 +777,11 @@ public class CloudBlobStoreTest {
   private void testGetForDeletedBlobWithoutIncludeExpiredOption(List<BlobId> blobIds) {
     try {
       store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
-      assertTrue(
-          "get should fail for a expired blob, if StoreGetOptions.Store_Include_Expired is not set in get options",
-          false);
+      fail("get should fail for a expired blob, if StoreGetOptions.Store_Include_Expired is not set in get options");
     } catch (StoreException e) {
-      assertTrue(
+      assertEquals(
           "get for expired blob with with StoreGetOptions.Store_Include_Expired not set in get options, should throw exception with "
-              + StoreErrorCodes.TTL_Expired + " error code.", e.getErrorCode().equals(StoreErrorCodes.TTL_Expired));
+              + StoreErrorCodes.TTL_Expired + " error code.", e.getErrorCode(), StoreErrorCodes.TTL_Expired);
     }
   }
 
@@ -801,14 +794,12 @@ public class CloudBlobStoreTest {
   private void testGetForDeletedBlobWithIncludeExpiredOption(List<BlobId> blobIds, BlobId expiredBlobId)
       throws Exception {
     StoreInfo storeInfo = store.get(blobIds, EnumSet.of(StoreGetOptions.Store_Include_Expired));
-    boolean getForExpiredBlobSuccessful = false;
     for (MessageInfo msgInfo : storeInfo.getMessageReadSetInfo()) {
       if (msgInfo.getStoreKey().equals(expiredBlobId)) {
-        getForExpiredBlobSuccessful = true;
+        return;
       }
     }
-    assertTrue("get should be successful for a expired blob with Store_Include_Expired set in get options",
-        getForExpiredBlobSuccessful);
+    fail("get should be successful for a expired blob with Store_Include_Expired set in get options");
   }
 
   /**

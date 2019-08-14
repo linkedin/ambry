@@ -111,7 +111,7 @@ public class AzureIntegrationTest {
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
 
     // Get blob should return the same data
-    testDownload(blobId, uploadData);
+    verifyDownloadMatches(blobId, uploadData);
 
     // Try to upload same blob again
     assertFalse("Expected duplicate upload to return false",
@@ -133,7 +133,7 @@ public class AzureIntegrationTest {
 
     // Get blob should fail after purge
     try {
-      testDownload(blobId, uploadData);
+      verifyDownloadMatches(blobId, uploadData);
     } catch (CloudStorageException csex) {
       assertTrue(csex.getMessage().contains("Error downloading blob"));
     }
@@ -182,7 +182,7 @@ public class AzureIntegrationTest {
       assertEquals("Unexpected metadata cryptoAgentFactory", cryptoAgentFactory, metadata.getCryptoAgentFactory());
       assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
 
-      testDownload(blobId, blobIdtoDataMap.get(blobId));
+      verifyDownloadMatches(blobId, blobIdtoDataMap.get(blobId));
     }
 
     cleanup();
@@ -355,7 +355,7 @@ public class AzureIntegrationTest {
    * @param uploadedData data uploaded to the blob
    * @throws CloudStorageException
    */
-  private void testDownload(BlobId blobId, byte[] uploadedData) throws CloudStorageException, IOException {
+  private void verifyDownloadMatches(BlobId blobId, byte[] uploadedData) throws CloudStorageException, IOException {
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream(blobSize);
     azureDest.downloadBlob(blobId, outputStream);
     assertTrue("Downloaded data should match the uploaded data",
