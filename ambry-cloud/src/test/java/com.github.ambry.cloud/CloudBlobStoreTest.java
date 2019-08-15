@@ -626,7 +626,8 @@ public class CloudBlobStoreTest {
    * Test cloud store get method.
    * @throws Exception
    */
-  private void testStoreGets() throws Exception {
+  @Test
+  public void testStoreGets() throws Exception {
     setupCloudStore(true, false, defaultCacheLimit, true);
     // Put blobs with and without expiration and encryption
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
