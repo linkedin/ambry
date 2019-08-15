@@ -839,11 +839,11 @@ public class HelixAccountServiceTest {
       assertAccountsInAccountService(accounts, expectedAccountCount, accountService);
       if (helixConfigProps.containsKey(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY)) {
         Path oldStateBackup = Files.list(accountBackupDir)
-            .filter(path -> path.getFileName().toString().endsWith(OLD_STATE_SUFFIX))
+            .filter(path -> path.getFileName().toString().endsWith(LocalBackup.OLD_STATE_SUFFIX))
             .max(Comparator.naturalOrder())
             .get();
         checkBackupFile(expectedOldState, oldStateBackup);
-        String newStateFilename = oldStateBackup.getFileName().toString().replace(OLD_STATE_SUFFIX, NEW_STATE_SUFFIX);
+        String newStateFilename = oldStateBackup.getFileName().toString().replace(LocalBackup.OLD_STATE_SUFFIX, LocalBackup.NEW_STATE_SUFFIX);
         Path newStateBackup = oldStateBackup.getParent().resolve(newStateFilename);
         checkBackupFile(accountService.getAllAccounts(), newStateBackup);
       } else {

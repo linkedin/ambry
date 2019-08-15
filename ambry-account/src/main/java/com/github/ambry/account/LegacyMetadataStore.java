@@ -20,9 +20,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.locks.ReentrantLock;
 import org.I0Itec.zkclient.DataUpdater;
-import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
@@ -30,65 +28,51 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-class LegacyMetadataStore implements AccountMetadataStore {
+/**
+ * A legacy implementation of {@link AccountMetadataStore}, where we store the full set of {@link Account} metadata as a map
+ * in a single {@link ZNRecord} in {@link HelixPropertyStore} at {@link #FULL_ACCOUNT_METADATA_PATH}.
+ *
+ * When updating {@link Account} metadata, it reads the data back from {@link ZNRecord}, and patches the provided accounts
+ * to the current ones and save it back to {@link HelixPropertyStore}. In order to keep a total order of all potential concurrent
+ * updates to {@link HelixPropertyStore}, we take advantage of {@link HelixPropertyStore#update(String, DataUpdater, int)} function
+ * that performs a atomic test-and-set.
+ */
+class LegacyMetadataStore extends AccountMetadataStore {
   static final String ACCOUNT_METADATA_MAP_KEY = "accountMetadata";
   static final String FULL_ACCOUNT_METADATA_PATH = "/account_metadata/full_data";
   private static final String ZN_RECORD_ID = "full_account_metadata";
   private static final Logger logger = LoggerFactory.getLogger(LegacyMetadataStore.class);
 
-  private final HelixAccountService accountService;
-  private final HelixPropertyStore<ZNRecord> helixStore;
-  private final ReentrantLock lock = new ReentrantLock();
-  private final HelixAccountServiceConfig config;
-
-  LegacyMetadataStore(HelixAccountService accountService, HelixPropertyStore<ZNRecord> helixStore,
-      HelixAccountServiceConfig config) throws IOException {
-    this.helixStore = helixStore;
-    this.accountService = accountService;
-    this.config = config;
+  /**
+   * Constructor to create a {@link LegacyMetadataStore}.
+   * @param accountServiceMetrics The metrics set to update metrics.
+   * @param backup The {@link LocalBackup} instance to manage backup files.
+   * @param helixStore The {@link HelixPropertyStore} to fetch and update data.
+   */
+  LegacyMetadataStore(AccountServiceMetrics accountServiceMetrics, LocalBackup backup, HelixPropertyStore<ZNRecord> helixStore) {
+    super(accountServiceMetrics, backup, helixStore, FULL_ACCOUNT_METADATA_PATH);
   }
 
   @Override
-  public void fetchAndUpdateCache(boolean isCalledFromListener) {
-    lock.lock();
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      logger.trace("Start reading full account metadata set from path={}", FULL_ACCOUNT_METADATA_PATH);
-      ZNRecord zNRecord = helixStore.get(FULL_ACCOUNT_METADATA_PATH, null, AccessOption.PERSISTENT);
-      logger.trace("Fetched ZNRecord from path={}, took time={} ms", FULL_ACCOUNT_METADATA_PATH,
-          System.currentTimeMillis() - startTimeMs);
-      if (zNRecord == null) {
-        logger.debug("The ZNRecord to read does not exist on path={}", FULL_ACCOUNT_METADATA_PATH);
-      } else {
-        Map<String, String> remoteAccountMap = zNRecord.getMapField(ACCOUNT_METADATA_MAP_KEY);
-        if (remoteAccountMap == null) {
-          logger.debug("ZNRecord={} to read on path={} does not have a simple map with key={}", zNRecord,
-              FULL_ACCOUNT_METADATA_PATH, ACCOUNT_METADATA_MAP_KEY);
-        } else {
-          logger.trace("Start parsing remote account data.");
-          AccountInfoMap newAccountInfoMap = new AccountInfoMap(accountService, remoteAccountMap);
-          AccountInfoMap oldAccountInfoMap = accountService.updateCache(newAccountInfoMap);
-          accountService.notifyAccountUpdateConsumers(newAccountInfoMap, oldAccountInfoMap, isCalledFromListener);
-        }
-      }
-    } finally {
-      lock.unlock();
+  Map<String, String> fetchAccountMetadataFromZNRecord(ZNRecord record) {
+    Map<String, String> result = record.getMapField(ACCOUNT_METADATA_MAP_KEY);
+    if (result == null) {
+      logger.debug("ZNRecord={} to read on path={} does not have a simple map with key={}", record,
+          FULL_ACCOUNT_METADATA_PATH, ACCOUNT_METADATA_MAP_KEY);
     }
+    return result;
   }
 
   @Override
-  public boolean updateAccounts(Collection<Account> accounts) {
-    ZkUpdater zkUpdater = new ZkUpdater(accounts);
-    boolean hasSucceeded = helixStore.update(FULL_ACCOUNT_METADATA_PATH, zkUpdater, AccessOption.PERSISTENT);
-    zkUpdater.cleanup(hasSucceeded);
-    return hasSucceeded;
+  ZKUpdater createNewZKUpdater(Collection<Account> accounts) {
+    return new ZKUpdater(accounts);
   }
 
   /**
    * A {@link DataUpdater} to be used for updating {@link #FULL_ACCOUNT_METADATA_PATH} inside of
    * {@link #updateAccounts(Collection)}
    */
-  private class ZkUpdater implements DataUpdater<ZNRecord> {
+  private class ZKUpdater implements AccountMetadataStore.ZKUpdater {
     private final Collection<Account> accountsToUpdate;
     private Map<String, String> potentialNewState;
     private final Pair<String, Path> backupPrefixAndPath;
@@ -96,16 +80,13 @@ class LegacyMetadataStore implements AccountMetadataStore {
     /**
      * @param accountsToUpdate The {@link Account}s to update.
      */
-    ZkUpdater(Collection<Account> accountsToUpdate) {
+    ZKUpdater(Collection<Account> accountsToUpdate) {
       this.accountsToUpdate = accountsToUpdate;
-
       Pair<String, Path> backupPrefixAndPath = null;
-      if (accountService.backupDirPath != null) {
-        try {
-          backupPrefixAndPath = accountService.reserveBackupFile();
-        } catch (IOException e) {
-          logger.error("Error reserving backup file", e);
-        }
+      try {
+        backupPrefixAndPath = backup.reserveBackupFile();
+      } catch (IOException e) {
+        logger.error("Error reserving backup file", e);
       }
       this.backupPrefixAndPath = backupPrefixAndPath;
     }
@@ -129,18 +110,18 @@ class LegacyMetadataStore implements AccountMetadataStore {
 
       AccountInfoMap remoteAccountInfoMap;
       try {
-        remoteAccountInfoMap = new AccountInfoMap(accountService, accountMap);
+        remoteAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
       } catch (JSONException e) {
         // Do not depend on Helix to log, so log the error message here.
         logger.error("Exception occurred when building AccountInfoMap from accountMap={}", accountMap, e);
-        accountService.accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
         throw new IllegalStateException("Exception occurred when building AccountInfoMap from accountMap", e);
       }
-      accountService.maybePersistOldState(backupPrefixAndPath, accountMap);
+      backup.maybePersistOldState(backupPrefixAndPath, accountMap);
 
       // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
       // be caught by Helix and helixStore#update will return false.
-      if (accountService.hasConflictingAccount(accountsToUpdate, remoteAccountInfoMap)) {
+      if (remoteAccountInfoMap.hasConflictingAccount(accountsToUpdate)) {
         // Throw exception, so that helixStore can capture and terminate the update operation
         throw new IllegalArgumentException(
             "Updating accounts failed because one account to update conflicts with existing accounts");
@@ -162,9 +143,10 @@ class LegacyMetadataStore implements AccountMetadataStore {
       }
     }
 
-    void cleanup(boolean isUpdateSucceeded) {
+    @Override
+    public void afterUpdate(boolean isUpdateSucceeded) {
       if (isUpdateSucceeded) {
-        accountService.maybePersistNewState(backupPrefixAndPath, potentialNewState);
+        backup.maybePersistNewState(backupPrefixAndPath, potentialNewState);
       }
     }
   }

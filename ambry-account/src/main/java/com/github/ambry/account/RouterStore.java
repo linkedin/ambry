@@ -15,7 +15,6 @@ package com.github.ambry.account;
 
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ReadableStreamChannelInputStream;
-import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
@@ -34,9 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
-import java.util.concurrent.locks.ReentrantLock;
-import org.I0Itec.zkclient.DataUpdater;
-import org.apache.helix.AccessOption;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
@@ -45,78 +42,76 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-class RouterStore implements AccountMetadataStore {
+/**
+ * RouterStore stores the full set of {@link Account} metadata in {@code AmbryServer} and keep the list of blob ids in
+ * a single {@link ZNRecord} in {@link HelixPropertyStore} at {@link #ACCOUNT_METADATA_BLOB_IDS_PATH}. Each item in the
+ * list contains the blob id, as well as the version number. In this way, RouterStore keeps track of various versions
+ * of {@link Account} metadata, and making rolling back to previous version much easier.
+ *
+ * When saving {@link Account} metadata as a blob in the {@code AmbryServer}, it's serialized as a json object, where
+ * each {@link Account}'id is the key and the {@link Account}'s json format string is the value. Each blob has a predefined
+ * {@link Account} id and {@link Container} id. The Account and Container are not actually created but serve as dummy ones
+ * to bootstrap the creation of {@link Account} metadata.
+ */
+class RouterStore extends AccountMetadataStore {
   static final String ACCOUNT_METADATA_BLOB_IDS_PATH = "/account_metadata/blobids";
   static final String ACCOUNT_METADATA_BLOB_IDS_LIST_KEY = "accountMetadataBlobIds";
   private static final String ZN_RECORD_ID = "account_metadata_version_list";
   private static final Logger logger = LoggerFactory.getLogger(RouterStore.class);
 
-  private final HelixAccountService accountService;
-  private final HelixPropertyStore<ZNRecord> helixStore;
-  private final HelixAccountServiceConfig config;
-  private final ReentrantLock lock = new ReentrantLock();
-
   private static final Short ACCOUNT_ID = Account.HELIX_ACCOUNT_SERVICE_ACCOUNT_ID;
   private static final Short CONTAINER_ID = Container.HELIX_ACCOUNT_SERVICE_CONTAINER_ID;
   private static final String SERVICE_ID = "helixAccountService";
 
-  RouterStore(HelixAccountService accountService, HelixPropertyStore<ZNRecord> helixStore,
-      HelixAccountServiceConfig config) {
-    this.accountService = accountService;
-    this.helixStore = helixStore;
-    this.config = config;
+  private final AtomicReference<Router> router;
+
+  /**
+   * Constructor to create the RouterStore.
+   * @param accountServiceMetrics The metrics set to update metrics.
+   * @param backup The {@link LocalBackup} instance to manage backup files.
+   * @param helixStore The {@link HelixPropertyStore} to fetch and update data.
+   * @param router The {@link Router} instance to retrieve and put blobs.
+   */
+  RouterStore(AccountServiceMetrics accountServiceMetrics, LocalBackup backup, HelixPropertyStore<ZNRecord> helixStore,
+      AtomicReference<Router> router) {
+    super(accountServiceMetrics, backup, helixStore, ACCOUNT_METADATA_BLOB_IDS_PATH);
+    this.router = router;
   }
 
   @Override
-  public void fetchAndUpdateCache(boolean isCalledFromListener) {
-    // when fetching account metadata, we need to fetch the list of blob ids that point to different versions of
-    // account metadata as well the latest version of account metadata.
-    lock.lock();
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      logger.trace("Start reading account metadata blob ids list from path={}", ACCOUNT_METADATA_BLOB_IDS_PATH);
-      ZNRecord zNRecord = helixStore.get(ACCOUNT_METADATA_BLOB_IDS_PATH, null, AccessOption.PERSISTENT);
-      logger.trace("Fetched ZNRecord from path={}, took time={} ms", ACCOUNT_METADATA_BLOB_IDS_PATH, startTimeMs);
-      if (zNRecord == null) {
-        logger.debug("The ZNRecord to read does not exist on path={}", ACCOUNT_METADATA_BLOB_IDS_PATH);
-      } else {
-        List<String> accountBlobIDs = zNRecord.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
-        if (accountBlobIDs == null || accountBlobIDs.size() == 0) {
-          logger.debug("ZNRecord={} to read on path={} does not have a simple list with key={}", zNRecord,
-              ACCOUNT_METADATA_BLOB_IDS_PATH, ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
-        } else {
-          // parse the json string list and get the blob id with the latest version
-          BlobIDAndVersion blobIDAndVersion = null;
-          for (String accountBlobIDInJson : accountBlobIDs) {
-            BlobIDAndVersion current = BlobIDAndVersion.fromJson(accountBlobIDInJson);
-            if (blobIDAndVersion == null || blobIDAndVersion.version < current.version) {
-              blobIDAndVersion = current;
-            }
-          }
-
-          Map<String, String> accountMap = readAccountMetadataFromBlobID(blobIDAndVersion.blobID);
-          if (accountMap == null) {
-            logger.debug("BlobID={} to read but no account map returned");
-          } else {
-            logger.trace("Start parsing remote account data from blob {} and versioned at {}.", blobIDAndVersion.blobID,
-                blobIDAndVersion.version);
-            AccountInfoMap newAccountInfoMap = new AccountInfoMap(accountService, accountMap);
-            AccountInfoMap oldAccountInfoMap = accountService.updateCache(newAccountInfoMap);
-            accountService.notifyAccountUpdateConsumers(newAccountInfoMap, oldAccountInfoMap, isCalledFromListener);
-          }
+  Map<String, String> fetchAccountMetadataFromZNRecord(ZNRecord record) {
+    List<String> accountBlobIDs = record.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
+    if (accountBlobIDs == null || accountBlobIDs.size() == 0) {
+      logger.debug("ZNRecord={} to read on path={} does not have a simple list with key={}", record,
+          ACCOUNT_METADATA_BLOB_IDS_PATH, ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
+      return null;
+    } else {
+      // parse the json string list and get the blob id with the latest version
+      BlobIDAndVersion blobIDAndVersion = null;
+      for (String accountBlobIDInJson : accountBlobIDs) {
+        BlobIDAndVersion current = BlobIDAndVersion.fromJson(accountBlobIDInJson);
+        if (blobIDAndVersion == null || blobIDAndVersion.version < current.version) {
+          blobIDAndVersion = current;
         }
       }
-    } finally {
-      lock.unlock();
+
+      logger.trace("Start reading remote account data from blob {} and versioned at {}.", blobIDAndVersion.blobID,
+          blobIDAndVersion.version);
+      return readAccountMetadataFromBlobID(blobIDAndVersion.blobID);
     }
   }
 
+  /**
+   * Fetch the {@link Account} metadata from the given blob id.
+   * @param blobID The blobID to fetch {@link Account} metadata from.
+   * @return {@link Account} metadata in a map, and null when there is any error.
+   */
   private Map<String, String> readAccountMetadataFromBlobID(String blobID) {
     long startTimeMs = System.currentTimeMillis();
-    Future<GetBlobResult> resultF = accountService.router.get().getBlob(blobID, new GetBlobOptionsBuilder().build());
+    Future<GetBlobResult> resultF = router.get().getBlob(blobID, new GetBlobOptionsBuilder().build());
     try {
       GetBlobResult result = resultF.get();
-      accountService.accountServiceMetrics.accountFetchFromAmbryTimeInMs.update(
+      accountServiceMetrics.accountFetchFromAmbryTimeInMs.update(
           System.currentTimeMillis() - startTimeMs);
 
       int blobSize = (int) result.getBlobInfo().getBlobProperties().getBlobSize();
@@ -128,20 +123,24 @@ class RouterStore implements AccountMetadataStore {
       object.keySet().stream().forEach(key -> map.put(key, object.getString(key)));
       return map;
     } catch (Exception e) {
-      logger.debug("Failed to read account metadata from blob id={}", blobID, e);
-      accountService.accountServiceMetrics.accountFetchFromAmbryServerErrorCount.inc();
+      logger.error("Failed to read account metadata from blob id={}", blobID, e);
+      accountServiceMetrics.accountFetchFromAmbryServerErrorCount.inc();
     }
     return null;
   }
 
   @Override
-  public boolean updateAccounts(Collection<Account> accountsToUpdate) {
-    ZKUpdater zkUpdater = new ZKUpdater(accountsToUpdate);
-    boolean hasSucceeded = helixStore.update(ACCOUNT_METADATA_BLOB_IDS_PATH, zkUpdater, AccessOption.PERSISTENT);
-    zkUpdater.cleanup(hasSucceeded);
-    return hasSucceeded;
+  AccountMetadataStore.ZKUpdater createNewZKUpdater(Collection<Account> accounts) {
+    return new ZKUpdater(accounts) ;
   }
 
+  /**
+   * Save the given {@link Account} metadata, as json object, in a blob in {@code AmbryServer}.
+   * @param accountMap The {@link Account} metadata to save.
+   * @param router The {@link Router} instance.
+   * @return A blob id if the operation is finished successfully.
+   * @throws Exception If there is any exceptions while saving the bytes to {@code AmbryServer}.
+   */
   static String writeAccountMapToRouter(Map<String, String> accountMap, Router router) throws Exception {
     // Construct the json object and save it to ambry server.
     JSONObject object = new JSONObject();
@@ -155,21 +154,26 @@ class RouterStore implements AccountMetadataStore {
     return router.putBlob(properties, null, channel, PutBlobOptions.DEFAULT).get();
   }
 
-  private class ZKUpdater implements DataUpdater<ZNRecord> {
+  /**
+   * A {@link DataUpdater} to be used for updating {@link #ACCOUNT_METADATA_BLOB_IDS_PATH} inside of
+   * {@link #updateAccounts(Collection)}
+   */
+  private class ZKUpdater implements AccountMetadataStore.ZKUpdater {
     private final Collection<Account> accounts;
     private final Pair<String, Path> backupPrefixAndPath;
     private Map<String, String> potentialNewState;
     private String newBlobID = null;
 
+    /**
+     * @param accounts The {@link Account}s to update.
+     */
     ZKUpdater(Collection<Account> accounts) {
       this.accounts = accounts;
       Pair<String, Path> backupPrefixAndPath = null;
-      if (accountService.backupDirPath != null) {
-        try {
-          backupPrefixAndPath = accountService.reserveBackupFile();
-        } catch (IOException e) {
-          logger.error("Error reserving backup file", e);
-        }
+      try {
+        backupPrefixAndPath = backup.reserveBackupFile();
+      } catch (IOException e) {
+        logger.error("Error reserving backup file", e);
       }
       this.backupPrefixAndPath = backupPrefixAndPath;
     }
@@ -215,7 +219,7 @@ class RouterStore implements AccountMetadataStore {
           accountBlobIDs = new ArrayList<>(accountBlobIDs);
         } catch (JSONException e) {
           logger.error("Exception occurred when parsing the blob id list from {}", accountBlobIDs);
-          accountService.accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
           throw new IllegalStateException("Exception occurred when parsing blob id list", e);
         } catch (Exception e) {
           logger.error("Unexpected exception occurred when parsing the blob id list from {}", accountBlobIDs, e);
@@ -230,18 +234,18 @@ class RouterStore implements AccountMetadataStore {
       // Start step 3:
       AccountInfoMap localAccountInfoMap;
       try {
-        localAccountInfoMap = new AccountInfoMap(accountService, accountMap);
+        localAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
       } catch (JSONException e) {
         // Do not depend on Helix to log, so log the error message here.
         logger.error("Exception occurred when building AccountInfoMap from accountMap={}", accountMap, e);
-        accountService.accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
         throw new IllegalStateException("Exception occurred when parsing blob id list", e);
       }
-      accountService.maybePersistOldState(backupPrefixAndPath, accountMap);
+      backup.maybePersistOldState(backupPrefixAndPath, accountMap);
 
       // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
       // be caught by Helix and helixStore#update will return false.
-      if (accountService.hasConflictingAccount(this.accounts, localAccountInfoMap)) {
+      if (localAccountInfoMap.hasConflictingAccount(this.accounts)) {
         // Throw exception, so that helixStore can capture and terminate the update operation
         throw new IllegalArgumentException(
             "Updating accounts failed because one account to update conflicts with existing accounts");
@@ -261,11 +265,11 @@ class RouterStore implements AccountMetadataStore {
       // Start step 4:
       long startTimeMs = System.currentTimeMillis();
       try {
-        this.newBlobID = writeAccountMapToRouter(accountMap, accountService.router.get());
-        accountService.accountServiceMetrics.accountUpdateToAmbryTimeInMs.update(
+        this.newBlobID = writeAccountMapToRouter(accountMap, router.get());
+        accountServiceMetrics.accountUpdateToAmbryTimeInMs.update(
             System.currentTimeMillis() - startTimeMs);
       } catch (Exception e) {
-        accountService.accountServiceMetrics.accountUpdatesToAmbryServerErrorCount.inc();
+        accountServiceMetrics.accountUpdatesToAmbryServerErrorCount.inc();
         String message =
             "Updating accounts failed because unexpected error occurred when uploading AccountMetadata to ambry";
         logger.error(message, e);
@@ -281,23 +285,28 @@ class RouterStore implements AccountMetadataStore {
       return recordToUpdate;
     }
 
-    void cleanup(boolean isUpdateSucceeded) {
+    @Override
+    public void afterUpdate(boolean isUpdateSucceeded) {
       if (isUpdateSucceeded) {
-        accountService.maybePersistNewState(backupPrefixAndPath, potentialNewState);
+        backup.maybePersistNewState(backupPrefixAndPath, potentialNewState);
       } else if (newBlobID != null) {
         // Delete the ambry blob regardless what error fails the update.
         try {
           // Block this execution? or maybe wait for a while then get out?
-          accountService.router.get().deleteBlob(newBlobID, SERVICE_ID).get();
+          router.get().deleteBlob(newBlobID, SERVICE_ID).get();
         } catch (Exception e) {
           logger.error("Failed to delete blob={} because of {}", newBlobID, e);
-          accountService.accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
+          accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
         }
       }
     }
   }
 
-  static class BlobIDAndVersion implements Comparable<BlobIDAndVersion> {
+  /**
+   * Helper class that encapsulates the blob id and version number to serve as each item in the blob id list that would
+   * eventually be persisted in {@link ZNRecord} at {@link #ACCOUNT_METADATA_BLOB_IDS_PATH}.
+   */
+  static class BlobIDAndVersion {
     private final String blobID;
     private final int version;
 
@@ -321,11 +330,6 @@ class RouterStore implements AccountMetadataStore {
       String blobID = object.getString(BLOBID_KEY);
       int version = object.getInt(VERSION_KEY);
       return new BlobIDAndVersion(blobID, version);
-    }
-
-    @Override
-    public int compareTo(BlobIDAndVersion o) {
-      return version - o.version;
     }
   }
 }

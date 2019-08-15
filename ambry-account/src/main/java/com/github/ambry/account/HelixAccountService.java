@@ -40,7 +40,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -90,27 +89,20 @@ class HelixAccountService implements AccountService {
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
 
-  // backup constants
-  static final String OLD_STATE_SUFFIX = "old";
-  static final String NEW_STATE_SUFFIX = "new";
-  static final String SEP = ".";
-  static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
-
-  final Path backupDirPath;
-  final AccountServiceMetrics accountServiceMetrics;
-
+  private final LocalBackup backup;
+  private final AccountServiceMetrics accountServiceMetrics;
   private final HelixPropertyStore<ZNRecord> helixStore;
   private final Notifier<String> notifier;
-  private final AtomicReference<AccountInfoMap> accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(this));
+  private final AtomicReference<AccountInfoMap> accountInfoMapRef;
   private final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers = new CopyOnWriteArraySet<>();
   private final ScheduledExecutorService scheduler;
   private final HelixAccountServiceConfig config;
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final TopicListener<String> changeTopicListener = this::onAccountChangeMessage;
-  private static final Logger logger = LoggerFactory.getLogger(HelixAccountService.class);
   private final AccountMetadataStore accountMetadataStore;
+  private static final Logger logger = LoggerFactory.getLogger(HelixAccountService.class);
 
-  AtomicReference<Router> router = new AtomicReference<>();
+  private AtomicReference<Router> router = new AtomicReference<>();
 
   /**
    * <p>
@@ -139,8 +131,9 @@ class HelixAccountService implements AccountService {
     this.notifier = notifier;
     this.scheduler = scheduler;
     this.config = config;
+    this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
+    this.backup= new LocalBackup(this.accountServiceMetrics, config);
 
-    backupDirPath = config.backupDir.isEmpty() ? null : Files.createDirectories(Paths.get(config.backupDir));
     if (notifier != null) {
       notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
     } else {
@@ -149,16 +142,17 @@ class HelixAccountService implements AccountService {
       accountServiceMetrics.nullNotifierCount.inc();
     }
     if (config.useNewZNodePath) {
-      accountMetadataStore = new RouterStore(this, helixStore, config);
+      accountMetadataStore = new RouterStore(this.accountServiceMetrics, backup, helixStore, router);
       // postpone initializeFetchAndSchedule to setupRouter function.
     } else {
-      accountMetadataStore = new LegacyMetadataStore(this, helixStore, config);
+      accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backup, helixStore);
       initialFetchAndSchedule();
     }
   }
 
   /**
-   * set the router to the given one.
+   * set the router to the given one. This is a blocking call. This function would block until it fetches the
+   * {@link Account} metadata from ambry server.
    * @param router The router to set.
    * @throws IllegalStateException when the router already set up.
    */
@@ -170,10 +164,22 @@ class HelixAccountService implements AccountService {
     }
   }
 
+  private void fetchAndUpdateCache(boolean isCalledFromListener) {
+    Map<String, String> accountMap = accountMetadataStore.fetchAccountMetadata();
+    if (accountMap == null) {
+      logger.debug("No account map returned");
+    } else {
+      logger.trace("Start parsing remote account data");
+      AccountInfoMap newAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
+      AccountInfoMap oldAccountInfoMap = accountInfoMapRef.getAndSet(newAccountInfoMap);
+      notifyAccountUpdateConsumers(newAccountInfoMap, oldAccountInfoMap, isCalledFromListener);
+    }
+  }
+
   private void initialFetchAndSchedule() {
     Runnable updater = () -> {
       try {
-        accountMetadataStore.fetchAndUpdateCache(false);
+        fetchAndUpdateCache(false);
       } catch (Exception e) {
         logger.error("Exception occurred when fetching remote account data", e);
         accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
@@ -237,6 +243,10 @@ class HelixAccountService implements AccountService {
   public boolean updateAccounts(Collection<Account> accounts) {
     checkOpen();
     Objects.requireNonNull(accounts, "accounts cannot be null");
+    if (accounts.isEmpty()) {
+      logger.debug("Empty account collection to update.");
+      return false;
+    }
     if (hasDuplicateAccountIdOrName(accounts)) {
       logger.debug("Duplicate account id or name exist in the accounts to update");
       accountServiceMetrics.updateAccountErrorCount.inc();
@@ -249,7 +259,7 @@ class HelixAccountService implements AccountService {
     // update operation for all the accounts if any conflict exists. There is a slight chance that the account to update
     // conflicts with the accounts in the local cache, but does not conflict with those in the helixPropertyStore. This
     // will happen if some accounts are updated but the local cache is not refreshed.
-    if (hasConflictWithCache(accounts)) {
+    if (accountInfoMapRef.get().hasConflictingAccount(accounts)) {
       logger.debug("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
       accountServiceMetrics.updateAccountErrorCount.inc();
     } else {
@@ -305,7 +315,7 @@ class HelixAccountService implements AccountService {
       switch (message) {
         case FULL_ACCOUNT_METADATA_CHANGE_MESSAGE:
           logger.trace("Start processing message={} for topic={}", message, topic);
-          accountMetadataStore.fetchAndUpdateCache(true);
+          fetchAndUpdateCache(true);
           logger.trace("Completed processing message={} for topic={}", message, topic);
           break;
         default:
@@ -325,7 +335,7 @@ class HelixAccountService implements AccountService {
    * @param oldAccountInfoMap the {@link AccountInfoMap} that was cached before this change.
    * @param isCalledFromListener {@code true} if the caller is the account update listener, {@@code false} otherwise.
    */
-  void notifyAccountUpdateConsumers(AccountInfoMap newAccountInfoMap, AccountInfoMap oldAccountInfoMap,
+  private void notifyAccountUpdateConsumers(AccountInfoMap newAccountInfoMap, AccountInfoMap oldAccountInfoMap,
       boolean isCalledFromListener) {
     Map<Short, Account> idToUpdatedAccounts = new HashMap<>();
     for (Account newAccount : newAccountInfoMap.getAccounts()) {
@@ -359,60 +369,6 @@ class HelixAccountService implements AccountService {
   }
 
   /**
-   * update the cache with the given {@link AccountInfoMap}.
-   * @param newAccountInfoMap
-   * @return the old {@link AccountInfoMap}
-   */
-  AccountInfoMap updateCache(AccountInfoMap newAccountInfoMap) {
-    return accountInfoMapRef.getAndSet(newAccountInfoMap);
-  }
-
-  /**
-   * Checks a collection of {@link Account}s if there is any conflict between the {@link Account}s to update and the
-   * {@link Account}s in the local cache.
-   *
-   * @param accountsToSet The collection of {@link Account}s to check with the local cache.
-   * @return {@code true} if there is at least one {@link Account} in {@code accountsToSet} conflicts with the
-   *                      {@link Account}s in the cache, {@code false} otherwise.
-   */
-  private boolean hasConflictWithCache(Collection<Account> accountsToSet) {
-    return hasConflictingAccount(accountsToSet, accountInfoMapRef.get());
-  }
-
-  /**
-   * Checks if there is any {@link Account} in a given collection of {@link Account}s conflicts against any {@link Account}
-   * in a {@link AccountInfoMap}, according to the Javadoc of {@link AccountService}. Two {@link Account}s can be
-   * conflicting with each other if they have different account Ids but the same account name.
-   *
-   * @param accountsToSet The collection of {@link Account}s to check conflict.
-   * @param accountInfoMap A {@link AccountInfoMap} that represents a group of {@link Account}s to check conflict.
-   * @return {@code true} if there is at least one {@link Account} in {@code accountPairs} conflicts with the existing
-   *                      {@link Account}s in {@link AccountInfoMap}, {@code false} otherwise.
-   */
-  boolean hasConflictingAccount(Collection<Account> accountsToSet, AccountInfoMap accountInfoMap) {
-    for (Account account : accountsToSet) {
-      // if the account already exists, check that the snapshot version matches the expected value.
-      Account accountInMap = accountInfoMap.getAccountById(account.getId());
-      if (accountInMap != null && account.getSnapshotVersion() != accountInMap.getSnapshotVersion()) {
-        logger.error(
-            "Account to update (accountId={} accountName={}) has an unexpected snapshot version in zk (expected={}, encountered={})",
-            account.getId(), account.getName(), account.getSnapshotVersion(), accountInMap.getSnapshotVersion());
-        return true;
-      }
-      // check that there are no other accounts that conflict with the name of the account to update
-      // (case D and E from the javadoc)
-      Account potentialConflict = accountInfoMap.getAccountByName(account.getName());
-      if (potentialConflict != null && potentialConflict.getId() != account.getId()) {
-        logger.error(
-            "Account to update (accountId={} accountName={}) conflicts with an existing record (accountId={} accountName={})",
-            account.getId(), account.getName(), potentialConflict.getId(), potentialConflict.getName());
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
    * Checks if the {@code HelixAccountService} is open.
    */
   private void checkOpen() {
@@ -421,77 +377,6 @@ class HelixAccountService implements AccountService {
     }
     if (config.useNewZNodePath && router.get() == null) {
       throw new IllegalStateException("Router not initialized.");
-    }
-  }
-
-  /**
-   * Save the zookeeper state from after the update to disk. This will only save the file if the update succeeded
-   * and the old state backup file was successfully reserved.
-   * The following file name format will be used: {@code {yyyyMMdd}T{HHmmss}.{unique long}.new}.
-   */
-  void maybePersistNewState(Pair<String, Path> backupPrefixAndPath, Map<String, String> newState) {
-    if (backupPrefixAndPath != null) {
-      try {
-        Path filepath = backupDirPath.resolve(backupPrefixAndPath.getFirst() + NEW_STATE_SUFFIX);
-        writeBackup(filepath, newState);
-      } catch (Exception e) {
-        logger.error("Could not write new state backup file", e);
-        accountServiceMetrics.backupErrorCount.inc();
-      }
-    }
-  }
-
-  /**
-   * Save the zookeeper state from before the update to disk.
-   * The following file name format will be used: {@code {yyyyMMdd}T{HHmmss}.{unique long}.old}.
-   * If there are multiple files with the same timestamp, the unique long will prevent the file names from clashing.
-   */
-  void maybePersistOldState(Pair<String, Path> backupPrefixAndPath, Map<String, String> oldState) {
-    if (backupPrefixAndPath != null) {
-      try {
-        writeBackup(backupPrefixAndPath.getSecond(), oldState);
-      } catch (Exception e) {
-        logger.error("Could not write previous state backup file", e);
-        accountServiceMetrics.backupErrorCount.inc();
-      }
-    }
-  }
-
-  /**
-   * If a backup file has not yet been created, reserve a new one with the following file name format:
-   * {@code {yyyyMMdd}T{HHmmss}.{unique long}.old}.
-   * @return a {@link Pair} containing the unique filename prefix for this account update and the path to use for
-   *         previous state backups.
-   * @throws IOException
-   */
-  Pair<String, Path> reserveBackupFile() throws IOException {
-    String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
-    for (long n = 0; n < Long.MAX_VALUE; n++) {
-      String prefix = timestamp + SEP + n + SEP;
-      Path filepath = backupDirPath.resolve(prefix + OLD_STATE_SUFFIX);
-      try {
-        return new Pair<>(prefix, Files.createFile(filepath));
-      } catch (FileAlreadyExistsException e) {
-        // retry with a new suffix.
-      }
-    }
-    throw new IOException("Could not create a unique file with timestamp " + timestamp);
-  }
-
-  /**
-   * @return a {@link JSONArray} containing the content for the local backup.
-   * @throws JSONException
-   */
-  private void writeBackup(Path backupPath, Map<String, String> accountMap) throws IOException, JSONException {
-    try (BufferedWriter writer = Files.newBufferedWriter(backupPath)) {
-      String sep = "";
-      writer.write('[');
-      for (String accountString : accountMap.values()) {
-        writer.write(sep);
-        writer.write(accountString);
-        sep = ",";
-      }
-      writer.write(']');
     }
   }
 }
@@ -510,15 +395,13 @@ class HelixAccountService implements AccountService {
 class AccountInfoMap {
   private final Map<String, Account> nameToAccountMap;
   private final Map<Short, Account> idToAccountMap;
-  private final HelixAccountService accountService;
+  private final static Logger logger = LoggerFactory.getLogger(AccountInfoMap.class);
 
   /**
    * Constructor for an empty {@code AccountInfoMap}.
    */
-  AccountInfoMap(HelixAccountService accountService) {
-    this.accountService = accountService;
-    nameToAccountMap = new HashMap<>();
-    idToAccountMap = new HashMap<>();
+  AccountInfoMap(AccountServiceMetrics accountServiceMetrics) {
+    this(accountServiceMetrics, new HashMap<>());
   }
 
   /**
@@ -535,8 +418,7 @@ class AccountInfoMap {
    * @param accountMap A map of {@link Account}s in the form of (accountIdString, accountJSONString).
    * @throws JSONException If parsing account data in json fails.
    */
-  AccountInfoMap(HelixAccountService accountService, Map<String, String> accountMap) throws JSONException {
-    this.accountService = accountService;
+  AccountInfoMap(AccountServiceMetrics accountServiceMetrics, Map<String, String> accountMap) throws JSONException {
     nameToAccountMap = new HashMap<>();
     idToAccountMap = new HashMap<>();
     for (Map.Entry<String, String> entry : accountMap.entrySet()) {
@@ -545,13 +427,13 @@ class AccountInfoMap {
       Account account;
       JSONObject accountJson = new JSONObject(valueString);
       if (idKey == null) {
-        accountService.accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
         throw new IllegalStateException(
             "Invalid account record when reading accountMap in ZNRecord because idKey=null");
       }
       account = Account.fromJson(accountJson);
       if (account.getId() != Short.valueOf(idKey)) {
-        accountService.accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
         throw new IllegalStateException(
             "Invalid account record when reading accountMap in ZNRecord because idKey and accountId do not match. idKey="
                 + idKey + " accountId=" + account.getId());
@@ -590,5 +472,139 @@ class AccountInfoMap {
   Collection<Account> getAccounts() {
     return Collections.unmodifiableCollection(idToAccountMap.values());
   }
+
+  /**
+   * Checks if there is any {@link Account} in a given collection of {@link Account}s conflicts against any {@link Account}
+   * in a {@link AccountInfoMap}, according to the Javadoc of {@link AccountService}. Two {@link Account}s can be
+   * conflicting with each other if they have different account Ids but the same account name.
+   *
+   * @param accountsToSet The collection of {@link Account}s to check conflict.
+   * @return {@code true} if there is at least one {@link Account} in {@code accountPairs} conflicts with the existing
+   *                      {@link Account}s in {@link AccountInfoMap}, {@code false} otherwise.
+   */
+  boolean hasConflictingAccount(Collection<Account> accountsToSet) {
+    for (Account account : accountsToSet) {
+      // if the account already exists, check that the snapshot version matches the expected value.
+      Account accountInMap = getAccountById(account.getId());
+      if (accountInMap != null && account.getSnapshotVersion() != accountInMap.getSnapshotVersion()) {
+        logger.error(
+            "Account to update (accountId={} accountName={}) has an unexpected snapshot version in zk (expected={}, encountered={})",
+            account.getId(), account.getName(), account.getSnapshotVersion(), accountInMap.getSnapshotVersion());
+        return true;
+      }
+      // check that there are no other accounts that conflict with the name of the account to update
+      // (case D and E from the javadoc)
+      Account potentialConflict = getAccountByName(account.getName());
+      if (potentialConflict != null && potentialConflict.getId() != account.getId()) {
+        logger.error(
+            "Account to update (accountId={} accountName={}) conflicts with an existing record (accountId={} accountName={})",
+            account.getId(), account.getName(), potentialConflict.getId(), potentialConflict.getName());
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
+/**
+ * A helper class to manage {@link Account} metadata backup.
+ *
+ * <p>
+ *   First, call {@link LocalBackup#reserveBackupFile} to reverse a backup file. The filename has timestamp as part of the name.
+ *   Then to save the old {@link Account} metadata, call {@link LocalBackup#maybePersistOldState(Pair, Map)} with the reserved file
+ *   and the state.
+ *   Then to save the new {@link Account} metadata, call {@link LocalBackup#maybePersistNewState(Pair, Map)} with the reserved file
+ *   and the state.
+ * </p>
+ */
+class LocalBackup {
+  static final String OLD_STATE_SUFFIX = "old";
+  static final String NEW_STATE_SUFFIX = "new";
+  static final String SEP = ".";
+  static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
+
+  private static final Logger logger = LoggerFactory.getLogger(LocalBackup.class);
+  private final AccountServiceMetrics accountServiceMetrics;
+  private final Path backupDirPath;
+
+  public LocalBackup(AccountServiceMetrics accountServiceMetrics, HelixAccountServiceConfig config) throws IOException {
+    this.accountServiceMetrics = accountServiceMetrics;
+    backupDirPath = config.backupDir.isEmpty() ? null : Files.createDirectories(Paths.get(config.backupDir));
+  }
+
+  /**
+   * Reserve a new one with the following file name format: {@code {yyyyMMdd}T{HHmmss}.{unique long}.old}.
+   * @return a {@link Pair} containing the unique filename prefix for this account update and the path to use for
+   *         previous state backups.
+   * @throws IOException
+   */
+  Pair<String, Path> reserveBackupFile() throws IOException {
+    if (backupDirPath != null) {
+      String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
+      for (long n = 0; n < Long.MAX_VALUE; n++) {
+        String prefix = timestamp + SEP + n + SEP;
+        Path filepath = backupDirPath.resolve(prefix + OLD_STATE_SUFFIX);
+        try {
+          return new Pair<>(prefix, Files.createFile(filepath));
+        } catch (FileAlreadyExistsException e) {
+          // retry with a new suffix.
+        }
+      }
+      throw new IOException("Could not create a unique file with timestamp " + timestamp);
+    }
+    return null;
+  }
+
+  /**
+   * Save the new {@link Account} metadata. You should call this function only if the update succeeded
+   * and the old state backup file was successfully reserved.
+   * The following file name format will be used: {@code {yyyyMMdd}T{HHmmss}.{unique long}.new}.
+   */
+  void maybePersistNewState(Pair<String, Path> backupPrefixAndPath, Map<String, String> newState) {
+    if (backupPrefixAndPath != null) {
+      try {
+        Path filepath = backupDirPath.resolve(backupPrefixAndPath.getFirst() + NEW_STATE_SUFFIX);
+        writeBackup(filepath, newState);
+      } catch (Exception e) {
+        logger.error("Could not write new state backup file", e);
+        accountServiceMetrics.backupErrorCount.inc();
+      }
+    }
+  }
+
+  /**
+   * Save the old {@link Account} metadata before the update to disk.
+   * The following file name format will be used: {@code {yyyyMMdd}T{HHmmss}.{unique long}.old}.
+   * If there are multiple files with the same timestamp, the unique long will prevent the file names from clashing.
+   */
+  void maybePersistOldState(Pair<String, Path> backupPrefixAndPath, Map<String, String> oldState) {
+    if (backupPrefixAndPath != null) {
+      try {
+        writeBackup(backupPrefixAndPath.getSecond(), oldState);
+      } catch (Exception e) {
+        logger.error("Could not write previous state backup file", e);
+        accountServiceMetrics.backupErrorCount.inc();
+      }
+    }
+  }
+
+  /**
+   * Write the {@link Account} metadata map to the given file.
+   * @param backupPath The filepath to serialize the map.
+   * @param accountMap The map to persist.
+   * @throws IOException
+   * @throws JSONException
+   */
+  private void writeBackup(Path backupPath, Map<String, String> accountMap) throws IOException, JSONException {
+    try (BufferedWriter writer = Files.newBufferedWriter(backupPath)) {
+      String sep = "";
+      writer.write('[');
+      for (String accountString : accountMap.values()) {
+        writer.write(sep);
+        writer.write(accountString);
+        sep = ",";
+      }
+      writer.write(']');
+    }
+  }
+}
