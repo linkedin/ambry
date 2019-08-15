@@ -389,7 +389,7 @@ public class AzureCloudDestinationTest {
     }
   }
 
-  //@Test
+  @Test
   public void testAzureConnection() throws Exception {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));

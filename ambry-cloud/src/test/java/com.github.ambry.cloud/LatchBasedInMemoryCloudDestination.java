@@ -177,11 +177,6 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
   }
 
-  @Override
-  public long getBlobSize(BlobId blobId) {
-    return map.get(blobId).getSecond().length;
-  }
-
   public Map<String, byte[]> getTokenMap() {
     return tokenMap;
   }

@@ -560,17 +560,6 @@ class AzureCloudDestination implements CloudDestination {
     }
   }
 
-  @Override
-  public long getBlobSize(BlobId blobId) throws CloudStorageException {
-    try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId);
-      azureBlob.downloadAttributes();
-      return azureBlob.getProperties().getLength();
-    } catch (URISyntaxException | StorageException e) {
-      throw new CloudStorageException("Could not retrieve blob: " + blobId);
-    }
-  }
-
   /**
    * Get the azure blob reference for blobid.
    * @param blobId id of the blob for which {@code CloudBlockBlob} reference is asked for.

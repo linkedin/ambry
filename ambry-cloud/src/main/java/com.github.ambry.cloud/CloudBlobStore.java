@@ -33,7 +33,6 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -147,20 +146,10 @@ class CloudBlobStore implements Store {
     return new StoreInfo(messageReadSet, messageInfos);
   }
 
-  public void downloadBlob(CloudBlobMetadata cloudBlobMetadata, BlobId blobId, OutputStream outputStream)
-      throws StoreException {
+  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws StoreException {
     try {
-      if (cloudBlobMetadata.getEncryptionOrigin().equals(EncryptionOrigin.VCR)) {
-        // the blob was encrytped by VCR during upload. So we need to download the blob and decrypt it here
-        long encryptedBlobSize = cloudDestination.getBlobSize(blobId);
-        ByteBuffer encryptedBlob = ByteBuffer.allocate((int) encryptedBlobSize);
-        cloudDestination.downloadBlob(blobId, new ByteBufferOutputStream(encryptedBlob));
-        ByteBuffer decryptedBlob = cryptoAgent.decrypt(encryptedBlob);
-        outputStream.write(decryptedBlob.array());
-      } else {
-        cloudDestination.downloadBlob(blobId, outputStream);
-      }
-    } catch (CloudStorageException | GeneralSecurityException | IOException e) {
+      cloudDestination.downloadBlob(blobId, outputStream);
+    } catch (CloudStorageException e) {
       throw new StoreException("Error occured in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
     }
   }
