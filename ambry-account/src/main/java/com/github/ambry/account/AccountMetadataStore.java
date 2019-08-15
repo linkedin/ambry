@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * An AccountMetadataStore is a storage to keep and retrieve {@link Account} metadata. This is the base
  */
 abstract class AccountMetadataStore {
-  private static final Logger logger = LoggerFactory.getLogger(LegacyMetadataStore.class);
+  private static final Logger logger = LoggerFactory.getLogger(AccountMetadataStore.class);
 
   protected final AccountServiceMetrics accountServiceMetrics;
   protected final LocalBackup backup;
@@ -35,6 +35,12 @@ abstract class AccountMetadataStore {
   private final HelixPropertyStore<ZNRecord> helixStore;
   private final ReentrantLock lock = new ReentrantLock();
 
+  /** Create a new {@link AccountMetadataStore} instance for the subclasses.
+   * @param accountServiceMetrics The {@link AccountServiceMetrics}
+   * @param backup The {@link LocalBackup} to manage the backup files.
+   * @param helixStore The {@link HelixPropertyStore} to retrieve and update the {@link ZNRecord}.
+   * @param znRecordPath The {@link ZNRecord} path.
+   */
   AccountMetadataStore(AccountServiceMetrics accountServiceMetrics, LocalBackup backup,
       HelixPropertyStore<ZNRecord> helixStore, String znRecordPath) {
     this.accountServiceMetrics = accountServiceMetrics;

@@ -541,7 +541,7 @@ class LocalBackup {
   }
 
   /**
-   * Reserve a new one with the following file name format: {@code {yyyyMMdd}T{HHmmss}.{unique long}.old}.
+   * Reserve a new backup file with the following file name format: {@code {yyyyMMdd}T{HHmmss}.{unique long}.old}.
    * @return a {@link Pair} containing the unique filename prefix for this account update and the path to use for
    *         previous state backups.
    * @throws IOException
