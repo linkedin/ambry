@@ -23,6 +23,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * Start point for creating an instance of {@link VcrServer} and starting/shutting it down.
+ */
 public class VcrMain {
   private static Logger logger = LoggerFactory.getLogger(VcrMain.class);
 
