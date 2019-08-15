@@ -15,7 +15,6 @@ package com.github.ambry.account;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.concurrent.locks.ReentrantLock;
 import org.I0Itec.zkclient.DataUpdater;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
@@ -34,7 +33,6 @@ abstract class AccountMetadataStore {
   protected final LocalBackup backup;
   protected final String znRecordPath;
   private final HelixPropertyStore<ZNRecord> helixStore;
-  private final ReentrantLock lock = new ReentrantLock();
 
   /** Create a new {@link AccountMetadataStore} instance for the subclasses.
    * @param accountServiceMetrics The {@link AccountServiceMetrics}

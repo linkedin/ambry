@@ -32,6 +32,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.ZNRecord;
@@ -80,6 +81,10 @@ class RouterStore extends AccountMetadataStore {
 
   @Override
   Map<String, String> fetchAccountMetadataFromZNRecord(ZNRecord record) {
+    if (router.get() == null) {
+      logger.error("Router is not yet initialized");
+      return null;
+    }
     List<String> accountBlobIDs = record.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
     if (accountBlobIDs == null || accountBlobIDs.size() == 0) {
       logger.debug("ZNRecord={} to read on path={} does not have a simple list with key={}", record,
@@ -130,6 +135,7 @@ class RouterStore extends AccountMetadataStore {
 
   @Override
   AccountMetadataStore.ZKUpdater createNewZKUpdater(Collection<Account> accounts) {
+    Objects.requireNonNull(router.get(), "Router is null");
     return new ZKUpdater(accounts);
   }
 
@@ -141,6 +147,7 @@ class RouterStore extends AccountMetadataStore {
    * @throws Exception If there is any exceptions while saving the bytes to {@code AmbryServer}.
    */
   static String writeAccountMapToRouter(Map<String, String> accountMap, Router router) throws Exception {
+    Objects.requireNonNull(router, "Router is null");
     // Construct the json object and save it to ambry server.
     JSONObject object = new JSONObject();
     for (Map.Entry<String, String> entry : accountMap.entrySet()) {

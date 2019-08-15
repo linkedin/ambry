@@ -133,14 +133,6 @@ class HelixAccountService implements AccountService {
     this.config = config;
     this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
     this.backup = new LocalBackup(this.accountServiceMetrics, config);
-
-    if (notifier != null) {
-      notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
-    } else {
-      logger.warn("Notifier is null. Account updates cannot be notified to other entities. Local account cache may not "
-          + "be in sync with remote account data.");
-      accountServiceMetrics.nullNotifierCount.inc();
-    }
     if (config.useNewZNodePath) {
       accountMetadataStore = new RouterStore(this.accountServiceMetrics, backup, helixStore, router);
       // postpone initializeFetchAndSchedule to setupRouter function.
@@ -200,6 +192,14 @@ class HelixAccountService implements AccountService {
       logger.info(
           "Background account updater will fetch accounts from remote starting {} ms from now and repeat with interval={} ms",
           initialDelay, config.updaterPollingIntervalMs);
+    }
+
+    if (notifier != null) {
+      notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
+    } else {
+      logger.warn("Notifier is null. Account updates cannot be notified to other entities. Local account cache may not "
+          + "be in sync with remote account data.");
+      accountServiceMetrics.nullNotifierCount.inc();
     }
   }
 

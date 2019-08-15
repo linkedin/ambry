@@ -13,7 +13,6 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.nio.file.Path;

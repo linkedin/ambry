@@ -25,7 +25,6 @@ public class HelixAccountServiceConfig {
   public static final String BACKUP_DIRECTORY_KEY = HELIX_ACCOUNT_SERVICE_PREFIX + "backup.dir";
   public static final String ZK_CLIENT_CONNECT_STRING_KEY = HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string";
   public static final String USE_NEW_ZNODE_PATH =  HELIX_ACCOUNT_SERVICE_PREFIX + "use.new.znode.path";
-  public static final String VERSION_COUNT = HELIX_ACCOUNT_SERVICE_PREFIX + ".version.count";
 
 
   /**
@@ -64,13 +63,6 @@ public class HelixAccountServiceConfig {
   @Default("false")
   public final boolean useNewZNodePath;
 
-  /**
-   * The number of latest versions of account metadata to save in ambry.
-   */
-  @Config(VERSION_COUNT)
-  @Default("10")
-  public final int versionCount;
-
   public HelixAccountServiceConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY);
     updaterPollingIntervalMs =
@@ -79,6 +71,5 @@ public class HelixAccountServiceConfig {
         verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_MS_KEY, 60 * 1000, 1, Integer.MAX_VALUE);
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
     useNewZNodePath = verifiableProperties.getBoolean(USE_NEW_ZNODE_PATH, false);
-    versionCount = verifiableProperties.getInt(VERSION_COUNT, 10);
   }
 }
