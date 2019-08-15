@@ -634,6 +634,11 @@ public class StatsManagerTest {
     public void shutdown() throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
+
+    @Override
+    public boolean isStarted() {
+      throw new IllegalStateException("Not implemented");
+    }
   }
 
   /**

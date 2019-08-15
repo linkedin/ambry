@@ -148,6 +148,7 @@ class InMemoryStore implements Store {
   private final DummyLog log;
   final List<MessageInfo> messageInfos;
   final PartitionId id;
+  private boolean started;
 
   InMemoryStore(PartitionId id, List<MessageInfo> messageInfos, List<ByteBuffer> buffers,
       ReplicationTest.StoreEventListener listener) {
@@ -158,10 +159,12 @@ class InMemoryStore implements Store {
     log = new DummyLog(buffers);
     this.listener = listener;
     this.id = id;
+    started = true;
   }
 
   @Override
   public void start() throws StoreException {
+    started = true;
   }
 
   @Override
@@ -309,5 +312,11 @@ class InMemoryStore implements Store {
 
   @Override
   public void shutdown() throws StoreException {
+    started = false;
+  }
+
+  @Override
+  public boolean isStarted() {
+    return started;
   }
 }

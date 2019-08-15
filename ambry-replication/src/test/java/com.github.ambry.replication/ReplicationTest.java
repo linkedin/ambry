@@ -239,7 +239,8 @@ public class ReplicationTest {
   }
 
   /**
-   * Tests pausing replication for all and individual partitions.
+   * Tests pausing replication for all and individual partitions. Also tests replication will pause on store that is not
+   * started and resume when store restarted.
    * @throws Exception
    */
   @Test
@@ -269,10 +270,12 @@ public class ReplicationTest {
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
     Map<PartitionId, Integer> progressTracker = new HashMap<>();
-    PartitionId idToLeaveOut = clusterMap.getAllPartitionIds(null).get(0);
+    PartitionId partitionToResumeFirst = clusterMap.getAllPartitionIds(null).get(0);
+    PartitionId partitionToShutdownLocally = clusterMap.getAllPartitionIds(null).get(1);
     boolean allStopped = false;
     boolean onlyOneResumed = false;
     boolean allReenabled = false;
+    boolean shutdownStoreRestarted = false;
     Set<PartitionId> expectedPaused = new HashSet<>();
     assertEquals("There should be no disabled partitions", expectedPaused,
         replicaThread.getReplicationDisabledPartitions());
@@ -285,7 +288,8 @@ public class ReplicationTest {
         int lastProgress = progressTracker.computeIfAbsent(id, id1 -> 0);
         int currentProgress = token.getIndex();
         boolean partDone = currentProgress + 1 == remoteHost.infosByPartition.get(id).size();
-        if (allStopped || (onlyOneResumed && !id.equals(idToLeaveOut))) {
+        if (allStopped || (onlyOneResumed && !id.equals(partitionToResumeFirst)) || (allReenabled
+            && !shutdownStoreRestarted && id.equals(partitionToShutdownLocally))) {
           assertEquals("There should have been no progress", lastProgress, currentProgress);
         } else if (!partDone) {
           assertTrue("There has been no progress", currentProgress > lastProgress);
@@ -293,13 +297,13 @@ public class ReplicationTest {
         }
         replicationDone = replicationDone && partDone;
       }
-      if (!allStopped && !onlyOneResumed && !allReenabled) {
+      if (!allStopped && !onlyOneResumed && !allReenabled && !shutdownStoreRestarted) {
         replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(null), false);
         expectedPaused.addAll(clusterMap.getAllPartitionIds(null));
         assertEquals("Disabled partitions sets do not match", expectedPaused,
             replicaThread.getReplicationDisabledPartitions());
         allStopped = true;
-      } else if (!onlyOneResumed && !allReenabled) {
+      } else if (!onlyOneResumed && !allReenabled && !shutdownStoreRestarted) {
         // resume replication for first partition
         replicaThread.controlReplicationForPartitions(Collections.singletonList(partitionIds.get(0)), true);
         expectedPaused.remove(partitionIds.get(0));
@@ -307,14 +311,19 @@ public class ReplicationTest {
             replicaThread.getReplicationDisabledPartitions());
         allStopped = false;
         onlyOneResumed = true;
-      } else if (!allReenabled) {
+      } else if (!allReenabled && !shutdownStoreRestarted) {
         // not removing the first partition
         replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(null), true);
+        // shutdown one local store to pause replication against that store
+        localHost.storesByPartition.get(partitionToShutdownLocally).shutdown();
         onlyOneResumed = false;
         allReenabled = true;
         expectedPaused.clear();
         assertEquals("Disabled partitions sets do not match", expectedPaused,
             replicaThread.getReplicationDisabledPartitions());
+      } else if (!shutdownStoreRestarted) {
+        localHost.storesByPartition.get(partitionToShutdownLocally).start();
+        shutdownStoreRestarted = true;
       }
       if (replicationDone) {
         break;
@@ -1242,8 +1251,8 @@ public class ReplicationTest {
     replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
         replicasToReplicate.get(remoteHost.dataNodeId), response);
     for (PartitionId partitionId : partitionIds) {
-      assertTrue("Replication lag should equal to 0",
-          replicaThread.getReplicationMetrics().getMaxLagForPartition(partitionId) == 0);
+      assertEquals("Replication lag should equal to 0", 0,
+          replicaThread.getReplicationMetrics().getMaxLagForPartition(partitionId));
     }
   }
 

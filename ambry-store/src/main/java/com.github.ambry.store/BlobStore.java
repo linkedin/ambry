@@ -761,7 +761,8 @@ class BlobStore implements Store {
   /**
    * @return {@code true} if this store has been started successfully.
    */
-  boolean isStarted() {
+  @Override
+  public boolean isStarted() {
     return started;
   }
 

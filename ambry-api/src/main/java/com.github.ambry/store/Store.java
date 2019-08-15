@@ -104,6 +104,11 @@ public interface Store {
   boolean isEmpty();
 
   /**
+   * @return true if the store is started
+   */
+  boolean isStarted();
+
+  /**
    * Shuts down the store
    */
   void shutdown() throws StoreException;
