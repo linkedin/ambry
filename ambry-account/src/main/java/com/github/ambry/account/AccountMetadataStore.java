@@ -23,6 +23,7 @@ import org.apache.helix.store.HelixPropertyStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 /**
  * An AccountMetadataStore is a storage to keep and retrieve {@link Account} metadata. This is the base
  */
@@ -76,7 +77,6 @@ abstract class AccountMetadataStore {
    * @return the Specific {@link ZKUpdater} to update accounts with {@link HelixPropertyStore}.
    */
   abstract ZKUpdater createNewZKUpdater(Collection<Account> accounts);
-
 
   /**
    * fetchAccountMetadata would fetch the latest full set of {@link Account} metadata from the store. It returns null

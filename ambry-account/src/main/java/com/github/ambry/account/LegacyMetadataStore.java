@@ -49,7 +49,8 @@ class LegacyMetadataStore extends AccountMetadataStore {
    * @param backup The {@link LocalBackup} instance to manage backup files.
    * @param helixStore The {@link HelixPropertyStore} to fetch and update data.
    */
-  LegacyMetadataStore(AccountServiceMetrics accountServiceMetrics, LocalBackup backup, HelixPropertyStore<ZNRecord> helixStore) {
+  LegacyMetadataStore(AccountServiceMetrics accountServiceMetrics, LocalBackup backup,
+      HelixPropertyStore<ZNRecord> helixStore) {
     super(accountServiceMetrics, backup, helixStore, FULL_ACCOUNT_METADATA_PATH);
   }
 
@@ -109,13 +110,15 @@ class LegacyMetadataStore extends AccountMetadataStore {
       }
 
       AccountInfoMap remoteAccountInfoMap;
+      String errorMessage = null;
       try {
         remoteAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
       } catch (JSONException e) {
         // Do not depend on Helix to log, so log the error message here.
-        logger.error("Exception occurred when building AccountInfoMap from accountMap={}", accountMap, e);
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-        throw new IllegalStateException("Exception occurred when building AccountInfoMap from accountMap", e);
+        errorMessage = String.format("Exception occurred when building AccountInfoMap from accountMap={}", accountMap);
+        logger.error(errorMessage, e);
+        throw new IllegalStateException(errorMessage, e);
       }
       backup.maybePersistOldState(backupPrefixAndPath, accountMap);
 
@@ -123,18 +126,18 @@ class LegacyMetadataStore extends AccountMetadataStore {
       // be caught by Helix and helixStore#update will return false.
       if (remoteAccountInfoMap.hasConflictingAccount(accountsToUpdate)) {
         // Throw exception, so that helixStore can capture and terminate the update operation
-        throw new IllegalArgumentException(
-            "Updating accounts failed because one account to update conflicts with existing accounts");
+        errorMessage = "Updating accounts failed because one account to update conflicts with existing accounts";
+        logger.error(errorMessage);
+        throw new IllegalArgumentException(errorMessage);
       } else {
         for (Account account : accountsToUpdate) {
           try {
             accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
           } catch (Exception e) {
-            String message = "Updating accounts failed because unexpected exception occurred when updating accountId="
+            errorMessage = "Updating accounts failed because unexpected exception occurred when updating accountId="
                 + account.getId() + " accountName=" + account.getName();
-            // Do not depend on Helix to log, so log the error message here.
-            logger.error(message, e);
-            throw new IllegalStateException(message, e);
+            logger.error(errorMessage, e);
+            throw new IllegalStateException(errorMessage, e);
           }
         }
         recordToUpdate.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);

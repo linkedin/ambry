@@ -74,11 +74,11 @@ public class AccountServiceMetrics {
     nullNotifierCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NullNotifierCount"));
     accountUpdatesCapturedByScheduledUpdaterCount = metricRegistry.counter(
         MetricRegistry.name(HelixAccountService.class, "AccountUpdatesCapturedByScheduledUpdaterCount"));
-    accountUpdatesToAmbryServerErrorCount = metricRegistry.counter(
-        MetricRegistry.name(HelixAccountService.class, "AccountUpdatesToAmbryServerErrorCount"));
-    accountDeletesToAmbryServerErrorCount = metricRegistry.counter(
-        MetricRegistry.name(HelixAccountService.class, "AccountDeletesToAmbryServerErrorCount"));
-    accountFetchFromAmbryServerErrorCount = metricRegistry.counter(
-        MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryServerErrorCount"));
+    accountUpdatesToAmbryServerErrorCount =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountUpdatesToAmbryServerErrorCount"));
+    accountDeletesToAmbryServerErrorCount =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountDeletesToAmbryServerErrorCount"));
+    accountFetchFromAmbryServerErrorCount =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryServerErrorCount"));
   }
 }

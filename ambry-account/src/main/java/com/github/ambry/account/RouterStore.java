@@ -111,8 +111,7 @@ class RouterStore extends AccountMetadataStore {
     Future<GetBlobResult> resultF = router.get().getBlob(blobID, new GetBlobOptionsBuilder().build());
     try {
       GetBlobResult result = resultF.get();
-      accountServiceMetrics.accountFetchFromAmbryTimeInMs.update(
-          System.currentTimeMillis() - startTimeMs);
+      accountServiceMetrics.accountFetchFromAmbryTimeInMs.update(System.currentTimeMillis() - startTimeMs);
 
       int blobSize = (int) result.getBlobInfo().getBlobProperties().getBlobSize();
       InputStream input = new ReadableStreamChannelInputStream(result.getBlobDataChannel());
@@ -131,7 +130,7 @@ class RouterStore extends AccountMetadataStore {
 
   @Override
   AccountMetadataStore.ZKUpdater createNewZKUpdater(Collection<Account> accounts) {
-    return new ZKUpdater(accounts) ;
+    return new ZKUpdater(accounts);
   }
 
   /**
@@ -198,6 +197,7 @@ class RouterStore extends AccountMetadataStore {
         recordToUpdate = znRecord;
       }
 
+      String errorMessage = null;
       List<String> accountBlobIDs = recordToUpdate.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
       int newVersion = 1;
       Map<String, String> accountMap = null;
@@ -218,12 +218,15 @@ class RouterStore extends AccountMetadataStore {
           // make this list mutable
           accountBlobIDs = new ArrayList<>(accountBlobIDs);
         } catch (JSONException e) {
-          logger.error("Exception occurred when parsing the blob id list from {}", accountBlobIDs);
           accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-          throw new IllegalStateException("Exception occurred when parsing blob id list", e);
+          errorMessage = String.format("Exception occurred when parsing the blob id list from {}", accountBlobIDs);
+          logger.error(errorMessage);
+          throw new IllegalStateException(errorMessage, e);
         } catch (Exception e) {
-          logger.error("Unexpected exception occurred when parsing the blob id list from {}", accountBlobIDs, e);
-          throw new IllegalStateException("Unexpected exception occurred when parsing blob id list", e);
+          errorMessage =
+              String.format("Unexpected exception occurred when parsing the blob id list from {}", accountBlobIDs);
+          logger.error(errorMessage, e);
+          throw new IllegalStateException(errorMessage, e);
         }
       }
       if (accountMap == null) {
@@ -236,10 +239,10 @@ class RouterStore extends AccountMetadataStore {
       try {
         localAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
       } catch (JSONException e) {
-        // Do not depend on Helix to log, so log the error message here.
-        logger.error("Exception occurred when building AccountInfoMap from accountMap={}", accountMap, e);
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-        throw new IllegalStateException("Exception occurred when parsing blob id list", e);
+        errorMessage = String.format("Exception occurred when building AccountInfoMap from accountMap={}", accountMap);
+        logger.error(errorMessage, e);
+        throw new IllegalStateException(errorMessage, e);
       }
       backup.maybePersistOldState(backupPrefixAndPath, accountMap);
 
@@ -247,18 +250,19 @@ class RouterStore extends AccountMetadataStore {
       // be caught by Helix and helixStore#update will return false.
       if (localAccountInfoMap.hasConflictingAccount(this.accounts)) {
         // Throw exception, so that helixStore can capture and terminate the update operation
-        throw new IllegalArgumentException(
-            "Updating accounts failed because one account to update conflicts with existing accounts");
+        errorMessage = "Updating accounts failed because one account to update conflicts with existing accounts";
+        logger.error(errorMessage);
+        throw new IllegalArgumentException(errorMessage);
       }
       for (Account account : this.accounts) {
         try {
           accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
         } catch (Exception e) {
-          String message = "Updating accounts failed because unexpected exception occurred when updating accountId="
+          errorMessage = "Updating accounts failed because unexpected exception occurred when updating accountId="
               + account.getId() + " accountName=" + account.getName();
           // Do not depend on Helix to log, so log the error message here.
-          logger.error(message, e);
-          throw new IllegalStateException(message, e);
+          logger.error(errorMessage, e);
+          throw new IllegalStateException(errorMessage, e);
         }
       }
 
@@ -266,14 +270,13 @@ class RouterStore extends AccountMetadataStore {
       long startTimeMs = System.currentTimeMillis();
       try {
         this.newBlobID = writeAccountMapToRouter(accountMap, router.get());
-        accountServiceMetrics.accountUpdateToAmbryTimeInMs.update(
-            System.currentTimeMillis() - startTimeMs);
+        accountServiceMetrics.accountUpdateToAmbryTimeInMs.update(System.currentTimeMillis() - startTimeMs);
       } catch (Exception e) {
         accountServiceMetrics.accountUpdatesToAmbryServerErrorCount.inc();
-        String message =
+        errorMessage =
             "Updating accounts failed because unexpected error occurred when uploading AccountMetadata to ambry";
-        logger.error(message, e);
-        throw new IllegalStateException(message, e);
+        logger.error(errorMessage, e);
+        throw new IllegalStateException(errorMessage, e);
       }
 
       // The new account map to backup locally

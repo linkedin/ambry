@@ -132,7 +132,7 @@ class HelixAccountService implements AccountService {
     this.scheduler = scheduler;
     this.config = config;
     this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
-    this.backup= new LocalBackup(this.accountServiceMetrics, config);
+    this.backup = new LocalBackup(this.accountServiceMetrics, config);
 
     if (notifier != null) {
       notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
