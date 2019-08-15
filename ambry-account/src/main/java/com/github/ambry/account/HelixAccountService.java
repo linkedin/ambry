@@ -102,7 +102,7 @@ class HelixAccountService implements AccountService {
   private final AccountMetadataStore accountMetadataStore;
   private static final Logger logger = LoggerFactory.getLogger(HelixAccountService.class);
 
-  private AtomicReference<Router> router = new AtomicReference<>();
+  private final AtomicReference<Router> router = new AtomicReference<>();
 
   /**
    * <p>
@@ -164,7 +164,11 @@ class HelixAccountService implements AccountService {
     }
   }
 
-  private void fetchAndUpdateCache(boolean isCalledFromListener) {
+  /**
+   * A synchronized function to fetch account metadata from {@link AccountMetadataStore} and update the in memory cache.
+   * @param isCalledFromListener True is this function is invoked in the {@link TopicListener}.
+   */
+  private synchronized void fetchAndUpdateCache(boolean isCalledFromListener) {
     Map<String, String> accountMap = accountMetadataStore.fetchAccountMetadata();
     if (accountMap == null) {
       logger.debug("No account map returned");
@@ -176,6 +180,10 @@ class HelixAccountService implements AccountService {
     }
   }
 
+  /**
+   * This is a blocking call that would fetch the {@link Account} metadata and update the cache. Then schedule this logic
+   * at a fixed rate.
+   */
   private void initialFetchAndSchedule() {
     Runnable updater = () -> {
       try {

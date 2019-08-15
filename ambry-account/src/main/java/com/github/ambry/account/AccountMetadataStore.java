@@ -78,22 +78,15 @@ abstract class AccountMetadataStore {
    * @return {@link Account} metadata in a map.
    */
   Map<String, String> fetchAccountMetadata() {
-    // when fetching account metadata, we need to fetch the list of blob ids that point to different versions of
-    // account metadata as well the latest version of account metadata.
-    lock.lock();
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      logger.trace("Start reading account metadata blob ids list from path={}", znRecordPath);
-      ZNRecord znRecord = helixStore.get(znRecordPath, null, AccessOption.PERSISTENT);
-      logger.trace("Fetched ZNRecord from path={}, took time={} ms", znRecordPath, startTimeMs);
-      if (znRecord == null) {
-        logger.debug("The ZNRecord to read does not exist on path={}", znRecordPath);
-        return null;
-      }
-      return fetchAccountMetadataFromZNRecord(znRecord);
-    } finally {
-      lock.unlock();
+    long startTimeMs = System.currentTimeMillis();
+    logger.trace("Start reading ZNRecord from path={}", znRecordPath);
+    ZNRecord znRecord = helixStore.get(znRecordPath, null, AccessOption.PERSISTENT);
+    logger.trace("Fetched ZNRecord from path={}, took time={} ms", znRecordPath, startTimeMs);
+    if (znRecord == null) {
+      logger.debug("The ZNRecord to read does not exist on path={}", znRecordPath);
+      return null;
     }
+    return fetchAccountMetadataFromZNRecord(znRecord);
   }
 
   /**
