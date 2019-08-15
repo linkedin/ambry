@@ -13,9 +13,29 @@
  */
 package com.github.ambry.messageformat;
 
+
 /**
  * Contains the delete sub-record info
  */
-public class DeleteSubRecord {
+public class DeleteSubRecord extends SubRecord{
 
+  private short recordVersion;
+
+  public DeleteSubRecord() {
+    this.recordVersion = -1;
+  }
+
+  public DeleteSubRecord(short recordVersion) {
+    this.recordVersion = recordVersion;
+  }
+
+  @Override
+  public UpdateRecord.Type getType() {
+    return UpdateRecord.Type.DELETE;
+  }
+
+  @Override
+  public short getRecordVersion() {
+    return recordVersion;
+  }
 }

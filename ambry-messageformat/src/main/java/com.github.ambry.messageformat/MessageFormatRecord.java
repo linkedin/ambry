@@ -61,7 +61,10 @@ public class MessageFormatRecord {
   static short headerVersionToUse = Message_Header_Version_V2;
 
   private static final short Delete_Subrecord_Version_V1 = 1;
+  private static final short Delete_Subrecord_Version_V2 = 2;
+  private static final short Undelete_Subrecord_Version_V1 = 1;
   private static final short Ttl_Update_Subrecord_Version_V1 = 1;
+  public static final int Record_Version_Field_Size_In_Bytes = 2;
 
   public static boolean isValidHeaderVersion(short headerVersion) {
     switch (headerVersion) {
@@ -1093,6 +1096,26 @@ public class MessageFormatRecord {
       switch (version) {
         case Delete_Subrecord_Version_V1:
           return Delete_Sub_Format_V1.deserialize(inputStream);
+        case Delete_Subrecord_Version_V2:
+          return Delete_Sub_Format_V2.deserialize(inputStream);
+        default:
+          throw new MessageFormatException("delete record version not supported: " + version,
+              MessageFormatErrorCodes.Unknown_Format_Version);
+      }
+    }
+
+    /**
+     * @param inputStream the stream that contains the serialized form of a {@link DeleteSubRecord}.
+     * @return the deserialized {@link DeleteSubRecord}
+     * @throws IOException if there are problems reading from stream.
+     * @throws MessageFormatException if the format of the message is unexpected.
+     */
+    private static UndeleteSubRecord getUndeleteSubRecord(DataInputStream inputStream)
+        throws IOException, MessageFormatException {
+      short version = inputStream.readShort();
+      switch (version) {
+        case Undelete_Subrecord_Version_V1:
+          return Undelete_Sub_Format_V1.deserialize(inputStream);
         default:
           throw new MessageFormatException("delete record version not supported: " + version,
               MessageFormatErrorCodes.Unknown_Format_Version);
@@ -1139,6 +1162,60 @@ public class MessageFormatRecord {
 
     static DeleteSubRecord deserialize(DataInputStream stream) {
       return new DeleteSubRecord();
+    }
+  }
+
+  /**
+   *  - - - - - - - - - - - - -
+   * |         |               |
+   * | version | recordVersion |
+   * |(2 bytes)|   (2 bytes)   |
+   * |         |               |
+   *  - - - - - - - - - - - - -
+   *  version         - The version of the undelete record
+   *  recordVersion   - The record version of the undelete record
+   */
+  private static class Undelete_Sub_Format_V1 {
+
+    static int getRecordSize() {
+      return Version_Field_Size_In_Bytes + Record_Version_Field_Size_In_Bytes;
+    }
+
+    static void serialize(ByteBuffer outputBuffer, DeleteSubRecord deleteSubRecord) {
+      outputBuffer.putShort(Undelete_Subrecord_Version_V1);
+      outputBuffer.putShort(deleteSubRecord.getRecordVersion());
+    }
+
+    static UndeleteSubRecord deserialize(DataInputStream stream) throws IOException {
+      short recordVersion = stream.readShort();
+      return new UndeleteSubRecord(recordVersion);
+    }
+  }
+
+  /**
+   *  - - - - - - - - - - - - -
+   * |         |               |
+   * | version | recordVersion |
+   * |(2 bytes)|   (2 bytes)   |
+   * |         |               |
+   *  - - - - - - - - - - - - -
+   *  version         - The version of the delete record
+   *  recordVersion   - The record version of the delete record
+   */
+  private static class Delete_Sub_Format_V2 {
+
+    static int getRecordSize() {
+      return Version_Field_Size_In_Bytes + Record_Version_Field_Size_In_Bytes;
+    }
+
+    static void serialize(ByteBuffer outputBuffer, DeleteSubRecord deleteSubRecord) {
+      outputBuffer.putShort(Delete_Subrecord_Version_V2);
+      outputBuffer.putShort(deleteSubRecord.getRecordVersion());
+    }
+
+    static DeleteSubRecord deserialize(DataInputStream stream) throws IOException {
+      short recordVersion = stream.readShort();
+      return new DeleteSubRecord(recordVersion);
     }
   }
 
