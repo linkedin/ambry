@@ -134,8 +134,8 @@ public class AzureIntegrationTest {
     // Get blob should fail after purge
     try {
       verifyDownloadMatches(blobId, uploadData);
+      fail("download blob should fail after data is purged");
     } catch (CloudStorageException csex) {
-      assertTrue(csex.getMessage().contains("Error downloading blob"));
     }
   }
 
