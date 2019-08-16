@@ -19,9 +19,10 @@ import com.codahale.metrics.Histogram;
 /**
  * Tracks a set of metrics for a network response by a Server
  */
-public class ServerNetworkResponseMetrics extends NetworkSendMetrics {
+public class ServerNetworkResponseMetrics {
 
   private final Histogram responseQueueTime;
+  private final Histogram responseSendTime;
   private final Histogram responseTotalTime;
   private final Histogram responseSendTimeBySize;
   private final Histogram responseTotalTimeBySize;
@@ -30,8 +31,8 @@ public class ServerNetworkResponseMetrics extends NetworkSendMetrics {
   public ServerNetworkResponseMetrics(Histogram responseQueueTime, Histogram responseSendTime,
       Histogram responseTotalTime, Histogram responseSendTimeBySize, Histogram responseTotalTimeBySize,
       long timeSpentTillNow) {
-    super(responseSendTime);
     this.responseQueueTime = responseQueueTime;
+    this.responseSendTime = responseSendTime;
     this.responseTotalTime = responseTotalTime;
     this.responseSendTimeBySize = responseSendTimeBySize;
     this.responseTotalTimeBySize = responseTotalTimeBySize;
@@ -51,9 +52,8 @@ public class ServerNetworkResponseMetrics extends NetworkSendMetrics {
    * Updates few metrics when send completes
    * @param value the time spent by the response to be completely sent
    */
-  @Override
   public void updateSendTime(long value) {
-    super.updateSendTime(value);
+    responseSendTime.update(value);
     if (responseSendTimeBySize != null) {
       responseSendTimeBySize.update(value);
     }

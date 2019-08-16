@@ -47,8 +47,8 @@ public class RouterServerSSLTest {
   private static MockCluster sslCluster;
   private static RouterServerTestFramework testFramework;
   private static MetricRegistry routerMetricRegistry;
-  private static long sslSendBytesCountBeforeTest;
-  private static long sslReceiveBytesCountBeforeTest;
+  private static long transmissionSendBytesCountBeforeTest;
+  private static long transmissionReceiveBytesCountBeforeTest;
 
   /**
    * Running for both regular and encrypted blobs
@@ -104,21 +104,17 @@ public class RouterServerSSLTest {
   @Before
   public void before() {
     Map<String, Meter> meters = routerMetricRegistry.getMeters();
-    sslSendBytesCountBeforeTest = meters.get(sslSendBytesMetricName).getCount();
-    sslReceiveBytesCountBeforeTest = meters.get(sslReceiveBytesMetricName).getCount();
+    transmissionSendBytesCountBeforeTest = meters.get(transmissionSendBytesMetricName).getCount();
+    transmissionReceiveBytesCountBeforeTest = meters.get(transmissionReceiveBytesMetricName).getCount();
   }
 
   @After
   public void after() {
     Map<String, Meter> meters = routerMetricRegistry.getMeters();
-    Assert.assertTrue("Router should have sent over SSL",
-        meters.get(sslSendBytesMetricName).getCount() != sslSendBytesCountBeforeTest);
-    Assert.assertTrue("Router should have received over SSL",
-        meters.get(sslReceiveBytesMetricName).getCount() != sslReceiveBytesCountBeforeTest);
-    Assert.assertTrue("Router should not have sent over Plain Text",
-        meters.get(plaintextSendBytesMetricName).getCount() == 0);
-    Assert.assertTrue("Router should not have received over Plain Text",
-        meters.get(plaintextReceiveBytesMetricName).getCount() == 0);
+    Assert.assertTrue("Router should have been sent",
+        meters.get(transmissionSendBytesMetricName).getCount() != transmissionSendBytesCountBeforeTest);
+    Assert.assertTrue("Router should have been sent",
+        meters.get(transmissionReceiveBytesMetricName).getCount() != transmissionReceiveBytesCountBeforeTest);
   }
 
   /**

@@ -335,8 +335,9 @@ public class Selector implements Selectable {
 
     if (readyKeys > 0) {
       long endSelect = time.milliseconds();
-      this.metrics.selectorSelectTime.update(endSelect - startSelect);
+      metrics.selectorSelectTime.update(endSelect - startSelect);
       Set<SelectionKey> keys = nioSelector.selectedKeys();
+      metrics.selectorReadyKeyCount.inc(keys.size());
       Iterator<SelectionKey> iter = keys.iterator();
       while (iter.hasNext()) {
         SelectionKey key = iter.next();
@@ -361,6 +362,7 @@ public class Selector implements Selectable {
           }
 
           if (key.isReadable() && transmission.ready()) {
+            metrics.selectorReadKeyCount.inc();
             NetworkReceive networkReceive = read(key, transmission);
             if (networkReceive == null) {
               // Exception happened in read.
@@ -369,6 +371,7 @@ public class Selector implements Selectable {
               this.completedReceives.add(networkReceive);
             }
           } else if (key.isWritable() && transmission.ready()) {
+            metrics.selectorWriteKeyCount.inc();
             NetworkSend networkSend = write(key, transmission);
             if (networkSend == null) {
               // Exception happened in write.
@@ -389,8 +392,8 @@ public class Selector implements Selectable {
         }
       }
       checkUnreadyConnectionsStatus();
-      this.metrics.selectorIOCount.inc(readyKeys);
-      this.metrics.selectorIOTime.update(time.milliseconds() - endSelect);
+      metrics.selectorIOCount.inc();
+      metrics.selectorIOTime.update(time.milliseconds() - endSelect);
     }
     disconnected.addAll(closedConnections);
     closedConnections.clear();
@@ -421,6 +424,7 @@ public class Selector implements Selectable {
       long endSelect = time.milliseconds();
       this.metrics.selectorSelectTime.update(endSelect - startSelect);
       Set<SelectionKey> keys = nioSelector.selectedKeys();
+      metrics.selectorReadyKeyCount.inc(keys.size());
       Iterator<SelectionKey> iter = keys.iterator();
       while (iter.hasNext()) {
         SelectionKey key = iter.next();
@@ -445,9 +449,11 @@ public class Selector implements Selectable {
           }
 
           if (key.isReadable() && transmission.ready()) {
+            metrics.selectorReadKeyCount.inc();
             completedReceivesFutures.add(executorPool.submit(() -> read(key, transmission)));
             readWriteKeySet.add(key);
           } else if (key.isWritable() && transmission.ready()) {
+            metrics.selectorWriteKeyCount.inc();
             completedSendsFutures.add(executorPool.submit(() -> write(key, transmission)));
             readWriteKeySet.add(key);
           } else if (!key.isValid()) {
@@ -493,8 +499,8 @@ public class Selector implements Selectable {
         close(keyWithError);
       }
       checkUnreadyConnectionsStatus();
-      this.metrics.selectorIOCount.inc(readyKeys);
-      this.metrics.selectorIOTime.update(time.milliseconds() - endSelect);
+      metrics.selectorIOCount.inc();
+      metrics.selectorIOTime.update(time.milliseconds() - endSelect);
     }
     disconnected.addAll(closedConnections);
     closedConnections.clear();

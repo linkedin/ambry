@@ -75,10 +75,8 @@ class RouterServerTestFramework {
 
   final InMemAccountService accountService = new InMemAccountService(false, true);
 
-  public static String sslSendBytesMetricName = Selector.class.getName() + ".SslSendBytesRate";
-  public static String sslReceiveBytesMetricName = Selector.class.getName() + ".SslReceiveBytesRate";
-  public static String plaintextSendBytesMetricName = Selector.class.getName() + ".PlaintextSendBytesRate";
-  public static String plaintextReceiveBytesMetricName = Selector.class.getName() + ".PlaintextReceiveBytesRate";
+  public static String transmissionSendBytesMetricName = Selector.class.getName() + ".TransmissionSendBytesRate";
+  public static String transmissionReceiveBytesMetricName = Selector.class.getName() + ".TransmissionReceiveBytesRate";
 
   /**
    * Instantiate a framework for testing router-server interaction. Creates a non-blocking router to interact with the
