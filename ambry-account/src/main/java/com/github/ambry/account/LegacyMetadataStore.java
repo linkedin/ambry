@@ -57,7 +57,7 @@ class LegacyMetadataStore extends AccountMetadataStore {
   Map<String, String> fetchAccountMetadataFromZNRecord(ZNRecord record) {
     Map<String, String> result = record.getMapField(ACCOUNT_METADATA_MAP_KEY);
     if (result == null) {
-      logger.debug("ZNRecord={} to read on path={} does not have a simple map with key={}", record,
+      logger.info("ZNRecord={} to read on path={} does not have a simple map with key={}", record,
           FULL_ACCOUNT_METADATA_PATH, ACCOUNT_METADATA_MAP_KEY);
     }
     return result;
@@ -95,7 +95,7 @@ class LegacyMetadataStore extends AccountMetadataStore {
     public ZNRecord update(ZNRecord recordFromZk) {
       ZNRecord recordToUpdate;
       if (recordFromZk == null) {
-        logger.debug(
+        logger.info(
             "ZNRecord does not exist on path={} in HelixPropertyStore when updating accounts. Creating a new ZNRecord.",
             FULL_ACCOUNT_METADATA_PATH);
         recordToUpdate = new ZNRecord(ZN_RECORD_ID);
@@ -104,7 +104,7 @@ class LegacyMetadataStore extends AccountMetadataStore {
       }
       Map<String, String> accountMap = recordToUpdate.getMapField(ACCOUNT_METADATA_MAP_KEY);
       if (accountMap == null) {
-        logger.debug("AccountMap does not exist in ZNRecord when updating accounts. Creating a new accountMap");
+        logger.info("AccountMap does not exist in ZNRecord when updating accounts. Creating a new accountMap");
         accountMap = new HashMap<>();
       }
 

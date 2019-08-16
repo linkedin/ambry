@@ -87,7 +87,7 @@ class RouterStore extends AccountMetadataStore {
     }
     List<String> accountBlobIDs = record.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
     if (accountBlobIDs == null || accountBlobIDs.size() == 0) {
-      logger.debug("ZNRecord={} to read on path={} does not have a simple list with key={}", record,
+      logger.info("ZNRecord={} to read on path={} does not have a simple list with key={}", record,
           ACCOUNT_METADATA_BLOB_IDS_PATH, ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
       return null;
     } else {
@@ -196,7 +196,7 @@ class RouterStore extends AccountMetadataStore {
       // Start step 1:
       ZNRecord recordToUpdate;
       if (znRecord == null) {
-        logger.debug(
+        logger.info(
             "ZNRecord does not exist on path={} in HelixPropertyStore when updating accounts. Creating a new ZNRecord.",
             ACCOUNT_METADATA_BLOB_IDS_PATH);
         recordToUpdate = new ZNRecord(ZN_RECORD_ID);

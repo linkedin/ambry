@@ -87,7 +87,7 @@ abstract class AccountMetadataStore {
     ZNRecord znRecord = helixStore.get(znRecordPath, null, AccessOption.PERSISTENT);
     logger.trace("Fetched ZNRecord from path={}, took time={} ms", znRecordPath, startTimeMs);
     if (znRecord == null) {
-      logger.debug("The ZNRecord to read does not exist on path={}", znRecordPath);
+      logger.info("The ZNRecord to read does not exist on path={}", znRecordPath);
       return null;
     }
     return fetchAccountMetadataFromZNRecord(znRecord);
