@@ -113,6 +113,7 @@ subprojects {
     javadoc {
         // TODO audit and fix our javadocs so that we don't need this setting
         // This is mainly for cases where param/throws tags don't have descriptions
+        // Previously, javadocs weren't being compiled, but now shipkit automatically enables this build step
         failOnError = false
     }
 }
