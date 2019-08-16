@@ -115,7 +115,7 @@ class LegacyMetadataStore extends AccountMetadataStore {
       } catch (JSONException e) {
         // Do not depend on Helix to log, so log the error message here.
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-        errorMessage = String.format("Exception occurred when building AccountInfoMap from accountMap={}", accountMap);
+        errorMessage = "Exception occurred when building AccountInfoMap from accountMap " + accountMap;
         logger.error(errorMessage, e);
         throw new IllegalStateException(errorMessage, e);
       }

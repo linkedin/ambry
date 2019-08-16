@@ -226,12 +226,11 @@ class RouterStore extends AccountMetadataStore {
           accountBlobIDs = new ArrayList<>(accountBlobIDs);
         } catch (JSONException e) {
           accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-          errorMessage = String.format("Exception occurred when parsing the blob id list from {}", accountBlobIDs);
+          errorMessage = "Exception occurred when parsing the blob id list from " + accountBlobIDs;
           logger.error(errorMessage);
           throw new IllegalStateException(errorMessage, e);
         } catch (Exception e) {
-          errorMessage =
-              String.format("Unexpected exception occurred when parsing the blob id list from {}", accountBlobIDs);
+          errorMessage = "Unexpected exception occurred when parsing the blob id list from " + accountBlobIDs;
           logger.error(errorMessage, e);
           throw new IllegalStateException(errorMessage, e);
         }
@@ -247,7 +246,7 @@ class RouterStore extends AccountMetadataStore {
         localAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
       } catch (JSONException e) {
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-        errorMessage = String.format("Exception occurred when building AccountInfoMap from accountMap={}", accountMap);
+        errorMessage = "Exception occurred when building AccountInfoMap from accountMap " + accountMap;
         logger.error(errorMessage, e);
         throw new IllegalStateException(errorMessage, e);
       }
