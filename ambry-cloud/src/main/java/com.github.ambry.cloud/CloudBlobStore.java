@@ -35,6 +35,7 @@ import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.security.GeneralSecurityException;
@@ -114,7 +115,94 @@ class CloudBlobStore implements Store {
 
   @Override
   public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
-    throw new UnsupportedOperationException("Method not supported");
+    checkStarted();
+    checkDuplicates(ids);
+    List<CloudMessageReadSet.BlobReadInfo> blobReadInfos = new ArrayList<>(ids.size());
+    List<MessageInfo> messageInfos = new ArrayList<>(ids.size());
+    try {
+      List<BlobId> blobIdList = ids.stream().map(key -> (BlobId) key).collect(Collectors.toList());
+      Map<String, CloudBlobMetadata> cloudBlobMetadataListMap = cloudDestination.getBlobMetadata(blobIdList);
+      if (cloudBlobMetadataListMap.size() < blobIdList.size()) {
+        Set<BlobId> missingBlobs = blobIdList.stream()
+            .filter(blobId -> !cloudBlobMetadataListMap.containsKey(blobId))
+            .collect(Collectors.toSet());
+        throw new StoreException("Some of the keys were missing in the cloud metadata store: " + missingBlobs,
+            StoreErrorCodes.ID_Not_Found);
+      }
+      long currentTimeStamp = System.currentTimeMillis();
+      validateCloudMetadata(cloudBlobMetadataListMap, storeGetOptions, currentTimeStamp);
+      for (BlobId blobId : blobIdList) {
+        CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
+        MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), blobMetadata.getExpirationTime(),
+            (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(),
+            getOperationTime(blobMetadata, currentTimeStamp));
+        messageInfos.add(messageInfo);
+        blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
+      }
+    } catch (CloudStorageException e) {
+      throw new StoreException(e, StoreErrorCodes.IOError);
+    }
+    CloudMessageReadSet messageReadSet = new CloudMessageReadSet(blobReadInfos, this);
+    return new StoreInfo(messageReadSet, messageInfos);
+  }
+
+  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws StoreException {
+    try {
+      cloudDestination.downloadBlob(blobId, outputStream);
+    } catch (CloudStorageException e) {
+      throw new StoreException("Error occured in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
+    }
+  }
+
+  /**
+   * validate the {@code CloudBlobMetadata} map to make sure it has metadata for all keys, and they meet the {@code storeGetOptions} requirements.
+   * @param cloudBlobMetadataListMap
+   * @throws StoreException if the {@code CloudBlobMetadata} isnt valid
+   */
+  private void validateCloudMetadata(Map<String, CloudBlobMetadata> cloudBlobMetadataListMap,
+      EnumSet<StoreGetOptions> storeGetOptions, long currentTimestamp) throws StoreException {
+    for (String key : cloudBlobMetadataListMap.keySet()) {
+      if (isBlobDeleted(cloudBlobMetadataListMap.get(key)) && !storeGetOptions.contains(
+          StoreGetOptions.Store_Include_Deleted)) {
+        throw new StoreException("Id " + key + " has been deleted on the cloud", StoreErrorCodes.ID_Deleted);
+      }
+      if (isBlobExpired(cloudBlobMetadataListMap.get(key), currentTimestamp) && !storeGetOptions.contains(
+          StoreGetOptions.Store_Include_Expired)) {
+        throw new StoreException("Id " + key + " has expired on the cloud", StoreErrorCodes.TTL_Expired);
+      }
+    }
+  }
+
+  /**
+   * Gets the operation time for a blob from blob metadata based on the blob's current state and timestamp recorded for that state.
+   * @param metadata blob metadata from which to derive operation time.
+   * @return operation time.
+   */
+  private long getOperationTime(CloudBlobMetadata metadata, long currentTimeStamp) {
+    if (isBlobDeleted(metadata)) {
+      return metadata.getDeletionTime();
+    } else if (isBlobExpired(metadata, currentTimeStamp)) {
+      return metadata.getExpirationTime();
+    }
+    return (metadata.getCreationTime() == Utils.Infinite_Time) ? metadata.getUploadTime() : metadata.getCreationTime();
+  }
+
+  /**
+   * Check if the blob is marked for deletion in its metadata
+   * @param metadata to check for deletion
+   * @return true if deleted. false otherwise
+   */
+  static boolean isBlobDeleted(CloudBlobMetadata metadata) {
+    return metadata.getDeletionTime() != Utils.Infinite_Time;
+  }
+
+  /**
+   * Check if the blob is expired
+   * @param metadata to check for expiration
+   * @return true if expired. false otherwise
+   */
+  static boolean isBlobExpired(CloudBlobMetadata metadata, long currentTimeStamp) {
+    return metadata.getExpirationTime() != Utils.Infinite_Time && metadata.getExpirationTime() < currentTimeStamp;
   }
 
   @Override
@@ -370,14 +458,24 @@ class CloudBlobStore implements Store {
    * @param writeSet the {@link MessageWriteSet} to detect duplicates in
    * @throws IllegalArgumentException if a duplicate is detected
    */
-  private void checkDuplicates(MessageWriteSet writeSet) {
+  private void checkDuplicates(MessageWriteSet writeSet) throws IllegalArgumentException {
     List<MessageInfo> infos = writeSet.getMessageSetInfo();
-    if (infos.size() > 1) {
+    List<StoreKey> keys = infos.stream().map(info -> info.getStoreKey()).collect(Collectors.toList());
+    checkDuplicates(keys);
+  }
+
+  /**
+   * Detects duplicates in {@code keys}
+   * @param keys list of {@link StoreKey} to detect duplicates in
+   * @throws IllegalArgumentException if a duplicate is detected
+   */
+  private void checkDuplicates(List<? extends StoreKey> keys) throws IllegalArgumentException {
+    if (keys.size() > 1) {
+      new HashSet<>();
       Set<StoreKey> seenKeys = new HashSet<>();
-      for (MessageInfo info : infos) {
-        if (!seenKeys.add(info.getStoreKey())) {
-          throw new IllegalArgumentException("WriteSet contains duplicates. Duplicate detected: " + info.getStoreKey());
-        }
+      Set<StoreKey> duplicates = keys.stream().filter(key -> !seenKeys.add(key)).collect(Collectors.toSet());
+      if (duplicates.size() > 0) {
+        throw new IllegalArgumentException("list contains duplicates. Duplicates detected: " + duplicates);
       }
     }
   }
@@ -386,6 +484,9 @@ class CloudBlobStore implements Store {
   public String toString() {
     return "PartitionId: " + partitionId.toPathString() + " in the cloud";
   }
+
+  /** The lifecycle state of a recently seen blob. */
+  enum BlobState {CREATED, TTL_UPDATED, DELETED}
 
   /** A {@link Write} implementation used by this store to write data. */
   private class CloudWriteChannel implements Write {
@@ -430,9 +531,6 @@ class CloudBlobStore implements Store {
       }
     }
   }
-
-  /** The lifecycle state of a recently seen blob. */
-  enum BlobState {CREATED, TTL_UPDATED, DELETED}
 
   /**
    * A local LRA cache of recent blobs processed by this store.

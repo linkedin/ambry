@@ -38,6 +38,14 @@ public interface CloudDestination {
       throws CloudStorageException;
 
   /**
+   * Download blob from the cloud destination.
+   * @param blobId id of the Ambry blob to be downloaded
+   * @param outputStream outputstream to populate the downloaded data with
+   * @throws CloudStorageException if the download encounters an error.
+   */
+  void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException;
+
+  /**
    * Mark a blob as deleted in the cloud destination.
    * @param blobId id of the Ambry blob
    * @param deletionTime time of blob deletion

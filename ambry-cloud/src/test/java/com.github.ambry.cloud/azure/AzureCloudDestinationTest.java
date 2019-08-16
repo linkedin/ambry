@@ -107,6 +107,7 @@ public class AzureCloudDestinationTest {
     mockBlobExistence(false);
     when(mockBlob.getMetadata()).thenReturn(new HashMap<>());
     Mockito.doNothing().when(mockBlob).upload(any(), anyLong(), any(), any(), any());
+    Mockito.doNothing().when(mockBlob).download(any());
 
     mockumentClient = mock(DocumentClient.class);
     ResourceResponse<Document> mockResponse = mock(ResourceResponse.class);
@@ -142,6 +143,19 @@ public class AzureCloudDestinationTest {
     assertEquals(0, azureMetrics.backupErrorCount.getCount());
     assertEquals(1, azureMetrics.blobUploadTime.getCount());
     assertEquals(1, azureMetrics.documentCreateTime.getCount());
+  }
+
+  /**
+   * Test normal download.
+   * @throws Exception
+   */
+  @Test
+  public void testDownload() throws Exception {
+    downloadBlob(blobId);
+    assertEquals(1, azureMetrics.blobDownloadRequestCount.getCount());
+    assertEquals(1, azureMetrics.blobDownloadSuccessCount.getCount());
+    assertEquals(0, azureMetrics.blobDownloadErrorCount.getCount());
+    assertEquals(1, azureMetrics.blobDownloadTime.getCount());
   }
 
   /** Test normal delete. */
@@ -209,6 +223,17 @@ public class AzureCloudDestinationTest {
     assertEquals(0, azureMetrics.backupErrorCount.getCount());
     // Make sure the metadata doc was created
     assertEquals(1, azureMetrics.documentCreateTime.getCount());
+  }
+
+  /**
+   * Test download of non existent blob
+   * @throws Exception
+   */
+  @Test
+  public void testDownloadNotExists() throws Exception {
+    doThrow(StorageException.class).when(mockBlob).download(any());
+    expectCloudStorageException(() -> downloadBlob(blobId), StorageException.class);
+    verifyDownloadErrorMetrics();
   }
 
   /** Test delete of nonexistent blob. */
@@ -440,6 +465,22 @@ public class AzureCloudDestinationTest {
     verifyUploadErrorMetrics(true);
   }
 
+  /** Test upload when client throws exception. */
+  @Test
+  public void testDownloadContainerReferenceException() throws Exception {
+    when(mockAzureClient.getContainerReference(anyString())).thenThrow(StorageException.class);
+    expectCloudStorageException(() -> downloadBlob(blobId), StorageException.class);
+    verifyDownloadErrorMetrics();
+  }
+
+  /** Test download when container throws exception. */
+  @Test
+  public void testDownloadContainerException() throws Exception {
+    when(mockAzureContainer.getBlockBlobReference(anyString())).thenThrow(StorageException.class);
+    expectCloudStorageException(() -> downloadBlob(blobId), StorageException.class);
+    verifyDownloadErrorMetrics();
+  }
+
   /** Test update methods when blob throws exception. */
   @Test
   public void testUpdateBlobException() throws Exception {
@@ -487,6 +528,16 @@ public class AzureCloudDestinationTest {
   }
 
   /**
+   * Verify the metric values after an upload error.
+   */
+  private void verifyDownloadErrorMetrics() {
+    assertEquals(1, azureMetrics.blobDownloadRequestCount.getCount());
+    assertEquals(0, azureMetrics.blobDownloadSuccessCount.getCount());
+    assertEquals(1, azureMetrics.blobDownloadErrorCount.getCount());
+    assertEquals(1, azureMetrics.blobDownloadTime.getCount());
+  }
+
+  /**
    * Verify the metric values after an update error.
    * @param numUpdates the number of update operations made.
    * @param isDocument Flag indicating a DocumentClientException thrown.
@@ -508,6 +559,14 @@ public class AzureCloudDestinationTest {
     CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
         CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
     return azureDest.uploadBlob(blobId, blobSize, metadata, inputStream);
+  }
+
+  /**
+   * Download a blob with the given blobId.
+   * @param blobId blobid of the blob to be downloaded.
+   */
+  private void downloadBlob(BlobId blobId) throws CloudStorageException {
+    azureDest.downloadBlob(blobId, new ByteArrayOutputStream(blobSize));
   }
 
   /**

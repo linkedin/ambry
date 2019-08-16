@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Pair;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -36,7 +37,7 @@ import org.apache.commons.io.IOUtils;
  */
 public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
-  private final Map<BlobId, Pair<CloudBlobMetadata, InputStream>> map = new HashMap<>();
+  private final Map<BlobId, Pair<CloudBlobMetadata, byte[]>> map = new HashMap<>();
   private final CountDownLatch latch;
   private final Set<BlobId> blobIdsToTrack = ConcurrentHashMap.newKeySet();
   private final Map<String, byte[]> tokenMap = new ConcurrentHashMap<>();
@@ -55,19 +56,25 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   synchronized public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) {
-    map.put(blobId, new Pair<>(cloudBlobMetadata, blobInputStream));
-    // read inputstream and track bytes read
-    // Note: blobSize may be -1 so don't rely on it
-    byte[] buffer = new byte[1024];
+
+    // Note: blobSize can be -1 when we dont know the actual blob size being uploaded.
+    // So we have to do buffered reads to handle that case.
+    int bufferSz = (blobSize == -1) ? 1024 : (int) blobSize;
     int bytesRead = 0;
+    byte[] buffer = new byte[bufferSz];
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
     try {
-      do {
-        bytesRead = blobInputStream.read(buffer);
+      bytesRead = blobInputStream.read(buffer);
+      while (bytesRead > 0) {
+        outputStream.write(buffer, 0, bytesRead);
         bytesUploadedCounter.addAndGet(Math.max(bytesRead, 0));
-      } while (bytesRead > 0);
+        bytesRead = blobInputStream.read(buffer);
+      }
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
+    map.put(blobId, new Pair<>(cloudBlobMetadata, outputStream.toByteArray()));
     blobsUploadedCounter.incrementAndGet();
     if (blobIdsToTrack.remove(blobId)) {
       latch.countDown();
@@ -76,7 +83,26 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
+  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
+    CloudMessageReadSet.BlobReadInfo blobReadInfo = null;
+    try {
+      if (!map.containsKey(blobId)) {
+        throw new CloudStorageException("Blob with blobId " + blobId.getID() + " does not exist.");
+      }
+      byte[] blobData = map.get(blobId).getSecond();
+      outputStream.write(blobData);
+    } catch (IOException ex) {
+      throw new CloudStorageException(
+          "Could not download blob for blobid " + blobId.getID() + " due to " + ex.toString());
+    }
+  }
+
+  @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime) throws CloudStorageException {
+    if (!map.containsKey(blobId)) {
+      return false;
+    }
+    map.get(blobId).getFirst().setDeletionTime(deletionTime);
     return true;
   }
 
@@ -107,7 +133,8 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken, long maxTotalSizeOfEntries) {
+  public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken,
+      long maxTotalSizeOfEntries) {
     return Collections.emptyList();
   }
 
@@ -157,6 +184,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   public int getBlobsUploaded() {
     return blobsUploadedCounter.get();
   }
+
   public long getBytesUploaded() {
     return bytesUploadedCounter.get();
   }

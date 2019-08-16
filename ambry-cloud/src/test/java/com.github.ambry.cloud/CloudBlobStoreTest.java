@@ -45,17 +45,24 @@ import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -613,5 +620,192 @@ public class CloudBlobStoreTest {
     byte dataCenterId = 66;
     return new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, encrypted,
         BlobDataType.DATACHUNK);
+  }
+
+  /**
+   * Test cloud store get method.
+   * @throws Exception
+   */
+  @Test
+  public void testStoreGets() throws Exception {
+    setupCloudStore(true, false, defaultCacheLimit, true);
+    // Put blobs with and without expiration and encryption
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+    int count = 5;
+    List<BlobId> blobIds = new ArrayList<>(count);
+    Map<BlobId, ByteBuffer> blobIdToUploadedDataMap = new HashMap<>(count);
+    for (int j = 0; j < count; j++) {
+      long size = Math.abs(random.nextLong()) % 10000;
+      blobIds.add(addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, false));
+      ByteBuffer uploadedData = messageWriteSet.getBuffers().get(messageWriteSet.getMessageSetInfo().size() - 1);
+      blobIdToUploadedDataMap.put(blobIds.get(j), uploadedData);
+    }
+    store.put(messageWriteSet);
+
+    for (BlobId blobId : blobIdToUploadedDataMap.keySet()) {
+      blobIdToUploadedDataMap.get(blobId).flip();
+    }
+
+    //test get for a list of blobs that exist
+    testGetForExistingBlobs(blobIds, blobIdToUploadedDataMap);
+
+    //test get for one blob that exists
+    List<BlobId> singleIdList = Collections.singletonList(blobIds.get(0));
+    Map<BlobId, ByteBuffer> singleBlobIdToUploadedDataMap = new HashMap<>(1);
+    singleBlobIdToUploadedDataMap.put(blobIds.get(0), blobIdToUploadedDataMap.get(blobIds.get(0)));
+    testGetForExistingBlobs(singleIdList, singleBlobIdToUploadedDataMap);
+
+    //test get for one blob that doesnt exist
+    BlobId nonExistentId = getUniqueId(refAccountId, refContainerId, false);
+    singleIdList = Collections.singletonList(nonExistentId);
+    testGetWithAtleastOneNonExistentBlob(singleIdList);
+
+    //test get with one blob in list non-existent
+    blobIds.add(nonExistentId);
+    testGetWithAtleastOneNonExistentBlob(blobIds);
+    blobIds.remove(blobIds.remove(blobIds.size() - 1));
+
+    //test get for deleted blob
+    MessageInfo deletedMessageInfo = messageWriteSet.getMessageSetInfo().get(0);
+    MockMessageWriteSet deleteMockMessageWriteSet = new MockMessageWriteSet();
+    deleteMockMessageWriteSet.add(deletedMessageInfo, null);
+    store.delete(deleteMockMessageWriteSet);
+
+    //test get with a deleted blob in blob list to get, but {@code StoreGetOptions.Store_Include_Deleted} not set in get options
+    testGetForDeletedBlobWithoutIncludeDeleteOption(blobIds);
+
+    //test get with a deleted blob in blob list to get, and {@code StoreGetOptions.Store_Include_Deleted} set in get options
+    testGetForDeletedBlobWithIncludeDeleteOption(blobIds, (BlobId) deletedMessageInfo.getStoreKey());
+
+    blobIds.remove(0);
+
+    //test get for expired blob
+    BlobId expiredBlobId = forceUploadExpiredBlob();
+    blobIds.add(expiredBlobId);
+
+    //test get with an expired blob in blob list, but {@code StoreGetOptions.Store_Include_Expired} not set in get options
+    testGetForDeletedBlobWithoutIncludeExpiredOption(blobIds);
+
+    //test get with a expired blob in blob list to get, and {@code StoreGetOptions.Store_Include_Expired} set in get options
+    testGetForDeletedBlobWithIncludeExpiredOption(blobIds, expiredBlobId);
+  }
+
+  /**
+   * Test cloud store get with a list of blobs that are all valid and previously uploaded in the store
+   * @param blobIds list of blob ids to get
+   * @param blobIdToUploadedDataMap map of expected blobid to data buffers
+   * @throws Exception
+   */
+  private void testGetForExistingBlobs(List<BlobId> blobIds, Map<BlobId, ByteBuffer> blobIdToUploadedDataMap)
+      throws Exception {
+    StoreInfo storeInfo = store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
+    assertEquals("Number of records returned by get should be same as uploaded",
+        storeInfo.getMessageReadSetInfo().size(), blobIds.size());
+    for (int i = 0; i < storeInfo.getMessageReadSetInfo().size(); i++) {
+      if (blobIdToUploadedDataMap.containsKey(storeInfo.getMessageReadSetInfo().get(i).getStoreKey())) {
+        ByteBuffer uploadedData = blobIdToUploadedDataMap.get(storeInfo.getMessageReadSetInfo().get(i).getStoreKey());
+        ByteBuffer downloadedData = ByteBuffer.allocate((int) storeInfo.getMessageReadSetInfo().get(i).getSize());
+        WritableByteChannel writableByteChannel = Channels.newChannel(new ByteBufferOutputStream(downloadedData));
+        storeInfo.getMessageReadSet().writeTo(i, writableByteChannel, -1, -1);
+        downloadedData.flip();
+        assertEquals(uploadedData, downloadedData);
+        break;
+      }
+    }
+  }
+
+  /**
+   * Test cloud store get with a list of blobs such that atleast one of the blobs is not present in the store
+   * @param blobIds list of blobids to get
+   */
+  private void testGetWithAtleastOneNonExistentBlob(List<BlobId> blobIds) {
+    try {
+      store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
+      fail("get with any non existent id should fail");
+    } catch (StoreException e) {
+      assertEquals("get with any non existent blob id should throw exception with " + StoreErrorCodes.ID_Not_Found
+          + " error code.", e.getErrorCode(), StoreErrorCodes.ID_Not_Found);
+    }
+  }
+
+  /**
+   * Test cloud store get with a list of blobs such that atleast one of them is deleted, but {@code StoreGetOptions.Store_Include_Deleted} is not set in getoptions
+   * @param blobIds list of blobids to get
+   */
+  private void testGetForDeletedBlobWithoutIncludeDeleteOption(List<BlobId> blobIds) {
+    try {
+      store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
+      fail("get should fail for a deleted blob, if StoreGetOptions.Store_Include_Deleted is not set in get options");
+    } catch (StoreException e) {
+      assertEquals(
+          "get for deleted blob with with Store_Include_Deleted not set in get options should throw exception with "
+              + StoreErrorCodes.ID_Deleted + " error code.", e.getErrorCode(), StoreErrorCodes.ID_Deleted);
+    }
+  }
+
+  /**
+   * Test cloud store get with a list of blobs such that atleast one of them is deleted, and {@code StoreGetOptions.Store_Include_Deleted} is set in getoptions
+   * @param blobIds list of blobids to get
+   * @param deletedBlobId blobId which is marked as deleted
+   * @throws Exception
+   */
+  private void testGetForDeletedBlobWithIncludeDeleteOption(List<BlobId> blobIds, BlobId deletedBlobId)
+      throws Exception {
+    StoreInfo storeInfo = store.get(blobIds, EnumSet.of(StoreGetOptions.Store_Include_Deleted));
+    for (MessageInfo msgInfo : storeInfo.getMessageReadSetInfo()) {
+      if (msgInfo.getStoreKey().equals(deletedBlobId)) {
+        return;
+      }
+    }
+    fail("get should be successful for a deleted blob with Store_Include_Deleted set in get options");
+  }
+
+  /**
+   * Test cloud store get with a list of blobs such that atleast one of them is expired, but {@code StoreGetOptions.Store_Include_Expired} is not set in getoptions
+   * @param blobIds list of blobids to get
+   */
+  private void testGetForDeletedBlobWithoutIncludeExpiredOption(List<BlobId> blobIds) {
+    try {
+      store.get(blobIds, EnumSet.noneOf(StoreGetOptions.class));
+      fail("get should fail for a expired blob, if StoreGetOptions.Store_Include_Expired is not set in get options");
+    } catch (StoreException e) {
+      assertEquals(
+          "get for expired blob with with StoreGetOptions.Store_Include_Expired not set in get options, should throw exception with "
+              + StoreErrorCodes.TTL_Expired + " error code.", e.getErrorCode(), StoreErrorCodes.TTL_Expired);
+    }
+  }
+
+  /**
+   * Test cloud store get with a list of blobs such that atleast one of them is expired, and {@code StoreGetOptions.Store_Include_Expired} is set in getoptions
+   * @param blobIds list of blobids to get
+   * @param expiredBlobId expired blob id
+   * @throws Exception
+   */
+  private void testGetForDeletedBlobWithIncludeExpiredOption(List<BlobId> blobIds, BlobId expiredBlobId)
+      throws Exception {
+    StoreInfo storeInfo = store.get(blobIds, EnumSet.of(StoreGetOptions.Store_Include_Expired));
+    for (MessageInfo msgInfo : storeInfo.getMessageReadSetInfo()) {
+      if (msgInfo.getStoreKey().equals(expiredBlobId)) {
+        return;
+      }
+    }
+    fail("get should be successful for a expired blob with Store_Include_Expired set in get options");
+  }
+
+  /**
+   * Force upload an expired blob to cloud destination by directly calling {@code CloudDestination}'s {@code uploadBlob} method to avoid expiry checks during upload.
+   * @return Blobid uploaded
+   * @throws CloudStorageException if upload fails
+   */
+  private BlobId forceUploadExpiredBlob() throws CloudStorageException {
+    BlobId expiredBlobId = getUniqueId(refAccountId, refContainerId, false);
+    long size = 1024;
+    long currentTime = System.currentTimeMillis();
+    CloudBlobMetadata expiredBlobMetadata =
+        new CloudBlobMetadata(expiredBlobId, currentTime, currentTime - 1, size, null, null, null);
+    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
+    InputStream inputStream = new ByteBufferInputStream(buffer);
+    dest.uploadBlob(expiredBlobId, size, expiredBlobMetadata, inputStream);
+    return expiredBlobId;
   }
 }

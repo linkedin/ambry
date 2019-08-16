@@ -229,13 +229,11 @@ class AzureCloudDestination implements CloudDestination {
     azureMetrics.blobUploadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
     try {
-      CloudBlobContainer azureContainer = getContainer(blobId, true);
-      String azureBlobName = getAzureBlobName(blobId);
-      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
+      CloudBlockBlob azureBlob = getAzureBlobReference(blobId);
       cloudBlobMetadata.setCloudBlobName(getAzureBlobName(blobId));
       azureBlob.setMetadata(getMetadataMap(cloudBlobMetadata));
       azureBlob.upload(blobInputStream, inputLength, condition, options, blobOpContext);
-      logger.debug("Uploaded blob {} to Azure container {}.", blobId, azureContainer.getName());
+      logger.debug("Uploaded blob {} to Azure container {}.", blobId, getContainer(blobId, true).getName());
       azureMetrics.blobUploadSuccessCount.inc();
       return true;
     } catch (StorageException sex) {
@@ -247,6 +245,22 @@ class AzureCloudDestination implements CloudDestination {
       } else {
         throw sex;
       }
+    } finally {
+      storageTimer.stop();
+    }
+  }
+
+  @Override
+  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
+    azureMetrics.blobDownloadRequestCount.inc();
+    Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
+    try {
+      CloudBlockBlob azureBlob = getAzureBlobReference(blobId);
+      azureBlob.download(outputStream);
+      azureMetrics.blobDownloadSuccessCount.inc();
+    } catch (URISyntaxException | StorageException e) {
+      azureMetrics.blobDownloadErrorCount.inc();
+      throw new CloudStorageException("Error downloading blob " + blobId, e);
     } finally {
       storageTimer.stop();
     }
@@ -374,12 +388,10 @@ class AzureCloudDestination implements CloudDestination {
     // 2) the blob storage entry metadata (to enable rebuilding the database)
 
     try {
-      CloudBlobContainer azureContainer = getContainer(blobId, false);
-      String azureBlobName = getAzureBlobName(blobId);
-      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
+      CloudBlockBlob azureBlob = getAzureBlobReference(blobId);
 
       if (!azureBlob.exists(null, null, blobOpContext)) {
-        logger.debug("Blob {} not found in Azure container {}.", blobId, azureContainer.getName());
+        logger.debug("Blob {} not found in Azure container {}.", blobId, getContainer(blobId, false).getName());
         return false;
       }
 
@@ -471,9 +483,7 @@ class AzureCloudDestination implements CloudDestination {
   @Override
   public boolean doesBlobExist(BlobId blobId) throws CloudStorageException {
     try {
-      CloudBlobContainer azureContainer = getContainer(blobId, false);
-      String azureBlobName = getAzureBlobName(blobId);
-      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(azureBlobName);
+      CloudBlockBlob azureBlob = getAzureBlobReference(blobId);
       return azureBlob.exists(null, null, blobOpContext);
     } catch (URISyntaxException | StorageException e) {
       throw new CloudStorageException("Could not check existence of blob: " + blobId, e);
@@ -548,6 +558,19 @@ class AzureCloudDestination implements CloudDestination {
     } catch (URISyntaxException | StorageException e) {
       throw new CloudStorageException("Could not retrieve token: " + partitionPath, e);
     }
+  }
+
+  /**
+   * Get the azure blob reference for blobid.
+   * @param blobId id of the blob for which {@code CloudBlockBlob} reference is asked for.
+   * @return {@code CloudBlockBlob} reference.
+   * @throws StorageException if storage service error occured.
+   * @throws URISyntaxException if resource name or uri is invalid.
+   */
+  private CloudBlockBlob getAzureBlobReference(BlobId blobId) throws StorageException, URISyntaxException {
+    CloudBlobContainer azureContainer = getContainer(blobId, false);
+    String azureBlobName = getAzureBlobName(blobId);
+    return azureContainer.getBlockBlobReference(azureBlobName);
   }
 
   /**

@@ -95,4 +95,8 @@ public class MockMessageWriteSet implements MessageWriteSet {
   public List<MessageInfo> getMessageSetInfo() {
     return infos;
   }
+
+  public List<ByteBuffer> getBuffers() {
+    return buffers;
+  }
 }
