@@ -73,7 +73,7 @@ public class CosmosDataAccessorTest {
     blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
     blobMetadata = new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
-        CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+        CloudBlobMetadata.EncryptionOrigin.NONE);
     azureMetrics = new AzureMetrics(new MetricRegistry());
     cosmosAccessor = new CosmosDataAccessor(mockumentClient, "ambry/metadata", maxRetries, azureMetrics);
   }

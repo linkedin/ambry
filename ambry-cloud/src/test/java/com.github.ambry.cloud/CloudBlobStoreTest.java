@@ -238,7 +238,7 @@ public class CloudBlobStoreTest {
       keys.add(existentBlobId);
       metadataMap.put(existentBlobId.getID(),
           new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024,
-              CloudBlobMetadata.EncryptionOrigin.ROUTER, null, null));
+              CloudBlobMetadata.EncryptionOrigin.ROUTER));
       // Blob without metadata
       BlobId nonexistentBlobId = getUniqueId();
       keys.add(nonexistentBlobId);
@@ -560,7 +560,7 @@ public class CloudBlobStoreTest {
     for (int j = 0; j < count; j++) {
       BlobId blobId = getUniqueId();
       CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+          CloudBlobMetadata.EncryptionOrigin.NONE);
       metadata.setUploadTime(startTime + j);
       metadataList.add(metadata);
     }
@@ -629,7 +629,16 @@ public class CloudBlobStoreTest {
    */
   @Test
   public void testStoreGets() throws Exception {
-    setupCloudStore(true, false, defaultCacheLimit, true);
+    testStoreGets(false);
+    testStoreGets(true);
+  }
+
+  /**
+   * Test cloud store get method with the given encryption requirement.
+   * @throws Exception
+   */
+  private void testStoreGets(boolean requireEncryption) throws Exception {
+    setupCloudStore(true, requireEncryption, defaultCacheLimit, true);
     // Put blobs with and without expiration and encryption
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     int count = 5;
@@ -803,7 +812,7 @@ public class CloudBlobStoreTest {
     long size = 1024;
     long currentTime = System.currentTimeMillis();
     CloudBlobMetadata expiredBlobMetadata =
-        new CloudBlobMetadata(expiredBlobId, currentTime, currentTime - 1, size, null, null, null);
+        new CloudBlobMetadata(expiredBlobId, currentTime, currentTime - 1, size, null);
     ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
     InputStream inputStream = new ByteBufferInputStream(buffer);
     dest.uploadBlob(expiredBlobId, size, expiredBlobMetadata, inputStream);

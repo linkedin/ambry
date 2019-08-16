@@ -188,7 +188,7 @@ public class AzureCloudDestinationTest {
     when(mockBlob.deleteIfExists(any(), any(), any(), any())).thenReturn(true);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
-            CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+            CloudBlobMetadata.EncryptionOrigin.NONE);
     assertTrue("Expected success", azureDest.purgeBlob(cloudBlobMetadata));
     assertEquals(1, azureMetrics.blobDeletedCount.getCount());
     assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
@@ -204,7 +204,7 @@ public class AzureCloudDestinationTest {
         new DocumentClientException(404));
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
-            CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+            CloudBlobMetadata.EncryptionOrigin.NONE);
     assertFalse("Expected false", azureDest.purgeBlob(cloudBlobMetadata));
     assertEquals(0, azureMetrics.blobDeletedCount.getCount());
     assertEquals(0, azureMetrics.blobDeleteErrorCount.getCount());
@@ -285,7 +285,7 @@ public class AzureCloudDestinationTest {
       BlobId blobId = generateBlobId();
       blobIdList.add(blobId);
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+          CloudBlobMetadata.EncryptionOrigin.NONE);
       docList.add(new Document(objectMapper.writeValueAsString(inputMetadata)));
     }
     when(mockIterable.iterator()).thenReturn(docList.iterator());
@@ -332,7 +332,7 @@ public class AzureCloudDestinationTest {
       BlobId blobId = generateBlobId();
       blobIdList.add(blobId.getID());
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
-          CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+          CloudBlobMetadata.EncryptionOrigin.NONE);
       inputMetadata.setUploadTime(startTime + j);
       docList.add(new Document(objectMapper.writeValueAsString(inputMetadata)));
     }
@@ -557,7 +557,7 @@ public class AzureCloudDestinationTest {
   private boolean uploadDefaultBlob() throws CloudStorageException {
     InputStream inputStream = getBlobInputStream(blobSize);
     CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-        CloudBlobMetadata.EncryptionOrigin.NONE, null, null);
+        CloudBlobMetadata.EncryptionOrigin.NONE);
     return azureDest.uploadBlob(blobId, blobSize, metadata, inputStream);
   }
 
