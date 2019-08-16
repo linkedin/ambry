@@ -1,7 +1,5 @@
 language: java
 dist: trusty
-script:
-  - ./gradlew build codeCoverageReport
 sudo: required
 jdk:
   - oraclejdk8
@@ -17,5 +15,15 @@ addons:
     packages:
       - oracle-java8-installer
       - oracle-java8-unlimited-jce-policy
+jobs:
+  include:
+    - stage: test
+      script: "./gradlew -s --scan build codeCoverageReport"
+    - stage: deploy
+      script: "./gradlew -s build && ./gradlew ciPerformRelease"
+stages:
+  - test
+  - name: deploy
+    if: branch = master AND type = push
 after_success:
   - bash <(curl -s https://codecov.io/bash)
