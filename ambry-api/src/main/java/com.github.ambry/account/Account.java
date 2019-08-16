@@ -93,6 +93,16 @@ public class Account {
    */
   public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account";
 
+  /**
+   * The id for to save account metadata in ambry.
+   */
+  public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
+
+  /**
+   * The name of the {@code HELIX_ACCOUNT_SERVICE_ACCOUNT_ID}.
+   */
+  public static final String HELIX_ACCOUNT_SERVICE_ACCOUNT_NAME = "helix-account-service-account-name";
+
   // account member variables
   private final short id;
   private final String name;

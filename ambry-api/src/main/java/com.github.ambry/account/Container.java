@@ -98,6 +98,11 @@ public class Container {
   public static final short UNKNOWN_CONTAINER_ID = -1;
 
   /**
+   * The id for HelixAccountService to store {@link Account} metadata.
+   */
+  public static final short HELIX_ACCOUNT_SERVICE_CONTAINER_ID = -2;
+
+  /**
    * The id for the containers to be associated with the blobs that are put without specifying a target container,
    * but are specified public. {@link #DEFAULT_PUBLIC_CONTAINER} is one of the containers that use it.
    */

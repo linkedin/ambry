@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.Router;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
@@ -27,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -50,6 +52,8 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.junit.After;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.AccountTestUtils.*;
@@ -66,6 +70,7 @@ import static org.junit.Assert.fail;
 /**
  * Unit tests for {@link HelixAccountService}.
  */
+@RunWith(Parameterized.class)
 public class HelixAccountServiceTest {
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 20000;
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
@@ -100,12 +105,20 @@ public class HelixAccountServiceTest {
   private short refParentAccountId;
   private AccountService accountService;
   private MockHelixAccountServiceFactory mockHelixAccountServiceFactory;
+  private Router mockRouter;
+  private boolean useNewZNodePath;
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
 
   /**
    * Resets variables and settings, and cleans up if the store already exists.
    * @throws Exception Any unexpected exception.
    */
-  public HelixAccountServiceTest() throws Exception {
+  public HelixAccountServiceTest(boolean useNewZNodePath) throws Exception {
+    this.useNewZNodePath = useNewZNodePath;
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
         String.valueOf(ZK_CLIENT_CONNECTION_TIMEOUT_MS));
@@ -115,11 +128,13 @@ public class HelixAccountServiceTest {
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", STORE_ROOT_PATH);
     accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
     helixConfigProps.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
+    helixConfigProps.setProperty(HelixAccountServiceConfig.USE_NEW_ZNODE_PATH, String.valueOf(useNewZNodePath));
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     notifier = new MockNotifier<>();
+    mockRouter = new MockRouter();
     mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, null);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, null, mockRouter);
     deleteStoreIfExists();
     generateReferenceAccountsAndContainers();
   }
@@ -261,7 +276,7 @@ public class HelixAccountServiceTest {
 
   /**
    * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has a map field
-   * ("key": someValidAccountMap), but ({@link HelixAccountService#ACCOUNT_METADATA_MAP_KEY}: someValidMap)
+   * ("key": someValidAccountMap), but ({@link LegacyMetadataStore#ACCOUNT_METADATA_MAP_KEY}: someValidMap)
    * is missing. This is a good {@link ZNRecord} format that should NOT fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
@@ -275,7 +290,7 @@ public class HelixAccountServiceTest {
 
   /**
    * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has a map field
-   * ({@link HelixAccountService#ACCOUNT_METADATA_MAP_KEY}: accountMap), and accountMap contains
+   * ({@link LegacyMetadataStore#ACCOUNT_METADATA_MAP_KEY}: accountMap), and accountMap contains
    * ("accountId": accountJsonStr) that does not match. This is a NOT good {@link ZNRecord} format that should
    * fail fetch or update.
    * @throws Exception Any unexpected exception.
@@ -284,13 +299,20 @@ public class HelixAccountServiceTest {
   public void testReadBadZNRecordCase4() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
     mapValue.put("-1", refAccount.toJson(true).toString());
-    ZNRecord zNRecord = makeZNRecordWithMapField(null, ACCOUNT_METADATA_MAP_KEY, mapValue);
+    ZNRecord zNRecord = null;
+    if (useNewZNodePath) {
+      String blobID = RouterStore.writeAccountMapToRouter(mapValue, mockRouter);
+      List<String> list = Collections.singletonList(new RouterStore.BlobIDAndVersion(blobID, 1).toJson());
+      zNRecord = makeZNRecordWithListField(null, RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, list);
+    } else {
+      zNRecord = makeZNRecordWithMapField(null, LegacyMetadataStore.ACCOUNT_METADATA_MAP_KEY, mapValue);
+    }
     updateAndWriteZNRecord(zNRecord, false);
   }
 
   /**
    * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has a map field
-   * ({@link HelixAccountService#ACCOUNT_METADATA_MAP_KEY}: accountMap), and accountMap contains
+   * ({@link LegacyMetadataStore#ACCOUNT_METADATA_MAP_KEY}: accountMap), and accountMap contains
    * ("accountId": badAccountJsonString). This is a NOT good {@link ZNRecord} format that should fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
@@ -298,7 +320,14 @@ public class HelixAccountServiceTest {
   public void testReadBadZNRecordCase5() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
     mapValue.put(String.valueOf(refAccount.getId()), BAD_ACCOUNT_METADATA_STRING);
-    ZNRecord zNRecord = makeZNRecordWithMapField(null, ACCOUNT_METADATA_MAP_KEY, mapValue);
+    ZNRecord zNRecord = null;
+    if (useNewZNodePath) {
+      String blobID = RouterStore.writeAccountMapToRouter(mapValue, mockRouter);
+      List<String> list = Collections.singletonList(new RouterStore.BlobIDAndVersion(blobID, 1).toJson());
+      zNRecord = makeZNRecordWithListField(null, RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, list);
+    } else {
+      zNRecord = makeZNRecordWithMapField(null, LegacyMetadataStore.ACCOUNT_METADATA_MAP_KEY, mapValue);
+    }
     updateAndWriteZNRecord(zNRecord, false);
   }
 
@@ -314,7 +343,55 @@ public class HelixAccountServiceTest {
     Map<String, String> accountMap = new HashMap<>();
     accountMap.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
     accountMap.put(String.valueOf(refAccount.getId() + 1), BAD_ACCOUNT_METADATA_STRING);
-    zNRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
+    if (useNewZNodePath) {
+      String blobID = RouterStore.writeAccountMapToRouter(accountMap, mockRouter);
+      List<String> list = Collections.singletonList(new RouterStore.BlobIDAndVersion(blobID, 1).toJson());
+      zNRecord.setListField(RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, list);
+    } else {
+      zNRecord.setMapField(LegacyMetadataStore.ACCOUNT_METADATA_MAP_KEY, accountMap);
+    }
+    updateAndWriteZNRecord(zNRecord, false);
+  }
+
+  /**
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore} and ambry, where the ambry has valid accounts
+   * record but {@link ZNRecord} has invalid list. This is a NOT good {@link ZNRecord} format and it should fail fetch or update
+   * operations, with none of the record should be read.
+   * @throws Exception Any unexpected exception.
+   */
+  @Test
+  public void testReadBadZNRecordCase7() throws Exception {
+    if (!useNewZNodePath) {
+      return;
+    }
+    ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
+    Map<String, String> accountMap = new HashMap<>();
+    accountMap.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
+    String blobID = RouterStore.writeAccountMapToRouter(accountMap, mockRouter);
+    List<String> list = Collections.singletonList("badliststring");
+    zNRecord.setListField(RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, list);
+    updateAndWriteZNRecord(zNRecord, false);
+  }
+
+  /**
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore} and ambry, where the ambry has valid accounts
+   * record but {@link ZNRecord} has an invalid list item and a valid list item. This is a NOT good {@link ZNRecord}
+   * format and it should fail fetch or update operations, with none of the record should be read.
+   * @throws Exception Any unexpected exception.
+   */
+  @Test
+  public void testReadBadZNRecordCase8() throws Exception {
+    if (!useNewZNodePath) {
+      return;
+    }
+    ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
+    Map<String, String> accountMap = new HashMap<>();
+    accountMap.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
+    String blobID = RouterStore.writeAccountMapToRouter(accountMap, mockRouter);
+    List<String> list = new ArrayList<>();
+    list.add("badliststring");
+    list.add(new RouterStore.BlobIDAndVersion(blobID, 1).toJson());
+    zNRecord.setListField(RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, list);
     updateAndWriteZNRecord(zNRecord, false);
   }
 
@@ -352,20 +429,20 @@ public class HelixAccountServiceTest {
   @Test
   public void testNullInputs() throws IOException {
     try {
-      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier, null).getAccountService();
+      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier, null, mockRouter).getAccountService();
       fail("should have thrown");
     } catch (NullPointerException e) {
       // expected
     }
 
     try {
-      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier, null).getAccountService();
+      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier, null, mockRouter).getAccountService();
       fail("should have thrown");
     } catch (NullPointerException e) {
       // expected
     }
     accountService =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null, null).getAccountService();
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null, null, mockRouter).getAccountService();
     accountService.close();
     accountService = mockHelixAccountServiceFactory.getAccountService();
     try {
@@ -659,7 +736,7 @@ public class HelixAccountServiceTest {
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix, mockRouter);
     accountService = mockHelixAccountServiceFactory.getAccountService();
     CountDownLatch latch = new CountDownLatch(1);
     mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig).setReadLatch(latch);
@@ -679,7 +756,7 @@ public class HelixAccountServiceTest {
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix, mockRouter);
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertEquals("Wrong number of thread for account updater.", 0, numThreadsByThisName(updaterThreadPrefix));
   }
@@ -697,7 +774,7 @@ public class HelixAccountServiceTest {
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix, mockRouter);
     accountService = mockHelixAccountServiceFactory.getAccountService();
     updateAccountsAndAssertAccountExistence(Collections.singleton(refAccount), 1, true);
   }
@@ -762,11 +839,11 @@ public class HelixAccountServiceTest {
       assertAccountsInAccountService(accounts, expectedAccountCount, accountService);
       if (helixConfigProps.containsKey(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY)) {
         Path oldStateBackup = Files.list(accountBackupDir)
-            .filter(path -> path.getFileName().toString().endsWith(OLD_STATE_SUFFIX))
+            .filter(path -> path.getFileName().toString().endsWith(LocalBackup.OLD_STATE_SUFFIX))
             .max(Comparator.naturalOrder())
             .get();
         checkBackupFile(expectedOldState, oldStateBackup);
-        String newStateFilename = oldStateBackup.getFileName().toString().replace(OLD_STATE_SUFFIX, NEW_STATE_SUFFIX);
+        String newStateFilename = oldStateBackup.getFileName().toString().replace(LocalBackup.OLD_STATE_SUFFIX, LocalBackup.NEW_STATE_SUFFIX);
         Path newStateBackup = oldStateBackup.getParent().resolve(newStateFilename);
         checkBackupFile(accountService.getAllAccounts(), newStateBackup);
       } else {
@@ -813,9 +890,16 @@ public class HelixAccountServiceTest {
     for (Account account : accounts) {
       accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
     }
-    zNRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
-    // Write account metadata into HelixPropertyStore.
-    storeOperator.write(HelixAccountService.FULL_ACCOUNT_METADATA_PATH, zNRecord);
+    if (useNewZNodePath) {
+      String blobID = RouterStore.writeAccountMapToRouter(accountMap, mockRouter);
+      List<String> list = Collections.singletonList(new RouterStore.BlobIDAndVersion(blobID, 1).toJson());
+      zNRecord.setListField(RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, list);
+      storeOperator.write(RouterStore.ACCOUNT_METADATA_BLOB_IDS_PATH, zNRecord);
+    } else {
+      zNRecord.setMapField(LegacyMetadataStore.ACCOUNT_METADATA_MAP_KEY, accountMap);
+      // Write account metadata into HelixPropertyStore.
+      storeOperator.write(LegacyMetadataStore.FULL_ACCOUNT_METADATA_PATH, zNRecord);
+    }
     if (shouldNotify) {
       notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
     }
@@ -829,7 +913,11 @@ public class HelixAccountServiceTest {
   private void writeZNRecordToHelixPropertyStore(ZNRecord zNRecord, boolean shouldNotify) throws Exception {
     HelixStoreOperator storeOperator =
         new HelixStoreOperator(mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig));
-    storeOperator.write(HelixAccountService.FULL_ACCOUNT_METADATA_PATH, zNRecord);
+    if (useNewZNodePath) {
+      storeOperator.write(RouterStore.ACCOUNT_METADATA_BLOB_IDS_PATH, zNRecord);
+    } else {
+      storeOperator.write(LegacyMetadataStore.FULL_ACCOUNT_METADATA_PATH, zNRecord);
+    }
     if (shouldNotify) {
       notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
     }
@@ -848,6 +936,23 @@ public class HelixAccountServiceTest {
     ZNRecord zNRecord = oldRecord == null ? new ZNRecord(String.valueOf(System.currentTimeMillis())) : oldRecord;
     if (mapKey != null && mapValue != null) {
       zNRecord.setMapField(mapKey, mapValue);
+    }
+    return zNRecord;
+  }
+
+  /**
+   * Add or update a {@link ZNRecord} to include a list field with the given key and value. If the supplied
+   * {@link ZNRecord} is null, a new {@link ZNRecord} will be created.
+   * @param oldRecord A {@link ZNRecord} to add or update its list field. {@code null} indicates to create a
+   *                  new {@link ZNRecord}.
+   * @param listKey The key for the list field.
+   * @param listValue The value for the list field.
+   * @return A {@link ZNRecord} including a list field with the given key and value.
+   */
+  private ZNRecord makeZNRecordWithListField(ZNRecord oldRecord, String listKey, List<String> listValue) {
+    ZNRecord zNRecord = oldRecord == null ? new ZNRecord(String.valueOf(System.currentTimeMillis())) : oldRecord;
+    if (listKey != null && listValue != null) {
+      zNRecord.setListField(listKey, listValue);
     }
     return zNRecord;
   }

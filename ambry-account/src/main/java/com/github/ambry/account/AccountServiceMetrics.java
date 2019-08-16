@@ -29,6 +29,8 @@ public class AccountServiceMetrics {
   public final Histogram updateAccountTimeInMs;
   public final Histogram fetchRemoteAccountTimeInMs;
   public final Histogram accountUpdateConsumerTimeInMs;
+  public final Histogram accountUpdateToAmbryTimeInMs;
+  public final Histogram accountFetchFromAmbryTimeInMs;
 
   // Counter
   public final Counter unrecognizedMessageErrorCount;
@@ -39,6 +41,9 @@ public class AccountServiceMetrics {
   public final Counter backupErrorCount;
   public final Counter nullNotifierCount;
   public final Counter accountUpdatesCapturedByScheduledUpdaterCount;
+  public final Counter accountUpdatesToAmbryServerErrorCount;
+  public final Counter accountDeletesToAmbryServerErrorCount;
+  public final Counter accountFetchFromAmbryServerErrorCount;
 
   public AccountServiceMetrics(MetricRegistry metricRegistry) {
     // Histogram
@@ -49,6 +54,10 @@ public class AccountServiceMetrics {
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountTimeInMs"));
     accountUpdateConsumerTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountUpdateConsumerTimeInMs"));
+    accountUpdateToAmbryTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountUpdateToAmbryTimeInMs"));
+    accountFetchFromAmbryTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryTimeInMs"));
 
     // Counter
     unrecognizedMessageErrorCount =
@@ -65,5 +74,11 @@ public class AccountServiceMetrics {
     nullNotifierCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NullNotifierCount"));
     accountUpdatesCapturedByScheduledUpdaterCount = metricRegistry.counter(
         MetricRegistry.name(HelixAccountService.class, "AccountUpdatesCapturedByScheduledUpdaterCount"));
+    accountUpdatesToAmbryServerErrorCount =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountUpdatesToAmbryServerErrorCount"));
+    accountDeletesToAmbryServerErrorCount =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountDeletesToAmbryServerErrorCount"));
+    accountFetchFromAmbryServerErrorCount =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryServerErrorCount"));
   }
 }

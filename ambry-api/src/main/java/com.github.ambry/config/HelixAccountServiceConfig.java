@@ -24,6 +24,8 @@ public class HelixAccountServiceConfig {
       HELIX_ACCOUNT_SERVICE_PREFIX + "updater.shut.down.timeout.ms";
   public static final String BACKUP_DIRECTORY_KEY = HELIX_ACCOUNT_SERVICE_PREFIX + "backup.dir";
   public static final String ZK_CLIENT_CONNECT_STRING_KEY = HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string";
+  public static final String USE_NEW_ZNODE_PATH =  HELIX_ACCOUNT_SERVICE_PREFIX + "use.new.znode.path";
+
 
   /**
    * The ZooKeeper server address. This config is required when using {@code HelixAccountService}.
@@ -54,6 +56,13 @@ public class HelixAccountServiceConfig {
   @Default("")
   public final String backupDir;
 
+  /**
+   * If true, then use the new znode path to store list of blob ids that point to account metadata content.
+   */
+  @Config(USE_NEW_ZNODE_PATH)
+  @Default("false")
+  public final boolean useNewZNodePath;
+
   public HelixAccountServiceConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY);
     updaterPollingIntervalMs =
@@ -61,5 +70,6 @@ public class HelixAccountServiceConfig {
     updaterShutDownTimeoutMs =
         verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_MS_KEY, 60 * 1000, 1, Integer.MAX_VALUE);
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
+    useNewZNodePath = verifiableProperties.getBoolean(USE_NEW_ZNODE_PATH, false);
   }
 }
