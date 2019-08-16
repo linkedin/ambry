@@ -428,9 +428,9 @@ task codeCoverageReport(type: JacocoReport) {
 }
 codeCoverageReport.dependsOn subprojects*.allTest
 
-buildScan {
-    // auto accept TOS
-    termsOfServiceUrl = "https://gradle.com/terms-of-service"
-    termsOfServiceAgree = "yes"
+if (hasProperty('buildScan')) {
+    buildScan {
+        termsOfServiceUrl = 'https://gradle.com/terms-of-service'
+        termsOfServiceAgree = 'yes'
+    }
 }
-
