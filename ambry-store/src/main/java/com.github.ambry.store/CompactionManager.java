@@ -164,16 +164,14 @@ class CompactionManager {
     if (compactionExecutor == null) {
       stores.remove(store);
       result = true;
+    } else if (!compactionExecutor.getStoresDisabledCompaction().contains(store)) {
+      logger.error("Fail to remove store ({}) from compaction manager because compaction of it is still enabled",
+          store);
+      result = false;
     } else {
-      if (!compactionExecutor.getStoresDisabledCompaction().contains(store)) {
-        logger.error("Fail to remove store ({}) from compaction manager because compaction of it is still enabled",
-            store);
-        result = false;
-      } else {
-        // stores.remove(store) is invoked within compactionExecutor.removeBlobStore() because it requires lock
-        compactionExecutor.removeBlobStore(store);
-        result = true;
-      }
+      // stores.remove(store) is invoked within compactionExecutor.removeBlobStore() because it requires lock
+      compactionExecutor.removeBlobStore(store);
+      result = true;
     }
     return result;
   }

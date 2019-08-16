@@ -57,7 +57,6 @@ import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
-import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
 
 
@@ -1187,7 +1186,6 @@ public class BlobStoreTest {
    */
   @Test
   public void deleteStoreFilesTest() throws Exception {
-    assumeTrue(isLogSegmented);
     store.shutdown();
     // create test store directory
     File storeDir = StoreTestUtils.createTempDirectory("store-" + storeId);
@@ -1197,12 +1195,13 @@ public class BlobStoreTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
-    //createBlobStore(getMockReplicaId(storeDir.getAbsolutePath()));
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
             diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time);
     testStore.start();
-    diskAllocator.initializePool(Collections.singletonList(testStore.getDiskSpaceRequirements()));
+    DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
+    diskAllocator.initializePool(diskSpaceRequirements == null ? Collections.emptyList()
+        : Collections.singletonList(testStore.getDiskSpaceRequirements()));
     // ensure store directory and file exist
     assertTrue("Store directory doesn't exist", storeDir.exists());
     // test that deletion on started store should fail

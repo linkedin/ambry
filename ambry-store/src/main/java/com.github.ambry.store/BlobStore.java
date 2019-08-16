@@ -22,11 +22,8 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -697,18 +694,16 @@ class BlobStore implements Store {
     }
     // step1: return occupied swap segments (if any) to reserve pool
     String[] swapSegmentsInUse = compactor.getSwapSegmentsInUse();
-    if (swapSegmentsInUse.length > 0) {
-      for (String fileName : swapSegmentsInUse) {
-        logger.trace("Returning swap segment {} to reserve pool", fileName);
-        File swapSegmentTempFile = new File(dataDir, fileName);
-        diskSpaceAllocator.free(swapSegmentTempFile, config.storeSegmentSizeInBytes, storeId, true);
-      }
+    for (String fileName : swapSegmentsInUse) {
+      logger.info("Returning swap segment {} to reserve pool", fileName);
+      File swapSegmentTempFile = new File(dataDir, fileName);
+      diskSpaceAllocator.free(swapSegmentTempFile, config.storeSegmentSizeInBytes, storeId, true);
     }
     // step2: delete all files
     logger.info("Deleting store {} directory", storeId);
     File storeDir = new File(dataDir);
     try {
-      Files.walk(storeDir.toPath()).sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
+      Utils.deleteFileOrDirectory(storeDir);
     } catch (Exception e) {
       throw new IOException("Couldn't delete store directory " + dataDir);
     }
