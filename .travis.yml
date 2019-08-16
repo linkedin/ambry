@@ -22,7 +22,7 @@ jobs:
     - stage: deploy
       script: "./gradlew -s build && ./gradlew ciPerformRelease"
 stages:
-  - test
+  - name: test
   - name: deploy
     if: branch = master AND type = push
 after_success:
