@@ -426,6 +426,11 @@ task codeCoverageReport(type: JacocoReport) {
         csv.enabled true
     }
 }
-
 codeCoverageReport.dependsOn subprojects*.allTest
+
+buildScan {
+    // auto accept TOS
+    termsOfServiceUrl = "https://gradle.com/terms-of-service"
+    termsOfServiceAgree = "yes"
+}
 
