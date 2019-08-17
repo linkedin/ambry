@@ -58,6 +58,8 @@ public class MessageFormatRecord {
   public static final short Metadata_Content_Version_V3 = 3;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
+  //TODO replace this with a way to access a config class that
+  //tells this class what versions to write
   static short headerVersionToUse = Message_Header_Version_V2;
 
   private static final short Delete_Subrecord_Version_V1 = 1;
@@ -65,6 +67,10 @@ public class MessageFormatRecord {
   private static final short Undelete_Subrecord_Version_V1 = 1;
   private static final short Ttl_Update_Subrecord_Version_V1 = 1;
   public static final int Record_Version_Field_Size_In_Bytes = 2;
+
+  //TODO replace this with a way to access a config class that
+  //tells this class what versions to write
+  static short deleteSubrecordToWrite = Delete_Subrecord_Version_V1;
 
   public static boolean isValidHeaderVersion(short headerVersion) {
     switch (headerVersion) {
@@ -1012,10 +1018,22 @@ public class MessageFormatRecord {
       int subRecordSize;
       switch (type) {
         case DELETE:
-          subRecordSize = Delete_Sub_Format_V1.getRecordSize();
+          switch (deleteSubrecordToWrite) {
+            case Delete_Subrecord_Version_V1:
+              subRecordSize = Delete_Sub_Format_V1.getRecordSize();
+              break;
+            case Delete_Subrecord_Version_V2:
+              subRecordSize = Delete_Sub_Format_V2.getRecordSize();
+              break;
+            default:
+              throw new IllegalArgumentException("Unknown delete subrecord version: " + deleteSubrecordToWrite);
+          }
           break;
         case TTL_UPDATE:
           subRecordSize = Ttl_Update_Sub_Format_V1.getRecordSize();
+          break;
+        case UNDELETE:
+          subRecordSize = Undelete_Sub_Format_V1.getRecordSize();
           break;
         default:
           throw new IllegalArgumentException("Unknown update record type: " + type);
@@ -1038,10 +1056,22 @@ public class MessageFormatRecord {
       outputBuffer.putShort((short) updateRecord.getType().ordinal());
       switch (updateRecord.getType()) {
         case DELETE:
-          Delete_Sub_Format_V1.serialize(outputBuffer, updateRecord.getDeleteSubRecord());
+          switch (deleteSubrecordToWrite) {
+            case Delete_Subrecord_Version_V1:
+              Delete_Sub_Format_V1.serialize(outputBuffer, updateRecord.getDeleteSubRecord());
+              break;
+            case Delete_Subrecord_Version_V2:
+              Delete_Sub_Format_V2.serialize(outputBuffer, updateRecord.getDeleteSubRecord());
+              break;
+            default:
+              throw new IllegalArgumentException("Unknown delete subrecord version: " + deleteSubrecordToWrite);
+          }
           break;
         case TTL_UPDATE:
           Ttl_Update_Sub_Format_V1.serialize(outputBuffer, updateRecord.getTtlUpdateSubRecord());
+          break;
+        case UNDELETE:
+          Undelete_Sub_Format_V1.serialize(outputBuffer, updateRecord.getUndeleteUpdateSubRecord());
           break;
         default:
           throw new IllegalArgumentException("Unknown update record type: " + updateRecord.getType());
@@ -1070,6 +1100,9 @@ public class MessageFormatRecord {
           break;
         case TTL_UPDATE:
           updateRecord = new UpdateRecord(accountId, containerId, updateTimeInMs, getTtlUpdateSubRecord(dataStream));
+          break;
+        case UNDELETE:
+          updateRecord = new UpdateRecord(accountId, containerId, updateTimeInMs, getUndeleteSubRecord(dataStream));
           break;
         default:
           throw new IllegalArgumentException("Unknown update record type: " + type);
@@ -1172,33 +1205,6 @@ public class MessageFormatRecord {
    * |(2 bytes)|   (2 bytes)   |
    * |         |               |
    *  - - - - - - - - - - - - -
-   *  version         - The version of the undelete record
-   *  recordVersion   - The record version of the undelete record
-   */
-  private static class Undelete_Sub_Format_V1 {
-
-    static int getRecordSize() {
-      return Version_Field_Size_In_Bytes + Record_Version_Field_Size_In_Bytes;
-    }
-
-    static void serialize(ByteBuffer outputBuffer, DeleteSubRecord deleteSubRecord) {
-      outputBuffer.putShort(Undelete_Subrecord_Version_V1);
-      outputBuffer.putShort(deleteSubRecord.getRecordVersion());
-    }
-
-    static UndeleteSubRecord deserialize(DataInputStream stream) throws IOException {
-      short recordVersion = stream.readShort();
-      return new UndeleteSubRecord(recordVersion);
-    }
-  }
-
-  /**
-   *  - - - - - - - - - - - - -
-   * |         |               |
-   * | version | recordVersion |
-   * |(2 bytes)|   (2 bytes)   |
-   * |         |               |
-   *  - - - - - - - - - - - - -
    *  version         - The version of the delete record
    *  recordVersion   - The record version of the delete record
    */
@@ -1216,6 +1222,33 @@ public class MessageFormatRecord {
     static DeleteSubRecord deserialize(DataInputStream stream) throws IOException {
       short recordVersion = stream.readShort();
       return new DeleteSubRecord(recordVersion);
+    }
+  }
+
+  /**
+   *  - - - - - - - - - - - - -
+   * |         |               |
+   * | version | recordVersion |
+   * |(2 bytes)|   (2 bytes)   |
+   * |         |               |
+   *  - - - - - - - - - - - - -
+   *  version         - The version of the undelete record
+   *  recordVersion   - The record version of the undelete record
+   */
+  private static class Undelete_Sub_Format_V1 {
+
+    static int getRecordSize() {
+      return Version_Field_Size_In_Bytes + Record_Version_Field_Size_In_Bytes;
+    }
+
+    static void serialize(ByteBuffer outputBuffer, UndeleteSubRecord undeleteSubRecord) {
+      outputBuffer.putShort(Undelete_Subrecord_Version_V1);
+      outputBuffer.putShort(undeleteSubRecord.getRecordVersion());
+    }
+
+    static UndeleteSubRecord deserialize(DataInputStream stream) throws IOException {
+      short recordVersion = stream.readShort();
+      return new UndeleteSubRecord(recordVersion);
     }
   }
 

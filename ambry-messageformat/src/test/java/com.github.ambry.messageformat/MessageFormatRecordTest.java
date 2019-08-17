@@ -405,6 +405,7 @@ public class MessageFormatRecordTest {
     // Test update V3 record
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    short recordVersion = Utils.getRandomShort(TestUtils.RANDOM);
     long updateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     long updatedExpiryTimesMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     for (UpdateRecord.Type type : UpdateRecord.Type.values()) {
@@ -412,37 +413,57 @@ public class MessageFormatRecordTest {
       UpdateRecord updateRecord = null;
       switch (type) {
         case DELETE:
-          DeleteSubRecord deleteSubRecord = new DeleteSubRecord();
+          DeleteSubRecord deleteSubRecord = new DeleteSubRecord(recordVersion);
           updateRecord = new UpdateRecord(accountId, containerId, updateTimeMs, deleteSubRecord);
           break;
         case TTL_UPDATE:
           TtlUpdateSubRecord ttlUpdateSubRecord = new TtlUpdateSubRecord(updatedExpiryTimesMs);
           updateRecord = new UpdateRecord(accountId, containerId, updateTimeMs, ttlUpdateSubRecord);
           break;
-        default:
-          fail("Unknown update record type: " + type);
-      }
-      Update_Format_V3.serialize(updateRecordBuf, updateRecord);
-      updateRecordBuf.flip();
-      UpdateRecord deserializeUpdateRecord =
-          MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecordBuf));
-      Assert.assertEquals("AccountId mismatch ", accountId, deserializeUpdateRecord.getAccountId());
-      Assert.assertEquals("ContainerId mismatch ", containerId, deserializeUpdateRecord.getContainerId());
-      Assert.assertEquals("UpdateTime mismatch ", updateTimeMs, deserializeUpdateRecord.getUpdateTimeInMs());
-      Assert.assertEquals("Type of update record incorrect", type, deserializeUpdateRecord.getType());
-      switch (type) {
-        case DELETE:
-          Assert.assertNotNull("DeleteSubRecord is null", deserializeUpdateRecord.getDeleteSubRecord());
-          break;
-        case TTL_UPDATE:
-          TtlUpdateSubRecord ttlUpdateSubRecord = deserializeUpdateRecord.getTtlUpdateSubRecord();
-          Assert.assertNotNull("TtlUpdateSubRecord is null", ttlUpdateSubRecord);
-          Assert.assertEquals("Updated expiry time is incorrect", updatedExpiryTimesMs,
-              ttlUpdateSubRecord.getUpdatedExpiryTimeMs());
+        case UNDELETE:
+          UndeleteSubRecord undeleteSubRecord = new UndeleteSubRecord(recordVersion);
+          updateRecord = new UpdateRecord(accountId, containerId, updateTimeMs, undeleteSubRecord);
           break;
         default:
           fail("Unknown update record type: " + type);
       }
+
+      for (deleteSubrecordToWrite = (short) 1; deleteSubrecordToWrite < 3; deleteSubrecordToWrite++) {
+        updateRecordBuf = ByteBuffer.allocate(Update_Format_V3.getRecordSize(type));
+        Update_Format_V3.serialize(updateRecordBuf, updateRecord);
+        updateRecordBuf.flip();
+        UpdateRecord deserializeUpdateRecord =
+            MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecordBuf));
+        Assert.assertEquals("AccountId mismatch ", accountId, deserializeUpdateRecord.getAccountId());
+        Assert.assertEquals("ContainerId mismatch ", containerId, deserializeUpdateRecord.getContainerId());
+        Assert.assertEquals("UpdateTime mismatch ", updateTimeMs, deserializeUpdateRecord.getUpdateTimeInMs());
+        Assert.assertEquals("Type of update record incorrect", type, deserializeUpdateRecord.getType());
+        switch (type) {
+          case DELETE:
+            DeleteSubRecord deleteSubRecord = deserializeUpdateRecord.getDeleteSubRecord();
+            Assert.assertNotNull("DeleteSubRecord is null", deleteSubRecord);
+            if (deleteSubrecordToWrite == (short) 1) {
+              Assert.assertEquals("recordVersion is incorrect", -1, deleteSubRecord.getRecordVersion());
+            } else if (deleteSubrecordToWrite == (short) 2) {
+              Assert.assertEquals("recordVersion is incorrect", recordVersion, deleteSubRecord.getRecordVersion());
+            }
+            break;
+          case TTL_UPDATE:
+            TtlUpdateSubRecord ttlUpdateSubRecord = deserializeUpdateRecord.getTtlUpdateSubRecord();
+            Assert.assertNotNull("TtlUpdateSubRecord is null", ttlUpdateSubRecord);
+            Assert.assertEquals("Updated expiry time is incorrect", updatedExpiryTimesMs,
+                ttlUpdateSubRecord.getUpdatedExpiryTimeMs());
+            break;
+          case UNDELETE:
+            UndeleteSubRecord undeleteSubRecord = deserializeUpdateRecord.getUndeleteUpdateSubRecord();
+            Assert.assertNotNull("UndeleteSubRecord is null", undeleteSubRecord);
+            Assert.assertEquals("recordVersion is incorrect", recordVersion, undeleteSubRecord.getRecordVersion());
+            break;
+          default:
+            fail("Unknown update record type: " + type);
+        }
+      }
+      deleteSubrecordToWrite = (short) 1;
 
       // corrupt update V3 record
       updateRecordBuf.flip();

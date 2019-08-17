@@ -32,6 +32,7 @@ public class BlobProperties {
   private final boolean isEncrypted;
   private long blobSize;
   private long timeToLiveInSeconds;
+  private short recordVersion;
   // Non persistent blob properties.
   private final String externalAssetTag;
 
@@ -44,7 +45,7 @@ public class BlobProperties {
    */
   public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, boolean isEncrypted) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds(),
-        accountId, containerId, isEncrypted, null);
+        accountId, containerId, isEncrypted, (short) 0, null);
   }
 
   /**
@@ -62,7 +63,7 @@ public class BlobProperties {
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds, short accountId, short containerId, boolean isEncrypted, String externalAssetTag) {
     this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
-        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, externalAssetTag);
+        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted, (short) 0, externalAssetTag);
   }
 
   /**
@@ -76,11 +77,12 @@ public class BlobProperties {
    * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
    * @param isEncrypted whether this blob is encrypted.
+   * @param recordVersion record version for inheriting latest delete/undelete record version post-compaction
    * @param externalAssetTag externalAssetTag for this blob. This is a non-persistent field.
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId, boolean isEncrypted,
-      String externalAssetTag) {
+      short recordVersion, String externalAssetTag) {
     this.blobSize = blobSize;
     this.serviceId = serviceId;
     this.ownerId = ownerId;
@@ -91,6 +93,7 @@ public class BlobProperties {
     this.accountId = accountId;
     this.containerId = containerId;
     this.isEncrypted = isEncrypted;
+    this.recordVersion = recordVersion;
     this.externalAssetTag = externalAssetTag;
   }
 
@@ -141,6 +144,10 @@ public class BlobProperties {
 
   public boolean isEncrypted() {
     return isEncrypted;
+  }
+
+  public short getRecordVersion() {
+    return recordVersion;
   }
 
   /**

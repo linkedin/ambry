@@ -21,13 +21,10 @@ public class UpdateRecord {
     DELETE, TTL_UPDATE, UNDELETE
   }
 
-//  private final Type type;
   private final short accountId;
   private final short containerId;
   private final long updateTimeInMs;
   private final SubRecord subRecord;
-//  private final DeleteSubRecord deleteSubRecord;
-//  private final TtlUpdateSubRecord ttlUpdateSubRecord;
 
   /**
    * @param accountId the account that the blob that this update is associated with belongs to
@@ -41,44 +38,6 @@ public class UpdateRecord {
     this.updateTimeInMs = updateTimeInMs;
     this.subRecord = subRecord;
   }
-
-//  /**
-//   * @param accountId the account that the blob that this update is associated with belongs to
-//   * @param containerId the id of the container that the blob that this update is associated with belongs to
-//   * @param updateTimeInMs the time in ms at which the update occurred.
-//   * @param deleteSubRecord the delete record that this update record represents.
-//   */
-//  UpdateRecord(short accountId, short containerId, long updateTimeInMs, DeleteSubRecord deleteSubRecord) {
-//    this(accountId, containerId, updateTimeInMs, Type.DELETE, deleteSubRecord, null);
-//  }
-//
-//  /**
-//   * @param accountId the account that the blob that this update is associated with belongs to
-//   * @param containerId the id of the container that the blob that this update is associated with belongs to
-//   * @param updateTimeInMs the time in ms at which the update occurred.
-//   * @param ttlUpdateSubRecord the ttl update record that this update record represents.
-//   */
-//  UpdateRecord(short accountId, short containerId, long updateTimeInMs, TtlUpdateSubRecord ttlUpdateSubRecord) {
-//    this(accountId, containerId, updateTimeInMs, Type.TTL_UPDATE, null, ttlUpdateSubRecord);
-//  }
-
-//  /**
-//   * @param accountId the account that the blob that this update is associated with belongs to
-//   * @param containerId the id of the container that the blob that this update is associated with belongs to
-//   * @param updateTimeInMs the time in ms at which the update occurred.
-//   * @param type the type of the update record.
-//   * @param deleteSubRecord the delete record that this update record represents.
-//   * @param ttlUpdateSubRecord the ttl update record that this update record represents.
-//   */
-//  private UpdateRecord(short accountId, short containerId, long updateTimeInMs, Type type,
-//      DeleteSubRecord deleteSubRecord, TtlUpdateSubRecord ttlUpdateSubRecord) {
-//    this.accountId = accountId;
-//    this.containerId = containerId;
-//    this.updateTimeInMs = updateTimeInMs;
-//    this.type = type;
-//    this.deleteSubRecord = deleteSubRecord;
-//    this.ttlUpdateSubRecord = ttlUpdateSubRecord;
-//  }
 
   /**
    * @return the type of the update record.
@@ -112,8 +71,9 @@ public class UpdateRecord {
    * @return the delete record if type is {@link Type#DELETE}. {@code null} otherwise.
    */
   public DeleteSubRecord getDeleteSubRecord() {
-    if (subRecord.getClass().equals(DeleteSubRecord.class))
+    if (subRecord.getClass().equals(DeleteSubRecord.class)) {
       return (DeleteSubRecord) subRecord;
+    }
     return null;
   }
 
@@ -121,8 +81,19 @@ public class UpdateRecord {
    * @return the ttl update record if type is {@link Type#TTL_UPDATE}. {@code null} otherwise.
    */
   public TtlUpdateSubRecord getTtlUpdateSubRecord() {
-    if (subRecord.getClass().equals(TtlUpdateSubRecord.class))
+    if (subRecord.getClass().equals(TtlUpdateSubRecord.class)) {
       return (TtlUpdateSubRecord) subRecord;
+    }
+    return null;
+  }
+
+  /**
+   * @return the ttl update record if type is {@link Type#TTL_UPDATE}. {@code null} otherwise.
+   */
+  public UndeleteSubRecord getUndeleteUpdateSubRecord() {
+    if (subRecord.getClass().equals(UndeleteSubRecord.class)) {
+      return (UndeleteSubRecord) subRecord;
+    }
     return null;
   }
 }

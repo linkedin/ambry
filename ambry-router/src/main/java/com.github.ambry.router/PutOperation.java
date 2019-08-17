@@ -1111,7 +1111,7 @@ class PutOperation {
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
-            passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
+            passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(), (short) 0,
             passedInBlobProperties.getExternalAssetTag());
         operationTracker =
             new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, null, true);
@@ -1616,7 +1616,7 @@ class PutOperation {
               passedInBlobProperties.getContentType(), passedInBlobProperties.isPrivate(),
               passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs(),
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
-              passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag());
+              passedInBlobProperties.isEncrypted(), (short) 0, passedInBlobProperties.getExternalAssetTag());
       if (isStitchOperation() || getNumDataChunks() > 1) {
         // values returned are in the right order as TreeMap returns them in key-order.
         if (routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2) {
