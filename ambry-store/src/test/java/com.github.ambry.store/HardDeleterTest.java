@@ -76,7 +76,7 @@ public class HardDeleterTest {
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       IndexValue indexValue =
           new IndexValue(sizeOfEntry, offset, IndexValue.FLAGS_DEFAULT_VALUE, 12345, time.milliseconds(), acccountId,
-              containerId);
+              containerId, (short) 0);
       index.addToIndex(new IndexEntry(id, indexValue),
           new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);

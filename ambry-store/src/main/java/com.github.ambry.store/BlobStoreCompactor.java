@@ -1029,7 +1029,7 @@ class BlobStoreCompactor {
               } else {
                 IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getFlags(),
                     srcValue.getExpiresAtMs(), srcValue.getOperationTimeInMs(), srcValue.getAccountId(),
-                    srcValue.getContainerId());
+                    srcValue.getContainerId(), (short) 0);
                 tgtValue.setFlag(IndexValue.Flags.Delete_Index);
                 tgtValue.clearOriginalMessageOffset();
                 tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
@@ -1040,7 +1040,7 @@ class BlobStoreCompactor {
               } else {
                 IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getFlags(),
                     srcValue.getExpiresAtMs(), srcValue.getOperationTimeInMs(), srcValue.getAccountId(),
-                    srcValue.getContainerId());
+                    srcValue.getContainerId(), (short) 0);
                 tgtValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
                 tgtValue.clearOriginalMessageOffset();
                 tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
