@@ -65,6 +65,7 @@ class PersistentIndex {
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
+  static final short VERSION_3 = 3;
   static final short CURRENT_VERSION = VERSION_2;
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
 
@@ -609,7 +610,7 @@ class PersistentIndex {
             if (latest.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !retCandidate.isFlagSet(
                 IndexValue.Flags.Ttl_Update_Index)) {
               retCandidate = new IndexValue(retCandidate.getOffset().getName(), retCandidate.getBytes(),
-                  retCandidate.getVersion());
+                  retCandidate.getFormatVersion());
               retCandidate.setFlag(IndexValue.Flags.Ttl_Update_Index);
               retCandidate.setExpiresAtMs(latest.getExpiresAtMs());
             }
@@ -680,7 +681,7 @@ class PersistentIndex {
     } else {
       newValue =
           new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), deletionTimeMs,
-              value.getAccountId(), value.getContainerId());
+              value.getAccountId(), value.getContainerId(), (short) 0);
       newValue.setNewOffset(fileSpan.getStartOffset());
       newValue.setNewSize(size);
     }
@@ -733,7 +734,7 @@ class PersistentIndex {
     } else {
       newValue =
           new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), Utils.Infinite_Time, operationTimeMs,
-              value.getAccountId(), value.getContainerId());
+              value.getAccountId(), value.getContainerId(), (short) 0);
       newValue.setNewOffset(fileSpan.getStartOffset());
       newValue.setNewSize(size);
     }

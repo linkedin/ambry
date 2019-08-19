@@ -249,7 +249,8 @@ public class IndexTest {
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
     IndexValue value =
         new IndexValue(1, state.index.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, Utils.Infinite_Time,
-            state.time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+            state.time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
+            (short) 0);
     try {
       state.index.addToIndex(new IndexEntry(state.getUniqueId(), value), fileSpan);
       fail("Should have failed because filespan provided < currentIndexEndOffset");
@@ -1046,7 +1047,7 @@ public class IndexTest {
     int latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
     // add first entry with size under storeIndexPersistedEntryMinBytes.
     int keySize =
-        config.storeIndexPersistedEntryMinBytes / 2 - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
+        config.storeIndexPersistedEntryMinBytes / 2 - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
 
     // Now, the active segment consists of one element. Add 2nd element of a smaller key size; and entry size still under
@@ -1060,16 +1061,17 @@ public class IndexTest {
 
     // 4th element with key size increase, and entry size at exactly storeIndexPersistedEntryMinBytes.
     // This should also not cause a rollover.
-    keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
+    keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize, false);
 
     // 5th element key size increase, and above storeIndexPersistedEntryMinBytes. This continues to be supported via
     // a rollover.
-    keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes + 1;
+    keySize =
+        config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes + 1;
     addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, ++latestSegmentExpectedEntrySize, false);
 
     // 2nd and 3rd element in the next segment of original size. This should be accommodated in the same segment.
-    keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
+    keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 2, indexCount, latestSegmentExpectedEntrySize, false);
 
     // verify index values
@@ -1079,14 +1081,14 @@ public class IndexTest {
     // Now close and reload index with a change in the minPersistedBytes.
     state.properties.put("store.index.persisted.entry.min.bytes", Long.toString(persistedEntryMinBytes / 2));
     state.reloadIndex(true, false);
-    keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
+    keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 7, indexCount, latestSegmentExpectedEntrySize, false);
 
     // At this point, index will rollover due to max number of entries being reached. Verify that the new segment that is
     // created honors the new config value.
     config = new StoreConfig(new VerifiableProperties(state.properties));
     latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
-    keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
+    keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
 
     // verify index values
@@ -1097,13 +1099,13 @@ public class IndexTest {
     state.properties.put("store.index.persisted.entry.min.bytes", Long.toString(persistedEntryMinBytes * 2));
     state.reloadIndex(true, false);
     // Make sure we add entries that can fit in the latest segment.
-    keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
+    keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 9, indexCount, latestSegmentExpectedEntrySize, false);
 
     // At this point, index will rollover due to max number of entries being reached. Verify that the new segment that is
     // created has the new entry size.
     config = new StoreConfig(new VerifiableProperties(state.properties));
-    keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
+    keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2 - serOverheadBytes;
     latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
     addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
 
@@ -2586,13 +2588,12 @@ public class IndexTest {
     // create an index entry in older version.
     IndexEntry entry = new IndexEntry(state.getUniqueId(),
         IndexValueTest.getIndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, currentEndOffset, Utils.Infinite_Time,
-            state.time.milliseconds(), Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, indexVersion));
+            state.time.milliseconds(), Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, (short) 0,
+            indexVersion));
     Offset startOffset = entry.getValue().getOffset();
     int entrySize = entry.getKey().sizeInBytes() + entry.getValue().getBytes().capacity();
     int valueSize = entry.getValue().getBytes().capacity();
-    IndexSegment indexSegment =
-        indexVersion == PersistentIndex.VERSION_0 ? generateIndexSegmentV0(startOffset, entrySize, valueSize)
-            : generateIndexSegmentV1(startOffset, entrySize, valueSize);
+    IndexSegment indexSegment = generateIndexSegment(startOffset, entrySize, valueSize, indexVersion);
     state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
     FileSpan fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.PUT_RECORD_SIZE);
     indexSegment.addEntry(entry, fileSpan.getEndOffset());
@@ -2660,29 +2661,16 @@ public class IndexTest {
    * @param startOffset the start offset of the {@link IndexSegment}
    * @param entrySize The entry size that this segment supports
    * @param valueSize The value size that this segment supports
+   * @param persistentIndexVersion
    * @return the {@link IndexSegment} created of version {@link PersistentIndex#VERSION_0}
    */
-  private IndexSegment generateIndexSegmentV0(Offset startOffset, int entrySize, int valueSize) {
+  private IndexSegment generateIndexSegment(Offset startOffset, int entrySize, int valueSize,
+      short persistentIndexVersion) {
     MetricRegistry metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
-    return new MockIndexSegmentV0(tempDir.getAbsolutePath(), startOffset, CuratedLogIndexState.STORE_KEY_FACTORY,
-        entrySize, valueSize, config, metrics, state.time);
-  }
-
-  /**
-   * Generate {@link IndexSegment} of version {@link PersistentIndex#VERSION_1}
-   * @param startOffset the start offset of the {@link IndexSegment}
-   * @param entrySize The entry size that this segment supports
-   * @param valueSize The value size that this segment supports
-   * @return the {@link IndexSegment} created of version {@link PersistentIndex#VERSION_1}
-   */
-  private IndexSegment generateIndexSegmentV1(Offset startOffset, int entrySize, int valueSize) {
-    MetricRegistry metricRegistry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(metricRegistry);
-    StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
-    return new MockIndexSegmentV1(tempDir.getAbsolutePath(), startOffset, CuratedLogIndexState.STORE_KEY_FACTORY,
-        entrySize, valueSize, config, metrics, state.time);
+    return new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, CuratedLogIndexState.STORE_KEY_FACTORY,
+        entrySize, valueSize, config, metrics, state.time, persistentIndexVersion);
   }
 
   /**
@@ -2712,12 +2700,13 @@ public class IndexTest {
       if (indexSegment != null) {
         entry = new IndexEntry(putId,
             IndexValueTest.getIndexValue(size, prevEntryEndOffset, expiresAtMs, state.time.milliseconds(), accountId,
-                containerId, indexSegment.getVersion()));
+                containerId, (short) 0, indexSegment.getVersion()));
         indexSegment.addEntry(entry, fileSpan.getEndOffset());
       } else {
         entry = new IndexEntry(putId,
             IndexValueTest.getIndexValue(size, prevEntryEndOffset, expiresAtMs, state.time.milliseconds(), accountId,
-                containerId, createV0IndexValue ? PersistentIndex.VERSION_0 : PersistentIndex.CURRENT_VERSION));
+                containerId, (short) 0,
+                createV0IndexValue ? PersistentIndex.VERSION_0 : PersistentIndex.CURRENT_VERSION));
         state.index.addToIndex(entry, fileSpan);
       }
       indexEntries.add(entry);

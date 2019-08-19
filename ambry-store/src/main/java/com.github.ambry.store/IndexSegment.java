@@ -289,10 +289,17 @@ class IndexSegment {
   }
 
   /**
-   * @return the version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
+   * @return the format version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
    */
   short getVersion() {
     return version;
+  }
+
+  /**
+   * @return set the format version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
+   */
+  void setVersion(short version) {
+    this.version = version;
   }
 
   /**
@@ -538,7 +545,7 @@ class IndexSegment {
       if (persistedEntrySize == ENTRY_SIZE_INVALID_VALUE) {
         StoreKey key = entry.getKey();
         persistedEntrySize =
-            getVersion() == PersistentIndex.VERSION_2 ? Math.max(config.storeIndexPersistedEntryMinBytes,
+            getVersion() >= PersistentIndex.VERSION_2 ? Math.max(config.storeIndexPersistedEntryMinBytes,
                 key.sizeInBytes() + valueSize) : key.sizeInBytes() + valueSize;
         logger.info("IndexSegment : {} setting persisted entry size to {} of key {} for index with start offset {}",
             indexFile.getAbsolutePath(), persistedEntrySize, key.getLongForm(), startOffset);
@@ -583,7 +590,7 @@ class IndexSegment {
   /**
    * Writes the index to a persistent file.
    *
-   * Those that are written in version 2 have the following format:
+   * Those that are written in version 2 and 1 have the following format:
    *
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * | version | entrysize | valuesize | fileendpointer |  last modified time(in secs) | Reset key | Reset key type  ...
@@ -665,7 +672,7 @@ class IndexSegment {
       rwLock.readLock().lock();
       try (DataOutputStream writer = new DataOutputStream(crc)) {
         writer.writeShort(getVersion());
-        if (getVersion() == PersistentIndex.VERSION_2) {
+        if (getVersion() >= PersistentIndex.VERSION_2) {
           writer.writeInt(getPersistedEntrySize());
         } else {
           // write the key size
@@ -681,7 +688,7 @@ class IndexSegment {
         }
 
         byte[] maxPaddingBytes = null;
-        if (getVersion() == PersistentIndex.VERSION_2) {
+        if (getVersion() >= PersistentIndex.VERSION_2) {
           maxPaddingBytes = new byte[persistedEntrySize - valueSize];
         }
         for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : index.entrySet()) {
@@ -689,7 +696,7 @@ class IndexSegment {
             if (value.getOffset().getOffset() + value.getSize() <= safeEndPoint.getOffset()) {
               writer.write(entry.getKey().toBytes());
               writer.write(value.getBytes().array());
-              if (getVersion() == PersistentIndex.VERSION_2) {
+              if (getVersion() >= PersistentIndex.VERSION_2) {
                 // Add padding if necessary
                 writer.write(maxPaddingBytes, 0, persistedEntrySize - (entry.getKey().sizeInBytes() + valueSize));
               }
@@ -755,11 +762,11 @@ class IndexSegment {
           break;
       }
       serEntries.position(0);
-      version = serEntries.getShort();
+      setVersion(serEntries.getShort());
       StoreKey storeKey;
       int keySize;
       short resetKeyType;
-      switch (version) {
+      switch (getVersion()) {
         case PersistentIndex.VERSION_0:
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
               + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
@@ -785,6 +792,7 @@ class IndexSegment {
           firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
           break;
         case PersistentIndex.VERSION_2:
+        case PersistentIndex.VERSION_3:
           persistedEntrySize = serEntries.getInt();
           valueSize = serEntries.getInt();
           endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
@@ -824,8 +832,8 @@ class IndexSegment {
     index.clear();
     CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToRead));
     try (DataInputStream stream = new DataInputStream(crcStream)) {
-      version = stream.readShort();
-      switch (version) {
+      setVersion(stream.readShort());
+      switch (getVersion()) {
         case PersistentIndex.VERSION_0:
         case PersistentIndex.VERSION_1:
           int keySize = stream.readInt();
@@ -835,6 +843,7 @@ class IndexSegment {
               + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
           break;
         case PersistentIndex.VERSION_2:
+        case PersistentIndex.VERSION_3:
           persistedEntrySize = stream.readInt();
           valueSize = stream.readInt();
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
@@ -845,7 +854,7 @@ class IndexSegment {
               StoreErrorCodes.Index_Version_Error);
       }
       long logEndOffset = stream.readLong();
-      if (version == PersistentIndex.VERSION_0) {
+      if (getVersion() == PersistentIndex.VERSION_0) {
         lastModifiedTimeSec.set(indexFile.lastModified() / 1000);
       } else {
         lastModifiedTimeSec.set(stream.readLong());
@@ -863,10 +872,10 @@ class IndexSegment {
         StoreKey key = factory.getStoreKey(stream);
         byte[] value = new byte[valueSize];
         stream.readFully(value);
-        if (version == PersistentIndex.VERSION_2) {
+        if (getVersion() >= PersistentIndex.VERSION_2) {
           stream.readFully(padding, 0, persistedEntrySize - (key.sizeInBytes() + valueSize));
         }
-        IndexValue blobValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(value), version);
+        IndexValue blobValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(value), getVersion());
         long offsetInLogSegment = blobValue.getOffset().getOffset();
         // ignore entries that have offsets outside the log end offset that this index represents
         if (offsetInLogSegment + blobValue.getSize() <= logEndOffset) {
