@@ -18,6 +18,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -86,11 +87,11 @@ public class NetworkMetrics {
   public final Meter sslDecryptionTimeInUsPerKB;
 
   // NetworkClient metrics
-  public final Histogram networkClientSendAndPollTime;
-  public final Histogram networkClientRequestQueueTime;
-  public final Histogram networkClientRoundTripTime;
+  public final Timer networkClientSendAndPollTime;
+  public final Timer networkClientRequestQueueTime;
+  public final Timer networkClientRoundTripTime;
   // NetworkClient request queuing time plus round trip time.
-  public final Histogram networkClientTotalTime;
+  public final Timer networkClientTotalTime;
 
   public final Counter connectionCheckoutTimeoutError;
   public final Counter connectionNotAvailable;
@@ -125,10 +126,8 @@ public class NetworkMetrics {
     transmissionSendPendingTime =
         registry.histogram(MetricRegistry.name(Selector.class, "TransmissionSendPendingTime"));
     transmissionSendAllTime = registry.histogram(MetricRegistry.name(Selector.class, "TransmissionSendTime"));
-    transmissionRoundTripTime =
-        registry.histogram(MetricRegistry.name(Selector.class, "TransmissionRoundTripTime"));
-    transmissionReceiveAllTime =
-        registry.histogram(MetricRegistry.name(Selector.class, "TransmissionReceiveTime"));
+    transmissionRoundTripTime = registry.histogram(MetricRegistry.name(Selector.class, "TransmissionRoundTripTime"));
+    transmissionReceiveAllTime = registry.histogram(MetricRegistry.name(Selector.class, "TransmissionReceiveTime"));
     transmissionSendBytesRate = registry.meter(MetricRegistry.name(Selector.class, "TransmissionSendBytesRate"));
     transmissionReceiveBytesRate = registry.meter(MetricRegistry.name(Selector.class, "TransmissionReceiveBytesRate"));
     transmissionSendTime = registry.histogram(MetricRegistry.name(Selector.class, "TransmissionSendTime"));
@@ -152,12 +151,11 @@ public class NetworkMetrics {
     sslDecryptionTimeInUsPerKB = registry.meter(MetricRegistry.name(Selector.class, "SslDecryptionTimeInUsPerKB"));
 
     networkClientSendAndPollTime =
-        registry.histogram(MetricRegistry.name(NetworkClient.class, "NetworkClientSendAndPollTime"));
+        registry.timer(MetricRegistry.name(NetworkClient.class, "NetworkClientSendAndPollTime"));
     networkClientRequestQueueTime =
-        registry.histogram(MetricRegistry.name(NetworkClient.class, "NetworkClientRequestQueueTime"));
-    networkClientRoundTripTime =
-        registry.histogram(MetricRegistry.name(NetworkClient.class, "NetworkClientRoundTripTime"));
-    networkClientTotalTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "NetworkClientTotalTime"));
+        registry.timer(MetricRegistry.name(NetworkClient.class, "NetworkClientRequestQueueTime"));
+    networkClientRoundTripTime = registry.timer(MetricRegistry.name(NetworkClient.class, "NetworkClientRoundTripTime"));
+    networkClientTotalTime = registry.timer(MetricRegistry.name(NetworkClient.class, "NetworkClientTotalTime"));
     connectionCheckoutTimeoutError =
         registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionCheckoutTimeoutError"));
     connectionNotAvailable = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionNotAvailable"));

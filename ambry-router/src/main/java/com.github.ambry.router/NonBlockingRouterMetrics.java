@@ -19,6 +19,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
@@ -73,7 +74,7 @@ public class NonBlockingRouterMetrics {
   // Latency.
   public final Histogram putBlobOperationLatencyMs;
   public final Histogram stitchBlobOperationLatencyMs;
-  public final Histogram putChunkOperationLatencyMs;
+  public final Timer putChunkOperationLatencyMs;
   public final Histogram getBlobInfoOperationLatencyMs;
   public final Histogram getBlobOperationLatencyMs;
   public final Histogram getBlobOperationTotalTimeMs;
@@ -257,7 +258,7 @@ public class NonBlockingRouterMetrics {
     stitchBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "StitchBlobOperationLatencyMs"));
     putChunkOperationLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "PutChunkOperationLatencyMs"));
+        metricRegistry.timer(MetricRegistry.name(PutOperation.class, "PutChunkOperationLatencyMs"));
     getBlobInfoOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "GetBlobInfoOperationLatencyMs"));
     getBlobOperationLatencyMs =
