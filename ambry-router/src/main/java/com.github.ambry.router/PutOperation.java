@@ -54,7 +54,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -503,7 +503,7 @@ class PutOperation {
     if (chunk.chunkBlobProperties.isEncrypted()) {
       routerMetrics.putEncryptedChunkOperationLatencyMs.update(operationLatencyMs);
     } else {
-      routerMetrics.putChunkOperationLatencyMs.update(operationLatencyMs);
+      routerMetrics.putChunkOperationLatencyMs.update(operationLatencyMs, TimeUnit.MILLISECONDS);
     }
     chunk.clear();
   }

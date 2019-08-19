@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -114,7 +115,7 @@ public class NetworkClient implements Closeable {
       networkMetrics.networkClientException.inc();
     } finally {
       numPendingRequests.set(pendingRequests.size());
-      networkMetrics.networkClientSendAndPollTime.update(time.milliseconds() - startTime);
+      networkMetrics.networkClientSendAndPollTime.update(time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
     }
     return responseInfoList;
   }
@@ -363,15 +364,17 @@ public class NetworkClient implements Closeable {
      */
     void onRequestDequeue() {
       requestDequeuedAtMs = time.milliseconds();
-      networkMetrics.networkClientRequestQueueTime.update(requestDequeuedAtMs - requestQueuedAtMs);
+      networkMetrics.networkClientRequestQueueTime.update(requestDequeuedAtMs - requestQueuedAtMs,
+          TimeUnit.MILLISECONDS);
     }
 
     /**
      * Actions to be done on receiving response for the request sent
      */
     void onResponseReceive() {
-      networkMetrics.networkClientRoundTripTime.update(time.milliseconds() - requestDequeuedAtMs);
-      networkMetrics.networkClientTotalTime.update(time.milliseconds() - requestQueuedAtMs);
+      networkMetrics.networkClientRoundTripTime.update(time.milliseconds() - requestDequeuedAtMs,
+          TimeUnit.MILLISECONDS);
+      networkMetrics.networkClientTotalTime.update(time.milliseconds() - requestQueuedAtMs, TimeUnit.MILLISECONDS);
     }
   }
 }
