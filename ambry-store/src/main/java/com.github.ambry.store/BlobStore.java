@@ -688,18 +688,18 @@ class BlobStore implements Store {
    * files/dirs associated with this store. This method is invoked by transition in AmbryStateModel (OFFLINE -> DROPPED)
    */
   public void deleteStoreFiles() throws StoreException, IOException {
-    // step0: ensure the store has been shut down
+    // Step 0: ensure the store has been shut down
     if (started) {
       throw new IllegalStateException("Store is still started. Deleting store files is not allowed.");
     }
-    // step1: return occupied swap segments (if any) to reserve pool
+    // Step 1: return occupied swap segments (if any) to reserve pool
     String[] swapSegmentsInUse = compactor.getSwapSegmentsInUse();
     for (String fileName : swapSegmentsInUse) {
       logger.info("Returning swap segment {} to reserve pool", fileName);
       File swapSegmentTempFile = new File(dataDir, fileName);
       diskSpaceAllocator.free(swapSegmentTempFile, config.storeSegmentSizeInBytes, storeId, true);
     }
-    // step2: delete all files
+    // Step 2: delete all files
     logger.info("Deleting store {} directory", storeId);
     File storeDir = new File(dataDir);
     try {
