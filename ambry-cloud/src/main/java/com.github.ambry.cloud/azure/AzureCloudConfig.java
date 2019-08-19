@@ -28,6 +28,7 @@ public class AzureCloudConfig {
   public static final String COSMOS_COLLECTION_LINK = "cosmos.collection.link";
   public static final String COSMOS_KEY = "cosmos.key";
   public static final String COSMOS_MAX_RETRIES = "cosmos.max.retries";
+  public static final String COSMOS_DIRECT_HTTPS = "cosmos.direct.https";
   public static final int DEFAULT_COSMOS_MAX_RETRIES = 5;
 
   /**
@@ -61,11 +62,20 @@ public class AzureCloudConfig {
   @Default("5")
   public final int cosmosMaxRetries;
 
+  /**
+   * Flag indicating whether to use DirectHttps CosmosDB connection mode.
+   * Provides better performance but may not work with all firewall settings.
+   */
+  @Config(COSMOS_DIRECT_HTTPS)
+  @Default("false")
+  public final boolean cosmosDirectHttps;
+
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING);
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
     cosmosCollectionLink = verifiableProperties.getString(COSMOS_COLLECTION_LINK);
     cosmosKey = verifiableProperties.getString(COSMOS_KEY);
     cosmosMaxRetries = verifiableProperties.getInt(COSMOS_MAX_RETRIES, DEFAULT_COSMOS_MAX_RETRIES);
+    cosmosDirectHttps = verifiableProperties.getBoolean(COSMOS_DIRECT_HTTPS, false);
   }
 }
