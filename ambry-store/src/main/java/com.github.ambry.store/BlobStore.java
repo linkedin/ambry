@@ -705,7 +705,7 @@ class BlobStore implements Store {
     try {
       Utils.deleteFileOrDirectory(storeDir);
     } catch (Exception e) {
-      throw new IOException("Couldn't delete store directory " + dataDir);
+      throw new IOException("Couldn't delete store directory " + dataDir, e);
     }
     logger.info("All files of store {} deleted", storeId);
   }
