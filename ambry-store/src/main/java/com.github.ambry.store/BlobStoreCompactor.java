@@ -253,16 +253,15 @@ class BlobStoreCompactor {
   }
 
   /**
-   * @return the number of temporary log segment files this compactor is currently using.
+   * @return an array of temporary log segment files this compactor is currently using.
    */
-  int getSwapSegmentsInUse() throws StoreException {
-    // TODO: use this method to return swap segment to pool when removing store
+  String[] getSwapSegmentsInUse() throws StoreException {
     String[] tempSegments = dataDir.list(TEMP_LOG_SEGMENTS_FILTER);
     if (tempSegments == null) {
       throw new StoreException("Error occurred while listing files in data dir:" + dataDir.getAbsolutePath(),
           StoreErrorCodes.IOError);
     }
-    return tempSegments.length;
+    return tempSegments;
   }
 
   /**

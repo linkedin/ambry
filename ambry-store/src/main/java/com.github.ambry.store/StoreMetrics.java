@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Metrics for store operations
  */
 public class StoreMetrics {
-  private static final String SEPERATOR = ".";
+  private static final String SEPARATOR = ".";
 
   public final Timer getResponse;
   public final Timer putResponse;
@@ -102,7 +102,7 @@ public class StoreMetrics {
 
   public StoreMetrics(String prefix, MetricRegistry registry) {
     this.registry = registry;
-    String name = !prefix.isEmpty() ? prefix + SEPERATOR : "";
+    String name = !prefix.isEmpty() ? prefix + SEPARATOR : "";
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreGetResponse"));
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StorePutResponse"));
     deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreDeleteResponse"));
@@ -201,7 +201,7 @@ public class StoreMetrics {
   }
 
   void initializeIndexGauges(String storeId, final PersistentIndex index, final long capacityInBytes) {
-    String prefix = storeId + SEPERATOR;
+    String prefix = storeId + SEPARATOR;
     Gauge<Long> currentCapacityUsed = index::getLogUsedCapacity;
     registry.register(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed"), currentCapacityUsed);
     Gauge<Double> percentageUsedCapacity = () -> ((double) index.getLogUsedCapacity() / capacityInBytes) * 100;
@@ -215,14 +215,16 @@ public class StoreMetrics {
    * @param storeId the {@link BlobStore} for which the IndexGauges should be deregistered.
    */
   private void deregisterIndexGauges(String storeId) {
-    String prefix = storeId + SEPERATOR;
+    String prefix = storeId + SEPARATOR;
     registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed"));
     registry.remove(MetricRegistry.name(Log.class, prefix + "PercentageUsedCapacity"));
     registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"));
+    registry.remove(MetricRegistry.name(Log.class, "ByteBufferForAppendTotalCount"));
+    registry.remove(MetricRegistry.name(Log.class, "UnderCompaction" + SEPARATOR + "ByteBufferForAppendTotalCount"));
   }
 
   void initializeHardDeleteMetric(String storeId, final HardDeleter hardDeleter, final PersistentIndex index) {
-    String prefix = storeId + SEPERATOR;
+    String prefix = storeId + SEPARATOR;
     Gauge<Long> currentHardDeleteProgress = hardDeleter::getProgress;
     registry.register(MetricRegistry.name(PersistentIndex.class, prefix + "CurrentHardDeleteProgress"),
         currentHardDeleteProgress);
@@ -245,7 +247,7 @@ public class StoreMetrics {
    * @param storeId the {@link BlobStore} for which the HardDeleteMetric should be deregistered.
    */
   private void deregisterHardDeleteMetric(String storeId) {
-    String prefix = storeId + SEPERATOR;
+    String prefix = storeId + SEPARATOR;
     registry.remove(MetricRegistry.name(PersistentIndex.class, prefix + "CurrentHardDeleteProgress"));
     registry.remove(MetricRegistry.name(Log.class, prefix + "PercentageHardDeleteCompleted"));
     registry.remove(MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteThreadRunning"));
@@ -253,7 +255,7 @@ public class StoreMetrics {
   }
 
   void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress) {
-    String prefix = storeId + SEPERATOR;
+    String prefix = storeId + SEPARATOR;
     Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
         compactionInProgressGauge);
@@ -264,7 +266,7 @@ public class StoreMetrics {
    * @param storeId the {@link BlobStore} for which the CompactorGauges should be deregistered.
    */
   private void deregisterCompactorGauges(String storeId) {
-    String prefix = storeId + SEPERATOR;
+    String prefix = storeId + SEPARATOR;
     registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"));
   }
 

@@ -155,6 +155,25 @@ class CompactionManager {
   }
 
   /**
+   * Remove store from compaction manager.
+   * @param store the {@link BlobStore} to remove
+   * @return {@code true} if store is removed successfully. {@code false} if not.
+   */
+  boolean removeBlobStore(BlobStore store) {
+    if (compactionExecutor == null) {
+      stores.remove(store);
+      return true;
+    } else if (!compactionExecutor.getStoresDisabledCompaction().contains(store)) {
+      logger.error("Fail to remove store ({}) from compaction manager because compaction is still enabled on it",
+          store);
+      return false;
+    }
+    // stores.remove(store) is invoked within compactionExecutor.removeBlobStore() because it requires lock
+    compactionExecutor.removeBlobStore(store);
+    return true;
+  }
+
+  /**
    * Get compaction details for a given {@link BlobStore} if any
    * @param blobStore the {@link BlobStore} for which compaction details are requested
    * @return the {@link CompactionDetails} containing the details about log segments that needs to be compacted.
@@ -364,6 +383,31 @@ class CompactionManager {
       } else {
         storesDisabledCompaction.add(store);
       }
+    }
+
+    /**
+     * Remove store from compaction executor.
+     * @param store the {@link BlobStore} to remove
+     */
+    void removeBlobStore(BlobStore store) {
+      lock.lock();
+      try {
+        stores.remove(store);
+        // It's ok to remove store from "storesDisabledCompaction" and "storesToSkip" list while executor thread is
+        // going through each store to check compaction eligibility. Note that the executor will first check if store
+        // is started, which is guaranteed to be false before removeBlobStore() is invoked.
+        storesDisabledCompaction.remove(store);
+        storesToSkip.remove(store);
+      } finally {
+        lock.unlock();
+      }
+    }
+
+    /**
+     * @return a list of stores on which compaction is disabled.
+     */
+    Set<BlobStore> getStoresDisabledCompaction() {
+      return storesDisabledCompaction;
     }
   }
 }

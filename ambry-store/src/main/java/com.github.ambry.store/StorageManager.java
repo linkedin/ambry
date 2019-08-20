@@ -209,7 +209,6 @@ public class StorageManager {
 
   /**
    * Shutdown the {@link DiskManager}s for the disks on this node.
-   * @throws StoreException
    * @throws InterruptedException
    */
   public void shutdown() throws InterruptedException {
@@ -288,6 +287,26 @@ public class StorageManager {
   public boolean shutdownBlobStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null && diskManager.shutdownBlobStore(id);
+  }
+
+  /**
+   * Remove store from storage manager.
+   * @param id the {@link PartitionId} associated with store
+   * @return {@code true} if removal succeeds. {@code false} otherwise.
+   */
+  public boolean removeBlobStore(PartitionId id) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    if (diskManager == null) {
+      logger.info("Store {} is not found in storage manager", id);
+      return true;
+    }
+    if (!diskManager.removeBlobStore(id)) {
+      logger.error("Fail to remove store {} from disk manager", id);
+      return false;
+    }
+    partitionToDiskManager.remove(id);
+    logger.info("Store {} is successfully removed from storage manager", id);
+    return true;
   }
 
   /**

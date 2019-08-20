@@ -682,6 +682,34 @@ class BlobStore implements Store {
         LogSegment.HEADER_SIZE, index.getLogSegmentsNotInJournal(), blobStoreStats);
   }
 
+  /**
+   * Delete files of this store.
+   * This is the last step to remove store from this node. Return swap segments (if any) to reserve pool and delete all
+   * files/dirs associated with this store. This method is invoked by transition in AmbryStateModel (OFFLINE -> DROPPED)
+   */
+  public void deleteStoreFiles() throws StoreException, IOException {
+    // Step 0: ensure the store has been shut down
+    if (started) {
+      throw new IllegalStateException("Store is still started. Deleting store files is not allowed.");
+    }
+    // Step 1: return occupied swap segments (if any) to reserve pool
+    String[] swapSegmentsInUse = compactor.getSwapSegmentsInUse();
+    for (String fileName : swapSegmentsInUse) {
+      logger.info("Returning swap segment {} to reserve pool", fileName);
+      File swapSegmentTempFile = new File(dataDir, fileName);
+      diskSpaceAllocator.free(swapSegmentTempFile, config.storeSegmentSizeInBytes, storeId, true);
+    }
+    // Step 2: delete all files
+    logger.info("Deleting store {} directory", storeId);
+    File storeDir = new File(dataDir);
+    try {
+      Utils.deleteFileOrDirectory(storeDir);
+    } catch (Exception e) {
+      throw new IOException("Couldn't delete store directory " + dataDir, e);
+    }
+    logger.info("All files of store {} deleted", storeId);
+  }
+
   @Override
   public void shutdown() throws StoreException {
     shutdown(false);
@@ -751,9 +779,10 @@ class BlobStore implements Store {
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
     checkStarted();
-    DiskSpaceRequirements requirements = log.isLogSegmented() ? new DiskSpaceRequirements(
-        replicaId.getPartitionId().toPathString(), log.getSegmentCapacity(),
-        log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse()) : null;
+    DiskSpaceRequirements requirements =
+        log.isLogSegmented() ? new DiskSpaceRequirements(replicaId.getPartitionId().toPathString(),
+            log.getSegmentCapacity(), log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse().length)
+            : null;
     logger.info("Store {} has disk space requirements: {}", storeId, requirements);
     return requirements;
   }

@@ -262,7 +262,7 @@ public class BlobStoreTest {
    */
   public BlobStoreTest(boolean isLogSegmented) throws InterruptedException, IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
-    tempDir = StoreTestUtils.createTempDirectory("storeDir-" + UtilsTest.getRandomString(10));
+    tempDir = StoreTestUtils.createTempDirectory("storeDir-" + storeId);
     tempDirStr = tempDir.getAbsolutePath();
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     long bufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
@@ -1176,6 +1176,66 @@ public class BlobStoreTest {
     // verify error count keeps track of StoreException and shut down store properly
     assertEquals("Mismatch in triggered shutdown counter", 1, metrics.storeIoErrorTriggeredShutdownCount.getCount());
     assertFalse("Store should shutdown because error count exceeded threshold", testStore2.isStarted());
+
+    reloadStore();
+  }
+
+  /**
+   * Test both success and failure cases when deleting store files.
+   * @throws Exception
+   */
+  @Test
+  public void deleteStoreFilesTest() throws Exception {
+    store.shutdown();
+    // create test store directory
+    File storeDir = StoreTestUtils.createTempDirectory("store-" + storeId);
+    File reserveDir = StoreTestUtils.createTempDirectory("reserve-pool");
+    DiskSpaceAllocator diskAllocator =
+        new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    MetricRegistry registry = new MetricRegistry();
+    StoreMetrics metrics = new StoreMetrics(registry);
+    BlobStore testStore =
+        new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
+            diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time);
+    testStore.start();
+    DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
+    diskAllocator.initializePool(diskSpaceRequirements == null ? Collections.emptyList()
+        : Collections.singletonList(testStore.getDiskSpaceRequirements()));
+    // ensure store directory and file exist
+    assertTrue("Store directory doesn't exist", storeDir.exists());
+    // test that deletion on started store should fail
+    try {
+      testStore.deleteStoreFiles();
+    } catch (IllegalStateException e) {
+      //expected
+    }
+    // create a unreadable dir in store dir to induce deletion failure
+    File invalidDir = new File(storeDir, "invalidDir");
+    assertTrue("Couldn't create dir within store dir", invalidDir.mkdir());
+    assertTrue("Could not make unreadable", invalidDir.setReadable(false));
+    testStore.shutdown();
+    try {
+      testStore.deleteStoreFiles();
+      fail("should fail because one invalid dir is unreadable");
+    } catch (Exception e) {
+      // expected
+    }
+    assertTrue("store directory should exist because deletion failed", storeDir.exists());
+    // reset permission to allow deletion to succeed.
+    assertTrue("Could not make readable", invalidDir.setReadable(true));
+
+    // put a swap segment into store dir
+    File tempFile = File.createTempFile("sample-swap",
+        LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, storeDir);
+    // test success case (swap segment is returned and store dir is correctly deleted)
+    assertEquals("Swap reserve dir should be empty initially", 0,
+        diskAllocator.getSwapReserveFileMap().getFileSizeSet().size());
+    testStore.deleteStoreFiles();
+    assertFalse("swap segment still exists", tempFile.exists());
+    assertEquals("Swap reserve dir should have one swap segment", 1,
+        diskAllocator.getSwapReserveFileMap().getFileSizeSet().size());
+    assertFalse("store directory shouldn't exist", storeDir.exists());
 
     reloadStore();
   }
