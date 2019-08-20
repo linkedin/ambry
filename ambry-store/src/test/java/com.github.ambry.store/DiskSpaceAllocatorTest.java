@@ -327,6 +327,9 @@ public class DiskSpaceAllocatorTest {
     File invalidFile = new File(reserveFileDir, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
     assertTrue(invalidDir.mkdir());
     assertTrue(invalidFile.createNewFile());
+    // create extra file inside invalid directory to mock non-empty directory
+    File extraFile = new File(invalidDir, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
+    assertTrue(extraFile.createNewFile());
     // instantiate DiskSpaceAllocator
     alloc = constructAllocator();
     // verify invalid directories and files no longer exist

@@ -302,9 +302,7 @@ class DiskSpaceAllocator {
         inventorySwapReserveFiles(file);
       } else {
         // if it is neither store reserved segment directory nor swap segment directory, then delete it.
-        if (!file.delete()) {
-          throw new IOException("Could not delete the following reserve file or directory: " + file.getAbsolutePath());
-        }
+        Utils.deleteFileOrDirectory(file);
       }
     }
   }
