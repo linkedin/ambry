@@ -13,9 +13,18 @@
  */
 package com.github.ambry.messageformat;
 
+/**
+ * Abstract class for {@link UpdateRecord} SubRecords
+ */
 public abstract class SubRecord {
 
+  /**
+   * @return the type of SubRecord
+   */
   abstract public UpdateRecord.Type getType();
 
+  /**
+   * @return the recordVersion of the SubRecord
+   */
   abstract public short getRecordVersion();
 }
