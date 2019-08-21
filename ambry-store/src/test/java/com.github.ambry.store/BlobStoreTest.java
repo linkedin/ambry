@@ -18,6 +18,8 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
@@ -871,7 +873,7 @@ public class BlobStoreTest {
   }
 
   /**
-   * Tests {@link BlobStore#findEntriesSince(FindToken, long)}.
+   * Tests {@link BlobStore#findEntriesSince(FindTokenType.FindToken, long)}.
    * <p/>
    * This test is minimal for two reasons
    * 1. The BlobStore simply calls into the index for this function and the index has extensive tests for this.

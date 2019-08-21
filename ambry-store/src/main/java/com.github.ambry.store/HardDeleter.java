@@ -15,8 +15,11 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
+import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.Time;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -36,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import jdk.nashorn.internal.parser.TokenType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -258,7 +262,7 @@ public class HardDeleter implements Runnable {
    */
   void pruneHardDeleteRecoveryRange() {
     StoreFindToken logFlushedTillToken = (StoreFindToken) startTokenSafeToPersist;
-    if (logFlushedTillToken != null && !logFlushedTillToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
+    if (logFlushedTillToken != null && !logFlushedTillToken.getType().equals(FindTokenType.Uninitialized)) {
       if (logFlushedTillToken.equals(endToken)) {
         hardDeleteRecoveryRange.clear();
       } else if (logFlushedTillToken.getStoreKey() != null) {
@@ -359,7 +363,7 @@ public class HardDeleter implements Runnable {
    */
   long getProgress() {
     StoreFindToken token = (StoreFindToken) startToken;
-    return token.getType().equals(StoreFindToken.Type.Uninitialized) ? 0
+    return token.getType().equals(FindTokenType.Uninitialized) ? 0
         : index.getAbsolutePositionInLogForOffset(token.getOffset());
   }
 
@@ -437,13 +441,13 @@ public class HardDeleter implements Runnable {
         short version = stream.readShort();
         switch (version) {
           case Cleanup_Token_Version_V0:
-            recoveryStartToken = StoreFindToken.fromBytes(stream, factory);
-            recoveryEndToken = StoreFindToken.fromBytes(stream, factory);
+            recoveryStartToken = StoreFindToken.fromBytes(new PeekableInputStream(stream), factory);
+            recoveryEndToken = StoreFindToken.fromBytes(new PeekableInputStream(stream), factory);
             hardDeleteRecoveryRange = new HardDeletePersistInfo(stream, factory);
             break;
           case Cleanup_Token_Version_V1:
-            recoveryStartToken = StoreFindToken.fromBytes(stream, factory);
-            recoveryEndToken = StoreFindToken.fromBytes(stream, factory);
+            recoveryStartToken = StoreFindToken.fromBytes(new PeekableInputStream(stream), factory);
+            recoveryEndToken = StoreFindToken.fromBytes(new PeekableInputStream(stream), factory);
             paused.set(stream.readByte() == (byte) 1);
             hardDeleteRecoveryRange = new HardDeletePersistInfo(stream, factory);
             break;

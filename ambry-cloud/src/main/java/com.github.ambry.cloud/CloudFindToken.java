@@ -13,8 +13,13 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.store.FindToken;
+import com.github.ambry.replication.FindTokenImpl;
+import com.github.ambry.replication.FindTokenType;
+import com.github.ambry.utils.PeekableInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -22,11 +27,10 @@ import java.util.Objects;
 /**
  * FindToken implementation used by the {@link CloudBlobStore}.
  */
-public class CloudFindToken implements FindToken {
+public class CloudFindToken extends FindTokenImpl {
 
-  static final short VERSION_0 = 0;
-  static final short CURRENT_VERSION = VERSION_0;
-  private final short version;
+  static final short VERSION_3 = 3;
+  static final short CURRENT_VERSION = VERSION_3;
   private final long latestUploadTime;
   private final String latestBlobId;
   private final long bytesRead;
@@ -38,7 +42,15 @@ public class CloudFindToken implements FindToken {
 
   /** Constructor for in-progress token */
   public CloudFindToken(long latestUploadTime, String latestBlobId, long bytesRead) {
-    this.version = CURRENT_VERSION;
+    super(CURRENT_VERSION, FindTokenType.CloudBased);
+    this.latestUploadTime = latestUploadTime;
+    this.latestBlobId = latestBlobId;
+    this.bytesRead = bytesRead;
+  }
+
+  /** Constructor for reading token that can have older version*/
+  public CloudFindToken(short version, long latestUploadTime, String latestBlobId, long bytesRead) {
+    super(version, FindTokenType.CloudBased);
     this.latestUploadTime = latestUploadTime;
     this.latestBlobId = latestBlobId;
     this.bytesRead = bytesRead;
@@ -56,33 +68,59 @@ public class CloudFindToken implements FindToken {
     } else {
       CloudBlobMetadata lastResult = queryResults.get(queryResults.size() - 1);
       long bytesReadThisQuery = queryResults.stream().mapToLong(CloudBlobMetadata::getSize).sum();
-      return new CloudFindToken(lastResult.getUploadTime(), lastResult.getId(), prevToken.getBytesRead() + bytesReadThisQuery);
+      return new CloudFindToken(lastResult.getUploadTime(), lastResult.getId(),
+          prevToken.getBytesRead() + bytesReadThisQuery);
     }
+  }
+
+  /**
+   * Utility to construct a previously serialized {@code CloudFindToken} from input stream.
+   * @param inputStream {@code PeekableInputStream} from which to read the token.
+   * @return deserialized {@code CloudFindToken} object.
+   * @throws IOException
+   */
+  static CloudFindToken fromBytes(PeekableInputStream inputStream) throws IOException {
+    CloudFindToken cloudFindToken = null;
+    DataInputStream stream = new DataInputStream(inputStream);
+    short version = stream.readShort();
+    if(version < VERSION_3) {
+      throw new IllegalArgumentException("Unrecognized version in CloudFindToken: " + version);
+    }
+    FindTokenType type = FindTokenType.values()[stream.readShort()];
+    long latestUploadTime = stream.readLong();
+    long bytesRead = stream.readLong();
+    short latestBlobIdLength = stream.readShort();
+    String latestBlobId = null;
+    if (latestBlobIdLength != 0) {
+      byte[] latestBlobIdbytes = new byte[latestBlobIdLength];
+      stream.read(latestBlobIdbytes, 0, (int) latestBlobIdLength);
+      latestBlobId = Arrays.toString(latestBlobIdbytes);
+    }
+    return new CloudFindToken(version, latestUploadTime, latestBlobId, bytesRead);
   }
 
   @Override
   public byte[] toBytes() {
     byte[] buf = null;
-    switch (version) {
-      case VERSION_0:
-        int size = Short.BYTES + 2 * Long.BYTES;
-        buf = new byte[size];
-        ByteBuffer bufWrap = ByteBuffer.wrap(buf);
-        // add version
-        bufWrap.putShort(version);
-        // add latestUploadTime
-        bufWrap.putLong(latestUploadTime);
-        // add bytesRead
-        bufWrap.putLong(bytesRead);
-        if (latestBlobId != null) {
-          bufWrap.putShort((short) latestBlobId.length());
-          bufWrap.put(latestBlobId.getBytes());
-        } else {
-          bufWrap.putShort((short) 0);
-        }
-        break;
-      default:
-        throw new IllegalStateException("Unknown version: " + version);
+    int size = 3 * Short.BYTES + 2 * Long.BYTES;
+    if (latestBlobId != null) {
+      size += latestBlobId.length();
+    }
+    buf = new byte[size];
+    ByteBuffer bufWrap = ByteBuffer.wrap(buf);
+    // add version
+    bufWrap.putShort(version);
+    // add type
+    bufWrap.putShort((short) type.ordinal());
+    // add latestUploadTime
+    bufWrap.putLong(latestUploadTime);
+    // add bytesRead
+    bufWrap.putLong(bytesRead);
+    if (latestBlobId != null) {
+      bufWrap.putShort((short) latestBlobId.length());
+      bufWrap.put(latestBlobId.getBytes());
+    } else {
+      bufWrap.putShort((short) 0);
     }
     return buf;
   }

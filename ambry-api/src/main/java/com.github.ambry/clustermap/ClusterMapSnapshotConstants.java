@@ -68,4 +68,6 @@ public class ClusterMapSnapshotConstants {
   public static final String REPLICA_DISK = "disk";
   // values
   public static final String REPLICA_STOPPED = "stopped";
+
+  public static final String CLOUD_REPLICA_MOUNT = "/vcr";
 }

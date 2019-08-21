@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
+import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.Time;
 import java.io.Closeable;
 import java.io.DataInputStream;
@@ -426,7 +427,7 @@ class CompactionLog implements Closeable {
       cycleLog.cleanupStartTime = stream.readLong();
       cycleLog.cycleEndTime = stream.readLong();
       cycleLog.safeToken =
-          stream.readByte() == STORE_TOKEN_PRESENT ? StoreFindToken.fromBytes(stream, storeKeyFactory) : null;
+          stream.readByte() == STORE_TOKEN_PRESENT ? StoreFindToken.fromBytes(new PeekableInputStream(stream), storeKeyFactory) : null;
       return cycleLog;
     }
 

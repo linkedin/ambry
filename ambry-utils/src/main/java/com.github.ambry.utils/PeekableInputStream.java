@@ -15,36 +15,19 @@ package com.github.ambry.utils;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.LinkedList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-/**
- * An inputstream that calculates Crc on the fly
- */
-public class CrcInputStream extends InputStream {
-  private Crc32 crc;
-  private final InputStream stream;
+public class PeekableInputStream extends InputStream {
+  private final InputStream inputStream;
+  private LinkedList<Byte> peekBuffer;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  /**
-   * Create a CrcInputStream using the specified CRC generator
-   * @param in
-   */
-  public CrcInputStream(InputStream in) {
-    this(new Crc32(), in);
-  }
-
-  public CrcInputStream(Crc32 crc, InputStream in) {
-    this.stream = in;
-    this.crc = crc;
-  }
-
-  @Override
-  public int read() throws IOException {
-    int val = stream.read();
-    crc.update((byte) (val & 0xFF));
-    return val;
+  public PeekableInputStream(InputStream inputStream) {
+    this.inputStream = inputStream;
+    peekBuffer = new LinkedList<>();
   }
 
   @Override
@@ -54,24 +37,46 @@ public class CrcInputStream extends InputStream {
 
   @Override
   public int read(byte[] b, int off, int len) throws IOException {
-    int ret = stream.read(b, off, len);
-    crc.update(b, off, ret);
+    int idx = off;
+    int ctr = 0;
+    while(ctr < len && !peekBuffer.isEmpty()) {
+      b[idx] = peekBuffer.removeFirst();
+      idx++;
+      ctr++;
+    }
+    if(ctr == len)
+      return ctr;
+    int ret = this.inputStream.read(b, idx, len-ctr);
+    if(ret == -1 && ctr > 0) {
+      return ctr;
+    }
     return ret;
   }
 
   @Override
-  public void close() throws IOException {
-    super.close();
+  public int read() throws IOException {
+    if(!peekBuffer.isEmpty()) {
+      return peekBuffer.removeFirst();
+    }
+    int val = this.inputStream.read();
+    return val;
   }
 
   @Override
   public int available() throws IOException {
-    int available = stream.available();
+    int available = inputStream.available();
     logger.trace("remaining bytes {}", available);
     return available;
   }
 
-  public long getValue() {
-    return crc.getValue();
+  @Override
+  public void close() throws IOException {
+    inputStream.close();
+  }
+
+  public int peek() throws IOException {
+    int val = this.inputStream.read();
+    peekBuffer.add((byte)val);
+    return val;
   }
 }

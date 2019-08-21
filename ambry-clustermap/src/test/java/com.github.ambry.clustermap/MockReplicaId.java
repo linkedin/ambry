@@ -164,4 +164,9 @@ public class MockReplicaId implements ReplicaId {
   public void markReplicaDownStatus(boolean isDown) {
     isMarkedDown = isDown;
   }
+
+  @Override
+  public ReplicaType getReplicaType() {
+    return ReplicaType.DISK_BACKED;
+  }
 }

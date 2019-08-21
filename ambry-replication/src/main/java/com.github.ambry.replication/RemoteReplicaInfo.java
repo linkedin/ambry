@@ -16,7 +16,6 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.network.Port;
-import com.github.ambry.store.FindToken;
 import com.github.ambry.store.Store;
 import com.github.ambry.utils.Time;
 import java.util.Objects;

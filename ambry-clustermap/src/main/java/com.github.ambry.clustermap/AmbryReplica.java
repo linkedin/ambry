@@ -177,5 +177,10 @@ class AmbryReplica implements ReplicaId {
   void onReplicaResponse() {
     resourceStatePolicy.onSuccess();
   }
+
+  @Override
+  public ReplicaType getReplicaType() {
+    return ReplicaType.DISK_BACKED;
+  }
 }
 

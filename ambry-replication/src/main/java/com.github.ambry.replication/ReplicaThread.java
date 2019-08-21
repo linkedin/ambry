@@ -46,8 +46,6 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
@@ -88,7 +86,7 @@ public class ReplicaThread implements Runnable {
   private final Set<PartitionId> allReplicatedPartitions = new HashSet<>();
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
-  private final FindTokenFactory findTokenFactory;
+  private final FindTokenFactoryFactory findTokenFactoryFactory;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationIdGenerator;
   private final DataNodeId dataNodeId;
@@ -115,14 +113,14 @@ public class ReplicaThread implements Runnable {
 
   private volatile boolean allDisabled = false;
 
-  public ReplicaThread(String threadName, FindTokenFactory findTokenFactory, ClusterMap clusterMap,
+  public ReplicaThread(String threadName, FindTokenFactoryFactory tokenFactoryFactory, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time) {
     this.threadName = threadName;
     this.running = true;
-    this.findTokenFactory = findTokenFactory;
+    this.findTokenFactoryFactory = tokenFactoryFactory;
     this.clusterMap = clusterMap;
     this.correlationIdGenerator = correlationIdGenerator;
     this.dataNodeId = dataNodeId;
@@ -539,9 +537,14 @@ public class ReplicaThread implements Runnable {
           new ByteBufferInputStream(channelOutput.getInputStream(), (int) channelOutput.getStreamSize());
       logger.trace("Remote node: {} Thread name: {} Remote replicas: {} ByteBuffer size after deserialization: {} ",
           remoteNode, threadName, replicasToReplicatePerNode, byteBufferInputStream.available());
-      ReplicaMetadataResponse response =
-          ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenFactory, clusterMap);
-
+      ReplicaMetadataResponse response = null;
+      try {
+        response = ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenFactoryFactory,
+            clusterMap);
+      } catch (ReflectiveOperationException roe) {
+        logger.error("Error on getting replica token factory", roe);
+        throw new ReplicationException("Error on getting replica token factory");
+      }
       long metadataRequestTime = SystemTime.getInstance().milliseconds() - replicaMetadataRequestStartTime;
       replicationMetrics.updateMetadataRequestTime(metadataRequestTime, replicatingFromRemoteColo, replicatingOverSsl,
           datacenterName);
@@ -782,6 +785,7 @@ public class ReplicaThread implements Runnable {
       try {
         connectedChannel.send(getRequest);
         ChannelOutput channelOutput = connectedChannel.receive();
+        //this is the most likely problem
         getResponse = GetResponse.readFrom(new DataInputStream(channelOutput.getInputStream()), clusterMap);
         long getRequestTime = SystemTime.getInstance().milliseconds() - startTime;
         replicationMetrics.updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl,

@@ -18,17 +18,23 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageMetadata;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.replication.FindTokenFactoryFactory;
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferChannel;
+import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -49,11 +55,27 @@ import org.junit.Test;
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
 
+class MockFindTokenFactoryFactory extends FindTokenFactoryFactory {
+  public MockFindTokenFactoryFactory(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig) {
+    super(storeKeyFactory, replicationConfig);
+  }
+
+  @Override
+  public FindTokenFactory getFindTokenFactoryFromType(ReplicaType replicaType) throws ReflectiveOperationException {
+    return new MockFindTokenFactory();
+  }
+
+  @Override
+  public FindTokenFactory getFindTokenFactoryFromStream(PeekableInputStream inputStream)
+      throws IOException, ReflectiveOperationException {
+    return new MockFindTokenFactory();
+  }
+}
 
 class MockFindTokenFactory implements FindTokenFactory {
 
   @Override
-  public FindToken getFindToken(DataInputStream stream) throws IOException {
+  public FindToken getFindToken(PeekableInputStream stream) throws IOException {
     return new MockFindToken(stream);
   }
 
@@ -64,25 +86,44 @@ class MockFindTokenFactory implements FindTokenFactory {
 }
 
 class MockFindToken implements FindToken {
+  short version;
+  FindTokenType type;
   int index;
   long bytesRead;
 
   public MockFindToken(int index, long bytesRead) {
+    this.version = 0;
+    this.type = FindTokenType.IndexBased;
     this.index = index;
     this.bytesRead = bytesRead;
   }
 
-  public MockFindToken(DataInputStream stream) throws IOException {
+  public MockFindToken(PeekableInputStream inputStream) throws IOException {
+    DataInputStream stream = new DataInputStream(inputStream);
+    this.version = stream.readShort();
+    this.type = FindTokenType.values()[stream.readShort()];
     this.index = stream.readInt();
     this.bytesRead = stream.readLong();
   }
 
   @Override
   public byte[] toBytes() {
-    ByteBuffer byteBuffer = ByteBuffer.allocate(12);
+    ByteBuffer byteBuffer = ByteBuffer.allocate(2 * Short.BYTES + Integer.BYTES + Long.BYTES);
+    byteBuffer.putShort(version);
+    byteBuffer.putShort((short) type.ordinal());
     byteBuffer.putInt(index);
     byteBuffer.putLong(bytesRead);
     return byteBuffer.array();
+  }
+
+  @Override
+  public FindTokenType getType() {
+    return type;
+  }
+
+  @Override
+  public short getVersion() {
+    return version;
   }
 
   public int getIndex() {
@@ -393,13 +434,13 @@ public class RequestResponseTest {
   }
 
   @Test
-  public void replicaMetadataRequestTest() throws IOException {
+  public void replicaMetadataRequestTest() throws IOException, ReflectiveOperationException {
     doReplicaMetadataRequestTest(ReplicaMetadataResponse.CURRENT_VERSION);
     doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_4);
     doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5);
   }
 
-  private void doReplicaMetadataRequestTest(short responseVersionToUse) throws IOException {
+  private void doReplicaMetadataRequestTest(short responseVersionToUse) throws IOException, ReflectiveOperationException {
     ReplicaMetadataResponse.CURRENT_VERSION = responseVersionToUse;
     MockClusterMap clusterMap = new MockClusterMap();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
@@ -408,8 +449,8 @@ public class RequestResponseTest {
     replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(1, "id", replicaMetadataRequestInfoList, 1000);
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
-    ReplicaMetadataRequest replicaMetadataRequestFromBytes =
-        ReplicaMetadataRequest.readFrom(requestStream, new MockClusterMap(), new MockFindTokenFactory());
+    ReplicaMetadataRequest replicaMetadataRequestFromBytes = ReplicaMetadataRequest.readFrom(requestStream, new MockClusterMap(),
+          new MockFindTokenFactoryFactory(null, null));
     Assert.assertEquals(replicaMetadataRequestFromBytes.getMaxTotalSizeOfEntriesInBytes(), 1000);
     Assert.assertEquals(replicaMetadataRequestFromBytes.getReplicaMetadataRequestInfoList().size(), 1);
 
@@ -456,7 +497,7 @@ public class RequestResponseTest {
         new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, replicaMetadataResponseInfoList);
     requestStream = serAndPrepForRead(response, -1, false);
     ReplicaMetadataResponse deserializedReplicaMetadataResponse =
-        ReplicaMetadataResponse.readFrom(requestStream, new MockFindTokenFactory(), clusterMap);
+        ReplicaMetadataResponse.readFrom(requestStream, new MockFindTokenFactoryFactory(null, null), clusterMap);
     Assert.assertEquals(deserializedReplicaMetadataResponse.getCorrelationId(), 1234);
     Assert.assertEquals(deserializedReplicaMetadataResponse.getError(), ServerErrorCode.No_Error);
     Assert.assertEquals("ReplicaMetadataResponse list size mismatch ", numResponseInfos,

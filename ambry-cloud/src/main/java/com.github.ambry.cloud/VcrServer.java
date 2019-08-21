@@ -35,7 +35,9 @@ import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
+import com.github.ambry.server.RequestHandlerPool;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindTokenFactoryFactory;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -70,6 +72,8 @@ public class VcrServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private CloudDestinationFactory cloudDestinationFactory;
+  private CloudRecoveryRequests requests = null;
+  private RequestHandlerPool requestHandlerPool = null;
 
   /**
    * VcrServer constructor.
@@ -130,6 +134,7 @@ public class VcrServer {
               clusterMapConfig, clusterMap)).getVirtualReplicatorCluster();
 
       // initialize cloud destination
+      //abcd
       if (cloudDestinationFactory == null) {
         cloudDestinationFactory = Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry);
       }
@@ -155,9 +160,15 @@ public class VcrServer {
         ports.add(new Port(cloudConfig.vcrSslPort, PortType.SSL));
       }
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
-      networkServer.start();
 
-      // TODO: for recovery, need AmbryRequests and RequestHandlerPool
+      FindTokenFactoryFactory findTokenFactoryFactory =
+          Utils.getObj("com.github.ambry.replication.FindTokenFactoryFactory", storeKeyFactory, replicationConfig);
+      requests = new CloudRecoveryRequests(cloudBackupManager, networkServer.getRequestResponseChannel(), currentNode,
+          registry, findTokenFactoryFactory, null, storeKeyFactory, storeKeyConverterFactory, clusterMap,
+          true);
+      requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
+          networkServer.getRequestResponseChannel(), requests);
+      networkServer.start();
 
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       logger.info("VCR startup time in Ms " + processingTime);

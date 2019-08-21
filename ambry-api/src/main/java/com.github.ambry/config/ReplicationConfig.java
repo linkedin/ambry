@@ -22,7 +22,14 @@ public class ReplicationConfig {
    */
   @Config("replication.token.factory")
   @Default("com.github.ambry.store.StoreFindTokenFactory")
-  public final String replicationTokenFactory;
+  public final String replicationStoreTokenFactory;
+
+  /**
+   * The factory class the replicatio uses to create cloud token
+   */
+  @Config("replcation.cloudtoken.factory")
+  @Default("com.github.ambry.cloud.CloudFindTokenFactory")
+  public final String replicationCloudTokenFactory;
 
   /**
    * The number of replica threads on each server that runs the replication protocol for intra dc replication
@@ -126,8 +133,10 @@ public class ReplicationConfig {
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
-    replicationTokenFactory =
+    replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
+    replicationCloudTokenFactory = verifiableProperties.getString("replication.cloudtoken.factory",
+        "com.github.ambry.cloud.CloudFindTokenFactory");
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =

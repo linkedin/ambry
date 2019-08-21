@@ -13,8 +13,10 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
@@ -137,30 +139,30 @@ public class StoreFindTokenTest {
 
     if (!isLogSegmented) {
       // UnInitialized
-      doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
+      doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1, StoreFindToken.VERSION_3);
 
       // Journal based token
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_0,
-          StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
+          StoreFindToken.VERSION_1, StoreFindToken.VERSION_3);
       // inclusiveness is present only in VERSION_2
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_2);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_3);
 
       // Index based
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_0,
-          StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
+          StoreFindToken.VERSION_1, StoreFindToken.VERSION_3);
     } else {
       // UnInitialized
-      doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
+      doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_1, StoreFindToken.VERSION_3);
 
       // Journal based token
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_1,
-          StoreFindToken.VERSION_2);
+          StoreFindToken.VERSION_3);
       // inclusiveness is present only in VERSION_2
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_2);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_3);
 
       // Index based
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_1,
-          StoreFindToken.VERSION_2);
+          StoreFindToken.VERSION_3);
     }
   }
 
@@ -216,7 +218,7 @@ public class StoreFindTokenTest {
   private void doSerDeTest(StoreFindToken token, Short... versions) throws IOException {
     for (Short version : versions) {
       DataInputStream stream = getSerializedStream(token, version);
-      StoreFindToken deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
+      StoreFindToken deSerToken = StoreFindToken.fromBytes(new PeekableInputStream(stream), STORE_KEY_FACTORY);
       assertEquals("Stream should have ended ", 0, stream.available());
       assertEquals("Version mismatch for token ", version.shortValue(), deSerToken.getVersion());
       compareTokens(token, deSerToken);
@@ -227,7 +229,7 @@ public class StoreFindTokenTest {
       // use StoreFindToken's actual serialize method to verify that token is serialized in the expected
       // version
       stream = new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(deSerToken.toBytes())));
-      deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
+      deSerToken = StoreFindToken.fromBytes(new PeekableInputStream(stream), STORE_KEY_FACTORY);
       assertEquals("Stream should have ended ", 0, stream.available());
       assertEquals("Version mismatch for token ", version.shortValue(), deSerToken.getVersion());
       compareTokens(token, deSerToken);
@@ -262,10 +264,10 @@ public class StoreFindTokenTest {
         Utils.serializeNullableString(bufWrap, sessionId == null ? null : sessionId.toString());
         long logOffset = -1;
         long indexStartOffset = -1;
-        StoreFindToken.Type type = token.getType();
-        if (type.equals(StoreFindToken.Type.JournalBased)) {
+        FindTokenType type = token.getType();
+        if (type.equals(FindTokenType.JournalBased)) {
           logOffset = token.getOffset().getOffset();
-        } else if (type.equals(StoreFindToken.Type.IndexBased)) {
+        } else if (type.equals(FindTokenType.IndexBased)) {
           indexStartOffset = token.getOffset().getOffset();
         }
         // add offset
@@ -299,6 +301,7 @@ public class StoreFindTokenTest {
           bufWrap.put(key.toBytes());
         }
         break;
+      case StoreFindToken.VERSION_2:
       case StoreFindToken.CURRENT_VERSION:
         bytes = token.toBytes();
         break;

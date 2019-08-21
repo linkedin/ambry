@@ -266,7 +266,8 @@ project(':ambry-tools') {
                 project(':ambry-server'),
                 project(':ambry-rest'),
                 project(':ambry-frontend'),
-                project(':ambry-cloud')
+                project(':ambry-cloud'),
+                project(':ambry-server')
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-account').sourceSets.test.output
@@ -398,7 +399,7 @@ task allJar(type: Jar, dependsOn: subprojects.assemble) {
 
 task allJarVcr(type: Jar, dependsOn: subprojects.assemble) {
     manifest {
-        attributes 'Implementation-Title': 'Ambry',
+        attributes 'Implementation-Title': 'Vcr',
                    'Main-Class': 'com.github.ambry.cloud.VcrMain'
     }
     zip64 true

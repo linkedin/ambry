@@ -13,8 +13,7 @@
  */
 package com.github.ambry.replication;
 
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.utils.PeekableInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -23,20 +22,29 @@ import java.nio.ByteBuffer;
 public class MockFindToken implements FindToken {
   int index;
   long bytesRead;
+  FindTokenType type;
+  short version;
 
   public MockFindToken(int index, long bytesRead) {
     this.index = index;
     this.bytesRead = bytesRead;
+    this.type = FindTokenType.IndexBased;
+    this.version = 0;
   }
 
-  public MockFindToken(DataInputStream stream) throws IOException {
+  public MockFindToken(PeekableInputStream inputStream) throws IOException {
+    DataInputStream stream = new DataInputStream(inputStream);
+    this.version = stream.readShort();
+    this.type = FindTokenType.values()[stream.readShort()];
     this.index = stream.readInt();
     this.bytesRead = stream.readLong();
   }
 
   @Override
   public byte[] toBytes() {
-    ByteBuffer byteBuffer = ByteBuffer.allocate(12);
+    ByteBuffer byteBuffer = ByteBuffer.allocate(Short.BYTES *2 + Integer.BYTES + Long.BYTES);
+    byteBuffer.putShort(version);
+    byteBuffer.putShort((short) type.ordinal());
     byteBuffer.putInt(index);
     byteBuffer.putLong(bytesRead);
     return byteBuffer.array();
@@ -54,6 +62,16 @@ public class MockFindToken implements FindToken {
     return index == that.index && bytesRead == that.bytesRead;
   }
 
+  @Override
+  public FindTokenType getType() {
+    return type;
+  }
+
+  @Override
+  public short getVersion() {
+    return version;
+  }
+
   public int getIndex() {
     return index;
   }
@@ -65,7 +83,7 @@ public class MockFindToken implements FindToken {
   public static class MockFindTokenFactory implements FindTokenFactory {
 
     @Override
-    public FindToken getFindToken(DataInputStream stream) throws IOException {
+    public FindToken getFindToken(PeekableInputStream stream) throws IOException {
       return new MockFindToken(stream);
     }
 

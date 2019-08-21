@@ -14,7 +14,8 @@
 package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.store.FindTokenFactory;
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -42,11 +43,11 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
    * @param partitionGroupedByMountPath A map between mount path and list of partitions under this mount path.
    * @param replicationMetrics metrics including token persist time.
    * @param clusterMap the {@link ClusterMap} to deserialize tokens.
-   * @param tokenfactory the {@link FindTokenFactory} to deserialize tokens.
+   * @param findTokenFactoryFactory the {@link FindTokenFactoryFactory} to get factory to deserialize tokens.
    */
   public DiskTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactory tokenfactory) {
-    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenfactory);
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactoryFactory findTokenFactoryFactory) {
+    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, findTokenFactoryFactory);
     this.replicaTokenFileName = replicaTokenFileName;
   }
 
@@ -70,8 +71,8 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
   public List<ReplicaTokenInfo> retrieve(String mountPath) throws ReplicationException {
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
     if (replicaTokenFile.exists()) {
-      try (FileInputStream fileInputStream = new FileInputStream(replicaTokenFile)) {
-        return replicaTokenSerde.deserializeTokens(fileInputStream);
+      try (FileInputStream inputStream = new FileInputStream(replicaTokenFile)) {
+        return replicaTokenSerde.deserializeTokens(inputStream);
       } catch (IOException e) {
         throw new ReplicationException("IO error while reading from replica token file at mount path " + mountPath, e);
       }

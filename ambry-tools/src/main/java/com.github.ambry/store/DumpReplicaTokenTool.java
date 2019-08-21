@@ -18,7 +18,10 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
@@ -84,7 +87,7 @@ public class DumpReplicaTokenTool {
           // read total bytes read from local store
           long totalBytesReadFromLocalStore = stream.readLong();
           // read replica token
-          FindToken token = findTokenFactory.getFindToken(stream);
+          FindToken token = findTokenFactory.getFindToken(new PeekableInputStream(stream));
           logger.info(
               "partitionId " + partitionId + " hostname " + hostname + " replicaPath " + replicaPath + " port " + port
                   + " totalBytesReadFromLocalStore " + totalBytesReadFromLocalStore + " token " + token);

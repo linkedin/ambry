@@ -40,8 +40,8 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindTokenFactoryFactory;
 import com.github.ambry.replication.ReplicationManager;
-import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -109,7 +109,7 @@ public class AmbryServer {
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
-      this.metrics = new ServerMetrics(registry);
+      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -135,7 +135,6 @@ public class AmbryServer {
       }
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
-      FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       storageManager =
           new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId),
               storeKeyFactory, new BlobStoreRecovery(), new BlobStoreHardDelete(),
@@ -161,9 +160,10 @@ public class AmbryServer {
       }
 
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
+      FindTokenFactoryFactory findTokenFactoryFactory = new FindTokenFactoryFactory(storeKeyFactory, replicationConfig);
       requests =
           new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
-              findTokenFactory, notificationSystem, replicationManager, storeKeyFactory,
+              findTokenFactoryFactory, notificationSystem, replicationManager, storeKeyFactory,
               serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);

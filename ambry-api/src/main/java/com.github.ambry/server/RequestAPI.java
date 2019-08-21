@@ -62,4 +62,11 @@ public interface RequestAPI {
    * @throws InterruptedException
    */
   void handleTtlUpdateRequest(Request request) throws IOException, InterruptedException;
+
+  /**
+   * Accept requests and redirect it to appropriate handler.
+   * @param request The request to be handled.
+   * @throws InterruptedException
+   */
+  void handleRequests(Request request) throws InterruptedException;
 }

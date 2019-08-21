@@ -16,9 +16,11 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.replication.FindTokenFactoryFactory;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.utils.PeekableInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -95,14 +97,16 @@ public class ReplicaMetadataResponseInfo {
     return errorCode;
   }
 
-  public static ReplicaMetadataResponseInfo readFrom(DataInputStream stream, FindTokenFactory factory,
-      ClusterMap clusterMap, short replicaMetadataResponseVersion) throws IOException {
+  public static ReplicaMetadataResponseInfo readFrom(DataInputStream stream, FindTokenFactoryFactory factory,
+      ClusterMap clusterMap, short replicaMetadataResponseVersion) throws IOException, ReflectiveOperationException {
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     if (error != ServerErrorCode.No_Error) {
       return new ReplicaMetadataResponseInfo(partitionId, error);
     } else {
-      FindToken token = factory.getFindToken(stream);
+      PeekableInputStream inputStream = new PeekableInputStream(stream);
+      FindTokenFactory findTokenFactory = factory.getFindTokenFactoryFromStream(inputStream);
+      FindToken token = findTokenFactory.getFindToken(inputStream);
       MessageInfoAndMetadataListSerde messageInfoAndMetadataList =
           MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(stream, clusterMap,
               getMessageInfoAndMetadataListSerDeVersion(replicaMetadataResponseVersion));
