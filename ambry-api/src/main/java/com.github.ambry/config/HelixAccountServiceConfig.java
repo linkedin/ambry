@@ -23,10 +23,12 @@ public class HelixAccountServiceConfig {
   public static final String UPDATER_SHUT_DOWN_TIMEOUT_MS_KEY =
       HELIX_ACCOUNT_SERVICE_PREFIX + "updater.shut.down.timeout.ms";
   public static final String BACKUP_DIRECTORY_KEY = HELIX_ACCOUNT_SERVICE_PREFIX + "backup.dir";
+  public static final String MAX_BACKUP_FILE_COUNT = HELIX_ACCOUNT_SERVICE_PREFIX + "max.backup.file.count";
   public static final String ZK_CLIENT_CONNECT_STRING_KEY = HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string";
   public static final String USE_NEW_ZNODE_PATH = HELIX_ACCOUNT_SERVICE_PREFIX + "use.new.znode.path";
   public static final String UPDATE_DISABLED =  HELIX_ACCOUNT_SERVICE_PREFIX + "update.disabled";
   public static final String BACKFILL_ACCOUNTS_TO_NEW_ZNODE = HELIX_ACCOUNT_SERVICE_PREFIX + "backfill.accounts.to.new.znode";
+  public static final String ENABLE_SERVE_FROM_BACKUP  = HELIX_ACCOUNT_SERVICE_PREFIX + "enable.serve.from.backup";
 
 
   /**
@@ -59,6 +61,14 @@ public class HelixAccountServiceConfig {
   public final String backupDir;
 
   /**
+   * The maximum number of local backup files kept in disk. When account service exceeds this count, every time it creates
+   * a new backup file, it will remove the oldest one.
+   */
+  @Config(MAX_BACKUP_FILE_COUNT)
+  @Default("10n")
+  public final int maxBackupFileCount;
+
+  /**
    * If true, then use the new znode path to store list of blob ids that point to account metadata content.
    */
   @Config(USE_NEW_ZNODE_PATH)
@@ -81,6 +91,14 @@ public class HelixAccountServiceConfig {
   @Default("false")
   public final boolean backFillAccountsToNewZNode;
 
+  /**
+   * If true, HelixAccountService would load the account metadata from local backup file when fetching from helix fails.
+   * Set it to false while transitioning, since the old backup files don't have up-to-date account metadata.
+   */
+  @Config(ENABLE_SERVE_FROM_BACKUP)
+  @Default("false")
+  public final boolean enableServeFromBackup;
+
   public HelixAccountServiceConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY);
     updaterPollingIntervalMs =
@@ -88,12 +106,14 @@ public class HelixAccountServiceConfig {
     updaterShutDownTimeoutMs =
         verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_MS_KEY, 60 * 1000, 1, Integer.MAX_VALUE);
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
+    maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 100, 1, Integer.MAX_VALUE);
     useNewZNodePath = verifiableProperties.getBoolean(USE_NEW_ZNODE_PATH, false);
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
     backFillAccountsToNewZNode = verifiableProperties.getBoolean(BACKFILL_ACCOUNTS_TO_NEW_ZNODE, false);
-
     if (backFillAccountsToNewZNode && useNewZNodePath) {
       throw new IllegalStateException("useNewZNodePath and backFillAccountsToNewZNode can't be true at the same time.");
     }
+
+    enableServeFromBackup = verifiableProperties.getBoolean(ENABLE_SERVE_FROM_BACKUP, false);
   }
 }

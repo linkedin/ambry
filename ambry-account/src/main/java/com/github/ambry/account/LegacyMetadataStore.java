@@ -13,9 +13,6 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.utils.Pair;
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -74,21 +71,12 @@ class LegacyMetadataStore extends AccountMetadataStore {
    */
   private class ZKUpdater implements AccountMetadataStore.ZKUpdater {
     private final Collection<Account> accountsToUpdate;
-    private Map<String, String> potentialNewState;
-    private final Pair<String, Path> backupPrefixAndPath;
 
     /**
      * @param accountsToUpdate The {@link Account}s to update.
      */
     ZKUpdater(Collection<Account> accountsToUpdate) {
       this.accountsToUpdate = accountsToUpdate;
-      Pair<String, Path> backupPrefixAndPath = null;
-      try {
-        backupPrefixAndPath = backup.reserveBackupFile();
-      } catch (IOException e) {
-        logger.error("Error reserving backup file", e);
-      }
-      this.backupPrefixAndPath = backupPrefixAndPath;
     }
 
     @Override
@@ -119,7 +107,6 @@ class LegacyMetadataStore extends AccountMetadataStore {
         logger.error(errorMessage, e);
         throw new IllegalStateException(errorMessage, e);
       }
-      backup.maybePersistOldState(backupPrefixAndPath, accountMap);
 
       // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
       // be caught by Helix and helixStore#update will return false.
@@ -140,16 +127,12 @@ class LegacyMetadataStore extends AccountMetadataStore {
           }
         }
         recordToUpdate.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
-        potentialNewState = accountMap;
         return recordToUpdate;
       }
     }
 
     @Override
     public void afterUpdate(boolean isUpdateSucceeded) {
-      if (isUpdateSucceeded) {
-        backup.maybePersistNewState(backupPrefixAndPath, potentialNewState);
-      }
     }
   }
 }

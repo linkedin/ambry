@@ -90,7 +90,9 @@ abstract class AccountMetadataStore {
       logger.info("The ZNRecord to read does not exist on path={}", znRecordPath);
       return null;
     }
-    return fetchAccountMetadataFromZNRecord(znRecord);
+    Map<String, String> newAccountMap = fetchAccountMetadataFromZNRecord(znRecord);
+    backup.persistState(newAccountMap, znRecord);
+    return newAccountMap;
   }
 
   /**

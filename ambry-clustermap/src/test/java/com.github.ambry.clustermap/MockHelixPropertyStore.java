@@ -24,6 +24,7 @@ import org.I0Itec.zkclient.IZkChildListener;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.BaseDataAccessor;
 import org.apache.helix.HelixException;
+import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.zookeeper.data.Stat;
@@ -282,6 +283,15 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
         pathToRecords.get(path) == null ? HelixStoreOperator.StoreOperationType.CREATE
             : HelixStoreOperator.StoreOperationType.WRITE;
     if (!shouldRemoveRecordBeforeNotify) {
+      // increase the version number if this is ZNRecord
+      if (record instanceof ZNRecord) {
+        ZNRecord oldRecord = (ZNRecord)pathToRecords.get(path);
+        if (oldRecord != null) {
+          ZNRecord znRecord = (ZNRecord) record;
+          znRecord.setVersion(oldRecord.getVersion() + 1);
+          znRecord.setModifiedTime(System.currentTimeMillis()/1000);
+        }
+      }
       pathToRecords.put(path, record);
     }
     notifyListeners(path, operationType);

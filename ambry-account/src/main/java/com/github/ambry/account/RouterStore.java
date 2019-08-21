@@ -20,13 +20,10 @@ import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.Router;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import com.google.common.base.Charsets;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -172,8 +169,6 @@ class RouterStore extends AccountMetadataStore {
    */
   private class ZKUpdater implements AccountMetadataStore.ZKUpdater {
     private final Collection<Account> accounts;
-    private final Pair<String, Path> backupPrefixAndPath;
-    private Map<String, String> potentialNewState;
     private String newBlobID = null;
 
     /**
@@ -181,18 +176,6 @@ class RouterStore extends AccountMetadataStore {
      */
     ZKUpdater(Collection<Account> accounts) {
       this.accounts = accounts;
-      if (forBackFill) {
-        // setting backupPrefixAndPath to be null effectily disable creating backup files.
-        this.backupPrefixAndPath = null;
-        return;
-      }
-      Pair<String, Path> backupPrefixAndPath = null;
-      try {
-        backupPrefixAndPath = backup.reserveBackupFile();
-      } catch (IOException e) {
-        logger.error("Error reserving backup file", e);
-      }
-      this.backupPrefixAndPath = backupPrefixAndPath;
     }
 
     @Override
@@ -301,9 +284,6 @@ class RouterStore extends AccountMetadataStore {
         throw new IllegalStateException(errorMessage, e);
       }
 
-      // The new account map to backup locally
-      potentialNewState = accountMap;
-
       // Start step 5:
       accountBlobIDs.add(new BlobIDAndVersion(this.newBlobID, newVersion).toJson());
       recordToUpdate.setListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, accountBlobIDs);
@@ -312,9 +292,7 @@ class RouterStore extends AccountMetadataStore {
 
     @Override
     public void afterUpdate(boolean isUpdateSucceeded) {
-      if (isUpdateSucceeded) {
-        backup.maybePersistNewState(backupPrefixAndPath, potentialNewState);
-      } else if (newBlobID != null) {
+      if (!isUpdateSucceeded && newBlobID != null) {
         // Delete the ambry blob regardless what error fails the update.
         try {
           // Block this execution? or maybe wait for a while then get out?

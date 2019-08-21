@@ -31,6 +31,8 @@ public class AccountServiceMetrics {
   public final Histogram accountUpdateConsumerTimeInMs;
   public final Histogram accountUpdateToAmbryTimeInMs;
   public final Histogram accountFetchFromAmbryTimeInMs;
+  public final Histogram backupWriteTimeInMs;
+  public final Histogram backupReadTimeInMs;
 
   // Counter
   public final Counter unrecognizedMessageErrorCount;
@@ -58,6 +60,9 @@ public class AccountServiceMetrics {
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountUpdateToAmbryTimeInMs"));
     accountFetchFromAmbryTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryTimeInMs"));
+    backupWriteTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "BackupWriteTimeInMs"));
+    backupReadTimeInMs = metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "BackupReadTimeInMs"));
 
     // Counter
     unrecognizedMessageErrorCount =
