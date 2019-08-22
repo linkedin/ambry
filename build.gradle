@@ -15,6 +15,10 @@ buildscript {
     apply from: file('gradle/buildscript.gradle'), to: buildscript
 }
 
+plugins {
+    id 'org.shipkit.java' version '2.2.5'
+}
+
 apply from: file('gradle/license.gradle')
 apply from: file('gradle/environment.gradle')
 apply from: file("gradle/dependency-versions.gradle")
@@ -104,6 +108,13 @@ subprojects {
 
     artifacts {
         archives testJar
+    }
+
+    javadoc {
+        // TODO audit and fix our javadocs so that we don't need this setting
+        // This is mainly for cases where param/throws tags don't have descriptions
+        // Previously, javadocs weren't being compiled, but now shipkit automatically enables this build step
+        failOnError = false
     }
 }
 
@@ -416,6 +427,11 @@ task codeCoverageReport(type: JacocoReport) {
         csv.enabled true
     }
 }
-
 codeCoverageReport.dependsOn subprojects*.allTest
 
+if (hasProperty('buildScan')) {
+    buildScan {
+        termsOfServiceUrl = 'https://gradle.com/terms-of-service'
+        termsOfServiceAgree = 'yes'
+    }
+}
