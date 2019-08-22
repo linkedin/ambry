@@ -20,6 +20,7 @@ import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.microsoft.azure.documentdb.ConnectionMode;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.Document;
@@ -122,6 +123,10 @@ class AzureCloudDestination implements CloudDestination {
     }
     // Set up CosmosDB connection, including any proxy setting
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
+    if (azureCloudConfig.cosmosDirectHttps) {
+      logger.info("Using CosmosDB DirectHttps connection mode");
+      connectionPolicy.setConnectionMode(ConnectionMode.DirectHttps);
+    }
     if (cloudConfig.vcrProxyHost != null) {
       connectionPolicy.setProxy(new HttpHost(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
       connectionPolicy.setHandleServiceUnavailableFromProxy(true);
