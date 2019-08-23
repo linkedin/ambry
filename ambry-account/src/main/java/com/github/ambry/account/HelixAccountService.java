@@ -141,7 +141,7 @@ class HelixAccountService implements AccountService {
     } else {
       accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backup, helixStore);
       initialFetchAndSchedule();
-      if (config.fillAccountsToNewZNode) {
+      if (config.backFillAccountsToNewZNode) {
         backFillStore = new RouterStore(this.accountServiceMetrics, backup, helixStore, router, true);
       }
     }
@@ -348,15 +348,19 @@ class HelixAccountService implements AccountService {
     }
   }
 
+  /**
+   * Maybe backfill the newly updated {@link Account} metadata to new zookeeper node. This function doesn't guarantee
+   * the success of the operation. It gives up whenever there is failure or exception and wait for next update.
+   */
   private void maybeBackFillToNewStore() {
-    if (!config.fillAccountsToNewZNode)  {
+    if (!config.backFillAccountsToNewZNode)  {
       return;
     }
     logger.trace("starting backfilling the new state to new store");
     if (backFillStore.updateAccounts( accountInfoMapRef.get().getAccounts())) {
       logger.trace("Finish backfilling the new state to new store");
     } else {
-      logger.error("Fail to backfil the new state to new store, just skip this one");
+      logger.error("Fail to backfill the new state to new store, just skip this one");
     }
   }
 
@@ -406,7 +410,7 @@ class HelixAccountService implements AccountService {
     if (!open.get()) {
       throw new IllegalStateException("AccountService is closed.");
     }
-    if ((config.useNewZNodePath || config.fillAccountsToNewZNode) && router.get() == null) {
+    if ((config.useNewZNodePath || config.backFillAccountsToNewZNode) && router.get() == null) {
       throw new IllegalStateException("Router not initialized.");
     }
   }

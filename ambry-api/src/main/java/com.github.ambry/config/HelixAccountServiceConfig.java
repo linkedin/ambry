@@ -26,7 +26,7 @@ public class HelixAccountServiceConfig {
   public static final String ZK_CLIENT_CONNECT_STRING_KEY = HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string";
   public static final String USE_NEW_ZNODE_PATH = HELIX_ACCOUNT_SERVICE_PREFIX + "use.new.znode.path";
   public static final String UPDATE_DISABLED =  HELIX_ACCOUNT_SERVICE_PREFIX + "update.disabled";
-  public static final String FILL_ACCOUNTS_TO_NEW_ZNODE = HELIX_ACCOUNT_SERVICE_PREFIX + "fill.accounts.to.new.znode";
+  public static final String BACKFILL_ACCOUNTS_TO_NEW_ZNODE = HELIX_ACCOUNT_SERVICE_PREFIX + "backfill.accounts.to.new.znode";
 
 
   /**
@@ -77,9 +77,9 @@ public class HelixAccountServiceConfig {
    * change message. This option can't be true with useNewZNodePath at the same time. It should only be enabled while
    * using the old znode path. And there should only be one machine enabling this option.
    */
-  @Config(FILL_ACCOUNTS_TO_NEW_ZNODE)
+  @Config(BACKFILL_ACCOUNTS_TO_NEW_ZNODE)
   @Default("false")
-  public final boolean fillAccountsToNewZNode;
+  public final boolean backFillAccountsToNewZNode;
 
   public HelixAccountServiceConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY);
@@ -90,10 +90,10 @@ public class HelixAccountServiceConfig {
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
     useNewZNodePath = verifiableProperties.getBoolean(USE_NEW_ZNODE_PATH, false);
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
-    fillAccountsToNewZNode = verifiableProperties.getBoolean(FILL_ACCOUNTS_TO_NEW_ZNODE, false);
+    backFillAccountsToNewZNode = verifiableProperties.getBoolean(BACKFILL_ACCOUNTS_TO_NEW_ZNODE, false);
 
-    if (fillAccountsToNewZNode && useNewZNodePath) {
-      throw new IllegalStateException("useNewZNodePath and fillAccountsToNewZNode can't be true at the same time.");
+    if (backFillAccountsToNewZNode && useNewZNodePath) {
+      throw new IllegalStateException("useNewZNodePath and backFillAccountsToNewZNode can't be true at the same time.");
     }
   }
 }

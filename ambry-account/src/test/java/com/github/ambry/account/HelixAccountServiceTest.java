@@ -821,7 +821,7 @@ public class HelixAccountServiceTest {
     if (useNewZNodePath) {
       return;
     }
-    helixConfigProps.put(HelixAccountServiceConfig.FILL_ACCOUNTS_TO_NEW_ZNODE, "true");
+    helixConfigProps.put(HelixAccountServiceConfig.BACKFILL_ACCOUNTS_TO_NEW_ZNODE, "true");
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
