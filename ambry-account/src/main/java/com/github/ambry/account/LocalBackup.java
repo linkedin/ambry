@@ -75,9 +75,9 @@ class LocalBackup {
   static final String SEP = ".";
   static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
   static final ZoneOffset zoneOffset = ZoneId.systemDefault().getRules().getOffset(LocalDateTime.now());
-  static final Pattern versionFilenamePattern = Pattern.compile("(\\d+)\\.(\\d{8}T\\d{6})");
-  static final Pattern oldStateFilenamePattern = Pattern.compile("(\\d{8}T\\d{6})\\." + OLD_STATE_SUFFIX);
-  static final Pattern newStateFilenamePattern = Pattern.compile("(\\d{8}T\\d{6})\\." + NEW_STATE_SUFFIX);
+  static final Pattern versionFilenamePattern = Pattern.compile("^(\\d+)\\.(\\d{8}T\\d{6})$");
+  static final Pattern oldStateFilenamePattern = Pattern.compile("^(\\d{8}T\\d{6})\\." + OLD_STATE_SUFFIX + "$");
+  static final Pattern newStateFilenamePattern = Pattern.compile("^(\\d{8}T\\d{6})\\." + NEW_STATE_SUFFIX + "$");
 
   private static final Logger logger = LoggerFactory.getLogger(LocalBackup.class);
   private final AccountServiceMetrics accountServiceMetrics;
