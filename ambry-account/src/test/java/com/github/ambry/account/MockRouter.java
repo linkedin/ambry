@@ -44,12 +44,13 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 public class MockRouter implements Router {
   private final static Logger logger = LoggerFactory.getLogger(MockRouter.class);
   private static final Random random = TestUtils.RANDOM;
 
   private final Lock lock = new ReentrantLock();
-  private Map<String, BlobInfoAndData>  allBlobs = new HashMap<>();
+  private Map<String, BlobInfoAndData> allBlobs = new HashMap<>();
 
   private class BlobInfoAndData {
     private final BlobInfo info;
@@ -105,10 +106,10 @@ public class MockRouter implements Router {
       long size = channel.getSize();
       try {
         InputStream input = new ReadableStreamChannelInputStream(channel);
-        byte[] bytes = Utils.readBytesFromStream(input, (int)size);
+        byte[] bytes = Utils.readBytesFromStream(input, (int) size);
         BlobInfoAndData blob = new BlobInfoAndData(new BlobInfo(blobProperties, userMetadata), bytes);
         String id = null;
-        for(;;) {
+        for (; ; ) {
           id = UtilsTest.getRandomString(10);
           if (allBlobs.putIfAbsent(id, blob) == null) {
             break;
@@ -119,7 +120,7 @@ public class MockRouter implements Router {
           callback.onCompletion(id, null);
         }
         return future;
-      } catch  (Exception e) {
+      } catch (Exception e) {
         logger.error("Failed to put blob", e);
         future.done(null, e);
         if (callback != null) {

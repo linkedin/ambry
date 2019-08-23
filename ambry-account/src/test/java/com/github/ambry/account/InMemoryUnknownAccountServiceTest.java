@@ -32,8 +32,7 @@ import static org.junit.Assert.*;
  */
 public class InMemoryUnknownAccountServiceTest {
   private static final Random random = new Random();
-  private AccountService accountService =
-      new InMemoryUnknownAccountServiceFactory(null, null).getAccountService();
+  private AccountService accountService = new InMemoryUnknownAccountServiceFactory(null, null).getAccountService();
 
   /**
    * Cleans up if the store already exists.
