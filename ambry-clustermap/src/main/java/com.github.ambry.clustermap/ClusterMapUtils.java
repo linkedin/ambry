@@ -41,15 +41,19 @@ import org.slf4j.LoggerFactory;
 public class ClusterMapUtils {
   // datacenterId == UNKNOWN_DATACENTER_ID indicate datacenterId is not available at the time when this blobId is formed.
   public static final byte UNKNOWN_DATACENTER_ID = -1;
-  public static final String ZNODE_NAME = "PartitionOverride";
-  public static final String ZNODE_PATH = "/ClusterConfigs/" + ZNODE_NAME;
-  public static final String PROPERTYSTORE_ZNODE_PATH = "/PROPERTYSTORE/ClusterConfigs/" + ZNODE_NAME;
+  public static final String PARTITION_OVERRIDE_STR = "PartitionOverride";
+  public static final String REPLICA_ADDITION_STR = "ReplicaAddition";
+  public static final String PARTITION_OVERRIDE_ZNODE_PATH = "/AdminConfigs/" + PARTITION_OVERRIDE_STR;
+  public static final String REPLICA_ADDITION_ZNODE_PATH = "/AdminConfigs/" + REPLICA_ADDITION_STR;
+  public static final String PROPERTYSTORE_ZNODE_PATH = "/PROPERTYSTORE/AdminConfigs/";
   static final String DISK_CAPACITY_STR = "capacityInBytes";
   static final String DISK_STATE = "diskState";
   static final String PARTITION_STATE = "state";
+  static final String PARTITION_CLASS_STR = "partitionClass";
   static final String REPLICAS_STR = "Replicas";
   static final String REPLICAS_DELIM_STR = ",";
   static final String REPLICAS_STR_SEPARATOR = ":";
+  static final String REPLICAS_CAPACITY_STR = "replicaCapacityInBytes";
   static final String SSLPORT_STR = "sslPort";
   static final String RACKID_STR = "rackId";
   static final String SEALED_STR = "SEALED";
@@ -432,7 +436,7 @@ public class ClusterMapUtils {
         if (partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(selected)) {
           if (selected.getPartitionState() == PartitionState.READ_WRITE) {
             anyWritablePartition = selected;
-            if(areEnoughReplicasForPartitionUp(selected)) {
+            if (areEnoughReplicasForPartitionUp(selected)) {
               return selected;
             }
           }

@@ -170,7 +170,7 @@ public class HelixClusterManagerTest {
       partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>())
           .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_ONLY_STR);
     }
-    znRecord = new ZNRecord(ClusterMapUtils.ZNODE_NAME);
+    znRecord = new ZNRecord(ClusterMapUtils.PARTITION_OVERRIDE_STR);
     znRecord.setMapFields(partitionOverrideMap);
 
     helixCluster =

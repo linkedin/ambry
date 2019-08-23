@@ -235,9 +235,10 @@ class HelixClusterManager implements ClusterMap {
       }
     };
     logger.info("Subscribing data listener to HelixPropertyStore.");
-    helixPropertyStore.subscribeDataChanges(ClusterMapUtils.ZNODE_PATH, dataListener);
+    helixPropertyStore.subscribeDataChanges(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, dataListener);
     logger.info("Getting ZNRecord from HelixPropertyStore");
-    ZNRecord zNRecord = helixPropertyStore.get(ClusterMapUtils.ZNODE_PATH, null, AccessOption.PERSISTENT);
+    ZNRecord zNRecord =
+        helixPropertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
     if (clusterMapConfig.clusterMapEnablePartitionOverride) {
       if (zNRecord != null) {
         partitionOverrideInfoMap.putAll(zNRecord.getMapFields());

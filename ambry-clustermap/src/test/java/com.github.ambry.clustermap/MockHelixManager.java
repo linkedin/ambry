@@ -90,8 +90,8 @@ class MockHelixManager implements HelixManager {
     this.beBadException = beBadException;
 
     MockitoAnnotations.initMocks(this);
-    Mockito.when(helixPropertyStore.get(eq(ClusterMapUtils.ZNODE_PATH), eq(null), eq(AccessOption.PERSISTENT)))
-        .thenReturn(record);
+    Mockito.when(helixPropertyStore.get(eq(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH), eq(null),
+        eq(AccessOption.PERSISTENT))).thenReturn(record);
   }
 
   @Override
