@@ -425,10 +425,20 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    // test invalid admin type
+    try {
+      HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
+          new String[]{"invalid_admin_type"});
+      fail("should fail because of invalid admin type");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+    // upload replica addition admin config
     HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
         new String[]{ClusterMapUtils.REPLICA_ADDITION_STR});
-
+    // verify replica addition znode in Helix PropertyStore
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,

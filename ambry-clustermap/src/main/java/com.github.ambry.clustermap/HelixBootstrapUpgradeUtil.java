@@ -286,7 +286,7 @@ class HelixBootstrapUpgradeUtil {
         break;
       default:
         throw new IllegalArgumentException(
-            "Unrecognized admin config type: " + adminType + ". Current supported types are "
+            "Unrecognized admin config type: " + adminType + ". Current supported types are: "
                 + ClusterMapUtils.PARTITION_OVERRIDE_STR + ", " + ClusterMapUtils.REPLICA_ADDITION_STR);
     }
     info("Upload cluster configs completed.");
