@@ -688,6 +688,7 @@ class HelixBootstrapUpgradeUtil {
         info("Resource {} has different state model {}. Updating it with {}", resourceName,
             resourceIs.getStateModelDefRef(), stateModelDef);
         resourceIs.setStateModelDefRef(stateModelDef);
+        resourceModified = true;
       }
       resourceIs.setNumPartitions(resourceIs.getPartitionSet().size());
       if (resourceModified) {
