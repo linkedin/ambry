@@ -20,6 +20,7 @@ import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceFactory;
+import com.github.ambry.account.HelixAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.RestServerConfig;
@@ -170,6 +171,12 @@ public class RestServer {
         Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem,
             sslFactory, accountService);
     router = routerFactory.getRouter();
+
+
+    // setup the router for the account service
+    if (accountService instanceof HelixAccountService) {
+      ((HelixAccountService)accountService).setupRouter(router);
+    }
 
     RestResponseHandlerFactory restResponseHandlerFactory =
         Utils.getObj(restServerConfig.restServerResponseHandlerFactory,

@@ -295,6 +295,7 @@ project(':ambry-protocol') {
 project(':ambry-rest') {
     dependencies {
         compile project(':ambry-api'),
+                project(':ambry-account'),
                 project(':ambry-utils'),
                 project(':ambry-commons')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"

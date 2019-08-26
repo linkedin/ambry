@@ -85,7 +85,7 @@ import static com.github.ambry.utils.Utils.*;
  *   cannot exceed 1MB before the transition.
  * </p>
  */
-class HelixAccountService implements AccountService {
+public class HelixAccountService implements AccountService {
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
 
