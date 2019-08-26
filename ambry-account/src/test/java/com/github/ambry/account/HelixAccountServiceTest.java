@@ -41,10 +41,10 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONArray;
@@ -817,7 +817,7 @@ public class HelixAccountServiceTest {
    * forward the new {@link Account} metadata to new znode path.
    */
   @Test
-  public void testFillAccountsToNewZNode() {
+  public void testFillAccountsToNewZNode() throws Exception {
     if (useNewZNodePath) {
       return;
     }
@@ -837,22 +837,17 @@ public class HelixAccountServiceTest {
     boolean hasUpdateAccountSucceed = accountService.updateAccounts(accountsToUpdate);
     assertTrue("Wrong update return status", hasUpdateAccountSucceed);
     assertAccountsInAccountService(accountsToUpdate, 1, accountService);
+
+    // verify the RouterStore can read the account map out.
     HelixPropertyStore<ZNRecord> helixStore =
         mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig);
-    ZNRecord record = helixStore.get(RouterStore.ACCOUNT_METADATA_BLOB_IDS_PATH, null, AccessOption.PERSISTENT);
-    assertNotNull("Backfill should create ZNRecord", record);
-    List<String> blobIDAndVersions = record.getListField(RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
-    assertNotNull("Blob ids are missing from ZNRecord", blobIDAndVersions);
-    assertEquals("Number of blobs mismatch", 1, blobIDAndVersions.size());
-    RouterStore.BlobIDAndVersion blobIDAndVersion = null;
-    for (String json : blobIDAndVersions) {
-      RouterStore.BlobIDAndVersion current = RouterStore.BlobIDAndVersion.fromJson(json);
-      if (current.getVersion() == 1) {
-        blobIDAndVersion = current;
-        break;
-      }
-    }
-    assertNotNull("Version 1 expected", blobIDAndVersion);
+    HelixAccountService helixAccountService = (HelixAccountService) accountService;
+    RouterStore routerStore =
+        new RouterStore(helixAccountService.getAccountServiceMetrics(), helixAccountService.getBackup(), helixStore,
+            new AtomicReference<>(mockRouter), false);
+    Map<String, String> accountMap = routerStore.fetchAccountMetadata();
+    assertNotNull("Accounts should be backfilled to new znode", accountMap);
+    assertAccountMapEquals(accountService.getAllAccounts(), accountMap);
   }
 
   /**
@@ -950,6 +945,22 @@ public class HelixAccountServiceTest {
         Account account = Account.fromJson(accountJson);
         assertTrue("unexpected account in array: " + accountJson.toString(), expectedAccountSet.contains(account));
       }
+    }
+  }
+
+  /**
+   * Assert that the account map has the same accounts with the expected account set.
+   * @param expectedAccounts the expected {@link Account}s.
+   * @param accountMap the account map.
+   * @throws Exception
+   */
+  private void assertAccountMapEquals(Collection<Account> expectedAccounts, Map<String, String> accountMap)
+      throws Exception {
+    Set<Account> expectedAccountSet = new HashSet<>(expectedAccounts);
+    for (String accountJsonString : accountMap.values()) {
+      JSONObject accountJson = new JSONObject(accountJsonString);
+      Account account = Account.fromJson(accountJson);
+      assertTrue("unexpected account in map: " + accountJson.toString(), expectedAccountSet.contains(account));
     }
   }
 

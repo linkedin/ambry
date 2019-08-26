@@ -414,6 +414,22 @@ class HelixAccountService implements AccountService {
       throw new IllegalStateException("Router not initialized.");
     }
   }
+
+  /**
+   * Return {@link AccountServiceMetrics}.
+   * @return {@link AccountServiceMetrics}
+   */
+  AccountServiceMetrics getAccountServiceMetrics() {
+    return accountServiceMetrics;
+  }
+
+  /**
+   * Return {@link LocalBackup}.
+   * @return {@link LocalBackup}
+   */
+  LocalBackup getBackup() {
+    return backup;
+  }
 }
 
 /**
