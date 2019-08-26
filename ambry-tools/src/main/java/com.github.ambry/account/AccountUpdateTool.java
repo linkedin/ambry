@@ -296,12 +296,11 @@ public class AccountUpdateTool {
       int zkConnectionTimeoutMs, int zkSessionTimeoutMs) {
     Properties helixConfigProps = new Properties();
     helixConfigProps.setProperty(
-        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
-        String.valueOf(zkConnectionTimeoutMs));
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
+        HelixPropertyStoreConfig.HELIX_ZK_CLIENT_CONNECTION_TIMEOUT_MS, String.valueOf(zkConnectionTimeoutMs));
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_ZK_CLIENT_SESSION_TIMEOUT_MS,
         String.valueOf(zkSessionTimeoutMs));
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_ROOT_PATH, storePath);
     helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, zkServer);
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", storePath);
     helixConfigProps.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, backupDir);
     VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     return new HelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry()).getAccountService();
