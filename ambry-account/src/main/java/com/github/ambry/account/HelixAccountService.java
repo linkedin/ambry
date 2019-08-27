@@ -157,7 +157,7 @@ public class HelixAccountService implements AccountService {
   public void setupRouter(final Router router) throws IllegalStateException {
     if (!this.router.compareAndSet(null, router)) {
       throw new IllegalStateException("Router already initialized");
-    } else if (config.useNewZNodePath){
+    } else if (config.useNewZNodePath) {
       initialFetchAndSchedule();
     }
   }
@@ -353,12 +353,12 @@ public class HelixAccountService implements AccountService {
    * the success of the operation. It gives up whenever there is failure or exception and wait for next update.
    */
   private void maybeBackFillToNewStore() {
-    if (!config.backFillAccountsToNewZNode)  {
+    if (!config.backFillAccountsToNewZNode) {
       return;
     }
-    logger.trace("starting backfilling the new state to new store");
-    if (backFillStore.updateAccounts( accountInfoMapRef.get().getAccounts())) {
-      logger.trace("Finish backfilling the new state to new store");
+    logger.info("Starting backfilling the new state to new store");
+    if (backFillStore.updateAccounts(accountInfoMapRef.get().getAccounts())) {
+      logger.info("Finish backfilling the new state to new store");
     } else {
       logger.error("Fail to backfill the new state to new store, just skip this one");
     }

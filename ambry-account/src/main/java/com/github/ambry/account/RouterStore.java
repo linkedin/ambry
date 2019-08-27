@@ -285,7 +285,8 @@ class RouterStore extends AccountMetadataStore {
         try {
           accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
         } catch (Exception e) {
-          errorMessage = "Updating accounts failed because unexpected exception occurred when updating accountId=" + account.getId() + " accountName=" + account.getName();
+          errorMessage = "Updating accounts failed because unexpected exception occurred when updating accountId="
+              + account.getId() + " accountName=" + account.getName();
           // Do not depend on Helix to log, so log the error message here.
           logger.error(errorMessage, e);
           throw new IllegalStateException(errorMessage, e);
