@@ -251,6 +251,7 @@ class RouterStore extends AccountMetadataStore {
           throw new IllegalStateException(errorMessage, e);
         }
       }
+      // This ZNRecord doesn't exist when first time we update this ZNRecord, thus accountMap will be null.
       if (accountMap == null) {
         accountMap = new HashMap<>();
         accountBlobIDs = new ArrayList<>();
@@ -277,8 +278,6 @@ class RouterStore extends AccountMetadataStore {
           logger.error(errorMessage);
           throw new IllegalArgumentException(errorMessage);
         }
-      } else {
-        accountMap.clear();
       }
 
       for (Account account : this.accounts) {

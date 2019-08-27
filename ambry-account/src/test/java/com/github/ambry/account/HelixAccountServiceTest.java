@@ -63,6 +63,7 @@ import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.HelixAccountService.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assume.assumeTrue;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -818,9 +819,7 @@ public class HelixAccountServiceTest {
    */
   @Test
   public void testFillAccountsToNewZNode() throws Exception {
-    if (useNewZNodePath) {
-      return;
-    }
+    assumeTrue(!useNewZNodePath);
     helixConfigProps.put(HelixAccountServiceConfig.BACKFILL_ACCOUNTS_TO_NEW_ZNODE, "true");
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
@@ -957,6 +956,7 @@ public class HelixAccountServiceTest {
   private void assertAccountMapEquals(Collection<Account> expectedAccounts, Map<String, String> accountMap)
       throws Exception {
     Set<Account> expectedAccountSet = new HashSet<>(expectedAccounts);
+    assertEquals("Number of accounts mismatch", expectedAccountSet.size(), accountMap.size());
     for (String accountJsonString : accountMap.values()) {
       JSONObject accountJson = new JSONObject(accountJsonString);
       Account account = Account.fromJson(accountJson);

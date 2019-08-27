@@ -109,7 +109,7 @@ public class MockRouter implements Router {
         byte[] bytes = Utils.readBytesFromStream(input, (int) size);
         BlobInfoAndData blob = new BlobInfoAndData(new BlobInfo(blobProperties, userMetadata), bytes);
         String id = null;
-        for (; ; ) {
+        while (true) {
           id = UtilsTest.getRandomString(10);
           if (allBlobs.putIfAbsent(id, blob) == null) {
             break;

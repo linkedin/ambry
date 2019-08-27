@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.MockHelixPropertyStore;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -93,8 +94,7 @@ public class RouterStoreTest {
       operator.delete("/");
     }
     if (Files.exists(accountBackupDir)) {
-      Files.walk(accountBackupDir).map(Path::toFile).forEach(File::delete);
-      Files.deleteIfExists(accountBackupDir);
+      Utils.deleteFileOrDirectory(accountBackupDir.toFile());
     }
   }
 
