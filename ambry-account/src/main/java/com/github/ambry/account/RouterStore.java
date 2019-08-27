@@ -37,8 +37,10 @@ import java.util.Objects;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
+import org.apache.zookeeper.data.Stat;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -140,6 +142,69 @@ class RouterStore extends AccountMetadataStore {
       accountServiceMetrics.accountFetchFromAmbryServerErrorCount.inc();
     }
     return null;
+  }
+
+  /**
+   * Get the list of {@link BlobIDAndVersion} from {@link ZNRecord}. This function returns null when there
+   * is any error.
+   * @return list of {@link BlobIDAndVersion}.
+   */
+  private List<BlobIDAndVersion> fetchAllBlobIDAndVersions() {
+    if (router.get() == null) {
+      logger.error("Router is not yet initialized");
+      return null;
+    }
+    long startTimeMs = System.currentTimeMillis();
+    logger.trace("Start reading ZNRecord from path={}", znRecordPath);
+    Stat stat = new Stat();
+    ZNRecord znRecord = helixStore.get(znRecordPath, stat, AccessOption.PERSISTENT);
+    logger.trace("Fetched ZNRecord from path={}, took time={} ms", znRecordPath,
+        System.currentTimeMillis() - startTimeMs);
+    if (znRecord == null) {
+      logger.info("The ZNRecord to read does not exist on path={}", znRecordPath);
+      return null;
+    }
+
+    List<String> blobIDAndVersionsJson = znRecord.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
+    if (blobIDAndVersionsJson == null || blobIDAndVersionsJson.size() == 0) {
+      logger.info("ZNRecord={} to read on path={} does not have a simple list with key={}", znRecord,
+          ACCOUNT_METADATA_BLOB_IDS_PATH, ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
+      return null;
+    } else {
+      return blobIDAndVersionsJson.stream().map(BlobIDAndVersion::fromJson).collect(Collectors.toList());
+    }
+  }
+
+  /**
+   * Returns all the versions of {@link Account} metadata as a list. It will return null when the versions are empty.
+   * @return All the versions of {@link Account} metadata.
+   */
+  public List<Integer> getAllVersions() {
+    List<BlobIDAndVersion> blobIDAndVersions = fetchAllBlobIDAndVersions() ;
+    if (blobIDAndVersions == null) {
+      return null;
+    } else {
+      return blobIDAndVersions.stream().map(BlobIDAndVersion::getVersion).collect(Collectors.toList());
+    }
+  }
+
+  /**
+   * Return a map from account id to {@link Account} metadata at given version. It returns null when there is any error.
+   * @param version The version of {@link Account} metadata to return.
+   * @return A map from account id to {@link Account} metadata in json format.
+   * @throws IllegalArgumentException When the version is not valid.
+   */
+  public Map<String, String> fetchAccountMetadataAtVersion(int version) throws IllegalArgumentException {
+    List<BlobIDAndVersion> blobIDAndVersions = fetchAllBlobIDAndVersions();
+    if (blobIDAndVersions == null) {
+      return null;
+    }
+    for (BlobIDAndVersion blobIDAndVersion: blobIDAndVersions) {
+      if (blobIDAndVersion.getVersion() == version) {
+        return readAccountMetadataFromBlobID(blobIDAndVersion.getBlobID());
+      }
+    }
+    throw new IllegalArgumentException("Version " + version  + " doesn't exist");
   }
 
   @Override

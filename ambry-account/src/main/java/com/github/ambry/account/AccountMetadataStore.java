@@ -33,7 +33,7 @@ abstract class AccountMetadataStore {
   protected final AccountServiceMetrics accountServiceMetrics;
   protected final BackupFileManager backupFileManager;
   protected final String znRecordPath;
-  private final HelixPropertyStore<ZNRecord> helixStore;
+  protected final HelixPropertyStore<ZNRecord> helixStore;
 
   /** Create a new {@link AccountMetadataStore} instance for the subclasses.
    * @param accountServiceMetrics The {@link AccountServiceMetrics}

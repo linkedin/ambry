@@ -157,6 +157,14 @@ public class HelixAccountService implements AccountService {
   }
 
   /**
+   * Return the {@link Notifier}.
+   * @return The {@link Notifier}
+   */
+  Notifier<String> getNotifier() {
+    return notifier;
+  }
+
+  /**
    * A synchronized function to fetch account metadata from {@link AccountMetadataStore} and update the in memory cache.
    * @param isCalledFromListener True is this function is invoked in the {@link TopicListener}.
    */
