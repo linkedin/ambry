@@ -28,11 +28,7 @@ public class ServerMetrics {
   public static final long mediumBlob = 1 * 1024 * 1024; // up to and including 1MB
   // largeBlob is everything larger than mediumBlob
 
-  public final Histogram putBlobRequestQueueTimeInMs;
-  public final Histogram putBlobProcessingTimeInMs;
-  public final Histogram putBlobResponseQueueTimeInMs;
-  public final Histogram putBlobSendTimeInMs;
-  public final Histogram putBlobTotalTimeInMs;
+  final RequestMetrics putBlobMetrics;
 
   public final Histogram putSmallBlobProcessingTimeInMs;
   public final Histogram putSmallBlobSendTimeInMs;
@@ -46,11 +42,7 @@ public class ServerMetrics {
   public final Histogram putLargeBlobSendTimeInMs;
   public final Histogram putLargeBlobTotalTimeInMs;
 
-  public final Histogram getBlobRequestQueueTimeInMs;
-  public final Histogram getBlobProcessingTimeInMs;
-  public final Histogram getBlobResponseQueueTimeInMs;
-  public final Histogram getBlobSendTimeInMs;
-  public final Histogram getBlobTotalTimeInMs;
+  final RequestMetrics getBlobMetrics;
 
   public final Histogram getSmallBlobProcessingTimeInMs;
   public final Histogram getSmallBlobSendTimeInMs;
@@ -64,55 +56,24 @@ public class ServerMetrics {
   public final Histogram getLargeBlobSendTimeInMs;
   public final Histogram getLargeBlobTotalTimeInMs;
 
-  public final Histogram getBlobPropertiesRequestQueueTimeInMs;
-  public final Histogram getBlobPropertiesProcessingTimeInMs;
-  public final Histogram getBlobPropertiesResponseQueueTimeInMs;
-  public final Histogram getBlobPropertiesSendTimeInMs;
-  public final Histogram getBlobPropertiesTotalTimeInMs;
+  final RequestMetrics getBlobPropertiesMetrics;
 
-  public final Histogram getBlobUserMetadataRequestQueueTimeInMs;
-  public final Histogram getBlobUserMetadataProcessingTimeInMs;
-  public final Histogram getBlobUserMetadataResponseQueueTimeInMs;
-  public final Histogram getBlobUserMetadataSendTimeInMs;
-  public final Histogram getBlobUserMetadataTotalTimeInMs;
+  final RequestMetrics getBlobUserMetadataMetrics;
 
-  public final Histogram getBlobAllRequestQueueTimeInMs;
-  public final Histogram getBlobAllProcessingTimeInMs;
-  public final Histogram getBlobAllResponseQueueTimeInMs;
-  public final Histogram getBlobAllSendTimeInMs;
-  public final Histogram getBlobAllTotalTimeInMs;
+  final RequestMetrics getBlobAllMetrics;
 
-  public final Histogram getBlobAllByReplicaRequestQueueTimeInMs;
-  public final Histogram getBlobAllByReplicaProcessingTimeInMs;
-  public final Histogram getBlobAllByReplicaResponseQueueTimeInMs;
-  public final Histogram getBlobAllByReplicaSendTimeInMs;
-  public final Histogram getBlobAllByReplicaTotalTimeInMs;
+  final RequestMetrics getBlobAllByReplicaMetrics;
 
-  public final Histogram getBlobInfoRequestQueueTimeInMs;
-  public final Histogram getBlobInfoProcessingTimeInMs;
-  public final Histogram getBlobInfoResponseQueueTimeInMs;
-  public final Histogram getBlobInfoSendTimeInMs;
-  public final Histogram getBlobInfoTotalTimeInMs;
+  final RequestMetrics getBlobInfoMetrics;
 
-  public final Histogram deleteBlobRequestQueueTimeInMs;
-  public final Histogram deleteBlobProcessingTimeInMs;
-  public final Histogram deleteBlobResponseQueueTimeInMs;
-  public final Histogram deleteBlobSendTimeInMs;
-  public final Histogram deleteBlobTotalTimeInMs;
+  final RequestMetrics deleteBlobMetrics;
 
-  public final Histogram updateBlobTtlRequestQueueTimeInMs;
-  public final Histogram updateBlobTtlProcessingTimeInMs;
-  public final Histogram updateBlobTtlResponseQueueTimeInMs;
-  public final Histogram updateBlobTtlSendTimeInMs;
-  public final Histogram updateBlobTtlTotalTimeInMs;
+  final RequestMetrics updateBlobTtlMetrics;
 
-  public final Histogram replicaMetadataRequestQueueTimeInMs;
-  public final Histogram replicaMetadataRequestProcessingTimeInMs;
-  public final Histogram replicaMetadataResponseQueueTimeInMs;
-  public final Histogram replicaMetadataSendTimeInMs;
-  public final Histogram replicaMetadataTotalTimeInMs;
+  final RequestMetrics replicaMetadataRequestMetrics;
   public final Histogram replicaMetadataTotalSizeOfMessages;
 
+  final RequestMetrics triggerCompactionRequ;
   public final Histogram triggerCompactionRequestQueueTimeInMs;
   public final Histogram triggerCompactionRequestProcessingTimeInMs;
   public final Histogram triggerCompactionResponseQueueTimeInMs;
@@ -504,6 +465,35 @@ public class ServerMetrics {
       putMediumBlobProcessingTimeInMs.update(processingTime);
     } else {
       putLargeBlobProcessingTimeInMs.update(processingTime);
+    }
+  }
+
+  /**
+   * Metrics emitted for each type of request.
+   */
+  static class RequestMetrics {
+    final Histogram requestQueueTimeInMs;
+    final Histogram processingTimeInMs;
+    final Histogram responseQueueTimeInMs;
+    final Histogram sendTimeInMs;
+    final Histogram totalTimeInMs;
+
+    /**
+     * @param prefix A prefix that describes the type of request these metrics are for.
+     * @param registry The {@link MetricRegistry} to use.
+     */
+    RequestMetrics(String prefix, MetricRegistry registry) {
+
+      requestQueueTimeInMs =
+          registry.histogram(MetricRegistry.name(AmbryRequests.class, prefix + "RequestQueueTime"));
+      processingTimeInMs =
+          registry.histogram(MetricRegistry.name(AmbryRequests.class, prefix + "ProcessingTime"));
+      responseQueueTimeInMs =
+          registry.histogram(MetricRegistry.name(AmbryRequests.class, prefix + "ResponseQueueTime"));
+      sendTimeInMs =
+          registry.histogram(MetricRegistry.name(AmbryRequests.class, prefix + "SendTime"));
+      totalTimeInMs =
+          registry.histogram(MetricRegistry.name(AmbryRequests.class, prefix + "TotalTime"));
     }
   }
 }
