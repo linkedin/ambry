@@ -15,15 +15,11 @@ addons:
     packages:
       - oracle-java8-installer
       - oracle-java8-unlimited-jce-policy
-jobs:
-  include:
-    - stage: test
-      script: "./gradlew -s --scan build codeCoverageReport"
-    - stage: deploy
-      script: "./gradlew -s build && ./gradlew ciPerformRelease"
-stages:
-  - name: test
-  - name: deploy
-    if: branch = master AND type = push
+#don't build tags
+branches:
+  except:
+    - /^v\d/
+script:
+  - ./gradlew build codeCoverageReport && ./gradlew ciPerformRelease
 after_success:
   - bash <(curl -s https://codecov.io/bash)
