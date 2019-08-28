@@ -232,12 +232,8 @@ class RouterStore extends AccountMetadataStore {
           newVersion = blobIDAndVersion.version + 1;
 
           // Start Step 2:
-          if (!forBackFill) {
-            // if this is not for backfill, then just read account metadata from blob
-            accountMap = readAccountMetadataFromBlobID(blobIDAndVersion.blobID);
-          } else {
-            accountMap = new HashMap<>();
-          }
+          // if this is not for backfill, then just read account metadata from blob
+          accountMap = (!forBackFill) ? readAccountMetadataFromBlobID(blobIDAndVersion.blobID) : new HashMap<>();
           // make this list mutable
           accountBlobIDs = new ArrayList<>(accountBlobIDs);
         } catch (JSONException e) {
