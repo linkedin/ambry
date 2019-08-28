@@ -276,7 +276,7 @@ class RouterStore extends AccountMetadataStore {
           // Throw exception, so that helixStore can capture and terminate the update operation
           errorMessage = "Updating accounts failed because one account to update conflicts with existing accounts";
           logger.error(errorMessage);
-          throw new IllegalArgumentException(errorMessage);
+          throw new IllegalStateException(errorMessage);
         }
       }
 
@@ -342,11 +342,20 @@ class RouterStore extends AccountMetadataStore {
     private static final String BLOBID_KEY = "blob_id";
     private static final String VERSION_KEY = "version";
 
+    /**
+     * Constructor to create a {@link BlobIDAndVersion}.
+     * @param blobID The blob id.
+     * @param version The version associated with this blob id.
+     */
     BlobIDAndVersion(String blobID, int version) {
       this.blobID = blobID;
       this.version = version;
     }
 
+    /**
+     * Return a string in json format of this object.
+     * @return A string in json format of this object.
+     */
     public String toJson() {
       JSONObject object = new JSONObject();
       object.put(BLOBID_KEY, blobID);
@@ -354,14 +363,28 @@ class RouterStore extends AccountMetadataStore {
       return object.toString();
     }
 
+    /**
+     * Return version number.
+     * @return Version number.
+     */
     public int getVersion() {
       return version;
     }
 
+    /**
+     * Return blob id.
+     * @return Blob id.
+     */
     public String getBlobID() {
       return blobID;
     }
 
+    /**
+     * Deserialize a string that carries a json object to an {@link BlobIDAndVersion}.
+     * @param json The string that carries a json object.
+     * @return A {@link BlobIDAndVersion} object.
+     * @throws JSONException If parsing the string to {@link JSONObject} fails.
+     */
     static BlobIDAndVersion fromJson(String json) throws JSONException {
       JSONObject object = new JSONObject(json);
       String blobID = object.getString(BLOBID_KEY);

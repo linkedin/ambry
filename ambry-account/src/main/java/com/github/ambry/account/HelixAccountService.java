@@ -349,8 +349,9 @@ public class HelixAccountService implements AccountService {
   }
 
   /**
-   * Maybe backfill the newly updated {@link Account} metadata to new zookeeper node. This function doesn't guarantee
-   * the success of the operation. It gives up whenever there is failure or exception and wait for next update.
+   * Backfill the newly updated {@link Account} metadata to new zookeeper node based on the configuration. This function
+   * doesn't guarantee the success of the operation. It gives up whenever there is failure or exception and wait for
+   * next update.
    */
   private void maybeBackFillToNewStore() {
     if (!config.backFillAccountsToNewZNode) {
