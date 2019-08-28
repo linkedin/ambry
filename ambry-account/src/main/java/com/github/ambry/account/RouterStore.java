@@ -233,7 +233,7 @@ class RouterStore extends AccountMetadataStore {
 
           // Start Step 2:
           if (!forBackFill) {
-            // if this is for backfill, then just don't read account metadata from blob
+            // if this is not for backfill, then just read account metadata from blob
             accountMap = readAccountMetadataFromBlobID(blobIDAndVersion.blobID);
           } else {
             accountMap = new HashMap<>();
