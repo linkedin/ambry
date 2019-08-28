@@ -96,7 +96,7 @@ class AccountTestUtils {
    * @throws Exception
    */
   static void generateRefAccounts(Map<Short, Account> idToRefAccountMap,
-      Map<Short, Map<Short, Container>> idToRefContainerMap, Set accountIdSet, int accountCount,
+      Map<Short, Map<Short, Container>> idToRefContainerMap, Set<Short> accountIdSet, int accountCount,
       int containerCountPerAccount) throws Exception {
     idToRefAccountMap.clear();
     idToRefContainerMap.clear();

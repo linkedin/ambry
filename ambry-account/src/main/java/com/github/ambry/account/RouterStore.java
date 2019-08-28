@@ -66,17 +66,23 @@ class RouterStore extends AccountMetadataStore {
 
   private final AtomicReference<Router> router;
 
+  // If forBackFill is true, then when updating the account metadata, we don't create backup files and we don't merge
+  // accounts from ambry-server with the provided accounts set.
+  private final boolean forBackFill;
+
   /**
    * Constructor to create the RouterStore.
    * @param accountServiceMetrics The metrics set to update metrics.
    * @param backup The {@link LocalBackup} instance to manage backup files.
    * @param helixStore The {@link HelixPropertyStore} to fetch and update data.
    * @param router The {@link Router} instance to retrieve and put blobs.
+   * @param forBackFill True if this {@link RouterStore} is created for backfill accounts to new zookeeper node.
    */
   RouterStore(AccountServiceMetrics accountServiceMetrics, LocalBackup backup, HelixPropertyStore<ZNRecord> helixStore,
-      AtomicReference<Router> router) {
+      AtomicReference<Router> router, boolean forBackFill) {
     super(accountServiceMetrics, backup, helixStore, ACCOUNT_METADATA_BLOB_IDS_PATH);
     this.router = router;
+    this.forBackFill = forBackFill;
   }
 
   @Override
@@ -111,7 +117,7 @@ class RouterStore extends AccountMetadataStore {
    * @param blobID The blobID to fetch {@link Account} metadata from.
    * @return {@link Account} metadata in a map, and null when there is any error.
    */
-  private Map<String, String> readAccountMetadataFromBlobID(String blobID) {
+  Map<String, String> readAccountMetadataFromBlobID(String blobID) {
     long startTimeMs = System.currentTimeMillis();
     Future<GetBlobResult> resultF = router.get().getBlob(blobID, new GetBlobOptionsBuilder().build());
     try {
@@ -175,6 +181,11 @@ class RouterStore extends AccountMetadataStore {
      */
     ZKUpdater(Collection<Account> accounts) {
       this.accounts = accounts;
+      if (forBackFill) {
+        // setting backupPrefixAndPath to be null effectily disable creating backup files.
+        this.backupPrefixAndPath = null;
+        return;
+      }
       Pair<String, Path> backupPrefixAndPath = null;
       try {
         backupPrefixAndPath = backup.reserveBackupFile();
@@ -221,7 +232,8 @@ class RouterStore extends AccountMetadataStore {
           newVersion = blobIDAndVersion.version + 1;
 
           // Start Step 2:
-          accountMap = readAccountMetadataFromBlobID(blobIDAndVersion.blobID);
+          // if this is not for backfill, then just read account metadata from blob
+          accountMap = (!forBackFill) ? readAccountMetadataFromBlobID(blobIDAndVersion.blobID) : new HashMap<>();
           // make this list mutable
           accountBlobIDs = new ArrayList<>(accountBlobIDs);
         } catch (JSONException e) {
@@ -235,31 +247,35 @@ class RouterStore extends AccountMetadataStore {
           throw new IllegalStateException(errorMessage, e);
         }
       }
+      // This ZNRecord doesn't exist when first time we update this ZNRecord, thus accountMap will be null.
       if (accountMap == null) {
         accountMap = new HashMap<>();
         accountBlobIDs = new ArrayList<>();
       }
 
-      // Start step 3:
-      AccountInfoMap localAccountInfoMap;
-      try {
-        localAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
-      } catch (JSONException e) {
-        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-        errorMessage = "Exception occurred when building AccountInfoMap from accountMap " + accountMap;
-        logger.error(errorMessage, e);
-        throw new IllegalStateException(errorMessage, e);
-      }
-      backup.maybePersistOldState(backupPrefixAndPath, accountMap);
+      if (!forBackFill) {
+        // Start step 3:
+        AccountInfoMap localAccountInfoMap;
+        try {
+          localAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
+        } catch (JSONException e) {
+          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+          errorMessage = "Exception occurred when building AccountInfoMap from accountMap " + accountMap;
+          logger.error(errorMessage, e);
+          throw new IllegalStateException(errorMessage, e);
+        }
+        backup.maybePersistOldState(backupPrefixAndPath, accountMap);
 
-      // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
-      // be caught by Helix and helixStore#update will return false.
-      if (localAccountInfoMap.hasConflictingAccount(this.accounts)) {
-        // Throw exception, so that helixStore can capture and terminate the update operation
-        errorMessage = "Updating accounts failed because one account to update conflicts with existing accounts";
-        logger.error(errorMessage);
-        throw new IllegalArgumentException(errorMessage);
+        // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
+        // be caught by Helix and helixStore#update will return false.
+        if (localAccountInfoMap.hasConflictingAccount(this.accounts)) {
+          // Throw exception, so that helixStore can capture and terminate the update operation
+          errorMessage = "Updating accounts failed because one account to update conflicts with existing accounts";
+          logger.error(errorMessage);
+          throw new IllegalStateException(errorMessage);
+        }
       }
+
       for (Account account : this.accounts) {
         try {
           accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
@@ -322,11 +338,20 @@ class RouterStore extends AccountMetadataStore {
     private static final String BLOBID_KEY = "blob_id";
     private static final String VERSION_KEY = "version";
 
+    /**
+     * Constructor to create a {@link BlobIDAndVersion}.
+     * @param blobID The blob id.
+     * @param version The version associated with this blob id.
+     */
     BlobIDAndVersion(String blobID, int version) {
       this.blobID = blobID;
       this.version = version;
     }
 
+    /**
+     * Return a string in json format of this object.
+     * @return A string in json format of this object.
+     */
     public String toJson() {
       JSONObject object = new JSONObject();
       object.put(BLOBID_KEY, blobID);
@@ -334,7 +359,29 @@ class RouterStore extends AccountMetadataStore {
       return object.toString();
     }
 
-    private static BlobIDAndVersion fromJson(String json) throws JSONException {
+    /**
+     * Return version number.
+     * @return Version number.
+     */
+    public int getVersion() {
+      return version;
+    }
+
+    /**
+     * Return blob id.
+     * @return Blob id.
+     */
+    public String getBlobID() {
+      return blobID;
+    }
+
+    /**
+     * Deserialize a string that carries a json object to an {@link BlobIDAndVersion}.
+     * @param json The string that carries a json object.
+     * @return A {@link BlobIDAndVersion} object.
+     * @throws JSONException If parsing the string to {@link JSONObject} fails.
+     */
+    static BlobIDAndVersion fromJson(String json) throws JSONException {
       JSONObject object = new JSONObject(json);
       String blobID = object.getString(BLOBID_KEY);
       int version = object.getInt(VERSION_KEY);

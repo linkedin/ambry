@@ -85,7 +85,7 @@ import static com.github.ambry.utils.Utils.*;
  *   cannot exceed 1MB before the transition.
  * </p>
  */
-class HelixAccountService implements AccountService {
+public class HelixAccountService implements AccountService {
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
 
@@ -103,6 +103,7 @@ class HelixAccountService implements AccountService {
   private static final Logger logger = LoggerFactory.getLogger(HelixAccountService.class);
 
   private final AtomicReference<Router> router = new AtomicReference<>();
+  private final AccountMetadataStore backFillStore;
 
   /**
    * <p>
@@ -133,13 +134,18 @@ class HelixAccountService implements AccountService {
     this.config = config;
     this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
     this.backup = new LocalBackup(this.accountServiceMetrics, config);
+    AccountMetadataStore backFillStore = null;
     if (config.useNewZNodePath) {
-      accountMetadataStore = new RouterStore(this.accountServiceMetrics, backup, helixStore, router);
+      accountMetadataStore = new RouterStore(this.accountServiceMetrics, backup, helixStore, router, false);
       // postpone initializeFetchAndSchedule to setupRouter function.
     } else {
       accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backup, helixStore);
       initialFetchAndSchedule();
+      if (config.backFillAccountsToNewZNode) {
+        backFillStore = new RouterStore(this.accountServiceMetrics, backup, helixStore, router, true);
+      }
     }
+    this.backFillStore = backFillStore;
   }
 
   /**
@@ -151,7 +157,7 @@ class HelixAccountService implements AccountService {
   public void setupRouter(final Router router) throws IllegalStateException {
     if (!this.router.compareAndSet(null, router)) {
       throw new IllegalStateException("Router already initialized");
-    } else {
+    } else if (config.useNewZNodePath) {
       initialFetchAndSchedule();
     }
   }
@@ -255,6 +261,10 @@ class HelixAccountService implements AccountService {
       logger.debug("Empty account collection to update.");
       return false;
     }
+    if (config.updateDisabled) {
+      logger.info("Updates has been disabled");
+      return false;
+    }
     if (hasDuplicateAccountIdOrName(accounts)) {
       logger.debug("Duplicate account id or name exist in the accounts to update");
       accountServiceMetrics.updateAccountErrorCount.inc();
@@ -325,6 +335,7 @@ class HelixAccountService implements AccountService {
           logger.trace("Start processing message={} for topic={}", message, topic);
           fetchAndUpdateCache(true);
           logger.trace("Completed processing message={} for topic={}", message, topic);
+          maybeBackFillToNewStore();
           break;
         default:
           accountServiceMetrics.unrecognizedMessageErrorCount.inc();
@@ -334,6 +345,23 @@ class HelixAccountService implements AccountService {
       logger.error("Exception occurred when processing message={} for topic={}.", message, topic, e);
       accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
       accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
+    }
+  }
+
+  /**
+   * Backfill the newly updated {@link Account} metadata to new zookeeper node based on the configuration. This function
+   * doesn't guarantee the success of the operation. It gives up whenever there is failure or exception and wait for
+   * next update.
+   */
+  private void maybeBackFillToNewStore() {
+    if (!config.backFillAccountsToNewZNode) {
+      return;
+    }
+    logger.info("Starting backfilling the new state to new store");
+    if (backFillStore.updateAccounts(accountInfoMapRef.get().getAccounts())) {
+      logger.info("Finish backfilling the new state to new store");
+    } else {
+      logger.error("Fail to backfill the new state to new store, just skip this one");
     }
   }
 
@@ -383,9 +411,25 @@ class HelixAccountService implements AccountService {
     if (!open.get()) {
       throw new IllegalStateException("AccountService is closed.");
     }
-    if (config.useNewZNodePath && router.get() == null) {
+    if ((config.useNewZNodePath || config.backFillAccountsToNewZNode) && router.get() == null) {
       throw new IllegalStateException("Router not initialized.");
     }
+  }
+
+  /**
+   * Return {@link AccountServiceMetrics}.
+   * @return {@link AccountServiceMetrics}
+   */
+  AccountServiceMetrics getAccountServiceMetrics() {
+    return accountServiceMetrics;
+  }
+
+  /**
+   * Return {@link LocalBackup}.
+   * @return {@link LocalBackup}
+   */
+  LocalBackup getBackup() {
+    return backup;
   }
 }
 

@@ -45,8 +45,9 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
    */
   public MockHelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       Notifier<String> notifier, String updaterThreadPrefix, Router router) {
-    super(new HelixPropertyStoreConfig(verifiableProperties), new HelixAccountServiceConfig(verifiableProperties), new AccountServiceMetrics(metricRegistry), notifier);
-    HelixAccountServiceConfig config =  new HelixAccountServiceConfig(verifiableProperties);
+    super(new HelixPropertyStoreConfig(verifiableProperties), new HelixAccountServiceConfig(verifiableProperties),
+        new AccountServiceMetrics(metricRegistry), notifier);
+    HelixAccountServiceConfig config = new HelixAccountServiceConfig(verifiableProperties);
     this.updaterThreadPrefix = updaterThreadPrefix;
     this.router = router;
     this.useNewZNodePath = config.useNewZNodePath;
@@ -57,8 +58,9 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
     try {
       ScheduledExecutorService scheduler =
           accountServiceConfig.updaterPollingIntervalMs > 0 ? Utils.newScheduler(1, updaterThreadPrefix, false) : null;
-      HelixAccountService accountService = new HelixAccountService(getHelixStore(accountServiceConfig.zkClientConnectString, storeConfig),
-          accountServiceMetrics, notifier, scheduler, accountServiceConfig);
+      HelixAccountService accountService =
+          new HelixAccountService(getHelixStore(accountServiceConfig.zkClientConnectString, storeConfig),
+              accountServiceMetrics, notifier, scheduler, accountServiceConfig);
       if (useNewZNodePath) {
         accountService.setupRouter(router);
       }

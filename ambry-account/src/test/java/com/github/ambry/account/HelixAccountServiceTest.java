@@ -41,6 +41,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -51,6 +52,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -60,9 +62,11 @@ import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.HelixAccountService.*;
 import static com.github.ambry.utils.TestUtils.*;
-import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assume.assumeTrue;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
@@ -119,6 +123,17 @@ public class HelixAccountServiceTest {
    */
   public HelixAccountServiceTest(boolean useNewZNodePath) throws Exception {
     this.useNewZNodePath = useNewZNodePath;
+    accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
+    notifier = new MockNotifier<>();
+    mockRouter = new MockRouter();
+    setup();
+    deleteStoreIfExists();
+    generateReferenceAccountsAndContainers();
+  }
+
+  @Before
+  public void setup() {
+    helixConfigProps.clear();
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
         String.valueOf(ZK_CLIENT_CONNECTION_TIMEOUT_MS));
@@ -126,17 +141,12 @@ public class HelixAccountServiceTest {
         String.valueOf(ZK_CLIENT_SESSION_TIMEOUT_MS));
     helixConfigProps.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, ZK_CONNECT_STRING);
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", STORE_ROOT_PATH);
-    accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
     helixConfigProps.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
     helixConfigProps.setProperty(HelixAccountServiceConfig.USE_NEW_ZNODE_PATH, String.valueOf(useNewZNodePath));
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
-    notifier = new MockNotifier<>();
-    mockRouter = new MockRouter();
     mockHelixAccountServiceFactory =
         new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, null, mockRouter);
-    deleteStoreIfExists();
-    generateReferenceAccountsAndContainers();
   }
 
   /**
@@ -441,8 +451,8 @@ public class HelixAccountServiceTest {
     } catch (NullPointerException e) {
       // expected
     }
-    accountService =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null, null, mockRouter).getAccountService();
+    accountService = new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null, null, mockRouter)
+        .getAccountService();
     accountService.close();
     accountService = mockHelixAccountServiceFactory.getAccountService();
     try {
@@ -736,7 +746,8 @@ public class HelixAccountServiceTest {
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix, mockRouter);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix,
+            mockRouter);
     accountService = mockHelixAccountServiceFactory.getAccountService();
     CountDownLatch latch = new CountDownLatch(1);
     mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig).setReadLatch(latch);
@@ -756,7 +767,8 @@ public class HelixAccountServiceTest {
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix, mockRouter);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix,
+            mockRouter);
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertEquals("Wrong number of thread for account updater.", 0, numThreadsByThisName(updaterThreadPrefix));
   }
@@ -774,9 +786,67 @@ public class HelixAccountServiceTest {
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix, mockRouter);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix,
+            mockRouter);
     accountService = mockHelixAccountServiceFactory.getAccountService();
     updateAccountsAndAssertAccountExistence(Collections.singleton(refAccount), 1, true);
+  }
+
+  /**
+   * Tests disabling account updates. By setting the {@link HelixAccountServiceConfig#UPDATE_DISABLED} to be true, all the
+   * account update request should be rejected.
+   */
+  @Test
+  public void testUpdateDisabled() {
+    helixConfigProps.setProperty(HelixAccountServiceConfig.UPDATE_DISABLED, "true");
+    vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+    String updaterThreadPrefix = UUID.randomUUID().toString();
+    MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix,
+            mockRouter);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+
+    // add a new account
+    Account newAccountWithoutContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
+    List<Account> accountsToUpdate = Collections.singletonList(newAccountWithoutContainer);
+    assertFalse("Update accounts should be disabled", accountService.updateAccounts(accountsToUpdate));
+  }
+
+  /**
+   * Tests enabling backfilling for new znode path. While {@link HelixAccountService} is still using old znode path, it should
+   * forward the new {@link Account} metadata to new znode path.
+   */
+  @Test
+  public void testFillAccountsToNewZNode() throws Exception {
+    assumeTrue(!useNewZNodePath);
+    helixConfigProps.put(HelixAccountServiceConfig.BACKFILL_ACCOUNTS_TO_NEW_ZNODE, "true");
+    vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+    String updaterThreadPrefix = UUID.randomUUID().toString();
+    MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix,
+            mockRouter);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    ((HelixAccountService) accountService).setupRouter(mockRouter);
+
+    // update accounts and then make sure the blob ids are stored in the helixStore
+    Account newAccountWithoutContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
+    List<Account> accountsToUpdate = Collections.singletonList(newAccountWithoutContainer);
+    boolean hasUpdateAccountSucceed = accountService.updateAccounts(accountsToUpdate);
+    assertTrue("Wrong update return status", hasUpdateAccountSucceed);
+    assertAccountsInAccountService(accountsToUpdate, 1, accountService);
+
+    // verify the RouterStore can read the account map out.
+    HelixPropertyStore<ZNRecord> helixStore =
+        mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig);
+    HelixAccountService helixAccountService = (HelixAccountService) accountService;
+    RouterStore routerStore =
+        new RouterStore(helixAccountService.getAccountServiceMetrics(), helixAccountService.getBackup(), helixStore,
+            new AtomicReference<>(mockRouter), false);
+    Map<String, String> accountMap = routerStore.fetchAccountMetadata();
+    assertNotNull("Accounts should be backfilled to new znode", accountMap);
+    assertAccountMapEquals(accountService.getAllAccounts(), accountMap);
   }
 
   /**
@@ -843,7 +913,8 @@ public class HelixAccountServiceTest {
             .max(Comparator.naturalOrder())
             .get();
         checkBackupFile(expectedOldState, oldStateBackup);
-        String newStateFilename = oldStateBackup.getFileName().toString().replace(LocalBackup.OLD_STATE_SUFFIX, LocalBackup.NEW_STATE_SUFFIX);
+        String newStateFilename =
+            oldStateBackup.getFileName().toString().replace(LocalBackup.OLD_STATE_SUFFIX, LocalBackup.NEW_STATE_SUFFIX);
         Path newStateBackup = oldStateBackup.getParent().resolve(newStateFilename);
         checkBackupFile(accountService.getAllAccounts(), newStateBackup);
       } else {
@@ -873,6 +944,23 @@ public class HelixAccountServiceTest {
         Account account = Account.fromJson(accountJson);
         assertTrue("unexpected account in array: " + accountJson.toString(), expectedAccountSet.contains(account));
       }
+    }
+  }
+
+  /**
+   * Assert that the account map has the same accounts with the expected account set.
+   * @param expectedAccounts the expected {@link Account}s.
+   * @param accountMap the account map.
+   * @throws Exception
+   */
+  private void assertAccountMapEquals(Collection<Account> expectedAccounts, Map<String, String> accountMap)
+      throws Exception {
+    Set<Account> expectedAccountSet = new HashSet<>(expectedAccounts);
+    assertEquals("Number of accounts mismatch", expectedAccountSet.size(), accountMap.size());
+    for (String accountJsonString : accountMap.values()) {
+      JSONObject accountJson = new JSONObject(accountJsonString);
+      Account account = Account.fromJson(accountJson);
+      assertTrue("unexpected account in map: " + accountJson.toString(), expectedAccountSet.contains(account));
     }
   }
 
