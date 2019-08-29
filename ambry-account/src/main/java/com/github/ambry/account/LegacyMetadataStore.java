@@ -42,12 +42,12 @@ class LegacyMetadataStore extends AccountMetadataStore {
   /**
    * Constructor to create a {@link LegacyMetadataStore}.
    * @param accountServiceMetrics The metrics set to update metrics.
-   * @param backup The {@link LocalBackup} instance to manage backup files.
+   * @param backupFileManager The {@link BackupFileManager} instance to manage backup files.
    * @param helixStore The {@link HelixPropertyStore} to fetch and update data.
    */
-  LegacyMetadataStore(AccountServiceMetrics accountServiceMetrics, LocalBackup backup,
+  LegacyMetadataStore(AccountServiceMetrics accountServiceMetrics, BackupFileManager backupFileManager,
       HelixPropertyStore<ZNRecord> helixStore) {
-    super(accountServiceMetrics, backup, helixStore, FULL_ACCOUNT_METADATA_PATH);
+    super(accountServiceMetrics, backupFileManager, helixStore, FULL_ACCOUNT_METADATA_PATH);
   }
 
   @Override

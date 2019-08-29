@@ -70,14 +70,14 @@ class RouterStore extends AccountMetadataStore {
   /**
    * Constructor to create the RouterStore.
    * @param accountServiceMetrics The metrics set to update metrics.
-   * @param backup The {@link LocalBackup} instance to manage backup files.
+   * @param backupFileManager The {@link BackupFileManager} instance to manage backup files.
    * @param helixStore The {@link HelixPropertyStore} to fetch and update data.
    * @param router The {@link Router} instance to retrieve and put blobs.
    * @param forBackFill True if this {@link RouterStore} is created for backfill accounts to new zookeeper node.
    */
-  RouterStore(AccountServiceMetrics accountServiceMetrics, LocalBackup backup, HelixPropertyStore<ZNRecord> helixStore,
-      AtomicReference<Router> router, boolean forBackFill) {
-    super(accountServiceMetrics, backup, helixStore, ACCOUNT_METADATA_BLOB_IDS_PATH);
+  RouterStore(AccountServiceMetrics accountServiceMetrics, BackupFileManager backupFileManager,
+      HelixPropertyStore<ZNRecord> helixStore, AtomicReference<Router> router, boolean forBackFill) {
+    super(accountServiceMetrics, backupFileManager, helixStore, ACCOUNT_METADATA_BLOB_IDS_PATH);
     this.router = router;
     this.forBackFill = forBackFill;
   }
@@ -247,7 +247,6 @@ class RouterStore extends AccountMetadataStore {
           logger.error(errorMessage, e);
           throw new IllegalStateException(errorMessage, e);
         }
-        backup.maybePersistOldState(backupPrefixAndPath, accountMap);
 
         // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
         // be caught by Helix and helixStore#update will return false.

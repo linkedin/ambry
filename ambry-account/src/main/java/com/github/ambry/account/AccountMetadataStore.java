@@ -30,20 +30,20 @@ abstract class AccountMetadataStore {
   private static final Logger logger = LoggerFactory.getLogger(AccountMetadataStore.class);
 
   protected final AccountServiceMetrics accountServiceMetrics;
-  protected final LocalBackup backup;
+  protected final BackupFileManager backupFileManager;
   protected final String znRecordPath;
   private final HelixPropertyStore<ZNRecord> helixStore;
 
   /** Create a new {@link AccountMetadataStore} instance for the subclasses.
    * @param accountServiceMetrics The {@link AccountServiceMetrics}
-   * @param backup The {@link LocalBackup} to manage the backup files.
+   * @param backupFileManager The {@link BackupFileManager} to manage the backup files.
    * @param helixStore The {@link HelixPropertyStore} to retrieve and update the {@link ZNRecord}.
    * @param znRecordPath The {@link ZNRecord} path.
    */
-  AccountMetadataStore(AccountServiceMetrics accountServiceMetrics, LocalBackup backup,
+  AccountMetadataStore(AccountServiceMetrics accountServiceMetrics, BackupFileManager backupFileManager,
       HelixPropertyStore<ZNRecord> helixStore, String znRecordPath) {
     this.accountServiceMetrics = accountServiceMetrics;
-    this.backup = backup;
+    this.backupFileManager = backupFileManager;
     this.helixStore = helixStore;
     this.znRecordPath = znRecordPath;
   }
@@ -91,7 +91,7 @@ abstract class AccountMetadataStore {
       return null;
     }
     Map<String, String> newAccountMap = fetchAccountMetadataFromZNRecord(znRecord);
-    backup.persistState(newAccountMap, znRecord);
+    backupFileManager.persistState(newAccountMap, znRecord);
     return newAccountMap;
   }
 

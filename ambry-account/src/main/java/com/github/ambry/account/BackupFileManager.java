@@ -21,6 +21,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -29,7 +30,6 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -37,6 +37,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.helix.ZNRecord;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -51,24 +52,27 @@ import org.slf4j.LoggerFactory;
  * identify each mutation to the {@link Account} metadata and modified time is used to show the order of each backup in
  * a human readable manner.
  *
- * Previously, {@link HelixAccountService} only keeps a backup when there is a update {@link Account} HTTP request
+ * Previously, {@link HelixAccountService} only keeps a backup when there is an update {@link Account} HTTP request
  * received by this instance. It doesn't backup mutations made by other instances. Since HTTP requests to update
- * {@link Account} are rare, latest backup files often holds a out-of-date view of the {@link Account} metadata.
- * In order to keep backup file up to date, in the new implementation, each mutation to the {@link Account} metadata
- * will be persisted with {@link LocalBackup}. Thus, whenever {@link HelixAccountService} fetches the {@link Account}
- * metadata, it tries to persist it.
+ * {@link Account} are rare, latest backup file often holds a out-of-date view of the {@link Account} metadata at lots
+ * of instances. In order to keep backup file up-to-date, in the new implementation, each mutation to the {@link Account}
+ * metadata will be persisted with {@link BackupFileManager}. This is achieved by the fact the {@link HelixAccountService} will
+ * publish each mutation to {@code ZooKeeper} and upon receiving the mutation message, all the {@link HelixAccountService}
+ * instances will fetch the latest {@link Account} metadata. And when it does, it also persists the latest {@link Account}
+ * metadata in the backup.
  *
- * However {@link LocalBackup} only try it's best to persist the {@link Account} metadata and will give up at any
- * exception. The reasons to not guarantee the persistence of backup is
+ * However {@link BackupFileManager} only tries its best to persist the {@link Account} metadata and will give up at any
+ * exception. The reasons to not guarantee the persistence of backup are
  * <ul>
- *   <li>Backup file is not the source of truth of {@link Account} metadata.</li>
- *   <li>There is no guarantee that {@link HelixAccountService} would persist all the revisions of {@link Account} metadata.</li>
+ *   <li>Backup file is not the source of truth for {@link Account} metadata.</li>
+ *   <li>There is no guarantee that {@link HelixAccountService} would publish all mutations to {@link Account} metadata.</li>
  * </ul>
  *
- * {@link LocalBackup} also have to clean up the backup files in the old format. It keeps a predefined number of backup
- * files in the local storage and remove all the oldest backup files.
+ * {@link BackupFileManager} also has to clean up the backup files in the old format. It keeps a predefined maximum number of
+ * backup files in the local storage and removes the oldest backup files when the number of files exceeds the predefined
+ * maximum number.
  */
-class LocalBackup {
+class BackupFileManager {
   static final String OLD_STATE_SUFFIX = "old";
   static final String NEW_STATE_SUFFIX = "new";
   static final String TEMP_FILE_SUFFIX = "tmp";
@@ -79,23 +83,24 @@ class LocalBackup {
   static final Pattern oldStateFilenamePattern = Pattern.compile("^(\\d{8}T\\d{6})\\." + OLD_STATE_SUFFIX + "$");
   static final Pattern newStateFilenamePattern = Pattern.compile("^(\\d{8}T\\d{6})\\." + NEW_STATE_SUFFIX + "$");
 
-  private static final Logger logger = LoggerFactory.getLogger(LocalBackup.class);
+  private static final Logger logger = LoggerFactory.getLogger(BackupFileManager.class);
   private final AccountServiceMetrics accountServiceMetrics;
   private final Path backupDirPath;
   private final HelixAccountServiceConfig config;
-  private final ConcurrentSkipListMap<Integer, BackupFile> backupFiles;
+  private final ConcurrentSkipListMap<Integer, BackupFileInfo> backupFileInfos;
 
   /**
-   * Constructor to create an instance of {@link LocalBackup}.
+   * Constructor to create an instance of {@link BackupFileManager}.
    * @param accountServiceMetrics The {@link AccountServiceMetrics}
    * @param config The {@link HelixAccountServiceConfig}
    * @throws IOException if I/O error occurs
    */
-  public LocalBackup(AccountServiceMetrics accountServiceMetrics, HelixAccountServiceConfig config) throws IOException {
+  public BackupFileManager(AccountServiceMetrics accountServiceMetrics, HelixAccountServiceConfig config)
+      throws IOException {
     this.accountServiceMetrics = accountServiceMetrics;
     this.config = config;
     backupDirPath = config.backupDir.isEmpty() ? null : Files.createDirectories(Paths.get(config.backupDir));
-    backupFiles = new ConcurrentSkipListMap<>();
+    backupFileInfos = new ConcurrentSkipListMap<>();
     cleanupBackupFiles();
   }
 
@@ -114,89 +119,81 @@ class LocalBackup {
     File backupDir = backupDirPath.toFile();
 
     // First get all the file with temp file suffix and remove all of them
-    final FileFilter tempFileFilter = (File pathname) -> pathname.getName().endsWith(SEP + TEMP_FILE_SUFFIX);
+    FileFilter tempFileFilter = (File pathname) -> pathname.getName().endsWith(SEP + TEMP_FILE_SUFFIX);
     for (File file : backupDir.listFiles(tempFileFilter)) {
       logger.trace("Delete temp file " + file.getName());
-      file.delete();
+      tryDeleteFile(file);
     }
 
     // Then get all the file with version number and local timestamp
-    final FileFilter versionFileFilter = (File pathname) -> versionFilenamePattern.matcher(pathname.getName()).find();
+    FileFilter versionFileFilter = (File pathname) -> versionFilenamePattern.matcher(pathname.getName()).find();
     for (File file : backupDir.listFiles(versionFileFilter)) {
       Matcher m = versionFilenamePattern.matcher(file.getName());
+      m.find();
       logger.trace("Starting processing version backup file " + file.getName());
-      if (m.find()) {
-        int version = Integer.parseInt(m.group(1));
-        long modifiedTimeInSecond = LocalDateTime.parse(m.group(2), TIMESTAMP_FORMATTER).toEpochSecond(zoneOffset);
-        BackupFile currentBackup = new BackupFile(version, file.getName(), modifiedTimeInSecond);
+      int version = Integer.parseInt(m.group(1));
+      long modifiedTimeInSecond = LocalDateTime.parse(m.group(2), TIMESTAMP_FORMATTER).toEpochSecond(zoneOffset);
+      BackupFileInfo currentBackup = new BackupFileInfo(version, file.getName(), modifiedTimeInSecond);
 
-        if (backupFiles.size() < config.maxBackupFileCount) {
-          backupFiles.put(version, currentBackup);
-        } else if (backupFiles.firstEntry().getKey() < version) {
-          // remove the old version file and remove this entry from the map
-          Map.Entry<Integer, BackupFile> entry = backupFiles.firstEntry();
-          BackupFile toRemove = entry.getValue();
-          logger.trace("Remove the oldest backup {} at version {}", toRemove.getFilename(), toRemove.getVersion());
-          entry.getValue().tryRemove();
-          backupFiles.remove(entry.getKey());
-          // add new entry to the map
-          backupFiles.put(version, currentBackup);
-        } else {
-          // remove the current file
-          currentBackup.tryRemove();
-        }
+      if (backupFileInfos.size() < config.maxBackupFileCount) {
+        // When the number of backup files are under the maximum value, just add the current backupFile in the map.
+        backupFileInfos.put(version, currentBackup);
       } else {
-        // We should never reach here, but sanity check
-        logger.error("File {} doesn't match version pattern. This is not possible", file.getName());
+        // When the number of backup files exceeds the maximum value, we have to remove the one backupFile.
+        if (backupFileInfos.firstEntry().getKey() < version) {
+          // The current backupFile's version is larger than the smallest one in the backupFileInfos map, then remove the
+          // smallest backupFile and it's entry from map and add the current backupFile in the map.
+          Map.Entry<Integer, BackupFileInfo> entry = backupFileInfos.firstEntry();
+          BackupFileInfo toRemove = entry.getValue();
+          logger.trace("Remove the oldest backup {} at version {}", toRemove.getFilename(), toRemove.getVersion());
+          tryRemoveBackupFile(entry.getValue());
+          backupFileInfos.remove(entry.getKey());
+          backupFileInfos.put(version, currentBackup);
+        } else {
+          // The current backupFile's version is smaller than the smallest version in the map, then remove the
+          // current backupFile.
+          tryRemoveBackupFile(currentBackup);
+        }
       }
     }
 
-    final FileFilter oldStateFileFilter = (File pathname) -> oldStateFilenamePattern.matcher(pathname.getName()).find();
+    FileFilter oldStateFileFilter = (File pathname) -> oldStateFilenamePattern.matcher(pathname.getName()).find();
     for (File file : backupDir.listFiles(oldStateFileFilter)) {
       logger.trace("Delete old state file " + file.getName());
-      file.delete();
+      tryDeleteFile(file);
     }
 
     // Lastly, if we have enough files, we will just remove all the backup file without version number.
     // Otherwise, sort the file based on the modified time.
-    final FileFilter newStateFileFilter = (File pathname) -> newStateFilenamePattern.matcher(pathname.getName()).find();
+    FileFilter newStateFileFilter = (File pathname) -> newStateFilenamePattern.matcher(pathname.getName()).find();
     File[] allNewStateFiles = backupDir.listFiles(newStateFileFilter);
-    if (backupFiles.size() >= config.maxBackupFileCount) {
+    if (backupFileInfos.size() >= config.maxBackupFileCount) {
       logger.trace("More than {} versioned backup found, remove all the backup files in old format");
       for (File file : allNewStateFiles) {
         logger.trace("Delete new state file " + file.getName());
-        file.delete();
+        tryDeleteFile(file);
       }
     } else {
-      int start = 0;
+      int startIndexToPreserveBackupFile = 0;
       int size = allNewStateFiles.length;
-      if (backupFiles.size() + size > config.maxBackupFileCount) {
+      if (backupFileInfos.size() + size > config.maxBackupFileCount) {
         // Sort all the files based on the filename. Since the filename follows the DateTime formatter, sorting filename
         // is equivalent to sorting modified time.
-        Arrays.sort(allNewStateFiles, new Comparator<File>() {
-          @Override
-          public int compare(File o1, File o2) {
-            return o1.getName().compareTo(o2.getName());
-          }
-        });
-        start = Math.max(backupFiles.size() + size - config.maxBackupFileCount, 0);
-        logger.info("Found {} old format backup file, only need {}", size, size - start);
+        Arrays.sort(allNewStateFiles, (File o1, File o2) -> o1.getName().compareTo(o2.getName()));
+        startIndexToPreserveBackupFile = Math.max(backupFileInfos.size() + size - config.maxBackupFileCount, 0);
+        logger.info("Found {} old format backup file, only need {}", size, size - startIndexToPreserveBackupFile);
       }
       for (int i = 0; i < size; i++) {
         File file = allNewStateFiles[i];
-        if (i < start) {
+        if (i < startIndexToPreserveBackupFile) {
           logger.trace("Delete new state file " + file.getName());
-          file.delete();
+          tryDeleteFile(file);
         } else {
           Matcher m = newStateFilenamePattern.matcher(file.getName());
-          if (m.find()) {
-            int version = i - size;
-            long modifiedTimeInSecond = LocalDateTime.parse(m.group(1), TIMESTAMP_FORMATTER).toEpochSecond(zoneOffset);
-            backupFiles.put(version, new BackupFile(version, file.getName(), modifiedTimeInSecond));
-          } else {
-            // sanity check
-            logger.error("File {} doesn't match new state pattern. This is not possible", file.getName());
-          }
+          m.find();
+          int version = i - size;
+          long modifiedTimeInSecond = LocalDateTime.parse(m.group(1), TIMESTAMP_FORMATTER).toEpochSecond(zoneOffset);
+          backupFileInfos.put(version, new BackupFileInfo(version, file.getName(), modifiedTimeInSecond));
         }
       }
     }
@@ -204,8 +201,8 @@ class LocalBackup {
 
   /**
    * Persist account map to local storage, with associated {@link ZNRecord} information.
-   * @param state
-   * @param record
+   * @param state The account map
+   * @param record The associated {@link ZNRecord}.
    */
   void persistState(Map<String, String> state, ZNRecord record) {
     if (backupDirPath == null) {
@@ -214,13 +211,14 @@ class LocalBackup {
     Objects.requireNonNull(state, "Invalid account state");
     Objects.requireNonNull(record, "Invalid ZNRecord");
     int version = record.getVersion();
-    if (backupFiles.containsKey(version)) {
+    if (backupFileInfos.containsKey(version)) {
       logger.trace("Version {} already has a backup file {}, skip persisting the state", version,
-          backupFiles.get(version).getFilename());
+          backupFileInfos.get(version).getFilename());
       return;
     }
-    if (!backupFiles.isEmpty() && backupFiles.firstEntry().getKey() > version) {
-      logger.trace("Version {} is out of date, the smallest version is {}", version, backupFiles.firstEntry().getKey());
+    if (!backupFileInfos.isEmpty() && backupFileInfos.firstEntry().getKey() > version) {
+      logger.error("Version {} is out of date, the smallest version is {}", version,
+          backupFileInfos.firstEntry().getKey());
       return;
     }
 
@@ -230,26 +228,22 @@ class LocalBackup {
     Path tempFilePath = backupDirPath.resolve(tempFileName);
 
     long startTimeInMs = System.currentTimeMillis();
-    if (!writeStateToFile(tempFilePath, state)) {
+    try {
+      writeStateToFile(tempFilePath, state);
+      Files.move(tempFilePath, filePath);
+    } catch (IOException e) {
+      logger.error("Failed to persist state to file: " + fileName, e);
       accountServiceMetrics.backupErrorCount.inc();
       return;
-    } else {
-      try {
-        Files.move(tempFilePath, filePath);
-      } catch (IOException e) {
-        logger.error("Failed to move temporary file " + tempFileName + " to file " + fileName, e);
-        accountServiceMetrics.backupErrorCount.inc();
-        return;
-      }
     }
     accountServiceMetrics.backupWriteTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
 
-    while (backupFiles.size() >= config.maxBackupFileCount) {
-      Map.Entry<Integer, BackupFile> entry = backupFiles.firstEntry();
-      entry.getValue().tryRemove();
-      backupFiles.remove(entry.getKey());
+    while (backupFileInfos.size() >= config.maxBackupFileCount) {
+      Map.Entry<Integer, BackupFileInfo> entry = backupFileInfos.firstEntry();
+      tryRemoveBackupFile(entry.getValue());
+      backupFileInfos.remove(entry.getKey());
     }
-    backupFiles.put(version, new BackupFile(version, fileName, record.getModifiedTime()));
+    backupFileInfos.put(version, new BackupFileInfo(version, fileName, record.getModifiedTime()));
   }
 
   /**
@@ -257,7 +251,7 @@ class LocalBackup {
    * @return True if there is no backup file found.
    */
   boolean isEmpty() {
-    return backupFiles.isEmpty();
+    return backupFileInfos.isEmpty();
   }
 
   /**
@@ -265,7 +259,7 @@ class LocalBackup {
    * @return The number of backup files.
    */
   int size() {
-    return backupFiles.size();
+    return backupFileInfos.size();
   }
 
   /**
@@ -275,14 +269,14 @@ class LocalBackup {
    * <p>
    *   If data from the latest backup is corrupted, then this function returns null;
    * </p>
-   * @param afterTimeInSecond The unix epoch time which the latest backup's modifiedTime must be greater than.
+   * @param latestTimeAllowedInSecond The unix epoch time which the latest backup's modifiedTime must be greater than.
    * @return The account map from the latest backup file.
    */
-  Map<String, String> getLatestState(long afterTimeInSecond) {
+  Map<String, String> getLatestState(long latestTimeAllowedInSecond) {
     if (backupDirPath == null) {
       return null;
     }
-    Map.Entry<Integer, BackupFile> entry = backupFiles.lastEntry();
+    Map.Entry<Integer, BackupFileInfo> entry = backupFileInfos.lastEntry();
     if (entry == null) {
       logger.warn("No backup file found");
       return null;
@@ -293,14 +287,14 @@ class LocalBackup {
       logger.warn("Latest backup is in old format that doesn't have version number");
       return null;
     }
-    BackupFile backupFile = entry.getValue();
-    if (backupFile.getModifiedTimeInSecond() < afterTimeInSecond) {
+    BackupFileInfo backupFileInfo = entry.getValue();
+    if (backupFileInfo.getModifiedTimeInSecond() < latestTimeAllowedInSecond) {
       logger.warn("The latest backup was changed at timestamp: {}, but the requested time is {}",
-          backupFile.getModifiedTimeInSecond(), afterTimeInSecond);
+          backupFileInfo.getModifiedTimeInSecond(), latestTimeAllowedInSecond);
       return null;
     }
 
-    Path filepath = backupDirPath.resolve(backupFile.getFilename());
+    Path filepath = backupDirPath.resolve(backupFileInfo.getFilename());
     try {
       long startTimeInMs = System.currentTimeMillis();
       byte[] bytes = Files.readAllBytes(filepath);
@@ -313,6 +307,45 @@ class LocalBackup {
     }
   }
 
+  /**
+   * Delete the given file and log out error when there is any.
+   * @param file The file to delete.
+   */
+  private void tryDeleteFile(File file) {
+    deleteFile(file.toPath());
+  }
+
+  /**
+   * Try to remove the backup from local storage. This function doesn't guarantee file would be removed. It exits at
+   * any exception, since file would be removed next time.
+   */
+  private void tryRemoveBackupFile(BackupFileInfo backupFileInfo) {
+    Path toDelete = backupDirPath.resolve(backupFileInfo.getFilename());
+    deleteFile(toDelete);
+  }
+
+  /***
+   * Delete file identified by the given {@link Path}.
+   * @param toDelete The path of file to be deleted.
+   */
+  private void deleteFile(Path toDelete) {
+    try {
+      Files.delete(toDelete);
+    } catch (NoSuchFileException e) {
+      logger.error("File doesn't exist while deleting: " + toDelete.toString(), e);
+    } catch (IOException e) {
+      logger.error("Encounter an I/O error while deleting file: " + toDelete.toString(), e);
+    } catch (Exception e) {
+      logger.error("Encounter an unexpected error while deleting file: " + toDelete.toString(), e);
+    }
+  }
+
+  /**
+   * Generate the backup filename from the given {@link ZNRecord}. The filename contains version number and modified time
+   * from record.
+   * @param record The {@link ZNRecord}.
+   * @return The filename.
+   */
   static String getBackupFilenameFromZNRecord(ZNRecord record) {
     long mtime = record.getModifiedTime();
     // The ModifiedTime is a unix timestamp in seconds
@@ -321,31 +354,35 @@ class LocalBackup {
     return fileName;
   }
 
-  static boolean writeStateToFile(Path filepath, Map<String, String> state) {
-    boolean persisted = false;
+  /**
+   * Persist the account map to the given file.
+   * @param filepath The filepath to persist account map.
+   * @param state Account map.
+   * @throws IOException Any I/O error.
+   */
+  static void writeStateToFile(Path filepath, Map<String, String> state) throws IOException {
     try (FileChannel channel = FileChannel.open(filepath, StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
       ByteBuffer buffer = serializeState(state);
       channel.write(buffer);
-      persisted = true;
     } catch (IOException e) {
       // Failed to persist file
       logger.error("Failed to persist state to file " + filepath, e);
+      throw e;
     }
-    return persisted;
   }
 
   /**
-   * Serialize the given account map to a json-formatted {@link ByteBuffer}.
+   * Convert given account map to an array of {@link Account}s and serialize it in json format in a {@link ByteBuffer}.
    * @param state The account map.
    * @return {@link ByteBuffer} that contains the serialized bytes.
    */
   static ByteBuffer serializeState(Map<String, String> state) {
-    JSONObject object = new JSONObject();
+    JSONArray array = new JSONArray();
     for (Map.Entry<String, String> entry : state.entrySet()) {
-      object.put(entry.getKey(), entry.getValue());
+      array.put(new JSONObject(entry.getValue()));
     }
-    return ByteBuffer.wrap(object.toString().getBytes(StandardCharsets.UTF_8));
+    return ByteBuffer.wrap(array.toString(2).getBytes(StandardCharsets.UTF_8));
   }
 
   /**
@@ -356,10 +393,11 @@ class LocalBackup {
    */
   static Map<String, String> deserializeState(byte[] bytes) {
     try {
-      JSONObject object = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
+      JSONArray array = new JSONArray(new String(bytes, StandardCharsets.UTF_8));
       Map<String, String> result = new HashMap<>();
-      for (String key : object.keySet()) {
-        result.put(key, object.getString(key));
+      for (int i = 0; i < array.length(); i++) {
+        Account account = Account.fromJson(array.getJSONObject(i));
+        result.put(String.valueOf(account.getId()), array.getJSONObject(i).toString());
       }
       return result;
     } catch (JSONException e) {
@@ -369,7 +407,7 @@ class LocalBackup {
   }
 
   /**
-   * BackupFile encapsulates the information about the backup files persisted in the local storage.
+   * BackupFileInfo encapsulates the information about the backup files persisted in the local storage.
    * Since every local backup file would have a {@link ZNRecord} version and modifiedTime as part of the filename,
    * every instance of class would have the same information.
    * <p>
@@ -377,18 +415,18 @@ class LocalBackup {
    *   be positive, using negative number for older backup enforce the order of backups.
    * </p>
    */
-  class BackupFile {
+  class BackupFileInfo {
     private final int version;
     private final String filename;
     private final long modifiedTimeInSecond;
 
     /**
-     *  Constructor to create a {@link BackupFile}.
+     *  Constructor to create a {@link BackupFileInfo}.
      * @param version The {@link ZNRecord} version associated with this backup file.
      * @param filename The filename of this file.
      * @param modifiedTimeInSecond The {@link ZNRecord} modifiedTime associated with this backup file.
      */
-    BackupFile(int version, String filename, long modifiedTimeInSecond) {
+    BackupFileInfo(int version, String filename, long modifiedTimeInSecond) {
       this.version = version;
       this.filename = filename;
       this.modifiedTimeInSecond = modifiedTimeInSecond;
@@ -416,18 +454,6 @@ class LocalBackup {
      */
     long getModifiedTimeInSecond() {
       return modifiedTimeInSecond;
-    }
-
-    /**
-     * Try to remove the backup from local storage. This function doesn't guarantee file would be removed. It exits at
-     * any exception, since file would be removed next time.
-     */
-    void tryRemove() {
-      try {
-        Files.delete(backupDirPath.resolve(filename));
-      } catch (IOException e) {
-        logger.error("Failed to delete file " + filename, e);
-      }
     }
   }
 }

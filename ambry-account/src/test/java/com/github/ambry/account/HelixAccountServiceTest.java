@@ -49,6 +49,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -69,7 +70,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
 
@@ -281,7 +281,7 @@ public class HelixAccountServiceTest {
     // should have some backup files.
     if (helixConfigProps.containsKey(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY)) {
       File[] files = accountBackupDir.toFile()
-          .listFiles(path -> LocalBackup.versionFilenamePattern.matcher(path.getName()).find());
+          .listFiles(path -> BackupFileManager.versionFilenamePattern.matcher(path.getName()).find());
       assertTrue("UpdateAccount should create backup files", files.length > 0);
 
       helixConfigProps.put(HelixAccountServiceConfig.ENABLE_SERVE_FROM_BACKUP, "true");
@@ -879,8 +879,8 @@ public class HelixAccountServiceTest {
         mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig);
     HelixAccountService helixAccountService = (HelixAccountService) accountService;
     RouterStore routerStore =
-        new RouterStore(helixAccountService.getAccountServiceMetrics(), helixAccountService.getBackup(), helixStore,
-            new AtomicReference<>(mockRouter), false);
+        new RouterStore(helixAccountService.getAccountServiceMetrics(), helixAccountService.getBackupFileManager(),
+            helixStore, new AtomicReference<>(mockRouter), false);
     Map<String, String> accountMap = routerStore.fetchAccountMetadata();
     assertNotNull("Accounts should be backfilled to new znode", accountMap);
     assertAccountMapEquals(accountService.getAllAccounts(), accountMap);
@@ -945,12 +945,12 @@ public class HelixAccountServiceTest {
       assertAccountsInAccountService(accounts, expectedAccountCount, accountService);
       if (helixConfigProps.containsKey(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY)) {
         Path newBackupFilePath = Files.list(accountBackupDir)
-            .filter(path -> LocalBackup.versionFilenamePattern.matcher(path.getFileName().toString()).find())
+            .filter(path -> BackupFileManager.versionFilenamePattern.matcher(path.getFileName().toString()).find())
             .max(new Comparator<Path>() {
               @Override
               public int compare(Path o1, Path o2) {
-                Matcher m1 = LocalBackup.versionFilenamePattern.matcher(o1.getFileName().toString());
-                Matcher m2 = LocalBackup.versionFilenamePattern.matcher(o2.getFileName().toString());
+                Matcher m1 = BackupFileManager.versionFilenamePattern.matcher(o1.getFileName().toString());
+                Matcher m2 = BackupFileManager.versionFilenamePattern.matcher(o2.getFileName().toString());
                 m1.find();
                 m2.find();
                 int v1 = Integer.parseInt(m1.group(1));
@@ -976,12 +976,12 @@ public class HelixAccountServiceTest {
   private void checkBackupFileWithVersion(Collection<Account> expectedAccounts, Path backupPath)
       throws JSONException, IOException {
     try (BufferedReader reader = Files.newBufferedReader(backupPath)) {
-      JSONObject accountObject = new JSONObject(new JSONTokener(reader));
-      int arrayLength = accountObject.length();
+      JSONArray accountArray = new JSONArray(new JSONTokener(reader));
+      int arrayLength = accountArray.length();
       assertEquals("unexpected array size", expectedAccounts.size(), arrayLength);
       Set<Account> expectedAccountSet = new HashSet<>(expectedAccounts);
-      for (String key : accountObject.keySet()) {
-        JSONObject accountJson = new JSONObject(accountObject.getString(key));
+      for (int i = 0; i < arrayLength; i++) {
+        JSONObject accountJson = accountArray.getJSONObject(i);
         Account account = Account.fromJson(accountJson);
         assertTrue("unexpected account in array: " + accountJson.toString(), expectedAccountSet.contains(account));
       }

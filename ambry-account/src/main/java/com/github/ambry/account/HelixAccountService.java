@@ -81,7 +81,7 @@ public class HelixAccountService implements AccountService {
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
 
-  private final LocalBackup backup;
+  private final BackupFileManager backupFileManager;
   private final AccountServiceMetrics accountServiceMetrics;
   private final HelixPropertyStore<ZNRecord> helixStore;
   private final Notifier<String> notifier;
@@ -125,16 +125,16 @@ public class HelixAccountService implements AccountService {
     this.scheduler = scheduler;
     this.config = config;
     this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
-    this.backup = new LocalBackup(this.accountServiceMetrics, config);
+    this.backupFileManager = new BackupFileManager(this.accountServiceMetrics, config);
     AccountMetadataStore backFillStore = null;
     if (config.useNewZNodePath) {
-      accountMetadataStore = new RouterStore(this.accountServiceMetrics, backup, helixStore, router, false);
+      accountMetadataStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, false);
       // postpone initializeFetchAndSchedule to setupRouter function.
     } else {
-      accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backup, helixStore);
+      accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backupFileManager, helixStore);
       initialFetchAndSchedule();
       if (config.backFillAccountsToNewZNode) {
-        backFillStore = new RouterStore(this.accountServiceMetrics, backup, helixStore, router, true);
+        backFillStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, true);
       }
     }
     this.backFillStore = backFillStore;
@@ -198,9 +198,9 @@ public class HelixAccountService implements AccountService {
     // is no account metadata for the time being. Theoretically local storage shouldn't have any backup files. So
     // backup.getLatestState should return null. And in case we have a very old backup file just mentioned above, a threshold
     // would solve the problem.
-    if (accountInfoMapRef.get().isEmpty() && config.enableServeFromBackup && !backup.isEmpty()) {
-      long aMonthAgo = System.currentTimeMillis() / 1000 - 30 * 24 * 60 * 60;
-      Map<String, String> accountMap = backup.getLatestState(aMonthAgo);
+    if (accountInfoMapRef.get().isEmpty() && config.enableServeFromBackup && !backupFileManager.isEmpty()) {
+      long aMonthAgo = System.currentTimeMillis() / 1000 - TimeUnit.DAYS.toSeconds(30);
+      Map<String, String> accountMap = backupFileManager.getLatestState(aMonthAgo);
       if (accountMap != null) {
         AccountInfoMap newAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
         AccountInfoMap oldAccountInfoMap = accountInfoMapRef.getAndSet(newAccountInfoMap);
@@ -441,11 +441,11 @@ public class HelixAccountService implements AccountService {
   }
 
   /**
-   * Return {@link LocalBackup}.
-   * @return {@link LocalBackup}
+   * Return {@link BackupFileManager}.
+   * @return {@link BackupFileManager}
    */
-  LocalBackup getBackup() {
-    return backup;
+  BackupFileManager getBackupFileManager() {
+    return backupFileManager;
   }
 }
 

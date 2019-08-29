@@ -30,7 +30,6 @@ public class HelixAccountServiceConfig {
   public static final String BACKFILL_ACCOUNTS_TO_NEW_ZNODE = HELIX_ACCOUNT_SERVICE_PREFIX + "backfill.accounts.to.new.znode";
   public static final String ENABLE_SERVE_FROM_BACKUP  = HELIX_ACCOUNT_SERVICE_PREFIX + "enable.serve.from.backup";
 
-
   /**
    * The ZooKeeper server address. This config is required when using {@code HelixAccountService}.
    */

@@ -42,9 +42,9 @@ import static org.junit.Assert.*;
 
 
 /**
- * Unit test for {@link LocalBackup}
+ * Unit test for {@link BackupFileManager}
  */
-public class LocalBackupTest {
+public class BackupFileInfoManagerTest {
   private final AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
   private final Properties helixConfigProps = new Properties();
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 20000;
@@ -55,10 +55,10 @@ public class LocalBackupTest {
   private Account refAccount;
 
   /**
-   * Constructor to create a LocalBackupTest
+   * Constructor to create a BackupFileInfoManagerTest
    * @throws IOException if I/O error occurs
    */
-  public LocalBackupTest() throws IOException {
+  public BackupFileInfoManagerTest() throws IOException {
     accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
     helixConfigProps.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
     helixConfigProps.setProperty(HelixAccountServiceConfig.MAX_BACKUP_FILE_COUNT, String.valueOf(maxBackupFile));
@@ -83,7 +83,7 @@ public class LocalBackupTest {
   }
 
   /**
-   * Test disable backup. Every method from {@link LocalBackup} should return null or have no effect.
+   * Test disable backup. Every method from {@link BackupFileManager} should return null or have no effect.
    * @throws IOException if I/O error occurs
    */
   @Test
@@ -91,7 +91,7 @@ public class LocalBackupTest {
     helixConfigProps.remove(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY);
     VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     HelixAccountServiceConfig config = new HelixAccountServiceConfig(vHelixConfigProps);
-    LocalBackup backup = new LocalBackup(accountServiceMetrics, config);
+    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
 
     // getLatestState should return null
     assertNull("Disabled backup shouldn't have any state", backup.getLatestState(0));
@@ -122,7 +122,7 @@ public class LocalBackupTest {
     Map<String, String> expected = new HashMap<>();
     expected.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
 
-    LocalBackup backup = new LocalBackup(accountServiceMetrics, config);
+    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
     Map<String, String> obtained = backup.getLatestState(0);
     assertTwoStringMapsEqual(expected, obtained);
     assertFalse("There are backup files", backup.isEmpty());
@@ -144,7 +144,7 @@ public class LocalBackupTest {
     String[] filenames = createBackupFilesWithoutVersion(accountBackupDir, count, baseModifiedTime, interval, false);
     saveAccountsToFile(Collections.singleton(refAccount), accountBackupDir.resolve(filenames[filenames.length - 1]));
 
-    LocalBackup backup = new LocalBackup(accountServiceMetrics, config);
+    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
     Map<String, String> obtained = backup.getLatestState(0);
     assertNull("No state should be loaded from backup file from old format", obtained);
     assertFalse("Backup should not be empty since there are files from old format", backup.isEmpty());
@@ -171,7 +171,7 @@ public class LocalBackupTest {
     Map<String, String> expected = new HashMap<>();
     expected.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
 
-    LocalBackup backup = new LocalBackup(accountServiceMetrics, config);
+    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
     Map<String, String> obtained = backup.getLatestState(0);
     assertTwoStringMapsEqual(expected, obtained);
     assertFalse("There are backup files", backup.isEmpty());
@@ -179,7 +179,7 @@ public class LocalBackupTest {
   }
 
   /**
-   * Test if LocalBackup correctly cleans up the backup files, when there are more than {@link #maxBackupFile} backup
+   * Test if BackupFileManager correctly cleans up the backup files, when there are more than {@link #maxBackupFile} backup
    * files with version number.
    * @throws IOException if I/O error occurs
    */
@@ -201,7 +201,7 @@ public class LocalBackupTest {
     createBackupFilesWithoutVersion(accountBackupDir, 10, baseModifiedTime, interval, false);
     createBackupFilesWithoutVersion(accountBackupDir, 10, baseModifiedTime, interval, true);
 
-    LocalBackup backup = new LocalBackup(accountServiceMetrics, config);
+    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
     assertEquals("Number of backup files mismatch", backup.size(), maxBackupFile);
 
     File[] remainingFiles = accountBackupDir.toFile().listFiles();
@@ -209,12 +209,12 @@ public class LocalBackupTest {
     for (File file : remainingFiles) {
       // All the files should
       assertTrue("Filename " + file.getName() + " should follow version pattern ",
-          LocalBackup.versionFilenamePattern.matcher(file.getName()).find());
+          BackupFileManager.versionFilenamePattern.matcher(file.getName()).find());
     }
   }
 
   /**
-   * Test if LocalBackup correctly cleans up the backup files, when there are less than {@link #maxBackupFile} backup
+   * Test if BackupFileManager correctly cleans up the backup files, when there are less than {@link #maxBackupFile} backup
    * files with version number.
    * @throws IOException if I/O error occurs
    */
@@ -236,7 +236,7 @@ public class LocalBackupTest {
         baseModifiedTime + 2 * backupFileNoVersionCount * interval, interval, false);
     saveAccountsToFile(Collections.singleton(refAccount), accountBackupDir.resolve(filenames[filenames.length - 1]));
 
-    LocalBackup backup = new LocalBackup(accountServiceMetrics, config);
+    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
     assertEquals("Number of backup files mismatch", backup.size(), maxBackupFile);
 
     File[] remainingFiles = accountBackupDir.toFile().listFiles();
@@ -244,7 +244,7 @@ public class LocalBackupTest {
     int versionFileCount = 0;
     int nonVersionFileCount = 0;
     for (File file : remainingFiles) {
-      if (LocalBackup.versionFilenamePattern.matcher(file.getName()).find()) {
+      if (BackupFileManager.versionFilenamePattern.matcher(file.getName()).find()) {
         versionFileCount++;
       } else {
         nonVersionFileCount++;
@@ -256,12 +256,12 @@ public class LocalBackupTest {
   }
 
   /**
-   * Test {@link LocalBackup#persistState(Map, ZNRecord)} and then recover {@link LocalBackup} from the same backup directory.
+   * Test {@link BackupFileManager#persistState(Map, ZNRecord)} and then recover {@link BackupFileManager} from the same backup directory.
    * @throws IOException if I/O error occurs
    */
   @Test
   public void testPersistStateAndRecover() throws IOException {
-    LocalBackup backup = new LocalBackup(accountServiceMetrics, config);
+    BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
     final int numberAccounts = maxBackupFile * 2;
     final Map<String, String> accounts = new HashMap<>(numberAccounts);
     final ZNRecord record = new ZNRecord(String.valueOf(System.currentTimeMillis()));
@@ -283,8 +283,8 @@ public class LocalBackupTest {
       File[] remaingingFiles = accountBackupDir.toFile().listFiles();
       assertEquals("Remaining backup mismatch", maxBackupFile, remaingingFiles.length);
 
-      // Recover LocalBackup from the same backup dir
-      backup = new LocalBackup(accountServiceMetrics, config);
+      // Recover BackupFileManager from the same backup dir
+      backup = new BackupFileManager(accountServiceMetrics, config);
     }
   }
 
@@ -296,14 +296,14 @@ public class LocalBackupTest {
   public void testSerializationAndDeserialization() throws JSONException {
     // Since the account metadata is stored in an map from string to string, so here we only test map<string, string>
     Map<String, String> state = new HashMap<>();
-    ByteBuffer buffer = LocalBackup.serializeState(state);
-    Map<String, String> deserializedState = LocalBackup.deserializeState(buffer.array());
+    ByteBuffer buffer = BackupFileManager.serializeState(state);
+    Map<String, String> deserializedState = BackupFileManager.deserializeState(buffer.array());
     assertTwoStringMapsEqual(state, deserializedState);
 
     // Put a real account's json string
     state.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
-    buffer = LocalBackup.serializeState(state);
-    deserializedState = LocalBackup.deserializeState(buffer.array());
+    buffer = BackupFileManager.serializeState(state);
+    deserializedState = BackupFileManager.deserializeState(buffer.array());
     assertTwoStringMapsEqual(state, deserializedState);
   }
 
@@ -337,9 +337,9 @@ public class LocalBackupTest {
       ZNRecord record = new ZNRecord(String.valueOf(i));
       record.setVersion(i);
       record.setModifiedTime(baseModifiedTime + (i - startVersion) * interval);
-      String filename = LocalBackup.getBackupFilenameFromZNRecord(record);
+      String filename = BackupFileManager.getBackupFilenameFromZNRecord(record);
       if (isTemp) {
-        filename = filename + LocalBackup.SEP + LocalBackup.TEMP_FILE_SUFFIX;
+        filename = filename + BackupFileManager.SEP + BackupFileManager.TEMP_FILE_SUFFIX;
       }
       try {
         Files.createFile(backupDir.resolve(filename));
@@ -365,11 +365,11 @@ public class LocalBackupTest {
     String[] filenames = new String[count];
     for (int i = 0; i < count; i++) {
       long modifiedTime = baseModifiedTime + i * interval;
-      String timestamp =
-          LocalDateTime.ofEpochSecond(modifiedTime, 0, LocalBackup.zoneOffset).format(LocalBackup.TIMESTAMP_FORMATTER);
-      String filename = timestamp + LocalBackup.SEP + LocalBackup.NEW_STATE_SUFFIX;
+      String timestamp = LocalDateTime.ofEpochSecond(modifiedTime, 0, BackupFileManager.zoneOffset)
+          .format(BackupFileManager.TIMESTAMP_FORMATTER);
+      String filename = timestamp + BackupFileManager.SEP + BackupFileManager.NEW_STATE_SUFFIX;
       if (isOld) {
-        filename = timestamp + LocalBackup.SEP + LocalBackup.OLD_STATE_SUFFIX;
+        filename = timestamp + BackupFileManager.SEP + BackupFileManager.OLD_STATE_SUFFIX;
       }
       try {
         Files.createFile(backupDir.resolve(filename));
@@ -424,6 +424,10 @@ public class LocalBackupTest {
     } catch (JSONException e) {
       fail("Fail to get a json format of accounts");
     }
-    assertTrue("Failed to write state to file", LocalBackup.writeStateToFile(filePath, accountMap));
+    try {
+      BackupFileManager.writeStateToFile(filePath, accountMap);
+    } catch (Exception e) {
+      fail("Fail to write state to file: " + filePath.toString());
+    }
   }
 }
