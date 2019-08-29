@@ -37,7 +37,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -77,7 +76,7 @@ public class MockRouter implements Router {
       BlobInfoAndData blob = allBlobs.get(blobId);
       FutureResult<GetBlobResult> future = new FutureResult<>();
       if (blob == null) {
-        Exception e = new ExecutionException(new RouterException("NotFound", RouterErrorCode.BlobDoesNotExist));
+        Exception e = new RouterException("NotFound", RouterErrorCode.BlobDoesNotExist);
         future.done(null, e);
         if (callback != null) {
           callback.onCompletion(null, e);
@@ -146,7 +145,7 @@ public class MockRouter implements Router {
       FutureResult<Void> future = new FutureResult<>();
       BlobInfoAndData blob = allBlobs.get(blobId);
       if (blob == null) {
-        Exception e = new ExecutionException(new RouterException("NotFound", RouterErrorCode.BlobDoesNotExist));
+        Exception e = new RouterException("NotFound", RouterErrorCode.BlobDoesNotExist);
         future.done(null, e);
         if (callback != null) {
           callback.onCompletion(null, e);
@@ -171,6 +170,12 @@ public class MockRouter implements Router {
 
   @Override
   public void close() throws IOException {
-    return;
+    // close will remove all the blobs
+    lock.lock();
+    try {
+      allBlobs.clear();
+    } finally {
+      lock.unlock();
+    }
   }
 }

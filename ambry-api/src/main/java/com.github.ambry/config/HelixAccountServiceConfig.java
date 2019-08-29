@@ -29,6 +29,7 @@ public class HelixAccountServiceConfig {
   public static final String UPDATE_DISABLED =  HELIX_ACCOUNT_SERVICE_PREFIX + "update.disabled";
   public static final String BACKFILL_ACCOUNTS_TO_NEW_ZNODE = HELIX_ACCOUNT_SERVICE_PREFIX + "backfill.accounts.to.new.znode";
   public static final String ENABLE_SERVE_FROM_BACKUP  = HELIX_ACCOUNT_SERVICE_PREFIX + "enable.serve.from.backup";
+  public static final String MAX_NUMBER_OF_VERSION_TO_SAVE = HELIX_ACCOUNT_SERVICE_PREFIX + "max.number.of.version.to.save";
 
   /**
    * The ZooKeeper server address. This config is required when using {@code HelixAccountService}.
@@ -98,6 +99,15 @@ public class HelixAccountServiceConfig {
   @Default("false")
   public final boolean enableServeFromBackup;
 
+  /**
+   * Maximum number of previous versions to save in the system. Every update account http request would generate a new
+   * version. And when the number of versions surpasses this number, HelixAccountService will purge the oldest one to
+   * make room for the new one.
+   */
+  @Config(MAX_NUMBER_OF_VERSION_TO_SAVE)
+  @Default("100")
+  public final int maxNumberOfVersionToSave;
+
   public HelixAccountServiceConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY);
     updaterPollingIntervalMs =
@@ -114,5 +124,6 @@ public class HelixAccountServiceConfig {
     }
 
     enableServeFromBackup = verifiableProperties.getBoolean(ENABLE_SERVE_FROM_BACKUP, false);
+    maxNumberOfVersionToSave = verifiableProperties.getIntInRange(MAX_NUMBER_OF_VERSION_TO_SAVE, 100, 1, Integer.MAX_VALUE);
   }
 }

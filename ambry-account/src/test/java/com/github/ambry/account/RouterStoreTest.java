@@ -18,20 +18,26 @@ import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.clustermap.MockHelixPropertyStore;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.GetBlobOptionsBuilder;
+import com.github.ambry.router.RouterErrorCode;
+import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
@@ -43,6 +49,7 @@ import org.junit.runners.Parameterized;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
 
 
 /**
@@ -50,6 +57,7 @@ import static org.junit.Assert.assertNotNull;
  */
 @RunWith(Parameterized.class)
 public class RouterStoreTest {
+  private final int MAX_NUMBER_OF_VERSIONS_TO_SAVE = 5;
   private final AccountServiceMetrics accountServiceMetrics;
   private final BackupFileManager backup;
   private final Path accountBackupDir;
@@ -95,6 +103,7 @@ public class RouterStoreTest {
     if (Files.exists(accountBackupDir)) {
       Utils.deleteFileOrDirectory(accountBackupDir.toFile());
     }
+    router.close();
   }
 
   /**
@@ -104,13 +113,14 @@ public class RouterStoreTest {
   @Test
   public void testUpdateAndFetch() throws Exception {
     RouterStore store =
-        new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill);
+        new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill,
+            MAX_NUMBER_OF_VERSIONS_TO_SAVE);
     Map<Short, Account> idToRefAccountMap = new HashMap<>();
     Map<Short, Map<Short, Container>> idtoRefContainerMap = new HashMap<>();
     Set<Short> accountIDSet = new HashSet<>();
     // generate an new account and test update and fetch on this account
     AccountTestUtils.generateRefAccounts(idToRefAccountMap, idtoRefContainerMap, accountIDSet, 1, 1);
-    assertUpdateAndFetch(store, idToRefAccountMap, idToRefAccountMap, 1);
+    assertUpdateAndFetch(store, idToRefAccountMap, idToRefAccountMap, 1, 1);
 
     // generate another new account and test update and fetch on this account
     Map<Short, Account> anotherIdToRefAccountMap = new HashMap<>();
@@ -123,7 +133,72 @@ public class RouterStoreTest {
       idToRefAccountMap = anotherIdToRefAccountMap;
     }
     // the version should be 2 now
-    assertUpdateAndFetch(store, idToRefAccountMap, anotherIdToRefAccountMap, 2);
+    assertUpdateAndFetch(store, idToRefAccountMap, anotherIdToRefAccountMap, 2, 2);
+  }
+
+  /**
+   * Test when the number of updates exceeds the maximum number of versions to save. RouterStore should start removing
+   * the old blobs.
+   */
+  @Test
+  public void testSizeLimitInList() throws Exception {
+    RouterStore store =
+        new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill,
+            MAX_NUMBER_OF_VERSIONS_TO_SAVE);
+
+    Map<Short, Account> idToRefAccountMap = new HashMap<>();
+    Map<Short, Map<Short, Container>> idtoRefContainerMap = new HashMap<>();
+    Set<Short> accountIDSet = new HashSet<>();
+    for (int i = 0; i < MAX_NUMBER_OF_VERSIONS_TO_SAVE; i++) {
+      // generate an new account and test update and fetch on this account
+      Map<Short, Account> newIdToRefAccountMap = new HashMap<>();
+      AccountTestUtils.generateRefAccounts(newIdToRefAccountMap, idtoRefContainerMap, accountIDSet, 1, 1);
+      if (!forBackfill) {
+        for (Map.Entry<Short, Account> entry : newIdToRefAccountMap.entrySet()) {
+          idToRefAccountMap.put(entry.getKey(), entry.getValue());
+        }
+      } else {
+        idToRefAccountMap = newIdToRefAccountMap;
+      }
+      assertUpdateAndFetch(store, idToRefAccountMap, newIdToRefAccountMap, i + 1, i + 1);
+    }
+    // Now we already have maximum number of versions in the list, adding a new version should remove the oldest one.
+    List<RouterStore.BlobIDAndVersion> blobIDAndVersions = getBlobIDAndVersionInHelix(MAX_NUMBER_OF_VERSIONS_TO_SAVE);
+    Collections.sort(blobIDAndVersions);
+    assertEquals(1, blobIDAndVersions.get(0).getVersion());
+
+    Map<Short, Account> newIdToRefAccountMap = new HashMap<>();
+    AccountTestUtils.generateRefAccounts(newIdToRefAccountMap, idtoRefContainerMap, accountIDSet, 1, 1);
+    if (!forBackfill) {
+      for (Map.Entry<Short, Account> entry : newIdToRefAccountMap.entrySet()) {
+        idToRefAccountMap.put(entry.getKey(), entry.getValue());
+      }
+    } else {
+      idToRefAccountMap = newIdToRefAccountMap;
+    }
+    assertUpdateAndFetch(store, idToRefAccountMap, newIdToRefAccountMap, MAX_NUMBER_OF_VERSIONS_TO_SAVE + 1,
+        MAX_NUMBER_OF_VERSIONS_TO_SAVE);
+
+    // Get the list again and compare the blob ids
+    List<RouterStore.BlobIDAndVersion> blobIDAndVersionsAfterUpdate =
+        getBlobIDAndVersionInHelix(MAX_NUMBER_OF_VERSIONS_TO_SAVE);
+    Collections.sort(blobIDAndVersionsAfterUpdate);
+    assertEquals("First version should be removed", 2, blobIDAndVersionsAfterUpdate.get(0).getVersion());
+    assertEquals("Version mismatch", MAX_NUMBER_OF_VERSIONS_TO_SAVE + 1,
+        blobIDAndVersionsAfterUpdate.get(MAX_NUMBER_OF_VERSIONS_TO_SAVE - 1).getVersion());
+
+    for (int i = 1; i < MAX_NUMBER_OF_VERSIONS_TO_SAVE; i++) {
+      assertEquals("BlobIDAndVersion mismatch at index " + i, blobIDAndVersions.get(i),
+          blobIDAndVersionsAfterUpdate.get(i - 1));
+    }
+    try {
+      router.getBlob(blobIDAndVersions.get(0).getBlobID(), new GetBlobOptionsBuilder().build()).get();
+      fail("Expecting not found exception");
+    } catch (ExecutionException e) {
+      Throwable t = e.getCause();
+      assertTrue("Cause should be RouterException", t instanceof RouterException);
+      assertEquals("ErrorCode mismatch", RouterErrorCode.BlobDoesNotExist, ((RouterException) t).getErrorCode());
+    }
   }
 
   /**
@@ -136,7 +211,7 @@ public class RouterStoreTest {
    * @param version The expected version of blob id to fetch {@link Account} metadata from ambry-server.
    */
   private void assertUpdateAndFetch(RouterStore store, Map<Short, Account> allAccounts,
-      Map<Short, Account> accountsToUpdate, int version) {
+      Map<Short, Account> accountsToUpdate, int version, int count) {
     // verify that updateAccount works again
     boolean succeeded = store.updateAccounts(accountsToUpdate.values());
     assertTrue("Update accounts failed at router store", succeeded);
@@ -145,17 +220,9 @@ public class RouterStoreTest {
     Map<String, String> accountMap = store.fetchAccountMetadata();
     assertAccountsEqual(accountMap, allAccounts);
 
-    // Verify that ZNRecord contains the right data.
-    ZNRecord record = helixStore.get(RouterStore.ACCOUNT_METADATA_BLOB_IDS_PATH, null, AccessOption.PERSISTENT);
-    assertNotNull("ZNRecord missing after update", record);
-    List<String> blobIDAndVersions = record.getListField(RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
-    assertNotNull("Blob ids are missing from ZNRecord", blobIDAndVersions);
-    // version also equals to the number of blobs
-    assertEquals("Number of blobs mismatch", version, blobIDAndVersions.size());
-
+    List<RouterStore.BlobIDAndVersion> blobIDAndVersions = getBlobIDAndVersionInHelix(count);
     RouterStore.BlobIDAndVersion blobIDAndVersion = null;
-    for (String json : blobIDAndVersions) {
-      RouterStore.BlobIDAndVersion current = RouterStore.BlobIDAndVersion.fromJson(json);
+    for (RouterStore.BlobIDAndVersion current : blobIDAndVersions) {
       if (current.getVersion() == version) {
         blobIDAndVersion = current;
         break;
@@ -164,6 +231,27 @@ public class RouterStoreTest {
     assertNotNull("Version " + version + " expected", blobIDAndVersion);
     accountMap = store.readAccountMetadataFromBlobID(blobIDAndVersion.getBlobID());
     assertAccountsEqual(accountMap, allAccounts);
+  }
+
+  /**
+   * Fetch the list of {@link RouterStore.BlobIDAndVersion} from the helixStore.
+   * @param count The expected number of elements in the list.
+   * @return The list of {@link RouterStore.BlobIDAndVersion}.
+   */
+  private List<RouterStore.BlobIDAndVersion> getBlobIDAndVersionInHelix(int count) {
+    // Verify that ZNRecord contains the right data.
+    ZNRecord record = helixStore.get(RouterStore.ACCOUNT_METADATA_BLOB_IDS_PATH, null, AccessOption.PERSISTENT);
+    assertNotNull("ZNRecord missing after update", record);
+    List<String> accountBlobs = record.getListField(RouterStore.ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
+    assertNotNull("Blob ids are missing from ZNRecord", accountBlobs);
+    // version also equals to the number of blobs
+    assertEquals("Number of blobs mismatch", count, accountBlobs.size());
+
+    List<RouterStore.BlobIDAndVersion> blobIDAndVersions = new ArrayList<>(count);
+    for (String json : accountBlobs) {
+      blobIDAndVersions.add(RouterStore.BlobIDAndVersion.fromJson(json));
+    }
+    return blobIDAndVersions;
   }
 
   /**

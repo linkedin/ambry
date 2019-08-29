@@ -26,7 +26,9 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -61,8 +63,8 @@ class RouterStore extends AccountMetadataStore {
   private static final Short CONTAINER_ID = Container.HELIX_ACCOUNT_SERVICE_CONTAINER_ID;
   private static final String SERVICE_ID = "helixAccountService";
 
+  private final int maxNumberOfVersionsToSave;
   private final AtomicReference<Router> router;
-
   // If forBackFill is true, then when updating the account metadata, we don't create backup files and we don't merge
   // accounts from ambry-server with the provided accounts set.
   private final boolean forBackFill;
@@ -76,10 +78,11 @@ class RouterStore extends AccountMetadataStore {
    * @param forBackFill True if this {@link RouterStore} is created for backfill accounts to new zookeeper node.
    */
   RouterStore(AccountServiceMetrics accountServiceMetrics, BackupFileManager backupFileManager,
-      HelixPropertyStore<ZNRecord> helixStore, AtomicReference<Router> router, boolean forBackFill) {
+      HelixPropertyStore<ZNRecord> helixStore, AtomicReference<Router> router, boolean forBackFill, int maxNumberOfVersionsToSave) {
     super(accountServiceMetrics, backupFileManager, helixStore, ACCOUNT_METADATA_BLOB_IDS_PATH);
     this.router = router;
     this.forBackFill = forBackFill;
+    this.maxNumberOfVersionsToSave = maxNumberOfVersionsToSave;
   }
 
   @Override
@@ -180,12 +183,15 @@ class RouterStore extends AccountMetadataStore {
 
     @Override
     public ZNRecord update(ZNRecord znRecord) {
-      // There are several steps to finish an update
-      // 1. Fetch the list from the ZNRecord
-      // 2. Fetch the AccountMetadata from the blob id if the list exist in the ZNRecord
-      // 3. Construct a new AccountMetadata
-      // 4. save it as a blob in the ambry server
-      // 5. Add the new blob id back to the list.
+      /**
+       * There are several steps to finish an update
+       * 1. Fetch the list from the ZNRecord
+       * 2. Fetch the AccountMetadata from the blob id if the list exist in the ZNRecord
+       * 3. Construct a new AccountMetadata
+       * 4. Save it as a blob in the ambry server
+       * 5. Remove oldest version if number of version exceeds the maximum value.
+       * 6. Add the new blob id back to the list.
+       */
 
       // Start step 1:
       ZNRecord recordToUpdate;
@@ -202,16 +208,14 @@ class RouterStore extends AccountMetadataStore {
       List<String> accountBlobIDs = recordToUpdate.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
       int newVersion = 1;
       Map<String, String> accountMap = null;
+      List<BlobIDAndVersion> blobIDAndVersions = new ArrayList<>();
       if (accountBlobIDs != null && accountBlobIDs.size() != 0) {
-        // parse the json string list and get the blob id with the latest version
         try {
-          BlobIDAndVersion blobIDAndVersion = null;
-          for (String accountBlobIDInJson : accountBlobIDs) {
-            BlobIDAndVersion current = BlobIDAndVersion.fromJson(accountBlobIDInJson);
-            if (blobIDAndVersion == null || blobIDAndVersion.version < current.version) {
-              blobIDAndVersion = current;
-            }
-          }
+          // parse the json string list and get the blob id with the latest version
+          accountBlobIDs.stream()
+              .forEach(accountBlobIDInJson -> blobIDAndVersions.add(BlobIDAndVersion.fromJson(accountBlobIDInJson)));
+          Collections.sort(blobIDAndVersions);
+          BlobIDAndVersion blobIDAndVersion = blobIDAndVersions.get(blobIDAndVersions.size() - 1);
           newVersion = blobIDAndVersion.version + 1;
 
           // Start Step 2:
@@ -284,6 +288,22 @@ class RouterStore extends AccountMetadataStore {
       }
 
       // Start step 5:
+      Iterator<BlobIDAndVersion> iter = blobIDAndVersions.iterator();
+      Iterator<String> stringIter = accountBlobIDs.iterator();
+      while (blobIDAndVersions.size() + 1 > maxNumberOfVersionsToSave) {
+        BlobIDAndVersion blobIDAndVersion = iter.next();
+        iter.remove();
+        logger.info("Removing blob " + blobIDAndVersion.getBlobID() + " at version " + blobIDAndVersion.getVersion());
+        try {
+          router.get().deleteBlob(blobIDAndVersion.getBlobID(), SERVICE_ID).get();
+        } catch (Exception e) {
+          logger.error("Failed to delete blob={} from older version because of {}", blobIDAndVersion.getBlobID(), e);
+          accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
+        }
+        stringIter.next();
+        stringIter.remove();
+      }
+      // Start step 6:
       accountBlobIDs.add(new BlobIDAndVersion(this.newBlobID, newVersion).toJson());
       recordToUpdate.setListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, accountBlobIDs);
       return recordToUpdate;
@@ -308,7 +328,7 @@ class RouterStore extends AccountMetadataStore {
    * Helper class that encapsulates the blob id and version number to serve as each item in the blob id list that would
    * eventually be persisted in {@link ZNRecord} at {@link #ACCOUNT_METADATA_BLOB_IDS_PATH}.
    */
-  static class BlobIDAndVersion {
+  static class BlobIDAndVersion implements Comparable<BlobIDAndVersion> {
     private final String blobID;
     private final int version;
 
@@ -350,6 +370,23 @@ class RouterStore extends AccountMetadataStore {
      */
     public String getBlobID() {
       return blobID;
+    }
+
+    @Override
+    public int compareTo(BlobIDAndVersion other) {
+      return version - other.version;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (o == this) {
+        return true;
+      }
+      if (!(o instanceof BlobIDAndVersion)) {
+        return false;
+      }
+      BlobIDAndVersion other = (BlobIDAndVersion) o;
+      return blobID.equals(other.blobID) && version == other.version;
     }
 
     /**
