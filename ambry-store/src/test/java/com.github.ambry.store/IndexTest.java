@@ -18,7 +18,9 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
@@ -869,7 +871,7 @@ public class IndexTest {
    * @throws IOException
    */
   private StoreFindToken getTokenWithNullIncarnationId(StoreFindToken token) throws IOException {
-    return StoreFindToken.fromBytes(StoreFindTokenTest.getSerializedStream(token, StoreFindToken.VERSION_1),
+    return StoreFindToken.fromBytes(new PeekableInputStream(StoreFindTokenTest.getSerializedStream(token, StoreFindToken.VERSION_1)),
         STORE_KEY_FACTORY);
   }
 

@@ -11,9 +11,9 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.store;
+package com.github.ambry.replication;
 
-import java.io.DataInputStream;
+import com.github.ambry.utils.PeekableInputStream;
 import java.io.IOException;
 
 
@@ -26,7 +26,7 @@ public interface FindTokenFactory {
    * @param stream The stream that is used to create the find token
    * @return The find token created from the stream
    */
-  FindToken getFindToken(DataInputStream stream) throws IOException;
+  FindToken getFindToken(PeekableInputStream stream) throws IOException;
 
   /**
    * Provides a new token to bootstrap the find operation

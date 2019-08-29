@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.replication.FindToken;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;

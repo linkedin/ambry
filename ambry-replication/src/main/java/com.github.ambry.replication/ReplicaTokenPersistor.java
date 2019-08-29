@@ -15,10 +15,9 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
+import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -47,10 +46,10 @@ public abstract class ReplicaTokenPersistor implements Runnable {
   protected final ReplicaTokenSerde replicaTokenSerde;
 
   public ReplicaTokenPersistor(Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactory tokenfactory) {
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactoryFactory findTokenFactoryFactory) {
     this.partitionGroupedByMountPath = partitionGroupedByMountPath;
     this.replicationMetrics = replicationMetrics;
-    this.replicaTokenSerde = new ReplicaTokenSerde(clusterMap, tokenfactory);
+    this.replicaTokenSerde = new ReplicaTokenSerde(clusterMap, findTokenFactoryFactory);
   }
 
   /**
@@ -130,13 +129,13 @@ public abstract class ReplicaTokenPersistor implements Runnable {
   public static class ReplicaTokenSerde {
     private static final short Crc_Size = 8;
     private final ClusterMap clusterMap;
-    private final FindTokenFactory tokenfactory;
+    private final FindTokenFactoryFactory tokenFactoryFactory;
     private final short version = 0;
 
     // Map<Sting,FindToken>
-    public ReplicaTokenSerde(ClusterMap clusterMap, FindTokenFactory tokenfactory) {
+    public ReplicaTokenSerde(ClusterMap clusterMap, FindTokenFactoryFactory tokenFactoryFactory) {
       this.clusterMap = clusterMap;
-      this.tokenfactory = tokenfactory;
+      this.tokenFactoryFactory = tokenFactoryFactory;
     }
 
     public void serializeTokens(List<ReplicaTokenInfo> tokenInfoList, OutputStream outputStream) throws IOException {
@@ -192,7 +191,10 @@ public abstract class ReplicaTokenPersistor implements Runnable {
               // read total bytes read from local store
               long totalBytesReadFromLocalStore = stream.readLong();
               // read replica token
-              FindToken token = tokenfactory.getFindToken(stream);
+              PeekableInputStream peekableInputStream = new PeekableInputStream(stream);
+              FindTokenFactory tokenFactory = tokenFactoryFactory.getFindTokenFactoryFromStream(peekableInputStream);
+              FindToken token = tokenFactory.getFindToken(peekableInputStream);
+
               tokenInfoList.add(
                   new ReplicaTokenInfo(partitionId, hostname, replicaPath, port, totalBytesReadFromLocalStore, token));
             }
@@ -209,6 +211,8 @@ public abstract class ReplicaTokenPersistor implements Runnable {
         }
       } catch (IOException e) {
         throw new ReplicationException("IO error deserializing replica tokens", e);
+      } catch (ReflectiveOperationException roe) {
+        throw new ReplicationException("Reflection error while deserializing replica tokens", roe);
       } finally {
         stream.close();
       }

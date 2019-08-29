@@ -13,30 +13,38 @@
  */
 package com.github.ambry.replication;
 
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.utils.PeekableInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 
 public class MockFindToken implements FindToken {
+  short version;
+  FindTokenType type;
   int index;
   long bytesRead;
 
   public MockFindToken(int index, long bytesRead) {
+    this.version = 0;
+    this.type = FindTokenType.IndexBased;
     this.index = index;
     this.bytesRead = bytesRead;
   }
 
-  public MockFindToken(DataInputStream stream) throws IOException {
-    this.index = stream.readInt();
-    this.bytesRead = stream.readLong();
+  public MockFindToken(PeekableInputStream stream) throws IOException {
+    DataInputStream dataInputStream = new DataInputStream(stream);
+    this.version = dataInputStream.readShort();
+    this.type = FindTokenType.values()[dataInputStream.readShort()];
+    this.index = dataInputStream.readInt();
+    this.bytesRead = dataInputStream.readLong();
   }
 
   @Override
   public byte[] toBytes() {
-    ByteBuffer byteBuffer = ByteBuffer.allocate(12);
+    ByteBuffer byteBuffer = ByteBuffer.allocate(Short.BYTES * 2 + Integer.BYTES + Long.BYTES);
+    byteBuffer.putShort(version);
+    byteBuffer.putShort((short) type.ordinal());
     byteBuffer.putInt(index);
     byteBuffer.putLong(bytesRead);
     return byteBuffer.array();
@@ -54,6 +62,16 @@ public class MockFindToken implements FindToken {
     return index == that.index && bytesRead == that.bytesRead;
   }
 
+  @Override
+  public FindTokenType getType() {
+    return type;
+  }
+
+  @Override
+  public short getVersion() {
+    return version;
+  }
+
   public int getIndex() {
     return index;
   }
@@ -65,7 +83,7 @@ public class MockFindToken implements FindToken {
   public static class MockFindTokenFactory implements FindTokenFactory {
 
     @Override
-    public FindToken getFindToken(DataInputStream stream) throws IOException {
+    public FindToken getFindToken(PeekableInputStream stream) throws IOException {
       return new MockFindToken(stream);
     }
 

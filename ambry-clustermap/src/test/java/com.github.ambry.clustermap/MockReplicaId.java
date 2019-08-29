@@ -146,6 +146,11 @@ public class MockReplicaId implements ReplicaId {
     diskId.onDiskOk();
   }
 
+  @Override
+  public ReplicaType getReplicaType() {
+    return ReplicaType.DISK_BACKED;
+  }
+
   public void cleanup() {
     File replicaDir = new File(replicaPath);
     File[] replicaDirFiles = replicaDir.listFiles();

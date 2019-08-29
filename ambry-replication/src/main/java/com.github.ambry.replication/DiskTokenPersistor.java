@@ -14,7 +14,6 @@
 package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.store.FindTokenFactory;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -42,11 +41,11 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
    * @param partitionGroupedByMountPath A map between mount path and list of partitions under this mount path.
    * @param replicationMetrics metrics including token persist time.
    * @param clusterMap the {@link ClusterMap} to deserialize tokens.
-   * @param tokenfactory the {@link FindTokenFactory} to deserialize tokens.
+   * @param tokenFactoryFactory the {@link FindTokenFactoryFactory} to deserialize tokens.
    */
   public DiskTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactory tokenfactory) {
-    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenfactory);
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactoryFactory tokenFactoryFactory) {
+    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenFactoryFactory);
     this.replicaTokenFileName = replicaTokenFileName;
   }
 

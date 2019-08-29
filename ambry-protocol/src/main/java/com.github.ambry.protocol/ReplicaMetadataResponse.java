@@ -15,7 +15,8 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.replication.FindTokenFactoryFactory;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -64,8 +65,8 @@ public class ReplicaMetadataResponse extends Response {
     return replicaMetadataResponseInfoList;
   }
 
-  public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenFactory factory,
-      ClusterMap clusterMap) throws IOException {
+  public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenFactoryFactory factory,
+      ClusterMap clusterMap) throws IOException, ReflectiveOperationException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.ReplicaMetadataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");

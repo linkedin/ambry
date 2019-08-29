@@ -164,6 +164,11 @@ class AmbryReplica implements ReplicaId {
     disk.onDiskOk();
   }
 
+  @Override
+  public ReplicaType getReplicaType() {
+    return ReplicaType.DISK_BACKED;
+  }
+
   /**
    * Take actions, if any, when this replica is unavailable.
    */

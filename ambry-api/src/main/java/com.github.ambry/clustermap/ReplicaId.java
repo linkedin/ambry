@@ -89,4 +89,9 @@ public interface ReplicaId extends Resource {
    * @return true if this replica is in sealed state.
    */
   boolean isSealed();
+
+  /**
+   * @return the {@code ReplicaType} for this replica.
+   */
+  ReplicaType getReplicaType();
 }

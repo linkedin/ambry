@@ -401,7 +401,7 @@ task allJar(type: Jar, dependsOn: subprojects.assemble) {
 
 task allJarVcr(type: Jar, dependsOn: subprojects.assemble) {
     manifest {
-        attributes 'Implementation-Title': 'Ambry',
+        attributes 'Implementation-Title': 'Vcr',
                    'Main-Class': 'com.github.ambry.cloud.VcrMain'
     }
     zip64 true

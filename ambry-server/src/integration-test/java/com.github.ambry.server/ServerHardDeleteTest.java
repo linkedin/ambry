@@ -37,7 +37,7 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.store.HardDeleter;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
@@ -45,6 +45,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -160,8 +161,9 @@ public class ServerHardDeleteTest {
           StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", mockClusterMap);
           FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
-          factory.getFindToken(stream);
-          endToken = (StoreFindToken) factory.getFindToken(stream);
+          PeekableInputStream peekableInputStream = new PeekableInputStream(stream);
+          factory.getFindToken(peekableInputStream);
+          endToken = (StoreFindToken) factory.getFindToken(peekableInputStream);
           Offset endTokenOffset = endToken.getOffset();
           parsedTokenValue = endTokenOffset == null ? -1 : endTokenOffset.getOffset();
           boolean pauseFlag = stream.readByte() == (byte) 1;

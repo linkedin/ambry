@@ -17,6 +17,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;

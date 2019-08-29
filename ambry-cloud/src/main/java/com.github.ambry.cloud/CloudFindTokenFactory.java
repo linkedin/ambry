@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,32 +11,29 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.store;
+package com.github.ambry.cloud;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.PeekableInputStream;
-import java.io.DataInputStream;
 import java.io.IOException;
 
 
-/**
- * Factory that creates the store token from an inputstream
- */
-public class StoreFindTokenFactory implements FindTokenFactory {
+public class CloudFindTokenFactory implements FindTokenFactory {
   private final StoreKeyFactory factory;
 
-  public StoreFindTokenFactory(StoreKeyFactory factory) {
+  public CloudFindTokenFactory(StoreKeyFactory factory) {
     this.factory = factory;
   }
 
   @Override
   public FindToken getFindToken(PeekableInputStream stream) throws IOException {
-    return StoreFindToken.fromBytes(stream, factory);
+    return CloudFindToken.fromBytes(stream);
   }
 
   @Override
   public FindToken getNewFindToken() {
-    return new StoreFindToken();
+    return new CloudFindToken();
   }
 }

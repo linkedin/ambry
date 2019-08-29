@@ -82,13 +82,14 @@ import com.github.ambry.router.NonBlockingRouterFactory;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.HelixControllerManager;
+import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -2020,7 +2021,7 @@ final class ServerTestUtil {
               // read total bytes read from local store
               dataInputStream.readLong();
               // read replica token
-              StoreFindToken token = (StoreFindToken) factory.getFindToken(dataInputStream);
+              StoreFindToken token = (StoreFindToken) factory.getFindToken(new PeekableInputStream(dataInputStream));
               System.out.println(
                   "partitionId " + partitionId + " hostname " + hostname + " port " + port + " token " + token);
               Offset endTokenOffset = token.getOffset();

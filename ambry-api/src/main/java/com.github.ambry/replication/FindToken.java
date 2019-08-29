@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.store;
+package com.github.ambry.replication;
 
 /**
  * The find token used to search entries in the store
@@ -28,4 +28,16 @@ public interface FindToken {
    * @return The total bytes read so far until this token
    */
   public long getBytesRead();
+
+  /**
+   * Returns the type of {@code FindToken}
+   * @return the type of the token
+   */
+  public FindTokenType getType();
+
+  /**
+   * Returns the version of the {@link FindToken}
+   * @return the version of the {}@link {@link FindToken}
+   */
+  public short getVersion();
 }

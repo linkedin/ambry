@@ -26,6 +26,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationEngine;
@@ -77,7 +78,7 @@ public class CloudBackupManager extends ReplicationEngine {
     this.cloudDestination = cloudDestinationFactory.getCloudDestination();
     this.persistor =
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-            factory, cloudDestination);
+            tokenFactoryFactory, cloudDestination);
     this.cloudStorageCompactor =
         new CloudStorageCompactor(cloudDestination, partitionToPartitionInfo.keySet(), vcrMetrics, false);
   }
@@ -184,8 +185,15 @@ public class CloudBackupManager extends ReplicationEngine {
         // We need to ensure that a replica token gets persisted only after the corresponding data in the
         // store gets flushed to cloud. We use the store flush interval multiplied by a constant factor
         // to determine the token flush interval
+        FindTokenFactory findTokenFactory;
+        try {
+          findTokenFactory = tokenFactoryFactory.getFindTokenFactoryFromType(peerReplica.getReplicaType());
+        } catch (ReflectiveOperationException roe) {
+          logger.error("Error on getting replica token factory", roe);
+          throw new ReplicationException("Error on getting replica token factory");
+        }
         RemoteReplicaInfo remoteReplicaInfo =
-            new RemoteReplicaInfo(peerReplica, cloudReplica, cloudStore, factory.getNewFindToken(),
+            new RemoteReplicaInfo(peerReplica, cloudReplica, cloudStore, findTokenFactory.getNewFindToken(),
                 storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
                 SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
         replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
@@ -241,6 +249,10 @@ public class CloudBackupManager extends ReplicationEngine {
 
   public VcrMetrics getVcrMetrics() {
     return vcrMetrics;
+  }
+
+  public PartitionInfo getPartitionInfo(PartitionId partitionId) {
+    return partitionToPartitionInfo.get(partitionId);
   }
 }
 

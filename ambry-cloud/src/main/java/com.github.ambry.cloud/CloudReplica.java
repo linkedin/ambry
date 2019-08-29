@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.protocol.GetRequest;
 import java.io.File;
@@ -117,6 +118,11 @@ class CloudReplica implements ReplicaId {
   @Override
   public void markDiskUp() {
     throw new UnsupportedOperationException("markDiskUp() is not supported.");
+  }
+
+  @Override
+  public ReplicaType getReplicaType() {
+    return ReplicaType.CLOUD_BACKED;
   }
 }
 

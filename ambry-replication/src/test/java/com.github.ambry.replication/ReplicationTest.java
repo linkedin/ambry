@@ -127,7 +127,7 @@ public class ReplicationTest {
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 4);
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindToken.MockFindTokenFactory(), clusterMap, new AtomicInteger(0),
+        new ReplicaThread("threadtest", new MockFindTokenFactoryFactory(storeKeyFactory, config), clusterMap, new AtomicInteger(0),
             localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
             mockStoreKeyConverterFactory.getStoreKeyConverter(), transformer, clusterMap.getMetricRegistry(), false,
             localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
@@ -1327,19 +1327,19 @@ public class ReplicationTest {
    */
   private Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> getRemoteReplicasAndReplicaThread(int batchSize,
       ClusterMap clusterMap, MockHost localHost, MockHost remoteHost, StoreKeyConverter storeKeyConverter,
-      Transformer transformer, StoreEventListener listener) {
+      Transformer transformer, StoreEventListener listener) throws ReflectiveOperationException {
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
     List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, listener);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate =
-
         Collections.singletonMap(remoteHost.dataNodeId, remoteReplicaInfoList);
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindToken.MockFindTokenFactory(), clusterMap, new AtomicInteger(0),
+        new ReplicaThread("threadtest", new MockFindTokenFactoryFactory(storeKeyFactory, config), clusterMap, new AtomicInteger(0),
             localHost.dataNodeId, connectionPool, config, replicationMetrics, null, storeKeyConverter, transformer,
             clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
             new ResponseHandler(clusterMap), time);

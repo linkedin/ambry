@@ -16,6 +16,8 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
@@ -374,9 +376,9 @@ public class HardDeleterTest {
     }
 
     /**
-     * Always returns a {@link StoreFindToken.Type#Uninitialized} token.
+     * Always returns a {@link FindTokenType#Uninitialized} token.
      * @param token the {@link StoreFindToken} to revalidate.
-     * @return a {@link StoreFindToken.Type#Uninitialized} token.
+     * @return a {@link FindTokenType#Uninitialized} token.
      */
     @Override
     FindToken revalidateFindToken(FindToken token) {

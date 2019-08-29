@@ -28,7 +28,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.store.FindInfo;
-import com.github.ambry.store.FindToken;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
