@@ -16,7 +16,10 @@ buildscript {
 }
 
 plugins {
-    id 'org.shipkit.java' version '2.2.5'
+    id 'org.shipkit.java' version '2.2.5' apply false
+}
+if (!project.hasProperty('disableShipkit')) {
+    apply plugin: 'org.shipkit.java'
 }
 
 apply from: file('gradle/license.gradle')

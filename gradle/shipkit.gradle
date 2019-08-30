@@ -35,6 +35,12 @@ allprojects {
                 name = 'ambry'
                 licenses = ['Apache-2.0']
                 labels = ['blob storage']
+                version {
+                    // disable upload to maven central
+                    mavenCentralSync {
+                        sync = false
+                    }
+                }
             }
         }
     }
