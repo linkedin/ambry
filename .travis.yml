@@ -20,6 +20,6 @@ branches:
   except:
     - /^v\d/
 script:
-  - ./gradlew -s --scan build codeCoverageReport && ./gradlew -s --scan ciPerformRelease
+  - ./gradlew -s --scan build codeCoverageReport && ./gradlew -s -i --scan ciPerformRelease
 after_success:
   - bash <(curl -s https://codecov.io/bash)
