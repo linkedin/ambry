@@ -24,7 +24,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.replication.FindTokenFactoryFactory;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationMetrics;
@@ -78,7 +78,7 @@ public class CloudTokenPersistorTest {
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));
     CloudTokenPersistor cloudTokenPersistor = new CloudTokenPersistor("replicaTokens", mountPathToPartitionInfoList,
         new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap,
-        new FindTokenFactoryFactory(blobIdFactory, replicationConfig), cloudDestination);
+        new FindTokenHelper(blobIdFactory, replicationConfig), cloudDestination);
     cloudTokenPersistor.persist(cloudReplicaId.getMountPath(), replicaTokenInfos);
     List<RemoteReplicaInfo.ReplicaTokenInfo> retrievedReplicaTokenInfos =
         cloudTokenPersistor.retrieve(cloudReplicaId.getMountPath());

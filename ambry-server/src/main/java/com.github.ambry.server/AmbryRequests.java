@@ -64,11 +64,10 @@ import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
-import com.github.ambry.replication.FindTokenFactoryFactory;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
-import com.github.ambry.replication.FindToken;
-import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
@@ -114,7 +113,7 @@ public class AmbryRequests implements RequestAPI {
   private final Map<PartitionId, ReplicaId> localPartitionToReplicaMap;
   private final ServerMetrics metrics;
   private final MessageFormatMetrics messageFormatMetrics;
-  private final FindTokenFactoryFactory findTokenFactoryFactory;
+  private final FindTokenHelper findTokenHelper;
   private final NotificationSystem notification;
   private final ReplicationManager replicationManager;
   private final StoreKeyFactory storeKeyFactory;
@@ -124,7 +123,7 @@ public class AmbryRequests implements RequestAPI {
   private final StoreKeyConverterFactory storeKeyConverterFactory;
 
   public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
-      ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactoryFactory findTokenFactoryFactory,
+      ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenHelper findTokenHelper,
       NotificationSystem operationNotification, ReplicationManager replicationManager, StoreKeyFactory storeKeyFactory,
       boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
     this.storageManager = storageManager;
@@ -133,7 +132,7 @@ public class AmbryRequests implements RequestAPI {
     this.currentNode = nodeId;
     this.metrics = new ServerMetrics(registry);
     this.messageFormatMetrics = new MessageFormatMetrics(registry);
-    this.findTokenFactoryFactory = findTokenFactoryFactory;
+    this.findTokenHelper = findTokenHelper;
     this.notification = operationNotification;
     this.replicationManager = replicationManager;
     this.storeKeyFactory = storeKeyFactory;
@@ -571,8 +570,9 @@ public class AmbryRequests implements RequestAPI {
   public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
     ReplicaMetadataRequest replicaMetadataRequest;
     try {
-      replicaMetadataRequest = ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactoryFactory);
-    }  catch (ReflectiveOperationException roe) {
+      replicaMetadataRequest =
+          ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenHelper);
+    } catch (ReflectiveOperationException roe) {
       logger.error("Error on getting replica token factory", roe);
       throw new IOException("Error on getting replica token factory");
     }

@@ -15,8 +15,7 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.replication.FindTokenFactory;
-import com.github.ambry.replication.FindTokenFactoryFactory;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -65,8 +64,8 @@ public class ReplicaMetadataResponse extends Response {
     return replicaMetadataResponseInfoList;
   }
 
-  public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenFactoryFactory factory,
-      ClusterMap clusterMap) throws IOException, ReflectiveOperationException {
+  public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenHelper helper, ClusterMap clusterMap)
+      throws IOException, ReflectiveOperationException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.ReplicaMetadataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
@@ -80,7 +79,7 @@ public class ReplicaMetadataResponse extends Response {
         new ArrayList<ReplicaMetadataResponseInfo>(replicaMetadataResponseInfoListCount);
     for (int i = 0; i < replicaMetadataResponseInfoListCount; i++) {
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-          ReplicaMetadataResponseInfo.readFrom(stream, factory, clusterMap, versionId);
+          ReplicaMetadataResponseInfo.readFrom(stream, helper, clusterMap, versionId);
       replicaMetadataResponseInfoList.add(replicaMetadataResponseInfo);
     }
     if (error != ServerErrorCode.No_Error) {

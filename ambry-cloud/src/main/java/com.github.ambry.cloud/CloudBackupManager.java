@@ -78,7 +78,7 @@ public class CloudBackupManager extends ReplicationEngine {
     this.cloudDestination = cloudDestinationFactory.getCloudDestination();
     this.persistor =
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-            tokenFactoryFactory, cloudDestination);
+            tokenHelper, cloudDestination);
     this.cloudStorageCompactor =
         new CloudStorageCompactor(cloudDestination, partitionToPartitionInfo.keySet(), vcrMetrics, false);
   }
@@ -187,7 +187,7 @@ public class CloudBackupManager extends ReplicationEngine {
         // to determine the token flush interval
         FindTokenFactory findTokenFactory;
         try {
-          findTokenFactory = tokenFactoryFactory.getFindTokenFactoryFromType(peerReplica.getReplicaType());
+          findTokenFactory = tokenHelper.getFindTokenFactoryFromType(peerReplica.getReplicaType());
         } catch (ReflectiveOperationException roe) {
           logger.error("Error on getting replica token factory", roe);
           throw new ReplicationException("Error on getting replica token factory");
@@ -251,9 +251,12 @@ public class CloudBackupManager extends ReplicationEngine {
     return vcrMetrics;
   }
 
+  /**
+   * Get the {@code PartitionInfo} for the given {@code PartitionId}
+   * @param partitionId for which to get the {@code PartitionInfo}
+   * @return {@code PartitionInfo} object.
+   */
   public PartitionInfo getPartitionInfo(PartitionId partitionId) {
     return partitionToPartitionInfo.get(partitionId);
   }
 }
-
-

@@ -14,28 +14,41 @@
 package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ReplicaType;
-import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.Utils;
-import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-public class FindTokenFactoryFactory {
-  protected final Logger logger = LoggerFactory.getLogger(getClass());
+/**
+ * Helper class to get findtoken based on replica type or input stream.
+ */
+public class FindTokenHelper {
+  private static final Logger logger = LoggerFactory.getLogger(FindTokenHelper.class);
   private final short LAST_STORE_ONLY_VERSION = 2;
   private final StoreKeyFactory storeKeyFactory;
   private final ReplicationConfig replicationConfig;
 
-  public FindTokenFactoryFactory(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig) {
+  /**
+   * Create a {@code FindTokenHelper} object.
+   * @param storeKeyFactory
+   * @param replicationConfig
+   */
+  public FindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig) {
     this.storeKeyFactory = storeKeyFactory;
     this.replicationConfig = replicationConfig;
   }
 
+  /**
+   * Get {@code FindTokenFactory} object based on {@code ReplicaType}
+   * @param replicaType for which to get the {@code FindTokenFactory} object
+   * @return {@code FindTokenFactory} object.
+   * @throws ReflectiveOperationException
+   */
   public FindTokenFactory getFindTokenFactoryFromType(ReplicaType replicaType) throws ReflectiveOperationException {
     FindTokenFactory findTokenFactory = null;
     if (replicaType.equals(ReplicaType.DISK_BACKED)) {
@@ -46,25 +59,23 @@ public class FindTokenFactoryFactory {
     return findTokenFactory;
   }
 
-  public FindTokenFactory getFindTokenFactoryFromStream(PeekableInputStream inputStream)
-      throws IOException, ReflectiveOperationException {
-
+  /**
+   * Deserialize the correct {@code FindToken} object from the input stream.
+   * @param inputStream from which to get the {@code FindToken} object.
+   * @return {@code FindToken} object.
+   * @throws IOException
+   * @throws ReflectiveOperationException
+   */
+  public FindToken getFindTokenFromStream(InputStream inputStream) throws IOException, ReflectiveOperationException {
+    PeekableInputStream peekableInputStream = new PeekableInputStream(inputStream);
     FindTokenFactory findTokenFactory = null;
-    short version = peekShort(inputStream);
-    FindTokenType type = FindTokenType.values()[peekShort(inputStream)];
+    short version = peekableInputStream.peekShort();
+    FindTokenType type = FindTokenType.values()[peekableInputStream.peekShort()];
     if (type == FindTokenType.CloudBased) {
       findTokenFactory = Utils.getObj(replicationConfig.replicationCloudTokenFactory, storeKeyFactory);
     } else {
       findTokenFactory = Utils.getObj(replicationConfig.replicationStoreTokenFactory, storeKeyFactory);
     }
-    return findTokenFactory;
-  }
-
-  private final short peekShort(PeekableInputStream in) throws IOException {
-    int ch1 = in.peek();
-    int ch2 = in.peek();
-    if ((ch1 | ch2) < 0)
-      throw new EOFException();
-    return (short)((ch1 << 8) + (ch2 << 0));
+    return findTokenFactory.getFindToken(peekableInputStream);
   }
 }

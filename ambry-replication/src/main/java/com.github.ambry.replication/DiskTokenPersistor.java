@@ -41,11 +41,11 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
    * @param partitionGroupedByMountPath A map between mount path and list of partitions under this mount path.
    * @param replicationMetrics metrics including token persist time.
    * @param clusterMap the {@link ClusterMap} to deserialize tokens.
-   * @param tokenFactoryFactory the {@link FindTokenFactoryFactory} to deserialize tokens.
+   * @param tokenHelper the {@link FindTokenHelper} to deserialize tokens.
    */
   public DiskTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactoryFactory tokenFactoryFactory) {
-    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenFactoryFactory);
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper tokenHelper) {
+    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenHelper);
     this.replicaTokenFileName = replicaTokenFileName;
   }
 

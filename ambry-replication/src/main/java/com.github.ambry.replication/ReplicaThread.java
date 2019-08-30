@@ -86,7 +86,7 @@ public class ReplicaThread implements Runnable {
   private final Set<PartitionId> allReplicatedPartitions = new HashSet<>();
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
-  private final FindTokenFactoryFactory findTokenFactoryFactory;
+  private final FindTokenHelper findTokenHelper;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationIdGenerator;
   private final DataNodeId dataNodeId;
@@ -113,14 +113,14 @@ public class ReplicaThread implements Runnable {
 
   private volatile boolean allDisabled = false;
 
-  public ReplicaThread(String threadName, FindTokenFactoryFactory findTokenFactoryFactory, ClusterMap clusterMap,
+  public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time) {
     this.threadName = threadName;
     this.running = true;
-    this.findTokenFactoryFactory = findTokenFactoryFactory;
+    this.findTokenHelper = findTokenHelper;
     this.clusterMap = clusterMap;
     this.correlationIdGenerator = correlationIdGenerator;
     this.dataNodeId = dataNodeId;
@@ -539,8 +539,8 @@ public class ReplicaThread implements Runnable {
           remoteNode, threadName, replicasToReplicatePerNode, byteBufferInputStream.available());
       ReplicaMetadataResponse response = null;
       try {
-        response = ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenFactoryFactory,
-            clusterMap);
+        response =
+            ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenHelper, clusterMap);
       } catch (ReflectiveOperationException roe) {
         logger.error("Error on getting replica token factory", roe);
         throw new ReplicationException("Error on getting replica token factory");

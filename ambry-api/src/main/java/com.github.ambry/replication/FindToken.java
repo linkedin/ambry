@@ -37,7 +37,7 @@ public interface FindToken {
 
   /**
    * Returns the version of the {@link FindToken}
-   * @return the version of the {}@link {@link FindToken}
+   * @return the version of the {@link FindToken}
    */
   public short getVersion();
 }

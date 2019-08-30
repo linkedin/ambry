@@ -16,9 +16,7 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.replication.FindToken;
-import com.github.ambry.replication.FindTokenFactory;
-import com.github.ambry.replication.FindTokenFactoryFactory;
-import com.github.ambry.utils.PeekableInputStream;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -56,12 +54,11 @@ public class ReplicaMetadataRequestInfo {
   }
 
   public static ReplicaMetadataRequestInfo readFrom(DataInputStream stream, ClusterMap clusterMap,
-      FindTokenFactoryFactory findTokenFactoryFactory) throws IOException, ReflectiveOperationException {
+      FindTokenHelper findTokenHelper) throws IOException, ReflectiveOperationException {
     String hostName = Utils.readIntString(stream);
     String replicaPath = Utils.readIntString(stream);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-    PeekableInputStream peekableInputStream = new PeekableInputStream(stream);
-    FindToken token = findTokenFactoryFactory.getFindTokenFactoryFromStream(new PeekableInputStream(peekableInputStream)).getFindToken(peekableInputStream);
+    FindToken token = findTokenHelper.getFindTokenFromStream(stream);
     return new ReplicaMetadataRequestInfo(partitionId, token, hostName, replicaPath);
   }
 

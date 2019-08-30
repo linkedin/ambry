@@ -73,7 +73,8 @@ public class CloudFindToken implements FindToken {
     } else {
       CloudBlobMetadata lastResult = queryResults.get(queryResults.size() - 1);
       long bytesReadThisQuery = queryResults.stream().mapToLong(CloudBlobMetadata::getSize).sum();
-      return new CloudFindToken(lastResult.getUploadTime(), lastResult.getId(), prevToken.getBytesRead() + bytesReadThisQuery);
+      return new CloudFindToken(lastResult.getUploadTime(), lastResult.getId(),
+          prevToken.getBytesRead() + bytesReadThisQuery);
     }
   }
 
@@ -83,7 +84,7 @@ public class CloudFindToken implements FindToken {
     switch (version) {
       case VERSION_0:
         int size = 2 * Short.BYTES + 2 * Long.BYTES;
-        if(latestBlobId != null) {
+        if (latestBlobId != null) {
           size += latestBlobId.length();
         }
         buf = new byte[size];
@@ -103,7 +104,7 @@ public class CloudFindToken implements FindToken {
         break;
       case VERSION_3:
         size = 3 * Short.BYTES + 2 * Long.BYTES;
-        if(latestBlobId != null) {
+        if (latestBlobId != null) {
           size += latestBlobId.length();
         }
         buf = new byte[size];
@@ -129,7 +130,6 @@ public class CloudFindToken implements FindToken {
     return buf;
   }
 
-
   /**
    * Utility to construct a previously serialized {@code CloudFindToken} from input stream.
    * @param inputStream {@code PeekableInputStream} from which to read the token.
@@ -140,10 +140,10 @@ public class CloudFindToken implements FindToken {
     CloudFindToken cloudFindToken = null;
     DataInputStream stream = new DataInputStream(inputStream);
     short version = stream.readShort();
-    if(version < VERSION_3) {
+    if (version < VERSION_3) {
       throw new IllegalArgumentException("Unrecognized version in CloudFindToken: " + version);
     }
-    switch(version) {
+    switch (version) {
       case VERSION_0:
         long latestUploadTime = stream.readLong();
         long bytesRead = stream.readLong();

@@ -17,7 +17,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
-import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -46,10 +45,10 @@ public abstract class ReplicaTokenPersistor implements Runnable {
   protected final ReplicaTokenSerde replicaTokenSerde;
 
   public ReplicaTokenPersistor(Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactoryFactory findTokenFactoryFactory) {
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper findTokenHelper) {
     this.partitionGroupedByMountPath = partitionGroupedByMountPath;
     this.replicationMetrics = replicationMetrics;
-    this.replicaTokenSerde = new ReplicaTokenSerde(clusterMap, findTokenFactoryFactory);
+    this.replicaTokenSerde = new ReplicaTokenSerde(clusterMap, findTokenHelper);
   }
 
   /**
@@ -129,13 +128,13 @@ public abstract class ReplicaTokenPersistor implements Runnable {
   public static class ReplicaTokenSerde {
     private static final short Crc_Size = 8;
     private final ClusterMap clusterMap;
-    private final FindTokenFactoryFactory tokenFactoryFactory;
+    private final FindTokenHelper tokenHelper;
     private final short version = 0;
 
     // Map<Sting,FindToken>
-    public ReplicaTokenSerde(ClusterMap clusterMap, FindTokenFactoryFactory tokenFactoryFactory) {
+    public ReplicaTokenSerde(ClusterMap clusterMap, FindTokenHelper tokenHelper) {
       this.clusterMap = clusterMap;
-      this.tokenFactoryFactory = tokenFactoryFactory;
+      this.tokenHelper = tokenHelper;
     }
 
     public void serializeTokens(List<ReplicaTokenInfo> tokenInfoList, OutputStream outputStream) throws IOException {
@@ -191,9 +190,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
               // read total bytes read from local store
               long totalBytesReadFromLocalStore = stream.readLong();
               // read replica token
-              PeekableInputStream peekableInputStream = new PeekableInputStream(stream);
-              FindTokenFactory tokenFactory = tokenFactoryFactory.getFindTokenFactoryFromStream(peekableInputStream);
-              FindToken token = tokenFactory.getFindToken(peekableInputStream);
+              FindToken token = tokenHelper.getFindTokenFromStream(stream);
 
               tokenInfoList.add(
                   new ReplicaTokenInfo(partitionId, hostname, replicaPath, port, totalBytesReadFromLocalStore, token));

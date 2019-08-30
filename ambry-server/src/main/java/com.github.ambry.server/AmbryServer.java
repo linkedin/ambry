@@ -40,7 +40,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.replication.FindTokenFactoryFactory;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
@@ -160,10 +160,10 @@ public class AmbryServer {
       }
 
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
-      FindTokenFactoryFactory findTokenFactoryFactory = new FindTokenFactoryFactory(storeKeyFactory, replicationConfig);
+      FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
       requests =
           new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
-              findTokenFactoryFactory, notificationSystem, replicationManager, storeKeyFactory,
+              findTokenHelper, notificationSystem, replicationManager, storeKeyFactory,
               serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);

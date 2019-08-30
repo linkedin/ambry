@@ -14,7 +14,7 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.replication.FindTokenFactoryFactory;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -50,8 +50,8 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     }
   }
 
-  public static ReplicaMetadataRequest readFrom(DataInputStream stream, ClusterMap clusterMap, FindTokenFactoryFactory findTokenFactoryFactory)
-      throws IOException, ReflectiveOperationException {
+  public static ReplicaMetadataRequest readFrom(DataInputStream stream, ClusterMap clusterMap,
+      FindTokenHelper findTokenHelper) throws IOException, ReflectiveOperationException {
     RequestOrResponseType type = RequestOrResponseType.ReplicaMetadataRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
@@ -61,7 +61,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
         new ArrayList<ReplicaMetadataRequestInfo>(replicaMetadataRequestInfoListCount);
     for (int i = 0; i < replicaMetadataRequestInfoListCount; i++) {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
-          ReplicaMetadataRequestInfo.readFrom(stream, clusterMap, findTokenFactoryFactory);
+          ReplicaMetadataRequestInfo.readFrom(stream, clusterMap, findTokenHelper);
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
     }
     long maxTotalSizeOfEntries = stream.readLong();

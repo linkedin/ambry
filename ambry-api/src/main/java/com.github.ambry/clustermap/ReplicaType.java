@@ -14,7 +14,9 @@
 
 package com.github.ambry.clustermap;
 
+/**
+ * The type of replica.
+ */
 public enum ReplicaType {
-  DISK_BACKED,
-  CLOUD_BACKED
+  DISK_BACKED, CLOUD_BACKED
 }

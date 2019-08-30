@@ -35,7 +35,7 @@ import com.github.ambry.replication.BlobIdTransformer;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.MockConnectionPool;
 import com.github.ambry.replication.MockFindToken;
-import com.github.ambry.replication.MockFindTokenFactoryFactory;
+import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.MockHost;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
@@ -458,7 +458,7 @@ public class CloudBlobStoreTest {
     // Create ReplicaThread and add RemoteReplicaInfo to it.
     ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), Collections.emptyList());
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindTokenFactoryFactory(storeKeyFactory, replicationConfig), clusterMap,
+        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(),
             new ResponseHandler(clusterMap), new MockTime());
