@@ -114,7 +114,6 @@ class HelixBootstrapUpgradeUtil {
   private HelixClusterManager validatingHelixClusterManager;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
   private static final String ALL = "all";
-  //private static final String
 
   /**
    * Parse the dc string argument and return a map of dc -> DcZkInfo for every datacenter that is enabled.
