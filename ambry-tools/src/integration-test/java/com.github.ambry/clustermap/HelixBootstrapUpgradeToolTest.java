@@ -69,7 +69,8 @@ public class HelixBootstrapUpgradeToolTest {
   private TestPartitionLayout testPartitionLayout;
   private static final String CLUSTER_NAME_IN_STATIC_CLUSTER_MAP = "ToolTestStatic";
   private static final String CLUSTER_NAME_PREFIX = "Ambry-";
-  private static final String ROOT_PATH = "/" + CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+  private static final String ROOT_PATH =
+      "/" + CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP + "/" + ClusterMapUtils.PROPERTYSTORE_STR;
   private static HelixPropertyStoreConfig propertyStoreConfig;
 
   /**
@@ -443,7 +444,7 @@ public class HelixBootstrapUpgradeToolTest {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      String getPath = ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH + ClusterMapUtils.REPLICA_ADDITION_STR;
+      String getPath = ClusterMapUtils.REPLICA_ADDITION_ZNODE_PATH;
       ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
       if (!activeDcSet.contains(zkInfo.getDcName())) {
         // if data center is not enabled, no admin config should be uploaded to Helix.
@@ -511,7 +512,7 @@ public class HelixBootstrapUpgradeToolTest {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      String getPath = ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH + ClusterMapUtils.PARTITION_OVERRIDE_STR;
+      String getPath = ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH;
       ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
       if (!activeDcSet.contains(zkInfo.getDcName())) {
         assertNull(zNRecord);

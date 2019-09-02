@@ -114,6 +114,7 @@ class HelixBootstrapUpgradeUtil {
   private HelixClusterManager validatingHelixClusterManager;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
   private static final String ALL = "all";
+  //private static final String
 
   /**
    * Parse the dc string argument and return a map of dc -> DcZkInfo for every datacenter that is enabled.
@@ -277,12 +278,13 @@ class HelixBootstrapUpgradeUtil {
         Map<String, Map<String, Map<String, String>>> partitionOverrideInfosByDc =
             clusterMapToHelixMapper.generatePartitionOverrideFromAllDCs();
         clusterMapToHelixMapper.uploadClusterAdminInfos(partitionOverrideInfosByDc,
-            ClusterMapUtils.PARTITION_OVERRIDE_STR);
+            ClusterMapUtils.PARTITION_OVERRIDE_STR, ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH);
         break;
       case ClusterMapUtils.REPLICA_ADDITION_STR:
         Map<String, Map<String, Map<String, String>>> replicaAdditionInfosByDc =
             clusterMapToHelixMapper.generateReplicaAdditionMap();
-        clusterMapToHelixMapper.uploadClusterAdminInfos(replicaAdditionInfosByDc, ClusterMapUtils.REPLICA_ADDITION_STR);
+        clusterMapToHelixMapper.uploadClusterAdminInfos(replicaAdditionInfosByDc, ClusterMapUtils.REPLICA_ADDITION_STR,
+            ClusterMapUtils.REPLICA_ADDITION_ZNODE_PATH);
         break;
       default:
         throw new IllegalArgumentException(
@@ -461,11 +463,13 @@ class HelixBootstrapUpgradeUtil {
    * @param adminInfosByDc the cluster admin information (overridden partitions, added replicas) grouped by DC that would
    *                       be applied to cluster.
    * @param clusterAdminType the type of cluster admin that would be uploaded (i.e. PartitionOverride, ReplicaAddition)
+   * @param adminConfigZNodePath ZNode path of admin config associated with clusterAdminType.
    */
   private void uploadClusterAdminInfos(Map<String, Map<String, Map<String, String>>> adminInfosByDc,
-      String clusterAdminType) {
+      String clusterAdminType, String adminConfigZNodePath) {
     Properties storeProps = new Properties();
-    storeProps.setProperty("helix.property.store.root.path", "/" + clusterName);
+    storeProps.setProperty("helix.property.store.root.path",
+        "/" + clusterName + "/" + ClusterMapUtils.PROPERTYSTORE_STR);
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
       info("Uploading {} infos for datacenter {}.", clusterAdminType, entry.getKey());
@@ -473,8 +477,7 @@ class HelixBootstrapUpgradeUtil {
           CommonUtils.createHelixPropertyStore(entry.getValue().getZkConnectStr(), propertyStoreConfig, null);
       ZNRecord znRecord = new ZNRecord(clusterAdminType);
       znRecord.setMapFields(adminInfosByDc.get(entry.getKey()));
-      String path = ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH + clusterAdminType;
-      if (!helixPropertyStore.set(path, znRecord, AccessOption.PERSISTENT)) {
+      if (!helixPropertyStore.set(adminConfigZNodePath, znRecord, AccessOption.PERSISTENT)) {
         info("Failed to upload {} infos for datacenter {}", clusterAdminType, entry.getKey());
       }
     }
