@@ -212,11 +212,13 @@ class DiskSpaceAllocator {
         try {
           Files.move(reserveFile.toPath(), destinationFile.toPath());
         } catch (Exception e) {
-          // return the segment to corresponding store reserve dir or swap reserve dir which it belongs to
-          if (isSwapSegment) {
-            swapReserveFiles.add(sizeInBytes, reserveFile);
-          } else {
-            storeReserveFiles.get(storeId).add(sizeInBytes, reserveFile);
+          // return the segment (if exists) to corresponding store reserve dir or swap reserve dir which it belongs to
+          if (reserveFile.exists()) {
+            if (isSwapSegment) {
+              swapReserveFiles.add(sizeInBytes, reserveFile);
+            } else {
+              storeReserveFiles.get(storeId).add(sizeInBytes, reserveFile);
+            }
           }
           throw e;
         }
@@ -408,6 +410,11 @@ class DiskSpaceAllocator {
           for (Long sizeInBytes : sizeToFilesMap.getFileSizeSet()) {
             Long segmentsNeeded = storeRequirement.get(sizeInBytes);
             if (segmentsNeeded == null || segmentsNeeded == 0) {
+              // 1. empty file queue to update in-mem store reserve map
+              while (sizeToFilesMap.getCount(sizeInBytes) > 0) {
+                sizeToFilesMap.remove(sizeInBytes);
+              }
+              // 2. delete directory of store segments with certain size
               File dirToDelete = new File(storeReserveDir, generateFileSizeDirName(sizeInBytes));
               Utils.deleteFileOrDirectory(dirToDelete);
             } else {
@@ -427,6 +434,11 @@ class DiskSpaceAllocator {
       for (long sizeInBytes : swapReserveFiles.getFileSizeSet()) {
         Long segmentsNeeded = requiredSwapSegments.get(sizeInBytes);
         if (segmentsNeeded == null || segmentsNeeded == 0) {
+          // 1. empty file queue to update in-mem swap reserve map
+          while (swapReserveFiles.getCount(sizeInBytes) > 0) {
+            swapReserveFiles.remove(sizeInBytes);
+          }
+          // 2. delete directory of swap segments with certain size
           File dirToDelete = new File(swapReserveDir, generateFileSizeDirName(sizeInBytes));
           Utils.deleteFileOrDirectory(dirToDelete);
         } else {
@@ -442,6 +454,8 @@ class DiskSpaceAllocator {
       // delete the unneeded segments at runtime which is usually called during dynamic store removal.
       // TODO use compactor in store to double check swap segments in use and return them to reserve pool
       for (String storeId : overallRequirements.keySet()) {
+        // remove store reserve dir from in-mem data structure and then delete whole directory
+        storeReserveFiles.remove(storeId);
         File storeReserveDir = new File(reserveDir, STORE_DIR_PREFIX + storeId);
         Utils.deleteFileOrDirectory(storeReserveDir);
       }

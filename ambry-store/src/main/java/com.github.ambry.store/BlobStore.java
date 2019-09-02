@@ -699,7 +699,15 @@ class BlobStore implements Store {
       File swapSegmentTempFile = new File(dataDir, fileName);
       diskSpaceAllocator.free(swapSegmentTempFile, config.storeSegmentSizeInBytes, storeId, true);
     }
-    // Step 2: delete all files
+    // Step 2: if segmented, delete remaining store segments in reserve pool
+    if (log.isLogSegmented()) {
+      Map<String, Map<Long, Long>> storeSegmentRequirement = new HashMap<>();
+      Map<Long, Long> segmentSizeAndNum = new HashMap<>();
+      segmentSizeAndNum.put(log.getSegmentCapacity(), log.getRemainingUnallocatedSegments());
+      storeSegmentRequirement.put(storeId, segmentSizeAndNum);
+      diskSpaceAllocator.deleteExtraSegments(storeSegmentRequirement, false);
+    }
+    // Step 3: delete all files in current store directory
     logger.info("Deleting store {} directory", storeId);
     File storeDir = new File(dataDir);
     try {

@@ -305,7 +305,7 @@ public class DiskSpaceAllocatorTest {
    * @throws Exception
    */
   @Test
-  public void inventoryExistingFilesTest() throws Exception {
+  public void inventoryExistingFilesAndInitTest() throws Exception {
     assertTrue("Couldn't create reserve file directory", reserveFileDir.mkdir());
     // create valid existing store reserve directory and swap directory
     File storeReserveDir = new File(reserveFileDir, DiskSpaceAllocator.STORE_DIR_PREFIX + storeId0);
@@ -315,13 +315,17 @@ public class DiskSpaceAllocatorTest {
     // create sub-directories in store and swap reserve directories
     File fileSizeDir1 = new File(storeReserveDir, DiskSpaceAllocator.FILE_SIZE_DIR_PREFIX + 50);
     File fileSizeDir2 = new File(swapReserveDir, DiskSpaceAllocator.FILE_SIZE_DIR_PREFIX + 30);
+    File fileSizeDir3 = new File(swapReserveDir, DiskSpaceAllocator.FILE_SIZE_DIR_PREFIX + 50);
     assertTrue("Couldn't create file size directory", fileSizeDir1.mkdir());
     assertTrue("Couldn't create file size directory", fileSizeDir2.mkdir());
+    assertTrue("Couldn't create file size directory", fileSizeDir3.mkdir());
     // create files in above directories
     File reserveFile1 = new File(fileSizeDir1, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
     File reserveFile2 = new File(fileSizeDir2, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
+    File reserveFile3 = new File(fileSizeDir3, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
     assertTrue("Couldn't create file", reserveFile1.createNewFile());
     assertTrue("Couldn't create file", reserveFile2.createNewFile());
+    assertTrue("Couldn't create file", reserveFile3.createNewFile());
     // create invalid directory and file for testing
     File invalidDir = new File(reserveFileDir, DiskSpaceAllocator.FILE_SIZE_DIR_PREFIX + 50);
     File invalidFile = new File(reserveFileDir, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
@@ -341,7 +345,21 @@ public class DiskSpaceAllocatorTest {
         storeFileMap.containsKey(storeId0) && storeFileMap.keySet().size() == 1);
     DiskSpaceAllocator.ReserveFileMap swapFileMap = alloc.getSwapReserveFileMap();
     assertTrue("Swap reserve file map doesn't match existing directory/file",
-        swapFileMap.getCount(30) == 1 && swapFileMap.getFileSizeSet().size() == 1);
+        swapFileMap.getCount(30) == 1 && swapFileMap.getFileSizeSet().size() == 2);
+    assertTrue("Swap reserve file map doesn't match existing directory/file",
+        swapFileMap.getCount(50) == 1 && swapFileMap.getFileSizeSet().size() == 2);
+
+    // initialize pool to verify extra swap segment is deleted and required store segments are added.
+    // before init: store reserve pool has reserve_50 segment; swap reserve pool has reserve_30, reserve_50
+    // after init (expected state): store reserve pool has reserve_30 segment; swap reserve pool is empty.
+    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(storeId0, 30, 1, 1)));
+    swapFileMap = alloc.getSwapReserveFileMap();
+    assertNull("The swap segment should not exist in in-mem swap map", swapFileMap.remove(30));
+    assertNull("The swap segment should not exist in in-mem swap map", swapFileMap.remove(50));
+    storeFileMap = alloc.getStoreReserveFileMap();
+    assertNull("The store segment with size 50 should not exist in in-mem store file map",
+        storeFileMap.get(storeId0).remove(50));
+    assertNotNull("The store segment with size 30 should exist", storeFileMap.get(storeId0).remove(30));
   }
 
   /**
@@ -430,6 +448,10 @@ public class DiskSpaceAllocatorTest {
     deleteStoreRequirement.put(storeId0, sizeAndFileNum);
     alloc.deleteExtraSegments(deleteStoreRequirement, false);
     verifyPoolState(new ExpectedState().addStoreSeg(storeId1, 20, 3));
+    // verify in-mem store reserve file map doesn't contain storeId0
+    Map<String, DiskSpaceAllocator.ReserveFileMap> storeFileMap = alloc.getStoreReserveFileMap();
+    assertFalse("Store reserve file map should not contain entry associated with storeId0",
+        storeFileMap.containsKey(storeId0));
   }
 
   /**

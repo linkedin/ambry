@@ -1204,6 +1204,12 @@ public class BlobStoreTest {
         : Collections.singletonList(testStore.getDiskSpaceRequirements()));
     // ensure store directory and file exist
     assertTrue("Store directory doesn't exist", storeDir.exists());
+    File storeSegmentDir = new File(reserveDir, DiskSpaceAllocator.STORE_DIR_PREFIX + storeId);
+    if (isLogSegmented) {
+      assertTrue("Store segment directory doesn't exist", storeSegmentDir.exists());
+      assertTrue("In-mem store file map should contain entry associated with test store",
+          diskAllocator.getStoreReserveFileMap().containsKey(storeId));
+    }
     // test that deletion on started store should fail
     try {
       testStore.deleteStoreFiles();
@@ -1236,7 +1242,9 @@ public class BlobStoreTest {
     assertEquals("Swap reserve dir should have one swap segment", 1,
         diskAllocator.getSwapReserveFileMap().getFileSizeSet().size());
     assertFalse("store directory shouldn't exist", storeDir.exists());
-
+    assertFalse("store segment directory shouldn't exist", storeSegmentDir.exists());
+    assertFalse("test store entry should have been removed from in-mem store file map ",
+        diskAllocator.getStoreReserveFileMap().containsKey(storeId));
     reloadStore();
   }
 
