@@ -871,7 +871,8 @@ public class IndexTest {
    * @throws IOException
    */
   private StoreFindToken getTokenWithNullIncarnationId(StoreFindToken token) throws IOException {
-    return StoreFindToken.fromBytes(new PeekableInputStream(StoreFindTokenTest.getSerializedStream(token, StoreFindToken.VERSION_1)),
+    return StoreFindToken.fromBytes(
+        new PeekableInputStream(StoreFindTokenTest.getSerializedStream(token, StoreFindToken.VERSION_1)),
         STORE_KEY_FACTORY);
   }
 

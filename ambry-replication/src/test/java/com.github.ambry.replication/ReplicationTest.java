@@ -127,8 +127,8 @@ public class ReplicationTest {
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 4);
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, config), clusterMap, new AtomicInteger(0),
-            localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
+        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, config), clusterMap,
+            new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
             mockStoreKeyConverterFactory.getStoreKeyConverter(), transformer, clusterMap.getMetricRegistry(), false,
             localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
@@ -1339,10 +1339,10 @@ public class ReplicationTest {
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, config), clusterMap, new AtomicInteger(0),
-            localHost.dataNodeId, connectionPool, config, replicationMetrics, null, storeKeyConverter, transformer,
-            clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
-            new ResponseHandler(clusterMap), time);
+        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, config), clusterMap,
+            new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
+            storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }

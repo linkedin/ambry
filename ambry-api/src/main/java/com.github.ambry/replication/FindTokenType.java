@@ -18,5 +18,4 @@ package com.github.ambry.replication;
  */
 public enum FindTokenType {
   Uninitialized, JournalBased, IndexBased, CloudBased;
-
 }

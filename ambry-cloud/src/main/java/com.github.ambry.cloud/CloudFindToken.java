@@ -30,8 +30,7 @@ import java.util.Objects;
 public class CloudFindToken implements FindToken {
 
   static final short VERSION_0 = 0;
-  static final short VERSION_3 = 3;
-  static final short CURRENT_VERSION = VERSION_3;
+  static final short CURRENT_VERSION = VERSION_0;
   private final short version;
   private final FindTokenType type;
   private final long latestUploadTime;
@@ -83,32 +82,12 @@ public class CloudFindToken implements FindToken {
     byte[] buf = null;
     switch (version) {
       case VERSION_0:
-        int size = 2 * Short.BYTES + 2 * Long.BYTES;
+        int size = 3 * Short.BYTES + 2 * Long.BYTES;
         if (latestBlobId != null) {
           size += latestBlobId.length();
         }
         buf = new byte[size];
         ByteBuffer bufWrap = ByteBuffer.wrap(buf);
-        // add version
-        bufWrap.putShort(version);
-        // add latestUploadTime
-        bufWrap.putLong(latestUploadTime);
-        // add bytesRead
-        bufWrap.putLong(bytesRead);
-        if (latestBlobId != null) {
-          bufWrap.putShort((short) latestBlobId.length());
-          bufWrap.put(latestBlobId.getBytes());
-        } else {
-          bufWrap.putShort((short) 0);
-        }
-        break;
-      case VERSION_3:
-        size = 3 * Short.BYTES + 2 * Long.BYTES;
-        if (latestBlobId != null) {
-          size += latestBlobId.length();
-        }
-        buf = new byte[size];
-        bufWrap = ByteBuffer.wrap(buf);
         // add version
         bufWrap.putShort(version);
         // add type
@@ -140,28 +119,13 @@ public class CloudFindToken implements FindToken {
     CloudFindToken cloudFindToken = null;
     DataInputStream stream = new DataInputStream(inputStream);
     short version = stream.readShort();
-    if (version < VERSION_3) {
-      throw new IllegalArgumentException("Unrecognized version in CloudFindToken: " + version);
-    }
     switch (version) {
       case VERSION_0:
+        FindTokenType type = FindTokenType.values()[stream.readShort()];
         long latestUploadTime = stream.readLong();
         long bytesRead = stream.readLong();
         short latestBlobIdLength = stream.readShort();
         String latestBlobId = null;
-        if (latestBlobIdLength != 0) {
-          byte[] latestBlobIdbytes = new byte[latestBlobIdLength];
-          stream.read(latestBlobIdbytes, 0, (int) latestBlobIdLength);
-          latestBlobId = Arrays.toString(latestBlobIdbytes);
-        }
-        cloudFindToken = new CloudFindToken(version, latestUploadTime, latestBlobId, bytesRead);
-        break;
-      case VERSION_3:
-        FindTokenType type = FindTokenType.values()[stream.readShort()];
-        latestUploadTime = stream.readLong();
-        bytesRead = stream.readLong();
-        latestBlobIdLength = stream.readShort();
-        latestBlobId = null;
         if (latestBlobIdLength != 0) {
           byte[] latestBlobIdbytes = new byte[latestBlobIdLength];
           stream.read(latestBlobIdbytes, 0, (int) latestBlobIdLength);

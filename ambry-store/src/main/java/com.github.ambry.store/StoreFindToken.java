@@ -38,8 +38,7 @@ public class StoreFindToken implements FindToken {
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
-  static final short VERSION_3 = 3;
-  static final short CURRENT_VERSION = VERSION_3;
+  static final short CURRENT_VERSION = VERSION_2;
 
   private static final int VERSION_SIZE = 2;
   private static final int TYPE_SIZE = 2;
@@ -116,7 +115,7 @@ public class StoreFindToken implements FindToken {
       } else if (type.equals(FindTokenType.IndexBased) && key == null) {
         throw new IllegalArgumentException("StoreKey cannot be null for an index based token");
       }
-      if (version >= VERSION_2 && incarnationId == null) {
+      if (version == VERSION_2 && incarnationId == null) {
         throw new IllegalArgumentException("IncarnationId cannot be null for StoreFindToken of version 2");
       }
     }
@@ -194,7 +193,6 @@ public class StoreFindToken implements FindToken {
         }
         break;
       case VERSION_2:
-      case VERSION_3:
         // read type
         type = FindTokenType.values()[stream.readShort()];
         switch (type) {
@@ -316,7 +314,6 @@ public class StoreFindToken implements FindToken {
         bufWrap.put(storeKeyBytes);
         break;
       case VERSION_2:
-      case VERSION_3:
         offsetBytes = offset != null ? offset.toBytes() : ZERO_LENGTH_ARRAY;
         sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
         byte[] incarnationIdBytes = incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
@@ -335,7 +332,7 @@ public class StoreFindToken implements FindToken {
         buf = new byte[size];
         bufWrap = ByteBuffer.wrap(buf);
         // add version
-        bufWrap.putShort(version);
+        bufWrap.putShort(VERSION_2);
         // add type
         bufWrap.putShort((short) type.ordinal());
         if (type != FindTokenType.Uninitialized) {

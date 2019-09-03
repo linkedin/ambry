@@ -29,7 +29,6 @@ import org.slf4j.LoggerFactory;
  */
 public class FindTokenHelper {
   private static final Logger logger = LoggerFactory.getLogger(FindTokenHelper.class);
-  private final short LAST_STORE_ONLY_VERSION = 2;
   private final StoreKeyFactory storeKeyFactory;
   private final ReplicationConfig replicationConfig;
 
@@ -51,7 +50,7 @@ public class FindTokenHelper {
    */
   public FindTokenFactory getFindTokenFactoryFromType(ReplicaType replicaType) throws ReflectiveOperationException {
     FindTokenFactory findTokenFactory = null;
-    if (replicaType.equals(ReplicaType.DISK_BACKED)) {
+    if (replicaType == ReplicaType.DISK_BACKED) {
       findTokenFactory = Utils.getObj(replicationConfig.replicationStoreTokenFactory, storeKeyFactory);
     } else if (replicaType.equals(ReplicaType.CLOUD_BACKED)) {
       findTokenFactory = Utils.getObj(replicationConfig.replicationCloudTokenFactory, storeKeyFactory);

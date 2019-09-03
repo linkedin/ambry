@@ -139,30 +139,30 @@ public class StoreFindTokenTest {
 
     if (!isLogSegmented) {
       // UnInitialized
-      doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1, StoreFindToken.VERSION_3);
+      doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
 
       // Journal based token
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_0,
-          StoreFindToken.VERSION_1, StoreFindToken.VERSION_3);
+          StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
       // inclusiveness is present only in VERSION_2
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_3);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_2);
 
       // Index based
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_0,
-          StoreFindToken.VERSION_1, StoreFindToken.VERSION_3);
+          StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
     } else {
       // UnInitialized
-      doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_1, StoreFindToken.VERSION_3);
+      doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
 
       // Journal based token
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_1,
-          StoreFindToken.VERSION_3);
+          StoreFindToken.VERSION_2);
       // inclusiveness is present only in VERSION_2
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_3);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_2);
 
       // Index based
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_1,
-          StoreFindToken.VERSION_3);
+          StoreFindToken.VERSION_2);
     }
   }
 
@@ -301,7 +301,6 @@ public class StoreFindTokenTest {
           bufWrap.put(key.toBytes());
         }
         break;
-      case StoreFindToken.VERSION_2:
       case StoreFindToken.CURRENT_VERSION:
         bytes = token.toBytes();
         break;

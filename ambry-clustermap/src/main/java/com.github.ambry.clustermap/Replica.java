@@ -58,7 +58,7 @@ class Replica implements ReplicaId {
       throw new IllegalStateException("Error creating resource state policy when instantiating a replica " + partition,
           e);
     }
-    if(disk.getMountPath().startsWith(CLOUD_REPLICA_MOUNT)) {
+    if (disk.getMountPath().startsWith(CLOUD_REPLICA_MOUNT)) {
       replicaType = ReplicaType.CLOUD_BACKED;
     } else {
       replicaType = ReplicaType.DISK_BACKED;

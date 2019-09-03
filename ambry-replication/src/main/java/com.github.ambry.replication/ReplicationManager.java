@@ -64,8 +64,8 @@ public class ReplicationManager extends ReplicationEngine {
             // to determine the token flush interval
             FindToken findToken = null;
             try {
-              findToken = this.tokenFactoryFactory.getFindTokenFactoryFromType(remoteReplica.getReplicaType())
-                  .getNewFindToken();
+              findToken =
+                  this.tokenHelper.getFindTokenFactoryFromType(remoteReplica.getReplicaType()).getNewFindToken();
             } catch (ReflectiveOperationException roe) {
               logger.error("Error on getting replica token factory", roe);
               throw new ReplicationException("Error on getting replica token factory");
@@ -90,7 +90,7 @@ public class ReplicationManager extends ReplicationEngine {
       }
     }
     persistor = new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-        tokenFactoryFactory);
+        tokenHelper);
   }
 
   @Override
