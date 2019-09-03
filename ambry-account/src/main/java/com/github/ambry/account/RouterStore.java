@@ -91,20 +91,17 @@ class RouterStore extends AccountMetadataStore {
       logger.error("Router is not yet initialized");
       return null;
     }
-    List<String> accountBlobIDs = record.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
-    if (accountBlobIDs == null || accountBlobIDs.size() == 0) {
+    List<String> blobIDAndVersionsJson = record.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
+    if (blobIDAndVersionsJson == null || blobIDAndVersionsJson.size() == 0) {
       logger.info("ZNRecord={} to read on path={} does not have a simple list with key={}", record,
           ACCOUNT_METADATA_BLOB_IDS_PATH, ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
       return null;
     } else {
       // parse the json string list and get the blob id with the latest version
-      BlobIDAndVersion blobIDAndVersion = null;
-      for (String accountBlobIDInJson : accountBlobIDs) {
-        BlobIDAndVersion current = BlobIDAndVersion.fromJson(accountBlobIDInJson);
-        if (blobIDAndVersion == null || blobIDAndVersion.version < current.version) {
-          blobIDAndVersion = current;
-        }
-      }
+      BlobIDAndVersion blobIDAndVersion = blobIDAndVersionsJson.stream()
+          .map(json -> BlobIDAndVersion.fromJson(json))
+          .max((o1, o2) -> o1.getVersion() - o2.getVersion())
+          .get();
 
       logger.trace("Start reading remote account data from blob {} and versioned at {}.", blobIDAndVersion.blobID,
           blobIDAndVersion.version);
@@ -203,16 +200,18 @@ class RouterStore extends AccountMetadataStore {
       } else {
         recordToUpdate = znRecord;
       }
-
       String errorMessage = null;
-      List<String> accountBlobIDs = recordToUpdate.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
+
+      List<String> blobIDAndVersionsJson = recordToUpdate.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
+
+      // This is the version number for the new blob id.
       int newVersion = 1;
       Map<String, String> accountMap = null;
       List<BlobIDAndVersion> blobIDAndVersions = new ArrayList<>();
-      if (accountBlobIDs != null && accountBlobIDs.size() != 0) {
+      if (blobIDAndVersionsJson != null && blobIDAndVersionsJson.size() != 0) {
         try {
           // parse the json string list and get the blob id with the latest version
-          accountBlobIDs.stream()
+          blobIDAndVersionsJson.stream()
               .forEach(accountBlobIDInJson -> blobIDAndVersions.add(BlobIDAndVersion.fromJson(accountBlobIDInJson)));
           Collections.sort(blobIDAndVersions);
           BlobIDAndVersion blobIDAndVersion = blobIDAndVersions.get(blobIDAndVersions.size() - 1);
@@ -222,14 +221,14 @@ class RouterStore extends AccountMetadataStore {
           // if this is not for backfill, then just read account metadata from blob
           accountMap = (!forBackFill) ? readAccountMetadataFromBlobID(blobIDAndVersion.blobID) : new HashMap<>();
           // make this list mutable
-          accountBlobIDs = new ArrayList<>(accountBlobIDs);
+          blobIDAndVersionsJson = new ArrayList<>(blobIDAndVersionsJson);
         } catch (JSONException e) {
           accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-          errorMessage = "Exception occurred when parsing the blob id list from " + accountBlobIDs;
+          errorMessage = "Exception occurred when parsing the blob id list from " + blobIDAndVersionsJson;
           logger.error(errorMessage);
           throw new IllegalStateException(errorMessage, e);
         } catch (Exception e) {
-          errorMessage = "Unexpected exception occurred when parsing the blob id list from " + accountBlobIDs;
+          errorMessage = "Unexpected exception occurred when parsing the blob id list from " + blobIDAndVersionsJson;
           logger.error(errorMessage, e);
           throw new IllegalStateException(errorMessage, e);
         }
@@ -237,7 +236,7 @@ class RouterStore extends AccountMetadataStore {
       // This ZNRecord doesn't exist when first time we update this ZNRecord, thus accountMap will be null.
       if (accountMap == null) {
         accountMap = new HashMap<>();
-        accountBlobIDs = new ArrayList<>();
+        blobIDAndVersionsJson = new ArrayList<>();
       }
 
       if (!forBackFill) {
@@ -289,8 +288,10 @@ class RouterStore extends AccountMetadataStore {
 
       // Start step 5:
       Iterator<BlobIDAndVersion> iter = blobIDAndVersions.iterator();
-      Iterator<String> stringIter = accountBlobIDs.iterator();
+      Iterator<String> jsonIter = blobIDAndVersionsJson.iterator();
       while (blobIDAndVersions.size() + 1 > maxNumberOfVersionsToSave) {
+        jsonIter.next();
+        jsonIter.remove();
         BlobIDAndVersion blobIDAndVersion = iter.next();
         iter.remove();
         logger.info("Removing blob " + blobIDAndVersion.getBlobID() + " at version " + blobIDAndVersion.getVersion());
@@ -300,12 +301,11 @@ class RouterStore extends AccountMetadataStore {
           logger.error("Failed to delete blob={} from older version because of {}", blobIDAndVersion.getBlobID(), e);
           accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
         }
-        stringIter.next();
-        stringIter.remove();
       }
+
       // Start step 6:
-      accountBlobIDs.add(new BlobIDAndVersion(this.newBlobID, newVersion).toJson());
-      recordToUpdate.setListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, accountBlobIDs);
+      blobIDAndVersionsJson.add(new BlobIDAndVersion(this.newBlobID, newVersion).toJson());
+      recordToUpdate.setListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY, blobIDAndVersionsJson);
       return recordToUpdate;
     }
 
