@@ -53,7 +53,7 @@ public class FindTokenHelper {
     if (replicaType == ReplicaType.DISK_BACKED) {
       findTokenFactory = Utils.getObj(replicationConfig.replicationStoreTokenFactory, storeKeyFactory);
     } else if (replicaType.equals(ReplicaType.CLOUD_BACKED)) {
-      findTokenFactory = Utils.getObj(replicationConfig.replicationCloudTokenFactory, storeKeyFactory);
+      findTokenFactory = Utils.getObj(replicationConfig.replicationCloudTokenFactory);
     }
     return findTokenFactory;
   }

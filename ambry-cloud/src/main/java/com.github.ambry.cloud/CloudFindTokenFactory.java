@@ -21,11 +21,6 @@ import java.io.IOException;
 
 
 public class CloudFindTokenFactory implements FindTokenFactory {
-  private final StoreKeyFactory factory;
-
-  public CloudFindTokenFactory(StoreKeyFactory factory) {
-    this.factory = factory;
-  }
 
   @Override
   public FindToken getFindToken(PeekableInputStream stream) throws IOException {

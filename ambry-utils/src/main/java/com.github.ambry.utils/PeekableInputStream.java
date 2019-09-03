@@ -77,8 +77,7 @@ public class PeekableInputStream extends InputStream {
     if (!peekBuffer.isEmpty()) {
       return peekBuffer.removeFirst();
     }
-    int val = this.inputStream.read();
-    return val;
+    return this.inputStream.read();
   }
 
   @Override
@@ -95,7 +94,7 @@ public class PeekableInputStream extends InputStream {
 
   /**
    * Read the next byte from the input stream, and also buffers it so that it is available for later read using this object.
-   * This logically provides peek-like functionality on any input stream by making sure that the peek-ed bytes are availble for read later on.
+   * This logically provides peek-like functionality on any input stream by making sure that the peek-ed bytes are available for read later on.
    * @return int value of the byte being read
    * @throws IOException if an exception occurs during read.
    */
