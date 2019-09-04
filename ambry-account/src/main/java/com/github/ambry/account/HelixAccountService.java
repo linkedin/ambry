@@ -196,11 +196,11 @@ public class HelixAccountService implements AccountService {
 
     // accountInfoMapRef's reference is empty doesn't mean that fetchAndUpdateCache failed, it would just be that there
     // is no account metadata for the time being. Theoretically local storage shouldn't have any backup files. So
-    // backup.getLatestState should return null. And in case we have a very old backup file just mentioned above, a threshold
+    // backup.getLatestAccountMap should return null. And in case we have a very old backup file just mentioned above, a threshold
     // would solve the problem.
     if (accountInfoMapRef.get().isEmpty() && config.enableServeFromBackup && !backupFileManager.isEmpty()) {
       long aMonthAgo = System.currentTimeMillis() / 1000 - TimeUnit.DAYS.toSeconds(30);
-      Map<String, String> accountMap = backupFileManager.getLatestState(aMonthAgo);
+      Map<String, String> accountMap = backupFileManager.getLatestAccountMap(aMonthAgo);
       if (accountMap != null) {
         AccountInfoMap newAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
         AccountInfoMap oldAccountInfoMap = accountInfoMapRef.getAndSet(newAccountInfoMap);

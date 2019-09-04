@@ -33,7 +33,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
-import org.apache.helix.ZNRecord;
+import org.apache.zookeeper.data.Stat;
 import org.json.JSONException;
 import org.junit.After;
 import org.junit.Test;
@@ -44,7 +44,7 @@ import static org.junit.Assert.*;
 /**
  * Unit test for {@link BackupFileManager}
  */
-public class BackupFileInfoManagerTest {
+public class BackupFileManagerTest {
   private final AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
   private final Properties helixConfigProps = new Properties();
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 20000;
@@ -55,10 +55,10 @@ public class BackupFileInfoManagerTest {
   private Account refAccount;
 
   /**
-   * Constructor to create a BackupFileInfoManagerTest
+   * Constructor to create a BackupFileManagerTest
    * @throws IOException if I/O error occurs
    */
-  public BackupFileInfoManagerTest() throws IOException {
+  public BackupFileManagerTest() throws IOException {
     accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
     helixConfigProps.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
     helixConfigProps.setProperty(HelixAccountServiceConfig.MAX_BACKUP_FILE_COUNT, String.valueOf(maxBackupFile));
@@ -93,20 +93,20 @@ public class BackupFileInfoManagerTest {
     HelixAccountServiceConfig config = new HelixAccountServiceConfig(vHelixConfigProps);
     BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
 
-    // getLatestState should return null
-    assertNull("Disabled backup shouldn't have any state", backup.getLatestState(0));
+    // getLatestAccountMap should return null
+    assertNull("Disabled backup shouldn't have any state", backup.getLatestAccountMap(0));
 
-    // persistState should not create any backup
-    ZNRecord record = new ZNRecord(String.valueOf(System.currentTimeMillis()));
-    record.setVersion(1);
-    record.setModifiedTime(System.currentTimeMillis() / 1000);
+    // persistAccountMap should not create any backup
+    Stat stat = new Stat();
+    stat.setVersion(1);
+    stat.setMtime(System.currentTimeMillis());
 
-    backup.persistState(new HashMap<String, String>(), record);
+    backup.persistAccountMap(new HashMap<String, String>(), stat);
     assertTrue("Disabled backup shouldn't add any backup", backup.isEmpty());
   }
 
   /**
-   * Test getLatestState function when all the backup files are files with version number.
+   * Test getLatestAccountMap function when all the backup files are files with version number.
    * @throws IOException if I/O error occurs
    */
   @Test
@@ -123,21 +123,21 @@ public class BackupFileInfoManagerTest {
     expected.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
 
     BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
-    Map<String, String> obtained = backup.getLatestState(0);
+    Map<String, String> obtained = backup.getLatestAccountMap(0);
     assertTwoStringMapsEqual(expected, obtained);
     assertFalse("There are backup files", backup.isEmpty());
 
-    obtained = backup.getLatestState(System.currentTimeMillis() / 1000);
+    obtained = backup.getLatestAccountMap(System.currentTimeMillis() / 1000);
     assertNull("No backup file should have a modified time later than now", obtained);
     assertEquals(backup.size(), endVersion - startVersion + 1);
   }
 
   /**
-   * Test getLatestState function when all the backup files are files without version number.
+   * Test getLatestAccountMap function when all the backup files are files without version number.
    * @throws IOException if I/O error occurs
    */
   @Test
-  public void testGetLatestState_BackupFilesAllWithoutVersion() throws IOException {
+  public void testGetLatestAccountMap_BackupFilesAllWithoutVersion() throws IOException {
     final long baseModifiedTime = System.currentTimeMillis() / 1000 - 100;
     final long interval = 2;
     final int count = maxBackupFile / 2;
@@ -145,18 +145,18 @@ public class BackupFileInfoManagerTest {
     saveAccountsToFile(Collections.singleton(refAccount), accountBackupDir.resolve(filenames[filenames.length - 1]));
 
     BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
-    Map<String, String> obtained = backup.getLatestState(0);
+    Map<String, String> obtained = backup.getLatestAccountMap(0);
     assertNull("No state should be loaded from backup file from old format", obtained);
     assertFalse("Backup should not be empty since there are files from old format", backup.isEmpty());
     assertEquals(backup.size(), count);
   }
 
   /**
-   * Test getLatestState function when some of the files are with version number and some are not.
+   * Test getLatestAccountMap function when some of the files are with version number and some are not.
    * @throws IOException if I/O error occurs
    */
   @Test
-  public void testGetLatestState_MixedBackupFiles() throws IOException {
+  public void testGetLatestAccountMap_MixedBackupFiles() throws IOException {
     final long baseModifiedTime = System.currentTimeMillis() / 1000 - 100;
     final long interval = 2;
     // Backup files without version should be created before files with version;
@@ -172,7 +172,7 @@ public class BackupFileInfoManagerTest {
     expected.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
 
     BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
-    Map<String, String> obtained = backup.getLatestState(0);
+    Map<String, String> obtained = backup.getLatestAccountMap(0);
     assertTwoStringMapsEqual(expected, obtained);
     assertFalse("There are backup files", backup.isEmpty());
     assertEquals(backup.size(), endVersion - startVersion + 1 + backupFileNoVersionCount);
@@ -256,29 +256,29 @@ public class BackupFileInfoManagerTest {
   }
 
   /**
-   * Test {@link BackupFileManager#persistState(Map, ZNRecord)} and then recover {@link BackupFileManager} from the same backup directory.
+   * Test {@link BackupFileManager#persistAccountMap(Map, Stat)} and then recover {@link BackupFileManager} from the same backup directory.
    * @throws IOException if I/O error occurs
    */
   @Test
-  public void testPersistStateAndRecover() throws IOException {
+  public void testPersistAccountMapAndRecover() throws IOException {
     BackupFileManager backup = new BackupFileManager(accountServiceMetrics, config);
     final int numberAccounts = maxBackupFile * 2;
     final Map<String, String> accounts = new HashMap<>(numberAccounts);
-    final ZNRecord record = new ZNRecord(String.valueOf(System.currentTimeMillis()));
+    final Stat stat = new Stat();
     final long interval = 1;
     long modifiedTime = System.currentTimeMillis() / 1000 - numberAccounts * 2;
     for (int i = 0; i < numberAccounts; i++) {
       Account account = createRandomAccount();
       accounts.put(String.valueOf(account.getId()), account.toJson(true).toString());
-      record.setVersion(i + 1);
-      record.setModifiedTime(modifiedTime);
-      backup.persistState(accounts, record);
+      stat.setVersion(i + 1);
+      stat.setMtime(modifiedTime * 1000);
+      backup.persistAccountMap(accounts, stat);
       modifiedTime += interval;
     }
 
     for (int i = 0; i < 2; i++) {
       assertEquals("Number of backup file mismatch", maxBackupFile, backup.size());
-      Map<String, String> obtained = backup.getLatestState(0);
+      Map<String, String> obtained = backup.getLatestAccountMap(0);
       assertTwoStringMapsEqual(accounts, obtained);
       File[] remaingingFiles = accountBackupDir.toFile().listFiles();
       assertEquals("Remaining backup mismatch", maxBackupFile, remaingingFiles.length);
@@ -296,14 +296,14 @@ public class BackupFileInfoManagerTest {
   public void testSerializationAndDeserialization() throws JSONException {
     // Since the account metadata is stored in an map from string to string, so here we only test map<string, string>
     Map<String, String> state = new HashMap<>();
-    ByteBuffer buffer = BackupFileManager.serializeState(state);
-    Map<String, String> deserializedState = BackupFileManager.deserializeState(buffer.array());
+    ByteBuffer buffer = BackupFileManager.serializeAccountMap(state);
+    Map<String, String> deserializedState = BackupFileManager.deserializeAccountMap(buffer.array());
     assertTwoStringMapsEqual(state, deserializedState);
 
     // Put a real account's json string
     state.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
-    buffer = BackupFileManager.serializeState(state);
-    deserializedState = BackupFileManager.deserializeState(buffer.array());
+    buffer = BackupFileManager.serializeAccountMap(state);
+    deserializedState = BackupFileManager.deserializeAccountMap(buffer.array());
     assertTwoStringMapsEqual(state, deserializedState);
   }
 
@@ -334,10 +334,10 @@ public class BackupFileInfoManagerTest {
       long interval, boolean isTemp) {
     String[] filenames = new String[endVersion - startVersion + 1];
     for (int i = startVersion; i <= endVersion; i++) {
-      ZNRecord record = new ZNRecord(String.valueOf(i));
-      record.setVersion(i);
-      record.setModifiedTime(baseModifiedTime + (i - startVersion) * interval);
-      String filename = BackupFileManager.getBackupFilenameFromZNRecord(record);
+      Stat stat = new Stat();
+      stat.setVersion(i);
+      stat.setMtime((baseModifiedTime + (i - startVersion) * interval) * 1000);
+      String filename = BackupFileManager.getBackupFilenameFromStat(stat);
       if (isTemp) {
         filename = filename + BackupFileManager.SEP + BackupFileManager.TEMP_FILE_SUFFIX;
       }
@@ -425,7 +425,7 @@ public class BackupFileInfoManagerTest {
       fail("Fail to get a json format of accounts");
     }
     try {
-      BackupFileManager.writeStateToFile(filePath, accountMap);
+      BackupFileManager.writeAccountMapToFile(filePath, accountMap);
     } catch (Exception e) {
       fail("Fail to write state to file: " + filePath.toString());
     }

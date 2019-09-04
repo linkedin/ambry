@@ -28,6 +28,7 @@ import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.zookeeper.data.Stat;
+import org.apache.zookeeper.server.DataTree;
 
 
 /**
@@ -35,6 +36,7 @@ import org.apache.zookeeper.data.Stat;
  */
 public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccessor<T> {
   private final Map<String, T> pathToRecords = new HashMap<>();
+  private final Map<String, Stat> pathToStats = new HashMap<>();
   private final Map<String, Set<HelixPropertyListener>> pathToListeners = new HashMap<>();
   private CountDownLatch readLatch = null;
   private boolean shouldFailSetOperation = false;
@@ -123,6 +125,7 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
   public boolean remove(String path, int options) {
     if (path.equals("/")) {
       pathToRecords.clear();
+      pathToStats.clear();
       notifyListeners("/", HelixStoreOperator.StoreOperationType.DELETE);
       return true;
     } else {
@@ -160,7 +163,12 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
     if (readLatch != null) {
       readLatch.countDown();
     }
-    return pathToRecords.get(path);
+    T result = pathToRecords.get(path);
+    if (result != null && stat != null) {
+      Stat resultStat = pathToStats.get(path);
+      DataTree.copyStat(resultStat, stat);
+    }
+    return result;
   }
 
   @Override
@@ -283,16 +291,19 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
         pathToRecords.get(path) == null ? HelixStoreOperator.StoreOperationType.CREATE
             : HelixStoreOperator.StoreOperationType.WRITE;
     if (!shouldRemoveRecordBeforeNotify) {
-      // increase the version number if this is ZNRecord
-      if (record instanceof ZNRecord) {
-        ZNRecord oldRecord = (ZNRecord)pathToRecords.get(path);
-        if (oldRecord != null) {
-          ZNRecord znRecord = (ZNRecord) record;
-          znRecord.setVersion(oldRecord.getVersion() + 1);
-          znRecord.setModifiedTime(System.currentTimeMillis()/1000);
-        }
-      }
       pathToRecords.put(path, record);
+      Stat stat = pathToStats.get(path);
+      long currentTime = System.currentTimeMillis();
+      if (stat == null) {
+        stat = new Stat();
+        stat.setCtime(currentTime);
+        stat.setMtime(currentTime);
+        stat.setVersion(0);
+        pathToStats.put(path, stat);
+      } else {
+        stat.setMtime(currentTime);
+        stat.setVersion(stat.getVersion()+1);
+      }
     }
     notifyListeners(path, operationType);
     return true;

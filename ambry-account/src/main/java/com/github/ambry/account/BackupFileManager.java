@@ -30,6 +30,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -49,9 +50,9 @@ import org.slf4j.LoggerFactory;
  * A helper class to manage {@link Account} metadata backup. Notice this is not a thread-safe class and all the methods
  * should be protected by holding an external lock.
  *
- * Every backup file is associated with a {@link ZNRecord} version number and modified time. Version number is used to
- * identify each mutation to the {@link Account} metadata and modified time is used to show the order of each backup in
- * a human readable manner.
+ * Every backup file is associated with the version number and modified time assoicated with {@link ZNRecord}'s {@link Stat}.
+ * Version number is used to identify each mutation to the {@link Account} metadata and modified time is used to show
+ * the order of each backup in a human readable manner.
  *
  * Previously, {@link HelixAccountService} only keeps a backup when there is an update {@link Account} HTTP request
  * received by this instance. It doesn't backup mutations made by other instances. Since HTTP requests to update
@@ -121,96 +122,108 @@ class BackupFileManager {
 
     // First get all the file with temp file suffix and remove all of them
     FileFilter tempFileFilter = (File pathname) -> pathname.getName().endsWith(SEP + TEMP_FILE_SUFFIX);
-    for (File file : backupDir.listFiles(tempFileFilter)) {
-      logger.trace("Delete temp file " + file.getName());
-      tryDeleteFile(file);
+    File[] files = backupDir.listFiles(tempFileFilter);
+    if (files != null) {
+      for (File file : files) {
+        logger.trace("Delete temp file " + file.getName());
+        tryDeleteFile(file);
+      }
     }
 
     // Then get all the file with version number and local timestamp
     FileFilter versionFileFilter = (File pathname) -> versionFilenamePattern.matcher(pathname.getName()).find();
-    for (File file : backupDir.listFiles(versionFileFilter)) {
-      Matcher m = versionFilenamePattern.matcher(file.getName());
-      m.find();
-      logger.trace("Starting processing version backup file " + file.getName());
-      int version = Integer.parseInt(m.group(1));
-      long modifiedTimeInSecond = LocalDateTime.parse(m.group(2), TIMESTAMP_FORMATTER).toEpochSecond(zoneOffset);
-      BackupFileInfo currentBackup = new BackupFileInfo(version, file.getName(), modifiedTimeInSecond);
+    files = backupDir.listFiles(versionFileFilter);
+    if (files != null) {
+      for (File file : files) {
+        Matcher m = versionFilenamePattern.matcher(file.getName());
+        m.find();
+        logger.trace("Starting processing version backup file " + file.getName());
+        int version = Integer.parseInt(m.group(1));
+        long modifiedTimeInSecond = LocalDateTime.parse(m.group(2), TIMESTAMP_FORMATTER).toEpochSecond(zoneOffset);
+        BackupFileInfo currentBackup = new BackupFileInfo(version, file.getName(), modifiedTimeInSecond);
 
-      if (backupFileInfos.size() < config.maxBackupFileCount) {
-        // When the number of backup files are under the maximum value, just add the current backupFile in the map.
-        backupFileInfos.put(version, currentBackup);
-      } else {
-        // When the number of backup files exceeds the maximum value, we have to remove the one backupFile.
-        if (backupFileInfos.firstEntry().getKey() < version) {
-          // The current backupFile's version is larger than the smallest one in the backupFileInfos map, then remove the
-          // smallest backupFile and it's entry from map and add the current backupFile in the map.
-          Map.Entry<Integer, BackupFileInfo> entry = backupFileInfos.firstEntry();
-          BackupFileInfo toRemove = entry.getValue();
-          logger.trace("Remove the oldest backup {} at version {}", toRemove.getFilename(), toRemove.getVersion());
-          tryDeleteBackupFile(entry.getValue());
-          backupFileInfos.remove(entry.getKey());
+        if (backupFileInfos.size() < config.maxBackupFileCount) {
+          // When the number of backup files are under the maximum value, just add the current backupFile in the map.
           backupFileInfos.put(version, currentBackup);
         } else {
-          // The current backupFile's version is smaller than the smallest version in the map, then remove the
-          // current backupFile.
-          tryDeleteBackupFile(currentBackup);
+          // When the number of backup files exceeds the maximum value, we have to remove the one backupFile.
+          if (backupFileInfos.firstEntry().getKey() < version) {
+            // The current backupFile's version is larger than the smallest one in the backupFileInfos map, then remove the
+            // smallest backupFile and it's entry from map and add the current backupFile in the map.
+            Map.Entry<Integer, BackupFileInfo> entry = backupFileInfos.firstEntry();
+            BackupFileInfo toRemove = entry.getValue();
+            logger.trace("Remove the oldest backup {} at version {}", toRemove.getFilename(), toRemove.getVersion());
+            tryDeleteBackupFile(entry.getValue());
+            backupFileInfos.remove(entry.getKey());
+            backupFileInfos.put(version, currentBackup);
+          } else {
+            // The current backupFile's version is smaller than the smallest version in the map, then remove the
+            // current backupFile.
+            tryDeleteBackupFile(currentBackup);
+          }
         }
       }
     }
 
     FileFilter oldStateFileFilter = (File pathname) -> oldStateFilenamePattern.matcher(pathname.getName()).find();
-    for (File file : backupDir.listFiles(oldStateFileFilter)) {
-      logger.trace("Delete old state file " + file.getName());
-      tryDeleteFile(file);
+    files = backupDir.listFiles(oldStateFileFilter);
+    if (files != null) {
+      for (File file : files) {
+        logger.trace("Delete old state file " + file.getName());
+        tryDeleteFile(file);
+      }
     }
 
     // Lastly, if we have enough files, we will just remove all the backup file without version number.
     // Otherwise, sort the file based on the modified time.
     FileFilter newStateFileFilter = (File pathname) -> newStateFilenamePattern.matcher(pathname.getName()).find();
     File[] allNewStateFiles = backupDir.listFiles(newStateFileFilter);
-    if (backupFileInfos.size() >= config.maxBackupFileCount) {
-      logger.trace("More than {} versioned backup found, remove all the backup files in old format");
-      for (File file : allNewStateFiles) {
-        logger.trace("Delete new state file " + file.getName());
-        tryDeleteFile(file);
-      }
-    } else {
-      int startIndexToPreserveBackupFile = 0;
-      int size = allNewStateFiles.length;
-      if (backupFileInfos.size() + size > config.maxBackupFileCount) {
-        // Sort all the files based on the filename. Since the filename follows the DateTime formatter, sorting filename
-        // is equivalent to sorting modified time.
-        Arrays.sort(allNewStateFiles, (File o1, File o2) -> o1.getName().compareTo(o2.getName()));
-        startIndexToPreserveBackupFile = Math.max(backupFileInfos.size() + size - config.maxBackupFileCount, 0);
-        logger.info("Found {} old format backup file, only need {}", size, size - startIndexToPreserveBackupFile);
-      }
-      for (int i = 0; i < size; i++) {
-        File file = allNewStateFiles[i];
-        if (i < startIndexToPreserveBackupFile) {
+    if (allNewStateFiles != null) {
+      if (backupFileInfos.size() >= config.maxBackupFileCount) {
+        logger.trace("More than {} versioned backup found, remove all the backup files in old format",
+            config.maxBackupFileCount);
+        for (File file : allNewStateFiles) {
           logger.trace("Delete new state file " + file.getName());
           tryDeleteFile(file);
-        } else {
-          Matcher m = newStateFilenamePattern.matcher(file.getName());
-          m.find();
-          int version = i - size;
-          long modifiedTimeInSecond = LocalDateTime.parse(m.group(1), TIMESTAMP_FORMATTER).toEpochSecond(zoneOffset);
-          backupFileInfos.put(version, new BackupFileInfo(version, file.getName(), modifiedTimeInSecond));
+        }
+      } else {
+        int startIndexToPreserveBackupFile = 0;
+        int size = allNewStateFiles.length;
+        if (backupFileInfos.size() + size > config.maxBackupFileCount) {
+          // Sort all the files based on the filename. Since the filename follows the DateTime formatter, sorting filename
+          // is equivalent to sorting modified time.
+          Arrays.sort(allNewStateFiles, Comparator.comparing(File::getName));
+          startIndexToPreserveBackupFile = Math.max(backupFileInfos.size() + size - config.maxBackupFileCount, 0);
+          logger.info("Found {} old format backup file, only need {}", size, size - startIndexToPreserveBackupFile);
+        }
+        for (int i = 0; i < size; i++) {
+          File file = allNewStateFiles[i];
+          if (i < startIndexToPreserveBackupFile) {
+            logger.trace("Delete new state file " + file.getName());
+            tryDeleteFile(file);
+          } else {
+            Matcher m = newStateFilenamePattern.matcher(file.getName());
+            m.find();
+            int version = i - size;
+            long modifiedTimeInSecond = LocalDateTime.parse(m.group(1), TIMESTAMP_FORMATTER).toEpochSecond(zoneOffset);
+            backupFileInfos.put(version, new BackupFileInfo(version, file.getName(), modifiedTimeInSecond));
+          }
         }
       }
     }
   }
 
   /**
-   * Persist account map to local storage, with associated {@link ZNRecord} information.
-   * @param state The account map
-   * @param record The associated {@link ZNRecord}.
+   * Persist account map to local storage, with associated {@link Stat} information.
+   * @param accountMap The account map
+   * @param stat The zookeeper znode {@link Stat}.
    */
-  void persistState(Map<String, String> state, Stat stat) {
+  void persistAccountMap(Map<String, String> accountMap, Stat stat) {
     if (backupDirPath == null) {
       return;
     }
-    Objects.requireNonNull(state, "Invalid account state");
-    Objects.requireNonNull(stat, "Invalid ZNRecord");
+    Objects.requireNonNull(accountMap, "Invalid account map");
+    Objects.requireNonNull(stat, "Invalid ZNode stat");
     int version = stat.getVersion();
     if (backupFileInfos.containsKey(version)) {
       logger.trace("Version {} already has a backup file {}, skip persisting the state", version,
@@ -223,14 +236,14 @@ class BackupFileManager {
       return;
     }
 
-    String fileName = getBackupFilenameFromZNRecord(stat);
+    String fileName = getBackupFilenameFromStat(stat);
     String tempFileName = fileName + SEP + TEMP_FILE_SUFFIX;
     Path filePath = backupDirPath.resolve(fileName);
     Path tempFilePath = backupDirPath.resolve(tempFileName);
 
     long startTimeInMs = System.currentTimeMillis();
     try {
-      writeStateToFile(tempFilePath, state);
+      writeAccountMapToFile(tempFilePath, accountMap);
       Files.move(tempFilePath, filePath);
     } catch (IOException e) {
       logger.error("Failed to persist state to file: " + fileName, e);
@@ -273,7 +286,7 @@ class BackupFileManager {
    * @param latestTimeAllowedInSecond The unix epoch time which the latest backup's modifiedTime must be greater than.
    * @return The account map from the latest backup file.
    */
-  Map<String, String> getLatestState(long latestTimeAllowedInSecond) {
+  Map<String, String> getLatestAccountMap(long latestTimeAllowedInSecond) {
     if (backupDirPath == null) {
       return null;
     }
@@ -289,9 +302,9 @@ class BackupFileManager {
       return null;
     }
     BackupFileInfo backupFileInfo = entry.getValue();
-    if (backupFileInfo.getModifiedTimeInSecond() < latestTimeAllowedInSecond) {
+    if (backupFileInfo.getModifiedTime() < latestTimeAllowedInSecond) {
       logger.warn("The latest backup was changed at timestamp: {}, but the requested time is {}",
-          backupFileInfo.getModifiedTimeInSecond(), latestTimeAllowedInSecond);
+          backupFileInfo.getModifiedTime(), latestTimeAllowedInSecond);
       return null;
     }
 
@@ -300,7 +313,7 @@ class BackupFileManager {
       long startTimeInMs = System.currentTimeMillis();
       byte[] bytes = Files.readAllBytes(filepath);
       accountServiceMetrics.backupReadTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
-      return deserializeState(bytes);
+      return deserializeAccountMap(bytes);
     } catch (IOException e) {
       accountServiceMetrics.backupErrorCount.inc();
       logger.error("Failed to read all bytes out from file " + filepath + " " + e.getMessage());
@@ -328,6 +341,7 @@ class BackupFileManager {
   /***
    * Delete file identified by the given {@link Path}.
    * @param toDelete The path of file to be deleted.
+   *                 sed(line('.')) < 0) ? 'zc' : 'zo')<CR>JJJJ</CR>
    */
   private void deleteFile(Path toDelete) {
     try {
@@ -342,15 +356,15 @@ class BackupFileManager {
   }
 
   /**
-   * Generate the backup filename from the given {@link ZNRecord}. The filename contains version number and modified time
+   * Generate the backup filename from the given {@link Stat}. The filename contains version number and modified time
    * from record.
-   * @param record The {@link ZNRecord}.
+   * @param stat The {@link Stat}.
    * @return The filename.
    */
-  static String getBackupFilenameFromZNRecord(Stat stat)  {
+  static String getBackupFilenameFromStat(Stat stat) {
+    // The mTime is in milliseconds
     long mtime = stat.getMtime();
-    // The ModifiedTime is a unix timestamp in seconds
-    String timestamp = LocalDateTime.ofEpochSecond(mtime, 0, zoneOffset).format(TIMESTAMP_FORMATTER);
+    String timestamp = LocalDateTime.ofEpochSecond(mtime / 1000, 0, zoneOffset).format(TIMESTAMP_FORMATTER);
     String fileName = stat.getVersion() + SEP + timestamp;
     return fileName;
   }
@@ -358,13 +372,13 @@ class BackupFileManager {
   /**
    * Persist the account map to the given file.
    * @param filepath The filepath to persist account map.
-   * @param state Account map.
+   * @param accountMap Account map.
    * @throws IOException Any I/O error.
    */
-  static void writeStateToFile(Path filepath, Map<String, String> state) throws IOException {
+  static void writeAccountMapToFile(Path filepath, Map<String, String> accountMap) throws IOException {
     try (FileChannel channel = FileChannel.open(filepath, StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
-      ByteBuffer buffer = serializeState(state);
+      ByteBuffer buffer = serializeAccountMap(accountMap);
       channel.write(buffer);
     } catch (IOException e) {
       // Failed to persist file
@@ -375,12 +389,12 @@ class BackupFileManager {
 
   /**
    * Convert given account map to an array of {@link Account}s and serialize it in json format in a {@link ByteBuffer}.
-   * @param state The account map.
+   * @param accountMap The account map.
    * @return {@link ByteBuffer} that contains the serialized bytes.
    */
-  static ByteBuffer serializeState(Map<String, String> state) {
+  static ByteBuffer serializeAccountMap(Map<String, String> accountMap) {
     JSONArray array = new JSONArray();
-    for (Map.Entry<String, String> entry : state.entrySet()) {
+    for (Map.Entry<String, String> entry : accountMap.entrySet()) {
       array.put(new JSONObject(entry.getValue()));
     }
     return ByteBuffer.wrap(array.toString(2).getBytes(StandardCharsets.UTF_8));
@@ -392,7 +406,7 @@ class BackupFileManager {
    * @param bytes The byte array to deserialize.
    * @return An account map.
    */
-  static Map<String, String> deserializeState(byte[] bytes) {
+  static Map<String, String> deserializeAccountMap(byte[] bytes) {
     try {
       JSONArray array = new JSONArray(new String(bytes, StandardCharsets.UTF_8));
       Map<String, String> result = new HashMap<>();
@@ -409,28 +423,28 @@ class BackupFileManager {
 
   /**
    * BackupFileInfo encapsulates the information about the backup files persisted in the local storage.
-   * Since every local backup file would have a {@link ZNRecord} version and modifiedTime as part of the filename,
+   * Since every local backup file would have a {@link Stat} version and modifiedTime as part of the filename,
    * every instance of class would have the same information.
    * <p>
-   *   Use negative number as version of backup file in old format. Since all the {@link ZNRecord}'s version should
+   *   Use negative number as version of backup file in old format. Since all the {@link Stat}'s version should
    *   be positive, using negative number for older backup enforce the order of backups.
    * </p>
    */
   class BackupFileInfo {
     private final int version;
     private final String filename;
-    private final long modifiedTimeInSecond;
+    private final long modifiedTime;
 
     /**
      *  Constructor to create a {@link BackupFileInfo}.
-     * @param version The {@link ZNRecord} version associated with this backup file.
+     * @param version The {@link Stat} version associated with this backup file.
      * @param filename The filename of this file.
-     * @param modifiedTimeInSecond The {@link ZNRecord} modifiedTime associated with this backup file.
+     * @param modifiedTime The {@link Stat} modifiedTime associated with this backup file.
      */
-    BackupFileInfo(int version, String filename, long modifiedTimeInSecond) {
+    BackupFileInfo(int version, String filename, long modifiedTime) {
       this.version = version;
       this.filename = filename;
-      this.modifiedTimeInSecond = modifiedTimeInSecond;
+      this.modifiedTime = modifiedTime;
     }
 
     /**
@@ -450,11 +464,11 @@ class BackupFileManager {
     }
 
     /**
-     * Return the modified time in seconds.
-     * @return The modified time in seconds.
+     * Return the modified time in second.
+     * @return The modified time in second.
      */
-    long getModifiedTimeInSecond() {
-      return modifiedTimeInSecond;
+    long getModifiedTime() {
+      return modifiedTime;
     }
   }
 }

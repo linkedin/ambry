@@ -87,13 +87,16 @@ abstract class AccountMetadataStore {
     logger.trace("Start reading ZNRecord from path={}", znRecordPath);
     Stat stat = new Stat();
     ZNRecord znRecord = helixStore.get(znRecordPath, stat, AccessOption.PERSISTENT);
-    logger.trace("Fetched ZNRecord from path={}, took time={} ms", znRecordPath, startTimeMs);
+    logger.trace("Fetched ZNRecord from path={}, took time={} ms", znRecordPath,
+        System.currentTimeMillis() - startTimeMs);
     if (znRecord == null) {
       logger.info("The ZNRecord to read does not exist on path={}", znRecordPath);
       return null;
     }
     Map<String, String> newAccountMap = fetchAccountMetadataFromZNRecord(znRecord);
-    backupFileManager.persistState(newAccountMap, stat);
+    if (newAccountMap != null) {
+      backupFileManager.persistAccountMap(newAccountMap, stat);
+    }
     return newAccountMap;
   }
 
