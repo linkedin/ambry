@@ -37,6 +37,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.helix.ZNRecord;
+import org.apache.zookeeper.data.Stat;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -146,13 +147,13 @@ class BackupFileManager {
           Map.Entry<Integer, BackupFileInfo> entry = backupFileInfos.firstEntry();
           BackupFileInfo toRemove = entry.getValue();
           logger.trace("Remove the oldest backup {} at version {}", toRemove.getFilename(), toRemove.getVersion());
-          tryRemoveBackupFile(entry.getValue());
+          tryDeleteBackupFile(entry.getValue());
           backupFileInfos.remove(entry.getKey());
           backupFileInfos.put(version, currentBackup);
         } else {
           // The current backupFile's version is smaller than the smallest version in the map, then remove the
           // current backupFile.
-          tryRemoveBackupFile(currentBackup);
+          tryDeleteBackupFile(currentBackup);
         }
       }
     }
@@ -204,13 +205,13 @@ class BackupFileManager {
    * @param state The account map
    * @param record The associated {@link ZNRecord}.
    */
-  void persistState(Map<String, String> state, ZNRecord record) {
+  void persistState(Map<String, String> state, Stat stat) {
     if (backupDirPath == null) {
       return;
     }
     Objects.requireNonNull(state, "Invalid account state");
-    Objects.requireNonNull(record, "Invalid ZNRecord");
-    int version = record.getVersion();
+    Objects.requireNonNull(stat, "Invalid ZNRecord");
+    int version = stat.getVersion();
     if (backupFileInfos.containsKey(version)) {
       logger.trace("Version {} already has a backup file {}, skip persisting the state", version,
           backupFileInfos.get(version).getFilename());
@@ -222,7 +223,7 @@ class BackupFileManager {
       return;
     }
 
-    String fileName = getBackupFilenameFromZNRecord(record);
+    String fileName = getBackupFilenameFromZNRecord(stat);
     String tempFileName = fileName + SEP + TEMP_FILE_SUFFIX;
     Path filePath = backupDirPath.resolve(fileName);
     Path tempFilePath = backupDirPath.resolve(tempFileName);
@@ -240,10 +241,10 @@ class BackupFileManager {
 
     while (backupFileInfos.size() >= config.maxBackupFileCount) {
       Map.Entry<Integer, BackupFileInfo> entry = backupFileInfos.firstEntry();
-      tryRemoveBackupFile(entry.getValue());
+      tryDeleteBackupFile(entry.getValue());
       backupFileInfos.remove(entry.getKey());
     }
-    backupFileInfos.put(version, new BackupFileInfo(version, fileName, record.getModifiedTime()));
+    backupFileInfos.put(version, new BackupFileInfo(version, fileName, stat.getMtime()));
   }
 
   /**
@@ -316,10 +317,10 @@ class BackupFileManager {
   }
 
   /**
-   * Try to remove the backup from local storage. This function doesn't guarantee file would be removed. It exits at
+   * Try to delete the backup from local storage. This function doesn't guarantee file would be removed. It exits at
    * any exception, since file would be removed next time.
    */
-  private void tryRemoveBackupFile(BackupFileInfo backupFileInfo) {
+  private void tryDeleteBackupFile(BackupFileInfo backupFileInfo) {
     Path toDelete = backupDirPath.resolve(backupFileInfo.getFilename());
     deleteFile(toDelete);
   }
@@ -346,11 +347,11 @@ class BackupFileManager {
    * @param record The {@link ZNRecord}.
    * @return The filename.
    */
-  static String getBackupFilenameFromZNRecord(ZNRecord record) {
-    long mtime = record.getModifiedTime();
+  static String getBackupFilenameFromZNRecord(Stat stat)  {
+    long mtime = stat.getMtime();
     // The ModifiedTime is a unix timestamp in seconds
     String timestamp = LocalDateTime.ofEpochSecond(mtime, 0, zoneOffset).format(TIMESTAMP_FORMATTER);
-    String fileName = record.getVersion() + SEP + timestamp;
+    String fileName = stat.getVersion() + SEP + timestamp;
     return fileName;
   }
 
