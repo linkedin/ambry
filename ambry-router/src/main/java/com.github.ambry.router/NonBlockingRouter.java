@@ -72,7 +72,6 @@ class NonBlockingRouter implements Router {
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
   static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
   private final AtomicInteger currentBackgroundOperationsCount = new AtomicInteger(0);
-  static final int MAX_IN_MEM_CHUNKS = 4;
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
   static final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
 

@@ -79,7 +79,7 @@ public class PutOperationTest {
    */
   @Test
   public void testSendIncomplete() throws Exception {
-    int numChunks = NonBlockingRouter.MAX_IN_MEM_CHUNKS + 1;
+    int numChunks = routerConfig.routerMaxInMemChunks + 1;
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);
@@ -103,7 +103,7 @@ public class PutOperationTest {
         mockNetworkClient.getAndClearWokenUpStatus());
     // A poll should therefore return requestParallelism number of requests from each chunk
     op.poll(requestRegistrationCallback);
-    Assert.assertEquals(NonBlockingRouter.MAX_IN_MEM_CHUNKS * requestParallelism, requestInfos.size());
+    Assert.assertEquals(routerConfig.routerMaxInMemChunks * requestParallelism, requestInfos.size());
 
     // There are MAX_IN_MEM_CHUNKS + 1 data chunks for this blob (and a metadata chunk).
     // Once the first chunk is completely sent out, the first PutChunk will be reused. What the test verifies is that
@@ -187,7 +187,7 @@ public class PutOperationTest {
    */
   @Test
   public void testSetOperationExceptionAndComplete() throws Exception {
-    int numChunks = NonBlockingRouter.MAX_IN_MEM_CHUNKS + 1;
+    int numChunks = routerConfig.routerMaxInMemChunks + 1;
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);

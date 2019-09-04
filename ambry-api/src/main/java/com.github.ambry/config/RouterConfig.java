@@ -343,6 +343,13 @@ public class RouterConfig {
   public final long routerOperationTrackerHistogramDumpPeriod;
 
   /**
+   * The max number of chunks per GetBlobOperation or PutOperation that may be buffered in memory.
+   */
+  @Config("router.max.in.mem.chunks")
+  @Default("4")
+  public final int routerMaxInMemChunks;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -429,5 +436,6 @@ public class RouterConfig {
     }
     routerOperationTrackerTerminateOnNotFoundEnabled =
         verifiableProperties.getBoolean("router.operation.tracker.terminate.on.not.found.enabled", false);
+    routerMaxInMemChunks = verifiableProperties.getIntInRange("router.max.in.mem.chunks", 4, 1, Integer.MAX_VALUE);
   }
 }

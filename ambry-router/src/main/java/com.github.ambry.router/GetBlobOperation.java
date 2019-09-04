@@ -278,7 +278,7 @@ class GetBlobOperation extends GetOperation {
             }
             if (dataChunk.isInProgress() || (dataChunk.isReady()
                 && numChunksRetrieved - blobDataChannel.getNumChunksWrittenOut()
-                < NonBlockingRouter.MAX_IN_MEM_CHUNKS)) {
+                < routerConfig.routerMaxInMemChunks)) {
               dataChunk.poll(requestRegistrationCallback);
               if (dataChunk.isComplete()) {
                 onChunkOperationComplete(dataChunk);
@@ -627,7 +627,7 @@ class GetBlobOperation extends GetOperation {
           logger.trace("Setting operation exception as decryption callback invoked with exception {} for data chunk {}",
               decryptCallbackResultInfo.exception, chunkBlobId);
           setOperationException(
-              new RouterException("Exception thrown on decrypting the content for data chunk " + chunkBlobId,
+              buildChunkException("Exception thrown on decrypting the content for data chunk",
                   decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
           progressTracker.setCryptoJobFailed();
         }
@@ -652,7 +652,7 @@ class GetBlobOperation extends GetOperation {
           // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
           // response and the response handler will be notified accordingly.
           onErrorResponse(entry.getValue().replicaId,
-              new RouterException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut));
+              buildChunkException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut));
           inFlightRequestsIterator.remove();
         } else {
           // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
@@ -699,7 +699,7 @@ class GetBlobOperation extends GetOperation {
           chunkException = null;
         } else if (chunkOperationTracker.hasFailedOnNotFound()) {
           chunkException =
-              new RouterException("Get Chunk failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist);
+              buildChunkException("Get Chunk failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist);
         }
         chunkCompleted = true;
       }
@@ -764,14 +764,14 @@ class GetBlobOperation extends GetOperation {
         logger.trace("GetBlobRequest with response correlationId {} timed out for replica {} ", correlationId,
             getRequestInfo.replicaId.getDataNodeId());
         onErrorResponse(getRequestInfo.replicaId,
-            new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
+            buildChunkException("Operation timed out", RouterErrorCode.OperationTimedOut));
       } else {
         if (getResponse == null) {
           logger.trace(
               "GetBlobRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
               correlationId, getRequestInfo.replicaId.getDataNodeId());
           onErrorResponse(getRequestInfo.replicaId,
-              new RouterException("Response deserialization received an unexpected error",
+              buildChunkException("Response deserialization received an unexpected error",
                   RouterErrorCode.UnexpectedInternalError));
         } else {
           if (getResponse.getCorrelationId() != correlationId) {
@@ -782,7 +782,7 @@ class GetBlobOperation extends GetOperation {
             logger.trace("GetBlobRequest with response correlationId {} mismatch from response {} for replica {} ",
                 correlationId, getResponse.getCorrelationId(), getRequestInfo.replicaId.getDataNodeId());
             routerMetrics.unknownReplicaResponseError.inc();
-            onErrorResponse(getRequestInfo.replicaId, new RouterException(
+            onErrorResponse(getRequestInfo.replicaId, buildChunkException(
                 "The correlation id in the GetResponse " + getResponse.getCorrelationId()
                     + " is not the same as the correlation id in the associated GetRequest: " + correlationId,
                 RouterErrorCode.UnexpectedInternalError));
@@ -798,7 +798,7 @@ class GetBlobOperation extends GetOperation {
                   correlationId, getRequestInfo.replicaId.getDataNodeId());
               routerMetrics.responseDeserializationErrorCount.inc();
               onErrorResponse(getRequestInfo.replicaId,
-                  new RouterException("Response deserialization received an unexpected error", e,
+                  buildChunkException("Response deserialization received an unexpected error", e,
                       RouterErrorCode.UnexpectedInternalError));
             }
           }
@@ -866,7 +866,7 @@ class GetBlobOperation extends GetOperation {
         int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
         // Each get request issued by the router is for a single blob.
         if (partitionsInResponse != 1) {
-          onErrorResponse(getRequestInfo.replicaId, new RouterException(
+          onErrorResponse(getRequestInfo.replicaId, buildChunkException(
               "Unexpected number of partition responses, expected: 1, " + "received: " + partitionsInResponse,
               RouterErrorCode.UnexpectedInternalError));
         } else {
@@ -875,7 +875,7 @@ class GetBlobOperation extends GetOperation {
             PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
             int objectsInPartitionResponse = partitionResponseInfo.getMessageInfoList().size();
             if (objectsInPartitionResponse != 1) {
-              onErrorResponse(getRequestInfo.replicaId, new RouterException(
+              onErrorResponse(getRequestInfo.replicaId, buildChunkException(
                   "Unexpected number of messages in a partition response, expected: 1, " + "received: "
                       + objectsInPartitionResponse, RouterErrorCode.UnexpectedInternalError));
             } else {
@@ -897,19 +897,19 @@ class GetBlobOperation extends GetOperation {
               // this is a successful response and one that completes the operation regardless of whether the
               // success target has been reached or not.
               chunkCompleted = true;
-              chunkException = new RouterException("Server returned: " + getError, routerErrorCode);
+              chunkException = buildChunkException("Server returned: " + getError, routerErrorCode);
             }
             // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
             // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
             onErrorResponse(getRequestInfo.replicaId,
-                new RouterException("Server returned: " + getError, routerErrorCode));
+                buildChunkException("Server returned: " + getError, routerErrorCode));
           }
         }
       } else {
         logger.trace("Replica {} returned an error {} for a GetBlobRequest with response correlationId : {} ",
             getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
         // process and set the most relevant exception.
-        onErrorResponse(getRequestInfo.replicaId, new RouterException("Server returned", processServerError(getError)));
+        onErrorResponse(getRequestInfo.replicaId, buildChunkException("Server returned", processServerError(getError)));
       }
     }
 
@@ -1010,6 +1010,25 @@ class GetBlobOperation extends GetOperation {
      */
     OperationTracker getChunkOperationTrackerInUse() {
       return chunkOperationTracker;
+    }
+
+    /**
+     * @param message the message to include in the exception.
+     * @param cause the cause of the exception.
+     * @param errorCode the error code to use.
+     * @return a {@link RouterException} with additional info about the chunk that failed.
+     */
+    private RouterException buildChunkException(String message, Throwable cause, RouterErrorCode errorCode) {
+      return new RouterException(message + ". Chunk ID: " + chunkBlobId, cause, errorCode);
+    }
+
+    /**
+     * @param message the message to include in the exception.
+     * @param errorCode the error code to use.
+     * @return a {@link RouterException} with additional info about the chunk that failed.
+     */
+    private RouterException buildChunkException(String message, RouterErrorCode errorCode) {
+      return new RouterException(message + ". Chunk ID: " + chunkBlobId, errorCode);
     }
   }
 
@@ -1286,7 +1305,7 @@ class GetBlobOperation extends GetOperation {
       } else {
         chunkIdIterator = chunkMetadataList.listIterator();
         numChunksTotal = chunkMetadataList.size();
-        dataChunks = new GetChunk[Math.min(chunkMetadataList.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
+        dataChunks = new GetChunk[Math.min(chunkMetadataList.size(), routerConfig.routerMaxInMemChunks)];
         for (int i = 0; i < dataChunks.length; i++) {
           int idx = chunkIdIterator.nextIndex();
           CompositeBlobInfo.ChunkMetadata keyAndOffset = chunkIdIterator.next();
