@@ -442,11 +442,7 @@ public class DiskSpaceAllocatorTest {
     assertTrue("The number of swap segments in map is not expected",
         alloc.getSwapSegmentBySizeMap().size() == 2 && alloc.getSwapSegmentBySizeMap().get(20L) == 1L);
     // test that segments associated with storeId0 can be correctly deleted
-    Map<String, Map<Long, Long>> deleteStoreRequirement = new HashMap<>();
-    Map<Long, Long> sizeAndFileNum = new HashMap<>();
-    sizeAndFileNum.put(50L, 1L);
-    deleteStoreRequirement.put(storeId0, sizeAndFileNum);
-    alloc.deleteExtraSegments(deleteStoreRequirement, false);
+    alloc.deleteAllSegmentsForStoreIds(Collections.singletonList(storeId0));
     verifyPoolState(new ExpectedState().addStoreSeg(storeId1, 20, 3));
     // verify in-mem store reserve file map doesn't contain storeId0
     Map<String, DiskSpaceAllocator.ReserveFileMap> storeFileMap = alloc.getStoreReserveFileMap();
@@ -471,7 +467,7 @@ public class DiskSpaceAllocatorTest {
     alloc.addRequiredSegments(requirements, true);
     verifyPoolState(null);
     // test that delete segments should be no-op
-    alloc.deleteExtraSegments(requirements, false);
+    alloc.deleteAllSegmentsForStoreIds(Collections.singletonList(storeId1));
     verifyPoolState(null);
   }
 

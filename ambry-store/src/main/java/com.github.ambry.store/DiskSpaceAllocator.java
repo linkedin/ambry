@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
@@ -144,7 +145,7 @@ class DiskSpaceAllocator {
         }
         // The requirements for each store and swap segments pool
         Map<String, Map<Long, Long>> overallRequirements = getOverallRequirements(requirementsList);
-        deleteExtraSegments(overallRequirements, true);
+        deleteExtraSegments(overallRequirements);
         addRequiredSegments(overallRequirements, true);
         // TODO fill the disk with additional swap segments
         poolState = PoolState.INITIALIZED;
@@ -393,71 +394,72 @@ class DiskSpaceAllocator {
   }
 
   /**
-   * Delete the currently-present reserve files that are not required by {@code overallRequirements}.
-   * @param overallRequirements a map between segment sizes in bytes and the number of segments needed for that size.
-   * @param isInitialize whether the deletion is called during initialization.
+   * Delete all the unneeded segments associated with stores that are being removed from current node.
+   * @param storeIds a list of store ids whose reserved segments should be deleted.
    * @throws IOException
    */
-  void deleteExtraSegments(Map<String, Map<Long, Long>> overallRequirements, boolean isInitialize) throws IOException {
-    if (isInitialize) {
-      for (String storeId : storeReserveFiles.keySet()) {
-        File storeReserveDir = new File(reserveDir, STORE_DIR_PREFIX + storeId);
-        if (!overallRequirements.containsKey(storeId)) {
-          Utils.deleteFileOrDirectory(storeReserveDir);
-        } else {
-          ReserveFileMap sizeToFilesMap = storeReserveFiles.get(storeId);
-          Map<Long, Long> storeRequirement = overallRequirements.get(storeId);
-          for (Long sizeInBytes : sizeToFilesMap.getFileSizeSet()) {
-            Long segmentsNeeded = storeRequirement.get(sizeInBytes);
-            if (segmentsNeeded == null || segmentsNeeded == 0) {
-              // 1. empty file queue to update in-mem store reserve map
-              while (sizeToFilesMap.getCount(sizeInBytes) > 0) {
-                sizeToFilesMap.remove(sizeInBytes);
-              }
-              // 2. delete directory of store segments with certain size
-              File dirToDelete = new File(storeReserveDir, generateFileSizeDirName(sizeInBytes));
-              Utils.deleteFileOrDirectory(dirToDelete);
-            } else {
-              while (sizeToFilesMap.getCount(sizeInBytes) > segmentsNeeded) {
-                File fileToDelete = sizeToFilesMap.remove(sizeInBytes);
-                if (fileToDelete != null && !fileToDelete.delete()) {
-                  throw new IOException(
-                      "Could not delete the following reserve file: " + fileToDelete.getAbsolutePath());
-                }
-              }
-            }
-          }
-        }
-      }
-      // delete extra swap segments
-      Map<Long, Long> requiredSwapSegments = overallRequirements.get(SWAP_DIR_NAME);
-      for (long sizeInBytes : swapReserveFiles.getFileSizeSet()) {
-        Long segmentsNeeded = requiredSwapSegments.get(sizeInBytes);
-        if (segmentsNeeded == null || segmentsNeeded == 0) {
-          // 1. empty file queue to update in-mem swap reserve map
-          while (swapReserveFiles.getCount(sizeInBytes) > 0) {
-            swapReserveFiles.remove(sizeInBytes);
-          }
-          // 2. delete directory of swap segments with certain size
-          File dirToDelete = new File(swapReserveDir, generateFileSizeDirName(sizeInBytes));
-          Utils.deleteFileOrDirectory(dirToDelete);
-        } else {
-          while (swapReserveFiles.getCount(sizeInBytes) > segmentsNeeded) {
-            File fileToDelete = swapReserveFiles.remove(sizeInBytes);
-            if (!fileToDelete.delete()) {
-              throw new IOException("Could not delete the following reserve file: " + fileToDelete.getAbsolutePath());
-            }
-          }
-        }
-      }
-    } else {
-      // delete the unneeded segments at runtime which is usually called during dynamic store removal.
-      // TODO use compactor in store to double check swap segments in use and return them to reserve pool
-      for (String storeId : overallRequirements.keySet()) {
-        // remove store reserve dir from in-mem data structure and then delete whole directory
-        storeReserveFiles.remove(storeId);
-        File storeReserveDir = new File(reserveDir, STORE_DIR_PREFIX + storeId);
+  void deleteAllSegmentsForStoreIds(List<String> storeIds) throws IOException {
+    for (String storeId : storeIds) {
+      // remove store reserve dir from in-mem data structure and then delete whole directory
+      storeReserveFiles.remove(storeId);
+      File storeReserveDir = new File(reserveDir, STORE_DIR_PREFIX + storeId);
+      Utils.deleteFileOrDirectory(storeReserveDir);
+    }
+  }
+
+  /**
+   * Delete the currently-present reserve files that are not required by {@code overallRequirements}.
+   * @param overallRequirements a map between segment sizes in bytes and the number of segments needed for that size.
+   * @throws IOException
+   */
+  private void deleteExtraSegments(Map<String, Map<Long, Long>> overallRequirements) throws IOException {
+    for (String storeId : storeReserveFiles.keySet()) {
+      File storeReserveDir = new File(reserveDir, STORE_DIR_PREFIX + storeId);
+      if (!overallRequirements.containsKey(storeId)) {
         Utils.deleteFileOrDirectory(storeReserveDir);
+      } else {
+        ReserveFileMap sizeToFilesMap = storeReserveFiles.get(storeId);
+        Map<Long, Long> storeRequirement = overallRequirements.get(storeId);
+        for (Long sizeInBytes : sizeToFilesMap.getFileSizeSet()) {
+          Long segmentsNeeded = storeRequirement.get(sizeInBytes);
+          if (segmentsNeeded == null || segmentsNeeded == 0) {
+            // 1. empty file queue to update in-mem store reserve map
+            while (sizeToFilesMap.getCount(sizeInBytes) > 0) {
+              sizeToFilesMap.remove(sizeInBytes);
+            }
+            // 2. delete directory of store segments with certain size
+            File dirToDelete = new File(storeReserveDir, generateFileSizeDirName(sizeInBytes));
+            Utils.deleteFileOrDirectory(dirToDelete);
+          } else {
+            while (sizeToFilesMap.getCount(sizeInBytes) > segmentsNeeded) {
+              File fileToDelete = sizeToFilesMap.remove(sizeInBytes);
+              if (fileToDelete != null && !fileToDelete.delete()) {
+                throw new IOException("Could not delete the following reserve file: " + fileToDelete.getAbsolutePath());
+              }
+            }
+          }
+        }
+      }
+    }
+    // delete extra swap segments
+    Map<Long, Long> requiredSwapSegments = overallRequirements.get(SWAP_DIR_NAME);
+    for (long sizeInBytes : swapReserveFiles.getFileSizeSet()) {
+      Long segmentsNeeded = requiredSwapSegments.get(sizeInBytes);
+      if (segmentsNeeded == null || segmentsNeeded == 0) {
+        // 1. empty file queue to update in-mem swap reserve map
+        while (swapReserveFiles.getCount(sizeInBytes) > 0) {
+          swapReserveFiles.remove(sizeInBytes);
+        }
+        // 2. delete directory of swap segments with certain size
+        File dirToDelete = new File(swapReserveDir, generateFileSizeDirName(sizeInBytes));
+        Utils.deleteFileOrDirectory(dirToDelete);
+      } else {
+        while (swapReserveFiles.getCount(sizeInBytes) > segmentsNeeded) {
+          File fileToDelete = swapReserveFiles.remove(sizeInBytes);
+          if (!fileToDelete.delete()) {
+            throw new IOException("Could not delete the following reserve file: " + fileToDelete.getAbsolutePath());
+          }
+        }
       }
     }
   }

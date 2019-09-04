@@ -24,6 +24,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -701,11 +702,7 @@ class BlobStore implements Store {
     }
     // Step 2: if segmented, delete remaining store segments in reserve pool
     if (log.isLogSegmented()) {
-      Map<String, Map<Long, Long>> storeSegmentRequirement = new HashMap<>();
-      Map<Long, Long> segmentSizeAndNum = new HashMap<>();
-      segmentSizeAndNum.put(log.getSegmentCapacity(), log.getRemainingUnallocatedSegments());
-      storeSegmentRequirement.put(storeId, segmentSizeAndNum);
-      diskSpaceAllocator.deleteExtraSegments(storeSegmentRequirement, false);
+      diskSpaceAllocator.deleteAllSegmentsForStoreIds(Collections.singletonList(storeId));
     }
     // Step 3: delete all files in current store directory
     logger.info("Deleting store {} directory", storeId);
