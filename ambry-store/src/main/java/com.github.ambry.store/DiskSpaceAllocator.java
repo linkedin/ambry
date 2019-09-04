@@ -220,6 +220,9 @@ class DiskSpaceAllocator {
             } else {
               storeReserveFiles.get(storeId).add(sizeInBytes, reserveFile);
             }
+          } else {
+            logger.warn("Reserve file {} doesn't exist when adding it back to in-mem file map",
+                reserveFile.getAbsolutePath());
           }
           throw e;
         }
