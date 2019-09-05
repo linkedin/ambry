@@ -24,7 +24,6 @@ import org.I0Itec.zkclient.IZkChildListener;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.BaseDataAccessor;
 import org.apache.helix.HelixException;
-import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.zookeeper.data.Stat;
@@ -302,7 +301,7 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
         pathToStats.put(path, stat);
       } else {
         stat.setMtime(currentTime);
-        stat.setVersion(stat.getVersion()+1);
+        stat.setVersion(stat.getVersion() + 1);
       }
     }
     notifyListeners(path, operationType);

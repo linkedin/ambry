@@ -64,7 +64,7 @@ public class HelixAccountServiceConfig {
    * a new backup file, it will remove the oldest one.
    */
   @Config(MAX_BACKUP_FILE_COUNT)
-  @Default("10n")
+  @Default("100")
   public final int maxBackupFileCount;
 
   /**

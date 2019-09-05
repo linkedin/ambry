@@ -302,9 +302,9 @@ class BackupFileManager {
       return null;
     }
     BackupFileInfo backupFileInfo = entry.getValue();
-    if (backupFileInfo.getModifiedTime() < latestTimeAllowedInSecond) {
+    if (backupFileInfo.getModifiedTimeInSecond() < latestTimeAllowedInSecond) {
       logger.warn("The latest backup was changed at timestamp: {}, but the requested time is {}",
-          backupFileInfo.getModifiedTime(), latestTimeAllowedInSecond);
+          backupFileInfo.getModifiedTimeInSecond(), latestTimeAllowedInSecond);
       return null;
     }
 
@@ -341,7 +341,6 @@ class BackupFileManager {
   /***
    * Delete file identified by the given {@link Path}.
    * @param toDelete The path of file to be deleted.
-   *                 sed(line('.')) < 0) ? 'zc' : 'zo')<CR>JJJJ</CR>
    */
   private void deleteFile(Path toDelete) {
     try {
@@ -362,11 +361,9 @@ class BackupFileManager {
    * @return The filename.
    */
   static String getBackupFilenameFromStat(Stat stat) {
-    // The mTime is in milliseconds
-    long mtime = stat.getMtime();
-    String timestamp = LocalDateTime.ofEpochSecond(mtime / 1000, 0, zoneOffset).format(TIMESTAMP_FORMATTER);
-    String fileName = stat.getVersion() + SEP + timestamp;
-    return fileName;
+    long mtimeInMs = stat.getMtime();
+    String timestamp = LocalDateTime.ofEpochSecond(mtimeInMs / 1000, 0, zoneOffset).format(TIMESTAMP_FORMATTER);
+    return stat.getVersion() + SEP + timestamp;
   }
 
   /**
@@ -382,7 +379,7 @@ class BackupFileManager {
       channel.write(buffer);
     } catch (IOException e) {
       // Failed to persist file
-      logger.error("Failed to persist state to file " + filepath, e);
+      logger.error("Failed to persist account map to file " + filepath, e);
       throw e;
     }
   }
@@ -433,18 +430,18 @@ class BackupFileManager {
   class BackupFileInfo {
     private final int version;
     private final String filename;
-    private final long modifiedTime;
+    private final long modifiedTimeInSecond;
 
     /**
      *  Constructor to create a {@link BackupFileInfo}.
      * @param version The {@link Stat} version associated with this backup file.
      * @param filename The filename of this file.
-     * @param modifiedTime The {@link Stat} modifiedTime associated with this backup file.
+     * @param modifiedTimeInSecond The {@link Stat} modifiedTime associated with this backup file.
      */
-    BackupFileInfo(int version, String filename, long modifiedTime) {
+    BackupFileInfo(int version, String filename, long modifiedTimeInSecond) {
       this.version = version;
       this.filename = filename;
-      this.modifiedTime = modifiedTime;
+      this.modifiedTimeInSecond = modifiedTimeInSecond;
     }
 
     /**
@@ -467,8 +464,8 @@ class BackupFileManager {
      * Return the modified time in second.
      * @return The modified time in second.
      */
-    long getModifiedTime() {
-      return modifiedTime;
+    long getModifiedTimeInSecond() {
+      return modifiedTimeInSecond;
     }
   }
 }
