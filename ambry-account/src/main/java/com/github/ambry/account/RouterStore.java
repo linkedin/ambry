@@ -27,6 +27,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -34,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
@@ -63,7 +65,7 @@ class RouterStore extends AccountMetadataStore {
   private static final Short CONTAINER_ID = Container.HELIX_ACCOUNT_SERVICE_CONTAINER_ID;
   private static final String SERVICE_ID = "helixAccountService";
 
-  private final int maxNumberOfVersionsToSave;
+  private final int totalNumberOfVersionToKeep;
   private final AtomicReference<Router> router;
   // If forBackFill is true, then when updating the account metadata, we don't create backup files and we don't merge
   // accounts from ambry-server with the provided accounts set.
@@ -76,13 +78,15 @@ class RouterStore extends AccountMetadataStore {
    * @param helixStore The {@link HelixPropertyStore} to fetch and update data.
    * @param router The {@link Router} instance to retrieve and put blobs.
    * @param forBackFill True if this {@link RouterStore} is created for backfill accounts to new zookeeper node.
+   * @param totalNumberOfVersionToKeep The total number of previous versions of account metadata to keep.
    */
   RouterStore(AccountServiceMetrics accountServiceMetrics, BackupFileManager backupFileManager,
-      HelixPropertyStore<ZNRecord> helixStore, AtomicReference<Router> router, boolean forBackFill, int maxNumberOfVersionsToSave) {
+      HelixPropertyStore<ZNRecord> helixStore, AtomicReference<Router> router, boolean forBackFill,
+      int totalNumberOfVersionToKeep) {
     super(accountServiceMetrics, backupFileManager, helixStore, ACCOUNT_METADATA_BLOB_IDS_PATH);
     this.router = router;
     this.forBackFill = forBackFill;
-    this.maxNumberOfVersionsToSave = maxNumberOfVersionsToSave;
+    this.totalNumberOfVersionToKeep = totalNumberOfVersionToKeep;
   }
 
   @Override
@@ -97,10 +101,11 @@ class RouterStore extends AccountMetadataStore {
           ACCOUNT_METADATA_BLOB_IDS_PATH, ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
       return null;
     } else {
-      // parse the json string list and get the blob id with the latest version
+      // Parse the json string list and get the blob id with the latest version
+      // Since the the blobIDAndVersionsJson.size() is greater than 0, max will return an optional with solid value.
       BlobIDAndVersion blobIDAndVersion = blobIDAndVersionsJson.stream()
           .map(json -> BlobIDAndVersion.fromJson(json))
-          .max((o1, o2) -> o1.getVersion() - o2.getVersion())
+          .max(Comparator.comparing(BlobIDAndVersion::getVersion))
           .get();
 
       logger.trace("Start reading remote account data from blob {} and versioned at {}.", blobIDAndVersion.blobID,
@@ -164,6 +169,16 @@ class RouterStore extends AccountMetadataStore {
   }
 
   /**
+   * Helper function to log the error message out and throw an {@link IllegalStateException}.
+   * @param errorMessage The error message.
+   * @param cause The cause exception.
+   */
+  private void logAndThrowIllegalStateException(String errorMessage, Exception cause) {
+    logger.error(errorMessage, cause);
+    throw new IllegalStateException(errorMessage, cause);
+  }
+
+  /**
    * A {@link DataUpdater} to be used for updating {@link #ACCOUNT_METADATA_BLOB_IDS_PATH} inside of
    * {@link #updateAccounts(Collection)}
    */
@@ -200,37 +215,33 @@ class RouterStore extends AccountMetadataStore {
       } else {
         recordToUpdate = znRecord;
       }
-      String errorMessage = null;
-
-      List<String> blobIDAndVersionsJson = recordToUpdate.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
-
       // This is the version number for the new blob id.
       int newVersion = 1;
-      Map<String, String> accountMap = null;
+      List<String> blobIDAndVersionsJson = recordToUpdate.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
       List<BlobIDAndVersion> blobIDAndVersions = new ArrayList<>();
+      Map<String, String> accountMap = null;
       if (blobIDAndVersionsJson != null && blobIDAndVersionsJson.size() != 0) {
         try {
-          // parse the json string list and get the blob id with the latest version
+          // Parse the json string list and get the BlobIDAndVersion with the latest version number.
           blobIDAndVersionsJson.stream()
               .forEach(accountBlobIDInJson -> blobIDAndVersions.add(BlobIDAndVersion.fromJson(accountBlobIDInJson)));
-          Collections.sort(blobIDAndVersions);
+          Collections.sort(blobIDAndVersions, Comparator.comparing(BlobIDAndVersion::getVersion));
           BlobIDAndVersion blobIDAndVersion = blobIDAndVersions.get(blobIDAndVersions.size() - 1);
           newVersion = blobIDAndVersion.version + 1;
 
           // Start Step 2:
-          // if this is not for backfill, then just read account metadata from blob
+          // If this is not for backfill, then just read account metadata from blob, otherwise, initialize it with
+          // an empty map and fill it up with the accountMap passed to constructor.
           accountMap = (!forBackFill) ? readAccountMetadataFromBlobID(blobIDAndVersion.blobID) : new HashMap<>();
-          // make this list mutable
+          // Make this list mutable
           blobIDAndVersionsJson = new ArrayList<>(blobIDAndVersionsJson);
         } catch (JSONException e) {
           accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-          errorMessage = "Exception occurred when parsing the blob id list from " + blobIDAndVersionsJson;
-          logger.error(errorMessage);
-          throw new IllegalStateException(errorMessage, e);
+          logAndThrowIllegalStateException(
+              "Exception occurred when parsing the blob id list from " + blobIDAndVersionsJson, e);
         } catch (Exception e) {
-          errorMessage = "Unexpected exception occurred when parsing the blob id list from " + blobIDAndVersionsJson;
-          logger.error(errorMessage, e);
-          throw new IllegalStateException(errorMessage, e);
+          logAndThrowIllegalStateException(
+              "Unexpected exception occurred when parsing the blob id list from " + blobIDAndVersionsJson, e);
         }
       }
       // This ZNRecord doesn't exist when first time we update this ZNRecord, thus accountMap will be null.
@@ -241,23 +252,21 @@ class RouterStore extends AccountMetadataStore {
 
       if (!forBackFill) {
         // Start step 3:
-        AccountInfoMap localAccountInfoMap;
+        AccountInfoMap localAccountInfoMap = null;
         try {
           localAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
         } catch (JSONException e) {
           accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-          errorMessage = "Exception occurred when building AccountInfoMap from accountMap " + accountMap;
-          logger.error(errorMessage, e);
-          throw new IllegalStateException(errorMessage, e);
+          logAndThrowIllegalStateException(
+              "Exception occurred when building AccountInfoMap from accountMap " + accountMap, e);
         }
 
-        // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
+        // If there is any conflict with the existing record, fail the update. Exception thrown in this updater will
         // be caught by Helix and helixStore#update will return false.
         if (localAccountInfoMap.hasConflictingAccount(this.accounts)) {
           // Throw exception, so that helixStore can capture and terminate the update operation
-          errorMessage = "Updating accounts failed because one account to update conflicts with existing accounts";
-          logger.error(errorMessage);
-          throw new IllegalStateException(errorMessage);
+          logAndThrowIllegalStateException(
+              "Updating accounts failed because one account to update conflicts with existing accounts", null);
         }
       }
 
@@ -265,11 +274,9 @@ class RouterStore extends AccountMetadataStore {
         try {
           accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
         } catch (Exception e) {
-          errorMessage = "Updating accounts failed because unexpected exception occurred when updating accountId="
-              + account.getId() + " accountName=" + account.getName();
-          // Do not depend on Helix to log, so log the error message here.
-          logger.error(errorMessage, e);
-          throw new IllegalStateException(errorMessage, e);
+          logAndThrowIllegalStateException(
+              "Updating accounts failed because unexpected exception occurred when updating accountId="
+                  + account.getId() + " accountName=" + account.getName(), e);
         }
       }
 
@@ -280,27 +287,28 @@ class RouterStore extends AccountMetadataStore {
         accountServiceMetrics.accountUpdateToAmbryTimeInMs.update(System.currentTimeMillis() - startTimeMs);
       } catch (Exception e) {
         accountServiceMetrics.accountUpdatesToAmbryServerErrorCount.inc();
-        errorMessage =
-            "Updating accounts failed because unexpected error occurred when uploading AccountMetadata to ambry";
-        logger.error(errorMessage, e);
-        throw new IllegalStateException(errorMessage, e);
+        logAndThrowIllegalStateException(
+            "Updating accounts failed because unexpected error occurred when uploading AccountMetadata to ambry", e);
       }
 
       // Start step 5:
-      Iterator<BlobIDAndVersion> iter = blobIDAndVersions.iterator();
-      Iterator<String> jsonIter = blobIDAndVersionsJson.iterator();
-      while (blobIDAndVersions.size() + 1 > maxNumberOfVersionsToSave) {
-        jsonIter.next();
-        jsonIter.remove();
-        BlobIDAndVersion blobIDAndVersion = iter.next();
-        iter.remove();
-        logger.info("Removing blob " + blobIDAndVersion.getBlobID() + " at version " + blobIDAndVersion.getVersion());
-        try {
-          router.get().deleteBlob(blobIDAndVersion.getBlobID(), SERVICE_ID).get();
-        } catch (Exception e) {
-          logger.error("Failed to delete blob={} from older version because of {}", blobIDAndVersion.getBlobID(), e);
-          accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
+      if (blobIDAndVersions.size() + 1 > totalNumberOfVersionToKeep) {
+        Iterator<BlobIDAndVersion> iter = blobIDAndVersions.iterator();
+        while (blobIDAndVersions.size() + 1 > totalNumberOfVersionToKeep) {
+          BlobIDAndVersion blobIDAndVersion = iter.next();
+          iter.remove();
+          logger.info("Removing blob " + blobIDAndVersion.getBlobID() + " at version " + blobIDAndVersion.getVersion());
+          try {
+            router.get().deleteBlob(blobIDAndVersion.getBlobID(), SERVICE_ID).get();
+          } catch (Exception e) {
+            logger.error("Failed to delete blob={} from older version because of {}", blobIDAndVersion.getBlobID(), e);
+            accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
+          }
         }
+        // Clear json string list since it's not sorted.
+        blobIDAndVersionsJson.clear();
+        blobIDAndVersionsJson.addAll(
+            blobIDAndVersions.stream().map(BlobIDAndVersion::toJson).collect(Collectors.toList()));
       }
 
       // Start step 6:
@@ -328,7 +336,7 @@ class RouterStore extends AccountMetadataStore {
    * Helper class that encapsulates the blob id and version number to serve as each item in the blob id list that would
    * eventually be persisted in {@link ZNRecord} at {@link #ACCOUNT_METADATA_BLOB_IDS_PATH}.
    */
-  static class BlobIDAndVersion implements Comparable<BlobIDAndVersion> {
+  static class BlobIDAndVersion {
     private final String blobID;
     private final int version;
 
@@ -370,11 +378,6 @@ class RouterStore extends AccountMetadataStore {
      */
     public String getBlobID() {
       return blobID;
-    }
-
-    @Override
-    public int compareTo(BlobIDAndVersion other) {
-      return version - other.version;
     }
 
     @Override

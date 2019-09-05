@@ -29,7 +29,7 @@ public class HelixAccountServiceConfig {
   public static final String UPDATE_DISABLED =  HELIX_ACCOUNT_SERVICE_PREFIX + "update.disabled";
   public static final String BACKFILL_ACCOUNTS_TO_NEW_ZNODE = HELIX_ACCOUNT_SERVICE_PREFIX + "backfill.accounts.to.new.znode";
   public static final String ENABLE_SERVE_FROM_BACKUP  = HELIX_ACCOUNT_SERVICE_PREFIX + "enable.serve.from.backup";
-  public static final String MAX_NUMBER_OF_VERSION_TO_SAVE = HELIX_ACCOUNT_SERVICE_PREFIX + "max.number.of.version.to.save";
+  public static final String TOTAL_NUMBER_OF_VERSION_TO_KEEP = HELIX_ACCOUNT_SERVICE_PREFIX + "total.number.of.version.to.keep";
 
   /**
    * The ZooKeeper server address. This config is required when using {@code HelixAccountService}.
@@ -100,13 +100,13 @@ public class HelixAccountServiceConfig {
   public final boolean enableServeFromBackup;
 
   /**
-   * Maximum number of previous versions to save in the system. Every update account http request would generate a new
-   * version. And when the number of versions surpasses this number, HelixAccountService will purge the oldest one to
-   * make room for the new one.
+   * Total number of previous versions of account metadata to keep in the system. Every update account http request would
+   * generate a new version. And when the number of versions surpasses this number, HelixAccountService will purge the
+   * oldest one to make room for the new one.
    */
-  @Config(MAX_NUMBER_OF_VERSION_TO_SAVE)
+  @Config(TOTAL_NUMBER_OF_VERSION_TO_KEEP)
   @Default("100")
-  public final int maxNumberOfVersionToSave;
+  public final int totalNumberOfVersionToKeep;
 
   public HelixAccountServiceConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY);
@@ -122,8 +122,7 @@ public class HelixAccountServiceConfig {
     if (backFillAccountsToNewZNode && useNewZNodePath) {
       throw new IllegalStateException("useNewZNodePath and backFillAccountsToNewZNode can't be true at the same time.");
     }
-
     enableServeFromBackup = verifiableProperties.getBoolean(ENABLE_SERVE_FROM_BACKUP, false);
-    maxNumberOfVersionToSave = verifiableProperties.getIntInRange(MAX_NUMBER_OF_VERSION_TO_SAVE, 100, 1, Integer.MAX_VALUE);
+    totalNumberOfVersionToKeep = verifiableProperties.getIntInRange(TOTAL_NUMBER_OF_VERSION_TO_KEEP, 100, 1, Integer.MAX_VALUE);
   }
 }

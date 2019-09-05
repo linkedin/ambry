@@ -128,13 +128,15 @@ public class HelixAccountService implements AccountService {
     this.backupFileManager = new BackupFileManager(this.accountServiceMetrics, config);
     AccountMetadataStore backFillStore = null;
     if (config.useNewZNodePath) {
-      accountMetadataStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, false, config.maxNumberOfVersionsToSave);
+      accountMetadataStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, false,
+          config.totalNumberOfVersionToKeep);
       // postpone initializeFetchAndSchedule to setupRouter function.
     } else {
       accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backupFileManager, helixStore);
       initialFetchAndSchedule();
       if (config.backFillAccountsToNewZNode) {
-        backFillStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, true, config.maxNumberOfVersionsToSave);
+        backFillStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, true,
+            config.totalNumberOfVersionToKeep);
       }
     }
     this.backFillStore = backFillStore;

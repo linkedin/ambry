@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -57,7 +58,7 @@ import static org.junit.Assert.fail;
  */
 @RunWith(Parameterized.class)
 public class RouterStoreTest {
-  private final int MAX_NUMBER_OF_VERSIONS_TO_SAVE = 5;
+  private final int TOTAL_NUMBER_OF_VERSION_TO_KEEP = 5;
   private final AccountServiceMetrics accountServiceMetrics;
   private final BackupFileManager backup;
   private final Path accountBackupDir;
@@ -114,7 +115,7 @@ public class RouterStoreTest {
   public void testUpdateAndFetch() throws Exception {
     RouterStore store =
         new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill,
-            MAX_NUMBER_OF_VERSIONS_TO_SAVE);
+            TOTAL_NUMBER_OF_VERSION_TO_KEEP);
     Map<Short, Account> idToRefAccountMap = new HashMap<>();
     Map<Short, Map<Short, Container>> idtoRefContainerMap = new HashMap<>();
     Set<Short> accountIDSet = new HashSet<>();
@@ -144,12 +145,12 @@ public class RouterStoreTest {
   public void testSizeLimitInList() throws Exception {
     RouterStore store =
         new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill,
-            MAX_NUMBER_OF_VERSIONS_TO_SAVE);
+            TOTAL_NUMBER_OF_VERSION_TO_KEEP);
 
     Map<Short, Account> idToRefAccountMap = new HashMap<>();
     Map<Short, Map<Short, Container>> idtoRefContainerMap = new HashMap<>();
     Set<Short> accountIDSet = new HashSet<>();
-    for (int i = 0; i < MAX_NUMBER_OF_VERSIONS_TO_SAVE; i++) {
+    for (int i = 0; i < TOTAL_NUMBER_OF_VERSION_TO_KEEP; i++) {
       // generate an new account and test update and fetch on this account
       Map<Short, Account> newIdToRefAccountMap = new HashMap<>();
       AccountTestUtils.generateRefAccounts(newIdToRefAccountMap, idtoRefContainerMap, accountIDSet, 1, 1);
@@ -163,8 +164,8 @@ public class RouterStoreTest {
       assertUpdateAndFetch(store, idToRefAccountMap, newIdToRefAccountMap, i + 1, i + 1);
     }
     // Now we already have maximum number of versions in the list, adding a new version should remove the oldest one.
-    List<RouterStore.BlobIDAndVersion> blobIDAndVersions = getBlobIDAndVersionInHelix(MAX_NUMBER_OF_VERSIONS_TO_SAVE);
-    Collections.sort(blobIDAndVersions);
+    List<RouterStore.BlobIDAndVersion> blobIDAndVersions = getBlobIDAndVersionInHelix(TOTAL_NUMBER_OF_VERSION_TO_KEEP);
+    Collections.sort(blobIDAndVersions, Comparator.comparing(RouterStore.BlobIDAndVersion::getVersion));
     assertEquals(1, blobIDAndVersions.get(0).getVersion());
 
     Map<Short, Account> newIdToRefAccountMap = new HashMap<>();
@@ -176,18 +177,18 @@ public class RouterStoreTest {
     } else {
       idToRefAccountMap = newIdToRefAccountMap;
     }
-    assertUpdateAndFetch(store, idToRefAccountMap, newIdToRefAccountMap, MAX_NUMBER_OF_VERSIONS_TO_SAVE + 1,
-        MAX_NUMBER_OF_VERSIONS_TO_SAVE);
+    assertUpdateAndFetch(store, idToRefAccountMap, newIdToRefAccountMap, TOTAL_NUMBER_OF_VERSION_TO_KEEP + 1,
+        TOTAL_NUMBER_OF_VERSION_TO_KEEP);
 
     // Get the list again and compare the blob ids
     List<RouterStore.BlobIDAndVersion> blobIDAndVersionsAfterUpdate =
-        getBlobIDAndVersionInHelix(MAX_NUMBER_OF_VERSIONS_TO_SAVE);
-    Collections.sort(blobIDAndVersionsAfterUpdate);
+        getBlobIDAndVersionInHelix(TOTAL_NUMBER_OF_VERSION_TO_KEEP);
+    Collections.sort(blobIDAndVersionsAfterUpdate, Comparator.comparing(RouterStore.BlobIDAndVersion::getVersion));
     assertEquals("First version should be removed", 2, blobIDAndVersionsAfterUpdate.get(0).getVersion());
-    assertEquals("Version mismatch", MAX_NUMBER_OF_VERSIONS_TO_SAVE + 1,
-        blobIDAndVersionsAfterUpdate.get(MAX_NUMBER_OF_VERSIONS_TO_SAVE - 1).getVersion());
+    assertEquals("Version mismatch", TOTAL_NUMBER_OF_VERSION_TO_KEEP + 1,
+        blobIDAndVersionsAfterUpdate.get(TOTAL_NUMBER_OF_VERSION_TO_KEEP - 1).getVersion());
 
-    for (int i = 1; i < MAX_NUMBER_OF_VERSIONS_TO_SAVE; i++) {
+    for (int i = 1; i < TOTAL_NUMBER_OF_VERSION_TO_KEEP; i++) {
       assertEquals("BlobIDAndVersion mismatch at index " + i, blobIDAndVersions.get(i),
           blobIDAndVersionsAfterUpdate.get(i - 1));
     }

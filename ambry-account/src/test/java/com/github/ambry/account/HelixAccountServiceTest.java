@@ -86,7 +86,7 @@ public class HelixAccountServiceTest {
   private static final String BAD_ACCOUNT_METADATA_STRING = "badAccountMetadataString";
   private static final int NUM_REF_ACCOUNT = 10;
   private static final int NUM_CONTAINER_PER_ACCOUNT = 4;
-  private static final int MAX_NUMBER_OF_VERSIONS_TO_SAVE = 100;
+  private static final int TOTAL_NUMBER_OF_VERSION_TO_KEEP = 100;
   private static final Map<Short, Account> idToRefAccountMap = new HashMap<>();
   private static final Map<Short, Map<Short, Container>> idToRefContainerMap = new HashMap<>();
   private final Properties helixConfigProps = new Properties();
@@ -881,7 +881,7 @@ public class HelixAccountServiceTest {
     HelixAccountService helixAccountService = (HelixAccountService) accountService;
     RouterStore routerStore =
         new RouterStore(helixAccountService.getAccountServiceMetrics(), helixAccountService.getBackupFileManager(),
-            helixStore, new AtomicReference<>(mockRouter), false, MAX_NUMBER_OF_VERSIONS_TO_SAVE);
+            helixStore, new AtomicReference<>(mockRouter), false, TOTAL_NUMBER_OF_VERSION_TO_KEEP);
     Map<String, String> accountMap = routerStore.fetchAccountMetadata();
     assertNotNull("Accounts should be backfilled to new znode", accountMap);
     assertAccountMapEquals(accountService.getAllAccounts(), accountMap);
