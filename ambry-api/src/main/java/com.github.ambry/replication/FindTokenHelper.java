@@ -37,11 +37,13 @@ public class FindTokenHelper {
    * @param storeKeyFactory
    * @param replicationConfig
    */
-  public FindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig) throws ReflectiveOperationException {
+  public FindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig)
+      throws ReflectiveOperationException {
     this.storeKeyFactory = storeKeyFactory;
     this.replicationConfig = replicationConfig;
     findTokenFactoryMap = new HashMap<>();
-    findTokenFactoryMap.put(ReplicaType.DISK_BACKED, Utils.getObj(replicationConfig.replicationStoreTokenFactory, storeKeyFactory));
+    findTokenFactoryMap.put(ReplicaType.DISK_BACKED,
+        Utils.getObj(replicationConfig.replicationStoreTokenFactory, storeKeyFactory));
     findTokenFactoryMap.put(ReplicaType.CLOUD_BACKED, Utils.getObj(replicationConfig.replicationCloudTokenFactory));
   }
 
@@ -52,7 +54,7 @@ public class FindTokenHelper {
    * @throws ReflectiveOperationException
    */
   public FindTokenFactory getFindTokenFactoryFromReplicaType(ReplicaType replicaType) {
-    if(!findTokenFactoryMap.containsKey(replicaType)) {
+    if (!findTokenFactoryMap.containsKey(replicaType)) {
       throw new IllegalArgumentException("Invalid replica type " + replicaType.getClass());
     }
     return findTokenFactoryMap.get(replicaType);

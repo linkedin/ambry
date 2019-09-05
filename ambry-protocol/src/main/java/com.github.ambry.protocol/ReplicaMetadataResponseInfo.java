@@ -103,7 +103,7 @@ public class ReplicaMetadataResponseInfo {
   }
 
   public static ReplicaMetadataResponseInfo readFrom(DataInputStream stream, FindTokenHelper helper,
-      ClusterMap clusterMap, short replicaMetadataResponseVersion) throws IOException, ReflectiveOperationException {
+      ClusterMap clusterMap, short replicaMetadataResponseVersion) throws IOException {
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
     ReplicaType replicaType = ReplicaType.values()[stream.readShort()];
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];

@@ -185,13 +185,8 @@ public class CloudBackupManager extends ReplicationEngine {
         // We need to ensure that a replica token gets persisted only after the corresponding data in the
         // store gets flushed to cloud. We use the store flush interval multiplied by a constant factor
         // to determine the token flush interval
-        FindTokenFactory findTokenFactory;
-        try {
-          findTokenFactory = tokenHelper.getFindTokenFactoryFromType(peerReplica.getReplicaType());
-        } catch (ReflectiveOperationException roe) {
-          logger.error("Error on getting replica token factory", roe);
-          throw new ReplicationException("Error on getting replica token factory");
-        }
+        FindTokenFactory findTokenFactory =
+            tokenHelper.getFindTokenFactoryFromReplicaType(peerReplica.getReplicaType());
         RemoteReplicaInfo remoteReplicaInfo =
             new RemoteReplicaInfo(peerReplica, cloudReplica, cloudStore, findTokenFactory.getNewFindToken(),
                 storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
@@ -249,14 +244,5 @@ public class CloudBackupManager extends ReplicationEngine {
 
   public VcrMetrics getVcrMetrics() {
     return vcrMetrics;
-  }
-
-  /**
-   * Get the {@code PartitionInfo} for the given {@code PartitionId}
-   * @param partitionId for which to get the {@code PartitionInfo}
-   * @return {@code PartitionInfo} object.
-   */
-  public PartitionInfo getPartitionInfo(PartitionId partitionId) {
-    return partitionToPartitionInfo.get(partitionId);
   }
 }

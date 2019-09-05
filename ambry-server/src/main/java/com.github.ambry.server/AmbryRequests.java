@@ -569,14 +569,8 @@ public class AmbryRequests implements RequestAPI {
   }
 
   public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
-    ReplicaMetadataRequest replicaMetadataRequest;
-    try {
-      replicaMetadataRequest =
-          ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenHelper);
-    } catch (ReflectiveOperationException roe) {
-      logger.error("Error on getting replica token factory", roe);
-      throw new IOException("Error on getting replica token factory");
-    }
+    ReplicaMetadataRequest replicaMetadataRequest =
+        ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenHelper);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.replicaMetadataRequestQueueTimeInMs.update(requestQueueTime);
@@ -648,7 +642,8 @@ public class AmbryRequests implements RequestAPI {
               metrics.unExpectedStoreFindEntriesError.inc();
             }
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-                new ReplicaMetadataResponseInfo(partitionId, replicaType, ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+                new ReplicaMetadataResponseInfo(partitionId, replicaType,
+                    ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
           }
         }

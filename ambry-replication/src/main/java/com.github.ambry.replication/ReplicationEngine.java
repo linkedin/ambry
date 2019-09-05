@@ -88,6 +88,7 @@ public abstract class ReplicationEngine {
     try {
       this.tokenHelper = new FindTokenHelper(this.storeKeyFactory, this.replicationConfig);
     } catch (ReflectiveOperationException roe) {
+      logger.error("Error on getting ReplicaTokenHelper", roe);
       throw new ReplicationException("Error on getting ReplicaTokenHelper");
     }
     this.replicaThreadPoolByDc = new ConcurrentHashMap<>();

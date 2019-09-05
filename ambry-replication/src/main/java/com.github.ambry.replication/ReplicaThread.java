@@ -521,7 +521,8 @@ public class ReplicaThread implements Runnable {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
           new ReplicaMetadataRequestInfo(remoteReplicaInfo.getReplicaId().getPartitionId(),
               remoteReplicaInfo.getToken(), dataNodeId.getHostname(),
-              remoteReplicaInfo.getLocalReplicaId().getReplicaPath(), remoteReplicaInfo.getReplicaId().getReplicaType());
+              remoteReplicaInfo.getLocalReplicaId().getReplicaPath(),
+              remoteReplicaInfo.getReplicaId().getReplicaType());
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ",
           remoteNode, threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
@@ -537,14 +538,8 @@ public class ReplicaThread implements Runnable {
           new ByteBufferInputStream(channelOutput.getInputStream(), (int) channelOutput.getStreamSize());
       logger.trace("Remote node: {} Thread name: {} Remote replicas: {} ByteBuffer size after deserialization: {} ",
           remoteNode, threadName, replicasToReplicatePerNode, byteBufferInputStream.available());
-      ReplicaMetadataResponse response = null;
-      try {
-        response =
-            ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenHelper, clusterMap);
-      } catch (ReflectiveOperationException roe) {
-        logger.error("Error on getting replica token factory", roe);
-        throw new ReplicationException("Error on getting replica token factory");
-      }
+      ReplicaMetadataResponse response =
+          ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenHelper, clusterMap);
 
       long metadataRequestTime = SystemTime.getInstance().milliseconds() - replicaMetadataRequestStartTime;
       replicationMetrics.updateMetadataRequestTime(metadataRequestTime, replicatingFromRemoteColo, replicatingOverSsl,

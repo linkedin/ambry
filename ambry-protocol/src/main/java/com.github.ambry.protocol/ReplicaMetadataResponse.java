@@ -65,7 +65,7 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenHelper helper, ClusterMap clusterMap)
-      throws IOException, ReflectiveOperationException {
+      throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.ReplicaMetadataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");

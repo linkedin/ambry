@@ -60,7 +60,7 @@ public class ReplicaMetadataRequestInfo {
   }
 
   public static ReplicaMetadataRequestInfo readFrom(DataInputStream stream, ClusterMap clusterMap,
-      FindTokenHelper findTokenHelper) throws IOException, ReflectiveOperationException {
+      FindTokenHelper findTokenHelper) throws IOException {
     String hostName = Utils.readIntString(stream);
     String replicaPath = Utils.readIntString(stream);
     ReplicaType replicaType = ReplicaType.values()[stream.readShort()];

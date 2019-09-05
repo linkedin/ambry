@@ -18,7 +18,6 @@ import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
@@ -133,9 +132,8 @@ public class StoreFindToken implements FindToken {
     this.bytesRead = bytesRead;
   }
 
-  static StoreFindToken fromBytes(InputStream inputStream, StoreKeyFactory factory) throws IOException {
+  static StoreFindToken fromBytes(DataInputStream stream, StoreKeyFactory factory) throws IOException {
     StoreFindToken storeFindToken;
-    DataInputStream stream = new DataInputStream(inputStream);
     // read version
     short version = stream.readShort();
     switch (version) {

@@ -232,7 +232,7 @@ public class AmbryRequestsTest {
    * @throws IOException
    */
   @Test
-  public void controlRequestSuccessTest() throws InterruptedException, IOException, ReflectiveOperationException {
+  public void controlRequestSuccessTest() throws InterruptedException, IOException {
     RequestOrResponseType[] requestOrResponseTypes =
         {RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.GetRequest,
             RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest};
@@ -571,8 +571,7 @@ public class AmbryRequestsTest {
    * @throws StoreException
    */
   @Test
-  public void ttlUpdateTest()
-      throws InterruptedException, IOException, MessageFormatException, StoreException, ReflectiveOperationException {
+  public void ttlUpdateTest() throws InterruptedException, IOException, MessageFormatException, StoreException {
     MockPartitionId id =
         (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
@@ -778,7 +777,7 @@ public class AmbryRequestsTest {
    * @throws IOException
    */
   private void doRequestControlRequestTest(RequestOrResponseType toControl, PartitionId id)
-      throws InterruptedException, IOException, ReflectiveOperationException {
+      throws InterruptedException, IOException {
     List<? extends PartitionId> idsToTest;
     if (id == null) {
       idsToTest = clusterMap.getAllPartitionIds(null);
@@ -848,8 +847,7 @@ public class AmbryRequestsTest {
    * @throws IOException
    */
   private void sendAndVerifyOperationRequest(RequestOrResponseType requestType, List<? extends PartitionId> ids,
-      ServerErrorCode expectedErrorCode, Boolean forceCheckOpReceived)
-      throws InterruptedException, IOException, ReflectiveOperationException {
+      ServerErrorCode expectedErrorCode, Boolean forceCheckOpReceived) throws InterruptedException, IOException {
     for (PartitionId id : ids) {
       int correlationId = TestUtils.RANDOM.nextInt();
       String clientId = UtilsTest.getRandomString(10);
@@ -1075,7 +1073,7 @@ public class AmbryRequestsTest {
    * @throws InterruptedException
    * @throws IOException
    */
-  private void miscTtlUpdateFailuresTest() throws InterruptedException, IOException, ReflectiveOperationException {
+  private void miscTtlUpdateFailuresTest() throws InterruptedException, IOException {
     PartitionId id = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     // store exceptions
     for (StoreErrorCodes code : StoreErrorCodes.values()) {
@@ -1326,12 +1324,8 @@ public class AmbryRequestsTest {
         tokenReceived = token;
         maxTotalSizeOfEntriesReceived = maxTotalSizeOfEntries;
         throwExceptionIfRequired();
-        try {
-          return new FindInfo(Collections.emptyList(),
-              findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken());
-        } catch (ReflectiveOperationException roe) {
-          throw new StoreException("Error on getting replica token factory", StoreErrorCodes.IOError);
-        }
+        return new FindInfo(Collections.emptyList(),
+            findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken());
       }
 
       @Override

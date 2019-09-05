@@ -51,7 +51,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   }
 
   public static ReplicaMetadataRequest readFrom(DataInputStream stream, ClusterMap clusterMap,
-      FindTokenHelper findTokenHelper) throws IOException, ReflectiveOperationException {
+      FindTokenHelper findTokenHelper) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.ReplicaMetadataRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();

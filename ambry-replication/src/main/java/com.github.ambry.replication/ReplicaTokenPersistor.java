@@ -151,12 +151,14 @@ public abstract class ReplicaTokenPersistor implements Runnable {
           writer.write(replicaTokenInfo.getHostname().getBytes());
           // Write replica path
           writer.writeInt(replicaTokenInfo.getReplicaPath().getBytes().length);
-          // Write replica type
           writer.write(replicaTokenInfo.getReplicaPath().getBytes());
           // Write port
           writer.writeInt(replicaTokenInfo.getPort());
+          // Write total bytes read from local store
           writer.writeLong(replicaTokenInfo.getTotalBytesReadFromLocalStore());
+          // Write replica type
           writer.writeShort((short) replicaTokenInfo.getReplicaInfo().getReplicaId().getReplicaType().ordinal());
+          // Write replica token
           writer.write(replicaTokenInfo.getReplicaToken().toBytes());
         }
         long crcValue = crcOutputStream.getValue();
@@ -214,8 +216,6 @@ public abstract class ReplicaTokenPersistor implements Runnable {
         }
       } catch (IOException e) {
         throw new ReplicationException("IO error deserializing replica tokens", e);
-      } catch (ReflectiveOperationException roe) {
-        throw new ReplicationException("Reflection error while deserializing replica tokens", roe);
       } finally {
         stream.close();
       }
