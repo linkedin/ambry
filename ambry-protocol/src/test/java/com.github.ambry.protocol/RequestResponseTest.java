@@ -34,7 +34,6 @@ import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferChannel;
-import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -43,7 +42,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,25 +56,21 @@ import static com.github.ambry.account.Container.*;
 
 
 class MockFindTokenHelper extends FindTokenHelper {
-  public MockFindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig) {
+  public MockFindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig)
+      throws ReflectiveOperationException {
     super(storeKeyFactory, replicationConfig);
   }
 
   @Override
-  public FindTokenFactory getFindTokenFactoryFromType(ReplicaType replicaType) throws ReflectiveOperationException {
+  public FindTokenFactory getFindTokenFactoryFromReplicaType(ReplicaType replicaType) {
     return new MockFindTokenFactory();
-  }
-
-  @Override
-  public FindToken getFindTokenFromStream(InputStream inputStream) throws IOException {
-    return new MockFindTokenFactory().getFindToken(new PeekableInputStream(inputStream));
   }
 }
 
 class MockFindTokenFactory implements FindTokenFactory {
 
   @Override
-  public FindToken getFindToken(PeekableInputStream stream) throws IOException {
+  public FindToken getFindToken(DataInputStream stream) throws IOException {
     return new MockFindToken(stream);
   }
 
@@ -99,12 +93,11 @@ class MockFindToken implements FindToken {
     this.bytesRead = bytesRead;
   }
 
-  public MockFindToken(PeekableInputStream stream) throws IOException {
-    DataInputStream dataInputStream = new DataInputStream(stream);
-    this.version = dataInputStream.readShort();
-    this.type = FindTokenType.values()[dataInputStream.readShort()];
-    this.index = dataInputStream.readInt();
-    this.bytesRead = dataInputStream.readLong();
+  public MockFindToken(DataInputStream stream) throws IOException {
+    this.version = stream.readShort();
+    this.type = FindTokenType.values()[stream.readShort()];
+    this.index = stream.readInt();
+    this.bytesRead = stream.readLong();
   }
 
   @Override
@@ -447,7 +440,8 @@ public class RequestResponseTest {
     MockClusterMap clusterMap = new MockClusterMap();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
-        new ReplicaMetadataRequestInfo(new MockPartitionId(), new MockFindToken(0, 1000), "localhost", "path");
+        new ReplicaMetadataRequestInfo(new MockPartitionId(), new MockFindToken(0, 1000), "localhost", "path",
+            ReplicaType.DISK_BACKED);
     replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(1, "id", replicaMetadataRequestInfoList, 1000);
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
@@ -463,7 +457,7 @@ public class RequestResponseTest {
       // expected. Nothing to do
     }
     try {
-      new ReplicaMetadataRequestInfo(new MockPartitionId(), null, "localhost", "path");
+      new ReplicaMetadataRequestInfo(new MockPartitionId(), null, "localhost", "path", ReplicaType.DISK_BACKED);
       Assert.fail("Construction should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do
@@ -489,8 +483,8 @@ public class RequestResponseTest {
         totalSizeOfAllMessages += msgSize;
       }
       ReplicaMetadataResponseInfo responseInfo = new ReplicaMetadataResponseInfo(
-          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), new MockFindToken(0, 1000),
-          messageInfoList, 1000);
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), ReplicaType.DISK_BACKED,
+          new MockFindToken(0, 1000), messageInfoList, 1000);
       Assert.assertEquals("Total size of messages not as expected", totalSizeOfAllMessages,
           responseInfo.getTotalSizeOfAllMessages());
       replicaMetadataResponseInfoList.add(responseInfo);
@@ -539,8 +533,8 @@ public class RequestResponseTest {
         response.toString().length() < maxLength);
     // test toString() of a ReplicaMetadataResponseInfo without any messages
     ReplicaMetadataResponseInfo responseInfo = new ReplicaMetadataResponseInfo(
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), new MockFindToken(0, 1000),
-        Collections.emptyList(), 1000);
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), ReplicaType.DISK_BACKED,
+        new MockFindToken(0, 1000), Collections.emptyList(), 1000);
     Assert.assertTrue("Length of toString() should be > 0", responseInfo.toString().length() > 0);
     // test toString() of a ReplicaMetadataResponse without any ReplicaMetadataResponseInfo
     response = new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, Collections.emptyList());

@@ -150,7 +150,7 @@ class CloudBlobStore implements Store {
     try {
       cloudDestination.downloadBlob(blobId, outputStream);
     } catch (CloudStorageException e) {
-      throw new StoreException("Error occured in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
+      throw new StoreException("Error occurred in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
     }
   }
 

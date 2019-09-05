@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
-import com.github.ambry.utils.PeekableInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 
@@ -31,7 +30,7 @@ public class StoreFindTokenFactory implements FindTokenFactory {
   }
 
   @Override
-  public FindToken getFindToken(PeekableInputStream stream) throws IOException {
+  public FindToken getFindToken(DataInputStream stream) throws IOException {
     return StoreFindToken.fromBytes(stream, factory);
   }
 

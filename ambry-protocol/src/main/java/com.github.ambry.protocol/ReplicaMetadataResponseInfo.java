@@ -15,8 +15,10 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.store.MessageInfo;
 import java.io.DataInputStream;
@@ -35,20 +37,23 @@ public class ReplicaMetadataResponseInfo {
   private final int messageInfoListSize;
   private final long remoteReplicaLagInBytes;
   private final PartitionId partitionId;
+  private final ReplicaType replicaType;
   private final ServerErrorCode errorCode;
 
   private long totalSizeOfAllMessages = 0;
 
   private static final int Error_Size_InBytes = 2;
   private static final int Remote_Replica_Lag_Size_In_Bytes = 8;
+  private static final int ReplicaType_Size_In_Bytes = 4;
 
-  private ReplicaMetadataResponseInfo(PartitionId partitionId, FindToken findToken, List<MessageInfo> messageInfoList,
-      long remoteReplicaLagInBytes, short replicaMetadataResponseVersion) {
+  private ReplicaMetadataResponseInfo(PartitionId partitionId, ReplicaType replicaType, FindToken findToken,
+      List<MessageInfo> messageInfoList, long remoteReplicaLagInBytes, short replicaMetadataResponseVersion) {
     if (partitionId == null || findToken == null || messageInfoList == null) {
       throw new IllegalArgumentException(
           "Invalid partition or token or message info list for ReplicaMetadataResponseInfo");
     }
     this.partitionId = partitionId;
+    this.replicaType = replicaType;
     this.remoteReplicaLagInBytes = remoteReplicaLagInBytes;
     messageInfoAndMetadataListSerde = new MessageInfoAndMetadataListSerde(messageInfoList,
         getMessageInfoAndMetadataListSerDeVersion(replicaMetadataResponseVersion));
@@ -58,11 +63,12 @@ public class ReplicaMetadataResponseInfo {
     messageInfoList.forEach(info -> totalSizeOfAllMessages += info.getSize());
   }
 
-  public ReplicaMetadataResponseInfo(PartitionId partitionId, ServerErrorCode errorCode) {
+  public ReplicaMetadataResponseInfo(PartitionId partitionId, ReplicaType replicaType, ServerErrorCode errorCode) {
     if (partitionId == null) {
       throw new IllegalArgumentException("Invalid partition for ReplicaMetadataResponseInfo");
     }
     this.partitionId = partitionId;
+    this.replicaType = replicaType;
     this.errorCode = errorCode;
     this.token = null;
     this.messageInfoAndMetadataListSerde = null;
@@ -70,9 +76,10 @@ public class ReplicaMetadataResponseInfo {
     this.remoteReplicaLagInBytes = 0;
   }
 
-  public ReplicaMetadataResponseInfo(PartitionId partitionId, FindToken findToken, List<MessageInfo> messageInfoList,
-      long remoteReplicaLagInBytes) {
-    this(partitionId, findToken, messageInfoList, remoteReplicaLagInBytes, ReplicaMetadataResponse.getCurrentVersion());
+  public ReplicaMetadataResponseInfo(PartitionId partitionId, ReplicaType replicaType, FindToken findToken,
+      List<MessageInfo> messageInfoList, long remoteReplicaLagInBytes) {
+    this(partitionId, replicaType, findToken, messageInfoList, remoteReplicaLagInBytes,
+        ReplicaMetadataResponse.getCurrentVersion());
   }
 
   public PartitionId getPartitionId() {
@@ -98,22 +105,25 @@ public class ReplicaMetadataResponseInfo {
   public static ReplicaMetadataResponseInfo readFrom(DataInputStream stream, FindTokenHelper helper,
       ClusterMap clusterMap, short replicaMetadataResponseVersion) throws IOException, ReflectiveOperationException {
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
+    ReplicaType replicaType = ReplicaType.values()[stream.readShort()];
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     if (error != ServerErrorCode.No_Error) {
-      return new ReplicaMetadataResponseInfo(partitionId, error);
+      return new ReplicaMetadataResponseInfo(partitionId, replicaType, error);
     } else {
-      FindToken token = helper.getFindTokenFromStream(stream);
+      FindTokenFactory findTokenFactory = helper.getFindTokenFactoryFromReplicaType(replicaType);
+      FindToken token = findTokenFactory.getFindToken(stream);
       MessageInfoAndMetadataListSerde messageInfoAndMetadataList =
           MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(stream, clusterMap,
               getMessageInfoAndMetadataListSerDeVersion(replicaMetadataResponseVersion));
       long remoteReplicaLag = stream.readLong();
-      return new ReplicaMetadataResponseInfo(partitionId, token, messageInfoAndMetadataList.getMessageInfoList(),
-          remoteReplicaLag, replicaMetadataResponseVersion);
+      return new ReplicaMetadataResponseInfo(partitionId, replicaType, token,
+          messageInfoAndMetadataList.getMessageInfoList(), remoteReplicaLag, replicaMetadataResponseVersion);
     }
   }
 
   public void writeTo(ByteBuffer buffer) {
     buffer.put(partitionId.getBytes());
+    buffer.putShort((short) replicaType.ordinal());
     buffer.putShort((short) errorCode.ordinal());
     if (errorCode == ServerErrorCode.No_Error) {
       buffer.put(token.toBytes());
@@ -124,7 +134,7 @@ public class ReplicaMetadataResponseInfo {
 
   public long sizeInBytes() {
     return (token == null ? 0 : (token.toBytes().length + Remote_Replica_Lag_Size_In_Bytes + messageInfoListSize))
-        + +partitionId.getBytes().length + Error_Size_InBytes;
+        + +partitionId.getBytes().length + ReplicaType_Size_In_Bytes + Error_Size_InBytes;
   }
 
   /**
@@ -138,6 +148,7 @@ public class ReplicaMetadataResponseInfo {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append(partitionId);
+    sb.append(replicaType.name());
     sb.append(" ServerErrorCode=").append(errorCode);
     if (errorCode == ServerErrorCode.No_Error) {
       List<MessageInfo> messageInfos = messageInfoAndMetadataListSerde.getMessageInfoList();

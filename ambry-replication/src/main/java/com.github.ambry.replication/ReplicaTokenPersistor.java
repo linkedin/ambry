@@ -15,6 +15,7 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.SystemTime;
@@ -150,10 +151,12 @@ public abstract class ReplicaTokenPersistor implements Runnable {
           writer.write(replicaTokenInfo.getHostname().getBytes());
           // Write replica path
           writer.writeInt(replicaTokenInfo.getReplicaPath().getBytes().length);
+          // Write replica type
           writer.write(replicaTokenInfo.getReplicaPath().getBytes());
           // Write port
           writer.writeInt(replicaTokenInfo.getPort());
           writer.writeLong(replicaTokenInfo.getTotalBytesReadFromLocalStore());
+          writer.writeShort((short) replicaTokenInfo.getReplicaInfo().getReplicaId().getReplicaType().ordinal());
           writer.write(replicaTokenInfo.getReplicaToken().toBytes());
         }
         long crcValue = crcOutputStream.getValue();
@@ -189,8 +192,11 @@ public abstract class ReplicaTokenPersistor implements Runnable {
               int port = stream.readInt();
               // read total bytes read from local store
               long totalBytesReadFromLocalStore = stream.readLong();
+              //read replica type
+              ReplicaType replicaType = ReplicaType.values()[stream.readShort()];
               // read replica token
-              FindToken token = tokenHelper.getFindTokenFromStream(stream);
+              FindTokenFactory findTokenFactory = tokenHelper.getFindTokenFactoryFromReplicaType(replicaType);
+              FindToken token = findTokenFactory.getFindToken(stream);
 
               tokenInfoList.add(
                   new ReplicaTokenInfo(partitionId, hostname, replicaPath, port, totalBytesReadFromLocalStore, token));

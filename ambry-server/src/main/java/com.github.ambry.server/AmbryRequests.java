@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
@@ -592,13 +593,15 @@ public class AmbryRequests implements RequestAPI {
       for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
         long partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
         PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
+        ReplicaType replicaType = replicaMetadataRequestInfo.getReplicaType();
         ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.ReplicaMetadataRequest, false);
         logger.trace("{} Time used to validate metadata request: {}", partitionId,
             (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
         if (error != ServerErrorCode.No_Error) {
           logger.error("Validating replica metadata request failed with error {} for partition {}", error, partitionId);
-          ReplicaMetadataResponseInfo replicaMetadataResponseInfo = new ReplicaMetadataResponseInfo(partitionId, error);
+          ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+              new ReplicaMetadataResponseInfo(partitionId, replicaType, error);
           replicaMetadataResponseList.add(replicaMetadataResponseInfo);
         } else {
           try {
@@ -624,8 +627,8 @@ public class AmbryRequests implements RequestAPI {
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-                new ReplicaMetadataResponseInfo(partitionId, findInfo.getFindToken(), findInfo.getMessageEntries(),
-                    store.getSizeInBytes() - totalBytesRead);
+                new ReplicaMetadataResponseInfo(partitionId, replicaType, findInfo.getFindToken(),
+                    findInfo.getMessageEntries(), store.getSizeInBytes() - totalBytesRead);
             if (replicaMetadataResponseInfo.getTotalSizeOfAllMessages()
                 > 5 * replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes()) {
               logger.debug("{} generated a metadata response {} where the cumulative size of messages is {}",
@@ -645,7 +648,7 @@ public class AmbryRequests implements RequestAPI {
               metrics.unExpectedStoreFindEntriesError.inc();
             }
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-                new ReplicaMetadataResponseInfo(partitionId, ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+                new ReplicaMetadataResponseInfo(partitionId, replicaType, ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
           }
         }

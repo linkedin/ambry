@@ -89,7 +89,6 @@ import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.HelixControllerManager;
-import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -2021,7 +2020,7 @@ final class ServerTestUtil {
               // read total bytes read from local store
               dataInputStream.readLong();
               // read replica token
-              StoreFindToken token = (StoreFindToken) factory.getFindToken(new PeekableInputStream(dataInputStream));
+              StoreFindToken token = (StoreFindToken) factory.getFindToken(dataInputStream);
               System.out.println(
                   "partitionId " + partitionId + " hostname " + hostname + " port " + port + " token " + token);
               Offset endTokenOffset = token.getOffset();

@@ -16,10 +16,9 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
-import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,15 +30,19 @@ public class FindTokenHelper {
   private static final Logger logger = LoggerFactory.getLogger(FindTokenHelper.class);
   private final StoreKeyFactory storeKeyFactory;
   private final ReplicationConfig replicationConfig;
+  private final Map<ReplicaType, FindTokenFactory> findTokenFactoryMap;
 
   /**
    * Create a {@code FindTokenHelper} object.
    * @param storeKeyFactory
    * @param replicationConfig
    */
-  public FindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig) {
+  public FindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig) throws ReflectiveOperationException {
     this.storeKeyFactory = storeKeyFactory;
     this.replicationConfig = replicationConfig;
+    findTokenFactoryMap = new HashMap<>();
+    findTokenFactoryMap.put(ReplicaType.DISK_BACKED, Utils.getObj(replicationConfig.replicationStoreTokenFactory, storeKeyFactory));
+    findTokenFactoryMap.put(ReplicaType.CLOUD_BACKED, Utils.getObj(replicationConfig.replicationCloudTokenFactory));
   }
 
   /**
@@ -48,33 +51,10 @@ public class FindTokenHelper {
    * @return {@code FindTokenFactory} object.
    * @throws ReflectiveOperationException
    */
-  public FindTokenFactory getFindTokenFactoryFromType(ReplicaType replicaType) throws ReflectiveOperationException {
-    FindTokenFactory findTokenFactory = null;
-    if (replicaType == ReplicaType.DISK_BACKED) {
-      findTokenFactory = Utils.getObj(replicationConfig.replicationStoreTokenFactory, storeKeyFactory);
-    } else if (replicaType.equals(ReplicaType.CLOUD_BACKED)) {
-      findTokenFactory = Utils.getObj(replicationConfig.replicationCloudTokenFactory);
+  public FindTokenFactory getFindTokenFactoryFromReplicaType(ReplicaType replicaType) {
+    if(!findTokenFactoryMap.containsKey(replicaType)) {
+      throw new IllegalArgumentException("Invalid replica type " + replicaType.getClass());
     }
-    return findTokenFactory;
-  }
-
-  /**
-   * Deserialize the correct {@code FindToken} object from the input stream.
-   * @param inputStream from which to get the {@code FindToken} object.
-   * @return {@code FindToken} object.
-   * @throws IOException
-   * @throws ReflectiveOperationException
-   */
-  public FindToken getFindTokenFromStream(InputStream inputStream) throws IOException, ReflectiveOperationException {
-    PeekableInputStream peekableInputStream = new PeekableInputStream(inputStream);
-    FindTokenFactory findTokenFactory = null;
-    short version = peekableInputStream.peekShort();
-    FindTokenType type = FindTokenType.values()[peekableInputStream.peekShort()];
-    if (type == FindTokenType.CloudBased) {
-      findTokenFactory = Utils.getObj(replicationConfig.replicationCloudTokenFactory, storeKeyFactory);
-    } else {
-      findTokenFactory = Utils.getObj(replicationConfig.replicationStoreTokenFactory, storeKeyFactory);
-    }
-    return findTokenFactory.getFindToken(peekableInputStream);
+    return findTokenFactoryMap.get(replicaType);
   }
 }

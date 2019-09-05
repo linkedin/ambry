@@ -13,7 +13,7 @@
  */
 package com.github.ambry.replication;
 
-import com.github.ambry.utils.PeekableInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 
 
@@ -26,7 +26,7 @@ public interface FindTokenFactory {
    * @param stream The stream that is used to create the find token
    * @return The find token created from the stream
    */
-  FindToken getFindToken(PeekableInputStream stream) throws IOException;
+  FindToken getFindToken(DataInputStream stream) throws IOException;
 
   /**
    * Provides a new token to bootstrap the find operation

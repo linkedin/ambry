@@ -15,7 +15,9 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -34,14 +36,17 @@ public class ReplicaMetadataRequestInfo {
   private FindToken token;
   private String hostName;
   private String replicaPath;
+  private ReplicaType replicaType;
   private PartitionId partitionId;
 
   private static final int ReplicaPath_Field_Size_In_Bytes = 4;
   private static final int HostName_Field_Size_In_Bytes = 4;
+  private static final int ReplicaType_Size_In_Bytes = Short.BYTES;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public ReplicaMetadataRequestInfo(PartitionId partitionId, FindToken token, String hostName, String replicaPath) {
+  public ReplicaMetadataRequestInfo(PartitionId partitionId, FindToken token, String hostName, String replicaPath,
+      ReplicaType replicaType) {
     if (partitionId == null || token == null || hostName == null || replicaPath == null) {
       throw new IllegalArgumentException(
           "A parameter in the replica metadata request is null: " + "[Partition: " + partitionId + ", token: " + token
@@ -51,27 +56,32 @@ public class ReplicaMetadataRequestInfo {
     this.token = token;
     this.hostName = hostName;
     this.replicaPath = replicaPath;
+    this.replicaType = replicaType;
   }
 
   public static ReplicaMetadataRequestInfo readFrom(DataInputStream stream, ClusterMap clusterMap,
       FindTokenHelper findTokenHelper) throws IOException, ReflectiveOperationException {
     String hostName = Utils.readIntString(stream);
     String replicaPath = Utils.readIntString(stream);
+    ReplicaType replicaType = ReplicaType.values()[stream.readShort()];
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-    FindToken token = findTokenHelper.getFindTokenFromStream(stream);
-    return new ReplicaMetadataRequestInfo(partitionId, token, hostName, replicaPath);
+    FindTokenFactory findTokenFactory = findTokenHelper.getFindTokenFactoryFromReplicaType(replicaType);
+    FindToken token = findTokenFactory.getFindToken(stream);
+    return new ReplicaMetadataRequestInfo(partitionId, token, hostName, replicaPath, replicaType);
   }
 
   public void writeTo(ByteBuffer buffer) {
     Utils.serializeString(buffer, hostName, Charset.defaultCharset());
     Utils.serializeString(buffer, replicaPath, Charset.defaultCharset());
+    buffer.putShort((short) replicaType.ordinal());
     buffer.put(partitionId.getBytes());
     buffer.put(token.toBytes());
   }
 
   public long sizeInBytes() {
     return HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes
-        + replicaPath.getBytes().length + +partitionId.getBytes().length + token.toBytes().length;
+        + replicaPath.getBytes().length + +partitionId.getBytes().length + ReplicaType_Size_In_Bytes
+        + token.toBytes().length;
   }
 
   public String toString() {
@@ -79,7 +89,8 @@ public class ReplicaMetadataRequestInfo {
     sb.append("[Token=").append(token);
     sb.append(", ").append(" PartitionId=").append(partitionId);
     sb.append(", ").append(" HostName=").append(hostName);
-    sb.append(", ").append(" ReplicaPath=").append(replicaPath).append("]");
+    sb.append(", ").append(" ReplicaPath=").append(replicaPath);
+    sb.append(", ").append(" ReplicaType=").append(replicaType).append("]");
     return sb.toString();
   }
 
@@ -97,5 +108,9 @@ public class ReplicaMetadataRequestInfo {
 
   public PartitionId getPartitionId() {
     return partitionId;
+  }
+
+  public ReplicaType getReplicaType() {
+    return replicaType;
   }
 }

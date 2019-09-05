@@ -13,7 +13,6 @@
  */
 package com.github.ambry.replication;
 
-import com.github.ambry.utils.PeekableInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -32,12 +31,11 @@ public class MockFindToken implements FindToken {
     this.bytesRead = bytesRead;
   }
 
-  public MockFindToken(PeekableInputStream stream) throws IOException {
-    DataInputStream dataInputStream = new DataInputStream(stream);
-    this.version = dataInputStream.readShort();
-    this.type = FindTokenType.values()[dataInputStream.readShort()];
-    this.index = dataInputStream.readInt();
-    this.bytesRead = dataInputStream.readLong();
+  public MockFindToken(DataInputStream stream) throws IOException {
+    this.version = stream.readShort();
+    this.type = FindTokenType.values()[stream.readShort()];
+    this.index = stream.readInt();
+    this.bytesRead = stream.readLong();
   }
 
   @Override
@@ -83,7 +81,7 @@ public class MockFindToken implements FindToken {
   public static class MockFindTokenFactory implements FindTokenFactory {
 
     @Override
-    public FindToken getFindToken(PeekableInputStream stream) throws IOException {
+    public FindToken getFindToken(DataInputStream stream) throws IOException {
       return new MockFindToken(stream);
     }
 

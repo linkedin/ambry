@@ -880,8 +880,8 @@ public class AmbryRequestsTest {
           break;
         case ReplicaMetadataRequest:
           ReplicaMetadataRequestInfo rRequestInfo = new ReplicaMetadataRequestInfo(id,
-              findTokenHelper.getFindTokenFactoryFromType(ReplicaType.DISK_BACKED).getNewFindToken(), "localhost",
-              "/tmp");
+              findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken(),
+              "localhost", "/tmp", ReplicaType.DISK_BACKED);
           request = new ReplicaMetadataRequest(correlationId, clientId, Collections.singletonList(rRequestInfo),
               Long.MAX_VALUE);
           break;
@@ -1328,7 +1328,7 @@ public class AmbryRequestsTest {
         throwExceptionIfRequired();
         try {
           return new FindInfo(Collections.emptyList(),
-              findTokenHelper.getFindTokenFactoryFromType(ReplicaType.DISK_BACKED).getNewFindToken());
+              findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken());
         } catch (ReflectiveOperationException roe) {
           throw new StoreException("Error on getting replica token factory", StoreErrorCodes.IOError);
         }

@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
-import com.github.ambry.utils.PeekableInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -111,11 +110,11 @@ public class CloudFindToken implements FindToken {
 
   /**
    * Utility to construct a previously serialized {@code CloudFindToken} from input stream.
-   * @param inputStream {@code PeekableInputStream} from which to read the token.
+   * @param inputStream {@code DataInputStream} from which to read the token.
    * @return deserialized {@code CloudFindToken} object.
    * @throws IOException
    */
-  static CloudFindToken fromBytes(PeekableInputStream inputStream) throws IOException {
+  static CloudFindToken fromBytes(DataInputStream inputStream) throws IOException {
     CloudFindToken cloudFindToken = null;
     DataInputStream stream = new DataInputStream(inputStream);
     short version = stream.readShort();

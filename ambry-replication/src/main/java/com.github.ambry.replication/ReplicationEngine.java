@@ -85,7 +85,11 @@ public abstract class ReplicationEngine {
       String transformerClassName) throws ReplicationException {
     this.replicationConfig = replicationConfig;
     this.storeKeyFactory = storeKeyFactory;
-    this.tokenHelper = new FindTokenHelper(this.storeKeyFactory, this.replicationConfig);
+    try {
+      this.tokenHelper = new FindTokenHelper(this.storeKeyFactory, this.replicationConfig);
+    } catch (ReflectiveOperationException roe) {
+      throw new ReplicationException("Error on getting ReplicaTokenHelper");
+    }
     this.replicaThreadPoolByDc = new ConcurrentHashMap<>();
     this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaIds);
     this.mountPathToPartitionInfos = new ConcurrentHashMap<>();

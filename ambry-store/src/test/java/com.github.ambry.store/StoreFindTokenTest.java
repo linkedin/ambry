@@ -16,7 +16,6 @@ package com.github.ambry.store;
 import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
@@ -218,7 +217,7 @@ public class StoreFindTokenTest {
   private void doSerDeTest(StoreFindToken token, Short... versions) throws IOException {
     for (Short version : versions) {
       DataInputStream stream = getSerializedStream(token, version);
-      StoreFindToken deSerToken = StoreFindToken.fromBytes(new PeekableInputStream(stream), STORE_KEY_FACTORY);
+      StoreFindToken deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
       assertEquals("Stream should have ended ", 0, stream.available());
       assertEquals("Version mismatch for token ", version.shortValue(), deSerToken.getVersion());
       compareTokens(token, deSerToken);
@@ -229,7 +228,7 @@ public class StoreFindTokenTest {
       // use StoreFindToken's actual serialize method to verify that token is serialized in the expected
       // version
       stream = new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(deSerToken.toBytes())));
-      deSerToken = StoreFindToken.fromBytes(new PeekableInputStream(stream), STORE_KEY_FACTORY);
+      deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
       assertEquals("Stream should have ended ", 0, stream.available());
       assertEquals("Version mismatch for token ", version.shortValue(), deSerToken.getVersion());
       compareTokens(token, deSerToken);

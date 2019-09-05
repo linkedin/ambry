@@ -16,24 +16,17 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.PeekableInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 
 
 public class MockFindTokenHelper extends FindTokenHelper {
 
-  public MockFindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig) {
+  public MockFindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig)
+      throws ReflectiveOperationException {
     super(storeKeyFactory, replicationConfig);
   }
 
   @Override
-  public FindTokenFactory getFindTokenFactoryFromType(ReplicaType replicaType) {
+  public FindTokenFactory getFindTokenFactoryFromReplicaType(ReplicaType replicaType) {
     return new MockFindToken.MockFindTokenFactory();
-  }
-
-  @Override
-  public FindToken getFindTokenFromStream(InputStream inputStream) throws IOException {
-    return new MockFindToken.MockFindTokenFactory().getFindToken(new PeekableInputStream(inputStream));
   }
 }

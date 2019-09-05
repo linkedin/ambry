@@ -15,15 +15,14 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
-import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.PeekableInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 
 
 public class CloudFindTokenFactory implements FindTokenFactory {
 
   @Override
-  public FindToken getFindToken(PeekableInputStream stream) throws IOException {
+  public FindToken getFindToken(DataInputStream stream) throws IOException {
     return CloudFindToken.fromBytes(stream);
   }
 

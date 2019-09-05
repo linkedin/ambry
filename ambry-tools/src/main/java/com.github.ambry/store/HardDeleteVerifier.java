@@ -27,7 +27,6 @@ import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.CrcInputStream;
-import com.github.ambry.utils.PeekableInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
@@ -187,10 +186,9 @@ public class HardDeleteVerifier {
         StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
         FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
-        PeekableInputStream peekableInputStream = new PeekableInputStream(stream);
-        FindToken startToken = factory.getFindToken(peekableInputStream);
+        FindToken startToken = factory.getFindToken(stream);
         //read past the end token.
-        factory.getFindToken(peekableInputStream);
+        factory.getFindToken(stream);
 
         ByteBuffer bytebufferToken = ByteBuffer.wrap(startToken.toBytes());
         short tokenVersion = bytebufferToken.getShort();
