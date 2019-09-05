@@ -23,6 +23,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,6 +44,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.apache.helix.ZNRecord;
@@ -161,6 +163,7 @@ public class HelixAccountServiceTest {
     assertEquals("No TopicListeners should still be attached to Notifier", 0,
         notifier.topicToListenersMap.getOrDefault(ACCOUNT_METADATA_CHANGE_TOPIC, Collections.emptySet()).size());
     deleteStoreIfExists();
+    deleteBackupDirectoryIfExist();
   }
 
   /**
@@ -259,6 +262,40 @@ public class HelixAccountServiceTest {
       accountsToUpdate.add(accountBuilder.build());
     }
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
+  }
+
+  /**
+   * Tests starting up a {@link HelixAccountService}, when the corresponding {@code ZooKeeper} does not have any
+   * {@link ZNRecord} on it but local backup files exists.
+   * @throws Exception Any unexpected exception
+   */
+  @Test
+  public void testStartWithBackupFiles() throws Exception {
+    // use testUpdateAccount function to create backups and then delete helixStore data.
+    testUpdateAccount();
+    if (accountService != null) {
+      accountService.close();
+    }
+    deleteStoreIfExists();
+
+    // should have some backup files.
+    if (helixConfigProps.containsKey(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY)) {
+      File[] files = accountBackupDir.toFile()
+          .listFiles(path -> BackupFileManager.versionFilenamePattern.matcher(path.getName()).find());
+      assertTrue("UpdateAccount should create backup files", files.length > 0);
+
+      helixConfigProps.put(HelixAccountServiceConfig.ENABLE_SERVE_FROM_BACKUP, "true");
+      vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+      storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+      String updaterThreadPrefix = UUID.randomUUID().toString();
+      MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
+          new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix,
+              mockRouter);
+      accountService = mockHelixAccountServiceFactory.getAccountService();
+      assertNotNull("Backup files should have data", accountService.getAllAccounts());
+      assertEquals("Number of accounts from backup mismatch", accountService.getAllAccounts().size(),
+          1 + NUM_REF_ACCOUNT);
+    }
   }
 
   /**
@@ -842,8 +879,8 @@ public class HelixAccountServiceTest {
         mockHelixAccountServiceFactory.getHelixStore(ZK_CONNECT_STRING, storeConfig);
     HelixAccountService helixAccountService = (HelixAccountService) accountService;
     RouterStore routerStore =
-        new RouterStore(helixAccountService.getAccountServiceMetrics(), helixAccountService.getBackup(), helixStore,
-            new AtomicReference<>(mockRouter), false);
+        new RouterStore(helixAccountService.getAccountServiceMetrics(), helixAccountService.getBackupFileManager(),
+            helixStore, new AtomicReference<>(mockRouter), false);
     Map<String, String> accountMap = routerStore.fetchAccountMetadata();
     assertNotNull("Accounts should be backfilled to new znode", accountMap);
     assertAccountMapEquals(accountService.getAllAccounts(), accountMap);
@@ -902,23 +939,27 @@ public class HelixAccountServiceTest {
    */
   private void updateAccountsAndAssertAccountExistence(Collection<Account> accounts, int expectedAccountCount,
       boolean shouldUpdateSucceed) throws Exception {
-    Collection<Account> expectedOldState = accountService.getAllAccounts();
     boolean hasUpdateAccountSucceed = accountService.updateAccounts(accounts);
     assertEquals("Wrong update return status", shouldUpdateSucceed, hasUpdateAccountSucceed);
     if (shouldUpdateSucceed) {
       assertAccountsInAccountService(accounts, expectedAccountCount, accountService);
       if (helixConfigProps.containsKey(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY)) {
-        Path oldStateBackup = Files.list(accountBackupDir)
-            .filter(path -> path.getFileName().toString().endsWith(LocalBackup.OLD_STATE_SUFFIX))
-            .max(Comparator.naturalOrder())
+        Path newBackupFilePath = Files.list(accountBackupDir)
+            .filter(path -> BackupFileManager.versionFilenamePattern.matcher(path.getFileName().toString()).find())
+            .max(new Comparator<Path>() {
+              @Override
+              public int compare(Path o1, Path o2) {
+                Matcher m1 = BackupFileManager.versionFilenamePattern.matcher(o1.getFileName().toString());
+                Matcher m2 = BackupFileManager.versionFilenamePattern.matcher(o2.getFileName().toString());
+                m1.find();
+                m2.find();
+                int v1 = Integer.parseInt(m1.group(1));
+                int v2 = Integer.parseInt(m2.group(1));
+                return v1 - v2;
+              }
+            })
             .get();
-        checkBackupFile(expectedOldState, oldStateBackup);
-        String newStateFilename =
-            oldStateBackup.getFileName().toString().replace(LocalBackup.OLD_STATE_SUFFIX, LocalBackup.NEW_STATE_SUFFIX);
-        Path newStateBackup = oldStateBackup.getParent().resolve(newStateFilename);
-        checkBackupFile(accountService.getAllAccounts(), newStateBackup);
-      } else {
-        assertEquals("No backup files should exist.", 0, Files.list(accountBackupDir).count());
+        checkBackupFileWithVersion(accountService.getAllAccounts(), newBackupFilePath);
       }
     } else {
       assertEquals("Wrong number of accounts in accountService", expectedAccountCount,
@@ -932,7 +973,7 @@ public class HelixAccountServiceTest {
    * @param backupPath the {@link Path} to the backup file.
    * @throws JSONException
    */
-  private void checkBackupFile(Collection<Account> expectedAccounts, Path backupPath)
+  private void checkBackupFileWithVersion(Collection<Account> expectedAccounts, Path backupPath)
       throws JSONException, IOException {
     try (BufferedReader reader = Files.newBufferedReader(backupPath)) {
       JSONArray accountArray = new JSONArray(new JSONTokener(reader));
@@ -1072,6 +1113,17 @@ public class HelixAccountServiceTest {
     // check if the store exists by checking if root path (e.g., "/") exists in the store.
     if (storeOperator.exist("/")) {
       storeOperator.delete("/");
+    }
+  }
+
+  /**
+   * Delete backup directory if exist.
+   * @throws Exception Any unexpected exception.
+   */
+  private void deleteBackupDirectoryIfExist() throws Exception {
+    if (Files.exists(accountBackupDir)) {
+      Files.walk(accountBackupDir).map(Path::toFile).forEach(File::delete);
+      Files.deleteIfExists(accountBackupDir);
     }
   }
 

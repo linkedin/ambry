@@ -17,15 +17,7 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.router.Router;
-import com.github.ambry.utils.Pair;
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -89,7 +81,7 @@ public class HelixAccountService implements AccountService {
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
 
-  private final LocalBackup backup;
+  private final BackupFileManager backupFileManager;
   private final AccountServiceMetrics accountServiceMetrics;
   private final HelixPropertyStore<ZNRecord> helixStore;
   private final Notifier<String> notifier;
@@ -133,16 +125,16 @@ public class HelixAccountService implements AccountService {
     this.scheduler = scheduler;
     this.config = config;
     this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
-    this.backup = new LocalBackup(this.accountServiceMetrics, config);
+    this.backupFileManager = new BackupFileManager(this.accountServiceMetrics, config);
     AccountMetadataStore backFillStore = null;
     if (config.useNewZNodePath) {
-      accountMetadataStore = new RouterStore(this.accountServiceMetrics, backup, helixStore, router, false);
+      accountMetadataStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, false);
       // postpone initializeFetchAndSchedule to setupRouter function.
     } else {
-      accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backup, helixStore);
+      accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backupFileManager, helixStore);
       initialFetchAndSchedule();
       if (config.backFillAccountsToNewZNode) {
-        backFillStore = new RouterStore(this.accountServiceMetrics, backup, helixStore, router, true);
+        backFillStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, true);
       }
     }
     this.backFillStore = backFillStore;
@@ -192,6 +184,30 @@ public class HelixAccountService implements AccountService {
       }
     };
     updater.run();
+
+    // If fetching account metadata failed, no matter for what reason, we use the data from local backup file.
+    // The local backup should be reasonably up-to-date.
+    //
+    // The caveat is that when a machine used to run ambry-frontend but then got decommissioned for a long time,
+    // it will have a very old account metadata in the backup. If we reschedule ambry-frontend process in this particular
+    // machine, and it fails to read the account metadata from AccountMetadataStore, then we would load stale data.
+    //
+    // One way to avoid this problem is to load latest account metadata, but not more than a month, from backup.
+
+    // accountInfoMapRef's reference is empty doesn't mean that fetchAndUpdateCache failed, it would just be that there
+    // is no account metadata for the time being. Theoretically local storage shouldn't have any backup files. So
+    // backup.getLatestAccountMap should return null. And in case we have a very old backup file just mentioned above, a threshold
+    // would solve the problem.
+    if (accountInfoMapRef.get().isEmpty() && config.enableServeFromBackup && !backupFileManager.isEmpty()) {
+      long aMonthAgo = System.currentTimeMillis() / 1000 - TimeUnit.DAYS.toSeconds(30);
+      Map<String, String> accountMap = backupFileManager.getLatestAccountMap(aMonthAgo);
+      if (accountMap != null) {
+        AccountInfoMap newAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
+        AccountInfoMap oldAccountInfoMap = accountInfoMapRef.getAndSet(newAccountInfoMap);
+        notifyAccountUpdateConsumers(newAccountInfoMap, oldAccountInfoMap, false);
+      }
+    }
+
     if (scheduler != null) {
       int initialDelay = new Random().nextInt(config.updaterPollingIntervalMs + 1);
       scheduler.scheduleAtFixedRate(updater, initialDelay, config.updaterPollingIntervalMs, TimeUnit.MILLISECONDS);
@@ -425,11 +441,11 @@ public class HelixAccountService implements AccountService {
   }
 
   /**
-   * Return {@link LocalBackup}.
-   * @return {@link LocalBackup}
+   * Return {@link BackupFileManager}.
+   * @return {@link BackupFileManager}
    */
-  LocalBackup getBackup() {
-    return backup;
+  BackupFileManager getBackupFileManager() {
+    return backupFileManager;
   }
 }
 
@@ -526,6 +542,14 @@ class AccountInfoMap {
   }
 
   /**
+   * Return true if there is no accounts in this info map.
+   * @return True when there is no accounts.
+   */
+  boolean isEmpty() {
+    return idToAccountMap.isEmpty();
+  }
+
+  /**
    * Checks if there is any {@link Account} in a given collection of {@link Account}s conflicts against any {@link Account}
    * in a {@link AccountInfoMap}, according to the Javadoc of {@link AccountService}. Two {@link Account}s can be
    * conflicting with each other if they have different account Ids but the same account name.
@@ -555,108 +579,5 @@ class AccountInfoMap {
       }
     }
     return false;
-  }
-}
-
-/**
- * A helper class to manage {@link Account} metadata backup.
- *
- * <p>
- *   First, call {@link LocalBackup#reserveBackupFile} to reverse a backup file. The filename has timestamp as part of the name.
- *   Then to save the old {@link Account} metadata, call {@link LocalBackup#maybePersistOldState(Pair, Map)} with the reserved file
- *   and the state.
- *   Then to save the new {@link Account} metadata, call {@link LocalBackup#maybePersistNewState(Pair, Map)} with the reserved file
- *   and the state.
- * </p>
- */
-class LocalBackup {
-  static final String OLD_STATE_SUFFIX = "old";
-  static final String NEW_STATE_SUFFIX = "new";
-  static final String SEP = ".";
-  static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
-
-  private static final Logger logger = LoggerFactory.getLogger(LocalBackup.class);
-  private final AccountServiceMetrics accountServiceMetrics;
-  private final Path backupDirPath;
-
-  public LocalBackup(AccountServiceMetrics accountServiceMetrics, HelixAccountServiceConfig config) throws IOException {
-    this.accountServiceMetrics = accountServiceMetrics;
-    backupDirPath = config.backupDir.isEmpty() ? null : Files.createDirectories(Paths.get(config.backupDir));
-  }
-
-  /**
-   * Reserve a new backup file with the following file name format: {@code {yyyyMMdd}T{HHmmss}.{unique long}.old}.
-   * @return a {@link Pair} containing the unique filename prefix for this account update and the path to use for
-   *         previous state backups.
-   * @throws IOException
-   */
-  Pair<String, Path> reserveBackupFile() throws IOException {
-    if (backupDirPath != null) {
-      String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
-      for (long n = 0; n < Long.MAX_VALUE; n++) {
-        String prefix = timestamp + SEP + n + SEP;
-        Path filepath = backupDirPath.resolve(prefix + OLD_STATE_SUFFIX);
-        try {
-          return new Pair<>(prefix, Files.createFile(filepath));
-        } catch (FileAlreadyExistsException e) {
-          // retry with a new suffix.
-        }
-      }
-      throw new IOException("Could not create a unique file with timestamp " + timestamp);
-    }
-    return null;
-  }
-
-  /**
-   * Save the new {@link Account} metadata. You should call this function only if the update succeeded
-   * and the old state backup file was successfully reserved.
-   * The following file name format will be used: {@code {yyyyMMdd}T{HHmmss}.{unique long}.new}.
-   */
-  void maybePersistNewState(Pair<String, Path> backupPrefixAndPath, Map<String, String> newState) {
-    if (backupPrefixAndPath != null) {
-      try {
-        Path filepath = backupDirPath.resolve(backupPrefixAndPath.getFirst() + NEW_STATE_SUFFIX);
-        writeBackup(filepath, newState);
-      } catch (Exception e) {
-        logger.error("Could not write new state backup file", e);
-        accountServiceMetrics.backupErrorCount.inc();
-      }
-    }
-  }
-
-  /**
-   * Save the old {@link Account} metadata before the update to disk.
-   * The following file name format will be used: {@code {yyyyMMdd}T{HHmmss}.{unique long}.old}.
-   * If there are multiple files with the same timestamp, the unique long will prevent the file names from clashing.
-   */
-  void maybePersistOldState(Pair<String, Path> backupPrefixAndPath, Map<String, String> oldState) {
-    if (backupPrefixAndPath != null) {
-      try {
-        writeBackup(backupPrefixAndPath.getSecond(), oldState);
-      } catch (Exception e) {
-        logger.error("Could not write previous state backup file", e);
-        accountServiceMetrics.backupErrorCount.inc();
-      }
-    }
-  }
-
-  /**
-   * Write the {@link Account} metadata map to the given file.
-   * @param backupPath The filepath to serialize the map.
-   * @param accountMap The map to persist.
-   * @throws IOException
-   * @throws JSONException
-   */
-  private void writeBackup(Path backupPath, Map<String, String> accountMap) throws IOException, JSONException {
-    try (BufferedWriter writer = Files.newBufferedWriter(backupPath)) {
-      String sep = "";
-      writer.write('[');
-      for (String accountString : accountMap.values()) {
-        writer.write(sep);
-        writer.write(accountString);
-        sep = ",";
-      }
-      writer.write(']');
-    }
   }
 }

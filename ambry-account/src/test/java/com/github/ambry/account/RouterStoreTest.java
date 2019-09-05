@@ -20,7 +20,6 @@ import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -52,7 +51,7 @@ import static org.junit.Assert.assertNotNull;
 @RunWith(Parameterized.class)
 public class RouterStoreTest {
   private final AccountServiceMetrics accountServiceMetrics;
-  private final LocalBackup backup;
+  private final BackupFileManager backup;
   private final Path accountBackupDir;
   private final HelixAccountServiceConfig config;
   private final MockHelixPropertyStore<ZNRecord> helixStore;
@@ -78,7 +77,7 @@ public class RouterStoreTest {
     properties.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, "1000");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     config = new HelixAccountServiceConfig(verifiableProperties);
-    backup = new LocalBackup(accountServiceMetrics, config);
+    backup = new BackupFileManager(accountServiceMetrics, config);
     helixStore = new MockHelixPropertyStore<>();
     router = new MockRouter();
   }

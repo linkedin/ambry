@@ -19,6 +19,7 @@ import org.I0Itec.zkclient.DataUpdater;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
+import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,20 +31,20 @@ abstract class AccountMetadataStore {
   private static final Logger logger = LoggerFactory.getLogger(AccountMetadataStore.class);
 
   protected final AccountServiceMetrics accountServiceMetrics;
-  protected final LocalBackup backup;
+  protected final BackupFileManager backupFileManager;
   protected final String znRecordPath;
   private final HelixPropertyStore<ZNRecord> helixStore;
 
   /** Create a new {@link AccountMetadataStore} instance for the subclasses.
    * @param accountServiceMetrics The {@link AccountServiceMetrics}
-   * @param backup The {@link LocalBackup} to manage the backup files.
+   * @param backupFileManager The {@link BackupFileManager} to manage the backup files.
    * @param helixStore The {@link HelixPropertyStore} to retrieve and update the {@link ZNRecord}.
    * @param znRecordPath The {@link ZNRecord} path.
    */
-  AccountMetadataStore(AccountServiceMetrics accountServiceMetrics, LocalBackup backup,
+  AccountMetadataStore(AccountServiceMetrics accountServiceMetrics, BackupFileManager backupFileManager,
       HelixPropertyStore<ZNRecord> helixStore, String znRecordPath) {
     this.accountServiceMetrics = accountServiceMetrics;
-    this.backup = backup;
+    this.backupFileManager = backupFileManager;
     this.helixStore = helixStore;
     this.znRecordPath = znRecordPath;
   }
@@ -84,13 +85,19 @@ abstract class AccountMetadataStore {
   Map<String, String> fetchAccountMetadata() {
     long startTimeMs = System.currentTimeMillis();
     logger.trace("Start reading ZNRecord from path={}", znRecordPath);
-    ZNRecord znRecord = helixStore.get(znRecordPath, null, AccessOption.PERSISTENT);
-    logger.trace("Fetched ZNRecord from path={}, took time={} ms", znRecordPath, startTimeMs);
+    Stat stat = new Stat();
+    ZNRecord znRecord = helixStore.get(znRecordPath, stat, AccessOption.PERSISTENT);
+    logger.trace("Fetched ZNRecord from path={}, took time={} ms", znRecordPath,
+        System.currentTimeMillis() - startTimeMs);
     if (znRecord == null) {
       logger.info("The ZNRecord to read does not exist on path={}", znRecordPath);
       return null;
     }
-    return fetchAccountMetadataFromZNRecord(znRecord);
+    Map<String, String> newAccountMap = fetchAccountMetadataFromZNRecord(znRecord);
+    if (newAccountMap != null) {
+      backupFileManager.persistAccountMap(newAccountMap, stat);
+    }
+    return newAccountMap;
   }
 
   /**
