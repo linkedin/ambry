@@ -225,7 +225,7 @@ public class MockConnectionPool implements ConnectionPool {
           long bytesRead = allMessageInfos.subList(0, indexRequested + 1).stream().mapToLong(i -> i.getSize()).sum();
           long total = allMessageInfos.stream().mapToLong(i -> i.getSize()).sum();
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-              new ReplicaMetadataResponseInfo(requestInfo.getPartitionId(),
+              new ReplicaMetadataResponseInfo(requestInfo.getPartitionId(), requestInfo.getReplicaType(),
                   new MockFindToken(indexRequested, bytesRead), messageInfosToReturn, total - bytesRead);
           responseInfoList.add(replicaMetadataResponseInfo);
         }

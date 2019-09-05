@@ -32,6 +32,12 @@ public class FindTokenHelper {
   private final ReplicationConfig replicationConfig;
   private final Map<ReplicaType, FindTokenFactory> findTokenFactoryMap;
 
+  public FindTokenHelper() {
+    storeKeyFactory = null;
+    replicationConfig = null;
+    findTokenFactoryMap = null;
+  }
+
   /**
    * Create a {@code FindTokenHelper} object.
    * @param storeKeyFactory

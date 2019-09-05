@@ -22,7 +22,6 @@ import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatFlags;
@@ -56,9 +55,8 @@ import static com.github.ambry.account.Container.*;
 
 
 class MockFindTokenHelper extends FindTokenHelper {
-  public MockFindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig)
-      throws ReflectiveOperationException {
-    super(storeKeyFactory, replicationConfig);
+  public MockFindTokenHelper() {
+    super();
   }
 
   @Override
@@ -68,6 +66,14 @@ class MockFindTokenHelper extends FindTokenHelper {
 }
 
 class MockFindTokenFactory implements FindTokenFactory {
+
+  public MockFindTokenFactory(StoreKeyFactory factory) {
+
+  }
+
+  public MockFindTokenFactory() {
+
+  }
 
   @Override
   public FindToken getFindToken(DataInputStream stream) throws IOException {
@@ -446,7 +452,7 @@ public class RequestResponseTest {
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(1, "id", replicaMetadataRequestInfoList, 1000);
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
     ReplicaMetadataRequest replicaMetadataRequestFromBytes =
-        ReplicaMetadataRequest.readFrom(requestStream, new MockClusterMap(), new MockFindTokenHelper(null, null));
+        ReplicaMetadataRequest.readFrom(requestStream, new MockClusterMap(), new MockFindTokenHelper());
     Assert.assertEquals(replicaMetadataRequestFromBytes.getMaxTotalSizeOfEntriesInBytes(), 1000);
     Assert.assertEquals(replicaMetadataRequestFromBytes.getReplicaMetadataRequestInfoList().size(), 1);
 
@@ -493,7 +499,7 @@ public class RequestResponseTest {
         new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, replicaMetadataResponseInfoList);
     requestStream = serAndPrepForRead(response, -1, false);
     ReplicaMetadataResponse deserializedReplicaMetadataResponse =
-        ReplicaMetadataResponse.readFrom(requestStream, new MockFindTokenHelper(null, null), clusterMap);
+        ReplicaMetadataResponse.readFrom(requestStream, new MockFindTokenHelper(), clusterMap);
     Assert.assertEquals(deserializedReplicaMetadataResponse.getCorrelationId(), 1234);
     Assert.assertEquals(deserializedReplicaMetadataResponse.getError(), ServerErrorCode.No_Error);
     Assert.assertEquals("ReplicaMetadataResponse list size mismatch ", numResponseInfos,

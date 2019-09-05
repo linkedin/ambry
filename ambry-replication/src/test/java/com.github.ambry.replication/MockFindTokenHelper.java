@@ -22,7 +22,6 @@ public class MockFindTokenHelper extends FindTokenHelper {
 
   public MockFindTokenHelper(StoreKeyFactory storeKeyFactory, ReplicationConfig replicationConfig)
       throws ReflectiveOperationException {
-    super(storeKeyFactory, replicationConfig);
   }
 
   @Override
