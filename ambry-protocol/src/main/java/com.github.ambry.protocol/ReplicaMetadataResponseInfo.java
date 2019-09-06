@@ -44,7 +44,7 @@ public class ReplicaMetadataResponseInfo {
 
   private static final int Error_Size_InBytes = 2;
   private static final int Remote_Replica_Lag_Size_In_Bytes = 8;
-  private static final int ReplicaType_Size_In_Bytes = 4;
+  private static final int ReplicaType_Size_In_Bytes = Short.BYTES;
 
   private ReplicaMetadataResponseInfo(PartitionId partitionId, ReplicaType replicaType, FindToken findToken,
       List<MessageInfo> messageInfoList, long remoteReplicaLagInBytes, short replicaMetadataResponseVersion) {
