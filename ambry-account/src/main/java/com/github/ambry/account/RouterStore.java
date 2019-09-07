@@ -104,7 +104,7 @@ class RouterStore extends AccountMetadataStore {
       // Parse the json string list and get the blob id with the latest version
       // Since the the blobIDAndVersionsJson.size() is greater than 0, max will return an optional with solid value.
       BlobIDAndVersion blobIDAndVersion = blobIDAndVersionsJson.stream()
-          .map(json -> BlobIDAndVersion.fromJson(json))
+          .map(BlobIDAndVersion::fromJson)
           .max(Comparator.comparing(BlobIDAndVersion::getVersion))
           .get();
 
@@ -132,7 +132,7 @@ class RouterStore extends AccountMetadataStore {
 
       JSONObject object = new JSONObject(new String(bytes, Charsets.UTF_8));
       Map<String, String> map = new HashMap<>();
-      object.keySet().stream().forEach(key -> map.put(key, object.getString(key)));
+      object.keySet().forEach(key -> map.put(key, object.getString(key)));
       return map;
     } catch (Exception e) {
       logger.error("Failed to read account metadata from blob id={}", blobID, e);
@@ -217,14 +217,17 @@ class RouterStore extends AccountMetadataStore {
       }
       // This is the version number for the new blob id.
       int newVersion = 1;
-      List<String> blobIDAndVersionsJson = recordToUpdate.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
       List<BlobIDAndVersion> blobIDAndVersions = new ArrayList<>();
-      Map<String, String> accountMap = null;
+      List<String> blobIDAndVersionsJson = recordToUpdate.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
+      blobIDAndVersionsJson =
+          blobIDAndVersionsJson == null ? new ArrayList<>() : new ArrayList<>(blobIDAndVersionsJson);
+      Map<String, String> accountMap = new HashMap<>();
+
       if (blobIDAndVersionsJson != null && blobIDAndVersionsJson.size() != 0) {
         try {
           // Parse the json string list and get the BlobIDAndVersion with the latest version number.
-          blobIDAndVersionsJson.stream()
-              .forEach(accountBlobIDInJson -> blobIDAndVersions.add(BlobIDAndVersion.fromJson(accountBlobIDInJson)));
+          blobIDAndVersionsJson.forEach(
+              accountBlobIDInJson -> blobIDAndVersions.add(BlobIDAndVersion.fromJson(accountBlobIDInJson)));
           Collections.sort(blobIDAndVersions, Comparator.comparing(BlobIDAndVersion::getVersion));
           BlobIDAndVersion blobIDAndVersion = blobIDAndVersions.get(blobIDAndVersions.size() - 1);
           newVersion = blobIDAndVersion.version + 1;
@@ -234,7 +237,6 @@ class RouterStore extends AccountMetadataStore {
           // an empty map and fill it up with the accountMap passed to constructor.
           accountMap = (!forBackFill) ? readAccountMetadataFromBlobID(blobIDAndVersion.blobID) : new HashMap<>();
           // Make this list mutable
-          blobIDAndVersionsJson = new ArrayList<>(blobIDAndVersionsJson);
         } catch (JSONException e) {
           accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
           logAndThrowIllegalStateException(
@@ -243,11 +245,6 @@ class RouterStore extends AccountMetadataStore {
           logAndThrowIllegalStateException(
               "Unexpected exception occurred when parsing the blob id list from " + blobIDAndVersionsJson, e);
         }
-      }
-      // This ZNRecord doesn't exist when first time we update this ZNRecord, thus accountMap will be null.
-      if (accountMap == null) {
-        accountMap = new HashMap<>();
-        blobIDAndVersionsJson = new ArrayList<>();
       }
 
       if (!forBackFill) {

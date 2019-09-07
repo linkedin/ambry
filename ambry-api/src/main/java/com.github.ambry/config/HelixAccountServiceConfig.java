@@ -26,10 +26,12 @@ public class HelixAccountServiceConfig {
   public static final String MAX_BACKUP_FILE_COUNT = HELIX_ACCOUNT_SERVICE_PREFIX + "max.backup.file.count";
   public static final String ZK_CLIENT_CONNECT_STRING_KEY = HELIX_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string";
   public static final String USE_NEW_ZNODE_PATH = HELIX_ACCOUNT_SERVICE_PREFIX + "use.new.znode.path";
-  public static final String UPDATE_DISABLED =  HELIX_ACCOUNT_SERVICE_PREFIX + "update.disabled";
-  public static final String BACKFILL_ACCOUNTS_TO_NEW_ZNODE = HELIX_ACCOUNT_SERVICE_PREFIX + "backfill.accounts.to.new.znode";
-  public static final String ENABLE_SERVE_FROM_BACKUP  = HELIX_ACCOUNT_SERVICE_PREFIX + "enable.serve.from.backup";
-  public static final String TOTAL_NUMBER_OF_VERSION_TO_KEEP = HELIX_ACCOUNT_SERVICE_PREFIX + "total.number.of.version.to.keep";
+  public static final String UPDATE_DISABLED = HELIX_ACCOUNT_SERVICE_PREFIX + "update.disabled";
+  public static final String BACKFILL_ACCOUNTS_TO_NEW_ZNODE =
+      HELIX_ACCOUNT_SERVICE_PREFIX + "backfill.accounts.to.new.znode";
+  public static final String ENABLE_SERVE_FROM_BACKUP = HELIX_ACCOUNT_SERVICE_PREFIX + "enable.serve.from.backup";
+  public static final String TOTAL_NUMBER_OF_VERSION_TO_KEEP =
+      HELIX_ACCOUNT_SERVICE_PREFIX + "total.number.of.version.to.keep";
 
   /**
    * The ZooKeeper server address. This config is required when using {@code HelixAccountService}.
@@ -123,6 +125,7 @@ public class HelixAccountServiceConfig {
       throw new IllegalStateException("useNewZNodePath and backFillAccountsToNewZNode can't be true at the same time.");
     }
     enableServeFromBackup = verifiableProperties.getBoolean(ENABLE_SERVE_FROM_BACKUP, false);
-    totalNumberOfVersionToKeep = verifiableProperties.getIntInRange(TOTAL_NUMBER_OF_VERSION_TO_KEEP, 100, 1, Integer.MAX_VALUE);
+    totalNumberOfVersionToKeep =
+        verifiableProperties.getIntInRange(TOTAL_NUMBER_OF_VERSION_TO_KEEP, 100, 1, Integer.MAX_VALUE);
   }
 }
