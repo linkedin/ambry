@@ -160,6 +160,7 @@ public class ServerHardDeleteTest {
           StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", mockClusterMap);
           FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
+          factory.getFindToken(stream);
           endToken = (StoreFindToken) factory.getFindToken(stream);
           Offset endTokenOffset = endToken.getOffset();
           parsedTokenValue = endTokenOffset == null ? -1 : endTokenOffset.getOffset();

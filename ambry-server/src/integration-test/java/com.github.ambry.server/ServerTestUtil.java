@@ -34,6 +34,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -2019,6 +2020,8 @@ final class ServerTestUtil {
               setToCheck.remove(partitionId.toString() + hostname + port);
               // read total bytes read from local store
               dataInputStream.readLong();
+              // read replica type
+              ReplicaType replicaType = ReplicaType.values()[dataInputStream.readShort()];
               // read replica token
               StoreFindToken token = (StoreFindToken) factory.getFindToken(dataInputStream);
               System.out.println(
