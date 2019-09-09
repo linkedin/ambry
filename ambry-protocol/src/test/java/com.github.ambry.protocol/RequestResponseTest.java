@@ -435,19 +435,21 @@ public class RequestResponseTest {
 
   @Test
   public void replicaMetadataRequestTest() throws IOException, ReflectiveOperationException {
-    doReplicaMetadataRequestTest(ReplicaMetadataResponse.CURRENT_VERSION);
-    doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_4);
-    doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5);
+    for (ReplicaType replicaType : ReplicaType.values()) {
+      doReplicaMetadataRequestTest(ReplicaMetadataResponse.CURRENT_VERSION, replicaType);
+      doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_4, replicaType);
+      doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, replicaType);
+    }
   }
 
-  private void doReplicaMetadataRequestTest(short responseVersionToUse)
+  private void doReplicaMetadataRequestTest(short responseVersionToUse, ReplicaType replicaType)
       throws IOException, ReflectiveOperationException {
     ReplicaMetadataResponse.CURRENT_VERSION = responseVersionToUse;
     MockClusterMap clusterMap = new MockClusterMap();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
         new ReplicaMetadataRequestInfo(new MockPartitionId(), new MockFindToken(0, 1000), "localhost", "path",
-            ReplicaType.DISK_BACKED);
+            replicaType);
     replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(1, "id", replicaMetadataRequestInfoList, 1000);
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
@@ -463,7 +465,7 @@ public class RequestResponseTest {
       // expected. Nothing to do
     }
     try {
-      new ReplicaMetadataRequestInfo(new MockPartitionId(), null, "localhost", "path", ReplicaType.DISK_BACKED);
+      new ReplicaMetadataRequestInfo(new MockPartitionId(), null, "localhost", "path", replicaType);
       Assert.fail("Construction should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do
@@ -489,7 +491,7 @@ public class RequestResponseTest {
         totalSizeOfAllMessages += msgSize;
       }
       ReplicaMetadataResponseInfo responseInfo = new ReplicaMetadataResponseInfo(
-          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), ReplicaType.DISK_BACKED,
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), replicaType,
           new MockFindToken(0, 1000), messageInfoList, 1000);
       Assert.assertEquals("Total size of messages not as expected", totalSizeOfAllMessages,
           responseInfo.getTotalSizeOfAllMessages());
@@ -539,7 +541,7 @@ public class RequestResponseTest {
         response.toString().length() < maxLength);
     // test toString() of a ReplicaMetadataResponseInfo without any messages
     ReplicaMetadataResponseInfo responseInfo = new ReplicaMetadataResponseInfo(
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), ReplicaType.DISK_BACKED,
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), replicaType,
         new MockFindToken(0, 1000), Collections.emptyList(), 1000);
     Assert.assertTrue("Length of toString() should be > 0", responseInfo.toString().length() > 0);
     // test toString() of a ReplicaMetadataResponse without any ReplicaMetadataResponseInfo

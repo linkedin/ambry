@@ -18,7 +18,6 @@ import com.github.ambry.replication.FindTokenType;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -128,7 +127,7 @@ public class CloudFindToken implements FindToken {
         if (latestBlobIdLength != 0) {
           byte[] latestBlobIdbytes = new byte[latestBlobIdLength];
           stream.read(latestBlobIdbytes, 0, (int) latestBlobIdLength);
-          latestBlobId = Arrays.toString(latestBlobIdbytes);
+          latestBlobId = new String(latestBlobIdbytes);
         }
         cloudFindToken = new CloudFindToken(version, latestUploadTime, latestBlobId, bytesRead);
         break;
