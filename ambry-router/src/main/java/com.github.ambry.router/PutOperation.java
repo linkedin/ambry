@@ -685,7 +685,7 @@ class PutOperation {
         break;
       }
     }
-    if (chunkToReturn == null && putChunks.size() < NonBlockingRouter.MAX_IN_MEM_CHUNKS) {
+    if (chunkToReturn == null && putChunks.size() < routerConfig.routerMaxInMemPutChunks) {
       chunkToReturn = new PutChunk();
       putChunks.add(chunkToReturn);
     }
