@@ -278,7 +278,7 @@ class GetBlobOperation extends GetOperation {
             }
             if (dataChunk.isInProgress() || (dataChunk.isReady()
                 && numChunksRetrieved - blobDataChannel.getNumChunksWrittenOut()
-                < routerConfig.routerMaxInMemChunks)) {
+                < routerConfig.routerMaxInMemGetChunks)) {
               dataChunk.poll(requestRegistrationCallback);
               if (dataChunk.isComplete()) {
                 onChunkOperationComplete(dataChunk);
@@ -1305,7 +1305,7 @@ class GetBlobOperation extends GetOperation {
       } else {
         chunkIdIterator = chunkMetadataList.listIterator();
         numChunksTotal = chunkMetadataList.size();
-        dataChunks = new GetChunk[Math.min(chunkMetadataList.size(), routerConfig.routerMaxInMemChunks)];
+        dataChunks = new GetChunk[Math.min(chunkMetadataList.size(), routerConfig.routerMaxInMemGetChunks)];
         for (int i = 0; i < dataChunks.length; i++) {
           int idx = chunkIdIterator.nextIndex();
           CompositeBlobInfo.ChunkMetadata keyAndOffset = chunkIdIterator.next();

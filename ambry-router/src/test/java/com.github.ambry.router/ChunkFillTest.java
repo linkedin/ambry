@@ -273,7 +273,7 @@ public class ChunkFillTest {
     int chunksLeftToBeFilled = numChunks;
     do {
       if (testEncryption) {
-        int chunksPerBatch = Math.min(routerConfig.routerMaxInMemChunks, chunksLeftToBeFilled);
+        int chunksPerBatch = Math.min(routerConfig.routerMaxInMemPutChunks, chunksLeftToBeFilled);
         CountDownLatch onPollLatch = new CountDownLatch(chunksPerBatch);
         routerCallback.setOnPollLatch(onPollLatch);
         op.fillChunks();

@@ -343,11 +343,18 @@ public class RouterConfig {
   public final long routerOperationTrackerHistogramDumpPeriod;
 
   /**
-   * The max number of chunks per GetBlobOperation or PutOperation that may be buffered in memory.
+   * The max number of chunks per PutOperation that may be buffered in memory.
    */
-  @Config("router.max.in.mem.chunks")
+  @Config("router.max.in.mem.put.chunks")
   @Default("4")
-  public final int routerMaxInMemChunks;
+  public final int routerMaxInMemPutChunks;
+
+  /**
+   * The max number of chunks per GetBlobOperation that may be buffered in memory.
+   */
+  @Config("router.max.in.mem.get.chunks")
+  @Default("4")
+  public final int routerMaxInMemGetChunks;
 
   /**
    * Create a RouterConfig instance.
@@ -436,6 +443,9 @@ public class RouterConfig {
     }
     routerOperationTrackerTerminateOnNotFoundEnabled =
         verifiableProperties.getBoolean("router.operation.tracker.terminate.on.not.found.enabled", false);
-    routerMaxInMemChunks = verifiableProperties.getIntInRange("router.max.in.mem.chunks", 4, 1, Integer.MAX_VALUE);
+    routerMaxInMemPutChunks = verifiableProperties.getIntInRange("router.max.in.mem.put.chunks", 4, 1,
+        Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
+    routerMaxInMemGetChunks = verifiableProperties.getIntInRange("router.max.in.mem.get.chunks", 4, 1,
+        Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
   }
 }
