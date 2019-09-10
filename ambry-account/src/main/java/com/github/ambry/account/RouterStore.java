@@ -299,7 +299,6 @@ class RouterStore extends AccountMetadataStore {
               + " to delete");
           oldBlobIDsToDelete.add(blobIDAndVersion.getBlobID());
         }
-        // Clear json string list since it's not sorted.
         blobIDAndVersionsJson = blobIDAndVersions.stream().map(BlobIDAndVersion::toJson).collect(Collectors.toList());
       }
 
@@ -322,7 +321,7 @@ class RouterStore extends AccountMetadataStore {
           accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
         }
       }
-      // Notice this logic might end up with the dangling blob, when the process crashes before the for loop.
+      // Notice this logic might end up with the dangling blobs, when the process crashes before the for loop.
       // But since the frequency to update account metadata is pretty rare, it won't be a big problem.
       if (isUpdateSucceeded && oldBlobIDsToDelete != null) {
         for (String blobID : oldBlobIDsToDelete) {
