@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -185,6 +186,7 @@ class RouterStore extends AccountMetadataStore {
   private class ZKUpdater implements AccountMetadataStore.ZKUpdater {
     private final Collection<Account> accounts;
     private String newBlobID = null;
+    private List<String> oldBlobIDsToDelete = null;
 
     /**
      * @param accounts The {@link Account}s to update.
@@ -195,14 +197,13 @@ class RouterStore extends AccountMetadataStore {
 
     @Override
     public ZNRecord update(ZNRecord znRecord) {
-      /**
-       * There are several steps to finish an update
+      /* There are several steps to finish an update
        * 1. Fetch the list from the ZNRecord
        * 2. Fetch the AccountMetadata from the blob id if the list exist in the ZNRecord
        * 3. Construct a new AccountMetadata
        * 4. Save it as a blob in the ambry server
        * 5. Remove oldest version if number of version exceeds the maximum value.
-       * 6. Add the new blob id back to the list.
+       * 6. Add the new blob id to the list.
        */
 
       // Start step 1:
@@ -220,10 +221,10 @@ class RouterStore extends AccountMetadataStore {
       List<BlobIDAndVersion> blobIDAndVersions = new ArrayList<>();
       List<String> blobIDAndVersionsJson = recordToUpdate.getListField(ACCOUNT_METADATA_BLOB_IDS_LIST_KEY);
       blobIDAndVersionsJson =
-          blobIDAndVersionsJson == null ? new ArrayList<>() : new ArrayList<>(blobIDAndVersionsJson);
+          blobIDAndVersionsJson == null ? new LinkedList<>() : new LinkedList<>(blobIDAndVersionsJson);
       Map<String, String> accountMap = new HashMap<>();
 
-      if (blobIDAndVersionsJson != null && blobIDAndVersionsJson.size() != 0) {
+      if (blobIDAndVersionsJson.size() != 0) {
         try {
           // Parse the json string list and get the BlobIDAndVersion with the latest version number.
           blobIDAndVersionsJson.forEach(
@@ -236,7 +237,6 @@ class RouterStore extends AccountMetadataStore {
           // If this is not for backfill, then just read account metadata from blob, otherwise, initialize it with
           // an empty map and fill it up with the accountMap passed to constructor.
           accountMap = (!forBackFill) ? readAccountMetadataFromBlobID(blobIDAndVersion.blobID) : new HashMap<>();
-          // Make this list mutable
         } catch (JSONException e) {
           accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
           logAndThrowIllegalStateException(
@@ -291,21 +291,16 @@ class RouterStore extends AccountMetadataStore {
       // Start step 5:
       if (blobIDAndVersions.size() + 1 > totalNumberOfVersionToKeep) {
         Iterator<BlobIDAndVersion> iter = blobIDAndVersions.iterator();
+        oldBlobIDsToDelete = new ArrayList<>();
         while (blobIDAndVersions.size() + 1 > totalNumberOfVersionToKeep) {
           BlobIDAndVersion blobIDAndVersion = iter.next();
           iter.remove();
-          logger.info("Removing blob " + blobIDAndVersion.getBlobID() + " at version " + blobIDAndVersion.getVersion());
-          try {
-            router.get().deleteBlob(blobIDAndVersion.getBlobID(), SERVICE_ID).get();
-          } catch (Exception e) {
-            logger.error("Failed to delete blob={} from older version because of {}", blobIDAndVersion.getBlobID(), e);
-            accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
-          }
+          logger.info("Adding blob " + blobIDAndVersion.getBlobID() + " at version " + blobIDAndVersion.getVersion()
+              + " to delete");
+          oldBlobIDsToDelete.add(blobIDAndVersion.getBlobID());
         }
         // Clear json string list since it's not sorted.
-        blobIDAndVersionsJson.clear();
-        blobIDAndVersionsJson.addAll(
-            blobIDAndVersions.stream().map(BlobIDAndVersion::toJson).collect(Collectors.toList()));
+        blobIDAndVersionsJson = blobIDAndVersions.stream().map(BlobIDAndVersion::toJson).collect(Collectors.toList());
       }
 
       // Start step 6:
@@ -319,11 +314,26 @@ class RouterStore extends AccountMetadataStore {
       if (!isUpdateSucceeded && newBlobID != null) {
         // Delete the ambry blob regardless what error fails the update.
         try {
+          logger.info("Removing blob " + newBlobID + " since the update failed");
           // Block this execution? or maybe wait for a while then get out?
           router.get().deleteBlob(newBlobID, SERVICE_ID).get();
         } catch (Exception e) {
           logger.error("Failed to delete blob={} because of {}", newBlobID, e);
           accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
+        }
+      }
+      // Notice this logic might end up with the dangling blob, when the process crashes before the for loop.
+      // But since the frequency to update account metadata is pretty rare, it won't be a big problem.
+      if (isUpdateSucceeded && oldBlobIDsToDelete != null) {
+        for (String blobID : oldBlobIDsToDelete) {
+          try {
+            logger.info("Removing blob " + blobID);
+            // Block this execution? or maybe wait for a while then get out?
+            router.get().deleteBlob(blobID, SERVICE_ID).get();
+          } catch (Exception e) {
+            logger.error("Failed to delete blob={} because of {}", blobID, e);
+            accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
+          }
         }
       }
     }
