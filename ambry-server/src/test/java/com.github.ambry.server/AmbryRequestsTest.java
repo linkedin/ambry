@@ -131,6 +131,7 @@ public class AmbryRequestsTest {
   private final Set<StoreKey> validKeysInStore = new HashSet<>();
   private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
   private final MockStoreKeyConverterFactory storeKeyConverterFactory;
+  private final ReplicationConfig replicationConfig;
 
   public AmbryRequestsTest()
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
@@ -143,9 +144,10 @@ public class AmbryRequestsTest {
     properties.setProperty("replication.no.of.intra.dc.replica.threads", "1");
     properties.setProperty("replication.no.of.inter.dc.replica.threads", "1");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    replicationConfig = new ReplicationConfig(verifiableProperties);
     dataNodeId = clusterMap.getDataNodeIds().get(0);
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
-    findTokenHelper = new MockFindTokenHelper(storeKeyFactory, new ReplicationConfig(verifiableProperties));
+    findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
     storageManager = new MockStorageManager(validKeysInStore, clusterMap.getReplicaIds(dataNodeId), findTokenHelper);
     storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(conversionMap);
@@ -879,9 +881,9 @@ public class AmbryRequestsTest {
         case ReplicaMetadataRequest:
           ReplicaMetadataRequestInfo rRequestInfo = new ReplicaMetadataRequestInfo(id,
               findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken(),
-              "localhost", "/tmp", ReplicaType.DISK_BACKED);
+              "localhost", "/tmp", ReplicaType.DISK_BACKED, replicationConfig.replicaMetadataRequestVersion);
           request = new ReplicaMetadataRequest(correlationId, clientId, Collections.singletonList(rRequestInfo),
-              Long.MAX_VALUE);
+              Long.MAX_VALUE, replicationConfig.replicaMetadataRequestVersion);
           break;
         case TtlUpdateRequest:
           request = new TtlUpdateRequest(correlationId, clientId, originalBlobId, Utils.Infinite_Time,

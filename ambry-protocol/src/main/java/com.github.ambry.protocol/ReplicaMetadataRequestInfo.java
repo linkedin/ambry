@@ -38,6 +38,7 @@ public class ReplicaMetadataRequestInfo {
   private String replicaPath;
   private ReplicaType replicaType;
   private PartitionId partitionId;
+  private short requestVersion;
 
   private static final int ReplicaPath_Field_Size_In_Bytes = 4;
   private static final int HostName_Field_Size_In_Bytes = 4;
@@ -46,7 +47,7 @@ public class ReplicaMetadataRequestInfo {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public ReplicaMetadataRequestInfo(PartitionId partitionId, FindToken token, String hostName, String replicaPath,
-      ReplicaType replicaType) {
+      ReplicaType replicaType, short requestVersion) {
     if (partitionId == null || token == null || hostName == null || replicaPath == null) {
       throw new IllegalArgumentException(
           "A parameter in the replica metadata request is null: " + "[Partition: " + partitionId + ", token: " + token
@@ -57,31 +58,44 @@ public class ReplicaMetadataRequestInfo {
     this.hostName = hostName;
     this.replicaPath = replicaPath;
     this.replicaType = replicaType;
+    this.requestVersion = requestVersion;
+    ReplicaMetadataRequest.validateVersion(this.requestVersion);
   }
 
   public static ReplicaMetadataRequestInfo readFrom(DataInputStream stream, ClusterMap clusterMap,
-      FindTokenHelper findTokenHelper) throws IOException {
+      FindTokenHelper findTokenHelper, short requestVersion) throws IOException {
     String hostName = Utils.readIntString(stream);
     String replicaPath = Utils.readIntString(stream);
-    ReplicaType replicaType = ReplicaType.values()[stream.readShort()];
+    ReplicaType replicaType;
+    if (requestVersion == ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2) {
+      replicaType = ReplicaType.values()[stream.readShort()];
+    } else {
+      //before version 2 we only have disk based replicas
+      replicaType = ReplicaType.DISK_BACKED;
+    }
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
     FindTokenFactory findTokenFactory = findTokenHelper.getFindTokenFactoryFromReplicaType(replicaType);
     FindToken token = findTokenFactory.getFindToken(stream);
-    return new ReplicaMetadataRequestInfo(partitionId, token, hostName, replicaPath, replicaType);
+    return new ReplicaMetadataRequestInfo(partitionId, token, hostName, replicaPath, replicaType, requestVersion);
   }
 
   public void writeTo(ByteBuffer buffer) {
     Utils.serializeString(buffer, hostName, Charset.defaultCharset());
     Utils.serializeString(buffer, replicaPath, Charset.defaultCharset());
-    buffer.putShort((short) replicaType.ordinal());
+    if (requestVersion == ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2) {
+      buffer.putShort((short) replicaType.ordinal());
+    }
     buffer.put(partitionId.getBytes());
     buffer.put(token.toBytes());
   }
 
   public long sizeInBytes() {
-    return HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes
-        + replicaPath.getBytes().length + +partitionId.getBytes().length + ReplicaType_Size_In_Bytes
-        + token.toBytes().length;
+    long size = HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes
+        + replicaPath.getBytes().length + +partitionId.getBytes().length + token.toBytes().length;
+    if (requestVersion == ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2) {
+      size += ReplicaType_Size_In_Bytes;
+    }
+    return size;
   }
 
   public String toString() {

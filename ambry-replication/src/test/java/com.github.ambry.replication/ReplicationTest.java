@@ -36,6 +36,8 @@ import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.protocol.ReplicaMetadataRequest;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
@@ -73,13 +75,18 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
 
 /**
- * Tests for ReplicaThread
+ * Tests for ReplicaThread for both pairs of compatible ReplicaMetadataRequest and ReplicaMetadataResponse
+ * {@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V1}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_5}
+ * {@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V2}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_6}
  */
+@RunWith(Parameterized.class)
 public class ReplicationTest {
 
   private static int CONSTANT_TIME_MS = 100000;
@@ -91,10 +98,24 @@ public class ReplicationTest {
   private ReplicationConfig config;
 
   /**
+   * Running for the two sets of compatible ReplicaMetadataRequest and ReplicaMetadataResponse,
+   * viz {{@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V1}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_5}}
+   * & {{@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V2}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_6}}
+   * @return an array with both pairs of compatible request and response.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1,
+        ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5}, {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6}});
+  }
+
+  /**
    * Constructor to set the configs
    */
-  public ReplicationTest() {
+  public ReplicationTest(short requestVersion, short responseVersion) {
     Properties properties = new Properties();
+    properties.setProperty("replication.metadatarequest.version", Short.toString(requestVersion));
+    properties.setProperty("replication.metadataresponse.version", Short.toString(responseVersion));
     properties.setProperty("replication.synced.replica.backoff.duration.ms", "3000");
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "200");

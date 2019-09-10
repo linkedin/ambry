@@ -434,24 +434,27 @@ public class RequestResponseTest {
   }
 
   @Test
-  public void replicaMetadataRequestTest() throws IOException, ReflectiveOperationException {
+  public void replicaMetadataRequestTest() throws IOException {
     for (ReplicaType replicaType : ReplicaType.values()) {
-      doReplicaMetadataRequestTest(ReplicaMetadataResponse.CURRENT_VERSION, replicaType);
-      doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_4, replicaType);
-      doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, replicaType);
+      doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6,
+          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, replicaType);
+      doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_4,
+          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, replicaType);
+      doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5,
+          ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, replicaType);
     }
   }
 
-  private void doReplicaMetadataRequestTest(short responseVersionToUse, ReplicaType replicaType)
-      throws IOException, ReflectiveOperationException {
-    ReplicaMetadataResponse.CURRENT_VERSION = responseVersionToUse;
+  private void doReplicaMetadataRequestTest(short responseVersionToUse, short requestVersionToUse,
+      ReplicaType replicaType) throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
         new ReplicaMetadataRequestInfo(new MockPartitionId(), new MockFindToken(0, 1000), "localhost", "path",
-            replicaType);
+            replicaType, requestVersionToUse);
     replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
-    ReplicaMetadataRequest request = new ReplicaMetadataRequest(1, "id", replicaMetadataRequestInfoList, 1000);
+    ReplicaMetadataRequest request =
+        new ReplicaMetadataRequest(1, "id", replicaMetadataRequestInfoList, 1000, requestVersionToUse);
     DataInputStream requestStream = serAndPrepForRead(request, -1, true);
     ReplicaMetadataRequest replicaMetadataRequestFromBytes =
         ReplicaMetadataRequest.readFrom(requestStream, new MockClusterMap(), new MockFindTokenHelper());
@@ -459,13 +462,14 @@ public class RequestResponseTest {
     Assert.assertEquals(replicaMetadataRequestFromBytes.getReplicaMetadataRequestInfoList().size(), 1);
 
     try {
-      new ReplicaMetadataRequest(1, "id", null, 12);
+      new ReplicaMetadataRequest(1, "id", null, 12, requestVersionToUse);
       Assert.fail("Serializing should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do
     }
     try {
-      new ReplicaMetadataRequestInfo(new MockPartitionId(), null, "localhost", "path", replicaType);
+      new ReplicaMetadataRequestInfo(new MockPartitionId(), null, "localhost", "path", replicaType,
+          requestVersionToUse);
       Assert.fail("Construction should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do
@@ -492,13 +496,14 @@ public class RequestResponseTest {
       }
       ReplicaMetadataResponseInfo responseInfo = new ReplicaMetadataResponseInfo(
           clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), replicaType,
-          new MockFindToken(0, 1000), messageInfoList, 1000);
+          new MockFindToken(0, 1000), messageInfoList, 1000, responseVersionToUse);
       Assert.assertEquals("Total size of messages not as expected", totalSizeOfAllMessages,
           responseInfo.getTotalSizeOfAllMessages());
       replicaMetadataResponseInfoList.add(responseInfo);
     }
     ReplicaMetadataResponse response =
-        new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, replicaMetadataResponseInfoList);
+        new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, replicaMetadataResponseInfoList,
+            responseVersionToUse);
     requestStream = serAndPrepForRead(response, -1, false);
     ReplicaMetadataResponse deserializedReplicaMetadataResponse =
         ReplicaMetadataResponse.readFrom(requestStream, new MockFindTokenHelper(), clusterMap);
@@ -522,8 +527,7 @@ public class RequestResponseTest {
         Assert.assertEquals("MsgInfo size mismatch ", originalMsgInfo.getSize(), msgInfo.getSize());
         Assert.assertEquals("MsgInfo key mismatch ", originalMsgInfo.getStoreKey(), msgInfo.getStoreKey());
         Assert.assertEquals("MsgInfo expiration value mismatch ", Utils.Infinite_Time, msgInfo.getExpirationTimeInMs());
-        if (ReplicaMetadataResponse.getCurrentVersion()
-            >= ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_3) {
+        if (response.getVersionId() >= ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_3) {
           Assert.assertEquals("AccountId mismatch ", originalMsgInfo.getAccountId(), msgInfo.getAccountId());
           Assert.assertEquals("ContainerId mismatch ", originalMsgInfo.getContainerId(), msgInfo.getContainerId());
           Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
@@ -542,11 +546,37 @@ public class RequestResponseTest {
     // test toString() of a ReplicaMetadataResponseInfo without any messages
     ReplicaMetadataResponseInfo responseInfo = new ReplicaMetadataResponseInfo(
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), replicaType,
-        new MockFindToken(0, 1000), Collections.emptyList(), 1000);
+        new MockFindToken(0, 1000), Collections.emptyList(), 1000, responseVersionToUse);
     Assert.assertTrue("Length of toString() should be > 0", responseInfo.toString().length() > 0);
     // test toString() of a ReplicaMetadataResponse without any ReplicaMetadataResponseInfo
-    response = new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, Collections.emptyList());
+    response = new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, Collections.emptyList(),
+        responseVersionToUse);
     Assert.assertTrue("Length of toString() should be > 0", response.toString().length() > 0);
+  }
+
+  /**
+   * ReplicaMetadataRequestResonse compatibility test. Tests {@code ReplicaMetadataResponse#getCompatibleResponseVersion}
+   */
+  @Test
+  public void getCompatibleResponseVersionTest() {
+    Assert.assertEquals(
+        "Request version Replica_Metadata_Request_Version_V1 should be compatible with REPLICA_METADATA_RESPONSE_VERSION_V_5",
+        ReplicaMetadataResponse.getCompatibleResponseVersion(
+            ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1),
+        ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5);
+    Assert.assertEquals(
+        "Request version Replica_Metadata_Request_Version_V6 should be compatible with REPLICA_METADATA_RESPONSE_VERSION_V_6",
+        ReplicaMetadataResponse.getCompatibleResponseVersion(
+            ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2),
+        ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6);
+    Assert.assertFalse(
+        "Request version Replica_Metadata_Request_Version_V1 should not be compatible with REPLICA_METADATA_RESPONSE_VERSION_V_6",
+        ReplicaMetadataResponse.getCompatibleResponseVersion(ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1)
+            == ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6);
+    Assert.assertFalse(
+        "Request version Replica_Metadata_Request_Version_V1 should not be compatible with REPLICA_METADATA_RESPONSE_VERSION_V_6",
+        ReplicaMetadataResponse.getCompatibleResponseVersion(ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2)
+            == ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5);
   }
 
   /**

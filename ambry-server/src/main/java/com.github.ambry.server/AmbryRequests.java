@@ -595,7 +595,8 @@ public class AmbryRequests implements RequestAPI {
         if (error != ServerErrorCode.No_Error) {
           logger.error("Validating replica metadata request failed with error {} for partition {}", error, partitionId);
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-              new ReplicaMetadataResponseInfo(partitionId, replicaType, error);
+              new ReplicaMetadataResponseInfo(partitionId, replicaType, error,
+                  ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
           replicaMetadataResponseList.add(replicaMetadataResponseInfo);
         } else {
           try {
@@ -622,7 +623,8 @@ public class AmbryRequests implements RequestAPI {
 
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
                 new ReplicaMetadataResponseInfo(partitionId, replicaType, findInfo.getFindToken(),
-                    findInfo.getMessageEntries(), store.getSizeInBytes() - totalBytesRead);
+                    findInfo.getMessageEntries(), store.getSizeInBytes() - totalBytesRead,
+                    ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
             if (replicaMetadataResponseInfo.getTotalSizeOfAllMessages()
                 > 5 * replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes()) {
               logger.debug("{} generated a metadata response {} where the cumulative size of messages is {}",
@@ -643,19 +645,22 @@ public class AmbryRequests implements RequestAPI {
             }
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
                 new ReplicaMetadataResponseInfo(partitionId, replicaType,
-                    ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+                    ErrorMapping.getStoreErrorMapping(e.getErrorCode()),
+                    ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
           }
         }
       }
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-              ServerErrorCode.No_Error, replicaMetadataResponseList);
+              ServerErrorCode.No_Error, replicaMetadataResponseList,
+              ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
     } catch (Exception e) {
       logger.error("Unknown exception for request " + replicaMetadataRequest, e);
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-              ServerErrorCode.Unknown_Error);
+              ServerErrorCode.Unknown_Error,
+              ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
       totalTimeSpent += processingTime;

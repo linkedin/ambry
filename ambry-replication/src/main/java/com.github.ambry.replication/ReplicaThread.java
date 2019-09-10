@@ -521,8 +521,8 @@ public class ReplicaThread implements Runnable {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
           new ReplicaMetadataRequestInfo(remoteReplicaInfo.getReplicaId().getPartitionId(),
               remoteReplicaInfo.getToken(), dataNodeId.getHostname(),
-              remoteReplicaInfo.getLocalReplicaId().getReplicaPath(),
-              remoteReplicaInfo.getReplicaId().getReplicaType());
+              remoteReplicaInfo.getLocalReplicaId().getReplicaPath(), remoteReplicaInfo.getReplicaId().getReplicaType(),
+              replicationConfig.replicaMetadataRequestVersion);
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ",
           remoteNode, threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
@@ -531,7 +531,7 @@ public class ReplicaThread implements Runnable {
     try {
       ReplicaMetadataRequest request = new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
           "replication-metadata-" + dataNodeId.getHostname(), replicaMetadataRequestInfoList,
-          replicationConfig.replicationFetchSizeInBytes);
+          replicationConfig.replicationFetchSizeInBytes, replicationConfig.replicaMetadataRequestVersion);
       connectedChannel.send(request);
       ChannelOutput channelOutput = connectedChannel.receive();
       ByteBufferInputStream byteBufferInputStream =

@@ -36,17 +36,17 @@ public class ReplicaMetadataResponse extends Response {
 
   private static int Replica_Metadata_Response_Info_List_Size_In_Bytes = 4;
 
-  static final short REPLICA_METADATA_RESPONSE_VERSION_V_1 = 1;
-  static final short REPLICA_METADATA_RESPONSE_VERSION_V_2 = 2;
-  static final short REPLICA_METADATA_RESPONSE_VERSION_V_3 = 3;
-  static final short REPLICA_METADATA_RESPONSE_VERSION_V_4 = 4;
-  static final short REPLICA_METADATA_RESPONSE_VERSION_V_5 = 5;
-
-  static short CURRENT_VERSION = REPLICA_METADATA_RESPONSE_VERSION_V_5;
+  public static final short REPLICA_METADATA_RESPONSE_VERSION_V_1 = 1;
+  public static final short REPLICA_METADATA_RESPONSE_VERSION_V_2 = 2;
+  public static final short REPLICA_METADATA_RESPONSE_VERSION_V_3 = 3;
+  public static final short REPLICA_METADATA_RESPONSE_VERSION_V_4 = 4;
+  public static final short REPLICA_METADATA_RESPONSE_VERSION_V_5 = 5;
+  public static final short REPLICA_METADATA_RESPONSE_VERSION_V_6 = 6;
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
-      List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList) {
-    super(RequestOrResponseType.ReplicaMetadataResponse, CURRENT_VERSION, correlationId, clientId, error);
+      List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList, short version) {
+    super(RequestOrResponseType.ReplicaMetadataResponse, version, correlationId, clientId, error);
+    validateVersion(version);
     this.replicaMetadataResponseInfoList = replicaMetadataResponseInfoList;
     this.replicaMetadataResponseInfoListSizeInBytes = 0;
     for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
@@ -54,8 +54,9 @@ public class ReplicaMetadataResponse extends Response {
     }
   }
 
-  public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.ReplicaMetadataResponse, CURRENT_VERSION, correlationId, clientId, error);
+  public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error, short version) {
+    super(RequestOrResponseType.ReplicaMetadataResponse, version, correlationId, clientId, error);
+    validateVersion(version);
     replicaMetadataResponseInfoList = null;
     replicaMetadataResponseInfoListSizeInBytes = 0;
   }
@@ -83,10 +84,9 @@ public class ReplicaMetadataResponse extends Response {
       replicaMetadataResponseInfoList.add(replicaMetadataResponseInfo);
     }
     if (error != ServerErrorCode.No_Error) {
-      return new ReplicaMetadataResponse(correlationId, clientId, error);
+      return new ReplicaMetadataResponse(correlationId, clientId, error, versionId);
     } else {
-      // ignore version for now
-      return new ReplicaMetadataResponse(correlationId, clientId, error, replicaMetadataResponseInfoList);
+      return new ReplicaMetadataResponse(correlationId, clientId, error, replicaMetadataResponseInfoList, versionId);
     }
   }
 
@@ -135,9 +135,32 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   /**
-   * @return the current version in which new ReplicaMetadataResponse objects are created.
+   * validate that the version is valid.
+   * @param version to validate
    */
-  static short getCurrentVersion() {
-    return CURRENT_VERSION;
+  static void validateVersion(short version) {
+    if (version < REPLICA_METADATA_RESPONSE_VERSION_V_1 || version > REPLICA_METADATA_RESPONSE_VERSION_V_6) {
+      throw new IllegalArgumentException("Invalid version");
+    }
+  }
+
+  /**
+   * get the compatible response version for the given request version.
+   * @param requestVersion for which to get the compatible response version.
+   * @return compatible responseVersion
+   */
+  public static short getCompatibleResponseVersion(short requestVersion) {
+    short responseVersion;
+    switch (requestVersion) {
+      case ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1:
+        responseVersion = REPLICA_METADATA_RESPONSE_VERSION_V_5;
+        break;
+      case ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2:
+        responseVersion = REPLICA_METADATA_RESPONSE_VERSION_V_6;
+        break;
+      default:
+        throw new IllegalArgumentException("Invalid replica metadata response version.");
+    }
+    return responseVersion;
   }
 }
