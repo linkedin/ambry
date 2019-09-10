@@ -57,8 +57,8 @@ import static org.junit.Assume.*;
 public class HelixBootstrapUpgradeToolTest {
   private static String tempDirPath;
   private static final Map<String, ZkInfo> dcsToZkInfo = new HashMap<>();
-  private static final String dcs[] = new String[]{"DC0", "DC1"};
-  private static final byte ids[] = new byte[]{(byte) 0, (byte) 1};
+  private static final String[] dcs = new String[]{"DC0", "DC1"};
+  private static final byte[] ids = new byte[]{(byte) 0, (byte) 1};
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
   private final String zkLayoutPath;
@@ -69,7 +69,8 @@ public class HelixBootstrapUpgradeToolTest {
   private TestPartitionLayout testPartitionLayout;
   private static final String CLUSTER_NAME_IN_STATIC_CLUSTER_MAP = "ToolTestStatic";
   private static final String CLUSTER_NAME_PREFIX = "Ambry-";
-  private static final String ROOT_PATH = "/" + CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+  private static final String ROOT_PATH =
+      "/" + CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP + "/" + ClusterMapUtils.PROPERTYSTORE_STR;
   private static HelixPropertyStoreConfig propertyStoreConfig;
 
   /**
@@ -388,6 +389,90 @@ public class HelixBootstrapUpgradeToolTest {
   }
 
   /**
+   * Test that new replicas can be correctly extracted from the diff between static clustermap and clustermap in Helix.
+   * Also test that new added replica infos are correct (i.e. partition class, replica size, data node and mount path)
+   * @throws Exception
+   */
+  @Test
+  public void testReplicaAdditionConfigUpload() throws Exception {
+    // Test bootstrap
+    long expectedResourceCount =
+        (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
+
+    // Now, change the replica count for two partitions.
+    Partition partition1 = (Partition) testPartitionLayout.getPartitionLayout()
+        .getPartitions(null)
+        .get(RANDOM.nextInt(testPartitionLayout.getPartitionCount()));
+    Partition partition2 = (Partition) testPartitionLayout.getPartitionLayout()
+        .getPartitions(null)
+        .get(RANDOM.nextInt(testPartitionLayout.getPartitionCount()));
+
+    // Add a new replica for partition1. Find a disk on a data node that does not already have a replica for partition1.
+    HashSet<DataNodeId> partition1Nodes = new HashSet<>();
+    for (Replica replica : partition1.getReplicas()) {
+      partition1Nodes.add(replica.getDataNodeId());
+    }
+    Disk diskForNewReplica;
+    do {
+      diskForNewReplica = testHardwareLayout.getRandomDisk();
+    } while (partition1Nodes.contains(diskForNewReplica.getDataNode()));
+    // Add new replica into partition1
+    partition1.addReplica(new Replica(partition1, diskForNewReplica, testHardwareLayout.clusterMapConfig));
+    String dcNameForNewReplica = diskForNewReplica.getDataNode().getDatacenterName();
+    // Remove a replica from partition2.
+    partition2.getReplicas().remove(0);
+
+    Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    // test invalid admin type
+    try {
+      HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
+          new String[]{"invalid_admin_type"});
+      fail("should fail because of invalid admin type");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+    // upload replica addition admin config
+    HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
+        new String[]{ClusterMapUtils.REPLICA_ADDITION_STR});
+    // verify replica addition znode in Helix PropertyStore
+    for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+      HelixPropertyStore<ZNRecord> propertyStore =
+          CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
+              Collections.singletonList(propertyStoreConfig.rootPath));
+      String getPath = ClusterMapUtils.REPLICA_ADDITION_ZNODE_PATH;
+      ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
+      if (!activeDcSet.contains(zkInfo.getDcName())) {
+        // if data center is not enabled, no admin config should be uploaded to Helix.
+        assertNull(zNRecord);
+      } else if (!zkInfo.getDcName().equals(dcNameForNewReplica)) {
+        // if data center doesn't equal to
+        Map<String, Map<String, String>> replicaAddition = zNRecord.getMapFields();
+        assertTrue(replicaAddition.isEmpty());
+      } else {
+        assertNotNull(zNRecord);
+        Map<String, Map<String, String>> replicaAddition = zNRecord.getMapFields();
+        assertEquals("There should be only one partition in new replica map", 1, replicaAddition.size());
+        assertNotNull("Partition id in new replica map is not expected",
+            replicaAddition.get(partition1.toPathString()));
+        Map<String, String> newReplicaMap = replicaAddition.get(partition1.toPathString());
+        assertEquals("Partition class is not expected", partition1.getPartitionClass(),
+            newReplicaMap.get(ClusterMapUtils.PARTITION_CLASS_STR));
+        assertEquals("Replica capacity is not expected", String.valueOf(partition1.getReplicaCapacityInBytes()),
+            newReplicaMap.get(ClusterMapUtils.REPLICAS_CAPACITY_STR));
+        String instanceName =
+            diskForNewReplica.getDataNode().getHostname() + "_" + diskForNewReplica.getDataNode().getPort();
+        assertTrue("Instance name doesn't exist", newReplicaMap.containsKey(instanceName));
+        assertEquals("Mount path is not expected", diskForNewReplica.getMountPath(), newReplicaMap.get(instanceName));
+      }
+    }
+  }
+
+  /**
    * Write the layout files out from the constructed in-memory hardware and partition layouts; use the bootstrap tool
    * to update the contents in Helix; verify that the information is consistent between the two.
    * @param expectedResourceCount number of resources expected in Helix for this cluster in each datacenter.
@@ -419,15 +504,15 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-    HelixBootstrapUpgradeUtil.uploadClusterConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+    HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+        new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR});
     // Check writable partitions in each datacenter
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      String getPath = ClusterMapUtils.PROPERTYSTORE_ZNODE_PATH;
+      String getPath = ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH;
       ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
       if (!activeDcSet.contains(zkInfo.getDcName())) {
         assertNull(zNRecord);

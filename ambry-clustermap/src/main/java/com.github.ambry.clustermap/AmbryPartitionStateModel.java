@@ -86,6 +86,6 @@ public class AmbryPartitionStateModel extends StateModel {
 
   @Override
   public void reset() {
-    logger.info("Reset method invoked. Partition {} un resource {} is reset to OFFLINE", partitionName, resourceName);
+    logger.info("Reset method invoked. Partition {} in resource {} is reset to OFFLINE", partitionName, resourceName);
   }
 }

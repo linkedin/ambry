@@ -102,9 +102,6 @@ public class HelixBootstrapUpgradeTool {
     OptionSpec forceRemove = parser.accepts("forceRemove",
         "Specifies that any instances or partitions absent in the json files be removed from Helix. Use this with care");
 
-    OptionSpec uploadConfig = parser.accepts("uploadConfig",
-        "Upload cluster configs to HelixPropertyStore based on the json files. This option will not touch instanceConfig");
-
     OptionSpec addStateModel = parser.accepts("addStateModel",
         "Attempt to add new state model to Helix StateModelDefs if it doesn't exist. This option will not touch instanceConfig");
 
@@ -165,6 +162,15 @@ public class HelixBootstrapUpgradeTool {
         .describedAs("state_model_definition")
         .ofType(String.class);
 
+    ArgumentAcceptingOptionSpec<String> adminConfigsOpt = parser.accepts("adminConfigs",
+        "(Optional argument) Upload cluster admin configs to HelixPropertyStore based on json files. Currently, "
+            + "the tool supports (1) partition override config, (2) replica addition config. The config names are "
+            + "comma-separated and case-sensitive, for example: '--clusterConfigs PartitionOverride,ReplicaAddition'. "
+            + "This option will not touch instanceConfig")
+        .withRequiredArg()
+        .describedAs("admin_configs")
+        .ofType(String.class);
+
     OptionSpecBuilder dryRun =
         parser.accepts("dryRun", "(Optional argument) Dry run, do not modify the cluster map in Helix.");
 
@@ -178,6 +184,7 @@ public class HelixBootstrapUpgradeTool {
     String clusterNamePrefix = options.valueOf(clusterNamePrefixOpt);
     String clusterName = options.valueOf(clusterNameOpt);
     String dcs = options.valueOf(dcsNameOpt);
+    String adminConfigStr = options.valueOf(adminConfigsOpt);
     int maxPartitionsInOneResource =
         options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
             : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt));
@@ -208,17 +215,18 @@ public class HelixBootstrapUpgradeTool {
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
           new HelixAdminFactory(), stateModelDef);
-    } else if (options.has(uploadConfig)) {
+    } else if (adminConfigStr != null) {
       ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
-      expectedOpts.add(uploadConfig);
+      expectedOpts.add(adminConfigsOpt);
       expectedOpts.add(zkLayoutPathOpt);
       expectedOpts.add(hardwareLayoutPathOpt);
       expectedOpts.add(partitionLayoutPathOpt);
       expectedOpts.add(clusterNamePrefixOpt);
       expectedOpts.add(dcsNameOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
-      HelixBootstrapUpgradeUtil.uploadClusterConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-          clusterNamePrefix, dcs, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(), stateModelDef);
+      String[] adminTypes = adminConfigStr.replaceAll("\\p{Space}", "").split(",");
+      HelixBootstrapUpgradeUtil.uploadClusterAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          clusterNamePrefix, dcs, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(), adminTypes);
     } else if (options.has(addStateModel)) {
       listOpt.add(stateModelDefinitionOpt);
       ToolUtils.ensureOrExit(listOpt, options, parser);
