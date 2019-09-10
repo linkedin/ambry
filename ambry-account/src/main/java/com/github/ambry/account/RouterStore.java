@@ -317,7 +317,7 @@ class RouterStore extends AccountMetadataStore {
           // Block this execution? or maybe wait for a while then get out?
           router.get().deleteBlob(newBlobID, SERVICE_ID).get();
         } catch (Exception e) {
-          logger.error("Failed to delete blob={} because of {}", newBlobID, e);
+          logger.error("Failed to delete blob=" + newBlobID, e);
           accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
         }
       }
@@ -330,7 +330,7 @@ class RouterStore extends AccountMetadataStore {
             // Block this execution? or maybe wait for a while then get out?
             router.get().deleteBlob(blobID, SERVICE_ID).get();
           } catch (Exception e) {
-            logger.error("Failed to delete blob={} because of {}", blobID, e);
+            logger.error("Failed to delete blob=" + blobID, e);
             accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
           }
         }
