@@ -36,6 +36,10 @@ allprojects {
                 licenses = ['Apache-2.0']
                 labels = ['blob storage']
                 version {
+                    // disable gpg signing to speed up publishing
+                    gpg {
+                      sign = false
+                    }
                     // disable upload to maven central
                     mavenCentralSync {
                         sync = false
