@@ -140,27 +140,24 @@ public class ReplicaMetadataResponse extends Response {
    */
   static void validateVersion(short version) {
     if (version < REPLICA_METADATA_RESPONSE_VERSION_V_1 || version > REPLICA_METADATA_RESPONSE_VERSION_V_6) {
-      throw new IllegalArgumentException("Invalid version");
+      throw new IllegalArgumentException("Invalid replica metadata response version: " + version);
     }
   }
 
   /**
-   * get the compatible response version for the given request version.
+   * Get the compatible response version for the given request version.
    * @param requestVersion for which to get the compatible response version.
    * @return compatible responseVersion
    */
   public static short getCompatibleResponseVersion(short requestVersion) {
-    short responseVersion;
     switch (requestVersion) {
       case ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1:
-        responseVersion = REPLICA_METADATA_RESPONSE_VERSION_V_5;
-        break;
+        return REPLICA_METADATA_RESPONSE_VERSION_V_5;
       case ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2:
-        responseVersion = REPLICA_METADATA_RESPONSE_VERSION_V_6;
-        break;
+        return REPLICA_METADATA_RESPONSE_VERSION_V_6;
       default:
-        throw new IllegalArgumentException("Invalid replica metadata response version.");
+        throw new IllegalArgumentException("Invalid replica metadata request version: " + requestVersion
+            + " No compatible replica metadata response version found");
     }
-    return responseVersion;
   }
 }

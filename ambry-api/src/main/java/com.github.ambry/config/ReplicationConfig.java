@@ -138,14 +138,6 @@ public class ReplicationConfig {
   @Default("1")
   public final short replicaMetadataRequestVersion;
 
-  /**
-   * The version of metadata response to be used for replication.
-   * @param verifiableProperties
-   */
-  @Config("replication.metadataresponse.version")
-  @Default("5")
-  public final short replicaMetadataResponseVersion;
-
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationStoreTokenFactory =
@@ -181,7 +173,5 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean("replication.track.per.partition.lag.from.remote", false);
     replicaMetadataRequestVersion =
         verifiableProperties.getShortInRange("replication.metadatarequest.version", (short) 1, (short) 1, (short) 2);
-    replicaMetadataResponseVersion =
-        verifiableProperties.getShortInRange("replication.metadataresponse.version", (short) 5, (short) 1, (short) 6);
   }
 }

@@ -123,7 +123,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   static void validateVersion(short version) {
     if (version < Replica_Metadata_Request_Version_V1 || version > Replica_Metadata_Request_Version_V2) {
-      throw new IllegalArgumentException("Invalid version");
+      throw new IllegalArgumentException("Invalid replicametadata request version: " + version);
     }
   }
 }

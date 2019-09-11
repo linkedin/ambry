@@ -136,7 +136,6 @@ public class CloudFindTokenTest {
    */
   private void ensureUnequal(CloudFindToken token1, CloudFindToken token2) {
     assertFalse("Tokens should match", token1.equals(token2));
-    assertFalse("Tokens should match", token1.hashCode() == token2.hashCode());
   }
 
   /**
