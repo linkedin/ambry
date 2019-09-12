@@ -32,6 +32,7 @@ public class HelixAccountServiceConfig {
   public static final String ENABLE_SERVE_FROM_BACKUP = HELIX_ACCOUNT_SERVICE_PREFIX + "enable.serve.from.backup";
   public static final String TOTAL_NUMBER_OF_VERSION_TO_KEEP =
       HELIX_ACCOUNT_SERVICE_PREFIX + "total.number.of.version.to.keep";
+  public static final String WAIT_TIME_FOR_CROSS_COLO_REPLICATION_MS = HELIX_ACCOUNT_SERVICE_PREFIX + "wait.time.for.cross.colo.replication.ms";
 
   /**
    * The ZooKeeper server address. This config is required when using {@code HelixAccountService}.
@@ -110,6 +111,15 @@ public class HelixAccountServiceConfig {
   @Default("100")
   public final int totalNumberOfVersionToKeep;
 
+  /**
+   * The duration to wait for cross colo replication. The reason to wait for this duration is to avoid the cross colo
+   * read as much as possible. A negative value indicates AccountService will not wait for replication. Please set the
+   * duration to at least 90 percentile of cross colo replication latency.
+   */
+  @Config(WAIT_TIME_FOR_CROSS_COLO_REPLICATION_MS)
+  @Default("-1")
+  public final int waitTimeForCrossColoReplicationMs;
+
   public HelixAccountServiceConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY);
     updaterPollingIntervalMs =
@@ -127,5 +137,10 @@ public class HelixAccountServiceConfig {
     enableServeFromBackup = verifiableProperties.getBoolean(ENABLE_SERVE_FROM_BACKUP, false);
     totalNumberOfVersionToKeep =
         verifiableProperties.getIntInRange(TOTAL_NUMBER_OF_VERSION_TO_KEEP, 100, 1, Integer.MAX_VALUE);
+    int waitTime = verifiableProperties.getIntInRange(WAIT_TIME_FOR_CROSS_COLO_REPLICATION_MS, -1, -1, Integer.MAX_VALUE);
+    if (!useNewZNodePath) {
+      waitTime = -1;
+    }
+    waitTimeForCrossColoReplicationMs = waitTime;
   }
 }

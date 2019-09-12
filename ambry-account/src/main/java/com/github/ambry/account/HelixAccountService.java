@@ -161,6 +161,17 @@ public class HelixAccountService implements AccountService {
    * @param isCalledFromListener True is this function is invoked in the {@link TopicListener}.
    */
   private synchronized void fetchAndUpdateCache(boolean isCalledFromListener) {
+    // we don't want to wait for cross colo replication when this function is not called from listener
+    // since the blob data is probably already replicated to the local colo. And if the AccountMetadataStore
+    // is not RouterStore, the wait time would be set to -1.
+    // This logic treats all colos the same, even if the blob is created within this colo.
+    if (isCalledFromListener && config.waitTimeForCrossColoReplicationMs > 0) {
+      try {
+        Thread.sleep(config.waitTimeForCrossColoReplicationMs);
+      } catch (InterruptedException e) {
+        logger.error("Interrupted while waiting for cross colo replication");
+      }
+    }
     Map<String, String> accountMap = accountMetadataStore.fetchAccountMetadata();
     if (accountMap == null) {
       logger.debug("No account map returned");
