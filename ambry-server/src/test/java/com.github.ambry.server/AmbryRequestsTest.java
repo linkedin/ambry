@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ServerErrorCode;
@@ -64,12 +65,12 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.replication.BlobIdTransformer;
-import com.github.ambry.replication.MockFindToken;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageInfoTest;
 import com.github.ambry.store.MessageReadSet;
@@ -119,8 +120,8 @@ import static org.junit.Assert.*;
  * Tests for {@link AmbryRequests}.
  */
 public class AmbryRequestsTest {
-  private static final FindTokenFactory FIND_TOKEN_FACTORY = new MockFindToken.MockFindTokenFactory();
 
+  private final FindTokenHelper findTokenHelper;
   private final MockClusterMap clusterMap;
   private final DataNodeId dataNodeId;
   private final MockStorageManager storageManager;
@@ -130,8 +131,10 @@ public class AmbryRequestsTest {
   private final Set<StoreKey> validKeysInStore = new HashSet<>();
   private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
   private final MockStoreKeyConverterFactory storeKeyConverterFactory;
+  private final ReplicationConfig replicationConfig;
 
-  public AmbryRequestsTest() throws IOException, ReplicationException, StoreException, InterruptedException {
+  public AmbryRequestsTest()
+      throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
     clusterMap = new MockClusterMap();
     Properties properties = new Properties();
     properties.setProperty("clustermap.cluster.name", "test");
@@ -141,15 +144,18 @@ public class AmbryRequestsTest {
     properties.setProperty("replication.no.of.intra.dc.replica.threads", "1");
     properties.setProperty("replication.no.of.inter.dc.replica.threads", "1");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    replicationConfig = new ReplicationConfig(verifiableProperties);
     dataNodeId = clusterMap.getDataNodeIds().get(0);
-    storageManager = new MockStorageManager(validKeysInStore, clusterMap.getReplicaIds(dataNodeId));
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
+    storageManager = new MockStorageManager(validKeysInStore, clusterMap.getReplicaIds(dataNodeId), findTokenHelper);
     storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(conversionMap);
     replicationManager =
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId,
             storeKeyConverterFactory);
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false,
+        clusterMap.getMetricRegistry(), findTokenHelper, null, replicationManager, null, false,
         storeKeyConverterFactory);
     storageManager.start();
   }
@@ -873,10 +879,11 @@ public class AmbryRequestsTest {
                   GetOption.Include_All);
           break;
         case ReplicaMetadataRequest:
-          ReplicaMetadataRequestInfo rRequestInfo =
-              new ReplicaMetadataRequestInfo(id, FIND_TOKEN_FACTORY.getNewFindToken(), "localhost", "/tmp");
+          ReplicaMetadataRequestInfo rRequestInfo = new ReplicaMetadataRequestInfo(id,
+              findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken(),
+              "localhost", "/tmp", ReplicaType.DISK_BACKED, replicationConfig.replicaMetadataRequestVersion);
           request = new ReplicaMetadataRequest(correlationId, clientId, Collections.singletonList(rRequestInfo),
-              Long.MAX_VALUE);
+              Long.MAX_VALUE, replicationConfig.replicaMetadataRequestVersion);
           break;
         case TtlUpdateRequest:
           request = new TtlUpdateRequest(correlationId, clientId, originalBlobId, Utils.Infinite_Time,
@@ -1319,7 +1326,8 @@ public class AmbryRequestsTest {
         tokenReceived = token;
         maxTotalSizeOfEntriesReceived = maxTotalSizeOfEntries;
         throwExceptionIfRequired();
-        return new FindInfo(Collections.emptyList(), FIND_TOKEN_FACTORY.getNewFindToken());
+        return new FindInfo(Collections.emptyList(),
+            findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken());
       }
 
       @Override
@@ -1446,10 +1454,14 @@ public class AmbryRequestsTest {
 
     private final Set<StoreKey> validKeysInStore;
 
-    MockStorageManager(Set<StoreKey> validKeysInStore, List<? extends ReplicaId> replicas) throws StoreException {
+    private final FindTokenHelper findTokenHelper;
+
+    MockStorageManager(Set<StoreKey> validKeysInStore, List<? extends ReplicaId> replicas,
+        FindTokenHelper findTokenHelper) throws StoreException {
       super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
           replicas, null, null, null, null, new MockTime());
       this.validKeysInStore = validKeysInStore;
+      this.findTokenHelper = findTokenHelper;
     }
 
     @Override

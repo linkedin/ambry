@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.File;
@@ -127,6 +128,11 @@ class StoreTestUtils {
     @Override
     public void markDiskUp() {
       // Null OK
+    }
+
+    @Override
+    public ReplicaType getReplicaType() {
+      return ReplicaType.DISK_BACKED;
     }
 
     public void setSealedState(boolean isSealed) {

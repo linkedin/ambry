@@ -22,7 +22,9 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationMetrics;
@@ -51,7 +53,8 @@ public class CloudTokenPersistorTest {
     ClusterMap clusterMap = new MockClusterMap();
     DataNodeId dataNodeId = new CloudDataNode(cloudConfig, clusterMapConfig);
     Map<String, List<PartitionInfo>> mountPathToPartitionInfoList = new HashMap<>();
-    StoreFindTokenFactory factory = new StoreFindTokenFactory(new BlobIdFactory(clusterMap));
+    BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
+    StoreFindTokenFactory factory = new StoreFindTokenFactory(blobIdFactory);
     PartitionId partitionId = clusterMap.getAllPartitionIds(null).get(0);
 
     ReplicaId cloudReplicaId = new CloudReplica(cloudConfig, partitionId, dataNodeId);
@@ -72,14 +75,15 @@ public class CloudTokenPersistorTest {
 
     LatchBasedInMemoryCloudDestination cloudDestination =
         new LatchBasedInMemoryCloudDestination(Collections.emptyList());
+    ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));
     CloudTokenPersistor cloudTokenPersistor = new CloudTokenPersistor("replicaTokens", mountPathToPartitionInfoList,
-        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, factory, cloudDestination);
+        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap,
+        new FindTokenHelper(blobIdFactory, replicationConfig), cloudDestination);
     cloudTokenPersistor.persist(cloudReplicaId.getMountPath(), replicaTokenInfos);
     List<RemoteReplicaInfo.ReplicaTokenInfo> retrievedReplicaTokenInfos =
         cloudTokenPersistor.retrieve(cloudReplicaId.getMountPath());
 
-    Assert.assertEquals("Number of tokens doesn't match.", replicaTokenInfos.size(),
-        retrievedReplicaTokenInfos.size());
+    Assert.assertEquals("Number of tokens doesn't match.", replicaTokenInfos.size(), retrievedReplicaTokenInfos.size());
     for (int i = 0; i < replicaTokenInfos.size(); i++) {
       Assert.assertArrayEquals("Token is not correct.", replicaTokenInfos.get(i).getReplicaToken().toBytes(),
           retrievedReplicaTokenInfos.get(i).getReplicaToken().toBytes());

@@ -22,7 +22,14 @@ public class ReplicationConfig {
    */
   @Config("replication.token.factory")
   @Default("com.github.ambry.store.StoreFindTokenFactory")
-  public final String replicationTokenFactory;
+  public final String replicationStoreTokenFactory;
+
+  /**
+   * The factory class the replicatio uses to create cloud token
+   */
+  @Config("replcation.cloudtoken.factory")
+  @Default("com.github.ambry.cloud.CloudFindTokenFactory")
+  public final String replicationCloudTokenFactory;
 
   /**
    * The number of replica threads on each server that runs the replication protocol for intra dc replication
@@ -124,10 +131,19 @@ public class ReplicationConfig {
   @Default("false")
   public final boolean replicationTrackPerPartitionLagFromRemote;
 
+  /**
+   * The version of metadata request to be used for replication.
+   */
+  @Config("replication.metadatarequest.version")
+  @Default("1")
+  public final short replicaMetadataRequestVersion;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
-    replicationTokenFactory =
+    replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
+    replicationCloudTokenFactory = verifiableProperties.getString("replication.cloudtoken.factory",
+        "com.github.ambry.cloud.CloudFindTokenFactory");
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =
@@ -155,5 +171,7 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean("replication.persist.token.on.shutdown.or.replica.remove", true);
     replicationTrackPerPartitionLagFromRemote =
         verifiableProperties.getBoolean("replication.track.per.partition.lag.from.remote", false);
+    replicaMetadataRequestVersion =
+        verifiableProperties.getShortInRange("replication.metadatarequest.version", (short) 1, (short) 1, (short) 2);
   }
 }

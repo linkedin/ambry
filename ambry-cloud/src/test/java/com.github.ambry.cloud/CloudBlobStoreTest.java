@@ -32,14 +32,15 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.replication.BlobIdTransformer;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.MockConnectionPool;
 import com.github.ambry.replication.MockFindToken;
+import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.MockHost;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.FindInfo;
-import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
@@ -457,10 +458,10 @@ public class CloudBlobStoreTest {
     // Create ReplicaThread and add RemoteReplicaInfo to it.
     ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), Collections.emptyList());
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindToken.MockFindTokenFactory(), clusterMap, new AtomicInteger(0),
-            cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
-            clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(), new ResponseHandler(clusterMap),
-            new MockTime());
+        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
+            new AtomicInteger(0), cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null,
+            storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(),
+            new ResponseHandler(clusterMap), new MockTime());
 
     for (ReplicaId replica : partitionId.getReplicaIds()) {
       if (replica.getDataNodeId() == remoteHost.dataNodeId) {

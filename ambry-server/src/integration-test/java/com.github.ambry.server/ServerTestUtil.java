@@ -34,6 +34,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -75,6 +76,7 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
@@ -82,7 +84,6 @@ import com.github.ambry.router.NonBlockingRouterFactory;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
-import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
@@ -2019,6 +2020,8 @@ final class ServerTestUtil {
               setToCheck.remove(partitionId.toString() + hostname + port);
               // read total bytes read from local store
               dataInputStream.readLong();
+              // read replica type
+              ReplicaType replicaType = ReplicaType.values()[dataInputStream.readShort()];
               // read replica token
               StoreFindToken token = (StoreFindToken) factory.getFindToken(dataInputStream);
               System.out.println(

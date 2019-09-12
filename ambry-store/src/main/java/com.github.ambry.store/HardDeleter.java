@@ -15,6 +15,8 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Time;
@@ -258,7 +260,7 @@ public class HardDeleter implements Runnable {
    */
   void pruneHardDeleteRecoveryRange() {
     StoreFindToken logFlushedTillToken = (StoreFindToken) startTokenSafeToPersist;
-    if (logFlushedTillToken != null && !logFlushedTillToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
+    if (logFlushedTillToken != null && !logFlushedTillToken.getType().equals(FindTokenType.Uninitialized)) {
       if (logFlushedTillToken.equals(endToken)) {
         hardDeleteRecoveryRange.clear();
       } else if (logFlushedTillToken.getStoreKey() != null) {
@@ -359,7 +361,7 @@ public class HardDeleter implements Runnable {
    */
   long getProgress() {
     StoreFindToken token = (StoreFindToken) startToken;
-    return token.getType().equals(StoreFindToken.Type.Uninitialized) ? 0
+    return token.getType().equals(FindTokenType.Uninitialized) ? 0
         : index.getAbsolutePositionInLogForOffset(token.getOffset());
   }
 

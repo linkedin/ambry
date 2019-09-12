@@ -15,8 +15,7 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.SystemTime;
@@ -47,10 +46,10 @@ public abstract class ReplicaTokenPersistor implements Runnable {
   protected final ReplicaTokenSerde replicaTokenSerde;
 
   public ReplicaTokenPersistor(Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactory tokenfactory) {
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper findTokenHelper) {
     this.partitionGroupedByMountPath = partitionGroupedByMountPath;
     this.replicationMetrics = replicationMetrics;
-    this.replicaTokenSerde = new ReplicaTokenSerde(clusterMap, tokenfactory);
+    this.replicaTokenSerde = new ReplicaTokenSerde(clusterMap, findTokenHelper);
   }
 
   /**
@@ -130,13 +129,13 @@ public abstract class ReplicaTokenPersistor implements Runnable {
   public static class ReplicaTokenSerde {
     private static final short Crc_Size = 8;
     private final ClusterMap clusterMap;
-    private final FindTokenFactory tokenfactory;
+    private final FindTokenHelper tokenHelper;
     private final short version = 0;
 
     // Map<Sting,FindToken>
-    public ReplicaTokenSerde(ClusterMap clusterMap, FindTokenFactory tokenfactory) {
+    public ReplicaTokenSerde(ClusterMap clusterMap, FindTokenHelper tokenHelper) {
       this.clusterMap = clusterMap;
-      this.tokenfactory = tokenfactory;
+      this.tokenHelper = tokenHelper;
     }
 
     public void serializeTokens(List<ReplicaTokenInfo> tokenInfoList, OutputStream outputStream) throws IOException {
@@ -155,7 +154,11 @@ public abstract class ReplicaTokenPersistor implements Runnable {
           writer.write(replicaTokenInfo.getReplicaPath().getBytes());
           // Write port
           writer.writeInt(replicaTokenInfo.getPort());
+          // Write total bytes read from local store
           writer.writeLong(replicaTokenInfo.getTotalBytesReadFromLocalStore());
+          // Write replica type
+          writer.writeShort((short) replicaTokenInfo.getReplicaInfo().getReplicaId().getReplicaType().ordinal());
+          // Write replica token
           writer.write(replicaTokenInfo.getReplicaToken().toBytes());
         }
         long crcValue = crcOutputStream.getValue();
@@ -191,8 +194,12 @@ public abstract class ReplicaTokenPersistor implements Runnable {
               int port = stream.readInt();
               // read total bytes read from local store
               long totalBytesReadFromLocalStore = stream.readLong();
+              //read replica type
+              ReplicaType replicaType = ReplicaType.values()[stream.readShort()];
               // read replica token
-              FindToken token = tokenfactory.getFindToken(stream);
+              FindTokenFactory findTokenFactory = tokenHelper.getFindTokenFactoryFromReplicaType(replicaType);
+              FindToken token = findTokenFactory.getFindToken(stream);
+
               tokenInfoList.add(
                   new ReplicaTokenInfo(partitionId, hostname, replicaPath, port, totalBytesReadFromLocalStore, token));
             }

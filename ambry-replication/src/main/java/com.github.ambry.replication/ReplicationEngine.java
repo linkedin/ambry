@@ -24,8 +24,6 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetRequest;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -71,7 +69,7 @@ public abstract class ReplicationEngine {
   protected final DataNodeId dataNodeId;
   protected final MetricRegistry metricRegistry;
   protected final ReplicationMetrics replicationMetrics;
-  protected final FindTokenFactory factory;
+  protected final FindTokenHelper tokenHelper;
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
   protected final Map<String, List<PartitionInfo>> mountPathToPartitionInfos;
@@ -88,10 +86,10 @@ public abstract class ReplicationEngine {
     this.replicationConfig = replicationConfig;
     this.storeKeyFactory = storeKeyFactory;
     try {
-      this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
-    } catch (ReflectiveOperationException e) {
-      logger.error("Error on getting replicationTokenFactory", e);
-      throw new ReplicationException("Error on getting replicationTokenFactory");
+      this.tokenHelper = new FindTokenHelper(this.storeKeyFactory, this.replicationConfig);
+    } catch (ReflectiveOperationException roe) {
+      logger.error("Error on getting ReplicaTokenHelper", roe);
+      throw new ReplicationException("Error on getting ReplicaTokenHelper");
     }
     this.replicaThreadPoolByDc = new ConcurrentHashMap<>();
     this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaIds);
@@ -306,8 +304,8 @@ public abstract class ReplicationEngine {
         Transformer threadSpecificTransformer =
             Utils.getObj(transformerClassName, storeKeyFactory, threadSpecificKeyConverter);
         ReplicaThread replicaThread =
-            new ReplicaThread(threadIdentity, factory, clusterMap, correlationIdGenerator, dataNodeId, connectionPool,
-                replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
+            new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+                connectionPool, replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
                 threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter, responseHandler,
                 SystemTime.getInstance());
         replicaThreads.add(replicaThread);

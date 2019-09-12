@@ -14,7 +14,7 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -34,14 +34,17 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   private static final int Max_Entries_Size_In_Bytes = 8;
   private static final int Replica_Metadata_Request_Info_List_Size_In_Bytes = 4;
-  private static final short Replica_Metadata_Request_Version_V1 = 1;
+  public static final short Replica_Metadata_Request_Version_V1 = 1;
+  public static final short Replica_Metadata_Request_Version_V2 = 2;
 
   public ReplicaMetadataRequest(int correlationId, String clientId,
-      List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList, long maxTotalSizeOfEntriesInBytes) {
-    super(RequestOrResponseType.ReplicaMetadataRequest, Replica_Metadata_Request_Version_V1, correlationId, clientId);
+      List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList, long maxTotalSizeOfEntriesInBytes,
+      short version) {
+    super(RequestOrResponseType.ReplicaMetadataRequest, version, correlationId, clientId);
     if (replicaMetadataRequestInfoList == null) {
       throw new IllegalArgumentException("replicaMetadataRequestInfoList cannot be null");
     }
+    validateVersion(version);
     this.replicaMetadataRequestInfoList = replicaMetadataRequestInfoList;
     this.maxTotalSizeOfEntriesInBytes = maxTotalSizeOfEntriesInBytes;
     this.replicaMetadataRequestInfoListSizeInBytes = 0;
@@ -50,10 +53,10 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     }
   }
 
-  public static ReplicaMetadataRequest readFrom(DataInputStream stream, ClusterMap clusterMap, FindTokenFactory factory)
-      throws IOException {
-    RequestOrResponseType type = RequestOrResponseType.ReplicaMetadataRequest;
+  public static ReplicaMetadataRequest readFrom(DataInputStream stream, ClusterMap clusterMap,
+      FindTokenHelper findTokenHelper) throws IOException {
     Short versionId = stream.readShort();
+    validateVersion(versionId);
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     int replicaMetadataRequestInfoListCount = stream.readInt();
@@ -61,12 +64,13 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
         new ArrayList<ReplicaMetadataRequestInfo>(replicaMetadataRequestInfoListCount);
     for (int i = 0; i < replicaMetadataRequestInfoListCount; i++) {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
-          ReplicaMetadataRequestInfo.readFrom(stream, clusterMap, factory);
+          ReplicaMetadataRequestInfo.readFrom(stream, clusterMap, findTokenHelper, versionId);
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
     }
     long maxTotalSizeOfEntries = stream.readLong();
     // ignore version for now
-    return new ReplicaMetadataRequest(correlationId, clientId, replicaMetadataRequestInfoList, maxTotalSizeOfEntries);
+    return new ReplicaMetadataRequest(correlationId, clientId, replicaMetadataRequestInfoList, maxTotalSizeOfEntries,
+        versionId);
   }
 
   public List<ReplicaMetadataRequestInfo> getReplicaMetadataRequestInfoList() {
@@ -115,5 +119,11 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
     sb.append(", ").append("CorrelationId=").append(correlationId);
     sb.append("]");
     return sb.toString();
+  }
+
+  static void validateVersion(short version) {
+    if (version < Replica_Metadata_Request_Version_V1 || version > Replica_Metadata_Request_Version_V2) {
+      throw new IllegalArgumentException("Invalid replicametadata request version: " + version);
+    }
   }
 }

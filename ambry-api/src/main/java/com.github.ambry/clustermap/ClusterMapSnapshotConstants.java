@@ -68,4 +68,7 @@ public class ClusterMapSnapshotConstants {
   public static final String REPLICA_DISK = "disk";
   // values
   public static final String REPLICA_STOPPED = "stopped";
+
+  //the virtual mount point for the cloud replica in the cluster map
+  public static final String CLOUD_REPLICA_MOUNT = "/vcr";
 }

@@ -13,7 +13,10 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.store.FindToken;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenType;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Objects;
@@ -27,6 +30,7 @@ public class CloudFindToken implements FindToken {
   static final short VERSION_0 = 0;
   static final short CURRENT_VERSION = VERSION_0;
   private final short version;
+  private final FindTokenType type;
   private final long latestUploadTime;
   private final String latestBlobId;
   private final long bytesRead;
@@ -39,8 +43,18 @@ public class CloudFindToken implements FindToken {
   /** Constructor for in-progress token */
   public CloudFindToken(long latestUploadTime, String latestBlobId, long bytesRead) {
     this.version = CURRENT_VERSION;
+    this.type = FindTokenType.CloudBased;
     this.latestUploadTime = latestUploadTime;
     this.latestBlobId = latestBlobId;
+    this.bytesRead = bytesRead;
+  }
+
+  /** Constructor for reading token that can have older version*/
+  public CloudFindToken(short version, long latestUploadTime, String latestBlobId, long bytesRead) {
+    this.version = version;
+    this.type = FindTokenType.CloudBased;
+    this.latestBlobId = latestBlobId;
+    this.latestUploadTime = latestUploadTime;
     this.bytesRead = bytesRead;
   }
 
@@ -56,7 +70,8 @@ public class CloudFindToken implements FindToken {
     } else {
       CloudBlobMetadata lastResult = queryResults.get(queryResults.size() - 1);
       long bytesReadThisQuery = queryResults.stream().mapToLong(CloudBlobMetadata::getSize).sum();
-      return new CloudFindToken(lastResult.getUploadTime(), lastResult.getId(), prevToken.getBytesRead() + bytesReadThisQuery);
+      return new CloudFindToken(lastResult.getUploadTime(), lastResult.getId(),
+          prevToken.getBytesRead() + bytesReadThisQuery);
     }
   }
 
@@ -65,11 +80,16 @@ public class CloudFindToken implements FindToken {
     byte[] buf = null;
     switch (version) {
       case VERSION_0:
-        int size = Short.BYTES + 2 * Long.BYTES;
+        int size = 3 * Short.BYTES + 2 * Long.BYTES;
+        if (latestBlobId != null) {
+          size += latestBlobId.length();
+        }
         buf = new byte[size];
         ByteBuffer bufWrap = ByteBuffer.wrap(buf);
         // add version
         bufWrap.putShort(version);
+        // add type
+        bufWrap.putShort((short) type.ordinal());
         // add latestUploadTime
         bufWrap.putLong(latestUploadTime);
         // add bytesRead
@@ -85,6 +105,36 @@ public class CloudFindToken implements FindToken {
         throw new IllegalStateException("Unknown version: " + version);
     }
     return buf;
+  }
+
+  /**
+   * Utility to construct a previously serialized {@code CloudFindToken} from input stream.
+   * @param inputStream {@code DataInputStream} from which to read the token.
+   * @return deserialized {@code CloudFindToken} object.
+   * @throws IOException
+   */
+  static CloudFindToken fromBytes(DataInputStream inputStream) throws IOException {
+    CloudFindToken cloudFindToken = null;
+    DataInputStream stream = new DataInputStream(inputStream);
+    short version = stream.readShort();
+    switch (version) {
+      case VERSION_0:
+        FindTokenType type = FindTokenType.values()[stream.readShort()];
+        long latestUploadTime = stream.readLong();
+        long bytesRead = stream.readLong();
+        short latestBlobIdLength = stream.readShort();
+        String latestBlobId = null;
+        if (latestBlobIdLength != 0) {
+          byte[] latestBlobIdbytes = new byte[latestBlobIdLength];
+          stream.read(latestBlobIdbytes, 0, (int) latestBlobIdLength);
+          latestBlobId = new String(latestBlobIdbytes);
+        }
+        cloudFindToken = new CloudFindToken(version, latestUploadTime, latestBlobId, bytesRead);
+        break;
+      default:
+        throw new IllegalStateException("Unknown version: " + version);
+    }
+    return cloudFindToken;
   }
 
   @Override
@@ -126,5 +176,15 @@ public class CloudFindToken implements FindToken {
     sb.append(" latestBlobId: ").append(latestBlobId);
     sb.append(" bytesRead: ").append(bytesRead);
     return sb.toString();
+  }
+
+  @Override
+  public FindTokenType getType() {
+    return type;
+  }
+
+  @Override
+  public short getVersion() {
+    return version;
   }
 }

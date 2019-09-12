@@ -38,6 +38,7 @@ class Replica implements ReplicaId {
   private Disk disk;
   private volatile boolean isStopped = false;
   private final ResourceStatePolicy resourceStatePolicy;
+  private final ReplicaType replicaType;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -56,6 +57,11 @@ class Replica implements ReplicaId {
       logger.error("Error creating resource state policy when instantiating a replica " + e);
       throw new IllegalStateException("Error creating resource state policy when instantiating a replica " + partition,
           e);
+    }
+    if (disk.getMountPath().startsWith(CLOUD_REPLICA_MOUNT)) {
+      replicaType = ReplicaType.CLOUD_BACKED;
+    } else {
+      replicaType = ReplicaType.DISK_BACKED;
     }
     validate();
   }
@@ -144,6 +150,11 @@ class Replica implements ReplicaId {
   @Override
   public void markDiskUp() {
     disk.onDiskOk();
+  }
+
+  @Override
+  public ReplicaType getReplicaType() {
+    return replicaType;
   }
 
   Partition getPartition() {

@@ -62,10 +62,11 @@ public class ReplicationManager extends ReplicationEngine {
             // We need to ensure that a replica token gets persisted only after the corresponding data in the
             // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
             // to determine the token flush interval
-            RemoteReplicaInfo remoteReplicaInfo =
-                new RemoteReplicaInfo(remoteReplica, replicaId, store, factory.getNewFindToken(),
-                    storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
-                    SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
+            FindToken findToken =
+                this.tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
+            RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica, replicaId, store, findToken,
+                storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
+                SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
             replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
           }
@@ -83,7 +84,7 @@ public class ReplicationManager extends ReplicationEngine {
       }
     }
     persistor = new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-        factory);
+        tokenHelper);
   }
 
   @Override

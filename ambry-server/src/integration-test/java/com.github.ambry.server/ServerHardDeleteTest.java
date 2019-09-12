@@ -37,7 +37,7 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.store.HardDeleter;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;

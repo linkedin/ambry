@@ -15,8 +15,10 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.clustermap.ReplicaType;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -34,14 +36,18 @@ public class ReplicaMetadataRequestInfo {
   private FindToken token;
   private String hostName;
   private String replicaPath;
+  private ReplicaType replicaType;
   private PartitionId partitionId;
+  private short requestVersion;
 
   private static final int ReplicaPath_Field_Size_In_Bytes = 4;
   private static final int HostName_Field_Size_In_Bytes = 4;
+  private static final int ReplicaType_Size_In_Bytes = Short.BYTES;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public ReplicaMetadataRequestInfo(PartitionId partitionId, FindToken token, String hostName, String replicaPath) {
+  public ReplicaMetadataRequestInfo(PartitionId partitionId, FindToken token, String hostName, String replicaPath,
+      ReplicaType replicaType, short requestVersion) {
     if (partitionId == null || token == null || hostName == null || replicaPath == null) {
       throw new IllegalArgumentException(
           "A parameter in the replica metadata request is null: " + "[Partition: " + partitionId + ", token: " + token
@@ -51,27 +57,45 @@ public class ReplicaMetadataRequestInfo {
     this.token = token;
     this.hostName = hostName;
     this.replicaPath = replicaPath;
+    this.replicaType = replicaType;
+    this.requestVersion = requestVersion;
+    ReplicaMetadataRequest.validateVersion(this.requestVersion);
   }
 
   public static ReplicaMetadataRequestInfo readFrom(DataInputStream stream, ClusterMap clusterMap,
-      FindTokenFactory factory) throws IOException {
+      FindTokenHelper findTokenHelper, short requestVersion) throws IOException {
     String hostName = Utils.readIntString(stream);
     String replicaPath = Utils.readIntString(stream);
+    ReplicaType replicaType;
+    if (requestVersion == ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2) {
+      replicaType = ReplicaType.values()[stream.readShort()];
+    } else {
+      //before version 2 we only have disk based replicas
+      replicaType = ReplicaType.DISK_BACKED;
+    }
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-    FindToken token = factory.getFindToken(stream);
-    return new ReplicaMetadataRequestInfo(partitionId, token, hostName, replicaPath);
+    FindTokenFactory findTokenFactory = findTokenHelper.getFindTokenFactoryFromReplicaType(replicaType);
+    FindToken token = findTokenFactory.getFindToken(stream);
+    return new ReplicaMetadataRequestInfo(partitionId, token, hostName, replicaPath, replicaType, requestVersion);
   }
 
   public void writeTo(ByteBuffer buffer) {
     Utils.serializeString(buffer, hostName, Charset.defaultCharset());
     Utils.serializeString(buffer, replicaPath, Charset.defaultCharset());
+    if (requestVersion == ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2) {
+      buffer.putShort((short) replicaType.ordinal());
+    }
     buffer.put(partitionId.getBytes());
     buffer.put(token.toBytes());
   }
 
   public long sizeInBytes() {
-    return HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes
+    long size = HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes
         + replicaPath.getBytes().length + +partitionId.getBytes().length + token.toBytes().length;
+    if (requestVersion == ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2) {
+      size += ReplicaType_Size_In_Bytes;
+    }
+    return size;
   }
 
   public String toString() {
@@ -79,7 +103,8 @@ public class ReplicaMetadataRequestInfo {
     sb.append("[Token=").append(token);
     sb.append(", ").append(" PartitionId=").append(partitionId);
     sb.append(", ").append(" HostName=").append(hostName);
-    sb.append(", ").append(" ReplicaPath=").append(replicaPath).append("]");
+    sb.append(", ").append(" ReplicaPath=").append(replicaPath);
+    sb.append(", ").append(" ReplicaType=").append(replicaType).append("]");
     return sb.toString();
   }
 
@@ -97,5 +122,9 @@ public class ReplicaMetadataRequestInfo {
 
   public PartitionId getPartitionId() {
     return partitionId;
+  }
+
+  public ReplicaType getReplicaType() {
+    return replicaType;
   }
 }

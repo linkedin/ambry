@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -262,10 +263,10 @@ public class StoreFindTokenTest {
         Utils.serializeNullableString(bufWrap, sessionId == null ? null : sessionId.toString());
         long logOffset = -1;
         long indexStartOffset = -1;
-        StoreFindToken.Type type = token.getType();
-        if (type.equals(StoreFindToken.Type.JournalBased)) {
+        FindTokenType type = token.getType();
+        if (type.equals(FindTokenType.JournalBased)) {
           logOffset = token.getOffset().getOffset();
-        } else if (type.equals(StoreFindToken.Type.IndexBased)) {
+        } else if (type.equals(FindTokenType.IndexBased)) {
           indexStartOffset = token.getOffset().getOffset();
         }
         // add offset

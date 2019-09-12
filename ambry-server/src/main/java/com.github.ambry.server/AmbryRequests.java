@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
@@ -64,10 +65,10 @@ import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
@@ -113,7 +114,7 @@ public class AmbryRequests implements RequestAPI {
   private final Map<PartitionId, ReplicaId> localPartitionToReplicaMap;
   private final ServerMetrics metrics;
   private final MessageFormatMetrics messageFormatMetrics;
-  private final FindTokenFactory findTokenFactory;
+  private final FindTokenHelper findTokenHelper;
   private final NotificationSystem notification;
   private final ReplicationManager replicationManager;
   private final StoreKeyFactory storeKeyFactory;
@@ -123,7 +124,7 @@ public class AmbryRequests implements RequestAPI {
   private final StoreKeyConverterFactory storeKeyConverterFactory;
 
   public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
-      ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
+      ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenHelper findTokenHelper,
       NotificationSystem operationNotification, ReplicationManager replicationManager, StoreKeyFactory storeKeyFactory,
       boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
     this.storageManager = storageManager;
@@ -132,7 +133,7 @@ public class AmbryRequests implements RequestAPI {
     this.currentNode = nodeId;
     this.metrics = new ServerMetrics(registry);
     this.messageFormatMetrics = new MessageFormatMetrics(registry);
-    this.findTokenFactory = findTokenFactory;
+    this.findTokenHelper = findTokenHelper;
     this.notification = operationNotification;
     this.replicationManager = replicationManager;
     this.storeKeyFactory = storeKeyFactory;
@@ -569,7 +570,7 @@ public class AmbryRequests implements RequestAPI {
 
   public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
     ReplicaMetadataRequest replicaMetadataRequest =
-        ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactory);
+        ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenHelper);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.replicaMetadataRequestQueueTimeInMs.update(requestQueueTime);
@@ -586,13 +587,16 @@ public class AmbryRequests implements RequestAPI {
       for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
         long partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
         PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
+        ReplicaType replicaType = replicaMetadataRequestInfo.getReplicaType();
         ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.ReplicaMetadataRequest, false);
         logger.trace("{} Time used to validate metadata request: {}", partitionId,
             (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
         if (error != ServerErrorCode.No_Error) {
           logger.error("Validating replica metadata request failed with error {} for partition {}", error, partitionId);
-          ReplicaMetadataResponseInfo replicaMetadataResponseInfo = new ReplicaMetadataResponseInfo(partitionId, error);
+          ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
+              new ReplicaMetadataResponseInfo(partitionId, replicaType, error,
+                  ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
           replicaMetadataResponseList.add(replicaMetadataResponseInfo);
         } else {
           try {
@@ -618,8 +622,9 @@ public class AmbryRequests implements RequestAPI {
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-                new ReplicaMetadataResponseInfo(partitionId, findInfo.getFindToken(), findInfo.getMessageEntries(),
-                    store.getSizeInBytes() - totalBytesRead);
+                new ReplicaMetadataResponseInfo(partitionId, replicaType, findInfo.getFindToken(),
+                    findInfo.getMessageEntries(), store.getSizeInBytes() - totalBytesRead,
+                    ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
             if (replicaMetadataResponseInfo.getTotalSizeOfAllMessages()
                 > 5 * replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes()) {
               logger.debug("{} generated a metadata response {} where the cumulative size of messages is {}",
@@ -639,19 +644,23 @@ public class AmbryRequests implements RequestAPI {
               metrics.unExpectedStoreFindEntriesError.inc();
             }
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-                new ReplicaMetadataResponseInfo(partitionId, ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+                new ReplicaMetadataResponseInfo(partitionId, replicaType,
+                    ErrorMapping.getStoreErrorMapping(e.getErrorCode()),
+                    ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
           }
         }
       }
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-              ServerErrorCode.No_Error, replicaMetadataResponseList);
+              ServerErrorCode.No_Error, replicaMetadataResponseList,
+              ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
     } catch (Exception e) {
       logger.error("Unknown exception for request " + replicaMetadataRequest, e);
       response =
           new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
-              ServerErrorCode.Unknown_Error);
+              ServerErrorCode.Unknown_Error,
+              ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTimeInMs;
       totalTimeSpent += processingTime;

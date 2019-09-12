@@ -14,11 +14,11 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationMetrics;
-import com.github.ambry.store.FindTokenFactory;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -47,12 +47,12 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
    * @param partitionGroupedByMountPath A map between mount path and list of partitions under this mount path.
    * @param replicationMetrics metrics including token persist time.
    * @param clusterMap the {@link ClusterMap} to deserialize tokens.
-   * @param tokenFactory the {@link FindTokenFactory} to deserialize tokens.
+   * @param tokenHelper the {@link FindTokenHelper} to deserialize tokens.
    */
   public CloudTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenFactory tokenFactory,
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper tokenHelper,
       CloudDestination cloudDestination) {
-    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenFactory);
+    super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenHelper);
     this.replicaTokenFileName = replicaTokenFileName;
     this.cloudDestination = cloudDestination;
   }

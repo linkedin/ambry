@@ -15,6 +15,8 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -875,10 +877,10 @@ class PersistentIndex {
       storeToken = revalidateStoreFindToken(storeToken, indexSegments);
 
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
-      if (!storeToken.getType().equals(StoreFindToken.Type.IndexBased)) {
+      if (!storeToken.getType().equals(FindTokenType.IndexBased)) {
         startTimeInMs = time.milliseconds();
         Offset offsetToStart = storeToken.getOffset();
-        if (storeToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
+        if (storeToken.getType().equals(FindTokenType.Uninitialized)) {
           offsetToStart = getStartOffset();
         }
         logger.trace("Index : " + dataDir + " getting entries since " + offsetToStart);
@@ -929,7 +931,7 @@ class PersistentIndex {
           return new FindInfo(messageEntries, storeFindToken);
         } else {
           storeToken = revalidateStoreFindToken(storeToken, indexSegments);
-          offsetToStart = storeToken.getType().equals(StoreFindToken.Type.Uninitialized) ? getStartOffset(indexSegments)
+          offsetToStart = storeToken.getType().equals(FindTokenType.Uninitialized) ? getStartOffset(indexSegments)
               : storeToken.getOffset();
           // Find index segment closest to the token offset.
           // Get entries starting from the first key in this offset.
@@ -997,8 +999,8 @@ class PersistentIndex {
     UUID remoteIncarnationId = storeToken.getIncarnationId();
     // if incarnationId is null, for backwards compatibility purposes, the token is considered as good.
     /// if not null, we check for a match
-    if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized) && remoteIncarnationId != null
-        && !remoteIncarnationId.equals(incarnationId)) {
+    if (!storeToken.getType().equals(FindTokenType.Uninitialized) && remoteIncarnationId != null && !remoteIncarnationId
+        .equals(incarnationId)) {
       // incarnationId mismatch, hence resetting the token to beginning
       logger.info("Index : {} resetting offset after incarnation, new incarnation Id {}, "
           + "incarnationId from store token {}", dataDir, incarnationId, remoteIncarnationId);
@@ -1008,13 +1010,13 @@ class PersistentIndex {
       if (!cleanShutdown) {
         // if we had an unclean shutdown and the token offset is larger than the logEndOffsetOnStartup
         // we reset the token to logEndOffsetOnStartup
-        if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized)
+        if (!storeToken.getType().equals(FindTokenType.Uninitialized)
             && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
           logger.info("Index : " + dataDir + " resetting offset after not clean shutdown " + logEndOffsetOnStartup
               + " before offset " + storeToken.getOffset());
           storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId, true);
         }
-      } else if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized)
+      } else if (!storeToken.getType().equals(FindTokenType.Uninitialized)
           && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
         logger.error(
             "Index : " + dataDir + " invalid token. Provided offset is outside the log range after clean shutdown");
@@ -1038,9 +1040,9 @@ class PersistentIndex {
   private long getTotalBytesRead(StoreFindToken token, List<MessageInfo> messageEntries, Offset logEndOffsetBeforeFind,
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) {
     long bytesRead = 0;
-    if (token.getType().equals(StoreFindToken.Type.IndexBased)) {
+    if (token.getType().equals(FindTokenType.IndexBased)) {
       bytesRead = getAbsolutePositionInLogForOffset(token.getOffset(), indexSegments);
-    } else if (token.getType().equals(StoreFindToken.Type.JournalBased)) {
+    } else if (token.getType().equals(FindTokenType.JournalBased)) {
       if (messageEntries.size() > 0) {
         bytesRead = getAbsolutePositionInLogForOffset(token.getOffset(), indexSegments) + messageEntries.get(
             messageEntries.size() - 1).getSize();
@@ -1445,20 +1447,20 @@ class PersistentIndex {
     StoreFindToken newToken;
     List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
 
-    if (storeToken.getType().equals(StoreFindToken.Type.IndexBased)) {
+    if (storeToken.getType().equals(FindTokenType.IndexBased)) {
       // Case 1: index based
       // Find the index segment corresponding to the token indexStartOffset.
       // Get entries starting from the token Key in this index.
       newToken = findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
           new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), validIndexSegments);
-      if (newToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
+      if (newToken.getType().equals(FindTokenType.Uninitialized)) {
         newToken = storeToken;
       }
     } else {
       // journal based or empty
       Offset offsetToStart = storeToken.getOffset();
       boolean inclusive = false;
-      if (storeToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
+      if (storeToken.getType().equals(FindTokenType.Uninitialized)) {
         offsetToStart = getStartOffset();
         inclusive = true;
       }
@@ -1502,7 +1504,7 @@ class PersistentIndex {
         if (entry != null && entry.getKey() != indexSegments.lastKey()) {
           newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
               new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), indexSegments);
-          if (newToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
+          if (newToken.getType().equals(FindTokenType.Uninitialized)) {
             newToken = storeToken;
           }
         } else {
@@ -1525,10 +1527,10 @@ class PersistentIndex {
 
   /**
    * Re-validates the {@code token} to ensure that it is consistent with the current set of index segments. If it is
-   * not, a {@link StoreFindToken.Type#Uninitialized} token is returned.
+   * not, a {@link FindTokenType#Uninitialized} token is returned.
    * @param token the {@link StoreFindToken} to revalidate.
    * @return {@code token} if is consistent with the current set of index segments, a new
-   * {@link StoreFindToken.Type#Uninitialized} token otherwise.
+   * {@link FindTokenType#Uninitialized} token otherwise.
    */
   FindToken revalidateFindToken(FindToken token) {
     return revalidateStoreFindToken((StoreFindToken) token, validIndexSegments);
@@ -1536,10 +1538,10 @@ class PersistentIndex {
 
   /**
    * Re-validates the {@code token} to ensure that it is consistent with the given view of {@code indexSegments}. If it
-   * is not, a {@link StoreFindToken.Type#Uninitialized} token is returned.
+   * is not, a {@link FindTokenType#Uninitialized} token is returned.
    * @param token the {@link StoreFindToken} to revalidate.
    * @param indexSegments the view of the index segments to revalidate against.
-   * @return {@code token} if is consistent with {@code indexSegments}, a new {@link StoreFindToken.Type#Uninitialized}
+   * @return {@code token} if is consistent with {@code indexSegments}, a new {@link FindTokenType#Uninitialized}
    * token otherwise.
    */
   private StoreFindToken revalidateStoreFindToken(StoreFindToken token,
