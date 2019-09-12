@@ -66,9 +66,10 @@ abstract class AccountMetadataStore {
    * Fetch the {@link Account} metadata from the given ZNRecord. It should return null when there is no {@link Account}
    * ever created before. Subclass can assume the {@link ZNRecord} passed in this function is not null;
    * @param record The {@link ZNRecord} fetched from {@code znRecordPath}.
+   * @param isCalledFromListener True is this function is invoked in the {@link TopicListener}.
    * @return {@link Account} metadata in a map.
    */
-  abstract Map<String, String> fetchAccountMetadataFromZNRecord(ZNRecord record);
+  abstract Map<String, String> fetchAccountMetadataFromZNRecord(ZNRecord record, boolean isCalledFromListener);
 
   /**
    * Create new {@link ZKUpdater} that will be used to update the accounts.
@@ -80,9 +81,10 @@ abstract class AccountMetadataStore {
   /**
    * fetchAccountMetadata would fetch the latest full set of {@link Account} metadata from the store. It returns null
    * when there is no {@link Account} created.
+   * @param isCalledFromListener True is this function is invoked in the {@link TopicListener}.
    * @return {@link Account} metadata in a map.
    */
-  Map<String, String> fetchAccountMetadata() {
+  Map<String, String> fetchAccountMetadata(boolean isCalledFromListener) {
     long startTimeMs = System.currentTimeMillis();
     logger.trace("Start reading ZNRecord from path={}", znRecordPath);
     Stat stat = new Stat();
@@ -93,7 +95,7 @@ abstract class AccountMetadataStore {
       logger.info("The ZNRecord to read does not exist on path={}", znRecordPath);
       return null;
     }
-    Map<String, String> newAccountMap = fetchAccountMetadataFromZNRecord(znRecord);
+    Map<String, String> newAccountMap = fetchAccountMetadataFromZNRecord(znRecord, isCalledFromListener);
     if (newAccountMap != null) {
       backupFileManager.persistAccountMap(newAccountMap, stat);
     }

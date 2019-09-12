@@ -13,8 +13,10 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ReadableStreamChannelInputStream;
+import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
@@ -22,6 +24,7 @@ import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
 import com.google.common.base.Charsets;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -67,6 +70,7 @@ class RouterStore extends AccountMetadataStore {
   private static final String SERVICE_ID = "helixAccountService";
 
   private final int totalNumberOfVersionToKeep;
+  private final int waitTimeForCrossColoReplicationMs;
   private final AtomicReference<Router> router;
   // If forBackFill is true, then when updating the account metadata, we don't create backup files and we don't merge
   // accounts from ambry-server with the provided accounts set.
@@ -78,20 +82,21 @@ class RouterStore extends AccountMetadataStore {
    * @param backupFileManager The {@link BackupFileManager} instance to manage backup files.
    * @param helixStore The {@link HelixPropertyStore} to fetch and update data.
    * @param router The {@link Router} instance to retrieve and put blobs.
+   * @param config The {@link HelixAccountServiceConfig}
    * @param forBackFill True if this {@link RouterStore} is created for backfill accounts to new zookeeper node.
-   * @param totalNumberOfVersionToKeep The total number of previous versions of account metadata to keep.
    */
   RouterStore(AccountServiceMetrics accountServiceMetrics, BackupFileManager backupFileManager,
-      HelixPropertyStore<ZNRecord> helixStore, AtomicReference<Router> router, boolean forBackFill,
-      int totalNumberOfVersionToKeep) {
+      HelixPropertyStore<ZNRecord> helixStore, AtomicReference<Router> router, HelixAccountServiceConfig config,
+      boolean forBackFill) {
     super(accountServiceMetrics, backupFileManager, helixStore, ACCOUNT_METADATA_BLOB_IDS_PATH);
     this.router = router;
     this.forBackFill = forBackFill;
-    this.totalNumberOfVersionToKeep = totalNumberOfVersionToKeep;
+    this.waitTimeForCrossColoReplicationMs = config.waitTimeForCrossColoReplicationMs;
+    this.totalNumberOfVersionToKeep = config.totalNumberOfVersionToKeep;
   }
 
   @Override
-  Map<String, String> fetchAccountMetadataFromZNRecord(ZNRecord record) {
+  Map<String, String> fetchAccountMetadataFromZNRecord(ZNRecord record, boolean isCalledFromListener) {
     if (router.get() == null) {
       logger.error("Router is not yet initialized");
       return null;
@@ -108,6 +113,19 @@ class RouterStore extends AccountMetadataStore {
           .map(BlobIDAndVersion::fromJson)
           .max(Comparator.comparing(BlobIDAndVersion::getVersion))
           .get();
+
+      // We don't want to wait for cross colo replication when this function is not called from listener
+      // since the blob data is probably already replicated to the local colo.
+      if (isCalledFromListener && waitTimeForCrossColoReplicationMs > 0 && router.get().getClusterMap() != null) {
+        try {
+          BlobId blobID = new BlobId(blobIDAndVersion.getBlobID(), router.get().getClusterMap());
+          if (blobID.getDatacenterId() != router.get().getClusterMap().getLocalDatacenterId()) {
+            Thread.sleep(waitTimeForCrossColoReplicationMs);
+          }
+        } catch (Exception e) {
+          logger.error("Exception while waiting for cross colo replication", e);
+        }
+      }
 
       logger.trace("Start reading remote account data from blob {} and versioned at {}.", blobIDAndVersion.blobID,
           blobIDAndVersion.version);

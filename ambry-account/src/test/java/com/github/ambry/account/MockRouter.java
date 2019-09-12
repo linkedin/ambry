@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.messageformat.BlobInfo;
@@ -67,6 +68,11 @@ public class MockRouter implements Router {
     byte[] getData() {
       return data;
     }
+  }
+
+  @Override
+  public ClusterMap getClusterMap() {
+    return null;
   }
 
   @Override

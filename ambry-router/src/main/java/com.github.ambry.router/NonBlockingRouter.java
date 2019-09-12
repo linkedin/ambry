@@ -126,6 +126,11 @@ class NonBlockingRouter implements Router {
     return ocList.get(ThreadLocalRandom.current().nextInt(ocCount));
   }
 
+  @Override
+  public ClusterMap getClusterMap() {
+    return clusterMap;
+  }
+
   /**
    * Requests for the blob data asynchronously with user-set {@link GetBlobOptions} and invokes the {@link Callback}
    * when the request completes.

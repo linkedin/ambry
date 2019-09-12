@@ -15,6 +15,7 @@ package com.github.ambry.tools.perf.rest;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.Callback;
@@ -71,6 +72,11 @@ class PerfRouter implements Router {
     chunk = new byte[perfConfig.perfRouterChunkSize];
     random.nextBytes(chunk);
     logger.trace("Instantiated PerfRouter");
+  }
+
+  @Override
+  public ClusterMap getClusterMap() {
+    return null;
   }
 
   @Override

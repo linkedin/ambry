@@ -84,6 +84,7 @@ public class RouterStoreTest {
     Properties properties = new Properties();
     properties.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
     properties.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, "1000");
+    properties.setProperty(HelixAccountServiceConfig.TOTAL_NUMBER_OF_VERSION_TO_KEEP, String.valueOf(TOTAL_NUMBER_OF_VERSION_TO_KEEP));
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     config = new HelixAccountServiceConfig(verifiableProperties);
     backup = new BackupFileManager(accountServiceMetrics, config);
@@ -114,8 +115,7 @@ public class RouterStoreTest {
   @Test
   public void testUpdateAndFetch() throws Exception {
     RouterStore store =
-        new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill,
-            TOTAL_NUMBER_OF_VERSION_TO_KEEP);
+        new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), config, forBackfill);
     Map<Short, Account> idToRefAccountMap = new HashMap<>();
     Map<Short, Map<Short, Container>> idtoRefContainerMap = new HashMap<>();
     Set<Short> accountIDSet = new HashSet<>();
@@ -144,8 +144,7 @@ public class RouterStoreTest {
   @Test
   public void testSizeLimitInList() throws Exception {
     RouterStore store =
-        new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill,
-            TOTAL_NUMBER_OF_VERSION_TO_KEEP);
+        new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), config, forBackfill);
 
     Map<Short, Account> idToRefAccountMap = new HashMap<>();
     Map<Short, Map<Short, Container>> idtoRefContainerMap = new HashMap<>();
@@ -203,7 +202,7 @@ public class RouterStoreTest {
   }
 
   /**
-   * call {@link RouterStore#updateAccounts(Collection)} to update {@link Account} metadata then call {@link RouterStore#fetchAccountMetadata()}
+   * call {@link RouterStore#updateAccounts(Collection)} to update {@link Account} metadata then call {@link RouterStore#fetchAccountMetadata(boolean)}
    * to fetch the {@link Account} metadata back and compare them. Also it fetches the {@link Account} metadata directly from ambry-server
    * and compare them.
    * @param store The {@link RouterStore}.
@@ -218,7 +217,7 @@ public class RouterStoreTest {
     assertTrue("Update accounts failed at router store", succeeded);
 
     // verify that fetchAccountMetadata can fetch the accounts we just updated.
-    Map<String, String> accountMap = store.fetchAccountMetadata();
+    Map<String, String> accountMap = store.fetchAccountMetadata(true);
     assertAccountsEqual(accountMap, allAccounts);
 
     List<RouterStore.BlobIDAndVersion> blobIDAndVersions = getBlobIDAndVersionInHelix(count);

@@ -2820,6 +2820,11 @@ class FrontendTestRouter implements Router {
   String ttlUpdateServiceId = null;
 
   @Override
+  public ClusterMap getClusterMap() {
+    return null;
+  }
+
+  @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
     GetBlobResult result;
     switch (options.getOperationType()) {

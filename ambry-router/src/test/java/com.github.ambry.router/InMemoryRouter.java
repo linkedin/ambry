@@ -98,6 +98,11 @@ public class InMemoryRouter implements Router {
     this(verifiableProperties, null, clusterMap);
   }
 
+  @Override
+  public ClusterMap getClusterMap() {
+    return clusterMap;
+  }
+
   /**
    * Representation of a blob in memory. Contains blob properties, user metadata and blob data.
    */

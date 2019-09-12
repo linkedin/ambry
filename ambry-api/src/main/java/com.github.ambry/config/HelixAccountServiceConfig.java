@@ -137,10 +137,6 @@ public class HelixAccountServiceConfig {
     enableServeFromBackup = verifiableProperties.getBoolean(ENABLE_SERVE_FROM_BACKUP, false);
     totalNumberOfVersionToKeep =
         verifiableProperties.getIntInRange(TOTAL_NUMBER_OF_VERSION_TO_KEEP, 100, 1, Integer.MAX_VALUE);
-    int waitTime = verifiableProperties.getIntInRange(WAIT_TIME_FOR_CROSS_COLO_REPLICATION_MS, -1, -1, Integer.MAX_VALUE);
-    if (!useNewZNodePath) {
-      waitTime = -1;
-    }
-    waitTimeForCrossColoReplicationMs = waitTime;
+    waitTimeForCrossColoReplicationMs = verifiableProperties.getIntInRange(WAIT_TIME_FOR_CROSS_COLO_REPLICATION_MS, -1, -1, Integer.MAX_VALUE);
   }
 }

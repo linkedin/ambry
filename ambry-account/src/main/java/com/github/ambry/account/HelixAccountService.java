@@ -128,15 +128,15 @@ public class HelixAccountService implements AccountService {
     this.backupFileManager = new BackupFileManager(this.accountServiceMetrics, config);
     AccountMetadataStore backFillStore = null;
     if (config.useNewZNodePath) {
-      accountMetadataStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, false,
-          config.totalNumberOfVersionToKeep);
+      accountMetadataStore =
+          new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, config, false);
       // postpone initializeFetchAndSchedule to setupRouter function.
     } else {
       accountMetadataStore = new LegacyMetadataStore(this.accountServiceMetrics, backupFileManager, helixStore);
       initialFetchAndSchedule();
       if (config.backFillAccountsToNewZNode) {
-        backFillStore = new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, true,
-            config.totalNumberOfVersionToKeep);
+        backFillStore =
+            new RouterStore(this.accountServiceMetrics, backupFileManager, helixStore, router, config, true);
       }
     }
     this.backFillStore = backFillStore;
@@ -161,18 +161,7 @@ public class HelixAccountService implements AccountService {
    * @param isCalledFromListener True is this function is invoked in the {@link TopicListener}.
    */
   private synchronized void fetchAndUpdateCache(boolean isCalledFromListener) {
-    // we don't want to wait for cross colo replication when this function is not called from listener
-    // since the blob data is probably already replicated to the local colo. And if the AccountMetadataStore
-    // is not RouterStore, the wait time would be set to -1.
-    // This logic treats all colos the same, even if the blob is created within this colo.
-    if (isCalledFromListener && config.waitTimeForCrossColoReplicationMs > 0) {
-      try {
-        Thread.sleep(config.waitTimeForCrossColoReplicationMs);
-      } catch (InterruptedException e) {
-        logger.error("Interrupted while waiting for cross colo replication");
-      }
-    }
-    Map<String, String> accountMap = accountMetadataStore.fetchAccountMetadata();
+    Map<String, String> accountMap = accountMetadataStore.fetchAccountMetadata(isCalledFromListener);
     if (accountMap == null) {
       logger.debug("No account map returned");
     } else {

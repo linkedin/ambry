@@ -51,7 +51,7 @@ class LegacyMetadataStore extends AccountMetadataStore {
   }
 
   @Override
-  Map<String, String> fetchAccountMetadataFromZNRecord(ZNRecord record) {
+  Map<String, String> fetchAccountMetadataFromZNRecord(ZNRecord record, boolean isCalledFromListener) {
     Map<String, String> result = record.getMapField(ACCOUNT_METADATA_MAP_KEY);
     if (result == null) {
       logger.info("ZNRecord={} to read on path={} does not have a simple map with key={}", record,

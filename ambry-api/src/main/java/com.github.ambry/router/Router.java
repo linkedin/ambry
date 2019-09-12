@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
@@ -26,6 +27,12 @@ import java.util.concurrent.Future;
  * The router interface for Ambry that helps to interact with Ambry server.
  */
 public interface Router extends Closeable {
+
+  /**
+   * Return {@link ClusterMap} instance if it exists within this router. Otherwise, return null;
+   * @return The {@link ClusterMap}.
+   */
+  ClusterMap getClusterMap();
 
   /**
    * Requests for the blob (info, data, or both) asynchronously and invokes the {@link Callback} when the request

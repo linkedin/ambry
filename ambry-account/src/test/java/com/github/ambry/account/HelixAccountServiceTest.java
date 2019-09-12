@@ -881,8 +881,8 @@ public class HelixAccountServiceTest {
     HelixAccountService helixAccountService = (HelixAccountService) accountService;
     RouterStore routerStore =
         new RouterStore(helixAccountService.getAccountServiceMetrics(), helixAccountService.getBackupFileManager(),
-            helixStore, new AtomicReference<>(mockRouter), false, TOTAL_NUMBER_OF_VERSION_TO_KEEP);
-    Map<String, String> accountMap = routerStore.fetchAccountMetadata();
+            helixStore, new AtomicReference<>(mockRouter), new HelixAccountServiceConfig(vHelixConfigProps), false);
+    Map<String, String> accountMap = routerStore.fetchAccountMetadata(true);
     assertNotNull("Accounts should be backfilled to new znode", accountMap);
     assertAccountMapEquals(accountService.getAllAccounts(), accountMap);
   }
