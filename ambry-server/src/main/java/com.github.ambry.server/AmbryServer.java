@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
@@ -38,6 +39,7 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.network.RequestHandlerPool;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenHelper;
@@ -109,7 +111,7 @@ public class AmbryServer {
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
-      this.metrics = new ServerMetrics(registry);
+      this.metrics = new ServerMetrics(registry, AmbryRequests.class);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 

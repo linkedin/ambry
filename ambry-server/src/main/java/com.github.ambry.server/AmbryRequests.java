@@ -23,7 +23,9 @@ import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -131,7 +133,7 @@ public class AmbryRequests implements RequestAPI {
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
     this.currentNode = nodeId;
-    this.metrics = new ServerMetrics(registry);
+    this.metrics = new ServerMetrics(registry, AmbryRequests.class);
     this.messageFormatMetrics = new MessageFormatMetrics(registry);
     this.findTokenHelper = findTokenHelper;
     this.notification = operationNotification;
