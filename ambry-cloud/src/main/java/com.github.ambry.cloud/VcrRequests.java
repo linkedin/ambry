@@ -39,15 +39,14 @@ import org.slf4j.LoggerFactory;
  * Request implementation class for Vcr. All requests to the vcr server are
  * handled by this class.
  */
-public class CloudRecoveryRequests extends AmbryRequests {
+public class VcrRequests extends AmbryRequests {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public CloudRecoveryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel,
-      ClusterMap clusterMap, DataNodeId currentNode, MetricRegistry registry, ServerMetrics serverMetrics,
-      FindTokenHelper findTokenHelper, NotificationSystem notification, ReplicationEngine replicationEngine,
-      StoreKeyFactory storageKeyFactory, boolean enableDataPrefetch,
-      StoreKeyConverterFactory storeKeyConverterFactory) {
+  public VcrRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
+      DataNodeId currentNode, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
+      NotificationSystem notification, ReplicationEngine replicationEngine, StoreKeyFactory storageKeyFactory,
+      boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
     super(storeManager, requestResponseChannel, clusterMap, currentNode, registry, serverMetrics, findTokenHelper,
         notification, replicationEngine, storageKeyFactory, enableDataPrefetch, storeKeyConverterFactory);
   }

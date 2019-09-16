@@ -11,10 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.network;
+package com.github.ambry.server;
 
-import com.github.ambry.server.EmptyRequest;
-import com.github.ambry.server.RequestAPI;
+import com.github.ambry.network.Request;
+import com.github.ambry.network.RequestResponseChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,10 +25,10 @@ import org.slf4j.LoggerFactory;
 public class RequestHandler implements Runnable {
   private final int id;
   private final RequestResponseChannel requestChannel;
-  private final RequestAPI requests;
+  private final AmbryRequests requests;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public RequestHandler(int id, RequestResponseChannel requestChannel, RequestAPI requests) {
+  public RequestHandler(int id, RequestResponseChannel requestChannel, AmbryRequests requests) {
     this.id = id;
     this.requestChannel = requestChannel;
     this.requests = requests;

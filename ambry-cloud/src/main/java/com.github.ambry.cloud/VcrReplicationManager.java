@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -33,7 +32,6 @@ import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -50,9 +48,9 @@ import org.apache.helix.InstanceType;
 
 
 /**
- * {@link CloudBackupManager} is used to backup partitions to Cloud. Partitions assignment is handled by Helix.
+ * {@link VcrReplicationManager} is used to backup partitions to Cloud. Partitions assignment is handled by Helix.
  */
-public class CloudBackupManager extends ReplicationEngine {
+public class VcrReplicationManager extends ReplicationEngine {
   private final VerifiableProperties properties;
   private final CloudConfig cloudConfig;
   private final StoreConfig storeConfig;
@@ -63,15 +61,16 @@ public class CloudBackupManager extends ReplicationEngine {
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
   private final StoreManager storeManager;
 
-  public CloudBackupManager(VerifiableProperties properties, CloudConfig cloudConfig,
+  public VcrReplicationManager(VerifiableProperties properties, CloudConfig cloudConfig,
       ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
-      StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VirtualReplicatorCluster virtualReplicatorCluster,
-      CloudDestination cloudDestination, ScheduledExecutorService scheduler,
-      ConnectionPool connectionPool, VcrMetrics vcrMetrics, NotificationSystem requestNotification,
-      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
+      StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
+      VirtualReplicatorCluster virtualReplicatorCluster, CloudDestination cloudDestination,
+      ScheduledExecutorService scheduler, ConnectionPool connectionPool, VcrMetrics vcrMetrics,
+      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
+      String transformerClassName) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
-        virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool, vcrMetrics.getMetricRegistry(),
-        requestNotification, storeKeyConverterFactory, transformerClassName);
+        virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool,
+        vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName);
     this.properties = properties;
     this.cloudConfig = cloudConfig;
     this.storeConfig = storeConfig;
@@ -172,7 +171,7 @@ public class CloudBackupManager extends ReplicationEngine {
     }
     ReplicaId cloudReplica =
         new CloudReplica(cloudConfig, partitionId, virtualReplicatorCluster.getCurrentDataNodeId());
-    if(!storeManager.addBlobStore(cloudReplica)) {
+    if (!storeManager.addBlobStore(cloudReplica)) {
       logger.error("Can't start cloudstore for replica " + cloudReplica);
       throw new ReplicationException("Can't start cloudstore for replica " + cloudReplica);
     }
@@ -189,13 +188,15 @@ public class CloudBackupManager extends ReplicationEngine {
         FindTokenFactory findTokenFactory =
             tokenHelper.getFindTokenFactoryFromReplicaType(peerReplica.getReplicaType());
         RemoteReplicaInfo remoteReplicaInfo =
-            new RemoteReplicaInfo(peerReplica, cloudReplica, storeManager.getStore(partitionId), findTokenFactory.getNewFindToken(),
+            new RemoteReplicaInfo(peerReplica, cloudReplica, storeManager.getStore(partitionId),
+                findTokenFactory.getNewFindToken(),
                 storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
                 SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
         replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
         remoteReplicaInfos.add(remoteReplicaInfo);
       }
-      PartitionInfo partitionInfo = new PartitionInfo(remoteReplicaInfos, partitionId, storeManager.getStore(partitionId), cloudReplica);
+      PartitionInfo partitionInfo =
+          new PartitionInfo(remoteReplicaInfos, partitionId, storeManager.getStore(partitionId), cloudReplica);
       partitionToPartitionInfo.put(partitionId, partitionInfo);
       mountPathToPartitionInfos.compute(cloudReplica.getMountPath(), (key, value) -> {
         // For CloudBackupManager, at most one PartitionInfo in the list.
@@ -247,5 +248,4 @@ public class CloudBackupManager extends ReplicationEngine {
   public VcrMetrics getVcrMetrics() {
     return vcrMetrics;
   }
-
 }

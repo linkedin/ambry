@@ -35,10 +35,10 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import com.github.ambry.network.RequestHandlerPool;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.server.RequestHandlerPool;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -62,7 +62,7 @@ public class VcrServer {
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
   private NetworkServer networkServer = null;
   private ScheduledExecutorService scheduler = null;
-  private CloudBackupManager cloudBackupManager = null;
+  private VcrReplicationManager vcrReplicationManager = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
@@ -73,7 +73,7 @@ public class VcrServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private CloudDestinationFactory cloudDestinationFactory;
-  private CloudRecoveryRequests requests;
+  private VcrRequests requests;
   private RequestHandlerPool requestHandlerPool;
 
   /**
@@ -151,12 +151,12 @@ public class VcrServer {
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
       CloudStorageManager cloudStorageManager =
           new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
-      cloudBackupManager =
-          new CloudBackupManager(properties, cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
+      vcrReplicationManager =
+          new VcrReplicationManager(properties, cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
               cloudStorageManager, storeKeyFactory, clusterMap, virtualReplicatorCluster, cloudDestination, scheduler,
               connectionPool, vcrMetrics, notificationSystem, storeKeyConverterFactory,
               serverConfig.serverMessageTransformer);
-      cloudBackupManager.start();
+      vcrReplicationManager.start();
 
       DataNodeId currentNode = virtualReplicatorCluster.getCurrentDataNodeId();
       ArrayList<Port> ports = new ArrayList<Port>();
@@ -168,10 +168,11 @@ public class VcrServer {
 
       //todo add notification
       //todo fix enableDataPrefetch
-      ServerMetrics serverMetrics = new ServerMetrics(registry, CloudRecoveryRequests.class, VcrServer.class);
-      requests = new CloudRecoveryRequests(cloudStorageManager, networkServer.getRequestResponseChannel(), clusterMap,
-          currentNode, registry, serverMetrics, new FindTokenHelper(), null, cloudBackupManager, storeKeyFactory, true,
-          storeKeyConverterFactory);
+      ServerMetrics serverMetrics = new ServerMetrics(registry, VcrRequests.class, VcrServer.class);
+      requests =
+          new VcrRequests(cloudStorageManager, networkServer.getRequestResponseChannel(), clusterMap, currentNode,
+              registry, serverMetrics, new FindTokenHelper(), null, vcrReplicationManager, storeKeyFactory, true,
+              storeKeyConverterFactory);
 
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
@@ -200,8 +201,8 @@ public class VcrServer {
       if (networkServer != null) {
         networkServer.shutdown();
       }
-      if (cloudBackupManager != null) {
-        cloudBackupManager.shutdown();
+      if (vcrReplicationManager != null) {
+        vcrReplicationManager.shutdown();
       }
       if (connectionPool != null) {
         connectionPool.shutdown();
@@ -240,7 +241,7 @@ public class VcrServer {
     return virtualReplicatorCluster;
   }
 
-  public CloudBackupManager getCloudBackupManager() {
-    return cloudBackupManager;
+  public VcrReplicationManager getVcrReplicationManager() {
+    return vcrReplicationManager;
   }
 }

@@ -68,7 +68,7 @@ public interface StoreManager {
    * @param disk the {@link DiskId} to check.
    * @return {@code true} if the disk is available. {@code false} if not.
    */
-  public boolean isDiskAvailable(DiskId disk);
+  public boolean isDiskAvailable(DiskId disk);//todo fix this
 
   /**
    * Schedules the {@link PartitionId} {@code id} for compaction next.

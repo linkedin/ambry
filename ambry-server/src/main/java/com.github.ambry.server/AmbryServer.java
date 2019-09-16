@@ -39,7 +39,6 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import com.github.ambry.network.RequestHandlerPool;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenHelper;

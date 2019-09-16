@@ -59,8 +59,9 @@ public class CloudStorageManager implements StoreManager {
   @Override
   public boolean shutdownBlobStore(PartitionId id) {
     CloudBlobStore blobStore = partitionTostore.getOrDefault(id, null);
-    if(blobStore == null)
+    if (blobStore == null) {
       return false;
+    }
     blobStore.shutdown();
     return true;
   }
@@ -81,8 +82,9 @@ public class CloudStorageManager implements StoreManager {
   @Override
   public boolean startBlobStore(PartitionId id) {
     CloudBlobStore cloudStore = partitionTostore.getOrDefault(id, null);
-    if(cloudStore == null)
+    if (cloudStore == null) {
       return false;
+    }
     try {
       cloudStore.start();
     } catch (StoreException e) {
