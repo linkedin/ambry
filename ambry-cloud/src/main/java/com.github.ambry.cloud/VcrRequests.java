@@ -66,15 +66,26 @@ public class VcrRequests extends AmbryRequests {
     throw new UnsupportedOperationException("Request type not supported");
   }
 
-  //todo fix this
   @Override
   protected ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType,
       boolean skipPartitionAndDiskAvailableCheck) {
+    // 1. Check partition is null
+    if (partition == null) {
+      metrics.badRequestError.inc();
+      return ServerErrorCode.Bad_Request;
+    }
+
+    // 2. check if partition is handled by this vcr node
+    if (storeManager.getStore(partition) == null) {
+      metrics.replicaUnavailableError.inc();
+      return ServerErrorCode.Replica_Unavailable;
+    }
+
     return ServerErrorCode.No_Error;
   }
 
   @Override
   protected long getRemoteReplicaLag(Store store, long totalBytesRead) {
-    return 1024 * 1024; // todo: fix this
+    return -1;
   }
 }

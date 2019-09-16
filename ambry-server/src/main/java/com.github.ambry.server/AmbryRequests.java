@@ -112,7 +112,7 @@ public class AmbryRequests implements RequestAPI {
   protected final ClusterMap clusterMap;
   private final DataNodeId currentNode;
   private final Map<PartitionId, ReplicaId> localPartitionToReplicaMap;
-  private final ServerMetrics metrics;
+  protected final ServerMetrics metrics;
   private final MessageFormatMetrics messageFormatMetrics;
   protected final FindTokenHelper findTokenHelper;
   private final NotificationSystem notification;

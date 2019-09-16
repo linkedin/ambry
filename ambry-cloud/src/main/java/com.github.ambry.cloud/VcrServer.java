@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.clustermap.VirtualReplicatorClusterFactory;
+import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
@@ -75,6 +76,15 @@ public class VcrServer {
   private CloudDestinationFactory cloudDestinationFactory;
   private VcrRequests requests;
   private RequestHandlerPool requestHandlerPool;
+
+  /**
+   * VcrServer constructor.
+   * @param properties the config properties to use.
+   * @param clusterAgentsFactory the {@link ClusterAgentsFactory} to use.
+   */
+  public VcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory) {
+    this(properties, clusterAgentsFactory, new LoggingNotificationSystem());
+  }
 
   /**
    * VcrServer constructor.
@@ -166,13 +176,12 @@ public class VcrServer {
       }
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
 
-      //todo add notification
       //todo fix enableDataPrefetch
       ServerMetrics serverMetrics = new ServerMetrics(registry, VcrRequests.class, VcrServer.class);
       requests =
           new VcrRequests(cloudStorageManager, networkServer.getRequestResponseChannel(), clusterMap, currentNode,
-              registry, serverMetrics, new FindTokenHelper(), null, vcrReplicationManager, storeKeyFactory, true,
-              storeKeyConverterFactory);
+              registry, serverMetrics, new FindTokenHelper(), notificationSystem, vcrReplicationManager,
+              storeKeyFactory, true, storeKeyConverterFactory);
 
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
