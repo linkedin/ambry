@@ -127,7 +127,7 @@ class CloudMessageReadSet implements MessageReadSet {
       // However, if in future, if very large size of blobs are allowed, then prefetching logic should be changed.
       prefetchedBuffer = ByteBuffer.allocate((int) blobMetadata.getSize());
       ByteBufferOutputStream outputStream = new ByteBufferOutputStream(prefetchedBuffer);
-      blobStore.downloadBlob(blobId, outputStream);
+      blobStore.downloadBlob(blobMetadata, blobId, outputStream);
       isPrefetched = true;
     }
 
@@ -138,7 +138,7 @@ class CloudMessageReadSet implements MessageReadSet {
      * @throws StoreException if blob download fails.
      */
     public void downloadBlob(CloudBlobStore blobStore, OutputStream outputStream) throws StoreException {
-      blobStore.downloadBlob(blobId, outputStream);
+      blobStore.downloadBlob(blobMetadata, blobId, outputStream);
     }
 
     /**

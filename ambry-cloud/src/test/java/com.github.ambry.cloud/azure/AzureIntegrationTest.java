@@ -106,7 +106,7 @@ public class AzureIntegrationTest {
     InputStream inputStream = new ByteArrayInputStream(uploadData);
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
-            CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
+            CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
     assertTrue("Expected upload to return true",
         azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
 
@@ -160,7 +160,7 @@ public class AzureIntegrationTest {
       byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
       blobIdtoDataMap.put(blobId, randomBytes);
       CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, new ByteArrayInputStream(randomBytes)));
     }
@@ -210,7 +210,7 @@ public class AzureIntegrationTest {
               BlobDataType.DATACHUNK);
       InputStream inputStream = getBlobInputStream(blobSize);
       CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
 
@@ -220,7 +220,7 @@ public class AzureIntegrationTest {
           BlobDataType.DATACHUNK);
       inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
       cloudBlobMetadata.setDeletionTime(timeOfDeath);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
@@ -232,7 +232,7 @@ public class AzureIntegrationTest {
       inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata =
           new CloudBlobMetadata(blobId, creationTime, timeOfDeath, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR,
-              vcrKmsContext, cryptoAgentFactory);
+              vcrKmsContext, cryptoAgentFactory, blobSize);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
       expectedDeadBlobs++;
@@ -243,7 +243,7 @@ public class AzureIntegrationTest {
           BlobDataType.DATACHUNK);
       inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
-          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, blobSize);
       cloudBlobMetadata.setDeletionTime(timeOfDeath);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
@@ -254,7 +254,7 @@ public class AzureIntegrationTest {
       inputStream = getBlobInputStream(blobSize);
       cloudBlobMetadata =
           new CloudBlobMetadata(blobId, creationTime, timeOfDeath, blobSize, CloudBlobMetadata.EncryptionOrigin.VCR,
-              vcrKmsContext, cryptoAgentFactory);
+              vcrKmsContext, cryptoAgentFactory, blobSize);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
     }
@@ -294,7 +294,7 @@ public class AzureIntegrationTest {
               BlobDataType.DATACHUNK);
       InputStream inputStream = getBlobInputStream(chunkSize);
       CloudBlobMetadata cloudBlobMetadata = new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, chunkSize,
-          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory);
+          CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, chunkSize);
       cloudBlobMetadata.setUploadTime(startTime + j * 1000);
       assertTrue("Expected upload to return true",
           azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
