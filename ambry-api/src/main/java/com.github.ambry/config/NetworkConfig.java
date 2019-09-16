@@ -83,6 +83,13 @@ public class NetworkConfig {
   @Default("4")
   public final int selectorExecutorPoolSize;
 
+  /**
+   * The max number of ready keys can be processed in a selector.poll() call. No limitation if -1 is used.
+   */
+  @Config("selector.max.key.to.process")
+  @Default("-1")
+  public final int selectorMaxKeyToProcess;
+
   public NetworkConfig(VerifiableProperties verifiableProperties) {
 
     numIoThreads = verifiableProperties.getIntInRange("num.io.threads", 8, 1, Integer.MAX_VALUE);
@@ -97,5 +104,7 @@ public class NetworkConfig {
         verifiableProperties.getBoolean("network.client.enable.connection.replenishment", false);
     selectorExecutorPoolSize =
         verifiableProperties.getIntInRange("selector.executor.pool.size", 4, 0, Integer.MAX_VALUE);
+    selectorMaxKeyToProcess =
+        verifiableProperties.getIntInRange("selector.max.key.to.process", -1, -1, Integer.MAX_VALUE);
   }
 }

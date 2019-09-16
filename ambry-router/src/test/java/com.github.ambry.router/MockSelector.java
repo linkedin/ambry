@@ -14,6 +14,8 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.BoundedByteBufferReceive;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.NetworkReceive;
@@ -26,6 +28,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
 
 
@@ -55,7 +58,8 @@ class MockSelector extends Selector {
    * @throws IOException if {@link Selector} throws.
    */
   MockSelector(MockServerLayout serverLayout, AtomicReference<MockSelectorState> state, Time time) throws IOException {
-    super(new NetworkMetrics(new MetricRegistry()), time, null, 0);
+    super(new NetworkMetrics(new MetricRegistry()), time, null,
+        new NetworkConfig(new VerifiableProperties(new Properties())));
     // we don't need the actual selector, close it.
     super.close();
     this.serverLayout = serverLayout;

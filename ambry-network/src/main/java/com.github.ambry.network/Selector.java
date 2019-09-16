@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.Time;
 import java.io.EOFException;
 import java.io.IOException;
@@ -86,11 +87,13 @@ public class Selector implements Selectable {
   private final AtomicLong numActiveConnections;
   private final SSLFactory sslFactory;
   private final ExecutorService executorPool;
+  private final NetworkConfig networkConfig;
 
   /**
    * Create a new selector
    */
-  public Selector(NetworkMetrics metrics, Time time, SSLFactory sslFactory, int executorPoolSize) throws IOException {
+  public Selector(NetworkMetrics metrics, Time time, SSLFactory sslFactory, NetworkConfig networkConfig)
+      throws IOException {
     this.nioSelector = java.nio.channels.Selector.open();
     this.time = time;
     this.keyMap = new HashMap<>();
@@ -104,8 +107,9 @@ public class Selector implements Selectable {
     idGenerator = new AtomicLong(0);
     numActiveConnections = new AtomicLong(0);
     unreadyConnections = new HashSet<>();
-    if (executorPoolSize > 0) {
-      executorPool = Executors.newFixedThreadPool(executorPoolSize);
+    this.networkConfig = networkConfig;
+    if (networkConfig.selectorExecutorPoolSize > 0) {
+      executorPool = Executors.newFixedThreadPool(networkConfig.selectorExecutorPoolSize);
     } else {
       executorPool = null;
     }
@@ -308,11 +312,13 @@ public class Selector implements Selectable {
    */
   @Override
   public void poll(long timeoutMs, List<NetworkSend> sends) throws IOException {
+    long startTime = time.milliseconds();
     if (executorPool != null) {
       pollWithExecutorPool(timeoutMs, sends);
     } else {
       pollOnMainThread(timeoutMs, sends);
     }
+    logger.trace("Selector poll total time: {} ms.", time.milliseconds() - startTime);
   }
 
   /**
@@ -339,9 +345,14 @@ public class Selector implements Selectable {
       Set<SelectionKey> keys = nioSelector.selectedKeys();
       metrics.selectorReadyKeyCount.inc(keys.size());
       Iterator<SelectionKey> iter = keys.iterator();
+      int keyProcessed = 0;
       while (iter.hasNext()) {
+        if (networkConfig.selectorMaxKeyToProcess != -1 && keyProcessed >= networkConfig.selectorMaxKeyToProcess) {
+          break;
+        }
         SelectionKey key = iter.next();
         iter.remove();
+        keyProcessed++;
 
         Transmission transmission = getTransmission(key);
         try {
@@ -405,7 +416,8 @@ public class Selector implements Selectable {
   private void pollWithExecutorPool(long timeoutMs, List<NetworkSend> sends) throws IOException {
     List<Future<NetworkSend>> completedSendsFutures = new ArrayList<>();
     List<Future<NetworkReceive>> completedReceivesFutures = new ArrayList<>();
-    Set<SelectionKey> readWriteKeySet = new HashSet<>();
+    List<Future<SelectionKey>> completedPrepareFutures = new ArrayList<>();
+    Set<SelectionKey> processingKeySet = new HashSet<>();
     clear();
 
     // register for write interest on any new sends
@@ -427,6 +439,10 @@ public class Selector implements Selectable {
       metrics.selectorReadyKeyCount.inc(keys.size());
       Iterator<SelectionKey> iter = keys.iterator();
       while (iter.hasNext()) {
+        if (networkConfig.selectorMaxKeyToProcess != -1
+            && processingKeySet.size() >= networkConfig.selectorMaxKeyToProcess) {
+          break;
+        }
         SelectionKey key = iter.next();
         iter.remove();
 
@@ -444,23 +460,22 @@ public class Selector implements Selectable {
 
           /* if channel is not ready, finish prepare */
           if (transmission.isConnected() && !transmission.ready()) {
-            transmission.prepare();
-            continue;
-          }
-
-          if (key.isReadable() && transmission.ready()) {
+            metrics.selectorPrepareKeyCount.inc();
+            completedPrepareFutures.add(executorPool.submit(() -> prepare(key, transmission)));
+            processingKeySet.add(key);
+          } else if (key.isReadable() && transmission.ready()) {
             metrics.selectorReadKeyCount.inc();
             completedReceivesFutures.add(executorPool.submit(() -> read(key, transmission)));
-            readWriteKeySet.add(key);
+            processingKeySet.add(key);
           } else if (key.isWritable() && transmission.ready()) {
             metrics.selectorWriteKeyCount.inc();
             completedSendsFutures.add(executorPool.submit(() -> write(key, transmission)));
-            readWriteKeySet.add(key);
+            processingKeySet.add(key);
           } else if (!key.isValid()) {
             close(key);
           }
         } catch (IOException e) {
-          // handles IOException from transmission.finishConnect() and transmission.prepare()
+          // handles IOException from transmission.finishConnect()
           handleReadWriteIOException(e, key);
           close(key);
         } catch (Exception e) {
@@ -469,11 +484,23 @@ public class Selector implements Selectable {
           logger.error("closing key on exception remote host {}", channel(key).socket().getRemoteSocketAddress(), e);
         }
       }
+
+      for (Future<SelectionKey> future : completedPrepareFutures) {
+        try {
+          SelectionKey returnKey = future.get();
+          if (returnKey != null) {
+            processingKeySet.remove(returnKey);
+          }
+        } catch (InterruptedException | ExecutionException e) {
+          logger.error("Hit Unexpected exception on selector prepare, ", e);
+        }
+      }
+
       for (Future<NetworkReceive> future : completedReceivesFutures) {
         try {
           NetworkReceive networkReceive = future.get();
           if (networkReceive != null) {
-            readWriteKeySet.remove(keyForId(networkReceive.getConnectionId()));
+            processingKeySet.remove(keyForId(networkReceive.getConnectionId()));
             if (networkReceive.getReceivedBytes().isReadComplete()) {
               this.completedReceives.add(networkReceive);
             }
@@ -482,11 +509,12 @@ public class Selector implements Selectable {
           logger.error("Hit Unexpected exception on selector read, ", e);
         }
       }
+
       for (Future<NetworkSend> future : completedSendsFutures) {
         try {
           NetworkSend networkSend = future.get();
           if (networkSend != null) {
-            readWriteKeySet.remove(keyForId(networkSend.getConnectionId()));
+            processingKeySet.remove(keyForId(networkSend.getConnectionId()));
             if (networkSend.getPayload().isSendComplete()) {
               this.completedSends.add(networkSend);
             }
@@ -495,12 +523,17 @@ public class Selector implements Selectable {
           logger.error("Hit Unexpected exception on selector write, ", e);
         }
       }
-      for (SelectionKey keyWithError : readWriteKeySet) {
+      // Keys hit exception should be closed.
+      for (SelectionKey keyWithError : processingKeySet) {
         close(keyWithError);
       }
       checkUnreadyConnectionsStatus();
-      metrics.selectorIOCount.inc();
-      metrics.selectorIOTime.update(time.milliseconds() - endSelect);
+      long selectorIOTime = time.milliseconds() - endSelect;
+      if (selectorIOTime >= 50) {
+        // Some selectors may not have enough work to do, so counting their time is misleading.
+        metrics.selectorIOCount.inc();
+        metrics.selectorIOTime.update(time.milliseconds() - endSelect);
+      }
     }
     disconnected.addAll(closedConnections);
     closedConnections.clear();
@@ -690,6 +723,23 @@ public class Selector implements Selectable {
     } else {
       metrics.selectorIOErrorCount.inc();
       logger.warn("Error in I/O with connection to {}", socketDescription, e);
+    }
+  }
+
+  /**
+   * A wrapper to call transmission.prepare().
+   */
+  private SelectionKey prepare(SelectionKey key, Transmission transmission) {
+    long startTimeInMs = time.milliseconds();
+    try {
+      transmission.prepare();
+      return key;
+    } catch (IOException e) {
+      handleReadWriteIOException(e, key);
+      return null;
+    } finally {
+      long prepareTime = time.milliseconds() - startTimeInMs;
+      logger.trace("SocketServer time spent on prepare {} = {}ms", transmission.getConnectionId(), prepareTime);
     }
   }
 

@@ -14,6 +14,8 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -21,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Before;
@@ -55,8 +58,12 @@ public class SelectorTest {
   public void setup() throws Exception {
     this.server = new EchoServer(18283);
     this.server.start();
-    this.selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), null,
-        selectorExecutorPoolSize);
+    Properties props = new Properties();
+    props.setProperty("selector.executor.pool.size", Integer.toString(selectorExecutorPoolSize));
+    VerifiableProperties vprops = new VerifiableProperties(props);
+    NetworkConfig networkConfig = new NetworkConfig(vprops);
+    this.selector =
+        new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), null, networkConfig);
   }
 
   @After

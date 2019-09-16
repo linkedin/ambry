@@ -84,7 +84,7 @@ public class NetworkClientTest {
     props.setProperty("network.client.enable.connection.replenishment", "true");
     VerifiableProperties vprops = new VerifiableProperties(props);
     NetworkConfig networkConfig = new NetworkConfig(vprops);
-    selector = new MockSelector();
+    selector = new MockSelector(networkConfig);
     time = new MockTime();
     networkMetrics = new NetworkMetrics(new MetricRegistry());
     networkClient = new NetworkClient(selector, networkConfig, networkMetrics, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
@@ -646,8 +646,8 @@ class MockSelector extends Selector {
    * Create a MockSelector
    * @throws IOException if {@link Selector} throws.
    */
-  MockSelector() throws IOException {
-    super(new NetworkMetrics(new MetricRegistry()), new MockTime(), null, 0);
+  MockSelector(NetworkConfig networkConfig) throws IOException {
+    super(new NetworkMetrics(new MetricRegistry()), new MockTime(), null, networkConfig);
     super.close();
   }
 

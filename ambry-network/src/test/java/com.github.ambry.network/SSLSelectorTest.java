@@ -16,7 +16,9 @@ package com.github.ambry.network;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
@@ -29,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
@@ -71,8 +74,12 @@ public class SSLSelectorTest {
     applicationBufferSize = clientSSLFactory.createSSLEngine("localhost", server.port, SSLFactory.Mode.CLIENT)
         .getSession()
         .getApplicationBufferSize();
-    selector =
-        new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), clientSSLFactory, poolSize);
+    Properties props = new Properties();
+    props.setProperty("selector.executor.pool.size", Integer.toString(poolSize));
+    VerifiableProperties vprops = new VerifiableProperties(props);
+    NetworkConfig networkConfig = new NetworkConfig(vprops);
+    selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), clientSSLFactory,
+        networkConfig);
   }
 
   @After
@@ -340,7 +347,11 @@ public class SSLSelectorTest {
     selector.close();
     NetworkMetrics metrics = new NetworkMetrics(new MetricRegistry());
     Time time = SystemTime.getInstance();
-    selector = new Selector(metrics, time, clientSSLFactory, poolSize) {
+    Properties props = new Properties();
+    props.setProperty("selector.executor.pool.size", Integer.toString(poolSize));
+    VerifiableProperties vprops = new VerifiableProperties(props);
+    NetworkConfig networkConfig = new NetworkConfig(vprops);
+    selector = new Selector(metrics, time, clientSSLFactory, networkConfig) {
       @Override
       protected Transmission createTransmission(String connectionId, SelectionKey key, String hostname, int port,
           PortType portType, SSLFactory.Mode mode) throws IOException {
