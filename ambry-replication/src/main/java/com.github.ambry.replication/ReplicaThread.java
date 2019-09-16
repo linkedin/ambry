@@ -281,10 +281,10 @@ public class ReplicaThread implements Runnable {
    */
   public void replicate() {
     boolean allCaughtUp = true;
-    Map<DataNodeId, List<RemoteReplicaInfo>> dateNodeToRemoteReplicaInfo = getRemoteReplicaInfos();
+    Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = getRemoteReplicaInfos();
 
     logger.trace("Replicating from {} DataNodes.", replicasToReplicateGroupedByNode.size());
-    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dateNodeToRemoteReplicaInfo.entrySet()) {
+    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
       DataNodeId remoteNode = entry.getKey();
       if (!running) {
         break;

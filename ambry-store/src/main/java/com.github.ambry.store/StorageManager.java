@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.server.StoreManager;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -40,7 +41,7 @@ import org.slf4j.LoggerFactory;
  * The storage manager that handles all the stores on this node. The stores on each disk are handled by a
  * {@link DiskManager}
  */
-public class StorageManager {
+public class StorageManager implements StoreManager {
   private final ConcurrentMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
   private final ConcurrentMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
   private final StorageManagerMetrics metrics;

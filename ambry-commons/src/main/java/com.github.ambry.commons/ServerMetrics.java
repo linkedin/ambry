@@ -200,10 +200,12 @@ public class ServerMetrics {
   public final Counter ttlUpdateRejectedError;
   public final Counter replicationResponseMessageSizeTooHigh;
 
-  public ServerMetrics(MetricRegistry registry, Class<?> requestClass) {
-    putBlobRequestQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobRequestQueueTime"));
+  public ServerMetrics(MetricRegistry registry, Class<?> requestClass, Class<?> serverClass) {
+    putBlobRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "PutBlobRequestQueueTime"));
     putBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobProcessingTime"));
-    putBlobResponseQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobResponseQueueTime"));
+    putBlobResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "PutBlobResponseQueueTime"));
     putBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobSendTime"));
     putBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobTotalTime"));
 
@@ -222,9 +224,11 @@ public class ServerMetrics {
     putLargeBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutLargeBlobSendTime"));
     putLargeBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutLargeBlobTotalTime"));
 
-    getBlobRequestQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "GetBlobRequestQueueTime"));
+    getBlobRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "GetBlobRequestQueueTime"));
     getBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "GetBlobProcessingTime"));
-    getBlobResponseQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "GetBlobResponseQueueTime"));
+    getBlobResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "GetBlobResponseQueueTime"));
     getBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "GetBlobSendTime"));
     getBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "GetBlobTotalTime"));
 
@@ -249,7 +253,8 @@ public class ServerMetrics {
         registry.histogram(MetricRegistry.name(requestClass, "GetBlobPropertiesProcessingTime"));
     getBlobPropertiesResponseQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "GetBlobPropertiesResponseQueueTime"));
-    getBlobPropertiesSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "GetBlobPropertiesSendTime"));
+    getBlobPropertiesSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "GetBlobPropertiesSendTime"));
     getBlobPropertiesTotalTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "GetBlobPropertiesTotalTime"));
 
@@ -266,7 +271,8 @@ public class ServerMetrics {
 
     getBlobAllRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "GetBlobAllRequestQueueTime"));
-    getBlobAllProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "GetBlobAllProcessingTime"));
+    getBlobAllProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "GetBlobAllProcessingTime"));
     getBlobAllResponseQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "GetBlobAllResponseQueueTime"));
     getBlobAllSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "GetBlobAllSendTime"));
@@ -285,7 +291,8 @@ public class ServerMetrics {
 
     getBlobInfoRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "GetBlobInfoRequestQueueTime"));
-    getBlobInfoProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "GetBlobInfoProcessingTime"));
+    getBlobInfoProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "GetBlobInfoProcessingTime"));
     getBlobInfoResponseQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "GetBlobInfoResponseQueueTime"));
     getBlobInfoSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "GetBlobInfoSendTime"));
@@ -293,7 +300,8 @@ public class ServerMetrics {
 
     deleteBlobRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobRequestQueueTime"));
-    deleteBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobProcessingTime"));
+    deleteBlobProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobProcessingTime"));
     deleteBlobResponseQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobResponseQueueTime"));
     deleteBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobSendTime"));
@@ -314,8 +322,10 @@ public class ServerMetrics {
         registry.histogram(MetricRegistry.name(requestClass, "ReplicaMetadataRequestProcessingTime"));
     replicaMetadataResponseQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "ReplicaMetadataResponseQueueTime"));
-    replicaMetadataSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "ReplicaMetadataSendTime"));
-    replicaMetadataTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "ReplicaMetadataTotalTime"));
+    replicaMetadataSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ReplicaMetadataSendTime"));
+    replicaMetadataTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ReplicaMetadataTotalTime"));
     replicaMetadataTotalSizeOfMessages =
         registry.histogram(MetricRegistry.name(requestClass, "ReplicaMetadataTotalSizeOfMessages"));
 
@@ -377,12 +387,13 @@ public class ServerMetrics {
     blobSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobUserMetadataSize"));
 
-    serverStartTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "ServerStartTimeInMs"));
-    serverShutdownTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "ServerShutdownTimeInMs"));
+    serverStartTimeInMs = registry.histogram(MetricRegistry.name(serverClass, "ServerStartTimeInMs"));
+    serverShutdownTimeInMs = registry.histogram(MetricRegistry.name(serverClass, "ServerShutdownTimeInMs"));
 
     putBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutBlobRequestRate"));
     getBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobRequestRate"));
-    getBlobPropertiesRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobPropertiesRequestRate"));
+    getBlobPropertiesRequestRate =
+        registry.meter(MetricRegistry.name(requestClass, "GetBlobPropertiesRequestRate"));
     getBlobUserMetadataRequestRate =
         registry.meter(MetricRegistry.name(requestClass, "GetBlobUserMetadataRequestRate"));
     getBlobAllRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobAllRequestRate"));
@@ -392,11 +403,14 @@ public class ServerMetrics {
     deleteBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "DeleteBlobRequestRate"));
     updateBlobTtlRequestRate = registry.meter(MetricRegistry.name(requestClass, "UpdateBlobTtlRequestRate"));
     replicaMetadataRequestRate = registry.meter(MetricRegistry.name(requestClass, "ReplicaMetadataRequestRate"));
-    triggerCompactionRequestRate = registry.meter(MetricRegistry.name(requestClass, "TriggerCompactionRequestRate"));
+    triggerCompactionRequestRate =
+        registry.meter(MetricRegistry.name(requestClass, "TriggerCompactionRequestRate"));
     requestControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "RequestControlRequestRate"));
-    replicationControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "ReplicationControlRequestRate"));
+    replicationControlRequestRate =
+        registry.meter(MetricRegistry.name(requestClass, "ReplicationControlRequestRate"));
     catchupStatusRequestRate = registry.meter(MetricRegistry.name(requestClass, "CatchupStatusRequestRate"));
-    blobStoreControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "BlobStoreControlRequestRate"));
+    blobStoreControlRequestRate =
+        registry.meter(MetricRegistry.name(requestClass, "BlobStoreControlRequestRate"));
 
     putSmallBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutSmallBlobRequestRate"));
     getSmallBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetSmallBlobRequestRate"));
@@ -422,7 +436,8 @@ public class ServerMetrics {
     badRequestError = registry.counter(MetricRegistry.name(requestClass, "BadRequestError"));
     unExpectedStorePutError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStorePutError"));
     unExpectedStoreGetError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreGetError"));
-    unExpectedStoreDeleteError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreDeleteError"));
+    unExpectedStoreDeleteError =
+        registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreDeleteError"));
     unExpectedAdminOperationError =
         registry.counter(MetricRegistry.name(requestClass, "UnexpectedAdminOperationError"));
     unExpectedStoreTtlUpdateError =
@@ -430,7 +445,8 @@ public class ServerMetrics {
     unExpectedStoreFindEntriesError =
         registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreFindEntriesError"));
     getAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "GetAuthorizationFailure"));
-    deleteAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "DeleteAuthorizationFailure"));
+    deleteAuthorizationFailure =
+        registry.counter(MetricRegistry.name(requestClass, "DeleteAuthorizationFailure"));
     ttlUpdateAuthorizationFailure =
         registry.counter(MetricRegistry.name(requestClass, "TtlUpdateAuthorizationFailure"));
     ttlAlreadyUpdatedError = registry.counter(MetricRegistry.name(requestClass, "TtlAlreadyUpdatedError"));
