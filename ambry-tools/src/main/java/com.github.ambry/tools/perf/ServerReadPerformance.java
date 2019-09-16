@@ -18,7 +18,7 @@ import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;

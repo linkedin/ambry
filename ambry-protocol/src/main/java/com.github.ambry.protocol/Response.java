@@ -13,7 +13,7 @@
  */
 package com.github.ambry.protocol;
 
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;

@@ -13,7 +13,6 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.Store;
@@ -64,11 +63,12 @@ public interface StoreManager {
   public List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop);
 
   /**
-   * Check if a certain disk is available.
-   * @param disk the {@link DiskId} to check.
-   * @return {@code true} if the disk is available. {@code false} if not.
+   * Check if a certain partition is available locally.
+   * @param partition the {@link PartitionId} to check.
+   * @param localReplica the {@link ReplicaId} of the localreplica of the partition.
+   * @return {@code true} if the partition is available. {@code false} if not.
    */
-  public boolean isDiskAvailable(DiskId disk);//todo fix this
+  public ServerErrorCode isPartitionAvailable(PartitionId partition, ReplicaId localReplica);//todo fix this
 
   /**
    * Schedules the {@link PartitionId} {@code id} for compaction next.

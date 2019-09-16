@@ -14,10 +14,10 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
@@ -66,17 +66,14 @@ public class CloudStorageManager implements StoreManager {
     return true;
   }
 
-  public void start() throws InterruptedException {
-
-  }
-
+  @Override
   public Store getStore(PartitionId id) {
     return partitionTostore.getOrDefault(id, null);
   }
 
   @Override
   public boolean scheduleNextForCompaction(PartitionId id) {
-    return false;
+    throw new UnsupportedOperationException("Method not supported");
   }
 
   @Override
@@ -96,12 +93,12 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
-    return false;
+    throw new UnsupportedOperationException("Method not supported");
   }
 
   @Override
   public List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop) {
-    return null;
+    throw new UnsupportedOperationException("Method not supported");
   }
 
   @Override
@@ -111,7 +108,10 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
-  public boolean isDiskAvailable(DiskId disk) {
-    return false;
+  public ServerErrorCode isPartitionAvailable(PartitionId partition, ReplicaId localReplica) {
+    if (getStore(partition) == null) {
+      return ServerErrorCode.Replica_Unavailable;
+    }
+    return ServerErrorCode.No_Error;
   }
 }

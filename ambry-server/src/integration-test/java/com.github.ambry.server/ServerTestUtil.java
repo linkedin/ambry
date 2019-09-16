@@ -40,7 +40,6 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;

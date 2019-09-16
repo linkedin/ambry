@@ -14,13 +14,12 @@
 package com.github.ambry.router;
 
 import com.github.ambry.account.InMemAccountService;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.RouterTestHelpers.*;

@@ -16,7 +16,7 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;

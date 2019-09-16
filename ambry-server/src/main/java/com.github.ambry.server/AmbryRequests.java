@@ -24,7 +24,6 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ErrorMapping;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
@@ -1123,21 +1122,18 @@ public class AmbryRequests implements RequestAPI {
         return ServerErrorCode.Disk_Unavailable;
       }
       // 3. check if partition exists on this node and that the store for this partition is available
-      if (storeManager.getStore(partition) == null) {
-        if (localReplica != null) {
-          // check stores on the disk
-          if (!storeManager.isDiskAvailable(localReplica.getDiskId())) {
-            metrics.diskUnavailableError.inc();
-            localReplica.markDiskDown();
-            return ServerErrorCode.Disk_Unavailable;
-          } else {
-            metrics.replicaUnavailableError.inc();
-            return ServerErrorCode.Replica_Unavailable;
-          }
-        } else {
+      ServerErrorCode errorCode = storeManager.isPartitionAvailable(partition, localReplica);
+      switch (errorCode) {
+        case Disk_Unavailable:
+          metrics.diskUnavailableError.inc();
+          localReplica.markDiskDown();
+          return errorCode;
+        case Replica_Unavailable:
+          metrics.replicaUnavailableError.inc();
+          return errorCode;
+        case Partition_Unknown:
           metrics.partitionUnknownError.inc();
-          return ServerErrorCode.Partition_Unknown;
-        }
+          return errorCode;
       }
     }
     // 4. ensure if the partition can be written to

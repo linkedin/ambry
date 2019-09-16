@@ -13,7 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;

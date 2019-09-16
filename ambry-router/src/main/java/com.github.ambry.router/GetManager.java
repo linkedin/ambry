@@ -19,7 +19,7 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;

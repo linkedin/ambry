@@ -16,7 +16,7 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaType;
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;

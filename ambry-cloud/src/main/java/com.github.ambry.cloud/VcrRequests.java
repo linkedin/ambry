@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
@@ -26,6 +25,7 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.server.AmbryRequests;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
@@ -76,12 +76,7 @@ public class VcrRequests extends AmbryRequests {
     }
 
     // 2. check if partition is handled by this vcr node
-    if (storeManager.getStore(partition) == null) {
-      metrics.replicaUnavailableError.inc();
-      return ServerErrorCode.Replica_Unavailable;
-    }
-
-    return ServerErrorCode.No_Error;
+    return storeManager.isPartitionAvailable(partition, null);
   }
 
   @Override

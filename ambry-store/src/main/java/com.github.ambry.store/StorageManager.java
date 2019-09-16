@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -158,14 +159,28 @@ public class StorageManager implements StoreManager {
     }
   }
 
-  /**
-   * @param id the {@link PartitionId} to find the store for.
-   * @return the {@link Store} corresponding to the given {@link PartitionId}, or {@code null} if no store was found for
-   *         that partition, or that store was not started.
-   */
+  @Override
   public Store getStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null ? diskManager.getStore(id) : null;
+  }
+
+  @Override
+  public ServerErrorCode isPartitionAvailable(PartitionId partition, ReplicaId localReplica) {
+    if (getStore(partition) == null) {
+      if (localReplica != null) {
+        // check stores on the disk
+        if (!isDiskAvailable(localReplica.getDiskId())) {
+          localReplica.markDiskDown();
+          return ServerErrorCode.Disk_Unavailable;
+        } else {
+          return ServerErrorCode.Replica_Unavailable;
+        }
+      } else {
+        return ServerErrorCode.Partition_Unknown;
+      }
+    }
+    return ServerErrorCode.No_Error;
   }
 
   /**
@@ -187,22 +202,13 @@ public class StorageManager implements StoreManager {
     return diskManager != null && !diskManager.areAllStoresDown();
   }
 
-  /**
-   * Schedules the {@link PartitionId} {@code id} for compaction next.
-   * @param id the {@link PartitionId} of the {@link Store} to compact.
-   * @return {@code true} if the scheduling was successful. {@code false} if not.
-   */
+  @Override
   public boolean scheduleNextForCompaction(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null && diskManager.scheduleNextForCompaction(id);
   }
 
-  /**
-   * Disable compaction on the {@link PartitionId} {@code id}.
-   * @param id the {@link PartitionId} of the {@link Store} on which compaction is disabled or enabled.
-   * @param enabled whether to enable ({@code true}) or disable.
-   * @return {@code true} if disabling was successful. {@code false} if not.
-   */
+  @Override
   public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null && diskManager.controlCompactionForBlobStore(id, enabled);
@@ -239,12 +245,7 @@ public class StorageManager implements StoreManager {
     }
   }
 
-  /**
-   * Add a new BlobStore with given {@link ReplicaId}. The new BlobStore is allowed to be placed on a brand new disk if
-   * certain disk is available.
-   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
-   * @return {@code true} if adding store was successful. {@code false} if not.
-   */
+  @Override
   public boolean addBlobStore(ReplicaId replica) {
     if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
       return false;
@@ -272,29 +273,19 @@ public class StorageManager implements StoreManager {
     return true;
   }
 
-  /**
-   * Start BlobStore with given {@link PartitionId} {@code id}.
-   * @param id the {@link PartitionId} of the {@link Store} which would be started.
-   */
+  @Override
   public boolean startBlobStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null && diskManager.startBlobStore(id);
   }
 
-  /**
-   * Shutdown BlobStore with given {@link PartitionId} {@code id}.
-   * @param id the {@link PartitionId} of the {@link Store} which would be shutdown.
-   */
+  @Override
   public boolean shutdownBlobStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null && diskManager.shutdownBlobStore(id);
   }
 
-  /**
-   * Remove store from storage manager.
-   * @param id the {@link PartitionId} associated with store
-   * @return {@code true} if removal succeeds. {@code false} otherwise.
-   */
+  @Override
   public boolean removeBlobStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     if (diskManager == null) {
@@ -310,12 +301,7 @@ public class StorageManager implements StoreManager {
     return true;
   }
 
-  /**
-   * Set BlobStore Stopped state with given {@link PartitionId} {@code id}.
-   * @param partitionIds a list {@link PartitionId} of the {@link Store} whose stopped state should be set.
-   * @param markStop whether to mark BlobStore as stopped ({@code true}) or started.
-   * @return a list of {@link PartitionId} whose stopped state fails to be updated.
-   */
+  @Override
   public List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop) {
     Map<DiskManager, List<PartitionId>> diskManagerToPartitionMap = new HashMap<>();
     List<PartitionId> failToUpdateStores = new ArrayList<>();
