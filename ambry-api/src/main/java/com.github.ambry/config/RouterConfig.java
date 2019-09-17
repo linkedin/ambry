@@ -246,6 +246,14 @@ public class RouterConfig {
   @Default("2")
   public final int routerTtlUpdateSuccessTarget;
 
+  @Config("router.get.chunkId.enabled")
+  @Default("false")
+  public final boolean routerGetChunkIdEnabled;
+
+  @Config("router.target.hostname")
+  @Default("")
+  public String routerTargetHostname;
+
   /**
    * If this config is set to {@code true} the router will use {@code GetBlobOperation} instead of
    * {@code GetBlobInfoOperation} for {@code getBlobInfo} calls. This allows the router to correct some blob size
@@ -375,8 +383,8 @@ public class RouterConfig {
     routerConnectionsWarmUpTimeoutMs =
         verifiableProperties.getIntInRange("router.connections.warm.up.timeout.ms", 5000, 0, Integer.MAX_VALUE);
     routerConnectionCheckoutTimeoutMs =
-        verifiableProperties.getIntInRange("router.connection.checkout.timeout.ms", 1000, 1, 5000);
-    routerRequestTimeoutMs = verifiableProperties.getIntInRange("router.request.timeout.ms", 2000, 1, 10000);
+        verifiableProperties.getIntInRange("router.connection.checkout.timeout.ms", 1000, 1, 10000);
+    routerRequestTimeoutMs = verifiableProperties.getIntInRange("router.request.timeout.ms", 2000, 1, 20000);
     routerMaxPutChunkSizeBytes =
         verifiableProperties.getIntInRange("router.max.put.chunk.size.bytes", 4 * 1024 * 1024, 1, Integer.MAX_VALUE);
     routerPutRequestParallelism =
@@ -447,5 +455,7 @@ public class RouterConfig {
         Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
     routerMaxInMemGetChunks = verifiableProperties.getIntInRange("router.max.in.mem.get.chunks", 4, 1,
         Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
+    routerGetChunkIdEnabled = verifiableProperties.getBoolean("router.get.chunkId.enabled", false);
+    routerTargetHostname = verifiableProperties.getString("router.target.hostname", "");
   }
 }

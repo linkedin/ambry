@@ -68,6 +68,7 @@ class DeleteOperation {
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
+  private boolean targetHostWasSeen = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DeleteOperation.class);
 
@@ -121,15 +122,28 @@ class DeleteOperation {
    */
   private void fetchRequests(RequestRegistrationCallback<DeleteOperation> requestRegistrationCallback) {
     Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
+    if (targetHostWasSeen) {
+      return;
+    }
     while (replicaIterator.hasNext()) {
       ReplicaId replica = replicaIterator.next();
       String hostname = replica.getDataNodeId().getHostname();
+      replicaIterator.remove();
       Port port = replica.getDataNodeId().getPortToConnectTo();
+      logger.info("hostname = {}", hostname);
+      if (!routerConfig.routerTargetHostname.isEmpty() && !hostname.equals(routerConfig.routerTargetHostname)) {
+        if (targetHostWasSeen) {
+          break;
+        }
+        logger.info("continue!!!");
+        continue;
+      }
+      targetHostWasSeen = true;
+      logger.info("Delete request is routed to hostname = {}, port = {}", hostname, port);
       DeleteRequest deleteRequest = createDeleteRequest();
       deleteRequestInfos.put(deleteRequest.getCorrelationId(), new DeleteRequestInfo(time.milliseconds(), replica));
       RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest, replica);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
-      replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
         logger.trace("Making request with correlationId {} to a remote replica {} in {} ",
             deleteRequest.getCorrelationId(), replica.getDataNodeId(), replica.getDataNodeId().getDatacenterName());

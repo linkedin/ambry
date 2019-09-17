@@ -25,6 +25,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -63,6 +65,7 @@ import java.util.Set;
 class SimpleOperationTracker implements OperationTracker {
   protected final String datacenterName;
   protected final String originatingDcName;
+  private static final Logger logger = LoggerFactory.getLogger(SimpleOperationTracker.class);
   protected final int successTarget;
   protected final int parallelism;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
@@ -79,6 +82,7 @@ class SimpleOperationTracker implements OperationTracker {
 
   private final OpTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaIterator;
+  private boolean hasTargeHost = false;
 
   /**
    * Constructor for an {@code SimpleOperationTracker}.
@@ -243,7 +247,11 @@ class SimpleOperationTracker implements OperationTracker {
     @Override
     public void remove() {
       replicaIterator.remove();
-      inflightCount++;
+      if (hasTargeHost) {
+        inflightCount = 1;
+      } else {
+        inflightCount++;
+      }
     }
 
     @Override

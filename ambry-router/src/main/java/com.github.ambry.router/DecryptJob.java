@@ -70,14 +70,16 @@ class DecryptJob implements CryptoJob {
     ByteBuffer decryptedBlobContent = null;
     ByteBuffer decryptedUserMetadata = null;
     try {
-      Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
-      Object perBlobKey = cryptoService.decryptKey(encryptedPerBlobKey, containerKey);
-      if (encryptedBlobContent != null) {
-        decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);
-      }
-      if (encryptedUserMetadata != null) {
-        decryptedUserMetadata = cryptoService.decrypt(encryptedUserMetadata, perBlobKey);
-      }
+//      Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
+//      Object perBlobKey = cryptoService.decryptKey(encryptedPerBlobKey, containerKey);
+//      if (encryptedBlobContent != null) {
+//        decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);
+//      }
+//      if (encryptedUserMetadata != null) {
+//        decryptedUserMetadata = cryptoService.decrypt(encryptedUserMetadata, perBlobKey);
+//      }
+      decryptedBlobContent = encryptedBlobContent;
+      decryptedUserMetadata = encryptedUserMetadata;
     } catch (Exception e) {
       exception = e;
     } finally {

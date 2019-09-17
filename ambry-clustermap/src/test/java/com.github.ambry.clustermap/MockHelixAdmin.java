@@ -55,6 +55,52 @@ public class MockHelixAdmin implements HelixAdmin {
   Set<String> getInstancesForPartition(String partition) {
     return partitionToInstances.getOrDefault(partition, Collections.emptySet());
   }
+//  @Override
+//  public List<String> getInstancesByDomain(String clusterName, String domain){
+//    throw new IllegalArgumentException();
+//  }
+//
+//  @Override
+//  public  Map<String, String> getBatchDisabledInstances(String clusterName){
+//    throw new IllegalArgumentException();
+//  }
+//
+//  @Override
+//  public void enableBatchMessageMode(String clusterName, boolean enabled){
+//    throw new IllegalArgumentException();
+//  }
+//  @Override
+//  public void enableBatchMessageMode(String clusterName, String resourceName, boolean enabled)
+//  {
+//    throw new IllegalArgumentException();
+//  }
+//  @Override
+//  public void enableInstance(String clusterName, List<String> instances, boolean enabled){
+//    throw new IllegalArgumentException();
+//  }
+//  @Override
+//  public void updateIdealState(String clusterName, String resourceName, IdealState idealState){
+//    throw new IllegalArgumentException();
+//  }
+//  @Override
+//  public void removeFromIdealState(String clusterName, String resourceName, IdealState idealState){
+//    throw new IllegalArgumentException();
+//  }
+//
+//  @Override
+//  public void enableCluster(String clusterName, boolean enabled, String reason){
+//    throw new IllegalArgumentException();
+//  }
+//
+//  @Override
+//  public void enableMaintenanceMode(String clusterName, boolean enabled, String reason){
+//    throw new IllegalArgumentException();
+//  }
+//
+//  @Override
+//  public void enableMaintenanceMode(String clusterName, boolean enabled){
+//    throw new IllegalArgumentException();
+//  }
 
   @Override
   public List<String> getClusters() {

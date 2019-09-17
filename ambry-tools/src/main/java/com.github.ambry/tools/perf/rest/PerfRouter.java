@@ -84,13 +84,13 @@ class PerfRouter implements Router {
       switch (options.getOperationType()) {
         case All:
           result = new GetBlobResult(new BlobInfo(blobProperties, usermetadata),
-              new PerfRSC(chunk, blobProperties.getBlobSize()));
+              new PerfRSC(chunk, blobProperties.getBlobSize()), null);
           break;
         case Data:
-          result = new GetBlobResult(null, new PerfRSC(chunk, blobProperties.getBlobSize()));
+          result = new GetBlobResult(null, new PerfRSC(chunk, blobProperties.getBlobSize()), null);
           break;
         case BlobInfo:
-          result = new GetBlobResult(new BlobInfo(blobProperties, usermetadata), null);
+          result = new GetBlobResult(new BlobInfo(blobProperties, usermetadata), null, null);
           break;
       }
       completeOperation(futureResult, callback, result, null);

@@ -342,7 +342,10 @@ public class Selector implements Selectable {
       while (iter.hasNext()) {
         SelectionKey key = iter.next();
         iter.remove();
-
+//        String descriptor = socketDescription(channel(key));
+//        if(descriptor.startsWith("lsg1-app18662.prod.linkedin.com")){
+//          continue;
+//        }
         Transmission transmission = getTransmission(key);
         try {
           if (key.isConnectable()) {

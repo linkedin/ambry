@@ -13,9 +13,7 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
@@ -28,6 +26,7 @@ import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.util.HashMap;
 import java.util.List;
@@ -189,11 +188,12 @@ class DeleteManager {
   void onComplete(DeleteOperation op) {
     Exception e = op.getOperationException();
     if (e == null) {
-      BlobId blobId = op.getBlobId();
-      Pair<Account, Container> accountContainer =
-          RouterUtils.getAccountContainer(accountService, blobId.getAccountId(), blobId.getContainerId());
-      notificationSystem.onBlobDeleted(blobId.getID(), op.getServiceId(), accountContainer.getFirst(),
-          accountContainer.getSecond());
+      logger.info("No exception, skip the notification step");
+//      BlobId blobId = op.getBlobId();
+//      Pair<Account, Container> accountContainer =
+//          RouterUtils.getAccountContainer(accountService, blobId.getAccountId(), blobId.getContainerId());
+//      notificationSystem.onBlobDeleted(blobId.getID(), op.getServiceId(), accountContainer.getFirst(),
+//          accountContainer.getSecond());
     } else {
       routerMetrics.onDeleteBlobError(e);
     }

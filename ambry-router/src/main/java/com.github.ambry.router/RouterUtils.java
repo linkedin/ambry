@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
 /**
  * This is a utility class used by Router.
  */
-class RouterUtils {
+public class RouterUtils {
 
   private static Logger logger = LoggerFactory.getLogger(RouterUtils.class);
 
@@ -51,13 +51,14 @@ class RouterUtils {
    * @return BlobId
    * @throws RouterException If parsing a string blobId fails.
    */
-  static BlobId getBlobIdFromString(String blobIdString, ClusterMap clusterMap) throws RouterException {
+  public static BlobId getBlobIdFromString(String blobIdString, ClusterMap clusterMap) throws RouterException {
     BlobId blobId;
     try {
       blobId = new BlobId(blobIdString, clusterMap);
       logger.trace("BlobId {} created with partitionId {}", blobId, blobId.getPartition());
     } catch (Exception e) {
-      logger.trace("Caller passed in invalid BlobId {}", blobIdString);
+      logger.error("Caller passed in invalid BlobId {}", blobIdString);
+      logger.error("Exception is {}", e);
       throw new RouterException("BlobId is invalid " + blobIdString, RouterErrorCode.InvalidBlobId);
     }
     return blobId;

@@ -94,6 +94,73 @@ class MockHelixManager implements HelixManager {
         eq(AccessOption.PERSISTENT))).thenReturn(record);
   }
 
+//  @Override
+//  public void addControllerMessageListener(org.apache.helix.api.listeners.MessageListener listener){
+//    throw new IllegalArgumentException();
+//  }
+//
+//  @Override
+//  public void addControllerListener(org.apache.helix.api.listeners.ControllerChangeListener listener) {
+//    throw new IllegalArgumentException();
+//  }
+//
+//  @Override
+//  public void addExternalViewChangeListener(org.apache.helix.api.listeners.ExternalViewChangeListener listener) {
+//    throw new IllegalArgumentException();
+//  }
+//
+//  @Override
+//  public void addTargetExternalViewChangeListener(org.apache.helix.api.listeners.ExternalViewChangeListener listener) {
+//    throw new IllegalArgumentException();
+//  }
+//
+//  @Override
+//  public void addCurrentStateChangeListener(org.apache.helix.api.listeners.CurrentStateChangeListener listener,
+//      String instanceName, String sessionId) {
+//    throw new IllegalArgumentException("");
+//  }
+//
+//  @Override
+//  public void addMessageListener(org.apache.helix.api.listeners.MessageListener listener, String instanceName) {
+//    throw new IllegalArgumentException("");
+//  }
+//
+//  @Override
+//  public void addConfigChangeListener(org.apache.helix.api.listeners.ScopedConfigChangeListener listener,
+//      HelixConfigScope.ConfigScopeProperty scope) {
+//    throw new IllegalArgumentException("not supported");
+//  }
+//
+//  @Override
+//  public void addResourceConfigChangeListener(ResourceConfigChangeListener listener) {
+//    throw new IllegalArgumentException("not supported");
+//  }
+//
+//  @Override
+//  public void addClusterfigChangeListener(ClusterConfigChangeListener listener) {
+//    throw new IllegalArgumentException("not supported");
+//  }
+//
+//  @Override
+//  public void addInstanceConfigChangeListener(org.apache.helix.api.listeners.InstanceConfigChangeListener listener) {
+//    throw new IllegalArgumentException("not supported");
+//  }
+//
+//  @Override
+//  public void addIdealStateChangeListener(org.apache.helix.api.listeners.IdealStateChangeListener listener) {
+//    throw new IllegalArgumentException("Not supported");
+//  }
+//
+//  @Override
+//  public String getMetadataStoreConnectionString() {
+//    throw new IllegalArgumentException("Not supported");
+//  }
+//
+//  @Override
+//  public void addConfigChangeListener(org.apache.helix.api.listeners.ConfigChangeListener listener) {
+//    throw new IllegalArgumentException("not supported");
+//  }
+
   @Override
   public void connect() throws Exception {
     isConnected = true;

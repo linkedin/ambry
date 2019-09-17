@@ -64,7 +64,7 @@ class GetBlobInfoOperation extends GetOperation {
       new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
   // map of correlation id to the request metadata for every request issued for this operation.
   private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
-
+  private boolean targetHostWasSeen = false;
   private static final Logger logger = LoggerFactory.getLogger(GetBlobInfoOperation.class);
 
   /**
@@ -155,16 +155,30 @@ class GetBlobInfoOperation extends GetOperation {
    */
   private void fetchRequests(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
     Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
+    if (targetHostWasSeen) {
+      return;
+    }
     while (replicaIterator.hasNext()) {
       ReplicaId replicaId = replicaIterator.next();
       String hostname = replicaId.getDataNodeId().getHostname();
+      replicaIterator.remove();
       Port port = replicaId.getDataNodeId().getPortToConnectTo();
+      logger.info("hostname = {}", hostname);
+      if (!routerConfig.routerTargetHostname.isEmpty() && !hostname.equals(routerConfig.routerTargetHostname)) {
+        if (targetHostWasSeen) {
+          break;
+        }
+        logger.info("continue!!!");
+        continue;
+      }
+      targetHostWasSeen = true;
+      logger.info("GetBlobInfo request is routed to hostname = {}, port = {}", hostname, port);
       GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getBlobOptions.getGetOption());
       RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId);
       int correlationId = getRequest.getCorrelationId();
       correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
       requestRegistrationCallback.registerRequestToSend(this, request);
-      replicaIterator.remove();
+      //replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
         logger.trace("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
             replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
@@ -342,7 +356,7 @@ class GetBlobInfoOperation extends GetOperation {
     if (encryptionKey == null) {
       // if blob is not encrypted, move the state to Complete
       operationResult =
-          new GetBlobResultInternal(new GetBlobResult(new BlobInfo(serverBlobProperties, userMetadata.array()), null),
+          new GetBlobResultInternal(new GetBlobResult(new BlobInfo(serverBlobProperties, userMetadata.array()), null, null),
               null);
     } else {
       // submit decrypt job
@@ -360,7 +374,7 @@ class GetBlobInfoOperation extends GetOperation {
               logger.trace("Successfully updating decrypt job callback results for {}", blobId);
               operationResult = new GetBlobResultInternal(
                   new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array()),
-                      null), null);
+                      null, null), null);
               progressTracker.setCryptoJobSuccess();
             } else {
               decryptJobMetricsTracker.incrementOperationError();

@@ -58,6 +58,18 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
     shouldRemoveRecordBeforeNotify = false;
   }
 
+//  @Override
+//  public   List<T> get(List<String> paths, List<Stat> stats, int options, boolean throwException)
+//      throws HelixException{
+//    throw new IllegalStateException("not supported");
+//  }
+//
+//  @Override
+//  public  List<T> getChildren(String parentPath, List<Stat> stats, int options, int retryCount,
+//      int retryInterval){
+//    throw new IllegalArgumentException("");
+//  }
+
   @Override
   public void start() {
     throw new IllegalStateException("Not implemented");

@@ -51,7 +51,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Streaming, non-blocking router implementation for Ambry.
  */
-class NonBlockingRouter implements Router {
+public class NonBlockingRouter implements Router {
   private final NetworkClientFactory networkClientFactory;
   private final ArrayList<OperationController> ocList;
   private final BackgroundDeleter backgroundDeleter;
@@ -118,6 +118,10 @@ class NonBlockingRouter implements Router {
     routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount, currentBackgroundOperationsCount);
   }
 
+  public void setTargetHost(String targetHost) {
+    routerConfig.routerTargetHostname = targetHost;
+  }
+
   /**
    * Returns an {@link OperationController}
    * @return a randomly picked {@link OperationController} from the list of OperationControllers.
@@ -143,7 +147,9 @@ class NonBlockingRouter implements Router {
     }
     currentOperationsCount.incrementAndGet();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
+    GetBlobOptionsInternal internalOptions =
+        new GetBlobOptionsInternal(options, options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds,
+            routerMetrics.ageAtGet);
     routerMetrics.operationQueuingRate.mark();
     try {
       if (isOpen.get()) {
@@ -259,6 +265,7 @@ class NonBlockingRouter implements Router {
       // Can skip attemptChunkDeletes if we can determine this is not a metadata blob
       boolean attemptChunkDeletes = isMaybeMetadataBlob(blobId);
       getOperationController().deleteBlob(blobId, serviceId, futureResult, callback, attemptChunkDeletes);
+      //getOperationController().deleteBlob(blobId, serviceId, futureResult, callback, false);
       if (!attemptChunkDeletes) {
         routerMetrics.skippedGetBlobCount.inc();
       }
@@ -333,7 +340,7 @@ class NonBlockingRouter implements Router {
         // blob could have been garbage collected and not found at all and so on.
         logger.trace("Encountered exception when attempting to get chunks of a possibly composite deleted blob {} ",
             blobIdStr, exception);
-      } else if (result.getBlobResult != null) {
+      } else if (!routerConfig.routerGetChunkIdEnabled && result.getBlobResult != null) {
         logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
       } else if (result.storeKeys != null) {
         List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(result.storeKeys.size());
@@ -698,7 +705,7 @@ class NonBlockingRouter implements Router {
         Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
           if (exception != null) {
             completeOperation(futureResult, callback, null, exception, false);
-          } else if (result.getBlobResult != null) {
+          } else if (!routerConfig.routerGetChunkIdEnabled && result.getBlobResult != null) {
             exception = new RouterException(
                 "GET blob call returned the blob instead of just the store keys (before TTL update)",
                 RouterErrorCode.UnexpectedInternalError);

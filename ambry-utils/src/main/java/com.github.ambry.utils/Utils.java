@@ -143,6 +143,9 @@ public class Utils {
     if (size < 0) {
       throw new IllegalArgumentException("readIntString : the size cannot be negative");
     }
+    if (size > 100){
+      throw new IllegalArgumentException("readIntString : the size is too large !!!");
+    }
     byte[] bytes = new byte[size];
     int read = 0;
     while (read < size) {
