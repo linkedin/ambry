@@ -68,7 +68,7 @@ public interface StoreManager {
    * @param localReplica the {@link ReplicaId} of the localreplica of the partition.
    * @return {@code true} if the partition is available. {@code false} if not.
    */
-  public ServerErrorCode isPartitionAvailable(PartitionId partition, ReplicaId localReplica);//todo fix this
+  public ServerErrorCode isPartitionAvailable(PartitionId partition, ReplicaId localReplica);
 
   /**
    * Schedules the {@link PartitionId} {@code id} for compaction next.

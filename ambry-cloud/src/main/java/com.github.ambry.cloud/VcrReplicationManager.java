@@ -169,8 +169,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (partitionToPartitionInfo.containsKey(partitionId)) {
       throw new ReplicationException("Partition " + partitionId + " already exists on " + dataNodeId);
     }
-    ReplicaId cloudReplica =
-        new CloudReplica(cloudConfig, partitionId, virtualReplicatorCluster.getCurrentDataNodeId());
+    ReplicaId cloudReplica = new CloudReplica(partitionId, virtualReplicatorCluster.getCurrentDataNodeId());
     if (!storeManager.addBlobStore(cloudReplica)) {
       logger.error("Can't start cloudstore for replica " + cloudReplica);
       throw new ReplicationException("Can't start cloudstore for replica " + cloudReplica);

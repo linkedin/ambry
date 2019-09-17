@@ -19,7 +19,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
-import com.github.ambry.config.CloudConfig;
 import com.github.ambry.protocol.GetRequest;
 import java.io.File;
 import java.util.ArrayList;
@@ -38,12 +37,11 @@ class CloudReplica implements ReplicaId {
 
   /**
    * Instantiate an CloudReplica instance.
-   * @param cloudConfig the {@link CloudConfig} to use.
    * @param partitionId the {@link PartitionId} of which this is a replica.
    * @param dataNodeId which hosts this replica.
    *
    */
-  CloudReplica(CloudConfig cloudConfig, PartitionId partitionId, DataNodeId dataNodeId) {
+  CloudReplica(PartitionId partitionId, DataNodeId dataNodeId) {
     this.partitionId = partitionId;
     this.dataNodeId = dataNodeId;
   }
@@ -72,7 +70,15 @@ class CloudReplica implements ReplicaId {
 
   @Override
   public List<ReplicaId> getPeerReplicaIds() {
-    return new ArrayList<>(partitionId.getReplicaIds());
+    List<ReplicaId> replicasOfPartition = new ArrayList<>();
+    for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+      if (replicaId.getDataNodeId().getHostname().equals(dataNodeId.getHostname())
+          && replicaId.getDataNodeId().getPort() == dataNodeId.getPort()) {
+        continue;
+      }
+      replicasOfPartition.add(replicaId);
+    }
+    return replicasOfPartition;
   }
 
   @Override

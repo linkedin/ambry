@@ -41,6 +41,7 @@ class MessageInfoAndMetadataListSerde {
   static final short VERSION_3 = 3;
   static final short VERSION_4 = 4;
   static final short VERSION_5 = 5;
+  static final short VERSION_6 = 6;
 
   static final short AUTO_VERSION = VERSION_5;
 
@@ -93,7 +94,7 @@ class MessageInfoAndMetadataListSerde {
       size += Long.BYTES;
       // whether deleted
       size += 1;
-      if (version < VERSION_1 || version > VERSION_5) {
+      if (version < VERSION_1 || version > VERSION_6) {
         throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
       }
       if (version >= VERSION_5) {
@@ -146,7 +147,7 @@ class MessageInfoAndMetadataListSerde {
         outputBuffer.putLong(messageInfo.getSize());
         outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
         outputBuffer.put(messageInfo.isDeleted() ? UPDATED : (byte) ~UPDATED);
-        if (version < VERSION_1 || version > VERSION_5) {
+        if (version < VERSION_1 || version > VERSION_6) {
           throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
         }
         if (version >= VERSION_5) {
@@ -212,7 +213,7 @@ class MessageInfoAndMetadataListSerde {
       short accountId = Account.UNKNOWN_ACCOUNT_ID;
       short containerId = Container.UNKNOWN_CONTAINER_ID;
       long operationTime = Utils.Infinite_Time;
-      if (versionToDeserializeIn < VERSION_1 || versionToDeserializeIn > VERSION_5) {
+      if (versionToDeserializeIn < VERSION_1 || versionToDeserializeIn > VERSION_6) {
         throw new IllegalArgumentException("Unknown version to deserialize MessageInfoList " + versionToDeserializeIn);
       }
       if (versionToDeserializeIn >= VERSION_5) {

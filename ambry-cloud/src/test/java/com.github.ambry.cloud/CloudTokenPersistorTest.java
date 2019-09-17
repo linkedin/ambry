@@ -57,7 +57,7 @@ public class CloudTokenPersistorTest {
     StoreFindTokenFactory factory = new StoreFindTokenFactory(blobIdFactory);
     PartitionId partitionId = clusterMap.getAllPartitionIds(null).get(0);
 
-    ReplicaId cloudReplicaId = new CloudReplica(cloudConfig, partitionId, dataNodeId);
+    ReplicaId cloudReplicaId = new CloudReplica(partitionId, dataNodeId);
 
     List<? extends ReplicaId> peerReplicas = cloudReplicaId.getPeerReplicaIds();
     List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>();

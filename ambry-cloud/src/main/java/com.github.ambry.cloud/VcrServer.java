@@ -180,8 +180,8 @@ public class VcrServer {
       ServerMetrics serverMetrics = new ServerMetrics(registry, VcrRequests.class, VcrServer.class);
       requests =
           new VcrRequests(cloudStorageManager, networkServer.getRequestResponseChannel(), clusterMap, currentNode,
-              registry, serverMetrics, new FindTokenHelper(), notificationSystem, vcrReplicationManager,
-              storeKeyFactory, true, storeKeyConverterFactory);
+              registry, serverMetrics, new FindTokenHelper(storeKeyFactory, replicationConfig), notificationSystem,
+              vcrReplicationManager, storeKeyFactory, true, storeKeyConverterFactory);
 
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);

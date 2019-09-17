@@ -16,10 +16,10 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaType;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -193,8 +193,9 @@ public class ReplicaMetadataResponseInfo {
       case ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_4:
         return MessageInfoAndMetadataListSerde.VERSION_4;
       case ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5:
+        return MessageInfoAndMetadataListSerde.VERSION_5;
       case ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6:
-        return MessageInfoAndMetadataListSerde.DETERMINE_VERSION;
+        return MessageInfoAndMetadataListSerde.VERSION_6;
       default:
         throw new IllegalArgumentException(
             "Unknown ReplicaMetadataResponse version encountered: " + replicaMetadataResponseVersion);
