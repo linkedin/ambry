@@ -1292,6 +1292,11 @@ public class AmbryRequestsTest {
           @Override
           public void doPrefetch(int index, long relativeOffset, long size) {
           }
+
+          @Override
+          public ByteBuffer getPrefetchedData(int index) {
+            return null;
+          }
         }, Collections.emptyList());
       }
 

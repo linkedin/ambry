@@ -91,6 +91,11 @@ class InMemoryStore implements Store {
     public void doPrefetch(int index, long relativeOffset, long size) {
 
     }
+
+    @Override
+    public ByteBuffer getPrefetchedData(int index) {
+      return buffers.get(index);
+    }
   }
 
   /**

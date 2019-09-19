@@ -32,6 +32,7 @@ public interface ClusterMap extends AutoCloseable {
    */
   PartitionId getPartitionIdFromStream(InputStream stream) throws IOException;
 
+
   /**
    * Gets a list of partitions that are available for writes. Gets a mutable shallow copy of the list of the partitions
    * that are available for writes

@@ -34,6 +34,7 @@ import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetBlobStoreOption;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -94,7 +95,7 @@ class GetBlobOperation extends GetOperation {
   // the total size of the object being fetched in this operation
   private long totalSize;
   // a byte range with defined start/end offsets that has been verified to be within the total blob size
-  private ByteRange resolvedByteRange;
+  private ByteRange resolvedByteRange = null;
   // a list iterator to the chunk ids that need to be fetched for this operation, if this is a composite blob.
   private ListIterator<CompositeBlobInfo.ChunkMetadata> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
@@ -508,6 +509,8 @@ class GetBlobOperation extends GetOperation {
     protected CryptoJobMetricsTracker decryptJobMetricsTracker =
         new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
 
+    private ByteRange chunkByteRange;
+
     /**
      * Construct a GetChunk
      * @param index the index (in the overall blob) of the initial data chunk that this GetChunk has to fetch.
@@ -545,6 +548,14 @@ class GetBlobOperation extends GetOperation {
       return MessageFormatFlags.Blob;
     }
 
+    GetBlobStoreOption getGetBlobStoreOption() {
+      if (chunkByteRange != null) {
+        return new GetBlobStoreOption(chunkByteRange);
+      } else {
+        return null;
+      }
+    }
+
     /**
      * Reset the state of this GetChunk.
      */
@@ -561,6 +572,7 @@ class GetBlobOperation extends GetOperation {
       decryptJobMetricsTracker = new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
       correlationIdToGetRequestInfo.clear();
       state = ChunkState.Free;
+      chunkByteRange = null;
     }
 
     /**
@@ -578,6 +590,16 @@ class GetBlobOperation extends GetOperation {
           RouterOperation.GetBlobOperation);
       progressTracker = new ProgressTracker(chunkOperationTracker);
       state = ChunkState.Ready;
+      if (resolvedByteRange != null && (chunkIndex == 0 || chunkIndex == numChunksTotal-1)){
+        long relativeOffset = offset;
+        if (options.getBlobOptions.hasBlobSegmentIdx()) {
+          relativeOffset = 0;
+        }
+        long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() - relativeOffset : 0;
+        long endOffsetInThisChunkExclusive =
+            chunkIndex == (numChunksTotal - 1) ? resolvedByteRange.getEndOffset() - relativeOffset + 1 : chunkSize;
+        chunkByteRange = ByteRange.fromOffsetRange(startOffsetInThisChunk, endOffsetInThisChunkExclusive);
+      }
     }
 
     /**
@@ -671,7 +693,7 @@ class GetBlobOperation extends GetOperation {
         replicaIterator.remove();
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = replicaId.getDataNodeId().getPortToConnectTo();
-        GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption());
+        GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption(), getGetBlobStoreOption());
         RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId);
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
@@ -726,7 +748,11 @@ class GetBlobOperation extends GetOperation {
 
         boolean launchedJob = maybeLaunchCryptoJob(chunkBuffer, null, encryptionKey, chunkBlobId);
         if (!launchedJob) {
-          chunkIndexToBuffer.put(chunkIndex, filterChunkToRange(chunkBuffer));
+          if (messageInfo.isByteRangeRespnose()) {
+            chunkIndexToBuffer.put(chunkIndex, chunkBuffer);
+          } else {
+            chunkIndexToBuffer.put(chunkIndex, filterChunkToRange(chunkBuffer));
+          }
           numChunksRetrieved++;
         }
 
@@ -1067,6 +1093,15 @@ class GetBlobOperation extends GetOperation {
       return options.getBlobOptions.getGetOption();
     }
 
+    @Override
+    GetBlobStoreOption getGetBlobStoreOption() {
+      if (options != null && options.getBlobOptions.getRange() != null) {
+        return new GetBlobStoreOption(options.getBlobOptions.getRange().toResolvedByteRange(Long.MAX_VALUE));
+      } else {
+        return null;
+      }
+    }
+
     /**
      * Return the {@link MessageFormatFlags} to associate with the first getBlob chunk operation.
      * @return {@link MessageFormatFlags#Blob} for {@link GetBlobOptions.OperationType#Data}, or
@@ -1186,7 +1221,7 @@ class GetBlobOperation extends GetOperation {
           if (blobType == BlobType.MetadataBlob) {
             handleMetadataBlob(blobData, userMetadata, encryptionKey);
           } else {
-            handleSimpleBlob(blobData, userMetadata, encryptionKey);
+            handleSimpleBlob(blobData, messageInfo, userMetadata, encryptionKey);
           }
         }
         successfullyDeserialized = true;
@@ -1320,7 +1355,7 @@ class GetBlobOperation extends GetOperation {
      * @param userMetadata userMetadata of the blob
      * @param encryptionKey encryption key for the blob. Could be null for non encrypted blob.
      */
-    private void handleSimpleBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
+    private void handleSimpleBlob(BlobData blobData, MessageInfo messageInfo, byte[] userMetadata, ByteBuffer encryptionKey) {
       boolean rangeResolutionFailure = false;
       if (encryptionKey == null) {
         totalSize = blobData.getSize();
@@ -1336,7 +1371,11 @@ class GetBlobOperation extends GetOperation {
         ByteBuffer dataBuffer = blobData.getStream().getByteBuffer();
         boolean launchedJob = maybeLaunchCryptoJob(dataBuffer, userMetadata, encryptionKey, blobId);
         if (!launchedJob) {
-          chunkIndexToBuffer.put(0, filterChunkToRange(dataBuffer));
+          if (messageInfo.isByteRangeRespnose()) {
+            chunkIndexToBuffer.put(0, dataBuffer);
+          } else {
+            chunkIndexToBuffer.put(0, filterChunkToRange(dataBuffer));
+          }
           numChunksRetrieved = 1;
         }
       }

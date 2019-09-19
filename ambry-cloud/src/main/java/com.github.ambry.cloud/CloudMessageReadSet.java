@@ -91,6 +91,12 @@ class CloudMessageReadSet implements MessageReadSet {
     }
   }
 
+  @Override
+  public ByteBuffer getPrefetchedData(int index) {
+    validateIndex(index);
+    return blobReadInfoList.get(index).getPrefetchedBuffer();
+  }
+
   /**
    * Validate that the index is withing the bounds of {@code blobReadInfoList}
    * @param index The index to be verified

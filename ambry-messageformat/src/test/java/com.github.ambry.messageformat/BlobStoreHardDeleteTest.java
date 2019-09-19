@@ -305,6 +305,11 @@ public class BlobStoreHardDeleteTest {
       public void doPrefetch(int index, long relativeOffset, long size) {
         return;
       }
+
+      @Override
+      public ByteBuffer getPrefetchedData(int index) {
+        return null;
+      }
     }
   }
 

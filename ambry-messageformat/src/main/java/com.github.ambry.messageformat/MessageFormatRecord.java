@@ -610,7 +610,7 @@ public class MessageFormatRecord {
    *  user metadata   - The offset at which the user metadata record is located relative to this message. This exist
    *  relative offset   only when blob property record and blob record exist
    *
-   *  blob metadata   - The offset at which the blob record is located relative to this message. This exist only when
+   *  blob            - The offset at which the blob record is located relative to this message. This exist only when
    *  relative offset   blob property record and user metadata record exist
    *
    *  crc             - The crc of the message header

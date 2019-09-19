@@ -22,6 +22,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetBlobStoreOption;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -30,7 +31,9 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -214,12 +217,20 @@ abstract class GetOperation {
    * @param flag The {@link MessageFormatFlags} to be set with the GetRequest.
    * @return the created GetRequest.
    */
-  protected GetRequest createGetRequest(BlobId blobId, MessageFormatFlags flag, GetOption getOption) {
+  protected GetRequest createGetRequest(BlobId blobId, MessageFormatFlags flag, GetOption getOption, GetBlobStoreOption getBlobStoreOption) {
     List<BlobId> blobIds = Collections.singletonList(blobId);
     List<PartitionRequestInfo> partitionRequestInfoList =
         Collections.singletonList(new PartitionRequestInfo(blobId.getPartition(), blobIds));
-    return new GetRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, flag,
-        partitionRequestInfoList, getOption);
+    logger.info("GetBlobStoreOption for blobId " + blobId.toString() + " is " + getBlobStoreOption);
+    if (getBlobStoreOption == null) {
+      return new GetRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
+          flag, partitionRequestInfoList, getOption);
+    } else {
+      Map<BlobId, GetBlobStoreOption> getBlobStoreOptions = new HashMap<>();
+      getBlobStoreOptions.put(blobId, getBlobStoreOption);
+      return new GetRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
+          flag, partitionRequestInfoList, getOption, getBlobStoreOptions);
+    }
   }
 
   /**

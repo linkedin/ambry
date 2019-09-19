@@ -13,7 +13,9 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.router.ByteRange;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
 
@@ -63,4 +65,6 @@ public interface MessageReadSet {
    * @throws IOException
    */
   void doPrefetch(int index, long relativeOffset, long size) throws IOException;
+
+  ByteBuffer getPrefetchedData(int index);
 }

@@ -49,6 +49,7 @@ import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.GetBlobStoreOption;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -93,7 +94,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -306,6 +309,9 @@ public class AmbryRequests implements RequestAPI {
       List<Send> messagesToSendList = new ArrayList<Send>(getRequest.getPartitionInfoList().size());
       List<PartitionResponseInfo> partitionResponseInfoList =
           new ArrayList<PartitionResponseInfo>(getRequest.getPartitionInfoList().size());
+      Map<BlobId, GetBlobStoreOption> allGetBlobStoreOptions = getRequest.getGetBlobStoreOptions();
+      allGetBlobStoreOptions = allGetBlobStoreOptions == null? new HashMap<>(): allGetBlobStoreOptions;
+      logger.info("AllGetBlobStoreOptions is " + allGetBlobStoreOptions);
       for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
         ServerErrorCode error =
             validateRequest(partitionRequestInfo.getPartition(), RequestOrResponseType.GetRequest, false);
@@ -331,13 +337,23 @@ public class AmbryRequests implements RequestAPI {
                   EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }
             List<StoreKey> convertedStoreKeys = getConvertedStoreKeys(partitionRequestInfo.getBlobIds());
+            Map<BlobId, GetBlobStoreOption> finalAllGetBlobStoreOptions = allGetBlobStoreOptions;
+            List<GetBlobStoreOption> getBlobStoreOptionList = partitionRequestInfo.getBlobIds().stream()
+                .map(key -> finalAllGetBlobStoreOptions.getOrDefault(key, null))
+                .collect(Collectors.toList());
+            Map<StoreKey, GetBlobStoreOption> getBlobStoreOptionMap = new HashMap<>();
+            for (int i = 0; i < convertedStoreKeys.size(); i ++ ) {
+              getBlobStoreOptionMap.put(convertedStoreKeys.get(i), getBlobStoreOptionList.get(i));
+              logger.info("There is a getBlobstoreoption for key " + convertedStoreKeys.get(i) + " and it's " + getBlobStoreOptionList.get(i));
+            }
+
             List<StoreKey> dedupedStoreKeys =
                 convertedStoreKeys.size() > 1 ? convertedStoreKeys.stream().distinct().collect(Collectors.toList())
                     : convertedStoreKeys;
             StoreInfo info = storeToGet.get(dedupedStoreKeys, storeGetOptions);
             MessageFormatSend blobsToSend =
-                new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
-                    storeKeyFactory, enableDataPrefetch);
+                new MessageFormatSend(info, getRequest.getMessageFormatFlag(), messageFormatMetrics,
+                    storeKeyFactory, enableDataPrefetch, getBlobStoreOptionMap);
             PartitionResponseInfo partitionResponseInfo =
                 new PartitionResponseInfo(partitionRequestInfo.getPartition(), info.getMessageReadSetInfo(),
                     blobsToSend.getMessageMetadataList());

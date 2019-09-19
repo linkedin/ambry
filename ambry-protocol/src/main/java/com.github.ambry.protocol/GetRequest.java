@@ -14,6 +14,7 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -21,7 +22,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -32,19 +35,41 @@ public class GetRequest extends RequestOrResponse {
   private MessageFormatFlags flags;
   private GetOption getOption;
   private List<PartitionRequestInfo> partitionRequestInfoList;
+  private Map<BlobId, GetBlobStoreOption> getBlobStoreOptions;
   private int sizeSent;
   private int totalPartitionRequestInfoListSize;
+  private int totalGetBlobStoreOptionSize = 0;
 
   private static final int MessageFormat_Size_In_Bytes = 2;
   private static final int GetOption_Size_In_Bytes = 2;
   private static final int Partition_Request_Info_List_Size = 4;
+  private static final int GetBlobStoreOption_Size_In_Bytes = 4;
   private static final short Get_Request_Version_V2 = 2;
+  private static final short Get_Request_Version_V3 = 3;
   public static final String Replication_Client_Id_Prefix = "replication-fetch-";
   public static final String Cloud_Replica_Keyword = "vcr";
 
   public GetRequest(int correlationId, String clientId, MessageFormatFlags flags,
       List<PartitionRequestInfo> partitionRequestInfoList, GetOption getOption) {
-    super(RequestOrResponseType.GetRequest, Get_Request_Version_V2, correlationId, clientId);
+    this(correlationId, clientId, flags, partitionRequestInfoList, getOption, Get_Request_Version_V2);
+  }
+
+  public GetRequest(int correlationId, String clientId, MessageFormatFlags flags,
+      List<PartitionRequestInfo> partitionRequestInfoList, GetOption getOption,
+      Map<BlobId, GetBlobStoreOption> getBlobStoreOptions) {
+    this(correlationId, clientId, flags, partitionRequestInfoList, getOption, Get_Request_Version_V3);;
+    this.getBlobStoreOptions = getBlobStoreOptions;
+    if (getBlobStoreOptions != null) {
+      for (Map.Entry<BlobId, GetBlobStoreOption> entry : getBlobStoreOptions.entrySet()) {
+        this.totalGetBlobStoreOptionSize += entry.getKey().sizeInBytes();
+        this.totalGetBlobStoreOptionSize += entry.getValue().sizeInBytes();
+      }
+    }
+  }
+
+  private GetRequest(int correlationId, String clientId, MessageFormatFlags flags,
+      List<PartitionRequestInfo> partitionRequestInfoList, GetOption getOption, short version) {
+    super(RequestOrResponseType.GetRequest, version, correlationId, clientId);
 
     this.flags = flags;
     this.getOption = getOption;
@@ -70,6 +95,10 @@ public class GetRequest extends RequestOrResponse {
     return getOption;
   }
 
+  public Map<BlobId, GetBlobStoreOption> getGetBlobStoreOptions() {
+    return getBlobStoreOptions;
+  }
+
   public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.GetRequest;
     Short versionId = stream.readShort();
@@ -84,11 +113,22 @@ public class GetRequest extends RequestOrResponse {
       partitionRequestInfoList.add(partitionRequestInfo);
     }
     GetOption getOption = GetOption.None;
-    if (versionId == Get_Request_Version_V2) {
+    if (versionId >= Get_Request_Version_V2) {
       getOption = GetOption.values()[stream.readShort()];
     }
+    System.out.println("Version of getrequest is " + versionId);
+    Map<BlobId, GetBlobStoreOption> getBlobStoreOptionMap = null;
+    if (versionId >= Get_Request_Version_V3) {
+      getBlobStoreOptionMap = new HashMap<>();
+      int mapSize = stream.readInt();
+      for (int i = 0; i < mapSize; i ++) {
+        BlobId blobId = new BlobId(stream, clusterMap);
+        GetBlobStoreOption option = new GetBlobStoreOption(stream);
+        getBlobStoreOptionMap.put(blobId, option);
+      }
+    }
     // ignore version for now
-    return new GetRequest(correlationId, clientId, messageType, partitionRequestInfoList, getOption);
+    return new GetRequest(correlationId, clientId, messageType, partitionRequestInfoList, getOption, getBlobStoreOptionMap);
   }
 
   @Override
@@ -103,6 +143,18 @@ public class GetRequest extends RequestOrResponse {
         partitionRequestInfo.writeTo(bufferToSend);
       }
       bufferToSend.putShort((short) getOption.ordinal());
+      if (versionId == Get_Request_Version_V3) {
+        if (getBlobStoreOptions == null || getBlobStoreOptions.isEmpty()) {
+          bufferToSend.putInt(0);
+        } else {
+          System.out.println("Putting get blob store options to buffer, size is " + getBlobStoreOptions.size());
+          bufferToSend.putInt(getBlobStoreOptions.size());
+          for (Map.Entry<BlobId, GetBlobStoreOption> entry: getBlobStoreOptions.entrySet()) {
+            bufferToSend.put(entry.getKey().toBytes());
+            entry.getValue().writeTo(bufferToSend);
+          }
+        }
+      }
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
@@ -120,8 +172,12 @@ public class GetRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + message format size + partition request info size + total partition request info list size
-    return super.sizeInBytes() + MessageFormat_Size_In_Bytes + Partition_Request_Info_List_Size
+    long size = super.sizeInBytes() + MessageFormat_Size_In_Bytes + Partition_Request_Info_List_Size
         + totalPartitionRequestInfoListSize + GetOption_Size_In_Bytes;
+    if (versionId == Get_Request_Version_V3) {
+      size += GetBlobStoreOption_Size_In_Bytes + totalGetBlobStoreOptionSize;
+    }
+    return size;
   }
 
   @Override

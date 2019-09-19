@@ -41,6 +41,7 @@ class MessageInfoAndMetadataListSerde {
   static final short VERSION_3 = 3;
   static final short VERSION_4 = 4;
   static final short VERSION_5 = 5;
+  static final short VERSION_6 = 6;
 
   static final short AUTO_VERSION = VERSION_5;
 
@@ -116,6 +117,10 @@ class MessageInfoAndMetadataListSerde {
         // operationTime
         size += Long.BYTES;
       }
+      if (version >= VERSION_6) {
+        // isByteRangeResponse
+        size += 1;
+      }
       if (version > VERSION_3) {
         // whether message metadata is present.
         size += Byte.BYTES;
@@ -146,7 +151,7 @@ class MessageInfoAndMetadataListSerde {
         outputBuffer.putLong(messageInfo.getSize());
         outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
         outputBuffer.put(messageInfo.isDeleted() ? UPDATED : (byte) ~UPDATED);
-        if (version < VERSION_1 || version > VERSION_5) {
+        if (version < VERSION_1 || version > VERSION_6) {
           throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
         }
         if (version >= VERSION_5) {
@@ -165,6 +170,9 @@ class MessageInfoAndMetadataListSerde {
           outputBuffer.putShort(messageInfo.getAccountId());
           outputBuffer.putShort(messageInfo.getContainerId());
           outputBuffer.putLong(messageInfo.getOperationTimeMs());
+        }
+        if (version >= VERSION_6) {
+          outputBuffer.put(messageInfo.isByteRangeRespnose() ? UPDATED : (byte)~UPDATED);
         }
         if (version > VERSION_3) {
           if (messageMetadata != null) {

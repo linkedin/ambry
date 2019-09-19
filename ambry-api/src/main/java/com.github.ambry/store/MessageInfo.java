@@ -32,6 +32,8 @@ public class MessageInfo {
   private final short containerId;
   private final long operationTimeMs;
 
+  private boolean isByteRangeResponse = false;
+
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
@@ -115,6 +117,14 @@ public class MessageInfo {
     this.accountId = accountId;
     this.containerId = containerId;
     this.operationTimeMs = operationTimeMs;
+  }
+
+  public void setByteRangeResponse() {
+    isByteRangeResponse = true;
+  }
+
+  public boolean isByteRangeRespnose() {
+    return isByteRangeResponse;
   }
 
   public StoreKey getStoreKey() {
