@@ -114,6 +114,9 @@ class HelixClusterManager implements ClusterMap {
     Map<String, DcZkInfo> dataCenterToZkAddress = null;
     HelixManager localManager_ = null;
     try {
+      logger.info("cluster map dcs zk connection is " + clusterMapConfig.clusterMapDcsZkConnectStrings);
+      logger.info("cluster map's cluster name is " + clusterMapConfig.clusterMapClusterName);
+      logger.info("cluster map's dc name is " + clusterMapConfig.clusterMapDatacenterName);
       dataCenterToZkAddress = parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
       // Make sure the HelixManager of local datacenter gets connected first and partitionOverrideInfoMap use PropertyStore
       // in local DC for initialization.

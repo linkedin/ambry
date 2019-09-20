@@ -57,7 +57,7 @@ import org.json.JSONObject;
  *   A sample usage of the tool is:
  *   <code>
  *     java -Dlog4j.configuration=file:../config/log4j.properties -cp ambry.jar com.github.ambry.account.AccountServiceTransitionVerifyTool
- *     --zkServer localhost:2818 --storePath /ambry/test/helixPropertyStore
+ *     --zkServer localhost:2818 --storePath /ambry/test/helixPropertyStore --zkLayoutPath ./zkLayout.json
  *   </code>
  *   The command will show you the result of the comparison. And if the {@link Account} metadata are not the same from these two storage,
  *   it will also print out the different part.
@@ -65,19 +65,25 @@ import org.json.JSONObject;
  */
 public class AccountServiceTransitionVerifyTool {
   private final MetricRegistry registry;
-  private final LocalBackup backup;
+  private final BackupFileManager backupFileManager;
   private final VerifiableProperties verifiableProperties;
   private final HelixPropertyStoreConfig storeConfig;
   private final HelixAccountServiceConfig accountServiceConfig;
   private final HelixPropertyStore<ZNRecord> helixStore;
 
-  private String hardwareLayoutFilePath;
-  private String partitionLayoutFilePath;
-
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 5000;
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
-  private static final String HARDWARD_LAYOUT_FILE_PATH = "";
-  private static final String PARTITION_LAYOUT_FILE_PATH = "";
+  private static final String DEFAULT_HOSTNAME = "localhost";
+  private static final String DEFAULT_DCNAME = "dc";
+
+  private String clusterName = null;
+  private String hostname = null;
+  private String dcName = null;
+  private String clusterMapDcsZkConnectString = null;
+
+  private Router router = null;
+  private AccountService accountService = null;
+  private ClusterMap clusterMap = null;
 
   public static void main(String[] args) throws Exception {
     OptionParser parser = new OptionParser();
@@ -112,21 +118,37 @@ public class AccountServiceTransitionVerifyTool {
         .ofType(Integer.class)
         .defaultsTo(ZK_CLIENT_SESSION_TIMEOUT_MS);
 
-    ArgumentAcceptingOptionSpec<String> hardwareLayoutFilePathOpt = parser.accepts("hardwareLayoutFilePath",
-        "The hardware layout filepath for clustermap. This option is not required. And the default value "
-          + "is the one in the ambryli artifacts.")
-        .withRequiredArg()
-        .describedAs("hardware_layout_file_path")
-        .ofType(String.class)
-        .defaultsTo(HARDWARD_LAYOUT_FILE_PATH);
+    ArgumentAcceptingOptionSpec<String> zkLayoutPathOpt = parser.accepts("zkLayoutPath",
+        "The path to the json file containing zookeeper connect info. This should be of the following form: \n{\n"
+            + "  \"zkInfo\" : [\n" + "     {\n" + "       \"datacenter\":\"dc1\",\n"
+            + "       \"zkConnectStr\":\"abc.example.com:2199\",\n" + "     },\n" + "     {\n"
+            + "       \"datacenter\":\"dc2\",\n" + "       \"zkConnectStr\":\"def.example.com:2300\",\n" + "     },\n"
+            + "     {\n" + "       \"datacenter\":\"dc3\",\n" + "       \"zkConnectStr\":\"ghi.example.com:2400\",\n"
+            + "     }\n" + "  ]\n" + "}").
+        withRequiredArg().
+        describedAs("zk_connect_info_path").
+        ofType(String.class);
 
-    ArgumentAcceptingOptionSpec<String> partitionLayoutFilePathOpt = parser.accepts("partitionLayoutFilePath",
-        "The partition layout filepath for clustermap. This option is not required. And the default value "
-            + "is the one in the ambryli artifacts.")
+    ArgumentAcceptingOptionSpec<String> clusterNameOpt = parser.accepts("clustername",
+        "Cluster name of current machine.")
         .withRequiredArg()
-        .describedAs("partition_layout_file_path")
+        .describedAs("cluster name")
+        .ofType(String.class);
+
+    ArgumentAcceptingOptionSpec<String> hostnameOpt = parser.accepts("hostname",
+        "Optional hostname of current machine. The option is not required and will defaulted to localhost")
+        .withRequiredArg()
+        .describedAs("hostname")
         .ofType(String.class)
-        .defaultsTo(PARTITION_LAYOUT_FILE_PATH);
+        .defaultsTo(DEFAULT_HOSTNAME);
+
+
+    ArgumentAcceptingOptionSpec<String> dcnameOpt = parser.accepts("dcname",
+        "Optional dc name of current machine. The option is not required and will defaulted to \"dc\"")
+        .withRequiredArg()
+        .describedAs("dc name")
+        .ofType(String.class)
+        .defaultsTo(DEFAULT_DCNAME);
 
     parser.accepts("help", "print this help message.");
     parser.accepts("h", "print this help message.");
@@ -137,21 +159,25 @@ public class AccountServiceTransitionVerifyTool {
       System.exit(0);
     }
 
-
-    ToolUtils.ensureOrExit(Arrays.asList(zkServerOpt, storePathOpt), options, parser);
+    ToolUtils.ensureOrExit(Arrays.asList(zkServerOpt, storePathOpt, zkLayoutPathOpt, clusterNameOpt), options, parser);
     String zkServer = options.valueOf(zkServerOpt);
     String storePath = options.valueOf(storePathOpt);
+    String hostname = options.valueOf(hostnameOpt);
+    String dcname = options.valueOf(dcnameOpt);
     Integer zkConnectionTimeoutMs = options.valueOf(zkConnectionTimeoutMsOpt);
     Integer zkSessionTimeoutMs = options.valueOf(zkSessionTimeoutMsOpt);
-    String hardwardLayoutFilePath = options.valueOf(hardwareLayoutFilePathOpt);
-    String partitionLayoutFilePath = options.valueOf(partitionLayoutFilePathOpt);
+    String zkLayoutPath = options.valueOf(zkLayoutPathOpt);
+    String clusterMapDcsZkConnectString = Utils.readStringFromFile(zkLayoutPath);
+    String clusterName = options.valueOf(clusterNameOpt);
 
-    AccountServiceTransitionVerifyTool verifyTool = new AccountServiceTransitionVerifyTool(zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs, hardwardLayoutFilePath, partitionLayoutFilePath);
+    AccountServiceTransitionVerifyTool verifyTool = new AccountServiceTransitionVerifyTool(zkServer, storePath, zkConnectionTimeoutMs,
+        zkSessionTimeoutMs, hostname, dcname, clusterMapDcsZkConnectString, clusterName);
     if (verifyTool.fetchAndCompareLegacyWithRouter()) {
       System.out.println("The legacy account map and the router account map are the same");
     } else {
       System.out.println("The legacy account map and the router account map are the **NOT** same, something is wrong");
     }
+    verifyTool.close();
   }
 
   /**
@@ -160,20 +186,24 @@ public class AccountServiceTransitionVerifyTool {
    * @param storePath The root path {@link HelixPropertyStore}.
    * @param zkConnectionTimeoutMs The connection timeout to {@link HelixPropertyStore}.
    * @param zkSessionTimeoutMs The session timeout to {@link HelixPropertyStore}.
-   * @param hardwareLayoutFilePath The filepath to the hardware layout.
-   * @param partitionLayoutFilePath The filepath to the partition layout.
+   * @param hostname The hostname of this machine.
+   * @param dcName The DCName of this machine.
+   * @param clusterMapDcsZkConnectString The DC zookeeper connection map in json format.
+   * @param clusterName The clusterName in HelixClusterMap.
    * @throws Exception Any unexpected exception.
    */
   public AccountServiceTransitionVerifyTool(String zkServer, String storePath, int zkConnectionTimeoutMs, int zkSessionTimeoutMs,
-      String hardwareLayoutFilePath, String partitionLayoutFilePath) throws Exception {
+      String hostname, String dcName, String clusterMapDcsZkConnectString, String clusterName) throws Exception {
+    this.hostname = hostname;
+    this.dcName = dcName;
+    this.clusterMapDcsZkConnectString = clusterMapDcsZkConnectString;
+    this.clusterName = clusterName;
     verifiableProperties = getVerifiableProperties(zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs);
     accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
     registry = new MetricRegistry();
-    backup = new LocalBackup(new AccountServiceMetrics(registry), accountServiceConfig);
+    backupFileManager = new BackupFileManager(new AccountServiceMetrics(registry), accountServiceConfig);
     helixStore = CommonUtils.createHelixPropertyStore(accountServiceConfig.zkClientConnectString, storeConfig, null);
-    this.hardwareLayoutFilePath = hardwareLayoutFilePath;
-    this.partitionLayoutFilePath = partitionLayoutFilePath;
   }
 
   /**
@@ -199,6 +229,7 @@ public class AccountServiceTransitionVerifyTool {
 
         String legacyValue = entry.getValue();
         Account legacyAccount = Account.fromJson(new JSONObject(legacyValue));
+        System.out.println("Verify account: " + legacyAccount.getName());
 
         String routerValue = routerAccountMap.get(key);
         if (routerValue == null) {
@@ -225,6 +256,25 @@ public class AccountServiceTransitionVerifyTool {
   }
 
   /**
+   * Close all the components.
+   * @throws Exception
+   */
+  public void close() throws Exception {
+    if (router != null) {
+      router.close();
+    }
+    if (accountService != null) {
+      accountService.close();
+    }
+    if (helixStore != null) {
+      helixStore.stop();
+    }
+    if (clusterMap != null) {
+      clusterMap.close();
+    }
+  }
+
+  /**
    * Setting proper properties for all the components to be created.
    * @param zkServer The address to zookeeper server.
    * @param storePath The root path for {@link HelixPropertyStore}.
@@ -242,11 +292,14 @@ public class AccountServiceTransitionVerifyTool {
     properties.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, zkServer);
 
     // for creating NonBlockingRouter
-    properties.setProperty("clustermap.cluster.name", "");
-    properties.setProperty("clustermap.host.name", "");
-    properties.setProperty("clustermap.datacenter.name", "");
-    properties.setProperty("router.hostname", "");
-    properties.setProperty("router.datacenter.name", "");
+    properties.setProperty("clustermap.dcs.zk.connect.strings", clusterMapDcsZkConnectString);
+    properties.setProperty("clustermap.clusteragents.factory", "com.github.ambry.clustermap.HelixClusterAgentsFactory");
+    properties.setProperty("clustermap.cluster.name", clusterName);
+    properties.setProperty("clustermap.host.name", hostname);
+    properties.setProperty("clustermap.datacenter.name", dcName);
+    properties.setProperty("router.hostname", hostname);
+    properties.setProperty("router.datacenter.name", dcName);
+    properties.setProperty("kms.default.container.key", "B375A26A71490437AA024E4FADD5B497FDFF1A8EA6FF12F6FB65AF2720B59CCF");
     return new VerifiableProperties(properties);
   }
 
@@ -255,7 +308,7 @@ public class AccountServiceTransitionVerifyTool {
    * @return {@link LegacyMetadataStore}.
    */
   private LegacyMetadataStore getLegacyMetadataStore() {
-    return new LegacyMetadataStore(new AccountServiceMetrics(registry), backup, helixStore);
+    return new LegacyMetadataStore(new AccountServiceMetrics(registry), backupFileManager, helixStore);
   }
 
   /**
@@ -264,7 +317,7 @@ public class AccountServiceTransitionVerifyTool {
    * @throws Exception Any unexpected exception.
    */
   private RouterStore getRouterStore() throws Exception {
-    return new RouterStore(new AccountServiceMetrics(registry), backup, helixStore, new AtomicReference<>(getRouter()));
+    return new RouterStore(new AccountServiceMetrics(registry), backupFileManager, helixStore, new AtomicReference<>(getRouter()), false, 100);
   }
 
   /**
@@ -277,20 +330,20 @@ public class AccountServiceTransitionVerifyTool {
     AccountServiceFactory accountServiceFactory =
         Utils.getObj("com.github.ambry.account.HelixAccountServiceFactory", verifiableProperties,
             registry);
-    AccountService accountService = accountServiceFactory.getAccountService();
+    accountService = accountServiceFactory.getAccountService();
 
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     ClusterAgentsFactory clusterAgentsFactory =
         Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
-            hardwareLayoutFilePath, partitionLayoutFilePath);
-    ClusterMap clusterMap = clusterAgentsFactory.getClusterMap();
+            "", "");
+    clusterMap = clusterAgentsFactory.getClusterMap();
     SSLFactory sslFactory = getSSLFactoryIfRequired();
     // Create a NonBlockingRouter.
     RouterFactory routerFactory =
         Utils.getObj("com.github.ambry.router.NonBlockingRouterFactory", verifiableProperties, clusterMap, new LoggingNotificationSystem(),
             sslFactory, accountService);
-    return routerFactory.getRouter();
-
+    router = routerFactory.getRouter();
+    return router;
   }
 
   /**
