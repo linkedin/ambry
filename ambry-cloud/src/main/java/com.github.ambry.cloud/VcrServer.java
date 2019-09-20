@@ -226,6 +226,9 @@ public class VcrServer {
           logger.error("Error while closing notification system.", e);
         }
       }
+      if (connectionPool != null) {
+        connectionPool.shutdown();
+      }
       if (clusterMap != null) {
         clusterMap.close();
       }
