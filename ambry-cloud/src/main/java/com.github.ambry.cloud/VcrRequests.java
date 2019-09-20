@@ -68,7 +68,7 @@ public class VcrRequests extends AmbryRequests {
 
   @Override
   protected ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType,
-      boolean skipPartitionAndDiskAvailableCheck) {
+      boolean skipPartitionAvailableCheck) {
     // 1. Check partition is null
     if (partition == null) {
       metrics.badRequestError.inc();
@@ -76,7 +76,7 @@ public class VcrRequests extends AmbryRequests {
     }
 
     // 2. check if partition is handled by this vcr node
-    return storeManager.isPartitionAvailable(partition, null);
+    return skipPartitionAvailableCheck ? ServerErrorCode.No_Error : storeManager.isPartitionAvailable(partition, null);
   }
 
   @Override

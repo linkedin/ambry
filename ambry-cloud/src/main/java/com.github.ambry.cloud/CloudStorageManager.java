@@ -50,6 +50,9 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean addBlobStore(ReplicaId replica) {
+    if (partitionTostore.containsKey(replica.getPartitionId())) {
+      return false;
+    }
     CloudBlobStore cloudStore =
         new CloudBlobStore(properties, replica.getPartitionId(), cloudDestination, clusterMap, vcrMetrics);
     partitionTostore.put(replica.getPartitionId(), cloudStore);
@@ -103,8 +106,7 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean removeBlobStore(PartitionId id) {
-    partitionTostore.remove(id);
-    return true;
+    return partitionTostore.remove(id) == null ? false : true;
   }
 
   @Override

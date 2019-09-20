@@ -552,7 +552,7 @@ final class ServerTestUtil {
   }
 
   /**
-   * Tests blobs put to dataNode can be backed up by {@link CloudBackupManager}.
+   * Tests blobs put to dataNode can be backed up by {@link com.github.ambry.cloud.VcrReplicationManager}.
    * @param cluster the {@link MockCluster} of dataNodes.
    * @param dataNode the datanode where blobs are originally put.
    * @param clientSSLConfig the {@link SSLConfig}.
