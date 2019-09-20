@@ -106,7 +106,7 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean removeBlobStore(PartitionId id) {
-    return partitionTostore.remove(id) == null ? false : true;
+    return partitionTostore.remove(id) != null;
   }
 
   @Override
