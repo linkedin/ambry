@@ -70,6 +70,8 @@ public class HelixClusterManagerTest {
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
   private final String hostname;
+  private final int portNum;
+  private final String selfInstanceName;
   private final String localDc;
   private final String remoteDc;
   private ClusterMap clusterManager;
@@ -182,11 +184,15 @@ public class HelixClusterManagerTest {
       }
     }
 
-    hostname = "localhost";
+    DataNode currentNode = testHardwareLayout.getRandomDataNodeFromDc(localDc);
+    hostname = currentNode.getHostname();
+    portNum = currentNode.getPort();
+    selfInstanceName = getInstanceName(hostname, portNum);
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
     props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
     props.setProperty("clustermap.datacenter.name", localDc);
+    props.setProperty("clustermap.port", Integer.toString(portNum));
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
     props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
@@ -198,10 +204,10 @@ public class HelixClusterManagerTest {
           new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath);
       metricRegistry = staticClusterAgentsFactory.getMetricRegistry();
       clusterManager = new CompositeClusterManager(staticClusterAgentsFactory.getClusterMap(),
-          new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, metricRegistry));
+          new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, metricRegistry));
     } else {
       metricRegistry = new MetricRegistry();
-      clusterManager = new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, metricRegistry);
+      clusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, metricRegistry);
     }
   }
 
@@ -321,7 +327,7 @@ public class HelixClusterManagerTest {
     testPartitionReplicaConsistency();
     testInvalidPartitionId();
     testDatacenterDatanodeReplicas();
-    assertStateEquivalency();
+    assertStateEquivalency(helixCluster.getDownInstances(), helixCluster.getUpInstances());
   }
 
   /**
@@ -334,24 +340,39 @@ public class HelixClusterManagerTest {
     assumeTrue(!useComposite && !overrideEnabled);
 
     // all instances are up initially.
-    assertStateEquivalency();
+    assertStateEquivalency(helixCluster.getDownInstances(), helixCluster.getUpInstances());
 
-    // Bring one instance down in each dc.
+    // Bring one instance (not current host) down in each dc
     for (String zkAddr : helixCluster.getZkAddrs()) {
-      helixCluster.bringInstanceDown(helixCluster.getUpInstances(zkAddr).get(0));
+      String instance =
+          helixCluster.getUpInstances(zkAddr).stream().filter(name -> !name.equals(selfInstanceName)).findFirst().get();
+      helixCluster.bringInstanceDown(instance);
     }
 
-    assertStateEquivalency();
+    assertStateEquivalency(helixCluster.getDownInstances(), helixCluster.getUpInstances());
 
     // Bring all instances down in all dcs.
     helixCluster.bringAllInstancesDown();
-    assertStateEquivalency();
+    Set<String> expectedDownInstances = helixCluster.getDownInstances();
+    Set<String> expectedUpInstances = helixCluster.getUpInstances();
+    expectedDownInstances.remove(selfInstanceName);
+    expectedUpInstances.add(selfInstanceName);
+    assertStateEquivalency(expectedDownInstances, expectedUpInstances);
 
     // Bring one instance up in each dc.
+    boolean selfInstanceIsChosen = false;
     for (String zkAddr : helixCluster.getZkAddrs()) {
-      helixCluster.bringInstanceUp(helixCluster.getDownInstances(zkAddr).get(0));
+      String instanceName = helixCluster.getDownInstances(zkAddr).get(0);
+      selfInstanceIsChosen = instanceName.equals(selfInstanceName);
+      helixCluster.bringInstanceUp(instanceName);
     }
-    assertStateEquivalency();
+    expectedDownInstances = helixCluster.getDownInstances();
+    expectedUpInstances = helixCluster.getUpInstances();
+    if (!selfInstanceIsChosen) {
+      expectedDownInstances.remove(selfInstanceName);
+      expectedUpInstances.add(selfInstanceName);
+    }
+    assertStateEquivalency(expectedDownInstances, expectedUpInstances);
   }
 
   /**
@@ -422,7 +443,7 @@ public class HelixClusterManagerTest {
 
     // The following does not do anything currently.
     clusterManager.onReplicaEvent(replica, ReplicaEventType.Partition_ReadOnly);
-    assertStateEquivalency();
+    assertStateEquivalency(helixCluster.getDownInstances(), helixCluster.getUpInstances());
   }
 
   /**
@@ -488,7 +509,7 @@ public class HelixClusterManagerTest {
     assumeTrue(!useComposite && !overrideEnabled && listenCrossColo);
 
     // all instances are up initially.
-    assertStateEquivalency();
+    assertStateEquivalency(helixCluster.getDownInstances(), helixCluster.getUpInstances());
 
     AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds(null).get(0);
     List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
@@ -513,7 +534,7 @@ public class HelixClusterManagerTest {
         clusterManager.getWritablePartitionIds(null).contains(partition));
     assertEquals("If no replica is SEALED, the whole partition should be Writable", PartitionState.READ_WRITE,
         partition.getPartitionState());
-    assertStateEquivalency();
+    assertStateEquivalency(helixCluster.getDownInstances(), helixCluster.getUpInstances());
   }
 
   /**
@@ -621,7 +642,7 @@ public class HelixClusterManagerTest {
     assumeTrue(!useComposite && !overrideEnabled && listenCrossColo);
 
     // all instances are up initially.
-    assertStateEquivalency();
+    assertStateEquivalency(helixCluster.getDownInstances(), helixCluster.getUpInstances());
 
     AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds(null).get(0);
     List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
@@ -785,9 +806,11 @@ public class HelixClusterManagerTest {
     // live instance trigger happens once initially.
     long instanceTriggerCount = dcs.length;
 
-    // Bring one instance down in each dc in order to test the metrics more generally.
+    // Bring one instance (not current instance) down in each dc in order to test the metrics more generally.
     for (String zkAddr : helixCluster.getZkAddrs()) {
-      helixCluster.bringInstanceDown(helixCluster.getUpInstances(zkAddr).get(0));
+      String instance =
+          helixCluster.getUpInstances(zkAddr).stream().filter(name -> !name.equals(selfInstanceName)).findFirst().get();
+      helixCluster.bringInstanceDown(instance);
       instanceTriggerCount++;
     }
 
@@ -981,11 +1004,10 @@ public class HelixClusterManagerTest {
   /**
    * Assert that the state of datanodes in the cluster manager's view are consistent with their actual states in the
    * cluster.
+   * @param expectedDownInstances the expected down instances set in cluster manager.
+   * @param expectedUpInstances the expected up instances set in cluster manager.
    */
-  private void assertStateEquivalency() {
-    Set<String> upInstancesInCluster = helixCluster.getUpInstances();
-    Set<String> downInstancesInCluster = helixCluster.getDownInstances();
-
+  private void assertStateEquivalency(Set<String> expectedDownInstances, Set<String> expectedUpInstances) {
     Set<String> upInstancesInClusterManager = new HashSet<>();
     Set<String> downInstancesInClusterManager = new HashSet<>();
     for (DataNodeId dataNode : clusterManager.getDataNodeIds()) {
@@ -997,8 +1019,8 @@ public class HelixClusterManagerTest {
             ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort())));
       }
     }
-    assertEquals(downInstancesInCluster, downInstancesInClusterManager);
-    assertEquals(upInstancesInCluster, upInstancesInClusterManager);
+    assertEquals(expectedDownInstances, downInstancesInClusterManager);
+    assertEquals(expectedUpInstances, upInstancesInClusterManager);
     Pair<Set<String>, Set<String>> writablePartitionsInTwoPlaces = getWritablePartitions();
     assertEquals(writablePartitionsInTwoPlaces.getFirst(), writablePartitionsInTwoPlaces.getSecond());
     testAllPartitions();
