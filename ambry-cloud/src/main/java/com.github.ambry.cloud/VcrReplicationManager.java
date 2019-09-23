@@ -32,6 +32,7 @@ import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -92,7 +93,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       @Override
       public void onPartitionAdded(PartitionId partitionId) {
         try {
-          addPartition(partitionId);
+          addReplica(partitionId);
           logger.info("Partition {} added to {}", partitionId, dataNodeId);
         } catch (ReplicationException e) {
           vcrMetrics.addPartitionErrorCount.inc();
@@ -107,30 +108,10 @@ public class VcrReplicationManager extends ReplicationEngine {
       @Override
       public void onPartitionRemoved(PartitionId partitionId) {
         try {
-          PartitionInfo partitionInfo = partitionToPartitionInfo.remove(partitionId);
-          if (partitionInfo == null) {
-            logger.error("Partition {} not exist when remove from {}. ", partitionId, dataNodeId);
-            vcrMetrics.removePartitionErrorCount.inc();
-            return;
-          }
-          removeRemoteReplicaInfoFromReplicaThread(partitionInfo.getRemoteReplicaInfos());
-          if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove) {
-            try {
-              persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
-            } catch (IOException | ReplicationException e) {
-              logger.error("Exception on token write when remove Partition {} from {}: ", partitionId, dataNodeId, e);
-              vcrMetrics.removePartitionErrorCount.inc();
-            }
-          }
-          Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
-          if (cloudStore != null) {
-            cloudStore.shutdown();
-          } else {
-            logger.warn("Store not found for partition {}", partitionId);
-          }
-          logger.info("Partition {} removed from {}", partitionId, dataNodeId);
-          // We don't close cloudBlobStore because because replicate in ReplicaThread is using a copy of
-          // remoteReplicaInfo which needs CloudBlobStore.
+          removeReplica(partitionId);
+        } catch (ReplicationException e) {
+          vcrMetrics.removePartitionErrorCount.inc();
+          logger.error("Exception on removing Partition {} to {}: ", partitionId, dataNodeId, e);
         } catch (Exception e) {
           // Helix will run into error state if exception throws in Helix context.
           vcrMetrics.removePartitionErrorCount.inc();
@@ -161,11 +142,11 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   /**
-   * Add given {@link PartitionId} and its {@link RemoteReplicaInfo}s to backup list.
-   * @param partitionId the {@link PartitionId} to add.
+   * Add a replica of given {@link PartitionId} and its {@link RemoteReplicaInfo}s to backup list.
+   * @param partitionId the {@link PartitionId} of the replica to add.
    * @throws ReplicationException if replicas initialization failed.
    */
-  void addPartition(PartitionId partitionId) throws ReplicationException {
+  void addReplica(PartitionId partitionId) throws ReplicationException {
     if (partitionToPartitionInfo.containsKey(partitionId)) {
       throw new ReplicationException("Partition " + partitionId + " already exists on " + dataNodeId);
     }
@@ -242,6 +223,41 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
       replicationMetrics.addLagMetricForPartition(partitionId);
     }
+  }
+
+  /**
+   * Remove a replica of given {@link PartitionId} and its {@link RemoteReplicaInfo}s from the backup list.
+   * @param partitionId the {@link PartitionId} of the replica to removed.
+   * @throws ReplicationException if replicas initialization failed.
+   */
+  void removeReplica(PartitionId partitionId) throws ReplicationException {
+    PartitionInfo partitionInfo = partitionToPartitionInfo.remove(partitionId);
+    if (partitionInfo == null) {
+      logger.error("Partition {} not exist when remove from {}. ", partitionId, dataNodeId);
+      throw new ReplicationException("Partition not found");
+    }
+    removeRemoteReplicaInfoFromReplicaThread(partitionInfo.getRemoteReplicaInfos());
+    if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove) {
+      try {
+        persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
+      } catch (IOException | ReplicationException e) {
+        logger.error("Exception on token write when remove Partition {} from {}: ", partitionId, dataNodeId, e);
+        throw new ReplicationException("Exception on token write.");
+      }
+    }
+    Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
+    if (cloudStore != null) {
+      try {
+        cloudStore.shutdown();
+      } catch (StoreException ex) {
+        throw new ReplicationException("Cloud not shutdown blobstore while removing replica");
+      }
+    } else {
+      logger.warn("Store not found for partition {}", partitionId);
+    }
+    logger.info("Partition {} removed from {}", partitionId, dataNodeId);
+    // We don't close cloudBlobStore because because replicate in ReplicaThread is using a copy of
+    // remoteReplicaInfo which needs CloudBlobStore.
   }
 
   public VcrMetrics getVcrMetrics() {
