@@ -589,7 +589,6 @@ class HelixClusterManager implements ClusterMap {
         for (LiveInstance liveInstance : liveInstances) {
           liveInstancesSet.add(liveInstance.getInstanceName());
         }
-        System.out.println(selfInstanceName);
         for (String instanceName : allInstances) {
           // when starting ambry-server, HelixClusterManager is instantiated before participating into cluster. During
           // this short window, Helix may send notification that makes this server mark itself is down. This brings

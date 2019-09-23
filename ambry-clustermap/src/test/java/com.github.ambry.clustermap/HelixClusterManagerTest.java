@@ -62,7 +62,7 @@ import static org.junit.Assume.*;
 @RunWith(Parameterized.class)
 public class HelixClusterManagerTest {
   private final HashMap<String, com.github.ambry.utils.TestUtils.ZkInfo> dcsToZkInfo = new HashMap<>();
-  private final String dcs[] = new String[]{"DC0", "DC1"};
+  private final String[] dcs = new String[]{"DC0", "DC1"};
   private final TestUtils.TestHardwareLayout testHardwareLayout;
   private final TestPartitionLayout testPartitionLayout;
   private final String clusterNameStatic = "HelixClusterManagerTestCluster";
@@ -240,13 +240,14 @@ public class HelixClusterManagerTest {
     JSONObject invalidZkJson = constructZkLayoutJSON(zkInfos);
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
+    props.setProperty("clustermap.port", Integer.toString(portNum));
     props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
     props.setProperty("clustermap.datacenter.name", localDc);
     props.setProperty("clustermap.dcs.zk.connect.strings", invalidZkJson.toString(2));
     ClusterMapConfig invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     metricRegistry = new MetricRegistry();
-    new HelixClusterManager(invalidClusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
-        metricRegistry);
+    new HelixClusterManager(invalidClusterMapConfig, selfInstanceName,
+        new MockHelixManagerFactory(helixCluster, null, null), metricRegistry);
     assertEquals(0L,
         metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
     assertEquals(1L, metricRegistry.getGauges()
@@ -262,8 +263,8 @@ public class HelixClusterManagerTest {
     invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     metricRegistry = new MetricRegistry();
     try {
-      new HelixClusterManager(invalidClusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
-          metricRegistry);
+      new HelixClusterManager(invalidClusterMapConfig, selfInstanceName,
+          new MockHelixManagerFactory(helixCluster, null, null), metricRegistry);
       fail("Instantiation should have failed with invalid zk addresses");
     } catch (IOException e) {
       assertEquals(1L,
@@ -275,7 +276,7 @@ public class HelixClusterManagerTest {
 
     metricRegistry = new MetricRegistry();
     try {
-      new HelixClusterManager(clusterMapConfig, hostname,
+      new HelixClusterManager(clusterMapConfig, selfInstanceName,
           new MockHelixManagerFactory(helixCluster, null, new Exception("beBad")), metricRegistry);
       fail("Instantiation should fail with a HelixManager factory that throws exception on listener registrations");
     } catch (Exception e) {
@@ -295,9 +296,8 @@ public class HelixClusterManagerTest {
     assumeTrue(overrideEnabled);
     metricRegistry = new MetricRegistry();
     // create a MockHelixManagerFactory
-    ClusterMap clusterManagerWithEmptyRecord =
-        new HelixClusterManager(clusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
-            metricRegistry);
+    ClusterMap clusterManagerWithEmptyRecord = new HelixClusterManager(clusterMapConfig, selfInstanceName,
+        new MockHelixManagerFactory(helixCluster, null, null), metricRegistry);
 
     Set<String> writableInClusterManager = new HashSet<>();
     for (PartitionId partition : clusterManagerWithEmptyRecord.getWritablePartitionIds(null)) {
@@ -320,9 +320,6 @@ public class HelixClusterManagerTest {
   public void basicInterfaceTest() throws Exception {
     assumeTrue(!overrideEnabled);
 
-    for (String metricName : clusterManager.getMetricRegistry().getNames()) {
-      System.out.println(metricName);
-    }
     assertEquals("Incorrect local datacenter ID", 0, clusterManager.getLocalDatacenterId());
     testPartitionReplicaConsistency();
     testInvalidPartitionId();
@@ -589,7 +586,7 @@ public class HelixClusterManagerTest {
       clusterManager.close();
       MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
       HelixClusterManager clusterManager =
-          new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
+          new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
       // Ensure the new RW partition is added
       assertEquals("Mismatch in writable partitions when instanceConfig changes", writableInOverrideMap.size() + 1,
           clusterManager.getWritablePartitionIds(null).size());
@@ -700,11 +697,19 @@ public class HelixClusterManagerTest {
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null, null);
     List<InstanceConfig> instanceConfigs = helixCluster.getAllInstanceConfigs();
     int instanceCount = instanceConfigs.size();
-    int randomIndex = com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size());
+    // find the self instance config and put it at the end of list. This is to ensure subsequent test won't choose self instance config.
+    for (int i = 0; i < instanceCount; ++i) {
+      if (instanceConfigs.get(i).getInstanceName().equals(selfInstanceName)) {
+        Collections.swap(instanceConfigs, i, instanceConfigs.size() - 1);
+        break;
+      }
+    }
+    int randomIndex = com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceCount - 1);
     InstanceConfig aheadInstanceConfig = instanceConfigs.get(randomIndex);
-    Collections.swap(instanceConfigs, randomIndex, instanceConfigs.size() - 1);
+    Collections.swap(instanceConfigs, randomIndex, instanceConfigs.size() - 2);
     aheadInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 1));
-    clusterManager = new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
+    clusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
     assertEquals(instanceCount - 1, clusterManager.getDataNodeIds().size());
     for (DataNodeId dataNode : clusterManager.getDataNodeIds()) {
       String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
@@ -717,9 +722,9 @@ public class HelixClusterManagerTest {
       assertEquals(instanceCount, aheadInstanceClusterManager.getDataNodeIds().size());
     }
 
-    // Post-initialization InstanceConfig change:
+    // Post-initialization InstanceConfig change: pick an instance that is neither previous instance nor self instance
     InstanceConfig ignoreInstanceConfig =
-        instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size() - 1));
+        instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceCount - 2));
     String ignoreInstanceName = ignoreInstanceConfig.getInstanceName();
     ignoreInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 2));
 
