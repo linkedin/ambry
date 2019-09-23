@@ -29,10 +29,10 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * The storage manager that does book keeping for all the handled by this vcr node.
+ * The storage manager that does book keeping for all of the partitions handled by this vcr node.
  */
 public class CloudStorageManager implements StoreManager {
-  private final ConcurrentMap<PartitionId, CloudBlobStore> partitionTostore;
+  private final ConcurrentMap<PartitionId, CloudBlobStore> partitionToStore;
   private final VerifiableProperties properties;
   private final CloudDestination cloudDestination;
   private final VcrMetrics vcrMetrics;
@@ -41,7 +41,7 @@ public class CloudStorageManager implements StoreManager {
 
   public CloudStorageManager(VerifiableProperties properties, VcrMetrics vcrMetrics, CloudDestination cloudDestination,
       ClusterMap clusterMap) {
-    partitionTostore = new ConcurrentHashMap<>();
+    partitionToStore = new ConcurrentHashMap<>();
     this.properties = properties;
     this.cloudDestination = cloudDestination;
     this.vcrMetrics = vcrMetrics;
@@ -50,18 +50,17 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean addBlobStore(ReplicaId replica) {
-    if (partitionTostore.containsKey(replica.getPartitionId())) {
-      return false;
+    CloudBlobStore cloudStore = partitionToStore.getOrDefault(replica.getPartitionId(), null);
+    if (cloudStore == null) {
+      cloudStore = new CloudBlobStore(properties, replica.getPartitionId(), cloudDestination, clusterMap, vcrMetrics);
+      partitionToStore.put(replica.getPartitionId(), cloudStore);
     }
-    CloudBlobStore cloudStore =
-        new CloudBlobStore(properties, replica.getPartitionId(), cloudDestination, clusterMap, vcrMetrics);
-    partitionTostore.put(replica.getPartitionId(), cloudStore);
     return startBlobStore(replica.getPartitionId());
   }
 
   @Override
   public boolean shutdownBlobStore(PartitionId id) {
-    CloudBlobStore blobStore = partitionTostore.getOrDefault(id, null);
+    CloudBlobStore blobStore = partitionToStore.getOrDefault(id, null);
     if (blobStore == null) {
       return false;
     }
@@ -71,7 +70,7 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public Store getStore(PartitionId id) {
-    return partitionTostore.getOrDefault(id, null);
+    return partitionToStore.getOrDefault(id, null);
   }
 
   @Override
@@ -81,7 +80,7 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean startBlobStore(PartitionId id) {
-    CloudBlobStore cloudStore = partitionTostore.getOrDefault(id, null);
+    CloudBlobStore cloudStore = partitionToStore.getOrDefault(id, null);
     if (cloudStore == null) {
       return false;
     }
@@ -106,11 +105,11 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean removeBlobStore(PartitionId id) {
-    return partitionTostore.remove(id) != null;
+    return partitionToStore.remove(id) != null;
   }
 
   @Override
-  public ServerErrorCode isPartitionAvailable(PartitionId partition, ReplicaId localReplica) {
+  public ServerErrorCode checkLocalPartitionStatus(PartitionId partition, ReplicaId localReplica) {
     if (getStore(partition) == null) {
       return ServerErrorCode.Replica_Unavailable;
     }

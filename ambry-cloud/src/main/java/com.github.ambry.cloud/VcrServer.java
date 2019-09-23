@@ -20,7 +20,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.clustermap.VirtualReplicatorClusterFactory;
-import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
@@ -76,15 +75,6 @@ public class VcrServer {
   private CloudDestinationFactory cloudDestinationFactory;
   private VcrRequests requests;
   private RequestHandlerPool requestHandlerPool;
-
-  /**
-   * VcrServer constructor.
-   * @param properties the config properties to use.
-   * @param clusterAgentsFactory the {@link ClusterAgentsFactory} to use.
-   */
-  public VcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory) {
-    this(properties, clusterAgentsFactory, new LoggingNotificationSystem());
-  }
 
   /**
    * VcrServer constructor.
@@ -207,6 +197,9 @@ public class VcrServer {
       if (scheduler != null) {
         shutDownExecutorService(scheduler, 5, TimeUnit.MINUTES);
       }
+      if (requestHandlerPool != null) {
+        requestHandlerPool.shutdown();
+      }
       if (networkServer != null) {
         networkServer.shutdown();
       }
@@ -225,9 +218,6 @@ public class VcrServer {
         } catch (IOException e) {
           logger.error("Error while closing notification system.", e);
         }
-      }
-      if (connectionPool != null) {
-        connectionPool.shutdown();
       }
       if (clusterMap != null) {
         clusterMap.close();

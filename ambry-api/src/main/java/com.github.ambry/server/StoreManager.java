@@ -19,6 +19,9 @@ import com.github.ambry.store.Store;
 import java.util.List;
 
 
+/**
+ * High level interface for handling and managing blob stores.
+ */
 public interface StoreManager {
 
   /**
@@ -26,33 +29,35 @@ public interface StoreManager {
    * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
    * @return {@code true} if adding store was successful. {@code false} if not.
    */
-  public boolean addBlobStore(ReplicaId replica);
+  boolean addBlobStore(ReplicaId replica);
 
   /**
    * Remove store from storage manager.
    * @param id the {@link PartitionId} associated with store
    * @return {@code true} if removal succeeds. {@code false} otherwise.
    */
-  public boolean removeBlobStore(PartitionId id);
+  boolean removeBlobStore(PartitionId id);
 
   /**
    * Start BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link Store} which would be started.
+   * @return true if successfully started, false otherwise.
    */
-  public boolean startBlobStore(PartitionId id);
+  boolean startBlobStore(PartitionId id);
 
   /**
    * Shutdown BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link Store} which would be shutdown.
+   * @return true if successfully shutdown, false otherwise.
    */
-  public boolean shutdownBlobStore(PartitionId id);
+  boolean shutdownBlobStore(PartitionId id);
 
   /**
    * @param id the {@link PartitionId} to find the store for.
    * @return the {@link Store} corresponding to the given {@link PartitionId}, or {@code null} if no store was found for
    *         that partition, or that store was not started.
    */
-  public Store getStore(PartitionId id);
+  Store getStore(PartitionId id);
 
   /**
    * Set BlobStore Stopped state with given {@link PartitionId} {@code id}.
@@ -60,22 +65,22 @@ public interface StoreManager {
    * @param markStop whether to mark BlobStore as stopped ({@code true}) or started.
    * @return a list of {@link PartitionId} whose stopped state fails to be updated.
    */
-  public List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop);
+  List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop);
 
   /**
    * Check if a certain partition is available locally.
    * @param partition the {@link PartitionId} to check.
-   * @param localReplica the {@link ReplicaId} of the localreplica of the partition.
+   * @param localReplica {@link ReplicaId} of localreplica of the partition {@code PartitionId}.
    * @return {@code true} if the partition is available. {@code false} if not.
    */
-  public ServerErrorCode isPartitionAvailable(PartitionId partition, ReplicaId localReplica);
+  ServerErrorCode checkLocalPartitionStatus(PartitionId partition, ReplicaId localReplica);
 
   /**
    * Schedules the {@link PartitionId} {@code id} for compaction next.
    * @param id the {@link PartitionId} of the {@link Store} to compact.
    * @return {@code true} if the scheduling was successful. {@code false} if not.
    */
-  public boolean scheduleNextForCompaction(PartitionId id);
+  boolean scheduleNextForCompaction(PartitionId id);
 
   /**
    * Disable compaction on the {@link PartitionId} {@code id}.
@@ -83,5 +88,5 @@ public interface StoreManager {
    * @param enabled whether to enable ({@code true}) or disable.
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
-  public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled);
+  boolean controlCompactionForBlobStore(PartitionId id, boolean enabled);
 }

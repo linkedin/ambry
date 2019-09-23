@@ -166,12 +166,11 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
-  public ServerErrorCode isPartitionAvailable(PartitionId partition, ReplicaId localReplica) {
+  public ServerErrorCode checkLocalPartitionStatus(PartitionId partition, ReplicaId localReplica) {
     if (getStore(partition) == null) {
       if (localReplica != null) {
         // check stores on the disk
         if (!isDiskAvailable(localReplica.getDiskId())) {
-          localReplica.markDiskDown();
           return ServerErrorCode.Disk_Unavailable;
         } else {
           return ServerErrorCode.Replica_Unavailable;

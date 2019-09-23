@@ -79,7 +79,7 @@ public class CloudStorageManagerTest {
     Assert.assertTrue(cloudStorageManager.addBlobStore(mockReplicaId));
 
     //add an already added replica to the store
-    Assert.assertFalse(cloudStorageManager.addBlobStore(mockReplicaId));
+    Assert.assertTrue(cloudStorageManager.addBlobStore(mockReplicaId));
 
     //try start for the added paritition
     Assert.assertTrue(cloudStorageManager.startBlobStore(partitionId));
@@ -137,29 +137,29 @@ public class CloudStorageManagerTest {
   }
 
   /**
-   * Test {@code CloudStorageManager#isPartitionAvailable}
+   * Test {@code CloudStorageManager#checkLocalPartitionStatus}
    * @throws IOException
    */
   @Test
-  public void isPartitionAvailableTest() throws IOException {
+  public void checkLocalPartitionStatusTest() throws IOException {
     CloudStorageManager cloudStorageManager = createNewCloudStorageManager();
     ReplicaId mockReplicaId = clusterMap.getReplicaIds(clusterMap.getDataNodeIds().get(0)).get(0);
     PartitionId partitionId = mockReplicaId.getPartitionId();
 
-    //try isPartitionAvailable for a partition that doesn't exist
-    Assert.assertEquals(cloudStorageManager.isPartitionAvailable(partitionId, new MockReplicaId()),
+    //try checkLocalPartitionStatus for a partition that doesn't exist
+    Assert.assertEquals(cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId()),
         ServerErrorCode.Replica_Unavailable);
 
     //add and start a replica to the store
     Assert.assertTrue(cloudStorageManager.addBlobStore(mockReplicaId));
 
-    //try isPartitionAvailable for an added replica
-    Assert.assertEquals(cloudStorageManager.isPartitionAvailable(partitionId, new MockReplicaId()),
+    //try checkLocalPartitionStatus for an added replica
+    Assert.assertEquals(cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId()),
         ServerErrorCode.No_Error);
 
-    //try isPartitionAvailable for a removed replica
+    //try checkLocalPartitionStatus for a removed replica
     Assert.assertTrue(cloudStorageManager.removeBlobStore(partitionId));
-    Assert.assertEquals(cloudStorageManager.isPartitionAvailable(partitionId, new MockReplicaId()),
+    Assert.assertEquals(cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId()),
         ServerErrorCode.Replica_Unavailable);
   }
 

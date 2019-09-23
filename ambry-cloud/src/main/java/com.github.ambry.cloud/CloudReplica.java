@@ -21,8 +21,8 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.protocol.GetRequest;
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
@@ -70,14 +70,12 @@ class CloudReplica implements ReplicaId {
 
   @Override
   public List<ReplicaId> getPeerReplicaIds() {
-    List<ReplicaId> replicasOfPartition = new ArrayList<>();
-    for (ReplicaId replicaId : partitionId.getReplicaIds()) {
-      if (replicaId.getDataNodeId().getHostname().equals(dataNodeId.getHostname())
-          && replicaId.getDataNodeId().getPort() == dataNodeId.getPort()) {
-        continue;
-      }
-      replicasOfPartition.add(replicaId);
-    }
+    List<ReplicaId> replicasOfPartition = partitionId.getReplicaIds()
+        .stream()
+        .filter(replica -> replica.getDataNodeId().getPort() != dataNodeId.getPort() || !replica.getDataNodeId()
+            .getHostname()
+            .equals(dataNodeId.getHostname()))
+        .collect(Collectors.toList());
     return replicasOfPartition;
   }
 
@@ -131,4 +129,3 @@ class CloudReplica implements ReplicaId {
     return ReplicaType.CLOUD_BACKED;
   }
 }
-

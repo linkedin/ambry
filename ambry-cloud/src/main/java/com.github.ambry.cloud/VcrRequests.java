@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
  */
 public class VcrRequests extends AmbryRequests {
 
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(VcrRequests.class);
 
   public VcrRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId currentNode, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
@@ -76,7 +76,8 @@ public class VcrRequests extends AmbryRequests {
     }
 
     // 2. check if partition is handled by this vcr node
-    return skipPartitionAvailableCheck ? ServerErrorCode.No_Error : storeManager.isPartitionAvailable(partition, null);
+    return skipPartitionAvailableCheck ? ServerErrorCode.No_Error
+        : storeManager.checkLocalPartitionStatus(partition, null);
   }
 
   @Override

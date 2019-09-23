@@ -106,7 +106,6 @@ public class AmbryRequests implements RequestAPI {
 
   protected StoreManager storeManager;
   protected final RequestResponseChannel requestResponseChannel;
-  private Logger logger = LoggerFactory.getLogger(getClass());
   private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   protected final ClusterMap clusterMap;
   private final DataNodeId currentNode;
@@ -121,6 +120,8 @@ public class AmbryRequests implements RequestAPI {
       new ConcurrentHashMap<>();
   private final boolean enableDataPrefetch;
   private final StoreKeyConverterFactory storeKeyConverterFactory;
+
+  private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
 
   public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
@@ -928,8 +929,7 @@ public class AmbryRequests implements RequestAPI {
                 EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest,
                     RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
                     RequestOrResponseType.TtlUpdateRequest), partitionIds, true);
-            if (replicationEngine.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
-                true)) {
+            if (replicationEngine.controlReplicationForPartitions(partitionIds, Collections.emptyList(), true)) {
               if (storeManager.controlCompactionForBlobStore(partitionId, true)) {
                 error = ServerErrorCode.No_Error;
                 logger.info("Store is successfully started and functional for partition: {}", partitionId);
@@ -965,8 +965,7 @@ public class AmbryRequests implements RequestAPI {
               controlRequestForPartitions(
                   EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
                       RequestOrResponseType.TtlUpdateRequest), partitionIds, false);
-              if (replicationEngine.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
-                  false)) {
+              if (replicationEngine.controlReplicationForPartitions(partitionIds, Collections.emptyList(), false)) {
                 if (isRemoteLagLesserOrEqual(partitionIds, 0,
                     blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition())) {
                   controlRequestForPartitions(
@@ -1122,7 +1121,7 @@ public class AmbryRequests implements RequestAPI {
         return ServerErrorCode.Disk_Unavailable;
       }
       // 3. check if partition exists on this node and that the store for this partition is available
-      ServerErrorCode errorCode = storeManager.isPartitionAvailable(partition, localReplica);
+      ServerErrorCode errorCode = storeManager.checkLocalPartitionStatus(partition, localReplica);
       switch (errorCode) {
         case Disk_Unavailable:
           metrics.diskUnavailableError.inc();

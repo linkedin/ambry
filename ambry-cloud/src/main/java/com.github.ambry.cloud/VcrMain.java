@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterAgentsFactory;
+import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.InvocationOptions;
@@ -41,7 +42,7 @@ public class VcrMain {
           Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
               options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       logger.info("Bootstrapping VcrServer");
-      vcrServer = new VcrServer(verifiableProperties, clusterAgentsFactory);
+      vcrServer = new VcrServer(verifiableProperties, clusterAgentsFactory, new LoggingNotificationSystem());
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
