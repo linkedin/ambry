@@ -590,12 +590,8 @@ class HelixClusterManager implements ClusterMap {
           liveInstancesSet.add(liveInstance.getInstanceName());
         }
         for (String instanceName : allInstances) {
-          // when starting ambry-server, HelixClusterManager is instantiated before participating into cluster. During
-          // this short window, Helix may send notification that makes this server mark itself is down. This brings
-          // Disk_Unavailable errors when handling replication requests and checking the state of disk (disk state depends
-          // on node state). The Disk_Unavailable is misleading, because disk is actually good and the server is able to
-          // serve replication request. Hence, if instance name equals self instance name, cluster manager of this node
-          // ignores its own liveness notification from Helix to avoid incorrect Disk_Unavailable error.
+          // Here we ignore live instance change it's about self instance. The reason is, during server's startup, current
+          // node should be AVAILABLE but the list of live instances doesn't include current node since it hasn't joined yet.
           if (liveInstancesSet.contains(instanceName) || instanceName.equals(selfInstanceName)) {
             instanceNameToAmbryDataNode.get(instanceName).setState(HardwareState.AVAILABLE);
           } else {
