@@ -61,7 +61,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * @see <a href="http://helix.apache.org">http://helix.apache.org</a>
  */
 class HelixClusterManager implements ClusterMap {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(HelixClusterManager.class);
   private final String clusterName;
   private final String selfInstanceName;
   private final MetricRegistry metricRegistry;
@@ -590,7 +590,9 @@ class HelixClusterManager implements ClusterMap {
           liveInstancesSet.add(liveInstance.getInstanceName());
         }
         for (String instanceName : allInstances) {
-          if (liveInstancesSet.contains(instanceName)) {
+          // Here we ignore live instance change it's about self instance. The reason is, during server's startup, current
+          // node should be AVAILABLE but the list of live instances doesn't include current node since it hasn't joined yet.
+          if (liveInstancesSet.contains(instanceName) || instanceName.equals(selfInstanceName)) {
             instanceNameToAmbryDataNode.get(instanceName).setState(HardwareState.AVAILABLE);
           } else {
             instanceNameToAmbryDataNode.get(instanceName).setState(HardwareState.UNAVAILABLE);
