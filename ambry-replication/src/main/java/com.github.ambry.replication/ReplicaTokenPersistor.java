@@ -130,7 +130,9 @@ public abstract class ReplicaTokenPersistor implements Runnable {
     private static final short Crc_Size = 8;
     private final ClusterMap clusterMap;
     private final FindTokenHelper tokenHelper;
-    private final short version = 0;
+    private static final short VERSION_0 = 0;
+    private static final short VERSION_1 = 1;
+    public static final short CURRENT_VERSION = VERSION_1;
 
     // Map<Sting,FindToken>
     public ReplicaTokenSerde(ClusterMap clusterMap, FindTokenHelper tokenHelper) {
@@ -143,7 +145,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
       DataOutputStream writer = new DataOutputStream(crcOutputStream);
       try {
         // write the current version
-        writer.writeShort(version);
+        writer.writeShort(CURRENT_VERSION);
         for (ReplicaTokenInfo replicaTokenInfo : tokenInfoList) {
           writer.write(replicaTokenInfo.getPartitionId().getBytes());
           // Write hostname
@@ -181,39 +183,40 @@ public abstract class ReplicaTokenPersistor implements Runnable {
       List<ReplicaTokenInfo> tokenInfoList = new ArrayList<>();
       try {
         short version = stream.readShort();
-        switch (version) {
-          case 0:
-            while (stream.available() > Crc_Size) {
-              // read partition id
-              PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-              // read remote node host name
-              String hostname = Utils.readIntString(stream);
-              // read remote replica path
-              String replicaPath = Utils.readIntString(stream);
-              // read remote port
-              int port = stream.readInt();
-              // read total bytes read from local store
-              long totalBytesReadFromLocalStore = stream.readLong();
-              //read replica type
-              ReplicaType replicaType = ReplicaType.values()[stream.readShort()];
-              // read replica token
-              FindTokenFactory findTokenFactory = tokenHelper.getFindTokenFactoryFromReplicaType(replicaType);
-              FindToken token = findTokenFactory.getFindToken(stream);
-
-              tokenInfoList.add(
-                  new ReplicaTokenInfo(partitionId, hostname, replicaPath, port, totalBytesReadFromLocalStore, token));
-            }
-
-            long computedCrc = crcStream.getValue();
-            long readCrc = stream.readLong();
-            if (computedCrc != readCrc) {
-              throw new ReplicationException(
-                  "Crc mismatch during replica token deserialization, computed " + computedCrc + ", read " + readCrc);
-            }
-            return tokenInfoList;
-          default:
-            throw new ReplicationException("Invalid version found during replica token deserialization: " + version);
+        if (version < VERSION_0 || version > VERSION_1) {
+          throw new ReplicationException("Invalid version found during replica token deserialization: " + version);
         }
+        while (stream.available() > Crc_Size) {
+          // read partition id
+          PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
+          // read remote node host name
+          String hostname = Utils.readIntString(stream);
+          // read remote replica path
+          String replicaPath = Utils.readIntString(stream);
+          // read remote port
+          int port = stream.readInt();
+          // read total bytes read from local store
+          long totalBytesReadFromLocalStore = stream.readLong();
+          //read replica type; prior to VERSION_1 all the replicas were DISK_BACKED only
+          ReplicaType replicaType = ReplicaType.DISK_BACKED;
+          if(version > VERSION_0) {
+            replicaType = ReplicaType.values()[stream.readShort()];
+          }
+          // read replica token
+          FindTokenFactory findTokenFactory = tokenHelper.getFindTokenFactoryFromReplicaType(replicaType);
+          FindToken token = findTokenFactory.getFindToken(stream);
+
+          tokenInfoList.add(
+              new ReplicaTokenInfo(partitionId, hostname, replicaPath, port, totalBytesReadFromLocalStore, token));
+        }
+
+        long computedCrc = crcStream.getValue();
+        long readCrc = stream.readLong();
+        if (computedCrc != readCrc) {
+          throw new ReplicationException(
+              "Crc mismatch during replica token deserialization, computed " + computedCrc + ", read " + readCrc);
+        }
+        return tokenInfoList;
       } catch (IOException e) {
         throw new ReplicationException("IO error deserializing replica tokens", e);
       } finally {

@@ -27,7 +27,7 @@ public class ReplicationConfig {
   /**
    * The factory class the replicatio uses to create cloud token
    */
-  @Config("replcation.cloudtoken.factory")
+  @Config("replication.cloudtoken.factory")
   @Default("com.github.ambry.cloud.CloudFindTokenFactory")
   public final String replicationCloudTokenFactory;
 
