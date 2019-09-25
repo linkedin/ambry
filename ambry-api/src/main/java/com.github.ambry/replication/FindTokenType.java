@@ -17,5 +17,5 @@ package com.github.ambry.replication;
  * The type of replica token
  */
 public enum FindTokenType {
-  Uninitialized, JournalBased, IndexBased, CloudBased;
+  Uninitialized, JournalBased, IndexBased, CloudBased
 }
