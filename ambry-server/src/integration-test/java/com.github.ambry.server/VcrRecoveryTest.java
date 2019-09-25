@@ -67,7 +67,7 @@ public class VcrRecoveryTest {
     vcrPortList.add(vcrSslPort);
     String vcrMountPath = "/vcr/1";
     MockDataNodeId vcrNode =
-        new MockDataNodeId("localhost", vcrPortList, Collections.singletonList(vcrMountPath), dcName, true);
+        new MockDataNodeId("localhost", vcrPortList, Collections.singletonList(vcrMountPath), dcName);
 
     // create data node
     Port recoveryClusterMapPort = new Port(12311, PortType.PLAINTEXT);
