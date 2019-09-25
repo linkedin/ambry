@@ -199,7 +199,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
           long totalBytesReadFromLocalStore = stream.readLong();
           //read replica type; prior to VERSION_1 all the replicas were DISK_BACKED only
           ReplicaType replicaType = ReplicaType.DISK_BACKED;
-          if(version > VERSION_0) {
+          if (version > VERSION_0) {
             replicaType = ReplicaType.values()[stream.readShort()];
           }
           // read replica token

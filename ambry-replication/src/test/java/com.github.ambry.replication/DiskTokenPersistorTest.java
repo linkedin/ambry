@@ -1,3 +1,16 @@
+/**
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
@@ -32,7 +45,6 @@ import org.junit.Test;
 public class DiskTokenPersistorTest {
   private static Map<String, List<PartitionInfo>> mountPathToPartitionInfoList;
   private static ClusterMap clusterMap;
-  private static ReplicationConfig replicationConfig;
   private static ReplicaId replicaId;
   private static List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfos;
   private static FindTokenHelper findTokenHelper;
@@ -66,7 +78,7 @@ public class DiskTokenPersistorTest {
 
     Properties replicationProperties = new Properties();
     replicationProperties.setProperty("replication.cloudtoken.factory",
-        new MockFindToken.MockFindTokenFactory().getClass().getName());
+        MockFindToken.MockFindTokenFactory.class.getName());
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(replicationProperties));
     findTokenHelper = new FindTokenHelper(blobIdFactory, replicationConfig);
   }
@@ -127,8 +139,6 @@ public class DiskTokenPersistorTest {
 
       // swap temp file with the original file
       temp.renameTo(actual);
-    } catch (IOException e) {
-      throw e;
     }
   }
 
@@ -155,21 +165,18 @@ public class DiskTokenPersistorTest {
         writer.write(replicaTokenInfo.getReplicaPath().getBytes());
         // Write port
         writer.writeInt(replicaTokenInfo.getPort());
-        // Write total bytes read from local store
+        //Write total bytes read from local store
         writer.writeLong(replicaTokenInfo.getTotalBytesReadFromLocalStore());
         // Write replica token
         writer.write(replicaTokenInfo.getReplicaToken().toBytes());
       }
       long crcValue = crcOutputStream.getValue();
       writer.writeLong(crcValue);
-    } catch (IOException e) {
-      throw e;
     } finally {
-      if (outputStream instanceof FileOutputStream) {
+      if (outputStream != null) {
         // flush and overwrite file
         outputStream.getChannel().force(true);
       }
-      writer.close();
     }
   }
 }
