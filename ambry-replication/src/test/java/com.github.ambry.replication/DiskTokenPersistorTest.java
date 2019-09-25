@@ -125,7 +125,7 @@ public class DiskTokenPersistorTest {
   }
 
   /**
-   * Serialize token in VERSION_0 format.
+   * Persist token in VERSION_0 format.
    * @param mountPath Path where persisted tokens will be saved.
    * @param tokenInfoList {@link RemoteReplicaInfo.ReplicaTokenInfo} list to serialize.
    * @throws IOException if an exception happens while persisting.
