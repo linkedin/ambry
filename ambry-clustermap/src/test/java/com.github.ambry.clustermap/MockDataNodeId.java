@@ -213,20 +213,6 @@ public class MockDataNodeId implements DataNodeId {
     return result;
   }
 
-  @Override
-  public int compareTo(DataNodeId o) {
-    if (o == null) {
-      throw new NullPointerException("input argument null");
-    }
-
-    MockDataNodeId other = (MockDataNodeId) o;
-    int compare = Integer.compare(portNum, other.portNum);
-    if (compare == 0) {
-      compare = hostname.compareTo(other.hostname);
-    }
-    return compare;
-  }
-
   public void onNodeTimeout() {
     isTimedout.set(true);
   }

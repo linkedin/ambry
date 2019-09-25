@@ -72,9 +72,7 @@ class CloudReplica implements ReplicaId {
   public List<ReplicaId> getPeerReplicaIds() {
     List<ReplicaId> replicasOfPartition = partitionId.getReplicaIds()
         .stream()
-        .filter(replica -> replica.getDataNodeId().getPort() != dataNodeId.getPort() || !replica.getDataNodeId()
-            .getHostname()
-            .equals(dataNodeId.getHostname()))
+        .filter(replica -> replica.getDataNodeId().compareTo(dataNodeId) != 0)
         .collect(Collectors.toList());
     return replicasOfPartition;
   }

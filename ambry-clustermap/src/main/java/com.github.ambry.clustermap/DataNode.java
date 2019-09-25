@@ -18,7 +18,6 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,9 +51,6 @@ class DataNode implements DataNodeId {
   private final ClusterMapConfig clusterMapConfig;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
-
-  private static final Comparator<DataNode> DATA_NODE_COMPARATOR = Comparator.comparingInt((DataNode k) -> k.portNum).
-      thenComparing(k -> k.hostname);
 
   DataNode(Datacenter datacenter, JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     if (logger.isTraceEnabled()) {
@@ -292,15 +288,5 @@ class DataNode implements DataNodeId {
     int result = hostname.hashCode();
     result = 31 * result + portNum;
     return result;
-  }
-
-  @Override
-  public int compareTo(DataNodeId o) {
-    if (o == null) {
-      throw new NullPointerException("input argument null");
-    }
-
-    DataNode other = (DataNode) o;
-    return DATA_NODE_COMPARATOR.compare(this, other);
   }
 }
