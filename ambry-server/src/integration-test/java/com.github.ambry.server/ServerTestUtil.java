@@ -2005,7 +2005,6 @@ final class ServerTestUtil {
             short version = dataInputStream.readShort();
             assertEquals(1, version);
 
-            System.out.println("setToCheck" + setToCheck.size());
             while (dataInputStream.available() > 8) {
               // read partition id
               PartitionId partitionId = clusterMap.getPartitionIdFromStream(dataInputStream);
