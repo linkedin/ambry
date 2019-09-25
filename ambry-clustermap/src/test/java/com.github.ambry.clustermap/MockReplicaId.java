@@ -30,9 +30,11 @@ public class MockReplicaId implements ReplicaId {
   private MockDataNodeId dataNodeId;
   private MockDiskId diskId;
   private boolean isMarkedDown = false;
+  private ReplicaType replicaType;
   private volatile boolean isSealed;
 
   public MockReplicaId() {
+    replicaType = ReplicaType.DISK_BACKED;
   }
 
   public MockReplicaId(int port, MockPartitionId partitionId, MockDataNodeId dataNodeId, int indexOfMountPathToUse) {
@@ -40,9 +42,14 @@ public class MockReplicaId implements ReplicaId {
     this.dataNodeId = dataNodeId;
     mountPath = dataNodeId.getMountPaths().get(indexOfMountPathToUse);
     File mountFile = new File(mountPath);
-    File replicaFile = new File(mountFile, "replica" + port + ((MockPartitionId) partitionId).partition);
+    File replicaFile = new File(mountFile, "replica" + port + partitionId.partition);
     replicaFile.mkdir();
     replicaFile.deleteOnExit();
+    if (mountPath.startsWith("/vcr")) {
+      replicaType = ReplicaType.CLOUD_BACKED;
+    } else {
+      replicaType = ReplicaType.DISK_BACKED;
+    }
     replicaPath = replicaFile.getAbsolutePath();
     diskId = new MockDiskId(dataNodeId, mountPath);
     isSealed = partitionId.getPartitionState().equals(PartitionState.READ_ONLY);
@@ -74,7 +81,7 @@ public class MockReplicaId implements ReplicaId {
   }
 
   public void setPeerReplicas(List<ReplicaId> peerReplicas) {
-    this.peerReplicas = new ArrayList<ReplicaId>();
+    this.peerReplicas = new ArrayList<>();
     for (ReplicaId replicaId : peerReplicas) {
       if (!(replicaId.getMountPath().compareTo(mountPath) == 0)) {
         this.peerReplicas.add(replicaId);
@@ -148,7 +155,7 @@ public class MockReplicaId implements ReplicaId {
 
   @Override
   public ReplicaType getReplicaType() {
-    return ReplicaType.DISK_BACKED;
+    return replicaType;
   }
 
   public void cleanup() {

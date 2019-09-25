@@ -19,7 +19,6 @@ import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
 import com.github.ambry.cloud.VcrServer;
 import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
@@ -55,7 +54,6 @@ import static org.junit.Assert.*;
 
 public class VcrBackupTest {
   private Logger logger = LoggerFactory.getLogger(getClass());
-  private Properties routerProps;
   private MockNotificationSystem notificationSystem;
   private MockCluster mockCluster;
   private TestUtils.ZkInfo zkInfo;
@@ -68,9 +66,6 @@ public class VcrBackupTest {
 
   @Before
   public void setup() throws Exception {
-    routerProps = new Properties();
-    routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
-    routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
     mockCluster = new MockCluster(new Properties(), false, SystemTime.getInstance(), 1, 1, numOfPartitions);
     notificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
     mockCluster.initializeServers(notificationSystem);
@@ -110,7 +105,8 @@ public class VcrBackupTest {
             notificationSystem, cloudDestinationFactory);
     vcrServer.startup();
     // Waiting for backup done
-    assertTrue("Did not backup all blobs in 2 minutes", latchBasedInMemoryCloudDestination.await(2, TimeUnit.MINUTES));
+    assertTrue("Did not backup all blobs in 2 minutes",
+        latchBasedInMemoryCloudDestination.awaitUpload(2, TimeUnit.MINUTES));
     vcrServer.shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServer.awaitShutdown(5000));
   }

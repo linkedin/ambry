@@ -621,11 +621,12 @@ final class ServerTestUtil {
     vcrServer.startup();
 
     // Waiting for backup done
-    assertTrue("Did not backup all blobs in 2 minutes", latchBasedInMemoryCloudDestination.await(2, TimeUnit.MINUTES));
+    assertTrue("Did not backup all blobs in 2 minutes",
+        latchBasedInMemoryCloudDestination.awaitUpload(2, TimeUnit.MINUTES));
     Map<String, CloudBlobMetadata> cloudBlobMetadataMap = latchBasedInMemoryCloudDestination.getBlobMetadata(blobIds);
     for (BlobId blobId : blobIds) {
       CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataMap.get(blobId.toString());
-      assertNotNull("cloudBlobMetadata shold not be null", cloudBlobMetadata);
+      assertNotNull("cloudBlobMetadata should not be null", cloudBlobMetadata);
       assertEquals("AccountId mismatch", accountId, cloudBlobMetadata.getAccountId());
       assertEquals("ContainerId mismatch", containerId, cloudBlobMetadata.getContainerId());
       assertEquals("Expiration time mismatch", Utils.Infinite_Time, cloudBlobMetadata.getExpirationTime());

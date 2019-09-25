@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -35,14 +36,46 @@ public class MockDataNodeId implements DataNodeId {
   private int portNum;
   private AtomicBoolean isTimedout = new AtomicBoolean(false);
 
+  /**
+   * Create a {@link MockDataNodeId} object for disk based datanode.
+   * @param hostname Hostname of the node.
+   * @param ports Ports associated with server on node.
+   * @param mountPaths Mount paths for replicas on node.
+   * @param dataCenter Name of datacenter.
+   */
   public MockDataNodeId(String hostname, List<Port> ports, List<String> mountPaths, String dataCenter) {
+    this(hostname, ports, mountPaths, dataCenter, false);
+  }
+
+  /**
+   * Create a {@link MockDataNodeId} object.
+   * @param hostname Hostname of the node.
+   * @param ports Ports associated with server on node.
+   * @param mountPaths Mount paths for replicas on node.
+   * @param dataCenter Name of datacenter.
+   * @param isVcr Whether the node is a vcr node or data node.
+   */
+  public MockDataNodeId(String hostname, List<Port> ports, List<String> mountPaths, String dataCenter, boolean isVcr) {
+    List<String> mPaths;
+    if (isVcr) {
+      // For vcr node force the path to start with "/vcr" as determination of cloud replica vs store replica is based on mount path.
+      mPaths = mountPaths.stream().map(mountPath -> "/vcr/" + mountPath).collect(Collectors.toList());
+    } else {
+      mPaths = mountPaths;
+    }
     this.hostname = hostname;
-    this.mountPaths = mountPaths;
+    this.mountPaths = mPaths;
     this.datacenter = dataCenter;
     this.ports = new HashMap<>();
     populatePorts(ports);
   }
 
+  /**
+   * Create a {@link MockDataNodeId} object from given {@code ports}, {@code mountPaths}, {@code dataCenter}.
+   * @param ports Ports associated with server on node.
+   * @param mountPaths Mount paths for replicas on node.
+   * @param dataCenter Name of datacenter.
+   */
   public MockDataNodeId(List<Port> ports, List<String> mountPaths, String dataCenter) {
     this("localhost", ports, mountPaths, dataCenter);
   }
@@ -91,11 +124,7 @@ public class MockDataNodeId implements DataNodeId {
 
   @Override
   public boolean hasSSLPort() {
-    if (ports.containsKey(PortType.SSL)) {
-      return true;
-    } else {
-      return false;
-    }
+    return ports.containsKey(PortType.SSL);
   }
 
   @Override

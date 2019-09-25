@@ -27,12 +27,31 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
   private MockClusterMap mockClusterMap;
   private ClusterParticipant clusterParticipant;
 
-  public MockClusterAgentsFactory(boolean enableSssPorts, int numNodes, int numMountPointsPerNode,
+  /**
+   * Create {@link MockClusterAgentsFactory} object.
+   * @param enableSslPorts disable/enable ssl ports.
+   * @param numNodes number of nodes in the cluster.
+   * @param numMountPointsPerNode number of mount points per node.
+   * @param numStoresPerMountPoint number of stores per mount point.
+   */
+  public MockClusterAgentsFactory(boolean enableSslPorts, int numNodes, int numMountPointsPerNode,
       int numStoresPerMountPoint) {
-    this.enableSslPorts = enableSssPorts;
+    this.enableSslPorts = enableSslPorts;
     this.numNodes = numNodes;
     this.numMountPointsPerNode = numMountPointsPerNode;
     this.numStoresPerMountPoint = numStoresPerMountPoint;
+  }
+
+  /**
+   * Create a {@link MockClusterAgentsFactory} object from the given {@code clustermap}.
+   * @param mockClusterMap {@link ClusterMap} object.
+   */
+  public MockClusterAgentsFactory(MockClusterMap mockClusterMap) {
+    this.mockClusterMap = mockClusterMap;
+    this.enableSslPorts = mockClusterMap.enableSSLPorts;
+    this.numMountPointsPerNode = mockClusterMap.numMountPointsPerNode;
+    this.numNodes = mockClusterMap.dataNodes.size();
+    this.numStoresPerMountPoint = mockClusterMap.partitions.size();
   }
 
   @Override
@@ -45,7 +64,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
   }
 
   @Override
-  public ClusterParticipant getClusterParticipant() throws IOException {
+  public ClusterParticipant getClusterParticipant() {
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
         @Override
