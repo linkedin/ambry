@@ -132,7 +132,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
     private final FindTokenHelper tokenHelper;
     private static final short VERSION_0 = 0;
     private static final short VERSION_1 = 1;
-    public static final short CURRENT_VERSION = VERSION_1;
+    private static final short CURRENT_VERSION = VERSION_1;
 
     // Map<Sting,FindToken>
     public ReplicaTokenSerde(ClusterMap clusterMap, FindTokenHelper tokenHelper) {
