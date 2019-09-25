@@ -44,27 +44,8 @@ public class MockDataNodeId implements DataNodeId {
    * @param dataCenter Name of datacenter.
    */
   public MockDataNodeId(String hostname, List<Port> ports, List<String> mountPaths, String dataCenter) {
-    this(hostname, ports, mountPaths, dataCenter, false);
-  }
-
-  /**
-   * Create a {@link MockDataNodeId} object.
-   * @param hostname Hostname of the node.
-   * @param ports Ports associated with server on node.
-   * @param mountPaths Mount paths for replicas on node.
-   * @param dataCenter Name of datacenter.
-   * @param isVcr Whether the node is a vcr node or data node.
-   */
-  public MockDataNodeId(String hostname, List<Port> ports, List<String> mountPaths, String dataCenter, boolean isVcr) {
-    List<String> mPaths;
-    if (isVcr) {
-      // For vcr node force the path to start with "/vcr" as determination of cloud replica vs store replica is based on mount path.
-      mPaths = mountPaths.stream().map(mountPath -> "/vcr/" + mountPath).collect(Collectors.toList());
-    } else {
-      mPaths = mountPaths;
-    }
     this.hostname = hostname;
-    this.mountPaths = mPaths;
+    this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
     this.ports = new HashMap<>();
     populatePorts(ports);
