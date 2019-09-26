@@ -78,7 +78,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     handshakeComplete = false;
     closing = false;
     //initiate handshake
-    handshakeStartTime = time.milliseconds();
+    handshakeStartTime = -1;
     sslEngine.beginHandshake();
     handshakeStatus = sslEngine.getHandshakeStatus();
   }
@@ -97,6 +97,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    */
   @Override
   public void prepare() throws IOException {
+    if (handshakeStartTime == -1) {
+      handshakeStartTime = time.milliseconds();
+    }
     if (!ready()) {
       handshake();
     }

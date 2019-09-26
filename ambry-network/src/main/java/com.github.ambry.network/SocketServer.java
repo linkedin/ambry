@@ -49,6 +49,7 @@ import org.slf4j.LoggerFactory;
  */
 public class SocketServer implements NetworkServer {
 
+  private final NetworkConfig networkConfig;
   private final String host;
   private final int port;
   private final int numProcessorThreads;
@@ -56,7 +57,6 @@ public class SocketServer implements NetworkServer {
   private final int sendBufferSize;
   private final int recvBufferSize;
   private final int maxRequestSize;
-  private final int selectorExecutorPoolSize;
   private final ArrayList<Processor> processors;
   private volatile ArrayList<Acceptor> acceptors;
   private final SocketRequestResponseChannel requestResponseChannel;
@@ -66,6 +66,7 @@ public class SocketServer implements NetworkServer {
   private SSLFactory sslFactory;
 
   public SocketServer(NetworkConfig config, SSLConfig sslConfig, MetricRegistry registry, ArrayList<Port> portList) {
+    this.networkConfig = config;
     this.host = config.hostName;
     this.port = config.port;
     this.numProcessorThreads = config.numIoThreads;
@@ -73,7 +74,6 @@ public class SocketServer implements NetworkServer {
     this.sendBufferSize = config.socketSendBufferBytes;
     this.recvBufferSize = config.socketReceiveBufferBytes;
     this.maxRequestSize = config.socketRequestMaxBytes;
-    this.selectorExecutorPoolSize = config.selectorExecutorPoolSize;
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
     metrics = new ServerNetworkMetrics(requestResponseChannel, registry, processors);
@@ -151,8 +151,7 @@ public class SocketServer implements NetworkServer {
   public void start() throws IOException, InterruptedException {
     logger.info("Starting {} processor threads", numProcessorThreads);
     for (int i = 0; i < numProcessorThreads; i++) {
-      processors.add(i,
-          new Processor(i, maxRequestSize, requestResponseChannel, metrics, sslFactory, selectorExecutorPoolSize));
+      processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel, metrics, sslFactory, networkConfig));
       Utils.newThread("ambry-processor-" + port + " " + i, processors.get(i), false).start();
     }
 
@@ -396,11 +395,11 @@ class Processor extends AbstractServerThread {
   private static final long pollTimeoutMs = 300;
 
   Processor(int id, int maxRequestSize, RequestResponseChannel channel, ServerNetworkMetrics metrics,
-      SSLFactory sslFactory, int selectorExecutorPoolSize) throws IOException {
+      SSLFactory sslFactory, NetworkConfig networkConfig) throws IOException {
     this.channel = (SocketRequestResponseChannel) channel;
     this.id = id;
     this.time = SystemTime.getInstance();
-    selector = new Selector(metrics, time, sslFactory, selectorExecutorPoolSize);
+    selector = new Selector(metrics, time, sslFactory, networkConfig);
     this.metrics = metrics;
   }
 

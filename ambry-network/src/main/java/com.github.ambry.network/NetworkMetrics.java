@@ -38,6 +38,7 @@ public class NetworkMetrics {
   public final Counter selectorIOCount;
   public final Histogram selectorIOTime;
   public final Counter selectorReadyKeyCount;
+  public final Counter selectorPrepareKeyCount;
   public final Counter selectorReadKeyCount;
   public final Counter selectorWriteKeyCount;
   public final Counter selectorNioCloseErrorCount;
@@ -109,6 +110,7 @@ public class NetworkMetrics {
     selectorSelectCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorSelectCount"));
     selectorIOCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorIOCount"));
     selectorReadyKeyCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorReadyKeyCount"));
+    selectorPrepareKeyCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorPrepareKeyCount"));
     selectorReadKeyCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorReadKeyCount"));
     selectorWriteKeyCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorWriteKeyCount"));
     selectorSelectTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorSelectTime"));
