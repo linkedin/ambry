@@ -131,7 +131,7 @@ public class VcrRecoveryTest {
     for (BlobId blobId : blobIds) {
       long time = System.currentTimeMillis();
       CloudBlobMetadata cloudBlobMetadata =
-          new CloudBlobMetadata(blobId, time, Utils.Infinite_Time, blobSize, null, null, null);
+          new CloudBlobMetadata(blobId, time, Utils.Infinite_Time, blobSize, CloudBlobMetadata.EncryptionOrigin.NONE);
       latchBasedInMemoryCloudDestination.uploadBlob(blobId, blobSize, cloudBlobMetadata,
           new ByteArrayInputStream(data));
     }
