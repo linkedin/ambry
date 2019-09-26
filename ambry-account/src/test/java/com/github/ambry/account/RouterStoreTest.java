@@ -152,8 +152,8 @@ public class RouterStoreTest {
     AccountTestUtils.generateRefAccounts(idToRefAccountMap, idtoRefContainerMap, accountIDSet, 1, 1);
     assertUpdateAndFetch(store, idToRefAccountMap, idToRefAccountMap, 1, 1);
 
-    // Now clear the router
-    router.close();
+    // Now clear the router to remove the blob so next time when reading blob, it will remove an exception.
+    router.clear();
 
     // generate another new account and test update and fetch on this account
     Map<Short, Account> anotherIdToRefAccountMap = new HashMap<>();

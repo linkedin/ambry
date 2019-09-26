@@ -168,14 +168,21 @@ public class MockRouter implements Router {
     throw new UnsupportedOperationException("updateBlobTtl is not supported by this mock");
   }
 
-  @Override
-  public void close() throws IOException {
-    // close will remove all the blobs
+  /**
+   * clear would remove all the blob in the map.
+   */
+  public void clear() {
     lock.lock();
     try {
       allBlobs.clear();
     } finally {
       lock.unlock();
     }
+  }
+
+  @Override
+  public void close() throws IOException {
+    // close will remove all the blobs
+    clear();
   }
 }
