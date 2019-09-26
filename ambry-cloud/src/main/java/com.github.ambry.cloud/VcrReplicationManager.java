@@ -32,7 +32,6 @@ import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -109,13 +108,10 @@ public class VcrReplicationManager extends ReplicationEngine {
       public void onPartitionRemoved(PartitionId partitionId) {
         try {
           removeReplica(partitionId);
-        } catch (ReplicationException e) {
-          vcrMetrics.removePartitionErrorCount.inc();
-          logger.error("Exception on removing Partition {} to {}: ", partitionId, dataNodeId, e);
         } catch (Exception e) {
           // Helix will run into error state if exception throws in Helix context.
           vcrMetrics.removePartitionErrorCount.inc();
-          logger.error("Unknown Exception on removing Partition {} from {}: ", partitionId, dataNodeId, e);
+          logger.error("Exception on removing Partition {} from {}: ", partitionId, dataNodeId, e);
         }
       }
     });
@@ -157,6 +153,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     }
     List<? extends ReplicaId> peerReplicas = cloudReplica.getPeerReplicaIds();
     List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
+    Store store = storeManager.getStore(partitionId);
     if (peerReplicas != null) {
       for (ReplicaId peerReplica : peerReplicas) {
         if (!peerReplica.getDataNodeId().getDatacenterName().equals(dataNodeId.getDatacenterName())) {
@@ -168,15 +165,13 @@ public class VcrReplicationManager extends ReplicationEngine {
         FindTokenFactory findTokenFactory =
             tokenHelper.getFindTokenFactoryFromReplicaType(peerReplica.getReplicaType());
         RemoteReplicaInfo remoteReplicaInfo =
-            new RemoteReplicaInfo(peerReplica, cloudReplica, storeManager.getStore(partitionId),
-                findTokenFactory.getNewFindToken(),
+            new RemoteReplicaInfo(peerReplica, cloudReplica, store, findTokenFactory.getNewFindToken(),
                 storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
                 SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
         replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
         remoteReplicaInfos.add(remoteReplicaInfo);
       }
-      PartitionInfo partitionInfo =
-          new PartitionInfo(remoteReplicaInfos, partitionId, storeManager.getStore(partitionId), cloudReplica);
+      PartitionInfo partitionInfo = new PartitionInfo(remoteReplicaInfos, partitionId, store, cloudReplica);
       partitionToPartitionInfo.put(partitionId, partitionInfo);
       mountPathToPartitionInfos.compute(cloudReplica.getMountPath(), (key, value) -> {
         // For CloudBackupManager, at most one PartitionInfo in the list.
@@ -184,7 +179,7 @@ public class VcrReplicationManager extends ReplicationEngine {
         retList.add(partitionInfo);
         return retList;
       });
-      partitionStoreMap.put(partitionId.toPathString(), storeManager.getStore(partitionId));
+      partitionStoreMap.put(partitionId.toPathString(), store);
     } else {
       try {
         storeManager.shutdownBlobStore(partitionId);
@@ -247,11 +242,8 @@ public class VcrReplicationManager extends ReplicationEngine {
     }
     Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
     if (cloudStore != null) {
-      try {
-        cloudStore.shutdown();
-      } catch (StoreException ex) {
-        throw new ReplicationException("Cloud not shutdown blobstore while removing replica");
-      }
+      storeManager.shutdownBlobStore(partitionId);
+      storeManager.removeBlobStore(partitionId);
     } else {
       logger.warn("Store not found for partition {}", partitionId);
     }

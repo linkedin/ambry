@@ -50,17 +50,15 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean addBlobStore(ReplicaId replica) {
-    CloudBlobStore cloudStore = partitionToStore.getOrDefault(replica.getPartitionId(), null);
-    if (cloudStore == null) {
-      cloudStore = new CloudBlobStore(properties, replica.getPartitionId(), cloudDestination, clusterMap, vcrMetrics);
-      partitionToStore.put(replica.getPartitionId(), cloudStore);
-    }
+    CloudBlobStore cloudBlobStore = partitionToStore.computeIfAbsent(replica.getPartitionId(),
+        store -> new CloudBlobStore(properties, replica.getPartitionId(), cloudDestination, clusterMap, vcrMetrics));
+    partitionToStore.put(replica.getPartitionId(), cloudBlobStore);
     return startBlobStore(replica.getPartitionId());
   }
 
   @Override
   public boolean shutdownBlobStore(PartitionId id) {
-    CloudBlobStore blobStore = partitionToStore.getOrDefault(id, null);
+    CloudBlobStore blobStore = partitionToStore.get(id);
     if (blobStore == null) {
       return false;
     }
@@ -70,7 +68,8 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public Store getStore(PartitionId id) {
-    return partitionToStore.getOrDefault(id, null);
+    Store store = partitionToStore.getOrDefault(id, null);
+    return (store != null && store.isStarted()) ? store : null;
   }
 
   @Override
