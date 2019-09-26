@@ -52,7 +52,6 @@ public class CloudStorageManager implements StoreManager {
   public boolean addBlobStore(ReplicaId replica) {
     CloudBlobStore cloudBlobStore = partitionToStore.computeIfAbsent(replica.getPartitionId(),
         store -> new CloudBlobStore(properties, replica.getPartitionId(), cloudDestination, clusterMap, vcrMetrics));
-    partitionToStore.put(replica.getPartitionId(), cloudBlobStore);
     return startBlobStore(replica.getPartitionId());
   }
 
