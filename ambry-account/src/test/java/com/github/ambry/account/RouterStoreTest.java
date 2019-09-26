@@ -161,8 +161,7 @@ public class RouterStoreTest {
     for (Map.Entry<Short, Account> entry : anotherIdToRefAccountMap.entrySet()) {
       idToRefAccountMap.put(entry.getKey(), entry.getValue());
     }
-    boolean succeeded = store.updateAccounts(anotherIdToRefAccountMap.values());
-    assertFalse("Update account should fail on read error", succeeded);
+    assertFalse("Update account should fail on read error", store.updateAccounts(anotherIdToRefAccountMap.values()));
   }
 
   /**
