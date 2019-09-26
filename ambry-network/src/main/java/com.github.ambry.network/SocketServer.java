@@ -57,7 +57,6 @@ public class SocketServer implements NetworkServer {
   private final int sendBufferSize;
   private final int recvBufferSize;
   private final int maxRequestSize;
-  private final int selectorExecutorPoolSize;
   private final ArrayList<Processor> processors;
   private volatile ArrayList<Acceptor> acceptors;
   private final SocketRequestResponseChannel requestResponseChannel;
@@ -75,7 +74,6 @@ public class SocketServer implements NetworkServer {
     this.sendBufferSize = config.socketSendBufferBytes;
     this.recvBufferSize = config.socketReceiveBufferBytes;
     this.maxRequestSize = config.socketRequestMaxBytes;
-    this.selectorExecutorPoolSize = config.selectorExecutorPoolSize;
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
     metrics = new ServerNetworkMetrics(requestResponseChannel, registry, processors);
