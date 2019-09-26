@@ -120,6 +120,7 @@ public class RouterStoreTest {
     // generate an new account and test update and fetch on this account
     AccountTestUtils.generateRefAccounts(idToRefAccountMap, idtoRefContainerMap, accountIDSet, 1, 1);
     assertUpdateAndFetch(store, idToRefAccountMap, idToRefAccountMap, 1, 1);
+    Map<Short, Account> accountMapFirstVersion = new HashMap<>(idToRefAccountMap);
 
     // generate another new account and test update and fetch on this account
     Map<Short, Account> anotherIdToRefAccountMap = new HashMap<>();
@@ -133,6 +134,18 @@ public class RouterStoreTest {
     }
     // the version should be 2 now
     assertUpdateAndFetch(store, idToRefAccountMap, anotherIdToRefAccountMap, 2, 2);
+
+    // Make sure we can get all the versions out
+    List<Integer> versions = store.getAllVersions();
+    assertNotNull(versions);
+    Collections.sort(versions);
+    assertEquals(versions.size(), 2);
+    assertEquals((int) versions.get(0), 1);
+    assertEquals((int) versions.get(1), 2);
+
+    // Make sure we can still get the first version out
+    Map<String, String> accountMap = store.fetchAccountMetadataAtVersion(1);
+    assertAccountsEqual(accountMap, accountMapFirstVersion);
   }
 
   /**
