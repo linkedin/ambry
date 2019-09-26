@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.NetworkClientErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import java.io.IOException;
 import java.net.SocketException;
 import java.util.List;

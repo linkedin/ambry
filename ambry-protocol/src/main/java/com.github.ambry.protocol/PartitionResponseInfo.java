@@ -15,7 +15,7 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.store.MessageInfo;
 import java.io.DataInputStream;

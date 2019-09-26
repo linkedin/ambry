@@ -449,7 +449,7 @@ public class CloudBlobStoreTest {
 
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIdList);
-    CloudReplica cloudReplica = new CloudReplica(cloudConfig, partitionId, cloudDataNode);
+    CloudReplica cloudReplica = new CloudReplica(partitionId, cloudDataNode);
     CloudBlobStore cloudBlobStore =
         new CloudBlobStore(new VerifiableProperties(props), partitionId, latchBasedInMemoryCloudDestination, clusterMap,
             new VcrMetrics(new MetricRegistry()));

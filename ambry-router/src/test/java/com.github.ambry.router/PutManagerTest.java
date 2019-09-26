@@ -23,7 +23,7 @@ import com.github.ambry.commons.BlobId.BlobDataType;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;

@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -35,6 +36,13 @@ public class MockDataNodeId implements DataNodeId {
   private int portNum;
   private AtomicBoolean isTimedout = new AtomicBoolean(false);
 
+  /**
+   * Create a {@link MockDataNodeId} object for disk based datanode.
+   * @param hostname Hostname of the node.
+   * @param ports Ports associated with server on node.
+   * @param mountPaths Mount paths for replicas on node.
+   * @param dataCenter Name of datacenter.
+   */
   public MockDataNodeId(String hostname, List<Port> ports, List<String> mountPaths, String dataCenter) {
     this.hostname = hostname;
     this.mountPaths = mountPaths;
@@ -43,6 +51,12 @@ public class MockDataNodeId implements DataNodeId {
     populatePorts(ports);
   }
 
+  /**
+   * Create a {@link MockDataNodeId} object from given {@code ports}, {@code mountPaths}, {@code dataCenter}.
+   * @param ports Ports associated with server on node.
+   * @param mountPaths Mount paths for replicas on node.
+   * @param dataCenter Name of datacenter.
+   */
   public MockDataNodeId(List<Port> ports, List<String> mountPaths, String dataCenter) {
     this("localhost", ports, mountPaths, dataCenter);
   }
@@ -91,11 +105,7 @@ public class MockDataNodeId implements DataNodeId {
 
   @Override
   public boolean hasSSLPort() {
-    if (ports.containsKey(PortType.SSL)) {
-      return true;
-    } else {
-      return false;
-    }
+    return ports.containsKey(PortType.SSL);
   }
 
   @Override
@@ -182,20 +192,6 @@ public class MockDataNodeId implements DataNodeId {
     int result = hostname.hashCode();
     result = 31 * result + portNum;
     return result;
-  }
-
-  @Override
-  public int compareTo(DataNodeId o) {
-    if (o == null) {
-      throw new NullPointerException("input argument null");
-    }
-
-    MockDataNodeId other = (MockDataNodeId) o;
-    int compare = Integer.compare(portNum, other.portNum);
-    if (compare == 0) {
-      compare = hostname.compareTo(other.hostname);
-    }
-    return compare;
   }
 
   public void onNodeTimeout() {

@@ -16,7 +16,6 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
-import com.github.ambry.cloud.CloudBackupManager;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
@@ -41,7 +40,6 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.commons.SSLFactory;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
@@ -554,7 +552,7 @@ final class ServerTestUtil {
   }
 
   /**
-   * Tests blobs put to dataNode can be backed up by {@link CloudBackupManager}.
+   * Tests blobs put to dataNode can be backed up by {@link com.github.ambry.cloud.VcrReplicationManager}.
    * @param cluster the {@link MockCluster} of dataNodes.
    * @param dataNode the datanode where blobs are originally put.
    * @param clientSSLConfig the {@link SSLConfig}.
@@ -623,11 +621,12 @@ final class ServerTestUtil {
     vcrServer.startup();
 
     // Waiting for backup done
-    assertTrue("Did not backup all blobs in 2 minutes", latchBasedInMemoryCloudDestination.await(2, TimeUnit.MINUTES));
+    assertTrue("Did not backup all blobs in 2 minutes",
+        latchBasedInMemoryCloudDestination.awaitUpload(2, TimeUnit.MINUTES));
     Map<String, CloudBlobMetadata> cloudBlobMetadataMap = latchBasedInMemoryCloudDestination.getBlobMetadata(blobIds);
     for (BlobId blobId : blobIds) {
       CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataMap.get(blobId.toString());
-      assertNotNull("cloudBlobMetadata shold not be null", cloudBlobMetadata);
+      assertNotNull("cloudBlobMetadata should not be null", cloudBlobMetadata);
       assertEquals("AccountId mismatch", accountId, cloudBlobMetadata.getAccountId());
       assertEquals("ContainerId mismatch", containerId, cloudBlobMetadata.getContainerId());
       assertEquals("Expiration time mismatch", Utils.Infinite_Time, cloudBlobMetadata.getExpirationTime());

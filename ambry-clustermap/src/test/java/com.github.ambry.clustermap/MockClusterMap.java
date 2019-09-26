@@ -109,7 +109,7 @@ public class MockClusterMap implements ClusterMap {
       int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass) throws IOException {
     this.enableSSLPorts = enableSSLPorts;
     this.numMountPointsPerNode = numMountPointsPerNode;
-    dataNodes = new ArrayList<MockDataNodeId>(numNodes);
+    dataNodes = new ArrayList<>(numNodes);
     //Every group of 3 nodes will be put in the same DC.
     int dcIndex = 0;
     String dcName = null;
@@ -123,15 +123,16 @@ public class MockClusterMap implements ClusterMap {
       }
       MockDataNodeId dataNodeId;
       if (enableSSLPorts) {
-        dataNodeId = createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), dcName);
+        dataNodeId =
+            createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), dcName, numMountPointsPerNode);
       } else {
-        dataNodeId = createDataNode(getListOfPorts(currentPlainTextPort++), dcName);
+        dataNodeId = createDataNode(getListOfPorts(currentPlainTextPort++), dcName, numMountPointsPerNode);
       }
       dataNodes.add(dataNodeId);
       dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(dataNodeId);
       localDatacenterName = dcName;
     }
-    partitions = new HashMap<Long, PartitionId>();
+    partitions = new HashMap<>();
 
     // create partitions
     long partitionId = 0;
@@ -180,8 +181,60 @@ public class MockClusterMap implements ClusterMap {
     specialPartition = null;
   }
 
+  /**
+   * Create a cluster map for recovery from the given {@code vcrNode} and {@code recoveryNode}.
+   * The cluster is created such that {@code recoveryNode} has {@code vcrNode}'s replicas as peer replicas.
+   * @param recoveryNode The data node.
+   * @param vcrNode The vcr node.
+   * @param dcName Name of the datacenter.
+   */
+  private MockClusterMap(MockDataNodeId recoveryNode, MockDataNodeId vcrNode, String dcName) {
+    this.enableSSLPorts = false;
+    this.numMountPointsPerNode = 1;
+    dataNodes = new ArrayList<>();
+    dataNodes.add(recoveryNode);
+    dataNodes.add(vcrNode);
+
+    dataCentersInClusterMap.add(dcName);
+    localDatacenterName = dcName;
+
+    dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(recoveryNode);
+    dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(vcrNode);
+
+    partitions = new HashMap<>();
+
+    // create partitions
+    MockPartitionId mockPartitionId = new MockPartitionId();
+    List<ReplicaId> replicaIds = new ArrayList<>(dataNodes.size());
+    MockReplicaId recoveryReplica = new MockReplicaId(recoveryNode.getPort(), mockPartitionId, recoveryNode, 0);
+    replicaIds.add(recoveryReplica);
+    MockReplicaId vcrReplica = new MockReplicaId(vcrNode.getPort(), mockPartitionId, vcrNode, 0);
+    replicaIds.add(vcrReplica);
+    mockPartitionId.replicaIds = replicaIds;
+
+    // Set only vcrReplica as peer of recovery replica.
+    recoveryReplica.setPeerReplicas(Collections.singletonList(vcrReplica));
+    partitions.put(mockPartitionId.partition, mockPartitionId);
+
+    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName);
+    specialPartition = null;
+  }
+
+  /**
+   * Create a cluster map for recovery from the given {@code vcrNode} and {@code recoveryNode}.
+   * The cluster is created such that {@code recoveryNode} has {@code vcrNode}'s replicas as peer replicas.
+   * @param recoveryNode The data node.
+   * @param vcrNode The vcr node.
+   * @param dcName Name of the datacenter.
+   * @return {@link MockClusterMap} object.
+   */
+  public static MockClusterMap createOneNodeRecoveryClusterMap(MockDataNodeId recoveryNode, MockDataNodeId vcrNode,
+      String dcName) {
+    return new MockClusterMap(recoveryNode, vcrNode, dcName);
+  }
+
   protected ArrayList<Port> getListOfPorts(int port) {
-    ArrayList<Port> ports = new ArrayList<Port>();
+    ArrayList<Port> ports = new ArrayList<>();
     ports.add(new Port(port, PortType.PLAINTEXT));
     return ports;
   }
@@ -193,7 +246,7 @@ public class MockClusterMap implements ClusterMap {
     return ports;
   }
 
-  protected int getPlainTextPort(ArrayList<Port> ports) {
+  public static int getPlainTextPort(ArrayList<Port> ports) {
     for (Port port : ports) {
       if (port.getPortType() == PortType.PLAINTEXT) {
         return port.getPort();
@@ -202,11 +255,12 @@ public class MockClusterMap implements ClusterMap {
     throw new IllegalArgumentException("No PlainText port found ");
   }
 
-  protected MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter) throws IOException {
+  public static MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter, int numMountPointsPerNode)
+      throws IOException {
     File f = null;
     int port = getPlainTextPort(ports);
     try {
-      List<String> mountPaths = new ArrayList<String>(numMountPointsPerNode);
+      List<String> mountPaths = new ArrayList<>(numMountPointsPerNode);
       f = File.createTempFile("ambry", ".tmp");
       for (int i = 0; i < numMountPointsPerNode; i++) {
         File mountFile = new File(f.getParent(), "mountpathfile" + port + i);
@@ -293,7 +347,7 @@ public class MockClusterMap implements ClusterMap {
 
   @Override
   public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
-    ArrayList<ReplicaId> replicaIdsToReturn = new ArrayList<ReplicaId>();
+    ArrayList<ReplicaId> replicaIdsToReturn = new ArrayList<>();
     for (PartitionId partitionId : partitions.values()) {
       List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
       for (ReplicaId replicaId : replicaIds) {
@@ -308,7 +362,7 @@ public class MockClusterMap implements ClusterMap {
 
   @Override
   public List<DataNodeId> getDataNodeIds() {
-    return new ArrayList<DataNodeId>(dataNodes);
+    return new ArrayList<>(dataNodes);
   }
 
   public List<MockDataNodeId> getDataNodes() {
@@ -475,4 +529,3 @@ public class MockClusterMap implements ClusterMap {
     exceptionOnSnapshot = e;
   }
 }
-

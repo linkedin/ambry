@@ -20,7 +20,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
-import java.util.Comparator;
 import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -41,10 +40,6 @@ public class CloudDataNode implements DataNodeId {
   private final String dataCenterName;
   private final List<String> sslEnabledDataCenters;
   private final Logger logger = LoggerFactory.getLogger(getClass());
-
-  private final static Comparator<CloudDataNode> CLOUD_DATA_NODE_COMPARATOR =
-      Comparator.comparing((CloudDataNode k) -> k.hostName).
-          thenComparing(k -> k.plainTextPort.getPort());
 
   /**
    * Instantiate an CloudDataNode object.
@@ -129,17 +124,7 @@ public class CloudDataNode implements DataNodeId {
   }
 
   @Override
-  public int compareTo(DataNodeId o) {
-    if (getClass() != o.getClass()) {
-      throw new IllegalStateException("Incompatible objects to compare");
-    }
-    CloudDataNode other = (CloudDataNode) o;
-    return CLOUD_DATA_NODE_COMPARATOR.compare(this, other);
-  }
-
-  @Override
   public String toString() {
     return "CloudDataNode[" + getHostname() + ":" + getPort() + "]";
   }
 }
-

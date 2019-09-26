@@ -26,7 +26,8 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.commons.ErrorMapping;
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -154,8 +155,10 @@ public class AmbryRequestsTest {
     replicationManager =
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId,
             storeKeyConverterFactory);
+    ServerMetrics serverMetrics =
+        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), findTokenHelper, null, replicationManager, null, false,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, false,
         storeKeyConverterFactory);
     storageManager.start();
   }

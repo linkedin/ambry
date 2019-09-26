@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.VirtualReplicatorCluster;
 import com.github.ambry.clustermap.VirtualReplicatorClusterFactory;
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -36,6 +37,8 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.server.RequestHandlerPool;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -59,7 +62,7 @@ public class VcrServer {
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
   private NetworkServer networkServer = null;
   private ScheduledExecutorService scheduler = null;
-  private CloudBackupManager cloudBackupManager = null;
+  private VcrReplicationManager vcrReplicationManager = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
@@ -70,6 +73,8 @@ public class VcrServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private CloudDestinationFactory cloudDestinationFactory;
+  private VcrRequests requests;
+  private RequestHandlerPool requestHandlerPool;
 
   /**
    * VcrServer constructor.
@@ -142,11 +147,16 @@ public class VcrServer {
 
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
-      cloudBackupManager =
-          new CloudBackupManager(properties, cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
-              storeKeyFactory, clusterMap, virtualReplicatorCluster, cloudDestinationFactory, scheduler, connectionPool,
-              registry, notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer);
-      cloudBackupManager.start();
+      CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
+      VcrMetrics vcrMetrics = new VcrMetrics(registry);
+      CloudStorageManager cloudStorageManager =
+          new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
+      vcrReplicationManager =
+          new VcrReplicationManager(properties, cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
+              cloudStorageManager, storeKeyFactory, clusterMap, virtualReplicatorCluster, cloudDestination, scheduler,
+              connectionPool, vcrMetrics, notificationSystem, storeKeyConverterFactory,
+              serverConfig.serverMessageTransformer);
+      vcrReplicationManager.start();
 
       DataNodeId currentNode = virtualReplicatorCluster.getCurrentDataNodeId();
       ArrayList<Port> ports = new ArrayList<Port>();
@@ -155,9 +165,18 @@ public class VcrServer {
         ports.add(new Port(cloudConfig.vcrSslPort, PortType.SSL));
       }
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
-      networkServer.start();
 
-      // TODO: for recovery, need AmbryRequests and RequestHandlerPool
+      //todo fix enableDataPrefetch
+      ServerMetrics serverMetrics = new ServerMetrics(registry, VcrRequests.class, VcrServer.class);
+      requests =
+          new VcrRequests(cloudStorageManager, networkServer.getRequestResponseChannel(), clusterMap, currentNode,
+              registry, serverMetrics, new FindTokenHelper(storeKeyFactory, replicationConfig), notificationSystem,
+              vcrReplicationManager, storeKeyFactory, true, storeKeyConverterFactory);
+
+      requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
+          networkServer.getRequestResponseChannel(), requests);
+
+      networkServer.start();
 
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       logger.info("VCR startup time in Ms " + processingTime);
@@ -178,11 +197,14 @@ public class VcrServer {
       if (scheduler != null) {
         shutDownExecutorService(scheduler, 5, TimeUnit.MINUTES);
       }
+      if (requestHandlerPool != null) {
+        requestHandlerPool.shutdown();
+      }
       if (networkServer != null) {
         networkServer.shutdown();
       }
-      if (cloudBackupManager != null) {
-        cloudBackupManager.shutdown();
+      if (vcrReplicationManager != null) {
+        vcrReplicationManager.shutdown();
       }
       if (connectionPool != null) {
         connectionPool.shutdown();
@@ -221,7 +243,7 @@ public class VcrServer {
     return virtualReplicatorCluster;
   }
 
-  public CloudBackupManager getCloudBackupManager() {
-    return cloudBackupManager;
+  public VcrReplicationManager getVcrReplicationManager() {
+    return vcrReplicationManager;
   }
 }

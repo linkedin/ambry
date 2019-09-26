@@ -17,7 +17,6 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobAll;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;

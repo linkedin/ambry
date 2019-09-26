@@ -23,7 +23,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobId.BlobDataType;
 import com.github.ambry.commons.BlobId.BlobIdType;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;

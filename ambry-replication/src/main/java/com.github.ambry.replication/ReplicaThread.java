@@ -22,7 +22,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -46,6 +45,7 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
@@ -281,10 +281,10 @@ public class ReplicaThread implements Runnable {
    */
   public void replicate() {
     boolean allCaughtUp = true;
-    Map<DataNodeId, List<RemoteReplicaInfo>> dateNodeToRemoteReplicaInfo = getRemoteReplicaInfos();
+    Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = getRemoteReplicaInfos();
 
     logger.trace("Replicating from {} DataNodes.", replicasToReplicateGroupedByNode.size());
-    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dateNodeToRemoteReplicaInfo.entrySet()) {
+    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
       DataNodeId remoteNode = entry.getKey();
       if (!running) {
         break;

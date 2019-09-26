@@ -17,7 +17,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
-import java.util.Comparator;
 import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -42,10 +41,6 @@ class AmbryDataNode implements DataNodeId {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ResourceStatePolicy resourceStatePolicy;
   private final ClusterManagerCallback clusterManagerCallback;
-
-  private final static Comparator<AmbryDataNode> AMBRY_DATA_NODE_COMPARATOR =
-      Comparator.comparingInt((AmbryDataNode k) -> k.plainTextPort.getPort()).
-          thenComparing(k -> k.hostName);
 
   /**
    * Instantiate an AmbryDataNode object.
@@ -151,15 +146,6 @@ class AmbryDataNode implements DataNodeId {
   }
 
   @Override
-  public int compareTo(DataNodeId o) {
-    if (getClass() != o.getClass()) {
-      throw new IllegalStateException("Incompatible objects to compare");
-    }
-    AmbryDataNode other = (AmbryDataNode) o;
-    return AMBRY_DATA_NODE_COMPARATOR.compare(this, other);
-  }
-
-  @Override
   public String toString() {
     return "DataNode[" + getHostname() + ":" + getPort() + "]";
   }
@@ -191,4 +177,3 @@ class AmbryDataNode implements DataNodeId {
     resourceStatePolicy.onSuccess();
   }
 }
-

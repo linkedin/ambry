@@ -47,7 +47,7 @@ public class HelixVcrClusterTest {
   private static MockClusterMap mockClusterMap;
   private static final String ZK_SERVER_HOSTNAME = "localhost";
   private static final int ZK_SERVER_PORT = 31900;
-  private static final String ZK_CONNECT_STRING = ZK_SERVER_HOSTNAME + ":" + Integer.toString(ZK_SERVER_PORT);
+  private static final String ZK_CONNECT_STRING = ZK_SERVER_HOSTNAME + ":" + ZK_SERVER_PORT;
   private static TestUtils.ZkInfo zkInfo;
   private static final String VCR_CLUSTER_NAME = "vcrTestCluster";
   private static HelixControllerManager helixControllerManager;
@@ -69,7 +69,7 @@ public class HelixVcrClusterTest {
   }
 
   /**
-   * Test addPartition and removePartition of {@link HelixVcrCluster}
+   * Test addReplica and removeReplica of {@link HelixVcrCluster}
    */
   @Test
   public void helixVcrClusterTest() throws Exception {

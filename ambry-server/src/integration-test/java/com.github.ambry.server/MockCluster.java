@@ -30,6 +30,7 @@ import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.notification.UpdateType;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -93,12 +94,77 @@ public class MockCluster {
     prefetchDataNodeIndex = clusterMap.getDataNodes().size() - 1;
   }
 
+  /**
+   * Creates {@link MockCluster} object based on the {@code mockClusterMap} passed.
+   * @param mockClusterMap {@link MockClusterMap} from which to create the cluster.
+   * @param serverSslProps ssl properties of the Ambry server.
+   * @param enableHardDeletes flag to enable/disable hard deletes.
+   * @param time creation time.
+   */
+  private MockCluster(MockClusterMap mockClusterMap, Properties serverSslProps, boolean enableHardDeletes, Time time) {
+    this.sslProps = serverSslProps;
+    this.enableHardDeletes = enableHardDeletes;
+    this.time = time;
+
+    // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
+    String sslEnabledDataCentersStr = sslProps.getProperty("clustermap.ssl.enabled.datacenters");
+    sslEnabledDataCenterList =
+        sslEnabledDataCentersStr != null ? Utils.splitString(sslEnabledDataCentersStr, ",") : new ArrayList<>();
+
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(mockClusterMap);
+    clusterMap = mockClusterMap;
+
+    serverList = new ArrayList<>();
+    generalDataNodeIndex = 0;
+    prefetchDataNodeIndex = clusterMap.getDataNodes().size() - 1;
+  }
+
+  /**
+   * Create a cluster for recovery from the given {@code vcrNode} and {@code recoveryNode}.
+   * The cluster is created such that {@code recoveryNode} has {@code vcrNode}'s replicas as peer replicas.
+   * @param vcrNode The vcr node.
+   * @param recoveryNode The data node.
+   * @param dcName Name of the datacenter.
+   * @return {@link MockCluster} object.
+   * @throws IOException if an exception happens during cluster creation.
+   */
+  public static MockCluster createOneNodeRecoveryCluster(MockDataNodeId vcrNode, MockDataNodeId recoveryNode,
+      String dcName) {
+    MockClusterMap clusterMap = MockClusterMap.createOneNodeRecoveryClusterMap(recoveryNode, vcrNode, dcName);
+    return new MockCluster(clusterMap, new Properties(), false, SystemTime.getInstance());
+  }
+
+  /**
+   * Initialize servers in the cluster.
+   * @param notificationSystem {@link NotificationSystem} object.
+   */
   public void initializeServers(NotificationSystem notificationSystem) {
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     for (int i = 0; i < dataNodes.size(); i++) {
       if (sslEnabledDataCenterList != null) {
         dataNodes.get(i).setSslEnabledDataCenters(sslEnabledDataCenterList);
       }
+      initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i, notificationSystem,
+          time);
+    }
+  }
+
+  /**
+   * Initialize servers in the cluster, but skip the given {@code skipNode}.
+   * @param notificationSystem {@link NotificationSystem} object.
+   * @param skipNode Node to be skipped from initialization.
+   * @param props Additional properties to be added during startup.
+   */
+  public void initializeServers(NotificationSystem notificationSystem, DataNodeId skipNode, Properties props) {
+    List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
+    for (int i = 0; i < dataNodes.size(); i++) {
+      if (dataNodes.get(i).equals(skipNode)) {
+        continue;
+      }
+      if (sslEnabledDataCenterList != null) {
+        dataNodes.get(i).setSslEnabledDataCenters(sslEnabledDataCenterList);
+      }
+      sslProps.putAll(props);
       initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i, notificationSystem,
           time);
     }

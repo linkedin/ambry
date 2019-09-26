@@ -23,7 +23,8 @@ import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.commons.ErrorMapping;
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -67,10 +68,9 @@ import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
-import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
@@ -102,40 +102,40 @@ import org.slf4j.LoggerFactory;
  * The main request implementation class. All requests to the server are
  * handled by this class
  */
-
 public class AmbryRequests implements RequestAPI {
 
-  private StorageManager storageManager;
-  private final RequestResponseChannel requestResponseChannel;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  protected StoreManager storeManager;
+  protected final RequestResponseChannel requestResponseChannel;
   private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
-  private final ClusterMap clusterMap;
+  protected final ClusterMap clusterMap;
   private final DataNodeId currentNode;
   private final Map<PartitionId, ReplicaId> localPartitionToReplicaMap;
-  private final ServerMetrics metrics;
+  protected final ServerMetrics metrics;
   private final MessageFormatMetrics messageFormatMetrics;
-  private final FindTokenHelper findTokenHelper;
+  protected final FindTokenHelper findTokenHelper;
   private final NotificationSystem notification;
-  private final ReplicationManager replicationManager;
+  protected final ReplicationEngine replicationEngine;
   private final StoreKeyFactory storeKeyFactory;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
   private final boolean enableDataPrefetch;
   private final StoreKeyConverterFactory storeKeyConverterFactory;
 
-  public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
-      ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenHelper findTokenHelper,
-      NotificationSystem operationNotification, ReplicationManager replicationManager, StoreKeyFactory storeKeyFactory,
+  private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
+
+  public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
+      DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
+      NotificationSystem operationNotification, ReplicationEngine replicationEngine, StoreKeyFactory storeKeyFactory,
       boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
-    this.storageManager = storageManager;
+    this.storeManager = storeManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
     this.currentNode = nodeId;
-    this.metrics = new ServerMetrics(registry);
+    this.metrics = serverMetrics;
     this.messageFormatMetrics = new MessageFormatMetrics(registry);
     this.findTokenHelper = findTokenHelper;
     this.notification = operationNotification;
-    this.replicationManager = replicationManager;
+    this.replicationEngine = replicationEngine;
     this.storeKeyFactory = storeKeyFactory;
     this.enableDataPrefetch = enableDataPrefetch;
     this.storeKeyConverterFactory = storeKeyConverterFactory;
@@ -213,7 +213,7 @@ public class AmbryRequests implements RequestAPI {
         ArrayList<MessageInfo> infoList = new ArrayList<>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
-        Store storeToPut = storageManager.getStore(receivedRequest.getBlobId().getPartition());
+        Store storeToPut = storeManager.getStore(receivedRequest.getBlobId().getPartition());
         storeToPut.put(writeset);
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
             ServerErrorCode.No_Error);
@@ -317,7 +317,7 @@ public class AmbryRequests implements RequestAPI {
           partitionResponseInfoList.add(partitionResponseInfo);
         } else {
           try {
-            Store storeToGet = storageManager.getStore(partitionRequestInfo.getPartition());
+            Store storeToGet = storeManager.getStore(partitionRequestInfo.getPartition());
             EnumSet<StoreGetOptions> storeGetOptions = EnumSet.noneOf(StoreGetOptions.class);
             // Currently only one option is supported.
             if (getRequest.getGetOption() == GetOption.Include_Expired_Blobs) {
@@ -440,7 +440,7 @@ public class AmbryRequests implements RequestAPI {
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
-        Store storeToDelete = storageManager.getStore(deleteRequest.getBlobId().getPartition());
+        Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
         storeToDelete.delete(writeSet);
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
@@ -516,7 +516,7 @@ public class AmbryRequests implements RequestAPI {
                 convertedStoreKey.getAccountId(), convertedStoreKey.getContainerId(),
                 updateRequest.getOperationTimeInMs());
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, Collections.singletonList(info), false);
-        Store store = storageManager.getStore(updateRequest.getBlobId().getPartition());
+        Store store = storeManager.getStore(updateRequest.getBlobId().getPartition());
         store.updateTtl(writeset);
         response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
             ServerErrorCode.No_Error);
@@ -603,7 +603,7 @@ public class AmbryRequests implements RequestAPI {
             FindToken findToken = replicaMetadataRequestInfo.getToken();
             String hostName = replicaMetadataRequestInfo.getHostName();
             String replicaPath = replicaMetadataRequestInfo.getReplicaPath();
-            Store store = storageManager.getStore(partitionId);
+            Store store = storeManager.getStore(partitionId);
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             FindInfo findInfo =
@@ -613,7 +613,7 @@ public class AmbryRequests implements RequestAPI {
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             long totalBytesRead = findInfo.getFindToken().getBytesRead();
-            replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath, totalBytesRead);
+            replicationEngine.updateTotalBytesReadByRemoteReplica(partitionId, hostName, replicaPath, totalBytesRead);
             logger.trace("{} Time used to update total bytes read: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
@@ -623,7 +623,7 @@ public class AmbryRequests implements RequestAPI {
 
             ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
                 new ReplicaMetadataResponseInfo(partitionId, replicaType, findInfo.getFindToken(),
-                    findInfo.getMessageEntries(), store.getSizeInBytes() - totalBytesRead,
+                    findInfo.getMessageEntries(), getRemoteReplicaLag(store, totalBytesRead),
                     ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
             if (replicaMetadataResponseInfo.getTotalSizeOfAllMessages()
                 > 5 * replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes()) {
@@ -796,7 +796,7 @@ public class AmbryRequests implements RequestAPI {
     ServerErrorCode error = validateRequest(adminRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
     if (error != ServerErrorCode.No_Error) {
       logger.error("Validating trigger compaction request failed with error {} for {}", error, adminRequest);
-    } else if (!storageManager.scheduleNextForCompaction(adminRequest.getPartitionId())) {
+    } else if (!storeManager.scheduleNextForCompaction(adminRequest.getPartitionId())) {
       error = ServerErrorCode.Unknown_Error;
       logger.error("Triggering compaction failed for {}. Check if admin trigger is enabled for compaction",
           adminRequest);
@@ -859,7 +859,7 @@ public class AmbryRequests implements RequestAPI {
       partitionIds = localPartitionToReplicaMap.keySet();
     }
     if (!error.equals(ServerErrorCode.Partition_Unknown)) {
-      if (replicationManager.controlReplicationForPartitions(partitionIds, replControlRequest.getOrigins(),
+      if (replicationEngine.controlReplicationForPartitions(partitionIds, replControlRequest.getOrigins(),
           replControlRequest.shouldEnable())) {
         error = ServerErrorCode.No_Error;
       } else {
@@ -923,19 +923,18 @@ public class AmbryRequests implements RequestAPI {
         // start BlobStore properly
         error = validateRequest(partitionId, RequestOrResponseType.AdminRequest, true);
         if (error.equals(ServerErrorCode.No_Error)) {
-          if (storageManager.startBlobStore(partitionId)) {
+          if (storeManager.startBlobStore(partitionId)) {
             Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
             controlRequestForPartitions(
                 EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest,
                     RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
                     RequestOrResponseType.TtlUpdateRequest), partitionIds, true);
-            if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
-                true)) {
-              if (storageManager.controlCompactionForBlobStore(partitionId, true)) {
+            if (replicationEngine.controlReplicationForPartitions(partitionIds, Collections.emptyList(), true)) {
+              if (storeManager.controlCompactionForBlobStore(partitionId, true)) {
                 error = ServerErrorCode.No_Error;
                 logger.info("Store is successfully started and functional for partition: {}", partitionId);
                 List<PartitionId> failToUpdateList =
-                    storageManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), false);
+                    storeManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), false);
                 if (!failToUpdateList.isEmpty()) {
                   logger.warn("Fail to remove BlobStore(s) {} from stopped list after start operation completed",
                       failToUpdateList.toArray());
@@ -961,24 +960,23 @@ public class AmbryRequests implements RequestAPI {
         error = validateRequest(partitionId, RequestOrResponseType.AdminRequest, false);
         if (error.equals(ServerErrorCode.No_Error)) {
           if (blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition() >= 0) {
-            if (storageManager.controlCompactionForBlobStore(partitionId, false)) {
+            if (storeManager.controlCompactionForBlobStore(partitionId, false)) {
               Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
               controlRequestForPartitions(
                   EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
                       RequestOrResponseType.TtlUpdateRequest), partitionIds, false);
-              if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
-                  false)) {
+              if (replicationEngine.controlReplicationForPartitions(partitionIds, Collections.emptyList(), false)) {
                 if (isRemoteLagLesserOrEqual(partitionIds, 0,
                     blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition())) {
                   controlRequestForPartitions(
                       EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.GetRequest),
                       partitionIds, false);
                   // Shutdown the BlobStore completely
-                  if (storageManager.shutdownBlobStore(partitionId)) {
+                  if (storeManager.shutdownBlobStore(partitionId)) {
                     error = ServerErrorCode.No_Error;
                     logger.info("Store is successfully shutdown for partition: {}", partitionId);
                     List<PartitionId> failToUpdateList =
-                        storageManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), true);
+                        storeManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), true);
                     if (!failToUpdateList.isEmpty()) {
                       logger.warn("Fail to add BlobStore(s) {} to stopped list after stop operation completed",
                           failToUpdateList.toArray());
@@ -1041,7 +1039,7 @@ public class AmbryRequests implements RequestAPI {
     }
   }
 
-  private void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, Request request,
+  protected void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, Request request,
       Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
       long blobSize, MessageFormatFlags flags, ServerMetrics metrics) throws InterruptedException {
 
@@ -1108,7 +1106,7 @@ public class AmbryRequests implements RequestAPI {
    * @return {@link ServerErrorCode#No_Error} error if the partition can be written to, or the corresponding error code
    *         if it cannot.
    */
-  private ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType,
+  protected ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType,
       boolean skipPartitionAndDiskAvailableCheck) {
     // 1. Check partition is null
     if (partition == null) {
@@ -1123,21 +1121,18 @@ public class AmbryRequests implements RequestAPI {
         return ServerErrorCode.Disk_Unavailable;
       }
       // 3. check if partition exists on this node and that the store for this partition is available
-      if (storageManager.getStore(partition) == null) {
-        if (localReplica != null) {
-          // check stores on the disk
-          if (!storageManager.isDiskAvailable(localReplica.getDiskId())) {
-            metrics.diskUnavailableError.inc();
-            localReplica.markDiskDown();
-            return ServerErrorCode.Disk_Unavailable;
-          } else {
-            metrics.replicaUnavailableError.inc();
-            return ServerErrorCode.Replica_Unavailable;
-          }
-        } else {
+      ServerErrorCode errorCode = storeManager.checkLocalPartitionStatus(partition, localReplica);
+      switch (errorCode) {
+        case Disk_Unavailable:
+          metrics.diskUnavailableError.inc();
+          localReplica.markDiskDown();
+          return errorCode;
+        case Replica_Unavailable:
+          metrics.replicaUnavailableError.inc();
+          return errorCode;
+        case Partition_Unknown:
           metrics.partitionUnknownError.inc();
-          return ServerErrorCode.Partition_Unknown;
-        }
+          return errorCode;
       }
     }
     // 4. ensure if the partition can be written to
@@ -1172,7 +1167,7 @@ public class AmbryRequests implements RequestAPI {
       int caughtUpCount = 0;
       for (ReplicaId replicaId : replicaIds) {
         if (!replicaId.getDataNodeId().equals(currentNode)) {
-          long lagInBytes = replicationManager.getRemoteReplicaLagFromLocalInBytes(partitionId,
+          long lagInBytes = replicationEngine.getRemoteReplicaLagFromLocalInBytes(partitionId,
               replicaId.getDataNodeId().getHostname(), replicaId.getReplicaPath());
           logger.debug("Lag of {} is {}", replicaId, lagInBytes);
           if (lagInBytes <= acceptableLagInBytes) {
@@ -1197,7 +1192,7 @@ public class AmbryRequests implements RequestAPI {
    * @param storeKeys A list of original storeKeys.
    * @return A list of converted storeKeys.
    */
-  private List<StoreKey> getConvertedStoreKeys(List<? extends StoreKey> storeKeys) throws Exception {
+  protected List<StoreKey> getConvertedStoreKeys(List<? extends StoreKey> storeKeys) throws Exception {
     storeKeyConverterFactory.getStoreKeyConverter().dropCache();
     Map<StoreKey, StoreKey> conversionMap = storeKeyConverterFactory.getStoreKeyConverter().convert(storeKeys);
     List<StoreKey> convertedStoreKeys = new ArrayList<>();
@@ -1206,5 +1201,9 @@ public class AmbryRequests implements RequestAPI {
       convertedStoreKeys.add(convertedKey == null ? key : convertedKey);
     }
     return convertedStoreKeys;
+  }
+
+  protected long getRemoteReplicaLag(Store store, long totalBytesRead) {
+    return store.getSizeInBytes() - totalBytesRead;
   }
 }

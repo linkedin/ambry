@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
@@ -109,7 +110,7 @@ public class AmbryServer {
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();
-      this.metrics = new ServerMetrics(registry);
+      this.metrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
 
@@ -161,9 +162,10 @@ public class AmbryServer {
 
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
+      ServerMetrics serverMetrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       requests =
           new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
-              findTokenHelper, notificationSystem, replicationManager, storeKeyFactory,
+              serverMetrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory,
               serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);

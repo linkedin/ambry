@@ -83,4 +83,16 @@ public interface DataNodeId extends Resource, Comparable<DataNodeId> {
    * @return the xid associated with this node.
    */
   long getXid();
+
+  @Override
+  default int compareTo(DataNodeId o) {
+    if (o == null) {
+      throw new NullPointerException("input argument null");
+    }
+    int compare = Integer.compare(getPort(), o.getPort());
+    if (compare == 0) {
+      compare = getHostname().compareTo(o.getHostname());
+    }
+    return compare;
+  }
 }
