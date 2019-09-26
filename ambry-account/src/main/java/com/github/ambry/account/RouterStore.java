@@ -237,6 +237,10 @@ class RouterStore extends AccountMetadataStore {
           // If this is not for backfill, then just read account metadata from blob, otherwise, initialize it with
           // an empty map and fill it up with the accountMap passed to constructor.
           accountMap = (!forBackFill) ? readAccountMetadataFromBlobID(blobIDAndVersion.blobID) : new HashMap<>();
+          if (accountMap == null) {
+            logAndThrowIllegalStateException("Fail to read account metadata from blob id " + blobIDAndVersion.blobID,
+                null);
+          }
         } catch (JSONException e) {
           accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
           logAndThrowIllegalStateException(

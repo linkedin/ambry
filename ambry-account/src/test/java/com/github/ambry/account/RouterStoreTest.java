@@ -47,10 +47,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 
 
 /**
@@ -135,6 +133,35 @@ public class RouterStoreTest {
     }
     // the version should be 2 now
     assertUpdateAndFetch(store, idToRefAccountMap, anotherIdToRefAccountMap, 2, 2);
+  }
+
+  /**
+   * Test update when there is an read error from router. Update should fail.
+   * @throws Exception Any error.
+   */
+  @Test
+  public void testUpdateFailureOnReadFromRouter() throws Exception {
+    assumeTrue(!forBackfill);
+    RouterStore store =
+        new RouterStore(accountServiceMetrics, backup, helixStore, new AtomicReference<>(router), forBackfill,
+            TOTAL_NUMBER_OF_VERSION_TO_KEEP);
+    Map<Short, Account> idToRefAccountMap = new HashMap<>();
+    Map<Short, Map<Short, Container>> idtoRefContainerMap = new HashMap<>();
+    Set<Short> accountIDSet = new HashSet<>();
+    // generate an new account and test update and fetch on this account
+    AccountTestUtils.generateRefAccounts(idToRefAccountMap, idtoRefContainerMap, accountIDSet, 1, 1);
+    assertUpdateAndFetch(store, idToRefAccountMap, idToRefAccountMap, 1, 1);
+
+    // Now clear the router to remove the blob so next time when reading blob, it will remove an exception.
+    router.clear();
+
+    // generate another new account and test update and fetch on this account
+    Map<Short, Account> anotherIdToRefAccountMap = new HashMap<>();
+    AccountTestUtils.generateRefAccounts(anotherIdToRefAccountMap, idtoRefContainerMap, accountIDSet, 1, 1);
+    for (Map.Entry<Short, Account> entry : anotherIdToRefAccountMap.entrySet()) {
+      idToRefAccountMap.put(entry.getKey(), entry.getValue());
+    }
+    assertFalse("Update account should fail on read error", store.updateAccounts(anotherIdToRefAccountMap.values()));
   }
 
   /**
