@@ -68,7 +68,7 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public Store getStore(PartitionId id) {
-    Store store = partitionToStore.getOrDefault(id, null);
+    Store store = partitionToStore.get(id);
     return (store != null && store.isStarted()) ? store : null;
   }
 
@@ -79,7 +79,7 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean startBlobStore(PartitionId id) {
-    CloudBlobStore cloudStore = partitionToStore.getOrDefault(id, null);
+    CloudBlobStore cloudStore = partitionToStore.get(id);
     if (cloudStore == null) {
       return false;
     }
@@ -109,7 +109,19 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public ServerErrorCode checkLocalPartitionStatus(PartitionId partition, ReplicaId localReplica) {
-    if (getStore(partition) == null) {
+    /*
+     * Vcr cluster map determines if a vcr node can handle requests for a particular replica.
+     * So either a vcr node will never get a partition assigned to it, or has a partition removed
+     * from it, in both of those cases we return Partition_Unknown. In case the partition was assigned,
+     * but is in stopped state currently, we return Replica_Unavailable.
+     * The actual disk and data for vcr node resides on azure. So a partition will likely never be
+     * actually unavailable. The Partition_Unknown and Replica_Unavailable error codes only determine if
+     * the partition is unknown or replica is unavailable with respect to this vcr node.
+     */
+    if (partitionToStore.get(partition) == null) {
+      return ServerErrorCode.Partition_Unknown;
+    }
+    if (!partitionToStore.get(partition).isStarted()) {
       return ServerErrorCode.Replica_Unavailable;
     }
     return ServerErrorCode.No_Error;
