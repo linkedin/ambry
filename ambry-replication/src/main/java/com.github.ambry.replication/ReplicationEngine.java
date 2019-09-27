@@ -194,7 +194,7 @@ public abstract class ReplicationEngine {
   }
 
   /**
-   * Shutsdown the replication manager. Shutsdown the individual replica threads and
+   * Shuts down the replication manager. Shuts down the individual replica threads and
    * then persists all the replica tokens
    * @throws ReplicationException
    */
@@ -224,7 +224,7 @@ public abstract class ReplicationEngine {
   protected void removeRemoteReplicaInfoFromReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos) {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
       // Thread safe with addRemoteReplicaInfoToReplicaThread.
-      // For ReplicationManger, this method is not used.
+      // For ReplicationManger, for same thread, removeRemoteReplicaInfo() ensures lock is held by only one thread at any time.
       // For CloudBackUpManager with HelixVcrCluster, Helix requires acknowledgement before next message for the same
       // resource, which means methods in HelixVcrStateModel will be executed sequentially for same partition.
       // So do listener actions in addPartition() and removePartition().

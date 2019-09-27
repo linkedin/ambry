@@ -53,7 +53,7 @@ public class VcrRequests extends AmbryRequests {
       NotificationSystem notification, ReplicationEngine replicationEngine, StoreKeyFactory storageKeyFactory,
       boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
     super(storeManager, requestResponseChannel, clusterMap, currentNode, registry, serverMetrics, findTokenHelper,
-        notification, replicationEngine, storageKeyFactory, enableDataPrefetch, storeKeyConverterFactory);
+        notification, replicationEngine, storageKeyFactory, enableDataPrefetch, storeKeyConverterFactory, null);
   }
 
   @Override

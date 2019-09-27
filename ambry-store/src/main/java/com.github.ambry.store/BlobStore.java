@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
 /**
  * The blob store that controls the log and index
  */
-class BlobStore implements Store {
+public class BlobStore implements Store {
   static final String SEPARATOR = "_";
   private final static String LockFile = ".lock";
 

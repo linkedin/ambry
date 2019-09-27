@@ -26,6 +26,6 @@ public class MockFindTokenHelper extends FindTokenHelper {
 
   @Override
   public FindTokenFactory getFindTokenFactoryFromReplicaType(ReplicaType replicaType) {
-    return new MockFindToken.MockFindTokenFactory();
+    return new MockFindTokenFactory();
   }
 }

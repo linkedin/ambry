@@ -123,6 +123,14 @@ public interface ClusterMap extends AutoCloseable {
   JSONObject getSnapshot();
 
   /**
+   * Attempt to get new replica of certain partition that resides on given data node.
+   * @param partitionIdStr the partition id string
+   * @param dataNodeId the {@link DataNodeId} on which new replica is placed
+   * @return {@link ReplicaId} if there is a new replica satisfying given partition and data node. {@code null} otherwise.
+   */
+  ReplicaId getNewReplica(String partitionIdStr, DataNodeId dataNodeId);
+
+  /**
    * Close the cluster map. Any cleanups should be done in this call.
    */
   @Override

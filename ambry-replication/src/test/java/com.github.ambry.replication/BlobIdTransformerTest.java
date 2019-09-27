@@ -681,6 +681,11 @@ public class BlobIdTransformerTest {
       return null;
     }
 
+    @Override
+    public ReplicaId getNewReplica(String partitionIdStr, DataNodeId dataNodeId) {
+      return null;
+    }
+
     public void close() {
     }
   }

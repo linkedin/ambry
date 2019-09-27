@@ -77,8 +77,7 @@ public class DiskTokenPersistorTest {
     mountPathToPartitionInfoList.computeIfAbsent(replicaId.getMountPath(), key -> new ArrayList<>()).add(partitionInfo);
 
     Properties replicationProperties = new Properties();
-    replicationProperties.setProperty("replication.cloudtoken.factory",
-        MockFindToken.MockFindTokenFactory.class.getName());
+    replicationProperties.setProperty("replication.cloud.token.factory", MockFindTokenFactory.class.getName());
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(replicationProperties));
     findTokenHelper = new FindTokenHelper(blobIdFactory, replicationConfig);
   }

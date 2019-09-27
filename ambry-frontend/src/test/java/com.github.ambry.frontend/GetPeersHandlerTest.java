@@ -388,6 +388,11 @@ class TailoredPeersClusterMap implements ClusterMap {
 
   }
 
+  @Override
+  public ReplicaId getNewReplica(String partitionIdStr, DataNodeId dataNodeId) {
+    return null;
+  }
+
   Set<String> getPeers(String datanode) {
     return peerMap.get(datanode);
   }

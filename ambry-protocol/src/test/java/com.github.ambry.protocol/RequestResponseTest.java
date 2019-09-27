@@ -21,7 +21,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatFlags;
@@ -30,6 +29,7 @@ import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.FindTokenType;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferChannel;
@@ -44,6 +44,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import org.junit.After;
 import org.junit.Assert;
@@ -671,8 +672,9 @@ public class RequestResponseTest {
    */
   @Test
   public void blobStoreControlAdminRequestTest() throws IOException {
-    doBlobStoreControlAdminRequestTest(true);
-    doBlobStoreControlAdminRequestTest(false);
+    for (BlobStoreControlRequestType requestType : EnumSet.allOf(BlobStoreControlRequestType.class)) {
+      doBlobStoreControlAdminRequestTest(requestType);
+    }
   }
 
   /**
@@ -688,7 +690,7 @@ public class RequestResponseTest {
     }
     doReplicationControlAdminRequestTest(origins, true);
     doReplicationControlAdminRequestTest(origins, false);
-    doReplicationControlAdminRequestTest(Collections.EMPTY_LIST, true);
+    doReplicationControlAdminRequestTest(Collections.emptyList(), true);
   }
 
   /**
@@ -738,10 +740,11 @@ public class RequestResponseTest {
   /**
    * Does the actual test of ser/de of {@link BlobStoreControlAdminRequest} and checks for equality of fields with
    * reference data.
-   * @param enable the value for the enable field in {@link BlobStoreControlAdminRequest}.
+   * @param storeControlRequestType the type of store control request specified in {@link BlobStoreControlAdminRequest}.
    * @throws IOException
    */
-  private void doBlobStoreControlAdminRequestTest(boolean enable) throws IOException {
+  private void doBlobStoreControlAdminRequestTest(BlobStoreControlRequestType storeControlRequestType)
+      throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     PartitionId id = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = 1234;
@@ -751,7 +754,7 @@ public class RequestResponseTest {
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
     BlobStoreControlAdminRequest blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numCaughtUpPerPartition, enable, adminRequest);
+        new BlobStoreControlAdminRequest(numCaughtUpPerPartition, storeControlRequestType, adminRequest);
     DataInputStream requestStream = serAndPrepForRead(blobStoreControlAdminRequest, -1, true);
     AdminRequest deserializedAdminRequest =
         deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
@@ -760,9 +763,11 @@ public class RequestResponseTest {
         BlobStoreControlAdminRequest.readFrom(requestStream, deserializedAdminRequest);
     Assert.assertEquals("Num caught up per partition not as set", numCaughtUpPerPartition,
         deserializedBlobStoreControlRequest.getNumReplicasCaughtUpPerPartition());
-    Assert.assertEquals("Enable variable not as set", enable, deserializedBlobStoreControlRequest.shouldEnable());
+    Assert.assertEquals("Control request type is not expected", storeControlRequestType,
+        deserializedBlobStoreControlRequest.getControlRequestType());
     // test toString method
     String correctString = "BlobStoreControlAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId
+        + ", ControlRequestType=" + deserializedBlobStoreControlRequest.getControlRequestType()
         + ", NumReplicasCaughtUpPerPartition="
         + deserializedBlobStoreControlRequest.getNumReplicasCaughtUpPerPartition() + ", PartitionId="
         + deserializedBlobStoreControlRequest.getPartitionId() + "]";

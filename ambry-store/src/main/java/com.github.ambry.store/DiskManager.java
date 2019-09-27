@@ -231,12 +231,13 @@ class DiskManager {
 
   /**
    * @param id the {@link PartitionId} to find the store for.
+   * @param skipStateCheck whether to skip checking state of store.
    * @return the associated {@link Store}, or {@code null} if the partition is not on this disk, or the store is not
    *         started.
    */
-  Store getStore(PartitionId id) {
+  Store getStore(PartitionId id, boolean skipStateCheck) {
     BlobStore store = stores.get(id);
-    return (running && store != null && store.isStarted()) ? store : null;
+    return (running && store != null && (store.isStarted() || skipStateCheck)) ? store : null;
   }
 
   /**
@@ -259,7 +260,7 @@ class DiskManager {
    * @return {@code true} if the scheduling was successful. {@code false} if not.
    */
   boolean scheduleNextForCompaction(PartitionId id) {
-    BlobStore store = (BlobStore) getStore(id);
+    BlobStore store = (BlobStore) getStore(id, false);
     return store != null && compactionManager.scheduleNextForCompaction(store);
   }
 
@@ -368,7 +369,7 @@ class DiskManager {
     BlobStore store = stores.get(id);
     if (store == null) {
       logger.info("Store {} is not found in disk manager", id);
-      return true;
+      return false;
     }
     if (!running || store.isStarted()) {
       logger.error("Removing store {} failed. Disk running = {}, store running = {}", id, running, store.isStarted());

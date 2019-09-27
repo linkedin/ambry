@@ -154,28 +154,27 @@ public class AmbryServer {
               serverConfig.serverMessageTransformer);
       replicationManager.start();
 
+      logger.info("Creating StatsManager to publish stats");
+      statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time);
+      if (serverConfig.serverStatsPublishLocalEnabled) {
+        statsManager.start();
+      }
+
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
       if (nodeId.hasSSLPort()) {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
-
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
       ServerMetrics serverMetrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       requests =
           new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               serverMetrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory,
-              serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory);
+              serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory, statsManager);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
-
-      logger.info("Creating StatsManager to publish stats");
-      statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time);
-      if (serverConfig.serverStatsPublishLocalEnabled) {
-        statsManager.start();
-      }
 
       List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
       Set<String> validStatsTypes = new HashSet<>();

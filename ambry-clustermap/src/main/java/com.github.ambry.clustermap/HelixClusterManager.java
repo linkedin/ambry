@@ -29,6 +29,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -87,6 +88,7 @@ class HelixClusterManager implements ClusterMap {
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final PartitionSelectionHelper partitionSelectionHelper;
   private final Map<String, Map<String, String>> partitionOverrideInfoMap = new HashMap<>();
+  private ZkHelixPropertyStore<ZNRecord> helixPropertyStoreInLocalDc = null;
   // The current xid currently does not change after instantiation. This can change in the future, allowing the cluster
   // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
   // reflects the current value.
@@ -216,13 +218,13 @@ class HelixClusterManager implements ClusterMap {
     DcZkInfo dcZkInfo = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName);
     String zkConnectStr = dcZkInfo.getZkConnectStr();
     HelixManager manager;
-    ZkHelixPropertyStore<ZNRecord> helixPropertyStore;
     manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
     logger.info("Connecting to Helix manager in local zookeeper at {}", zkConnectStr);
     manager.connect();
     logger.info("Established connection to Helix manager in local zookeeper at {}", zkConnectStr);
-    helixPropertyStore = manager.getHelixPropertyStore();
-    logger.info("HelixPropertyStore from local datacenter {} is: {}", dcZkInfo.getDcName(), helixPropertyStore);
+    helixPropertyStoreInLocalDc = manager.getHelixPropertyStore();
+    logger.info("HelixPropertyStore from local datacenter {} is: {}", dcZkInfo.getDcName(),
+        helixPropertyStoreInLocalDc);
     IZkDataListener dataListener = new IZkDataListener() {
       @Override
       public void handleDataChange(String dataPath, Object data) {
@@ -235,10 +237,9 @@ class HelixClusterManager implements ClusterMap {
       }
     };
     logger.info("Subscribing data listener to HelixPropertyStore.");
-    helixPropertyStore.subscribeDataChanges(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, dataListener);
-    logger.info("Getting ZNRecord from HelixPropertyStore");
-    ZNRecord zNRecord =
-        helixPropertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
+    helixPropertyStoreInLocalDc.subscribeDataChanges(PARTITION_OVERRIDE_ZNODE_PATH, dataListener);
+    logger.info("Getting PartitionOverride ZNRecord from HelixPropertyStore");
+    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
     if (clusterMapConfig.clusterMapEnablePartitionOverride) {
       if (zNRecord != null) {
         partitionOverrideInfoMap.putAll(zNRecord.getMapFields());
@@ -379,6 +380,55 @@ class HelixClusterManager implements ClusterMap {
   @Override
   public List<PartitionId> getAllPartitionIds(String partitionClass) {
     return partitionSelectionHelper.getPartitions(partitionClass);
+  }
+
+  @Override
+  public ReplicaId getNewReplica(String partitionIdStr, DataNodeId dataNodeId) {
+    ReplicaId newReplica = null;
+    logger.info("Getting ReplicaAddition ZNRecord from HelixPropertyStore in local DC.");
+    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(REPLICA_ADDITION_ZNODE_PATH, null, AccessOption.PERSISTENT);
+    if (zNRecord != null) {
+      String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
+      Map<String, Map<String, String>> partitionToReplicas = zNRecord.getMapFields();
+      Map<String, String> replicaInfos = partitionToReplicas.get(partitionIdStr);
+      if (replicaInfos != null && replicaInfos.containsKey(instanceName)) {
+        long replicaCapacity = Long.valueOf(replicaInfos.get(REPLICAS_CAPACITY_STR));
+        String partitionClass = replicaInfos.get(PARTITION_CLASS_STR);
+        AmbryPartition mappedPartition = partitionNameToAmbryPartition.get(partitionIdStr);
+        if (mappedPartition == null) {
+          logger.info("Partition {} is currently not present in cluster map, creating a new partition.",
+              partitionIdStr);
+          mappedPartition =
+              new AmbryPartition(Long.valueOf(partitionIdStr), partitionClass, helixClusterManagerCallback);
+        }
+        // Check if data or disk is in current cluster map, if not, set newReplica to null.
+        AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
+        String mountPathFromHelix = replicaInfos.get(instanceName);
+        Set<AmbryDisk> disks = dataNode != null ? ambryDataNodeToAmbryDisks.get(dataNode) : null;
+        Optional<AmbryDisk> potentialDisk =
+            disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPathFromHelix)).findAny()
+                : Optional.empty();
+        if (dataNode != null && potentialDisk.isPresent()) {
+          try {
+            newReplica =
+                new AmbryReplica(clusterMapConfig, mappedPartition, potentialDisk.get(), true, replicaCapacity, false);
+          } catch (Exception e) {
+            logger.error("Failed to create new replica for partition {} on {} due to exception: ", partitionIdStr,
+                instanceName, e);
+            newReplica = null;
+          }
+        } else {
+          logger.error(
+              "Either datanode or disk that associated with new replica is not found in cluster map. Cannot create new replica.");
+        }
+      } else {
+        logger.warn("Partition {} or replica on host {} is not found in replica info map", partitionIdStr,
+            instanceName);
+      }
+    } else {
+      logger.warn("ZNRecord from HelixPropertyStore is NULL, partition to replicaInfo map doesn't exist.");
+    }
+    return newReplica;
   }
 
   /**

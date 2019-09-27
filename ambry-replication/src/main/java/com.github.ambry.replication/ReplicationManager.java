@@ -40,6 +40,8 @@ import java.util.concurrent.TimeUnit;
  * Set up replicas based on {@link ReplicationEngine} and do replication across all colos.
  */
 public class ReplicationManager extends ReplicationEngine {
+  private final StorageManager storageManager;
+  private final StoreConfig storeConfig;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StorageManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -49,35 +51,19 @@ public class ReplicationManager extends ReplicationEngine {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName);
+    this.storageManager = storageManager;
+    this.storeConfig = storeConfig;
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
     // initialize all partitions
     for (ReplicaId replicaId : replicaIds) {
       PartitionId partition = replicaId.getPartitionId();
-      Store store = storageManager.getStore(partition);
+      Store store = storageManager.getStore(partition, false);
       if (store != null) {
         List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
         if (peerReplicas != null) {
-          List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>(peerReplicas.size());
-          for (ReplicaId remoteReplica : peerReplicas) {
-            // We need to ensure that a replica token gets persisted only after the corresponding data in the
-            // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
-            // to determine the token flush interval
-            FindToken findToken =
-                this.tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
-            RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica, replicaId, store, findToken,
-                storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
-                SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
-            replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
-            remoteReplicas.add(remoteReplicaInfo);
-          }
+          List<RemoteReplicaInfo> remoteReplicas = createRemoteReplicaInfos(peerReplicas, replicaId);
+          updatePartitionInfoMaps(remoteReplicas, replicaId);
           addRemoteReplicaInfoToReplicaThread(remoteReplicas, false);
-          PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, partition, store, replicaId);
-          partitionToPartitionInfo.put(partition, partitionInfo);
-          if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
-            replicationMetrics.addLagMetricForPartition(partition);
-          }
-          mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> new ArrayList<>())
-              .add(partitionInfo);
         }
       } else {
         logger.error("Not replicating to partition " + partition + " because an initialized store could not be found");
@@ -120,5 +106,98 @@ public class ReplicationManager extends ReplicationEngine {
     } catch (IOException e) {
       logger.error("IO error while starting replication", e);
     }
+  }
+
+  /**
+   * Add given replica into replication manager.
+   * @param replicaId the replica to add
+   * @return {@code true} if addition succeeded, {@code false} failed to add replica because it already exists.
+   */
+  public boolean addReplica(ReplicaId replicaId) {
+    if (partitionToPartitionInfo.containsKey(replicaId.getPartitionId())) {
+      logger.error("{} already exists in replication manager, rejecting adding replica request.",
+          replicaId.getPartitionId());
+      return false;
+    }
+    List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
+    List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
+    if (peerReplicas != null) {
+      remoteReplicaInfos = createRemoteReplicaInfos(peerReplicas, replicaId);
+      updatePartitionInfoMaps(remoteReplicaInfos, replicaId);
+    }
+    logger.info("Assigning thread for {}", replicaId.getPartitionId());
+    addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
+    // No need to update persistor to explicitly persist tokens for new replica because background persistor will
+    // periodically persistor all tokens including new added replica's
+    // TODO ensure there is a test that checks persistor has new replica info.
+    logger.info("{} is successfully added into replication manager", replicaId.getPartitionId());
+    return true;
+  }
+
+  /**
+   * Remove replica from replication manager
+   * @param replicaId the replica to remove
+   * @return {@code true} if replica is successfully removed. {@code false} otherwise
+   */
+  public boolean removeReplica(ReplicaId replicaId) {
+    if (!partitionToPartitionInfo.containsKey(replicaId.getPartitionId())) {
+      logger.error("{} doesn't exist in replication manager, skipping removing replica request.",
+          replicaId.getPartitionId());
+      return false;
+    }
+    PartitionInfo partitionInfo = partitionToPartitionInfo.get(replicaId.getPartitionId());
+    List<RemoteReplicaInfo> remoteReplicaInfos = partitionInfo.getRemoteReplicaInfos();
+    logger.info("Removing remote replicas of {} from replica threads", replicaId.getPartitionId());
+    removeRemoteReplicaInfoFromReplicaThread(remoteReplicaInfos);
+    mountPathToPartitionInfos.computeIfPresent(replicaId.getMountPath(), (k, v) -> {
+      v.remove(partitionInfo);
+      return v;
+    });
+    //mountPathToPartitionInfos.get(replicaId.getMountPath()).remove(partitionInfo);
+    partitionToPartitionInfo.remove(replicaId.getPartitionId());
+    return true;
+  }
+
+  /**
+   * Create {@link RemoteReplicaInfo}(s) that associates with given local replica.
+   * @param peerReplicas the list peer replicas of given local replica
+   * @param replicaId the local replica
+   * @return list of {@link RemoteReplicaInfo} associated with local replica.
+   */
+  private List<RemoteReplicaInfo> createRemoteReplicaInfos(List<? extends ReplicaId> peerReplicas,
+      ReplicaId replicaId) {
+    List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
+    PartitionId partition = replicaId.getPartitionId();
+    Store store = storageManager.getStore(partition);
+    for (ReplicaId remoteReplica : peerReplicas) {
+      // We need to ensure that a replica token gets persisted only after the corresponding data in the
+      // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
+      // to determine the token flush interval
+      FindToken findToken =
+          this.tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
+      RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica, replicaId, store, findToken,
+          storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
+          SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
+      replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
+      remoteReplicaInfos.add(remoteReplicaInfo);
+    }
+    if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
+      replicationMetrics.addLagMetricForPartition(partition);
+    }
+    return remoteReplicaInfos;
+  }
+
+  /**
+   * Update {@link PartitionInfo} related maps including {@link ReplicationEngine#partitionToPartitionInfo} and
+   * {@link ReplicationEngine#mountPathToPartitionInfos}
+   * @param remoteReplicaInfos the {@link RemoteReplicaInfo}(s) of the local {@link ReplicaId}
+   * @param replicaId the local replica
+   */
+  private void updatePartitionInfoMaps(List<RemoteReplicaInfo> remoteReplicaInfos, ReplicaId replicaId) {
+    PartitionId partition = replicaId.getPartitionId();
+    PartitionInfo partitionInfo =
+        new PartitionInfo(remoteReplicaInfos, partition, storageManager.getStore(partition), replicaId);
+    partitionToPartitionInfo.put(partition, partitionInfo);
+    mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> new ArrayList<>()).add(partitionInfo);
   }
 }

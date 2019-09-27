@@ -38,8 +38,8 @@ public class AmbryStatsReportTest {
   public void testAmbryStatsReport() throws StoreException {
     StatsManagerConfig config = new StatsManagerConfig(new VerifiableProperties(new Properties()));
     StatsManager testStatsManager =
-        new StatsManager(new StatsManagerTest.MockStorageManager(Collections.emptyMap()), Collections.emptyList(),
-            new MetricRegistry(), config, new MockTime());
+        new StatsManager(new MockStorageManager(Collections.emptyMap()), Collections.emptyList(), new MetricRegistry(),
+            config, new MockTime());
     // test account stats report
     AmbryStatsReport ambryStatsReport =
         new AmbryStatsReport(testStatsManager, AGGREGATE_INTERVAL_MINS, StatsReportType.ACCOUNT_REPORT);
