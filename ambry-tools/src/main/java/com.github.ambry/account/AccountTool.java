@@ -18,7 +18,6 @@ import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixAccountServiceConfig;
@@ -34,6 +33,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -147,8 +147,7 @@ public class AccountTool {
   private RouterStore routerStore = null;
   private Router router = null;
   private ClusterMap clusterMap = null;
-  private AccountService accountService = null;
-  private Notifier<String> notifier = null;
+  private HelixAccountService accountService = null;
 
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 5000;
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
@@ -291,11 +290,19 @@ public class AccountTool {
     switch (action) {
       case "list":
         List<Integer> versions = accountTool.listVersions();
-        System.out.println("The versions are " + versions);
+        if (versions != null) {
+          System.out.println("The versions are " + versions);
+        } else {
+          System.out.println("Some error occurs.");
+        }
         break;
       case "view":
-        Collection<String> accounts = accountTool.viewAccountMetadatada(version);
-        System.out.println("The account metadata at version " + version + " are " + accounts);
+        Collection<String> accounts = accountTool.viewAccountMetadata(version);
+        if (accounts != null) {
+          System.out.println("The account metadata at version " + version + " are " + accounts);
+        } else {
+          System.out.println("Some error occurs");
+        }
         break;
       case "rollback":
         succeeded = accountTool.rollback(version);
@@ -355,7 +362,7 @@ public class AccountTool {
    * @param version The version to fetch the {@link Account} metadata.
    * @return A collection of json string of {@link Account} metadata.
    */
-  public Collection<String> viewAccountMetadatada(int version) {
+  public Collection<String> viewAccountMetadata(int version) {
     Map<String, String> accountMetadata = routerStore.fetchAccountMetadataAtVersion(version);
     if (accountMetadata != null) {
       return accountMetadata.values();
@@ -371,12 +378,22 @@ public class AccountTool {
    * @return True if the update succeeds.
    */
   private boolean updateAccounts(Collection<Account> accounts) {
-    boolean succeeded = routerStore.updateAccounts(accounts);
-    if (succeeded && notifier != null) {
-      succeeded = notifier.publish(HelixAccountService.ACCOUNT_METADATA_CHANGE_TOPIC,
-          HelixAccountService.FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
+    Collection<Account> existingAccounts = accountService.getAllAccounts();
+    Map<Short, Account> existingAccountsMap = new HashMap<>();
+    for (Account account : existingAccounts) {
+      existingAccountsMap.put(account.getId(), account);
     }
-    return succeeded;
+    Collection<Account> newAccounts = new ArrayList<>(accounts.size());
+    // resolve the snapshot conflict.
+    for (Account account : accounts) {
+      Account accountInMap = existingAccountsMap.get(account.getId());
+      if (accountInMap != null && accountInMap.getSnapshotVersion() != account.getSnapshotVersion()) {
+        newAccounts.add(new AccountBuilder(account).snapshotVersion(accountInMap.getSnapshotVersion()).build());
+      } else {
+        newAccounts.add(account);
+      }
+    }
+    return accountService.updateAccountsWithAccountMetadataStore(newAccounts, routerStore);
   }
 
   /**
@@ -404,7 +421,7 @@ public class AccountTool {
    * @throws Exception Andy unexpected error.
    */
   public boolean rollback(int version) throws Exception {
-    Collection<String> accountJsons = viewAccountMetadatada(version);
+    Collection<String> accountJsons = viewAccountMetadata(version);
     Collection<Account> accounts = new ArrayList<>();
     for (String accountJson : accountJsons) {
       accounts.add(Account.fromJson(new JSONObject(accountJson)));
@@ -478,7 +495,8 @@ public class AccountTool {
   }
 
   /**
-   * Create a {@link RouterStore}.
+   * Create a {@link RouterStore}. This router store will overwrite the account metadata whene updating
+   * the account metadata.
    * @return {@link RouterStore}.
    * @throws Exception Any unexpected exception.
    */
@@ -496,9 +514,7 @@ public class AccountTool {
     // Create a HelixAccountService for the router.
     AccountServiceFactory accountServiceFactory =
         Utils.getObj("com.github.ambry.account.HelixAccountServiceFactory", verifiableProperties, registry);
-    accountService = accountServiceFactory.getAccountService();
-
-    notifier = ((HelixAccountService) accountService).getNotifier();
+    accountService = (HelixAccountService) accountServiceFactory.getAccountService();
 
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     ClusterAgentsFactory clusterAgentsFactory =
