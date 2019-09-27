@@ -761,7 +761,8 @@ public class Utils {
    */
   public static ByteBuffer ensureCapacity(ByteBuffer existingBuffer, int newLength) {
     if (newLength > existingBuffer.capacity()) {
-      ByteBuffer newBuffer = ByteBuffer.allocate(newLength);
+      ByteBuffer newBuffer =
+          existingBuffer.isDirect() ? ByteBuffer.allocateDirect(newLength) : ByteBuffer.allocate(newLength);
       existingBuffer.flip();
       newBuffer.put(existingBuffer);
       return newBuffer;

@@ -19,17 +19,23 @@ package com.github.ambry.store;
  */
 public enum IndexMemState {
   /**
-   * Index should not be in memory
+   * Index should be read from an mmap-ed file, but not forced to reside in memory.
    */
-  NOT_IN_MEM,
+  MMAP_WITHOUT_FORCE_LOAD,
 
   /**
-   * Index should be in heap memory
+   * Index should be mmap-ed and force loaded into memory. The index should make a best effort to keep the segments in
+   * memory, but it is not guaranteed.
+   */
+  MMAP_WITH_FORCE_LOAD,
+
+  /**
+   * Index should be in heap memory.
    */
   IN_HEAP_MEM,
 
   /**
-   * If mmaped, the index should be force loaded into memory
+   * Index should be in direct (off-heap) memory.
    */
-  FORCE_LOAD_MMAP
+  IN_DIRECT_MEM
 }

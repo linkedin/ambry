@@ -28,7 +28,6 @@ import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -53,20 +52,37 @@ public class SSLSelectorTest {
   private final EchoServer server;
   private Selector selector;
   private final File trustStoreFile;
-  private final int poolSize;
+  private final NetworkConfig networkConfig;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{0}, {2}});
+    List<Object[]> params = new ArrayList<>();
+    for (String provider : new String[]{"Conscrypt", "SunJSSE"}) {
+      for (int poolSize : new int[]{0, 2}) {
+        for (boolean useDirectBuffers : TestUtils.BOOLEAN_VALUES) {
+          params.add(new Object[]{provider, poolSize, useDirectBuffers});
+        }
+      }
+    }
+    return params;
   }
 
-  public SSLSelectorTest(int poolSize) throws Exception {
-    this.poolSize = poolSize;
+  /**
+   * @param sslContextProvider the name of the SSL library provider to use.
+   * @param poolSize the size of the worker pool for reading/writing/connecting to sockets.
+   * @param useDirectBuffers true to allocate direct buffers in {@link SSLTransmission}.
+   * @throws Exception
+   */
+  public SSLSelectorTest(String sslContextProvider, int poolSize, boolean useDirectBuffers) throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
-    SSLConfig sslConfig =
-        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
-    SSLConfig clientSSLConfig =
-        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client"));
+    Properties serverProps = new Properties();
+    TestSSLUtils.addSSLProperties(serverProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server",
+        sslContextProvider);
+    SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(serverProps));
+    Properties clientProps = new Properties();
+    TestSSLUtils.addSSLProperties(clientProps, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client",
+        sslContextProvider);
+    SSLConfig clientSSLConfig = new SSLConfig(new VerifiableProperties(clientProps));
     SSLFactory serverSSLFactory = SSLFactory.getNewInstance(sslConfig);
     clientSSLFactory = SSLFactory.getNewInstance(clientSSLConfig);
     server = new EchoServer(serverSSLFactory, 18383);
@@ -76,8 +92,9 @@ public class SSLSelectorTest {
         .getApplicationBufferSize();
     Properties props = new Properties();
     props.setProperty("selector.executor.pool.size", Integer.toString(poolSize));
+    props.setProperty("selector.use.direct.buffers", Boolean.toString(useDirectBuffers));
     VerifiableProperties vprops = new VerifiableProperties(props);
-    NetworkConfig networkConfig = new NetworkConfig(vprops);
+    networkConfig = new NetworkConfig(vprops);
     selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), clientSSLFactory,
         networkConfig);
   }
@@ -347,10 +364,6 @@ public class SSLSelectorTest {
     selector.close();
     NetworkMetrics metrics = new NetworkMetrics(new MetricRegistry());
     Time time = SystemTime.getInstance();
-    Properties props = new Properties();
-    props.setProperty("selector.executor.pool.size", Integer.toString(poolSize));
-    VerifiableProperties vprops = new VerifiableProperties(props);
-    NetworkConfig networkConfig = new NetworkConfig(vprops);
     selector = new Selector(metrics, time, clientSSLFactory, networkConfig) {
       @Override
       protected Transmission createTransmission(String connectionId, SelectionKey key, String hostname, int port,
@@ -359,7 +372,7 @@ public class SSLSelectorTest {
         AtomicReference<Integer> netWriteBufSizeOverride = new AtomicReference<>(netWriteBufSizeStart);
         AtomicReference<Integer> appReadBufSizeOverride = new AtomicReference<>(appReadBufSizeStart);
         return new SSLTransmission(clientSSLFactory, connectionId, (SocketChannel) key.channel(), key, hostname, port,
-            time, metrics, mode) {
+            time, metrics, mode, networkConfig.selectorUseDirectBuffers) {
           @Override
           protected int netReadBufferSize() {
             // netReadBufferSize() is invoked in SSLTransportLayer.read() prior to the read

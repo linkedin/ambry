@@ -360,8 +360,7 @@ public class IndexSegmentTest {
    */
   @Test
   public void memoryMapFailureTest() throws IOException, StoreException {
-    assumeTrue(version == PersistentIndex.VERSION_1 && !config.storeIndexMemState.equals(IndexMemState.IN_HEAP_MEM)
-        && !config.storeIndexMemState.equals(IndexMemState.FORCE_LOAD_MMAP));
+    assumeTrue(version == PersistentIndex.VERSION_1 && config.storeIndexMemState == IndexMemState.MMAP_WITHOUT_FORCE_LOAD);
     String logSegmentName = LogSegmentNameHelper.getName(0, 0);
     StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
     IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), mockStoreKeyFactory);

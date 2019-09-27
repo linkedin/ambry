@@ -257,7 +257,7 @@ public class StoreConfig {
    * Provides a hint for how indexes should be treated w.r.t memory
    */
   @Config(storeIndexMemStateName)
-  @Default("NOT_IN_MEM")
+  @Default("MMAP_WITHOUT_FORCE_LOAD")
   public final IndexMemState storeIndexMemState;
   public static final String storeIndexMemStateName = "store.index.mem.state";
 
@@ -343,8 +343,8 @@ public class StoreConfig {
     storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", false);
     storeTtlUpdateBufferTimeSeconds =
         verifiableProperties.getIntInRange(storeTtlUpdateBufferTimeSecondsName, 60 * 60 * 24, 0, Integer.MAX_VALUE);
-    storeIndexMemState =
-        IndexMemState.valueOf(verifiableProperties.getString(storeIndexMemStateName, IndexMemState.NOT_IN_MEM.name()));
+    storeIndexMemState = IndexMemState.valueOf(
+        verifiableProperties.getString(storeIndexMemStateName, IndexMemState.MMAP_WITHOUT_FORCE_LOAD.name()));
     storeIoErrorCountToTriggerShutdown =
         verifiableProperties.getIntInRange("store.io.error.count.to.trigger.shutdown", Integer.MAX_VALUE, 1,
             Integer.MAX_VALUE);
