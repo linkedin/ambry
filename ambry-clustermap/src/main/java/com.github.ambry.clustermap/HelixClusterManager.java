@@ -401,7 +401,7 @@ class HelixClusterManager implements ClusterMap {
           mappedPartition =
               new AmbryPartition(Long.valueOf(partitionIdStr), partitionClass, helixClusterManagerCallback);
         }
-        // Check if data or disk is in current cluster map, if not, set newReplica to null.
+        // Check if data node or disk is in current cluster map, if not, set newReplica to null.
         AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
         String mountPathFromHelix = replicaInfos.get(instanceName);
         Set<AmbryDisk> disks = dataNode != null ? ambryDataNodeToAmbryDisks.get(dataNode) : null;

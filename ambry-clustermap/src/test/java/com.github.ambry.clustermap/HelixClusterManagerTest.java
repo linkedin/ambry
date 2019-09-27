@@ -18,9 +18,9 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.TestUtils.*;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -393,14 +393,14 @@ public class HelixClusterManagerTest {
     helixClusterManager = new HelixClusterManager(clusterMapConfig, hostname,
         new MockHelixManagerFactory(helixCluster, znRecordMap, null), metricRegistry);
 
-    // 2. test that no partition or no host is found in helix property store that associates with new replica
-    // select a partition that doesn't equal to partitionOfNewReplica dataNodeOfNewReplica
+    // 2. test that cases: 1) partition is not found  2) host is not found in helix property store that associates with new replica
+    // select a partition that doesn't equal to partitionOfNewReplica
     PartitionId partitionForTest;
     Random random = new Random();
     List<PartitionId> partitionsInClusterManager = helixClusterManager.getAllPartitionIds(null);
     do {
       partitionForTest = partitionsInClusterManager.get(random.nextInt(partitionsInClusterManager.size()));
-    } while (partitionForTest == partitionOfNewReplica);
+    } while (partitionForTest.toString().equals(partitionOfNewReplica.toString()));
     assertNull("New replica should be null because given partition id is not in Helix property store",
         helixClusterManager.getNewReplica(partitionForTest.toPathString(), dataNodeOfNewReplica));
     // select partitionOfNewReplica but a random node that doesn't equal to
