@@ -312,6 +312,20 @@ public class AccountTool {
     String hardwareLayout = options.valueOf(hardwareLayoutOpt);
     String partitionLayout = options.valueOf(partitionLayoutOpt);
 
+    if ((zkLayoutPath != null && clusterName == null) || (zkLayoutPath == null && clusterName != null)) {
+      System.out.println("You have to provide clustername and zklayout at the same time");
+      parser.printHelpOn(System.out);
+      System.exit(0);
+    }
+
+    if (zkLayoutPath == null) {
+      if ((hardwareLayout != null && partitionLayout == null) || (hardwareLayout == null && partitionLayout != null)) {
+        System.out.println("You have to provide hardwareLayout and partitionLayout at the same time");
+        parser.printHelpOn(System.out);
+        System.exit(0);
+      }
+    }
+
     int version = 0;
     if (act == Action.VIEW || act == Action.ROLLBACK) {
       ToolUtils.ensureOrExit(Arrays.asList(versionOpt), options, parser);
@@ -537,9 +551,13 @@ public class AccountTool {
     properties.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, zkServer);
 
     // for creating NonBlockingRouter
-    properties.setProperty("clustermap.dcs.zk.connect.strings", clusterMapDcsZkConnectString);
-    properties.setProperty("clustermap.clusteragents.factory", "com.github.ambry.clustermap.HelixClusterAgentsFactory");
-    properties.setProperty("clustermap.cluster.name", clusterName);
+    if (clusterMapDcsZkConnectString != null) {
+      properties.setProperty("clustermap.clusteragents.factory", "com.github.ambry.clustermap.HelixClusterAgentsFactory");
+      properties.setProperty("clustermap.dcs.zk.connect.strings", clusterMapDcsZkConnectString);
+      properties.setProperty("clustermap.cluster.name", clusterName);
+    } else {
+      properties.setProperty("clustermap.clusteragents.factory", "com.github.ambry.clustermap.StaticClusterAgentsFactory");
+    }
     properties.setProperty("clustermap.host.name", hostname);
     properties.setProperty("clustermap.datacenter.name", dcName);
     properties.setProperty("router.hostname", hostname);
