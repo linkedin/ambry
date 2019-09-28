@@ -83,9 +83,9 @@ import org.json.JSONObject;
  *     {
  *     "zkInfo": [
  *         {
- *             "datacenter": "ei4",
- *             "id": 3,
- *             "zkConnectStr": "zk-ei4-shared.int.linkedin.com:12913"
+ *             "datacenter": "dc1",
+ *             "id": 1,
+ *             "zkConnectStr": "zk-dc1.example.com:2181"
  *         }
  *     ]
  *    }
@@ -158,7 +158,30 @@ public class AccountTool {
   private String dcName = null;
   private String clusterMapDcsZkConnectString = null;
 
-  private static final List<String> ACTION_CHOICES = Arrays.asList("list", "view", "rollback", "update");
+  private String hardwareLayout;
+  private String partitionLayout;
+
+  private enum Action {
+    /**
+     * List all the versions available in the account service.
+     */
+    LIST,
+
+    /**
+     * View the whole account metadata at a specific version.
+     */
+    VIEW,
+
+    /**
+     * Rollback the account metadata to a previous version.
+     */
+    ROLLBACK,
+
+    /**
+     * Update the account metadata by overwriting it with the content provided by a file.
+     */
+    UPDATE
+  }
 
   public static void main(String[] args) throws Exception {
     OptionParser parser = new OptionParser();
@@ -244,6 +267,18 @@ public class AccountTool {
         .describedAs("account_json_path")
         .ofType(String.class);
 
+    ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt = parser.accepts("hardwareLayout",
+        "The hardware layout json file. This is optional if you provide a zklayout file.")
+        .withRequiredArg()
+        .describedAs("hardware_layout")
+        .ofType(String.class);
+
+    ArgumentAcceptingOptionSpec<String> partitionLayoutOpt = parser.accepts("partitionLayout",
+        "The partition layout json file. This is optional if you provide a zklayout file.")
+        .withRequiredArg()
+        .describedAs("partition_layout")
+        .ofType(String.class);
+
     parser.accepts("help", "print this help message.");
     parser.accepts("h", "print this help message.");
 
@@ -257,7 +292,11 @@ public class AccountTool {
         Arrays.asList(actionOpt, zkServerOpt, storePathOpt, zkLayoutPathOpt, dcnameOpt, clusterNameOpt), options,
         parser);
     String action = options.valueOf(actionOpt);
-    if (!ACTION_CHOICES.contains(action.toLowerCase())) {
+    Action act = null;
+    try {
+      act = Enum.valueOf(Action.class, action.toUpperCase());
+    } catch (Exception e) {
+      System.out.println("Invalid action: " + action);
       parser.printHelpOn(System.out);
       System.exit(0);
     }
@@ -270,59 +309,66 @@ public class AccountTool {
     String zkLayoutPath = options.valueOf(zkLayoutPathOpt);
     String clusterMapDcsZkConnectString = Utils.readStringFromFile(zkLayoutPath);
     String clusterName = options.valueOf(clusterNameOpt);
+    String hardwareLayout = options.valueOf(hardwareLayoutOpt);
+    String partitionLayout = options.valueOf(partitionLayoutOpt);
 
     int version = 0;
-    if (action.equals("view") || action.equals("rollback")) {
+    if (act == Action.VIEW || act == Action.ROLLBACK) {
       ToolUtils.ensureOrExit(Arrays.asList(versionOpt), options, parser);
       version = options.valueOf(versionOpt);
     }
 
     String accountJsonPath = null;
-    if (action.equals("update")) {
+    if (act == Action.UPDATE) {
       ToolUtils.ensureOrExit(Arrays.asList(accountJsonPathOpt), options, parser);
       accountJsonPath = options.valueOf(accountJsonPathOpt);
     }
 
     AccountTool accountTool =
         new AccountTool(zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs, hostname, dcname, clusterName,
-            clusterMapDcsZkConnectString);
-    boolean succeeded = false;
-    switch (action) {
-      case "list":
-        List<Integer> versions = accountTool.listVersions();
-        if (versions != null) {
-          System.out.println("The versions are " + versions);
-        } else {
-          System.out.println("Some error occurs.");
-        }
-        break;
-      case "view":
-        Collection<String> accounts = accountTool.viewAccountMetadata(version);
-        if (accounts != null) {
-          System.out.println("The account metadata at version " + version + " are " + accounts);
-        } else {
-          System.out.println("Some error occurs");
-        }
-        break;
-      case "rollback":
-        succeeded = accountTool.rollback(version);
-        if (succeeded) {
-          System.out.println("Successfully rollback account metadata to version " + version);
-        } else {
-          System.out.println("Fail to rollback account metadata to version " + version);
-        }
-        break;
-      case "update":
-        succeeded = accountTool.updateFromFile(accountJsonPath);
-        if (succeeded) {
-          System.out.println("Successfully update account metadata from file " + accountJsonPath);
-        } else {
-          System.out.println("Fail to update account metadata from file " + accountJsonPath);
-        }
-        break;
+            clusterMapDcsZkConnectString, hardwareLayout, partitionLayout);
+    try {
+      boolean succeeded = false;
+      switch (act) {
+        case LIST:
+          List<Integer> versions = accountTool.listVersions();
+          if (versions != null) {
+            System.out.println("The versions are " + versions);
+          } else {
+            System.out.println("Some error occurs.");
+          }
+          break;
+        case VIEW:
+          Collection<String> accounts = accountTool.viewAccountMetadata(version);
+          if (accounts != null) {
+            System.out.println("The account metadata at version " + version + " are " + accounts);
+          } else {
+            System.out.println("Some error occurs");
+          }
+          break;
+        case ROLLBACK:
+          succeeded = accountTool.rollback(version);
+          if (succeeded) {
+            System.out.println("Successfully rollback account metadata to version " + version);
+          } else {
+            System.out.println("Fail to rollback account metadata to version " + version);
+          }
+          break;
+        case UPDATE:
+          succeeded = accountTool.updateFromFile(accountJsonPath);
+          if (succeeded) {
+            System.out.println("Successfully update account metadata from file " + accountJsonPath);
+          } else {
+            System.out.println("Fail to update account metadata from file " + accountJsonPath);
+          }
+          break;
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+    } finally {
+      accountTool.close();
+      System.exit(0);
     }
-    accountTool.close();
-    System.exit(0);
   }
 
   /**
@@ -331,14 +377,23 @@ public class AccountTool {
    * @param storePath The root path {@link HelixPropertyStore}.
    * @param zkConnectionTimeoutMs The connection timeout to {@link HelixPropertyStore}.
    * @param zkSessionTimeoutMs The session timeout to {@link HelixPropertyStore}.
+   * @param hostname The hostname of the current host.
+   * @param dcname The dc name of the current host.
+   * @param clusterName The cluster name of the current host. This will be used to figure out the hardware layout.
+   * @param clusterMapDcsZkConnectString The zk info in different dc in json format.
+   * @param hardwareLayout The filepath to hardware layout. This is optional if clusterMapDcsZkConnectString is not empty.
+   * @param partitionLayout The filepath to partition layout. This is optional if clusterMapDcsZkConnectString is not empty.
    * @throws Exception Any unexpected exception.
    */
   public AccountTool(String zkServer, String storePath, int zkConnectionTimeoutMs, int zkSessionTimeoutMs,
-      String hostname, String dcname, String clusterName, String clusterMapDcsZkConnectString) throws Exception {
+      String hostname, String dcname, String clusterName, String clusterMapDcsZkConnectString, String hardwareLayout,
+      String partitionLayout) throws Exception {
     this.hostname = hostname;
     this.dcName = dcname;
     this.clusterName = clusterName;
     this.clusterMapDcsZkConnectString = clusterMapDcsZkConnectString;
+    this.hardwareLayout = hardwareLayout;
+    this.partitionLayout = partitionLayout;
     verifiableProperties = getVerifiableProperties(zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs);
     accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
@@ -518,7 +573,8 @@ public class AccountTool {
 
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     ClusterAgentsFactory clusterAgentsFactory =
-        Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, "", "");
+        Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, hardwareLayout,
+            partitionLayout);
     clusterMap = clusterAgentsFactory.getClusterMap();
     SSLFactory sslFactory = getSSLFactoryIfRequired();
     // Create a NonBlockingRouter.
