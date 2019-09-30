@@ -59,7 +59,7 @@ import org.junit.Assert;
 
 public class TestSSLUtils {
   private final static String SSL_CONTEXT_PROTOCOL = "TLS";
-  private final static String SSL_CONTEXT_PROVIDER = "SunJSSE";
+  private final static String SSL_CONTEXT_PROVIDER = "Conscrypt";
   private final static String TLS_V1_2_PROTOCOL = "TLSv1.2";
   private static final String SSL_V2_HELLO_PROTOCOL = "SSLv2Hello";
   private final static String ENDPOINT_IDENTIFICATION_ALGORITHM = "HTTPS";
@@ -163,8 +163,35 @@ public class TestSSLUtils {
     saveKeyStore(ks, filename, password);
   }
 
+  /**
+   * Generate a cert and add SSL related properties to {@code props}. This will use {@link #SSL_CONTEXT_PROVIDER} as the
+   * provider for SSL routines/libraries.
+   * @param props the {@link Properties} instance.
+   * @param sslEnabledDatacenters a comma separated list of datacenters where SSL should be enabled.
+   * @param mode whether to generate the "client" or "server" certificate.
+   * @param trustStoreFile the file path at which to create the trust store.
+   * @param certAlias the cert alias to use.
+   * @throws IOException
+   * @throws GeneralSecurityException
+   */
   public static void addSSLProperties(Properties props, String sslEnabledDatacenters, SSLFactory.Mode mode,
       File trustStoreFile, String certAlias) throws IOException, GeneralSecurityException {
+    addSSLProperties(props, sslEnabledDatacenters, mode, trustStoreFile, certAlias, SSL_CONTEXT_PROVIDER);
+  }
+
+  /**
+   * Generate a cert and add SSL related properties to {@code props}
+   * @param props the {@link Properties} instance.
+   * @param sslEnabledDatacenters a comma separated list of datacenters where SSL should be enabled.
+   * @param mode whether to generate the "client" or "server" certificate.
+   * @param trustStoreFile the file path at which to create the trust store.
+   * @param certAlias the cert alias to use.
+   * @param sslContextProvider the name of a registered security provider to use for instantiating {@link SSLContext}.
+   * @throws IOException
+   * @throws GeneralSecurityException
+   */
+  public static void addSSLProperties(Properties props, String sslEnabledDatacenters, SSLFactory.Mode mode,
+      File trustStoreFile, String certAlias, String sslContextProvider) throws IOException, GeneralSecurityException {
     Map<String, X509Certificate> certs = new HashMap<>();
     File keyStoreFile;
     String password;
@@ -188,7 +215,7 @@ public class TestSSLUtils {
     createTrustStore(trustStoreFile.getPath(), TRUSTSTORE_PASSWORD, certs);
 
     props.put("ssl.context.protocol", SSL_CONTEXT_PROTOCOL);
-    props.put("ssl.context.provider", SSL_CONTEXT_PROVIDER);
+    props.put("ssl.context.provider", sslContextProvider == null ? SSL_CONTEXT_PROVIDER : sslContextProvider);
     props.put("ssl.enabled.protocols", TLS_V1_2_PROTOCOL);
     props.put("ssl.endpoint.identification.algorithm", ENDPOINT_IDENTIFICATION_ALGORITHM);
     props.put("ssl.client.authentication", CLIENT_AUTHENTICATION);
@@ -220,14 +247,14 @@ public class TestSSLUtils {
   public static VerifiableProperties createSslProps(String sslEnabledDatacenters, SSLFactory.Mode mode,
       File trustStoreFile, String certAlias) throws IOException, GeneralSecurityException {
     Properties props = new Properties();
-    addSSLProperties(props, sslEnabledDatacenters, mode, trustStoreFile, certAlias);
+    addSSLProperties(props, sslEnabledDatacenters, mode, trustStoreFile, certAlias, SSL_CONTEXT_PROVIDER);
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "dc1");
     props.setProperty("clustermap.host.name", "localhost");
     return new VerifiableProperties(props);
   }
 
-  public static void verifySSLConfig(SSLContext sslContext, SSLEngine sslEngine, boolean isClient) {
+  private static void verifySSLConfig(SSLContext sslContext, SSLEngine sslEngine, boolean isClient) {
     // SSLContext verify
     Assert.assertEquals(sslContext.getProtocol(), SSL_CONTEXT_PROTOCOL);
     Assert.assertEquals(sslContext.getProvider().getName(), SSL_CONTEXT_PROVIDER);

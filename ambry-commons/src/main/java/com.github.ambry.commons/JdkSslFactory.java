@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.SecureRandom;
+import java.security.Security;
 import java.util.ArrayList;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -27,6 +28,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
+import org.conscrypt.Conscrypt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,8 +37,15 @@ import org.slf4j.LoggerFactory;
  * Factory to create SSLContext and SSLEngine
  */
 public class JdkSslFactory implements SSLFactory {
+  private static final Logger LOGGER = LoggerFactory.getLogger(JdkSslFactory.class);
 
-  protected static final Logger logger = LoggerFactory.getLogger(JdkSslFactory.class);
+  static {
+    if (Conscrypt.isAvailable()) {
+      Security.addProvider(Conscrypt.newProvider());
+    } else {
+      LOGGER.warn("Conscrypt not available for this platform; will not be able to use OpenSSL-based engine");
+    }
+  }
 
   private final SSLContext sslContext;
   private final String[] cipherSuites;

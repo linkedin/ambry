@@ -333,16 +333,19 @@ class IndexSegment {
             logger.trace("IndexSegment {} found in bloom filter for index with start offset {} and for key {} ",
                 indexFile.getAbsolutePath(), startOffset, keyToFind);
           }
-          // binary search on the mapped file
-          if (!(serEntries instanceof MappedByteBuffer) || ((MappedByteBuffer) serEntries).isLoaded()) {
+          if (config.storeIndexMemState == IndexMemState.MMAP_WITH_FORCE_LOAD
+              || config.storeIndexMemState == IndexMemState.MMAP_WITHOUT_FORCE_LOAD) {
             // isLoaded() will be true only if the entire buffer is in memory - so it being false does not necessarily
             // mean that the pages in the scope of the search need to be loaded from disk.
             // Secondly, even if it returned true (or false), by the time the actual lookup is done,
             // the situation may be different.
-            metrics.mappedSegmentIsLoadedDuringFindCount.inc();
-          } else {
-            metrics.mappedSegmentIsNotLoadedDuringFindCount.inc();
+            if (((MappedByteBuffer) serEntries).isLoaded()) {
+              metrics.mappedSegmentIsLoadedDuringFindCount.inc();
+            } else {
+              metrics.mappedSegmentIsNotLoadedDuringFindCount.inc();
+            }
           }
+          // binary search on the mapped file
           ByteBuffer duplicate = serEntries.duplicate();
           int low = 0;
           int totalEntries = numberOfEntries(duplicate);
@@ -736,18 +739,20 @@ class IndexSegment {
   private void map() throws StoreException {
     rwLock.writeLock().lock();
     try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
-      if (config.storeIndexMemState.equals(IndexMemState.IN_HEAP_MEM)) {
-        if (indexFile.length() > Integer.MAX_VALUE) {
-          throw new IllegalStateException("Configured to keep indexes in memory but index file length > IntegerMax");
-        }
-        serEntries = ByteBuffer.allocate((int) indexFile.length());
-        raf.getChannel().read(serEntries);
-      } else {
-        MappedByteBuffer buf = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
-        if (config.storeIndexMemState.equals(IndexMemState.FORCE_LOAD_MMAP)) {
-          buf.load();
-        }
-        serEntries = buf;
+      switch (config.storeIndexMemState) {
+        case IN_DIRECT_MEM:
+          serEntries = readFileIntoBuffer(raf, true);
+          break;
+        case IN_HEAP_MEM:
+          serEntries = readFileIntoBuffer(raf, false);
+          break;
+        default:
+          MappedByteBuffer buf = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
+          if (config.storeIndexMemState == IndexMemState.MMAP_WITH_FORCE_LOAD) {
+            buf.load();
+          }
+          serEntries = buf;
+          break;
       }
       serEntries.position(0);
       version = serEntries.getShort();
@@ -1037,6 +1042,23 @@ class IndexSegment {
         iterator.remove();
       }
     }
+  }
+
+  /**
+   * Read a full {@link RandomAccessFile} into a buffer.
+   * @param file the file to read.
+   * @param useDirect {@code true} to allocate a direct buffer instead of a heap buffer.
+   * @return the buffer containing the contents of {@code file}
+   * @throws IOException on read failure.
+   */
+  private static ByteBuffer readFileIntoBuffer(RandomAccessFile file, boolean useDirect) throws IOException {
+    if (file.length() > Integer.MAX_VALUE) {
+      throw new IllegalStateException("Configured to keep indexes in memory but index file length > IntegerMax");
+    }
+    ByteBuffer buf =
+        useDirect ? ByteBuffer.allocateDirect((int) file.length()) : ByteBuffer.allocate((int) file.length());
+    file.getChannel().read(buf);
+    return buf;
   }
 
   /**

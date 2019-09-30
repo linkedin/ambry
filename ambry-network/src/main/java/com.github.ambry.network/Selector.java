@@ -617,7 +617,8 @@ public class Selector implements Selectable {
     } else if (portType == PortType.SSL) {
       try {
         transmission =
-            new SSLTransmission(sslFactory, connectionId, channel(key), key, hostname, port, time, metrics, mode);
+            new SSLTransmission(sslFactory, connectionId, channel(key), key, hostname, port, time, metrics, mode,
+                networkConfig.selectorUseDirectBuffers);
         metrics.sslTransmissionInitializationCount.inc();
       } catch (IOException e) {
         metrics.sslTransmissionInitializationErrorCount.inc();

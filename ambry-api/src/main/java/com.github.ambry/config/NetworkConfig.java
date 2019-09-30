@@ -90,6 +90,13 @@ public class NetworkConfig {
   @Default("-1")
   public final int selectorMaxKeyToProcess;
 
+  /**
+   * True to allocate direct buffers within the selector (for things like SSL work).
+   */
+  @Config("selector.use.direct.buffers")
+  @Default("false")
+  public final boolean selectorUseDirectBuffers;
+
   public NetworkConfig(VerifiableProperties verifiableProperties) {
 
     numIoThreads = verifiableProperties.getIntInRange("num.io.threads", 8, 1, Integer.MAX_VALUE);
@@ -106,5 +113,6 @@ public class NetworkConfig {
         verifiableProperties.getIntInRange("selector.executor.pool.size", 4, 0, Integer.MAX_VALUE);
     selectorMaxKeyToProcess =
         verifiableProperties.getIntInRange("selector.max.key.to.process", -1, -1, Integer.MAX_VALUE);
+    selectorUseDirectBuffers = verifiableProperties.getBoolean("selector.use.direct.buffers", false);
   }
 }

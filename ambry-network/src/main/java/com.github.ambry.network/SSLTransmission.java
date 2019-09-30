@@ -57,12 +57,19 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private long handshakeStartTime;
 
   public SSLTransmission(SSLFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
-      String remoteHost, int remotePort, Time time, NetworkMetrics metrics, SSLFactory.Mode mode) throws IOException {
+      String remoteHost, int remotePort, Time time, NetworkMetrics metrics, SSLFactory.Mode mode,
+      boolean useDirectBuffers) throws IOException {
     super(connectionId, socketChannel, key, time, metrics);
     this.sslEngine = sslFactory.createSSLEngine(remoteHost, remotePort, mode);
-    this.netReadBuffer = ByteBuffer.allocate(netReadBufferSize());
-    this.netWriteBuffer = ByteBuffer.allocate(netWriteBufferSize());
-    this.appReadBuffer = ByteBuffer.allocate(appReadBufferSize());
+    if (useDirectBuffers) {
+      this.netReadBuffer = ByteBuffer.allocateDirect(netReadBufferSize());
+      this.netWriteBuffer = ByteBuffer.allocateDirect(netWriteBufferSize());
+      this.appReadBuffer = ByteBuffer.allocateDirect(appReadBufferSize());
+    } else {
+      this.netReadBuffer = ByteBuffer.allocate(netReadBufferSize());
+      this.netWriteBuffer = ByteBuffer.allocate(netWriteBufferSize());
+      this.appReadBuffer = ByteBuffer.allocate(appReadBufferSize());
+    }
     startHandshake();
   }
 
@@ -121,29 +128,39 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     closing = true;
     sslEngine.closeOutbound();
     try {
-      if (!flush(netWriteBuffer)) {
-        throw new IOException("Remaining data in the network buffer, can't send SSL close message.");
+      if (socketChannel.isConnected()) {
+        if (!flush(netWriteBuffer)) {
+          throw new IOException("Remaining data in the network buffer, can't send SSL close message.");
+        }
+        //prep the buffer for the close message
+        netWriteBuffer.clear();
+        //perform the close, since we called sslEngine.closeOutbound
+        SSLEngineResult handshake = sslEngine.wrap(emptyBuf, netWriteBuffer);
+        //we should be in a close state
+        if (handshake.getStatus() != Status.CLOSED) {
+          throw new IOException("Invalid close state, will not send network data.");
+        }
+        netWriteBuffer.flip();
+        flush(netWriteBuffer);
       }
-      //prep the buffer for the close message
-      netWriteBuffer.clear();
-      //perform the close, since we called sslEngine.closeOutbound
-      SSLEngineResult handshake = sslEngine.wrap(emptyBuf, netWriteBuffer);
-      //we should be in a close state
-      if (handshake.getStatus() != Status.CLOSED) {
-        throw new IOException("Invalid close state, will not send network data.");
-      }
-      netWriteBuffer.flip();
-      flush(netWriteBuffer);
-      clearReceive();
-      clearSend();
-      socketChannel.socket().close();
-      socketChannel.close();
     } catch (IOException ie) {
       metrics.selectorCloseSocketErrorCount.inc();
       logger.debug("Failed to send SSL close message ", ie);
+    } finally {
+      try {
+        clearReceive();
+        clearSend();
+        clearBuffers();
+        socketChannel.socket().close();
+        socketChannel.close();
+      } catch (IOException ie) {
+        metrics.selectorCloseSocketErrorCount.inc();
+        logger.debug("Failed to close socket", ie);
+      } finally {
+        key.attach(null);
+        key.cancel();
+      }
     }
-    key.attach(null);
-    key.cancel();
   }
 
   /**
@@ -330,7 +347,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * @return SSLEngineResult
    * @throws IOException
    */
-  private SSLEngineResult handshakeWrap(Boolean doWrite) throws IOException {
+  private SSLEngineResult handshakeWrap(boolean doWrite) throws IOException {
     logger.trace("SSLHandshake handshakeWrap {}", getConnectionId());
     if (netWriteBuffer.hasRemaining()) {
       throw new IllegalStateException("handshakeWrap called with netWriteBuffer not empty");
@@ -357,7 +374,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * @return SSLEngineResult
    * @throws IOException
    */
-  private SSLEngineResult handshakeUnwrap(Boolean doRead) throws IOException {
+  private SSLEngineResult handshakeUnwrap(boolean doRead) throws IOException {
     logger.trace("SSLHandshake handshakeUnwrap {}", getConnectionId());
     int read;
     if (doRead) {
@@ -637,9 +654,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private void handleUnwrapOverflow() {
     int currentAppReadBufferSize = appReadBufferSize();
     appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentAppReadBufferSize);
-    if (appReadBuffer.position() >= currentAppReadBufferSize) {
+    if (appReadBuffer.position() > currentAppReadBufferSize) {
       throw new IllegalStateException(
-          "Buffer overflow when available data size (" + appReadBuffer.position() + ") >= application buffer size ("
+          "Buffer overflow when available data size (" + appReadBuffer.position() + ") > application buffer size ("
               + currentAppReadBufferSize + ")");
     }
   }
@@ -682,5 +699,14 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     } catch (SSLException e) {
       logger.debug("SSLEngine.closeInBound() raised an exception.", e);
     }
+  }
+
+  /**
+   * Nullify buffers used for I/O with {@link SSLEngine}.
+   */
+  private void clearBuffers() {
+    appReadBuffer = null;
+    netReadBuffer = null;
+    netWriteBuffer = null;
   }
 }
