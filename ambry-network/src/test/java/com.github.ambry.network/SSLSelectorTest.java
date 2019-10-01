@@ -27,12 +27,15 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.security.Security;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
+import org.conscrypt.Conscrypt;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -57,7 +60,12 @@ public class SSLSelectorTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     List<Object[]> params = new ArrayList<>();
-    for (String provider : new String[]{"Conscrypt", "SunJSSE"}) {
+    List<String> supportedProviders = new ArrayList<>();
+    supportedProviders.add("SunJSSE");
+    if (Conscrypt.isAvailable()) {
+      supportedProviders.add("Conscrypt");
+    }
+    for (String provider : supportedProviders) {
       for (int poolSize : new int[]{0, 2}) {
         for (boolean useDirectBuffers : TestUtils.BOOLEAN_VALUES) {
           params.add(new Object[]{provider, poolSize, useDirectBuffers});

@@ -54,12 +54,13 @@ import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.DefaultDigestAlgorithmIdentifierFinder;
 import org.bouncycastle.operator.DefaultSignatureAlgorithmIdentifierFinder;
 import org.bouncycastle.operator.bc.BcRSAContentSignerBuilder;
+import org.conscrypt.Conscrypt;
 import org.junit.Assert;
 
 
 public class TestSSLUtils {
   private final static String SSL_CONTEXT_PROTOCOL = "TLS";
-  private final static String SSL_CONTEXT_PROVIDER = "Conscrypt";
+  private final static String SSL_CONTEXT_PROVIDER = Conscrypt.isAvailable() ? "Conscrypt" : "SunJSSE";
   private final static String TLS_V1_2_PROTOCOL = "TLSv1.2";
   private static final String SSL_V2_HELLO_PROTOCOL = "SSLv2Hello";
   private final static String ENDPOINT_IDENTIFICATION_ALGORITHM = "HTTPS";
