@@ -40,10 +40,11 @@ public class JdkSslFactory implements SSLFactory {
   private static final Logger LOGGER = LoggerFactory.getLogger(JdkSslFactory.class);
 
   static {
-    if (Conscrypt.isAvailable()) {
+    try {
+      Conscrypt.checkAvailability();
       Security.addProvider(Conscrypt.newProvider());
-    } else {
-      LOGGER.warn("Conscrypt not available for this platform; will not be able to use OpenSSL-based engine");
+    } catch (Exception e) {
+      LOGGER.warn("Conscrypt not available for this platform; will not be able to use OpenSSL-based engine", e);
     }
   }
 
