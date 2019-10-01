@@ -18,11 +18,16 @@ package com.github.ambry.config;
  */
 public class HelixPropertyStoreConfig {
   public static final String HELIX_PROPERTY_STORE_PREFIX = "helix.property.store.";
+  public static final String HELIX_ZK_CLIENT_CONNECTION_TIMEOUT_MS =
+      HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms";
+  public static final String HELIX_ZK_CLIENT_SESSION_TIMEOUT_MS =
+      HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms";
+  public static final String HELIX_ROOT_PATH = HELIX_PROPERTY_STORE_PREFIX + "root.path";
 
   /**
    * Time in ms to time out a connection to a ZooKeeper server.
    */
-  @Config(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms")
+  @Config(HELIX_ZK_CLIENT_CONNECTION_TIMEOUT_MS)
   @Default("20 * 1000")
   public final int zkClientConnectionTimeoutMs;
 
@@ -30,7 +35,7 @@ public class HelixPropertyStoreConfig {
    * Time in ms defines disconnection tolerance by a session. I.e., if reconnected within this time, it will
    * be considered as the same session.
    */
-  @Config(HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms")
+  @Config(HELIX_ZK_CLIENT_SESSION_TIMEOUT_MS)
   @Default("20 * 1000")
   public final int zkClientSessionTimeoutMs;
 
@@ -38,18 +43,15 @@ public class HelixPropertyStoreConfig {
    * The root path of helix property store in the ZooKeeper. Must start with {@code /}, and must not end with {@code /}.
    * It is recommended to make root path in the form of {@code /ambry/<clustername>/helixPropertyStore}
    */
-  @Config(HELIX_PROPERTY_STORE_PREFIX + "root.path")
+  @Config(HELIX_ROOT_PATH)
   @Default("/ambry/defaultCluster/helixPropertyStore")
   public final String rootPath;
 
   public HelixPropertyStoreConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectionTimeoutMs =
-        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms", 20 * 1000,
-            1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(HELIX_ZK_CLIENT_CONNECTION_TIMEOUT_MS, 20 * 1000, 1, Integer.MAX_VALUE);
     zkClientSessionTimeoutMs =
-        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms", 20 * 1000, 1,
-            Integer.MAX_VALUE);
-    rootPath = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "root.path",
-        "/ambry/defaultCluster/helixPropertyStore");
+        verifiableProperties.getIntInRange(HELIX_ZK_CLIENT_SESSION_TIMEOUT_MS, 20 * 1000, 1, Integer.MAX_VALUE);
+    rootPath = verifiableProperties.getString(HELIX_ROOT_PATH, "/ambry/defaultCluster/helixPropertyStore");
   }
 }

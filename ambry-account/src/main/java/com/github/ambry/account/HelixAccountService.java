@@ -157,6 +157,14 @@ public class HelixAccountService implements AccountService {
   }
 
   /**
+   * Return the {@link Notifier}.
+   * @return The {@link Notifier}
+   */
+  Notifier<String> getNotifier() {
+    return notifier;
+  }
+
+  /**
    * A synchronized function to fetch account metadata from {@link AccountMetadataStore} and update the in memory cache.
    * @param isCalledFromListener True is this function is invoked in the {@link TopicListener}.
    */
@@ -273,7 +281,17 @@ public class HelixAccountService implements AccountService {
    */
   @Override
   public boolean updateAccounts(Collection<Account> accounts) {
-    checkOpen();
+    return updateAccountsWithAccountMetadataStore(accounts, accountMetadataStore);
+  }
+
+  /**
+   * Helper function to update {@link Account} metadata.
+   * @param accounts The {@link Account} metadata to update.
+   * @param accountMetadataStore The {@link AccountMetadataStore}.
+   * @return True when the update operation succeeds.
+   */
+  boolean updateAccountsWithAccountMetadataStore(Collection<Account> accounts, AccountMetadataStore accountMetadataStore) {
+     checkOpen();
     Objects.requireNonNull(accounts, "accounts cannot be null");
     if (accounts.isEmpty()) {
       logger.debug("Empty account collection to update.");
