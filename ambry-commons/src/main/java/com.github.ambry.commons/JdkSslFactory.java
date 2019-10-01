@@ -43,8 +43,9 @@ public class JdkSslFactory implements SSLFactory {
     try {
       Conscrypt.checkAvailability();
       Security.addProvider(Conscrypt.newProvider());
-    } catch (Exception e) {
-      LOGGER.warn("Conscrypt not available for this platform; will not be able to use OpenSSL-based engine", e);
+    } catch (Throwable t) {
+      // catching a throwable since Conscrypt.checkAvailability can throw an UnsatisfiedLinkError
+      LOGGER.warn("Conscrypt not available for this platform; will not be able to use OpenSSL-based engine", t);
     }
   }
 
