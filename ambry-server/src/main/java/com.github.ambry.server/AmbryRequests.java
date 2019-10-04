@@ -108,7 +108,7 @@ public class AmbryRequests implements RequestAPI {
   protected final RequestResponseChannel requestResponseChannel;
   private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   protected final ClusterMap clusterMap;
-  private final DataNodeId currentNode;
+  protected final DataNodeId currentNode;
   private final Map<PartitionId, ReplicaId> localPartitionToReplicaMap;
   protected final ServerMetrics metrics;
   private final MessageFormatMetrics messageFormatMetrics;
@@ -146,11 +146,7 @@ public class AmbryRequests implements RequestAPI {
       requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     }
 
-    Map<PartitionId, ReplicaId> partitionToReplica = new HashMap<>();
-    for (ReplicaId replicaId : clusterMap.getReplicaIds(currentNode)) {
-      partitionToReplica.put(replicaId.getPartitionId(), replicaId);
-    }
-    localPartitionToReplicaMap = Collections.unmodifiableMap(partitionToReplica);
+    localPartitionToReplicaMap = Collections.unmodifiableMap(createLocalPartitionToReplicaMap());
   }
 
   public void handleRequests(Request request) throws InterruptedException {
@@ -183,6 +179,19 @@ public class AmbryRequests implements RequestAPI {
       logger.error("Error while handling request " + request + " closing connection", e);
       requestResponseChannel.closeConnection(request);
     }
+  }
+
+  /**
+   * Get the list of replicas on current node.
+   * @return list of {@link ReplicaId}s on current node.
+   */
+  protected Map<PartitionId, ReplicaId> createLocalPartitionToReplicaMap() {
+    Map<PartitionId, ReplicaId> partitionToReplica = new HashMap<>();
+    List<? extends ReplicaId> localReplicaIds = clusterMap.getReplicaIds(currentNode);
+    for (ReplicaId replicaId : localReplicaIds) {
+      partitionToReplica.put(replicaId.getPartitionId(), replicaId);
+    }
+    return partitionToReplica;
   }
 
   public void handlePutRequest(Request request) throws IOException, InterruptedException {

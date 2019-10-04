@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
@@ -31,6 +32,9 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,14 +78,21 @@ public class VcrRequests extends AmbryRequests {
       metrics.badRequestError.inc();
       return ServerErrorCode.Bad_Request;
     }
-
-    // 2. check if partition is handled by this vcr node
-    return skipPartitionAvailableCheck ? ServerErrorCode.No_Error
-        : storeManager.checkLocalPartitionStatus(partition, null);
+    return ServerErrorCode.No_Error;
   }
 
   @Override
   protected long getRemoteReplicaLag(Store store, long totalBytesRead) {
     return -1;
+  }
+
+  @Override
+  protected Map<PartitionId, ReplicaId> createLocalPartitionToReplicaMap() {
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
+    Map<PartitionId, ReplicaId> partitionToReplica = new HashMap<>();
+    for (PartitionId partitionId : partitionIds) {
+      partitionToReplica.put(partitionId, new CloudReplica(partitionId, currentNode));
+    }
+    return partitionToReplica;
   }
 }
