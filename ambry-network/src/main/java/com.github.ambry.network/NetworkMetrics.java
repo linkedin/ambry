@@ -127,9 +127,9 @@ public class NetworkMetrics {
 
     transmissionSendPendingTime =
         registry.histogram(MetricRegistry.name(Selector.class, "TransmissionSendPendingTime"));
-    transmissionSendAllTime = registry.histogram(MetricRegistry.name(Selector.class, "TransmissionSendTime"));
+    transmissionSendAllTime = registry.histogram(MetricRegistry.name(Selector.class, "TransmissionSendAllTime"));
     transmissionRoundTripTime = registry.histogram(MetricRegistry.name(Selector.class, "TransmissionRoundTripTime"));
-    transmissionReceiveAllTime = registry.histogram(MetricRegistry.name(Selector.class, "TransmissionReceiveTime"));
+    transmissionReceiveAllTime = registry.histogram(MetricRegistry.name(Selector.class, "TransmissionReceiveAllTime"));
     transmissionSendBytesRate = registry.meter(MetricRegistry.name(Selector.class, "TransmissionSendBytesRate"));
     transmissionReceiveBytesRate = registry.meter(MetricRegistry.name(Selector.class, "TransmissionReceiveBytesRate"));
     transmissionSendTime = registry.histogram(MetricRegistry.name(Selector.class, "TransmissionSendTime"));
