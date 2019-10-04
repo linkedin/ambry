@@ -221,11 +221,11 @@ public class AmbryServer {
       if (statsManager != null) {
         statsManager.shutdown();
       }
-      if (requestHandlerPool != null) {
-        requestHandlerPool.shutdown();
-      }
       if (networkServer != null) {
         networkServer.shutdown();
+      }
+      if (requestHandlerPool != null) {
+        requestHandlerPool.shutdown();
       }
       if (replicationManager != null) {
         replicationManager.shutdown();
