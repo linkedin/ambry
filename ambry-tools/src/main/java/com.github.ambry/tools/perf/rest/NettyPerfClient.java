@@ -103,15 +103,12 @@ public class NettyPerfClient {
   private final String targetAccountName;
   private final String targetContainerName;
   private final List<Pair<String, String>> customHeaders = new ArrayList<>();
-  private final Bootstrap b = new Bootstrap();
   private final ChannelConnectListener channelConnectListener = new ChannelConnectListener();
   private final MetricRegistry metricRegistry = new MetricRegistry();
   private final JmxReporter reporter = JmxReporter.forRegistry(metricRegistry).build();
   private final PerfClientMetrics perfClientMetrics = new PerfClientMetrics(metricRegistry);
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
-  private final CountDownLatch channelConnectLatch = new CountDownLatch(1);
   private final AtomicLong totalRequestCount = new AtomicLong(0);
-  private final Map<Channel, String> channelToHost = new HashMap<>();
   private final Map<String, AtomicLong> hostToRequestCount = new HashMap<>();
   private final Map<String, Long> hostToSleepTime = new HashMap<>();
   private final SleepTimeUpdater updater = new SleepTimeUpdater();
@@ -382,33 +379,32 @@ public class NettyPerfClient {
     logger.info("Starting NettyPerfClient");
     reporter.start();
     group = new NioEventLoopGroup(concurrency);
-    b.group(group).channel(NioSocketChannel.class).handler(new ChannelInitializer<SocketChannel>() {
-      @Override
-      public void initChannel(SocketChannel ch) throws Exception {
-        channelConnectLatch.await();
-        if (sslFactory != null) {
-          String host = channelToHost.get(ch);
-          if (host == null) {
-            throw new Exception("Unrecognized host!");
-          }
-          logger.info("Initializing the channel to {}", host);
-          ch.pipeline().addLast(new SslHandler(sslFactory.createSSLEngine(host, port, SSLFactory.Mode.CLIENT)));
-        }
-        ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(new ResponseHandler());
-      }
-    });
     perfClientStartTime = System.currentTimeMillis();
     for (String host : hosts) {
       logger.info("Connecting to {}:{}", host, port);
+      // create a new bootstrap with a fixed remote address for each host. This is the simplest way to support
+      // reconnection on failure. All bootstraps will share the same event loop group.
+      Bootstrap bootstrap = new Bootstrap().group(group).channel(NioSocketChannel.class).remoteAddress(host, port);
+      bootstrap.handler(new ChannelInitializer<SocketChannel>() {
+        @Override
+        public void initChannel(SocketChannel ch) {
+          logger.info("Initializing the channel to {}:{}", host, port);
+          if (sslFactory != null) {
+            ch.pipeline().addLast(new SslHandler(sslFactory.createSSLEngine(host, port, SSLFactory.Mode.CLIENT)));
+          }
+          ch.pipeline()
+              .addLast(new HttpClientCodec())
+              .addLast(new ChunkedWriteHandler())
+              .addLast(new ResponseHandler(bootstrap));
+        }
+      });
       for (int i = 0; i < concurrency; i++) {
-        ChannelFuture future = b.connect(host, port);
-        channelToHost.put(future.channel(), host);
+        ChannelFuture future = bootstrap.connect();
         future.addListener(channelConnectListener);
       }
       hostToRequestCount.put(host, new AtomicLong(0));
       hostToSleepTime.put(host, sleepTimeInMs);
     }
-    channelConnectLatch.countDown();
     if (backgroundScheduler != null) {
       backgroundScheduler.scheduleAtFixedRate(updater, 0, 1, TimeUnit.SECONDS);
       logger.info("Background scheduler is instantiated to update sleep time.");
@@ -496,7 +492,7 @@ public class NettyPerfClient {
    */
   private class ResponseHandler extends SimpleChannelInboundHandler<HttpObject> {
     private final Logger logger = LoggerFactory.getLogger(getClass());
-
+    private final Bootstrap bootstrap;
     private HttpRequest request;
     private HttpResponse response;
     private ChunkedInput<HttpContent> chunkedInput;
@@ -506,6 +502,10 @@ public class NettyPerfClient {
     private long lastChunkReceiveTime;
     private long requestStartTime;
     private long requestId = 0;
+
+    ResponseHandler(Bootstrap bootstrap) {
+      this.bootstrap = bootstrap;
+    }
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
@@ -577,7 +577,7 @@ public class NettyPerfClient {
       if (isRunning) {
         perfClientMetrics.unexpectedDisconnectionError.inc();
         logger.info("Creating a new channel to keep up concurrency");
-        b.connect().addListener(channelConnectListener);
+        bootstrap.connect().addListener(channelConnectListener);
       }
     }
 
@@ -727,8 +727,7 @@ public class NettyPerfClient {
       if (!future.isSuccess()) {
         perfClientMetrics.connectError.inc();
         Channel channel = future.channel();
-        logger.error("Channel {} to {}:{} could not be connected.", channel, channelToHost.get(channel), port,
-            future.cause());
+        logger.error("Channel {} to {} could not be connected.", channel, channel.remoteAddress(), future.cause());
       }
     }
   }
