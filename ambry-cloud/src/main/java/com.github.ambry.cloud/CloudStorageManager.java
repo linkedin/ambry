@@ -50,9 +50,8 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean addBlobStore(ReplicaId replica) {
-    partitionToStore.computeIfAbsent(replica.getPartitionId(),
-        store -> new CloudBlobStore(properties, replica.getPartitionId(), cloudDestination, clusterMap, vcrMetrics));
-    return startBlobStore(replica.getPartitionId());
+    createAndStartBlobStoreIfAbsent(replica.getPartitionId());
+    return partitionToStore.get(replica.getPartitionId()) != null;
   }
 
   @Override
@@ -67,8 +66,8 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public Store getStore(PartitionId id) {
-    Store store = partitionToStore.computeIfAbsent(id, store -> new CloudBlobStore(properties, id, cloudDestination, clusterMap, vcrMetrics));
-    return (store != null && store.isStarted()) ? store : null;
+    createAndStartBlobStoreIfAbsent(id);
+    return partitionToStore.get(id);
   }
 
   @Override
@@ -113,5 +112,18 @@ public class CloudStorageManager implements StoreManager {
      * the local partition status for a vcr node should always be available.
      */
     return ServerErrorCode.No_Error;
+  }
+
+  private void createAndStartBlobStoreIfAbsent(PartitionId partitionId) {
+    partitionToStore.computeIfAbsent(partitionId, value -> {
+      CloudBlobStore store = null;
+      try {
+        store = new CloudBlobStore(properties, partitionId, cloudDestination, clusterMap, vcrMetrics);
+        store.start();
+      } catch (StoreException ex) {
+        logger.error("Can't start CloudStore for partition {}" + partitionId, ex);
+      }
+      return store;
+    });
   }
 }
