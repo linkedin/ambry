@@ -88,6 +88,7 @@ public class VcrRequests extends AmbryRequests {
 
   @Override
   protected Map<PartitionId, ReplicaId> createLocalPartitionToReplicaMap() {
+    //Vcr should be able to handle requests for all partitions
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     Map<PartitionId, ReplicaId> partitionToReplica = new HashMap<>();
     for (PartitionId partitionId : partitionIds) {
