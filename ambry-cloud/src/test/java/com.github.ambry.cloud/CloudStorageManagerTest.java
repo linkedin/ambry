@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.Store;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Properties;
@@ -123,17 +124,23 @@ public class CloudStorageManagerTest {
     PartitionId partitionId = mockReplicaId.getPartitionId();
 
     //try get for a partition that doesn't exist
-    Assert.assertNull(cloudStorageManager.getStore(partitionId));
+    Store store = cloudStorageManager.getStore(partitionId);
+    Assert.assertNotNull(store);
+    Assert.assertTrue(store.isStarted());
 
     //add and start a replica to the store
     Assert.assertTrue(cloudStorageManager.addBlobStore(mockReplicaId));
 
     //try get for an added replica
-    Assert.assertNotNull(cloudStorageManager.getStore(partitionId));
+    store = cloudStorageManager.getStore(partitionId);
+    Assert.assertNotNull(store);
+    Assert.assertTrue(store.isStarted());
 
     //try get for a removed replica
     Assert.assertTrue(cloudStorageManager.removeBlobStore(partitionId));
-    Assert.assertNull(cloudStorageManager.getStore(partitionId));
+    store = cloudStorageManager.getStore(partitionId);
+    Assert.assertNotNull(store);
+    Assert.assertTrue(store.isStarted());
   }
 
   /**
@@ -148,7 +155,7 @@ public class CloudStorageManagerTest {
 
     //try checkLocalPartitionStatus for a partition that doesn't exist
     Assert.assertEquals(cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId()),
-        ServerErrorCode.Partition_Unknown);
+        ServerErrorCode.No_Error);
 
     //add and start a replica to the store
     Assert.assertTrue(cloudStorageManager.addBlobStore(mockReplicaId));
@@ -162,12 +169,12 @@ public class CloudStorageManagerTest {
 
     //try checkLocalPartitionStatus for a stopped replica (stopped blob store)
     Assert.assertEquals(cloudStorageManager.checkLocalPartitionStatus(partitionId, mockReplicaId),
-        ServerErrorCode.Replica_Unavailable);
+        ServerErrorCode.No_Error);
 
     //try checkLocalPartitionStatus for a removed replica
     Assert.assertTrue(cloudStorageManager.removeBlobStore(partitionId));
     Assert.assertEquals(cloudStorageManager.checkLocalPartitionStatus(partitionId, new MockReplicaId()),
-        ServerErrorCode.Partition_Unknown);
+        ServerErrorCode.No_Error);
   }
 
   /**
