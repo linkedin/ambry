@@ -20,7 +20,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreException;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -81,12 +80,7 @@ public class CloudStorageManager implements StoreManager {
     if (cloudStore == null) {
       return false;
     }
-    try {
-      cloudStore.start();
-    } catch (StoreException e) {
-      logger.error("Can't start CloudStore " + cloudStore, e);
-      return false;
-    }
+    cloudStore.start();
     return true;
   }
 
@@ -115,15 +109,9 @@ public class CloudStorageManager implements StoreManager {
   }
 
   private void createAndStartBlobStoreIfAbsent(PartitionId partitionId) {
-    partitionToStore.computeIfAbsent(partitionId, value -> {
-      CloudBlobStore store = null;
-      try {
-        store = new CloudBlobStore(properties, partitionId, cloudDestination, clusterMap, vcrMetrics);
-        store.start();
-      } catch (StoreException ex) {
-        logger.error("Can't start CloudStore for partition {}" + partitionId, ex);
-      }
-      return store;
-    });
+    partitionToStore.computeIfAbsent(partitionId,
+        value -> new CloudBlobStore(properties, partitionId, cloudDestination, clusterMap, vcrMetrics));
+    // cloud blob store start is idempotent
+    partitionToStore.get(partitionId).start();
   }
 }

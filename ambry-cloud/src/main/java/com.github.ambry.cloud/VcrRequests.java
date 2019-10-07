@@ -32,9 +32,10 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -90,10 +91,7 @@ public class VcrRequests extends AmbryRequests {
   protected Map<PartitionId, ReplicaId> createLocalPartitionToReplicaMap() {
     //Vcr should be able to handle requests for all partitions
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
-    Map<PartitionId, ReplicaId> partitionToReplica = new HashMap<>();
-    for (PartitionId partitionId : partitionIds) {
-      partitionToReplica.put(partitionId, new CloudReplica(partitionId, currentNode));
-    }
-    return partitionToReplica;
+    return partitionIds.stream()
+        .collect(Collectors.toMap(Function.identity(), partitionId -> new CloudReplica(partitionId, currentNode)));
   }
 }

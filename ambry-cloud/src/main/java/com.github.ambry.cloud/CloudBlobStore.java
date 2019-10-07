@@ -110,7 +110,7 @@ class CloudBlobStore implements Store {
   }
 
   @Override
-  public void start() throws StoreException {
+  public void start() {
     started = true;
   }
 
