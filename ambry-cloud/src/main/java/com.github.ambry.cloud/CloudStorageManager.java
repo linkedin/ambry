@@ -113,5 +113,6 @@ public class CloudStorageManager implements StoreManager {
         value -> new CloudBlobStore(properties, partitionId, cloudDestination, clusterMap, vcrMetrics));
     // cloud blob store start is idempotent
     partitionToStore.get(partitionId).start();
+    logger.info("Cloudblobstore started for partition {}", partitionId);
   }
 }
