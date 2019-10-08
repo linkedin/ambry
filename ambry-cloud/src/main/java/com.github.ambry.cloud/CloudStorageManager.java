@@ -20,9 +20,11 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
+import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.Map;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,7 +33,8 @@ import org.slf4j.LoggerFactory;
  * The storage manager that does book keeping for all of the partitions handled by this vcr node.
  */
 public class CloudStorageManager implements StoreManager {
-  private final ConcurrentMap<PartitionId, CloudBlobStore> partitionToStore;
+  private final ReadWriteLock lock;
+  private final Map<PartitionId, CloudBlobStore> partitionToStore;
   private final VerifiableProperties properties;
   private final CloudDestination cloudDestination;
   private final VcrMetrics vcrMetrics;
@@ -40,33 +43,44 @@ public class CloudStorageManager implements StoreManager {
 
   public CloudStorageManager(VerifiableProperties properties, VcrMetrics vcrMetrics, CloudDestination cloudDestination,
       ClusterMap clusterMap) {
-    partitionToStore = new ConcurrentHashMap<>();
+    partitionToStore = new HashMap<>();
     this.properties = properties;
     this.cloudDestination = cloudDestination;
     this.vcrMetrics = vcrMetrics;
     this.clusterMap = clusterMap;
+    lock = new ReentrantReadWriteLock();
   }
 
   @Override
   public boolean addBlobStore(ReplicaId replica) {
-    createAndStartBlobStoreIfAbsent(replica.getPartitionId());
-    return partitionToStore.get(replica.getPartitionId()) != null;
+    return createAndStartBlobStoreIfAbsent(replica.getPartitionId()) != null;
   }
 
   @Override
   public boolean shutdownBlobStore(PartitionId id) {
-    CloudBlobStore blobStore = partitionToStore.get(id);
-    if (blobStore == null) {
-      return false;
+    try {
+      lock.writeLock().lock();
+      if (partitionToStore.get(id) != null) {
+        partitionToStore.get(id).shutdown();
+        return true;
+      }
+    } finally {
+      lock.writeLock().unlock();
     }
-    blobStore.shutdown();
-    return true;
+    return false;
   }
 
   @Override
   public Store getStore(PartitionId id) {
-    createAndStartBlobStoreIfAbsent(id);
-    return partitionToStore.get(id);
+    try {
+      lock.readLock().lock();
+      if (partitionToStore.containsKey(id)) {
+        return partitionToStore.get(id).isStarted() ? partitionToStore.get(id) : null;
+      }
+    } finally {
+      lock.readLock().unlock();
+    }
+    return createAndStartBlobStoreIfAbsent(id);
   }
 
   @Override
@@ -76,12 +90,16 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean startBlobStore(PartitionId id) {
-    CloudBlobStore cloudStore = partitionToStore.get(id);
-    if (cloudStore == null) {
-      return false;
+    try {
+      lock.writeLock().lock();
+      if (partitionToStore.get(id) != null) {
+        partitionToStore.get(id).start();
+        return true;
+      }
+    } finally {
+      lock.writeLock().unlock();
     }
-    cloudStore.start();
-    return true;
+    return false;
   }
 
   @Override
@@ -96,7 +114,12 @@ public class CloudStorageManager implements StoreManager {
 
   @Override
   public boolean removeBlobStore(PartitionId id) {
-    return partitionToStore.remove(id) != null;
+    try {
+      lock.writeLock().lock();
+      return partitionToStore.remove(id) != null;
+    } finally {
+      lock.writeLock().unlock();
+    }
   }
 
   @Override
@@ -108,11 +131,25 @@ public class CloudStorageManager implements StoreManager {
     return ServerErrorCode.No_Error;
   }
 
-  private void createAndStartBlobStoreIfAbsent(PartitionId partitionId) {
-    partitionToStore.computeIfAbsent(partitionId,
-        value -> new CloudBlobStore(properties, partitionId, cloudDestination, clusterMap, vcrMetrics));
-    // cloud blob store start is idempotent
-    partitionToStore.get(partitionId).start();
-    logger.info("Cloudblobstore started for partition {}", partitionId);
+  /**
+   * Return the blobstore for the given partition if blob store if it is already present in {@code CloudStorageManager::partitionToStore}
+   * Otherwise create a blobstore for the paritition, and start it.
+   * @param partitionId {@code PartitionId} of the store.
+   * @return {@code CloudBlobStore} corresponding to the {@code partitionId}
+   */
+  private CloudBlobStore createAndStartBlobStoreIfAbsent(PartitionId partitionId) {
+    try {
+      lock.writeLock().lock();
+      if (partitionToStore.containsKey(partitionId)) {
+        return partitionToStore.get(partitionId);
+      }
+      CloudBlobStore store = new CloudBlobStore(properties, partitionId, cloudDestination, clusterMap, vcrMetrics);
+      partitionToStore.put(partitionId, store);
+      store.start();
+      logger.info("Cloudblobstore started for partition {}", partitionId);
+      return store;
+    } finally {
+      lock.writeLock().unlock();
+    }
   }
 }
