@@ -43,8 +43,8 @@ import org.slf4j.LoggerFactory;
  * {@link DiskManager}
  */
 public class StorageManager implements StoreManager {
-  private final ConcurrentMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
-  private final ConcurrentMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
   private final StorageManagerMetrics metrics;
   private final Time time;
   private final StoreConfig storeConfig;

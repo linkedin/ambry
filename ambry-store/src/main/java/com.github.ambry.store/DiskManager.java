@@ -36,6 +36,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,8 +47,9 @@ import org.slf4j.LoggerFactory;
  */
 class DiskManager {
 
-  private final Map<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
-  private final Map<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();
+  private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
   private final Time time;
@@ -289,29 +292,30 @@ class DiskManager {
       logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
       return false;
     }
-    boolean succeed = true;
+    boolean succeed = false;
     BlobStore store =
         new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
             storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
             time);
+    rwLock.readLock().lock();
     try {
       // TODO In future PR, store.start() should contain logic for recovery  OFFLINE -> BOOTSTRAP -> STANDBY
       store.start();
       // collect store segment requirements and add into DiskSpaceAllocator
       List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
       diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
-    } catch (Exception e) {
-      logger.error("Failed to start new added store {} or add requirements to disk allocator",
-          replica.getPartitionId());
-      succeed = false;
-    }
-    if (succeed) {
       // add store into CompactionManager
       compactionManager.addBlobStore(store);
       // add new created store into in-memory data structures.
       stores.put(replica.getPartitionId(), store);
       partitionToReplicaMap.put(replica.getPartitionId(), replica);
       logger.info("New store is successfully added into DiskManager.");
+      succeed = true;
+    } catch (Exception e) {
+      logger.error("Failed to start new added store {} or add requirements to disk allocator",
+          replica.getPartitionId());
+    } finally {
+      rwLock.readLock().unlock();
     }
     return succeed;
   }
@@ -375,15 +379,22 @@ class DiskManager {
       logger.error("Removing store {} failed. Disk running = {}, store running = {}", id, running, store.isStarted());
       return false;
     }
-    if (!compactionManager.removeBlobStore(store)) {
-      logger.error("Fail to remove store {} from compaction manager.", id);
-      return false;
+    boolean succeed = false;
+    rwLock.readLock().lock();
+    try {
+      if (!compactionManager.removeBlobStore(store)) {
+        logger.error("Fail to remove store {} from compaction manager.", id);
+      } else {
+        stores.remove(id);
+        stoppedReplicas.remove(id.toPathString());
+        partitionToReplicaMap.remove(id);
+        logger.info("Store {} is successfully removed from disk manager", id);
+        succeed = true;
+      }
+    } finally {
+      rwLock.readLock().unlock();
     }
-    stores.remove(id);
-    stoppedReplicas.remove(id.toPathString());
-    partitionToReplicaMap.remove(id);
-    logger.info("Store {} is successfully removed from disk manager", id);
-    return true;
+    return succeed;
   }
 
   /**
