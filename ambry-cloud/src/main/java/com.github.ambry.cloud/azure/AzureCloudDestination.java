@@ -234,7 +234,7 @@ class AzureCloudDestination implements CloudDestination {
     azureMetrics.blobUploadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
     try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId);
+      CloudBlockBlob azureBlob = getAzureBlobReference(blobId, true);
       cloudBlobMetadata.setCloudBlobName(getAzureBlobName(blobId));
       azureBlob.setMetadata(getMetadataMap(cloudBlobMetadata));
       azureBlob.upload(blobInputStream, inputLength, condition, options, blobOpContext);
@@ -260,7 +260,7 @@ class AzureCloudDestination implements CloudDestination {
     azureMetrics.blobDownloadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
     try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId);
+      CloudBlockBlob azureBlob = getAzureBlobReference(blobId, false);
       azureBlob.download(outputStream);
       azureMetrics.blobDownloadSuccessCount.inc();
     } catch (URISyntaxException | StorageException e) {
@@ -393,7 +393,7 @@ class AzureCloudDestination implements CloudDestination {
     // 2) the blob storage entry metadata (to enable rebuilding the database)
 
     try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId);
+      CloudBlockBlob azureBlob = getAzureBlobReference(blobId, false);
 
       if (!azureBlob.exists(null, null, blobOpContext)) {
         logger.debug("Blob {} not found in Azure container {}.", blobId, getContainer(blobId, false).getName());
@@ -488,7 +488,7 @@ class AzureCloudDestination implements CloudDestination {
   @Override
   public boolean doesBlobExist(BlobId blobId) throws CloudStorageException {
     try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId);
+      CloudBlockBlob azureBlob = getAzureBlobReference(blobId, false);
       return azureBlob.exists(null, null, blobOpContext);
     } catch (URISyntaxException | StorageException e) {
       throw new CloudStorageException("Could not check existence of blob: " + blobId, e);
@@ -568,12 +568,14 @@ class AzureCloudDestination implements CloudDestination {
   /**
    * Get the azure blob reference for blobid.
    * @param blobId id of the blob for which {@code CloudBlockBlob} reference is asked for.
+   * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
    * @return {@code CloudBlockBlob} reference.
    * @throws StorageException if storage service error occured.
    * @throws URISyntaxException if resource name or uri is invalid.
    */
-  private CloudBlockBlob getAzureBlobReference(BlobId blobId) throws StorageException, URISyntaxException {
-    CloudBlobContainer azureContainer = getContainer(blobId, false);
+  private CloudBlockBlob getAzureBlobReference(BlobId blobId, boolean autoCreateContainer)
+      throws StorageException, URISyntaxException {
+    CloudBlobContainer azureContainer = getContainer(blobId, autoCreateContainer);
     String azureBlobName = getAzureBlobName(blobId);
     return azureContainer.getBlockBlobReference(azureBlobName);
   }
