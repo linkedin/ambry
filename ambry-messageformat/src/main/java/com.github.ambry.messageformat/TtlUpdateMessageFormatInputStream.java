@@ -33,7 +33,7 @@ public class TtlUpdateMessageFormatInputStream extends MessageFormatInputStream 
   public TtlUpdateMessageFormatInputStream(StoreKey key, short accountId, short containerId, long expiresAtMs,
       long updateTimeInMs) throws MessageFormatException {
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
-    int recordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.TTL_UPDATE);
+    int recordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.TTL_UPDATE);
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + recordSize);
     MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(buffer, recordSize,
         MessageFormatRecord.Message_Header_Invalid_Relative_Offset,

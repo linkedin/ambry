@@ -31,6 +31,7 @@ public class MessageInfo {
   private final short accountId;
   private final short containerId;
   private final long operationTimeMs;
+  private final short updateVersion;
 
   /**
    * Construct an instance of MessageInfo.
@@ -74,7 +75,7 @@ public class MessageInfo {
    */
   public MessageInfo(StoreKey key, long size, boolean deleted, boolean ttlUpdated, long expirationTimeInMs,
       short accountId, short containerId, long operationTimeMs) {
-    this(key, size, deleted, ttlUpdated, expirationTimeInMs, null, accountId, containerId, operationTimeMs);
+    this(key, size, deleted, ttlUpdated, expirationTimeInMs, null, accountId, containerId, operationTimeMs, (short) -1);
   }
 
   /**
@@ -103,6 +104,24 @@ public class MessageInfo {
    */
   public MessageInfo(StoreKey key, long size, boolean deleted, boolean ttlUpdated, long expirationTimeInMs, Long crc,
       short accountId, short containerId, long operationTimeMs) {
+    this(key, size, deleted, ttlUpdated, expirationTimeInMs, crc, accountId, containerId, operationTimeMs, (short) -1);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message in bytes.
+   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
+   * @param ttlUpdated {@code true} if the message's ttl has been updated, {@code false} otherwise
+   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
+   * @param crc the crc associated with this message. If unavailable, pass in null.
+   * @param accountId accountId of the blob
+   * @param containerId containerId of the blob
+   * @param operationTimeMs operation time in ms
+   * @param updateVersion update version of update
+   */
+  public MessageInfo(StoreKey key, long size, boolean deleted, boolean ttlUpdated, long expirationTimeInMs, Long crc,
+      short accountId, short containerId, long operationTimeMs, short updateVersion) {
     if (operationTimeMs < Utils.Infinite_Time) {
       throw new IllegalArgumentException("OperationTime cannot be negative " + operationTimeMs);
     }
@@ -115,6 +134,7 @@ public class MessageInfo {
     this.accountId = accountId;
     this.containerId = containerId;
     this.operationTimeMs = operationTimeMs;
+    this.updateVersion = updateVersion;
   }
 
   public StoreKey getStoreKey() {
@@ -167,6 +187,10 @@ public class MessageInfo {
     return operationTimeMs;
   }
 
+  public short getUpdateVersion() {
+    return updateVersion;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -178,7 +202,8 @@ public class MessageInfo {
     MessageInfo that = (MessageInfo) o;
     return size == that.size && expirationTimeInMs == that.expirationTimeInMs && isDeleted == that.isDeleted
         && isTtlUpdated == that.isTtlUpdated && accountId == that.accountId && containerId == that.containerId
-        && operationTimeMs == that.operationTimeMs && Objects.equals(key, that.key) && Objects.equals(crc, that.crc);
+        && operationTimeMs == that.operationTimeMs && Objects.equals(key, that.key)
+        && updateVersion == that.updateVersion && Objects.equals(crc, that.crc);
   }
 
   @Override
@@ -217,6 +242,9 @@ public class MessageInfo {
         .append(",")
         .append("OperationTimeMs-")
         .append(operationTimeMs)
+        .append(",")
+        .append("UpdateVersion-")
+        .append(updateVersion)
         .append("]");
     return stringBuilder.toString();
   }

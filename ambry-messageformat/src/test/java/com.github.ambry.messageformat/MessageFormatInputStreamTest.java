@@ -266,7 +266,7 @@ public class MessageFormatInputStreamTest {
         useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
       } else {
         messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
-        deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.DELETE);
+        deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.DELETE);
         useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
       }
       int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
@@ -305,7 +305,7 @@ public class MessageFormatInputStreamTest {
 
       // check delete record
       UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(messageFormatStream);
-      Assert.assertEquals("Type of update record not DELETE", UpdateRecord.Type.DELETE, updateRecord.getType());
+      Assert.assertEquals("Type of update record not DELETE", SubRecord.Type.DELETE, updateRecord.getType());
       Assert.assertNotNull("DeleteSubRecord should not be null", updateRecord.getDeleteSubRecord());
       Assert.assertEquals("AccountId mismatch", accountId, updateRecord.getAccountId());
       Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());
@@ -354,7 +354,7 @@ public class MessageFormatInputStreamTest {
     long updatedExpiryMs = ttlUpdateTimeMs + TestUtils.RANDOM.nextInt();
     MessageFormatInputStream messageFormatStream =
         new TtlUpdateMessageFormatInputStream(key, accountId, containerId, updatedExpiryMs, ttlUpdateTimeMs);
-    long ttlUpdateRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.TTL_UPDATE);
+    long ttlUpdateRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.TTL_UPDATE);
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     Assert.assertEquals(headerSize + ttlUpdateRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
     checkTtlUpdateMessage(messageFormatStream, ttlUpdateRecordSize, key, accountId, containerId, updatedExpiryMs,
@@ -429,7 +429,7 @@ public class MessageFormatInputStreamTest {
   private static void checkTtlUpdateSubRecord(InputStream stream, short accountId, short containerId,
       long updatedExpiresAtMs, long updateTimeMs) throws IOException, MessageFormatException {
     UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(stream);
-    Assert.assertEquals("Type of update record not TTL_UPDATE", UpdateRecord.Type.TTL_UPDATE, updateRecord.getType());
+    Assert.assertEquals("Type of update record not TTL_UPDATE", SubRecord.Type.TTL_UPDATE, updateRecord.getType());
     Assert.assertNotNull("TtlUpdateSubRecord should not be null", updateRecord.getTtlUpdateSubRecord());
     Assert.assertEquals("AccountId mismatch", accountId, updateRecord.getAccountId());
     Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());

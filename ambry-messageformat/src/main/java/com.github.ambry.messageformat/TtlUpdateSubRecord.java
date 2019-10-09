@@ -16,7 +16,7 @@ package com.github.ambry.messageformat;
 /**
  * In mem representation of a TTL update record
  */
-public class TtlUpdateSubRecord {
+public class TtlUpdateSubRecord implements SubRecord {
   private final long updatedExpiryTimeMs;
 
   /**
@@ -31,5 +31,10 @@ public class TtlUpdateSubRecord {
    */
   public long getUpdatedExpiryTimeMs() {
     return updatedExpiryTimeMs;
+  }
+
+  @Override
+  public Type getType() {
+    return SubRecord.Type.TTL_UPDATE;
   }
 }

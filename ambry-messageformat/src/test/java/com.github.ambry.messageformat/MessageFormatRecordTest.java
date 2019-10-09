@@ -45,9 +45,10 @@ import static org.junit.Assert.*;
 
 
 public class MessageFormatRecordTest {
+
+  //TODO Separate this mega test into smaller tests
   @Test
-  public void deserializeTest() {
-    try {
+  public void deserializeTest() throws MessageFormatException, IOException {
       {
         // Test message header V1
         ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
@@ -92,6 +93,30 @@ public class MessageFormatRecordTest {
           Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
         }
       }
+
+    {
+      // Test message header V3
+      ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V3.getHeaderSize());
+      MessageFormatRecord.MessageHeader_Format_V3.serializeHeader(header, (short)2, 1000, 5, 10, -1, 20, 30);
+      header.flip();
+      MessageFormatRecord.MessageHeader_Format_V3 format = new MessageFormatRecord.MessageHeader_Format_V3(header);
+      Assert.assertEquals(format.getMessageSize(), 1000);
+      Assert.assertEquals(format.getUpdateVersion(), (short)2);
+      Assert.assertEquals(format.getBlobEncryptionKeyRecordRelativeOffset(), 5);
+      Assert.assertEquals(format.getBlobPropertiesRecordRelativeOffset(), 10);
+      Assert.assertEquals(format.getUserMetadataRecordRelativeOffset(), 20);
+      Assert.assertEquals(format.getBlobRecordRelativeOffset(), 30);
+
+      // corrupt message header V3
+      header.put(10, (byte) 1);
+      format = new MessageFormatRecord.MessageHeader_Format_V3(header);
+      try {
+        format.verifyHeader();
+        fail("Corrupt header verification should have failed");
+      } catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+      }
+    }
 
       // Test blob encryption key record
       ByteBuffer blobEncryptionKey = ByteBuffer.allocate(1000);
@@ -161,9 +186,6 @@ public class MessageFormatRecordTest {
       } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
-    } catch (Exception e) {
-      Assert.assertTrue(false);
-    }
   }
 
   /**
@@ -345,7 +367,7 @@ public class MessageFormatRecordTest {
     Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, deserializeUpdateRecord.getAccountId());
     Assert.assertEquals("ContainerId mismatch ", UNKNOWN_CONTAINER_ID, deserializeUpdateRecord.getContainerId());
     Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time, deserializeUpdateRecord.getUpdateTimeInMs());
-    Assert.assertEquals("Type of update record incorrect", UpdateRecord.Type.DELETE, deserializeUpdateRecord.getType());
+    Assert.assertEquals("Type of update record incorrect", SubRecord.Type.DELETE, deserializeUpdateRecord.getType());
     Assert.assertNotNull("DeleteSubRecord is null", deserializeUpdateRecord.getDeleteSubRecord());
 
     // corrupt update V1 record
@@ -380,7 +402,7 @@ public class MessageFormatRecordTest {
     Assert.assertEquals("AccountId mismatch ", accountId, deserializeUpdateRecord.getAccountId());
     Assert.assertEquals("ContainerId mismatch ", containerId, deserializeUpdateRecord.getContainerId());
     Assert.assertEquals("DeletionTime mismatch ", updateTimeMs, deserializeUpdateRecord.getUpdateTimeInMs());
-    Assert.assertEquals("Type of update record incorrect", UpdateRecord.Type.DELETE, deserializeUpdateRecord.getType());
+    Assert.assertEquals("Type of update record incorrect", SubRecord.Type.DELETE, deserializeUpdateRecord.getType());
     Assert.assertNotNull("DeleteSubRecord is null", deserializeUpdateRecord.getDeleteSubRecord());
 
     // corrupt update V2 record
@@ -407,7 +429,7 @@ public class MessageFormatRecordTest {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     long updateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     long updatedExpiryTimesMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
-    for (UpdateRecord.Type type : UpdateRecord.Type.values()) {
+    for (SubRecord.Type type : SubRecord.Type.values()) {
       ByteBuffer updateRecordBuf = ByteBuffer.allocate(Update_Format_V3.getRecordSize(type));
       UpdateRecord updateRecord = null;
       switch (type) {
@@ -418,6 +440,10 @@ public class MessageFormatRecordTest {
         case TTL_UPDATE:
           TtlUpdateSubRecord ttlUpdateSubRecord = new TtlUpdateSubRecord(updatedExpiryTimesMs);
           updateRecord = new UpdateRecord(accountId, containerId, updateTimeMs, ttlUpdateSubRecord);
+          break;
+        case UNDELETE:
+          UndeleteSubRecord undeleteSubRecord = new UndeleteSubRecord();
+          updateRecord = new UpdateRecord(accountId, containerId, updateTimeMs, undeleteSubRecord);
           break;
         default:
           fail("Unknown update record type: " + type);
@@ -439,6 +465,9 @@ public class MessageFormatRecordTest {
           Assert.assertNotNull("TtlUpdateSubRecord is null", ttlUpdateSubRecord);
           Assert.assertEquals("Updated expiry time is incorrect", updatedExpiryTimesMs,
               ttlUpdateSubRecord.getUpdatedExpiryTimeMs());
+          break;
+        case UNDELETE:
+          Assert.assertNotNull("UndeleteSubRecord is null", deserializeUpdateRecord.getUndeleteSubRecord());
           break;
         default:
           fail("Unknown update record type: " + type);

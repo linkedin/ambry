@@ -22,7 +22,7 @@ import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.messageformat.UpdateRecord;
+import com.github.ambry.messageformat.SubRecord;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.tools.util.ToolUtils;
@@ -463,7 +463,7 @@ public class HardDeleteVerifier {
               }
             } else if (MessageFormatRecord.deserializeUpdateRecord(streamlog)
                 .getType()
-                .equals(UpdateRecord.Type.DELETE)) {
+                .equals(SubRecord.Type.DELETE)) {
               deletes++;
             }
             currentOffset += (header.getMessageSize() + buffer.capacity() + id.sizeInBytes());
@@ -668,7 +668,7 @@ public class HardDeleteVerifier {
     boolean caughtExceptionInOld = false;
     try {
       isDeleteRecord =
-          MessageFormatRecord.deserializeUpdateRecord(streamlog).getType().equals(UpdateRecord.Type.DELETE);
+          MessageFormatRecord.deserializeUpdateRecord(streamlog).getType().equals(SubRecord.Type.DELETE);
     } catch (Exception e) {
       caughtException = true;
     }
