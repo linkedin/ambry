@@ -263,6 +263,7 @@ public class MessageFormatRecord {
             MessageHeader_Format_V2.getHeaderSize() - Version_Field_Size_In_Bytes);
         headerBuf.rewind();
         header = new MessageHeader_Format_V2(headerBuf);
+        break;
       case Message_Header_Version_V3:
         headerBuf = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V3.getHeaderSize());
         headerBuf.putShort(headerVersion);
