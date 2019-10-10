@@ -17,6 +17,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
@@ -132,6 +133,15 @@ class RouterUtils {
     return new Pair<>(account, container);
   }
 
+  /**
+   * @param correlationId correlation ID for the request that timed out
+   * @param dataNode the node that the request was made to.
+   * @param blobId the blob ID of the request.
+   * @return a {@link RouterException} with the {@link RouterErrorCode#OperationTimedOut} error code.
+   */
+  static RouterException buildTimeoutException(int correlationId, DataNodeId dataNode, BlobId blobId) {
+    return new RouterException("Timed out waiting for a response. correlationId=" + correlationId + ", dataNode=" + dataNode + ", blobId=" + blobId, RouterErrorCode.OperationTimedOut);
+  }
   /**
    * Atomically replace the exception for an operation depending on the precedence of the new exception.
    * First, if the current operationException is null, directly set operationException as exception;

@@ -66,9 +66,10 @@ class MockNetworkClient extends NetworkClient {
    * {@inheritDoc}
    */
   @Override
-  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos, int pollTimeoutMs) {
+  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop,
+      int pollTimeoutMs) {
     processedResponseCount = responseCount;
-    List<ResponseInfo> responseInfoList = super.sendAndPoll(requestInfos, pollTimeoutMs);
+    List<ResponseInfo> responseInfoList = super.sendAndPoll(requestsToSend, requestsToDrop, pollTimeoutMs);
     responseCount += responseInfoList.size();
     return responseInfoList;
   }
@@ -85,7 +86,7 @@ class MockNetworkClient extends NetworkClient {
 
   /**
    * Get the number of responses received by the client before the current
-   * {@link MockNetworkClient#sendAndPoll(List, int)} call.
+   * {@link NetworkClient#sendAndPoll(List, List, int)} call.
    * @return the number of processed responses.
    */
   int getProcessedResponseCount() {

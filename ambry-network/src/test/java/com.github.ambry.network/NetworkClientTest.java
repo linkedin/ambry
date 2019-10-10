@@ -155,7 +155,7 @@ public class NetworkClientTest {
     int responseCount = 0;
 
     do {
-      responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+      responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
       requestInfoList.clear();
       for (ResponseInfo responseInfo : responseInfoList) {
         MockSend send = (MockSend) responseInfo.getRequestInfo().getRequest();
@@ -171,7 +171,7 @@ public class NetworkClientTest {
     } while (requestCount > responseCount);
     Assert.assertEquals("Should receive only as many responses as there were requests", requestCount, responseCount);
 
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
   }
@@ -188,7 +188,7 @@ public class NetworkClientTest {
     int requestCount = requestInfoList.size();
     int responseCount = 0;
 
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     requestInfoList.clear();
     // The first sendAndPoll() initiates the connections. So, after the selector poll, new connections
     // would have been established, but no new responses or disconnects, so the NetworkClient should not have been
@@ -198,7 +198,7 @@ public class NetworkClientTest {
     time.sleep(CHECKOUT_TIMEOUT_MS + 1);
 
     do {
-      responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+      responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
       requestInfoList.clear();
       for (ResponseInfo responseInfo : responseInfoList) {
         NetworkClientErrorCode error = responseInfo.getError();
@@ -210,7 +210,7 @@ public class NetworkClientTest {
         responseCount++;
       }
     } while (requestCount > responseCount);
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
   }
@@ -230,7 +230,7 @@ public class NetworkClientTest {
     // set beBad so that requests end up failing due to "network error".
     selector.setState(MockSelectorState.DisconnectOnSend);
     do {
-      responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+      responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
       requestInfoList.clear();
       for (ResponseInfo responseInfo : responseInfoList) {
         NetworkClientErrorCode error = responseInfo.getError();
@@ -242,7 +242,7 @@ public class NetworkClientTest {
         responseCount++;
       }
     } while (requestCount > responseCount);
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
     selector.setState(MockSelectorState.Good);
@@ -256,7 +256,7 @@ public class NetworkClientTest {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     // test that IllegalStateException would be thrown if replica is not specified in RequestInfo
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(-1), null));
-    networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     Assert.assertEquals("NetworkClientException should increase because replica is null in request", 1,
         networkMetrics.networkClientException.getCount());
     requestInfoList.clear();
@@ -265,7 +265,7 @@ public class NetworkClientTest {
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
     selector.setState(MockSelectorState.ThrowExceptionOnConnect);
     try {
-      networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+      networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     } catch (Exception e) {
       Assert.fail("If selector throws on connect, sendAndPoll() should not throw");
     }
@@ -286,32 +286,33 @@ public class NetworkClientTest {
     selector.setState(MockSelectorState.IdlePoll);
     Assert.assertEquals(0, selector.connectCallCount());
     // this sendAndPoll() should initiate a connect().
-    List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(),
+        POLL_TIMEOUT_MS);
     // At this time a single connection would have been initiated for the above request.
     Assert.assertEquals(1, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
     requestInfoList.clear();
 
     // Subsequent calls to sendAndPoll() should not initiate any connections.
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     Assert.assertEquals(1, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
 
     // Another connection should get initialized if a new request comes in for the same destination.
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(1), replicaOnSslNode));
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
     requestInfoList.clear();
 
     // Subsequent calls to sendAndPoll() should not initiate any more connections.
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
 
     // Once connect failure kicks in, the pending requests should be failed immediately.
     selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(2, responseInfoList.size());
     Assert.assertEquals(NetworkClientErrorCode.NetworkError, responseInfoList.get(0).getError());
@@ -320,7 +321,7 @@ public class NetworkClientTest {
   }
 
   /**
-   * Test that connections get replenished in {@link NetworkClient#sendAndPoll(List, int)} to maintain the minimum
+   * Test that connections get replenished in {@link NetworkClient#sendAndPoll(List, List, int)} to maintain the minimum
    * number of active connections.
    */
   @Test
@@ -341,26 +342,27 @@ public class NetworkClientTest {
 
     selector.setState(MockSelectorState.Good);
     // this sendAndPoll() should use one of the pre-warmed connections
-    List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestGen.apply(3), POLL_TIMEOUT_MS);
+    List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestGen.apply(3), Collections.emptyList(),
+        POLL_TIMEOUT_MS);
     checkConnectCalls.run();
     Assert.assertEquals(3, responseInfoList.size());
 
     // this sendAndPoll() should disconnect two of the pre-warmed connections
     selector.setState(MockSelectorState.DisconnectOnSend);
-    responseInfoList = networkClient.sendAndPoll(requestGen.apply(2), POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestGen.apply(2), Collections.emptyList(), POLL_TIMEOUT_MS);
     checkConnectCalls.run();
     Assert.assertEquals(2, responseInfoList.size());
 
     // the two connections lost in the previous sendAndPoll should be replenished
     selector.setState(MockSelectorState.Good);
-    responseInfoList = networkClient.sendAndPoll(requestGen.apply(1), POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestGen.apply(1), Collections.emptyList(), POLL_TIMEOUT_MS);
     expectedConnectCalls.addAndGet(2);
     checkConnectCalls.run();
     Assert.assertEquals(1, responseInfoList.size());
 
     // this call should use the existing connections in the pool
     selector.setState(MockSelectorState.Good);
-    responseInfoList = networkClient.sendAndPoll(requestGen.apply(3), POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestGen.apply(3), Collections.emptyList(), POLL_TIMEOUT_MS);
     checkConnectCalls.run();
     Assert.assertEquals(3, responseInfoList.size());
   }
@@ -383,13 +385,14 @@ public class NetworkClientTest {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(2), replicaOnSslNode));
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode));
-    List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(),
+        POLL_TIMEOUT_MS);
     requestInfoList.clear();
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
 
     // Invoke sendAndPoll() again, the Connection C1 will get disconnected
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     // Verify that no more connection is initiated in network client
     Assert.assertEquals(2, selector.connectCallCount());
     // There should be 2 responses, one is success from Request R1, another is from Connection C1 timeout.
@@ -404,7 +407,7 @@ public class NetworkClientTest {
     responseInfoList.clear();
 
     // Invoke sendAndPoll() again, Request R2 will get sent via Connection C2
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(1, responseInfoList.size());
     Assert.assertNull(responseInfoList.get(0).getError());
@@ -424,14 +427,15 @@ public class NetworkClientTest {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     selector.setState(MockSelectorState.IdlePoll);
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
-    List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(),
+        POLL_TIMEOUT_MS);
     Assert.assertEquals(0, responseInfoList.size());
     requestInfoList.clear();
     // now make the selector return any attempted connections as disconnections.
     selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
     // increment the time so that the request times out in the next cycle.
     time.sleep(2000);
-    responseInfoList = networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     // the size of responseInfoList should be 2 because first response comes from dropping request in the queue that
     // waits too long. (This response would be handled by corresponding manager, i.e PutManager, GetManager, etc); second
     // response comes from underlying connection timeout in nioSelector (usually due to remote node is down). This response
@@ -455,7 +459,7 @@ public class NetworkClientTest {
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
     selector.setState(MockSelectorState.ThrowExceptionOnPoll);
     try {
-      networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+      networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
     } catch (Exception e) {
       Assert.fail("If selector throws on poll, sendAndPoll() should not throw.");
     }
@@ -480,7 +484,7 @@ public class NetworkClientTest {
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     networkClient.close();
     try {
-      networkClient.sendAndPoll(requestInfoList, POLL_TIMEOUT_MS);
+      networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), POLL_TIMEOUT_MS);
       Assert.fail("Polling after close should throw");
     } catch (IllegalStateException e) {
     }
@@ -512,7 +516,7 @@ public class NetworkClientTest {
  * A mock implementation of the {@link Send} interface that simply stores a correlation id that can be used to
  * identify this request.
  */
-class MockSend implements Send {
+class MockSend implements SendWithCorrelationId {
   private final ByteBuffer buf;
   private final int correlationId;
   private final int size;
@@ -530,7 +534,8 @@ class MockSend implements Send {
   /**
    * @return the correlation id of this MockSend.
    */
-  int getCorrelationId() {
+  @Override
+  public int getCorrelationId() {
     return correlationId;
   }
 

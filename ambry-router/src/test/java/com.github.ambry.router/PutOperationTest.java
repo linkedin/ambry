@@ -26,7 +26,6 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
@@ -54,8 +53,8 @@ public class PutOperationTest {
   private final Time time;
   private final Map<Integer, PutOperation> correlationIdToPutOperation = new TreeMap<>();
   private final MockServer mockServer = new MockServer(mockClusterMap, "");
-  private final PutTestRequestRegistrationCallbackImpl requestRegistrationCallback =
-      new PutTestRequestRegistrationCallbackImpl();
+  private final RequestRegistrationCallback<PutOperation> requestRegistrationCallback =
+      new RequestRegistrationCallback<>(correlationIdToPutOperation);
   private final int chunkSize = 10;
   private final int requestParallelism = 3;
   private final int successTarget = 1;
@@ -96,7 +95,7 @@ public class PutOperationTest {
             MockClusterMap.DEFAULT_PARTITION_CLASS);
     op.startOperation();
     List<RequestInfo> requestInfos = new ArrayList<>();
-    requestRegistrationCallback.requestListToFill = requestInfos;
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
     // Since this channel is in memory, one call to fill chunks would end up filling the maximum number of PutChunks.
     op.fillChunks();
     Assert.assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
@@ -278,16 +277,6 @@ public class PutOperationTest {
   private ResponseInfo getResponseInfo(RequestInfo requestInfo) throws IOException {
     NetworkReceive networkReceive = new NetworkReceive(null, mockServer.send(requestInfo.getRequest()), time);
     return new ResponseInfo(requestInfo, null, networkReceive.getReceivedBytes().getPayload());
-  }
-
-  private class PutTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<PutOperation> {
-    private List<RequestInfo> requestListToFill;
-
-    @Override
-    public void registerRequestToSend(PutOperation putOperation, RequestInfo requestInfo) {
-      requestListToFill.add(requestInfo);
-      correlationIdToPutOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), putOperation);
-    }
   }
 }
 

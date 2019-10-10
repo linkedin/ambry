@@ -25,7 +25,6 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.utils.Pair;
@@ -40,8 +39,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -58,24 +55,8 @@ class TtlUpdateManager {
   private final RouterConfig routerConfig;
   private final Set<TtlUpdateOperation> ttlUpdateOperations = ConcurrentHashMap.newKeySet();
   private final Map<Integer, TtlUpdateOperation> correlationIdToTtlUpdateOperation = new HashMap<>();
-  private static final Logger logger = LoggerFactory.getLogger(TtlUpdateManager.class);
-
-  /**
-   * Used by a {@link TtlUpdateOperation} to associate a {@code CorrelationId} to a {@link TtlUpdateOperation}.
-   */
-  private class TtlUpdateRequestRegistrationCallbackImpl implements RequestRegistrationCallback<TtlUpdateOperation> {
-    private List<RequestInfo> requestListToFill;
-
-    @Override
-    public void registerRequestToSend(TtlUpdateOperation ttlUpdateOperation, RequestInfo requestInfo) {
-      requestListToFill.add(requestInfo);
-      correlationIdToTtlUpdateOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(),
-          ttlUpdateOperation);
-    }
-  }
-
-  private final TtlUpdateRequestRegistrationCallbackImpl requestRegistrationCallback =
-      new TtlUpdateRequestRegistrationCallbackImpl();
+  private final RequestRegistrationCallback<TtlUpdateOperation> requestRegistrationCallback =
+      new RequestRegistrationCallback<>(correlationIdToTtlUpdateOperation);
 
   /**
    * Creates a TtlUpdateManager.
@@ -139,11 +120,13 @@ class TtlUpdateManager {
   /**
    * Polls all ttl update operations and populates a list of {@link RequestInfo} to be sent to data nodes in order to
    * complete ttl update operations.
-   * @param requestListToFill list to be filled with the requests created.
+   * @param requestsToSend list to be filled with the requests created.
+   * @param requestsToDrop list to be filled with the requests to drop.
    */
-  void poll(List<RequestInfo> requestListToFill) {
+  void poll(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop) {
     long startTime = time.milliseconds();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
+    requestRegistrationCallback.setRequestsToSend(requestsToSend);
+    requestRegistrationCallback.setRequestsToDrop(requestsToDrop);
     for (TtlUpdateOperation op : ttlUpdateOperations) {
       boolean exceptionEncountered = false;
       try {

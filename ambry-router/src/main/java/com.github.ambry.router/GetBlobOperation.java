@@ -18,7 +18,6 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobAll;
 import com.github.ambry.messageformat.BlobData;
@@ -39,6 +38,7 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
@@ -600,7 +600,7 @@ class GetBlobOperation extends GetOperation {
      */
     void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
       //First, check if any of the existing requests have timed out.
-      cleanupExpiredInFlightRequests();
+      cleanupExpiredInFlightRequests(requestRegistrationCallback);
       maybeProcessCallbacks();
       checkAndMaybeComplete();
       if (!isComplete()) {
@@ -626,9 +626,8 @@ class GetBlobOperation extends GetOperation {
           decryptJobMetricsTracker.incrementOperationError();
           logger.trace("Setting operation exception as decryption callback invoked with exception {} for data chunk {}",
               decryptCallbackResultInfo.exception, chunkBlobId);
-          setOperationException(
-              buildChunkException("Exception thrown on decrypting the content for data chunk",
-                  decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
+          setOperationException(buildChunkException("Exception thrown on decrypting the content for data chunk",
+              decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
           progressTracker.setCryptoJobFailed();
         }
         decryptJobMetricsTracker.onJobResultProcessingComplete();
@@ -638,21 +637,25 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Clean up requests sent out by this operation that have now timed out.
+     * @param requestRegistrationCallback The callback to use to notify the networking layer of dropped requests.
      */
-    private void cleanupExpiredInFlightRequests() {
+    private void cleanupExpiredInFlightRequests(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
       //First, check if any of the existing requests have timed out.
       Iterator<Map.Entry<Integer, GetRequestInfo>> inFlightRequestsIterator =
           correlationIdToGetRequestInfo.entrySet().iterator();
       while (inFlightRequestsIterator.hasNext()) {
         Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
-        if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
-          logger.trace("GetBlobRequest with correlationId {} in flight has expired for replica {} ", entry.getKey(),
-              entry.getValue().replicaId.getDataNodeId());
+        int correlationId = entry.getKey();
+        GetRequestInfo info = entry.getValue();
+        if (time.milliseconds() - info.startTimeMs > routerConfig.routerRequestTimeoutMs) {
+          logger.trace("GetBlobRequest with correlationId {} in flight has expired for replica {} ", correlationId,
+              info.replicaId.getDataNodeId());
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
           // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
           // response and the response handler will be notified accordingly.
-          onErrorResponse(entry.getValue().replicaId,
-              buildChunkException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut));
+          onErrorResponse(info.replicaId,
+              RouterUtils.buildTimeoutException(correlationId, info.replicaId.getDataNodeId(), chunkBlobId));
+          requestRegistrationCallback.registerRequestToDrop(correlationId);
           inFlightRequestsIterator.remove();
         } else {
           // the entries are ordered by correlation id and time. Break on the first request that has not timed out.

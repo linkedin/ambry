@@ -19,13 +19,12 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
-import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
@@ -54,7 +53,7 @@ class GetManager {
   // Requests are added before they are sent out and get cleaned up as and when responses come in.
   // Because there is a guaranteed response from the NetworkClient for every request sent out, entries
   // get cleaned up periodically.
-  private final Map<Integer, GetOperation> correlationIdToGetOperation = new HashMap<Integer, GetOperation>();
+  private final Map<Integer, GetOperation> correlationIdToGetOperation;
 
   // shared by all GetOperations
   private final ClusterMap clusterMap;
@@ -64,20 +63,9 @@ class GetManager {
   private final NonBlockingRouterMetrics routerMetrics;
   private final RouterCallback routerCallback;
 
-  private class GetRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
-    private List<RequestInfo> requestListToFill;
-
-    @Override
-    public void registerRequestToSend(GetOperation getOperation, RequestInfo requestInfo) {
-      requestListToFill.add(requestInfo);
-      correlationIdToGetOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), getOperation);
-    }
-  }
-
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to GetOperations, every time.
-  private final GetRequestRegistrationCallbackImpl requestRegistrationCallback =
-      new GetRequestRegistrationCallbackImpl();
+  private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback;
 
   /**
    * Create a GetManager
@@ -105,6 +93,8 @@ class GetManager {
     this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     getOperations = ConcurrentHashMap.newKeySet();
+    correlationIdToGetOperation = new HashMap<>();
+    requestRegistrationCallback = new RequestRegistrationCallback<>(correlationIdToGetOperation);
   }
 
   /**
@@ -192,11 +182,13 @@ class GetManager {
    * thread in the {@link NonBlockingRouter} ({@link #handleResponse} gets called only if a
    * response is received for a get operation), any error handling or operation completion and cleanup also usually
    * gets done in the context of this method.
-   * @param requestListToFill list to be filled with the requests created
+   * @param requestsToSend list to be filled with the requests created
+   * @param requestsToDrop list to be filled with the requests to drop.
    */
-  void poll(List<RequestInfo> requestListToFill) {
+  void poll(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop) {
     long startTime = time.milliseconds();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
+    requestRegistrationCallback.setRequestsToSend(requestsToSend);
+    requestRegistrationCallback.setRequestsToDrop(requestsToDrop);
     for (GetOperation op : getOperations) {
       try {
         op.poll(requestRegistrationCallback);

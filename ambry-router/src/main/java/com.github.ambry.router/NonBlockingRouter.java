@@ -791,22 +791,22 @@ class NonBlockingRouter implements Router {
 
     /**
      * This method is used by the RequestResponseHandler thread to poll for requests to be sent
-     * @return a list of {@link RequestInfo} that contains the requests to be sent out.
+     * @param requestsToSend a list of {@link RequestInfo} that will contain the requests to be sent out.
+     * @param requestsToDrop a list of correlation IDs that will contain the IDs for requests that the network layer
+     *                       should drop.
      */
-    protected List<RequestInfo> pollForRequests() {
-      List<RequestInfo> requests = new ArrayList<>();
+    protected void pollForRequests(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop) {
       try {
-        putManager.poll(requests);
-        getManager.poll(requests);
+        putManager.poll(requestsToSend, requestsToDrop);
+        getManager.poll(requestsToSend, requestsToDrop);
         initiateBackgroundDeletes(backgroundDeleteRequests);
         backgroundDeleteRequests.clear();
-        deleteManager.poll(requests);
-        ttlUpdateManager.poll(requests);
+        deleteManager.poll(requestsToSend, requestsToDrop);
+        ttlUpdateManager.poll(requestsToSend, requestsToDrop);
       } catch (Exception e) {
         logger.error("Operation Manager poll received an unexpected error: ", e);
         routerMetrics.operationManagerPollErrorCount.inc();
       }
-      return requests;
     }
 
     /**
@@ -863,8 +863,11 @@ class NonBlockingRouter implements Router {
       final int NETWORK_CLIENT_POLL_TIMEOUT = routerConfig.routerRequestTimeoutMs / 10;
       try {
         while (isOpen.get()) {
-          List<RequestInfo> requestInfoList = pollForRequests();
-          List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, NETWORK_CLIENT_POLL_TIMEOUT);
+          List<RequestInfo> requestsToSend = new ArrayList<>();
+          List<Integer> requestsToDrop = new ArrayList<>();
+          pollForRequests(requestsToSend, requestsToDrop);
+          List<ResponseInfo> responseInfoList =
+              networkClient.sendAndPoll(requestsToSend, requestsToDrop, NETWORK_CLIENT_POLL_TIMEOUT);
           onResponse(responseInfoList);
         }
       } catch (Throwable e) {
@@ -948,16 +951,14 @@ class NonBlockingRouter implements Router {
      * {@inheritDoc}
      */
     @Override
-    protected List<RequestInfo> pollForRequests() {
-      List<RequestInfo> requests = new ArrayList<>();
+    protected void pollForRequests(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop) {
       try {
-        getManager.poll(requests);
-        deleteManager.poll(requests);
+        getManager.poll(requestsToSend, requestsToDrop);
+        deleteManager.poll(requestsToSend, requestsToDrop);
       } catch (Exception e) {
         logger.error("Background Deleter Operation Manager poll received an unexpected error: ", e);
         routerMetrics.operationManagerPollErrorCount.inc();
       }
-      return requests;
     }
   }
 }

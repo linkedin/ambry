@@ -349,14 +349,15 @@ public class TtlUpdateManagerTest {
   private void sendRequestsGetResponses(FutureResult<Void> futureResult, TtlUpdateManager manager, boolean advanceTime,
       boolean ignoreUnrecognizedRequests) {
     List<RequestInfo> requestInfoList = new ArrayList<>();
+    List<Integer> requestsToDrop = new ArrayList<>();
     Set<RequestInfo> requestAcks = new HashSet<>();
     List<RequestInfo> referenceRequestInfos = new ArrayList<>();
     while (!futureResult.isDone()) {
-      manager.poll(requestInfoList);
+      manager.poll(requestInfoList, requestsToDrop);
       referenceRequestInfos.addAll(requestInfoList);
       List<ResponseInfo> responseInfoList = new ArrayList<>();
       try {
-        responseInfoList = networkClient.sendAndPoll(requestInfoList, AWAIT_TIMEOUT_MS);
+        responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptyList(), AWAIT_TIMEOUT_MS);
       } catch (RuntimeException | Error e) {
         if (!advanceTime) {
           throw e;

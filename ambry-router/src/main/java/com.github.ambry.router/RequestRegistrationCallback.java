@@ -14,13 +14,78 @@
 package com.github.ambry.router;
 
 import com.github.ambry.network.RequestInfo;
+import java.util.List;
+import java.util.Map;
 
 
 /**
- * The callback to be used when requests are created and needs to be sent out. The operation manager passes this
- * callback to the associated operation class and the operation uses this callback when requests are created and
- * need to be sent out.
+ * The callback to be used when requests are created or dropped and needs to be sent out or closed. The operation
+ * manager passes this callback to the associated operation class and the operation uses this callback when requests are
+ * created and need to be sent out. The callback will then update data structures common to all of the different
+ * "Manager" classes. The updates to these data structures are not thread safe and this callback should only be called
+ * from the main event loop thread.
  */
-public interface RequestRegistrationCallback<T> {
-  public void registerRequestToSend(T routerOperation, RequestInfo request);
+class RequestRegistrationCallback<T> {
+  private final Map<Integer, T> correlationIdToOperation;
+  private List<RequestInfo> requestsToSend = null;
+  private List<Integer> requestsToDrop = null;
+
+  /**
+   * @param correlationIdToOperation used to keep a mapping from correlation ID to the operation that the request
+   *                                 corresponds to.
+   */
+  RequestRegistrationCallback(Map<Integer, T> correlationIdToOperation) {
+    this.correlationIdToOperation = correlationIdToOperation;
+  }
+
+  /**
+   * @return the list where new requests to send are added.
+   */
+  List<RequestInfo> getRequestsToSend() {
+    return requestsToSend;
+  }
+
+  /**
+   * @return the list where the correlation IDs of requests to drop are added.
+   */
+  List<Integer> getRequestsToDrop() {
+    return requestsToDrop;
+  }
+
+  /**
+   * @param requestsToSend the list to add {@link RequestInfo} for requests to send to.
+   */
+  void setRequestsToSend(List<RequestInfo> requestsToSend) {
+    this.requestsToSend = requestsToSend;
+  }
+
+  /**
+   * @param requestsToDrop the list to add the correlation IDs of requests to drop to.
+   */
+  void setRequestsToDrop(List<Integer> requestsToDrop) {
+    this.requestsToDrop = requestsToDrop;
+  }
+
+  /**
+   * @param routerOperation the operation that the request corresponds to.
+   * @param requestInfo the request to send out.
+   */
+  void registerRequestToSend(T routerOperation, RequestInfo requestInfo) {
+    if (requestsToSend != null) {
+      requestsToSend.add(requestInfo);
+    }
+    correlationIdToOperation.put(requestInfo.getRequest().getCorrelationId(), routerOperation);
+  }
+
+  /**
+   * Register a request to "drop". The current default networking layer drops requests by closing connections.
+   * @param correlationId the correlation ID of the request to drop.
+   */
+  void registerRequestToDrop(int correlationId) {
+    if (requestsToDrop != null) {
+      requestsToDrop.add(correlationId);
+    }
+//    // TODO remove from correlationId map okay or should extra bookkeeping be done??
+//    correlationIdToOperation.remove(correlationId);
+  }
 }

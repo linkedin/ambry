@@ -23,7 +23,7 @@ import com.github.ambry.clustermap.ReplicaId;
 public class RequestInfo {
   private final String host;
   private final Port port;
-  private final Send request;
+  private final SendWithCorrelationId request;
   private final ReplicaId replicaId;
 
   /**
@@ -33,7 +33,7 @@ public class RequestInfo {
    * @param request the data to be sent.
    * @param replicaId the {@link ReplicaId} associated with this request
    */
-  public RequestInfo(String host, Port port, Send request, ReplicaId replicaId) {
+  public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId) {
     this.host = host;
     this.port = port;
     this.request = request;
@@ -57,7 +57,7 @@ public class RequestInfo {
   /**
    * @return the request in the form of {@link Send} associated with this object.
    */
-  public Send getRequest() {
+  public SendWithCorrelationId getRequest() {
     return request;
   }
 
