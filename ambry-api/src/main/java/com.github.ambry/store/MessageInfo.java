@@ -209,7 +209,7 @@ public class MessageInfo {
   @Override
   public int hashCode() {
     return Objects.hash(key, size, expirationTimeInMs, isDeleted, isTtlUpdated, crc, accountId, containerId,
-        operationTimeMs);
+        operationTimeMs, updateVersion);
   }
 
   @Override

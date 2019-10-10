@@ -68,8 +68,9 @@ public class UpdateRecord {
    * @return the delete record if type is {@link SubRecord.Type#DELETE}. {@code null} otherwise.
    */
   public DeleteSubRecord getDeleteSubRecord() {
-    if (subRecord.getType().equals(SubRecord.Type.DELETE))
+    if (subRecord.getType().equals(SubRecord.Type.DELETE)) {
       return (DeleteSubRecord) subRecord;
+    }
     return null;
   }
 
@@ -77,8 +78,9 @@ public class UpdateRecord {
    * @return the ttl update record if type is {@link SubRecord.Type#TTL_UPDATE}. {@code null} otherwise.
    */
   public TtlUpdateSubRecord getTtlUpdateSubRecord() {
-    if (subRecord.getType().equals(SubRecord.Type.TTL_UPDATE))
+    if (subRecord.getType().equals(SubRecord.Type.TTL_UPDATE)) {
       return (TtlUpdateSubRecord) subRecord;
+    }
     return null;
   }
 
@@ -86,8 +88,9 @@ public class UpdateRecord {
    * @return the undelete record if type is {@link SubRecord.Type#UNDELETE}. {@code null} otherwise.
    */
   public UndeleteSubRecord getUndeleteSubRecord() {
-    if (subRecord.getType().equals(SubRecord.Type.UNDELETE))
+    if (subRecord.getType().equals(SubRecord.Type.UNDELETE)) {
       return (UndeleteSubRecord) subRecord;
+    }
     return null;
   }
 }
