@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -72,7 +73,7 @@ public abstract class ReplicationEngine {
   protected final FindTokenHelper tokenHelper;
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
-  protected final Map<String, List<PartitionInfo>> mountPathToPartitionInfos;
+  protected final Map<String, Set<PartitionInfo>> mountPathToPartitionInfos;
   protected ReplicaTokenPersistor persistor = null;
 
   protected static final short Replication_Delay_Multiplier = 5;

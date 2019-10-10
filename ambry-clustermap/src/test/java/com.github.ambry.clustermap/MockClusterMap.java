@@ -504,7 +504,7 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public ReplicaId getNewReplica(String partitionIdStr, DataNodeId dataNodeId) {
+  public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
     ReplicaId newReplica = null;
     PartitionId partition = partitions.get(Long.valueOf(partitionIdStr));
     for (ReplicaId replicaId : partition.getReplicaIds()) {

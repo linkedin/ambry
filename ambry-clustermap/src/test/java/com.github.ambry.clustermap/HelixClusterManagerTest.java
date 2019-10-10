@@ -337,7 +337,7 @@ public class HelixClusterManagerTest {
     PartitionId partitionOfNewReplica = helixClusterManager.getAllPartitionIds(null).get(0);
     DataNode dataNodeOfNewReplica = testHardwareLayout.getAllExistingDataNodes().get(0);
     assertNull("New replica should be null because no replica infos ZNRecord in Helix",
-        helixClusterManager.getNewReplica(partitionOfNewReplica.toPathString(), dataNodeOfNewReplica));
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), dataNodeOfNewReplica));
     helixClusterManager.close();
 
     // Prepare new replica info map in Helix property store. We use the first partition and first data node in HardwareLayout
@@ -402,7 +402,7 @@ public class HelixClusterManagerTest {
       partitionForTest = partitionsInClusterManager.get(random.nextInt(partitionsInClusterManager.size()));
     } while (partitionForTest.toString().equals(partitionOfNewReplica.toString()));
     assertNull("New replica should be null because given partition id is not in Helix property store",
-        helixClusterManager.getNewReplica(partitionForTest.toPathString(), dataNodeOfNewReplica));
+        helixClusterManager.getBootstrapReplica(partitionForTest.toPathString(), dataNodeOfNewReplica));
     // select partitionOfNewReplica but a random node that doesn't equal to
     DataNode dataNodeForTest;
     List<DataNode> dataNodesInHardwareLayout = testHardwareLayout.getAllExistingDataNodes();
@@ -410,22 +410,22 @@ public class HelixClusterManagerTest {
       dataNodeForTest = dataNodesInHardwareLayout.get(random.nextInt(dataNodesInHardwareLayout.size()));
     } while (dataNodeForTest == dataNodeOfNewReplica);
     assertNull("New replica should be null because hostname is not found in replica info map",
-        helixClusterManager.getNewReplica(partitionOfNewReplica.toPathString(), dataNodeForTest));
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), dataNodeForTest));
 
     // 3. test that new replica is from a new partition which doesn't exist in current cluster yet. (Mock adding new partition case)
     //    3.1 test new partition on host that is not present in current clustermap
     assertNull("New replica should be null because host is not present in clustermap",
-        helixClusterManager.getNewReplica(NEW_PARTITION_ID_STR, fakeNode));
+        helixClusterManager.getBootstrapReplica(NEW_PARTITION_ID_STR, fakeNode));
     //    3.2 test new partition on disk that doesn't exist
     assertNull("New replica should be null because disk doesn't exist",
-        helixClusterManager.getNewReplica(NEW_PARTITION_ID_STR, dataNodeOfNewReplica));
+        helixClusterManager.getBootstrapReplica(NEW_PARTITION_ID_STR, dataNodeOfNewReplica));
     //    3.3 test replica is created for new partition
     assertNotNull("New replica should be created successfully",
-        helixClusterManager.getNewReplica(NEW_PARTITION_ID_STR, dataNodeOfNewPartition));
+        helixClusterManager.getBootstrapReplica(NEW_PARTITION_ID_STR, dataNodeOfNewPartition));
 
     // 4. test that new replica of existing partition is successfully created based on infos from Helix property store.
     assertNotNull("New replica should be created successfully",
-        helixClusterManager.getNewReplica(partitionOfNewReplica.toPathString(), dataNodeOfNewReplica));
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), dataNodeOfNewReplica));
 
     helixClusterManager.close();
   }

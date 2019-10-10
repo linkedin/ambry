@@ -43,7 +43,7 @@ import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
-import com.github.ambry.protocol.BlobStoreControlRequestType;
+import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.GetOption;
@@ -224,7 +224,7 @@ public class ServerAdminTool implements Closeable {
 
     @Config("store.control.request.type")
     @Default("StartStore")
-    final BlobStoreControlRequestType storeControlRequestType;
+    final BlobStoreControlAction storeControlRequestType;
 
     /**
      * Path of the file where the data from certain operations will output. For example, the blob from GetBlob and the
@@ -256,7 +256,7 @@ public class ServerAdminTool implements Closeable {
           verifiableProperties.getShortInRange("num.replicas.caught.up.per.partition", Short.MAX_VALUE, (short) 1,
               Short.MAX_VALUE);
       storeControlRequestType =
-          BlobStoreControlRequestType.valueOf(verifiableProperties.getString("store.control.request.type"));
+          BlobStoreControlAction.valueOf(verifiableProperties.getString("store.control.request.type"));
       dataOutputFilePath = verifiableProperties.getString("data.output.file.path", "/tmp/ambryResult.out");
     }
   }
@@ -514,7 +514,7 @@ public class ServerAdminTool implements Closeable {
    */
   private static void sendBlobStoreControlRequest(ServerAdminTool serverAdminTool, DataNodeId dataNodeId,
       PartitionId partitionId, short numReplicasCaughtUpPerPartition,
-      BlobStoreControlRequestType storeControlRequestType) throws IOException, TimeoutException {
+      BlobStoreControlAction storeControlRequestType) throws IOException, TimeoutException {
     ServerErrorCode errorCode =
         serverAdminTool.controlBlobStore(dataNodeId, partitionId, numReplicasCaughtUpPerPartition,
             storeControlRequestType);
@@ -701,7 +701,7 @@ public class ServerAdminTool implements Closeable {
    * @throws TimeoutException
    */
   private ServerErrorCode controlBlobStore(DataNodeId dataNodeId, PartitionId partitionId,
-      short numReplicasCaughtUpPerPartition, BlobStoreControlRequestType storeControlRequestType)
+      short numReplicasCaughtUpPerPartition, BlobStoreControlAction storeControlRequestType)
       throws IOException, TimeoutException {
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, correlationId.incrementAndGet(),

@@ -682,7 +682,7 @@ public class BlobIdTransformerTest {
     }
 
     @Override
-    public ReplicaId getNewReplica(String partitionIdStr, DataNodeId dataNodeId) {
+    public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
       return null;
     }
 

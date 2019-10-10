@@ -28,6 +28,7 @@ import java.io.DataInputStream;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -141,7 +142,7 @@ public class MockReplicationManager extends ReplicationManager {
   /**
    * @return mountPathToPartitionInfos map
    */
-  Map<String, List<PartitionInfo>> getMountPathToPartitionInfosMap() {
+  Map<String, Set<PartitionInfo>> getMountPathToPartitionInfosMap() {
     return mountPathToPartitionInfos;
   }
 

@@ -34,6 +34,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -43,7 +45,7 @@ import org.junit.Test;
  * Test for {@link DiskTokenPersistor}.
  */
 public class DiskTokenPersistorTest {
-  private static Map<String, List<PartitionInfo>> mountPathToPartitionInfoList;
+  private static Map<String, Set<PartitionInfo>> mountPathToPartitionInfoList;
   private static ClusterMap clusterMap;
   private static ReplicaId replicaId;
   private static List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfos;
@@ -74,7 +76,8 @@ public class DiskTokenPersistorTest {
       replicaTokenInfos.add(new RemoteReplicaInfo.ReplicaTokenInfo(remoteReplicaInfo));
     }
     PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, partitionId, null, replicaId);
-    mountPathToPartitionInfoList.computeIfAbsent(replicaId.getMountPath(), key -> new ArrayList<>()).add(partitionInfo);
+    mountPathToPartitionInfoList.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
+        .add(partitionInfo);
 
     Properties replicationProperties = new Properties();
     replicationProperties.setProperty("replication.cloud.token.factory", MockFindTokenFactory.class.getName());

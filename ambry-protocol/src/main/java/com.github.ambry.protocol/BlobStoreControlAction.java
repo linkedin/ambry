@@ -14,10 +14,10 @@
 package com.github.ambry.protocol;
 
 /**
- * Enum of types of BlobStore control request.
+ * Enum of actions of BlobStore control.
  * The order of these enums should not be changed since their relative position goes into the serialized form of
  * requests.
  */
-public enum BlobStoreControlRequestType {
+public enum BlobStoreControlAction {
   StopStore, StartStore, AddStore, RemoveStore
 }

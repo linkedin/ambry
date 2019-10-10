@@ -27,9 +27,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerMetrics;
-import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.server.ServerErrorCode;
-import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -46,7 +43,7 @@ import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
-import com.github.ambry.protocol.BlobStoreControlRequestType;
+import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
@@ -391,7 +388,7 @@ public class AmbryRequestsTest {
     replicationManager.controlReplicationReturnVal = true;
     generateLagOverrides(0, acceptableLagInBytes);
     // stop BlobStore
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.No_Error);
     // verify APIs are called in the process of stopping BlobStore
     assertEquals("Compaction on store should be disabled after stopping the BlobStore", false,
@@ -402,7 +399,7 @@ public class AmbryRequestsTest {
     assertEquals("Replication on given BlobStore should be disabled", false, replicationManager.enableVal);
     assertEquals("Partition shutdown not as expected", id, storageManager.shutdownPartitionId);
     // start BlobStore
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StartStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.No_Error);
     // verify APIs are called in the process of starting BlobStore
     assertEquals("Partition started not as expected", id, storageManager.startedPartitionId);
@@ -413,13 +410,13 @@ public class AmbryRequestsTest {
         storageManager.compactionEnableVal);
     // add BlobStore (create a new partition and add one of its replicas to server)
     PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
-    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlRequestType.AddStore,
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.AddStore,
         numReplicasCaughtUpPerPartition, ServerErrorCode.No_Error);
     // remove BlobStore (remove previously added store)
     BlobStore mockStore = Mockito.mock(BlobStore.class);
     storageManager.overrideStoreToReturn = mockStore;
     doNothing().when(mockStore).deleteStoreFiles();
-    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlRequestType.RemoveStore,
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore,
         numReplicasCaughtUpPerPartition, ServerErrorCode.No_Error);
     storageManager.overrideStoreToReturn = null;
   }
@@ -433,29 +430,29 @@ public class AmbryRequestsTest {
         .collect(Collectors.toList());
     PartitionId newPartition1 = clusterMap.createNewPartition(dataNodes);
     // test that getting new replica from cluster map fails
-    sendAndVerifyStoreControlRequest(newPartition1, BlobStoreControlRequestType.AddStore, (short) 0,
+    sendAndVerifyStoreControlRequest(newPartition1, BlobStoreControlAction.AddStore, (short) 0,
         ServerErrorCode.Replica_Unavailable);
 
     // create newPartition2 that has one replica on current node
     PartitionId newPartition2 = clusterMap.createNewPartition(clusterMap.getDataNodes());
     // test that adding store into StorageManager fails
     storageManager.returnValueOfAddBlobStore = false;
-    sendAndVerifyStoreControlRequest(newPartition2, BlobStoreControlRequestType.AddStore, (short) 0,
+    sendAndVerifyStoreControlRequest(newPartition2, BlobStoreControlAction.AddStore, (short) 0,
         ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfAddBlobStore = true;
 
     // test that adding replica into ReplicationManager fails (we first add replica into ReplicationManager to trigger failure)
     ReplicaId replicaToAdd =
-        clusterMap.getNewReplica(newPartition2.toPathString(), dataNodeId);
+        clusterMap.getBootstrapReplica(newPartition2.toPathString(), dataNodeId);
     replicationManager.addReplica(replicaToAdd);
-    sendAndVerifyStoreControlRequest(newPartition2, BlobStoreControlRequestType.AddStore, (short) 0,
+    sendAndVerifyStoreControlRequest(newPartition2, BlobStoreControlAction.AddStore, (short) 0,
         ServerErrorCode.Unknown_Error);
     assertTrue("Remove replica from replication manager should succeed.",
         replicationManager.removeReplica(replicaToAdd));
 
     // test that adding replica into StatsManager fails
     statsManager.returnValOfAddReplica = false;
-    sendAndVerifyStoreControlRequest(newPartition2, BlobStoreControlRequestType.AddStore, (short) 0,
+    sendAndVerifyStoreControlRequest(newPartition2, BlobStoreControlAction.AddStore, (short) 0,
         ServerErrorCode.Unknown_Error);
     statsManager.returnValOfAddReplica = true;
   }
@@ -465,25 +462,25 @@ public class AmbryRequestsTest {
     // first, create new partition but don't add to current node
     PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
     // test store removal failure because store doesn't exist
-    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlRequestType.RemoveStore, (short) 0,
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, (short) 0,
         ServerErrorCode.Partition_Unknown);
     // add store on current node for store removal testing
-    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlRequestType.AddStore, (short) 0,
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.AddStore, (short) 0,
         ServerErrorCode.No_Error);
     // mock exception in StorageManager
     storageManager.returnValueOfRemoveBlobStore = false;
-    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlRequestType.RemoveStore, (short) 0,
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, (short) 0,
         ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfRemoveBlobStore = true;
     // mock exception when deleting files of removed store
     BlobStore mockStore = Mockito.mock(BlobStore.class);
     storageManager.overrideStoreToReturn = mockStore;
     doThrow(new IOException()).when(mockStore).deleteStoreFiles();
-    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlRequestType.RemoveStore, (short) 0,
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, (short) 0,
         ServerErrorCode.Unknown_Error);
     // test store removal success case
     doNothing().when(mockStore).deleteStoreFiles();
-    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlRequestType.RemoveStore, (short) 0,
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, (short) 0,
         ServerErrorCode.No_Error);
     storageManager.overrideStoreToReturn = null;
   }
@@ -500,27 +497,27 @@ public class AmbryRequestsTest {
     short numReplicasCaughtUpPerPartition = 3;
     // test start BlobStore failure
     storageManager.returnValueOfStartingBlobStore = false;
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StartStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfStartingBlobStore = true;
     // test start BlobStore with runtime exception
     storageManager.exceptionToThrowOnStartingBlobStore = new IllegalStateException();
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StartStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnStartingBlobStore = null;
     // test enable replication failure
     replicationManager.controlReplicationReturnVal = false;
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StartStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     replicationManager.controlReplicationReturnVal = true;
     // test enable compaction failure
     storageManager.returnValueOfControllingCompaction = false;
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StartStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfControllingCompaction = true;
     // test enable compaction with runtime exception
     storageManager.exceptionToThrowOnControllingCompaction = new IllegalStateException();
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StartStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnControllingCompaction = null;
   }
@@ -536,57 +533,57 @@ public class AmbryRequestsTest {
     PartitionId id = partitionIds.get(0);
     short numReplicasCaughtUpPerPartition = 3;
     // test partition unknown
-    sendAndVerifyStoreControlRequest(null, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(null, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Bad_Request);
     // test validate request failure - Replica_Unavailable
     storageManager.returnNullStore = true;
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Replica_Unavailable);
     storageManager.returnNullStore = false;
     // test validate request failure - Disk_Unavailable
     storageManager.shutdown();
     storageManager.returnNullStore = true;
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Disk_Unavailable);
     storageManager.returnNullStore = false;
     storageManager.start();
     // test invalid numReplicasCaughtUpPerPartition
     numReplicasCaughtUpPerPartition = -1;
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Bad_Request);
     numReplicasCaughtUpPerPartition = 3;
     // test disable compaction failure
     storageManager.returnValueOfControllingCompaction = false;
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfControllingCompaction = true;
     // test disable compaction with runtime exception
     storageManager.exceptionToThrowOnControllingCompaction = new IllegalStateException();
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnControllingCompaction = null;
     // test disable replication failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = false;
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     // test peers catchup failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     // all replicas of this partition > acceptableLag
     generateLagOverrides(1, 1);
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Retry_After_Backoff);
     // test shutdown BlobStore failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     storageManager.returnValueOfShutdownBlobStore = false;
     generateLagOverrides(0, 0);
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     // test shutdown BlobStore with runtime exception
     storageManager.exceptionToThrowOnShuttingDownBlobStore = new IllegalStateException();
-    sendAndVerifyStoreControlRequest(id, BlobStoreControlRequestType.StopStore, numReplicasCaughtUpPerPartition,
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnShuttingDownBlobStore = null;
   }
@@ -775,7 +772,7 @@ public class AmbryRequestsTest {
    * @throws IOException
    */
   private void sendAndVerifyStoreControlRequest(PartitionId partitionId,
-      BlobStoreControlRequestType storeControlRequestType, short numReplicasCaughtUpPerPartition,
+      BlobStoreControlAction storeControlRequestType, short numReplicasCaughtUpPerPartition,
       ServerErrorCode expectedServerErrorCode) throws InterruptedException, IOException {
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);

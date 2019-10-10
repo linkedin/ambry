@@ -32,10 +32,9 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 
 /**
@@ -44,7 +43,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class ReplicationManager extends ReplicationEngine {
   private final StorageManager storageManager;
   private final StoreConfig storeConfig;
-  private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StorageManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -117,31 +115,23 @@ public class ReplicationManager extends ReplicationEngine {
    * @return {@code true} if addition succeeded, {@code false} failed to add replica because it already exists.
    */
   public boolean addReplica(ReplicaId replicaId) {
-    boolean succeed = false;
-    rwLock.readLock().lock();
-    try {
-      if (partitionToPartitionInfo.containsKey(replicaId.getPartitionId())) {
-        logger.error("{} already exists in replication manager, rejecting adding replica request.",
-            replicaId.getPartitionId());
-      } else {
-        List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
-        List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
-        if (peerReplicas != null) {
-          remoteReplicaInfos = createRemoteReplicaInfos(peerReplicas, replicaId);
-          updatePartitionInfoMaps(remoteReplicaInfos, replicaId);
-        }
-        logger.info("Assigning thread for {}", replicaId.getPartitionId());
-        addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
-        // No need to update persistor to explicitly persist tokens for new replica because background persistor will
-        // periodically persistor all tokens including new added replica's
-        // TODO ensure there is a test that checks persistor has new replica info.
-        logger.info("{} is successfully added into replication manager", replicaId.getPartitionId());
-        succeed = true;
-      }
-    } finally {
-      rwLock.readLock().unlock();
+    if (partitionToPartitionInfo.containsKey(replicaId.getPartitionId())) {
+      logger.error("{} already exists in replication manager, rejecting adding replica request.",
+          replicaId.getPartitionId());
+      return false;
     }
-    return succeed;
+    List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
+    List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
+    if (!peerReplicas.isEmpty()) {
+      remoteReplicaInfos = createRemoteReplicaInfos(peerReplicas, replicaId);
+      updatePartitionInfoMaps(remoteReplicaInfos, replicaId);
+    }
+    logger.info("Assigning thread for {}", replicaId.getPartitionId());
+    addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
+    // No need to update persistor to explicitly persist tokens for new replica because background persistor will
+    // periodically persist all tokens including new added replica's
+    logger.info("{} is successfully added into replication manager", replicaId.getPartitionId());
+    return true;
   }
 
   /**
@@ -150,29 +140,22 @@ public class ReplicationManager extends ReplicationEngine {
    * @return {@code true} if replica is successfully removed. {@code false} otherwise
    */
   public boolean removeReplica(ReplicaId replicaId) {
-    boolean succeed = false;
-    rwLock.readLock().lock();
-    try {
-      if (!partitionToPartitionInfo.containsKey(replicaId.getPartitionId())) {
-        logger.error("{} doesn't exist in replication manager, skipping removing replica request.",
-            replicaId.getPartitionId());
-      } else {
-        PartitionInfo partitionInfo = partitionToPartitionInfo.get(replicaId.getPartitionId());
-        List<RemoteReplicaInfo> remoteReplicaInfos = partitionInfo.getRemoteReplicaInfos();
-        logger.info("Removing remote replicas of {} from replica threads", replicaId.getPartitionId());
-        removeRemoteReplicaInfoFromReplicaThread(remoteReplicaInfos);
-        mountPathToPartitionInfos.computeIfPresent(replicaId.getMountPath(), (k, v) -> {
-          v.remove(partitionInfo);
-          return v;
-        });
-        partitionToPartitionInfo.remove(replicaId.getPartitionId());
-        logger.info("{} is successfully removed from replication manager", replicaId.getPartitionId());
-        succeed = true;
-      }
-    } finally {
-      rwLock.readLock().unlock();
+    if (!partitionToPartitionInfo.containsKey(replicaId.getPartitionId())) {
+      logger.error("{} doesn't exist in replication manager, skipping removing replica request.",
+          replicaId.getPartitionId());
+      return false;
     }
-    return succeed;
+    PartitionInfo partitionInfo = partitionToPartitionInfo.get(replicaId.getPartitionId());
+    List<RemoteReplicaInfo> remoteReplicaInfos = partitionInfo.getRemoteReplicaInfos();
+    logger.info("Removing remote replicas of {} from replica threads", replicaId.getPartitionId());
+    removeRemoteReplicaInfoFromReplicaThread(remoteReplicaInfos);
+    mountPathToPartitionInfos.computeIfPresent(replicaId.getMountPath(), (k, v) -> {
+      v.remove(partitionInfo);
+      return v;
+    });
+    partitionToPartitionInfo.remove(replicaId.getPartitionId());
+    logger.info("{} is successfully removed from replication manager", replicaId.getPartitionId());
+    return true;
   }
 
   /**
@@ -193,7 +176,7 @@ public class ReplicationManager extends ReplicationEngine {
       FindToken findToken =
           this.tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
       RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica, replicaId, store, findToken,
-          storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
+          TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
           SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
       replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
       remoteReplicaInfos.add(remoteReplicaInfo);
@@ -215,6 +198,7 @@ public class ReplicationManager extends ReplicationEngine {
     PartitionInfo partitionInfo =
         new PartitionInfo(remoteReplicaInfos, partition, storageManager.getStore(partition), replicaId);
     partitionToPartitionInfo.put(partition, partitionInfo);
-    mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> new ArrayList<>()).add(partitionInfo);
+    mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
+        .add(partitionInfo);
   }
 }

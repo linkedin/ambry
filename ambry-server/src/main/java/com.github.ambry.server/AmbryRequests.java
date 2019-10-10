@@ -928,7 +928,7 @@ public class AmbryRequests implements RequestAPI {
         BlobStoreControlAdminRequest.readFrom(requestStream, adminRequest);
     PartitionId partitionId = blobStoreControlAdminRequest.getPartitionId();
     if (partitionId != null) {
-      switch (blobStoreControlAdminRequest.getControlRequestType()) {
+      switch (blobStoreControlAdminRequest.getStoreControlAction()) {
         case StopStore:
           short numReplicasCaughtUpPerPartition = blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition();
           logger.info(
@@ -950,7 +950,7 @@ public class AmbryRequests implements RequestAPI {
           break;
         default:
           throw new IllegalArgumentException(
-              "Request type not supported: " + blobStoreControlAdminRequest.getControlRequestType());
+              "Request type not supported: " + blobStoreControlAdminRequest.getStoreControlAction());
       }
     } else {
       error = ServerErrorCode.Bad_Request;
@@ -966,37 +966,35 @@ public class AmbryRequests implements RequestAPI {
    */
   private ServerErrorCode handleStartStoreRequest(PartitionId partitionId) {
     ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.AdminRequest, true);
-    if (error.equals(ServerErrorCode.No_Error)) {
-      if (storeManager.startBlobStore(partitionId)) {
-        Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
-        controlRequestForPartitions(
-            EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest,
-                RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
-                RequestOrResponseType.TtlUpdateRequest), partitionIds, true);
-        if (replicationEngine.controlReplicationForPartitions(partitionIds, Collections.emptyList(), true)) {
-          if (storeManager.controlCompactionForBlobStore(partitionId, true)) {
-            error = ServerErrorCode.No_Error;
-            logger.info("Store is successfully started and functional for partition: {}", partitionId);
-            List<PartitionId> failToUpdateList =
-                storeManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), false);
-            if (!failToUpdateList.isEmpty()) {
-              logger.warn("Fail to remove BlobStore(s) {} from stopped list after start operation completed",
-                  failToUpdateList.toArray());
-            }
-          } else {
-            error = ServerErrorCode.Unknown_Error;
-            logger.error("Enable compaction fails on given BlobStore {}", partitionId);
-          }
-        } else {
-          error = ServerErrorCode.Unknown_Error;
-          logger.error("Could not enable replication on {}", partitionIds);
-        }
-      } else {
-        error = ServerErrorCode.Unknown_Error;
-        logger.error("Starting BlobStore fails on {}", partitionId);
+    if (!error.equals(ServerErrorCode.No_Error)) {
+      logger.debug("Validate request fails for {} with error code {} when trying to start store", partitionId, error);
+      return error;
+    }
+    if (!storeManager.startBlobStore(partitionId)) {
+      logger.error("Starting BlobStore fails on {}", partitionId);
+      return ServerErrorCode.Unknown_Error;
+    }
+    Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
+    controlRequestForPartitions(
+        EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest,
+            RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
+            RequestOrResponseType.TtlUpdateRequest), partitionIds, true);
+    if (!replicationEngine.controlReplicationForPartitions(partitionIds, Collections.emptyList(), true)) {
+      logger.error("Could not enable replication on {}", partitionIds);
+      return ServerErrorCode.Unknown_Error;
+    }
+    if (storeManager.controlCompactionForBlobStore(partitionId, true)) {
+      error = ServerErrorCode.No_Error;
+      logger.info("Store is successfully started and functional for partition: {}", partitionId);
+      List<PartitionId> failToUpdateList =
+          storeManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), false);
+      if (!failToUpdateList.isEmpty()) {
+        logger.warn("Fail to remove BlobStore(s) {} from stopped list after start operation completed",
+            failToUpdateList.toArray());
       }
     } else {
-      logger.debug("Validate request fails for {} with error code {} when trying to start store", partitionId, error);
+      error = ServerErrorCode.Unknown_Error;
+      logger.error("Enable compaction fails on given BlobStore {}", partitionId);
     }
     return error;
   }
@@ -1010,50 +1008,46 @@ public class AmbryRequests implements RequestAPI {
    */
   private ServerErrorCode handleStopStoreRequest(PartitionId partitionId, short numReplicasCaughtUpPerPartition) {
     ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.AdminRequest, false);
-    if (error.equals(ServerErrorCode.No_Error)) {
-      if (numReplicasCaughtUpPerPartition >= 0) {
-        if (storeManager.controlCompactionForBlobStore(partitionId, false)) {
-          Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
-          controlRequestForPartitions(EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
-              RequestOrResponseType.TtlUpdateRequest), partitionIds, false);
-          if (replicationEngine.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(), false)) {
-            if (isRemoteLagLesserOrEqual(partitionIds, 0, numReplicasCaughtUpPerPartition)) {
-              controlRequestForPartitions(
-                  EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.GetRequest),
-                  partitionIds, false);
-              // Shutdown the BlobStore completely
-              if (storeManager.shutdownBlobStore(partitionId)) {
-                error = ServerErrorCode.No_Error;
-                logger.info("Store is successfully shutdown for partition: {}", partitionId);
-                List<PartitionId> failToUpdateList =
-                    storeManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), true);
-                if (!failToUpdateList.isEmpty()) {
-                  logger.warn("Fail to add BlobStore(s) {} to stopped list after stop operation completed",
-                      failToUpdateList.toArray());
-                }
-              } else {
-                error = ServerErrorCode.Unknown_Error;
-                logger.error("Shutting down BlobStore fails on {}", partitionId);
-              }
-            } else {
-              error = ServerErrorCode.Retry_After_Backoff;
-              logger.debug("Catchup not done on {}", partitionIds);
-            }
-          } else {
-            error = ServerErrorCode.Unknown_Error;
-            logger.error("Could not disable replication on {}", partitionIds);
-          }
-        } else {
-          error = ServerErrorCode.Unknown_Error;
-          logger.error("Disable compaction fails on given BlobStore {}", partitionId);
-        }
-      } else {
-        error = ServerErrorCode.Bad_Request;
-        logger.debug("The number of replicas to catch up should not be less or equal to zero {}",
-            numReplicasCaughtUpPerPartition);
+    if (!error.equals(ServerErrorCode.No_Error)) {
+      logger.debug("Validate request fails for {} with error code {} when trying to stop store", partitionId, error);
+      return error;
+    }
+    if (numReplicasCaughtUpPerPartition < 0) {
+      logger.debug("The number of replicas to catch up should not be less than zero {}",
+          numReplicasCaughtUpPerPartition);
+      return ServerErrorCode.Bad_Request;
+    }
+    if (!storeManager.controlCompactionForBlobStore(partitionId, false)) {
+      logger.error("Disable compaction fails on given BlobStore {}", partitionId);
+      return ServerErrorCode.Unknown_Error;
+    }
+    Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
+    controlRequestForPartitions(EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
+        RequestOrResponseType.TtlUpdateRequest), partitionIds, false);
+    if (!replicationEngine.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(), false)) {
+      logger.error("Could not disable replication on {}", partitionIds);
+      return ServerErrorCode.Unknown_Error;
+    }
+    if (!isRemoteLagLesserOrEqual(partitionIds, 0, numReplicasCaughtUpPerPartition)) {
+      logger.debug("Catchup not done on {}", partitionIds);
+      return ServerErrorCode.Retry_After_Backoff;
+    }
+    controlRequestForPartitions(
+        EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.GetRequest), partitionIds,
+        false);
+    // Shutdown the BlobStore completely
+    if (storeManager.shutdownBlobStore(partitionId)) {
+      error = ServerErrorCode.No_Error;
+      logger.info("Store is successfully shutdown for partition: {}", partitionId);
+      List<PartitionId> failToUpdateList =
+          storeManager.setBlobStoreStoppedState(Collections.singletonList(partitionId), true);
+      if (!failToUpdateList.isEmpty()) {
+        logger.warn("Fail to add BlobStore(s) {} to stopped list after stop operation completed",
+            failToUpdateList.toArray());
       }
     } else {
-      logger.debug("Validate request fails for {} with error code {} when trying to stop store", partitionId, error);
+      error = ServerErrorCode.Unknown_Error;
+      logger.error("Shutting down BlobStore fails on {}", partitionId);
     }
     return error;
   }
@@ -1065,32 +1059,28 @@ public class AmbryRequests implements RequestAPI {
    */
   private ServerErrorCode handleAddStoreRequest(PartitionId partitionId) {
     ServerErrorCode errorCode = ServerErrorCode.No_Error;
-    ReplicaId replicaToAdd = clusterMap.getNewReplica(partitionId.toPathString(), currentNode);
-    if (replicaToAdd != null) {
-      // Attempt to add store into storage manager. If store already exists, fail adding store request.
-      if (storeManager.addBlobStore(replicaToAdd)) {
-        // Attempt to add replica into replication manager. If replica already exists, fail adding replica request
-        if (((ReplicationManager) replicationEngine).addReplica(replicaToAdd)) {
-          // Attempt to add replica into stats manager. If replica already exists, fail adding replica request
-          if (statsManager.addReplica(replicaToAdd)) {
-            logger.info("{} is successfully added into storage manager, replication manager and stats manager.",
-                partitionId);
-            localPartitionToReplicaMap.put(partitionId, replicaToAdd);
-          } else {
-            errorCode = ServerErrorCode.Unknown_Error;
-            logger.debug("Failed to add {} into stats manager", partitionId);
-          }
-        } else {
-          errorCode = ServerErrorCode.Unknown_Error;
-          logger.debug("Failed to add {} into replication manager", partitionId);
-        }
-      } else {
-        errorCode = ServerErrorCode.Unknown_Error;
-        logger.debug("Failed to add {} into storage manager", partitionId);
-      }
-    } else {
-      errorCode = ServerErrorCode.Replica_Unavailable;
+    ReplicaId replicaToAdd = clusterMap.getBootstrapReplica(partitionId.toPathString(), currentNode);
+    if (replicaToAdd == null) {
       logger.error("No new replica found for {} in cluster map", partitionId);
+      return ServerErrorCode.Replica_Unavailable;
+    }
+    // Attempt to add store into storage manager. If store already exists, fail adding store request.
+    if (!storeManager.addBlobStore(replicaToAdd)) {
+      logger.debug("Failed to add {} into storage manager", partitionId);
+      return ServerErrorCode.Unknown_Error;
+    }
+    // Attempt to add replica into replication manager. If replica already exists, fail adding replica request
+    if (!((ReplicationManager) replicationEngine).addReplica(replicaToAdd)) {
+      logger.debug("Failed to add {} into replication manager", partitionId);
+      return ServerErrorCode.Unknown_Error;
+    }
+    // Attempt to add replica into stats manager. If replica already exists, fail adding replica request
+    if (statsManager.addReplica(replicaToAdd)) {
+      logger.info("{} is successfully added into storage manager, replication manager and stats manager.", partitionId);
+      localPartitionToReplicaMap.put(partitionId, replicaToAdd);
+    } else {
+      errorCode = ServerErrorCode.Unknown_Error;
+      logger.debug("Failed to add {} into stats manager", partitionId);
     }
     return errorCode;
   }
@@ -1103,22 +1093,21 @@ public class AmbryRequests implements RequestAPI {
   private ServerErrorCode handleRemoveStoreRequest(PartitionId partitionId) throws StoreException, IOException {
     ServerErrorCode errorCode = ServerErrorCode.No_Error;
     ReplicaId replicaId = localPartitionToReplicaMap.get(partitionId);
-    if (replicaId != null) {
-      // Attempt to remove replica from stats manager. If replica doesn't exist, log info but don't fail the request
-      statsManager.removeReplica(replicaId);
-      // Attempt to remove replica from replication manager. If replica doesn't exist, log info but don't fail the request
-      ((ReplicationManager) replicationEngine).removeReplica(replicaId);
-      Store store = ((StorageManager) storeManager).getStore(partitionId, true);
-      // Attempt to remove store from storage manager.
-      if (storeManager.removeBlobStore(partitionId) && store != null) {
-        ((BlobStore) store).deleteStoreFiles();
-        localPartitionToReplicaMap.remove(partitionId);
-      } else {
-        errorCode = ServerErrorCode.Unknown_Error;
-      }
-    } else {
-      errorCode = ServerErrorCode.Partition_Unknown;
+    if (replicaId == null) {
       logger.info("{} doesn't exist on current node", partitionId);
+      return ServerErrorCode.Partition_Unknown;
+    }
+    // Attempt to remove replica from stats manager. If replica doesn't exist, log info but don't fail the request
+    statsManager.removeReplica(replicaId);
+    // Attempt to remove replica from replication manager. If replica doesn't exist, log info but don't fail the request
+    ((ReplicationManager) replicationEngine).removeReplica(replicaId);
+    Store store = ((StorageManager) storeManager).getStore(partitionId, true);
+    // Attempt to remove store from storage manager.
+    if (storeManager.removeBlobStore(partitionId) && store != null) {
+      ((BlobStore) store).deleteStoreFiles();
+      localPartitionToReplicaMap.remove(partitionId);
+    } else {
+      errorCode = ServerErrorCode.Unknown_Error;
     }
     return errorCode;
   }

@@ -672,7 +672,7 @@ public class RequestResponseTest {
    */
   @Test
   public void blobStoreControlAdminRequestTest() throws IOException {
-    for (BlobStoreControlRequestType requestType : EnumSet.allOf(BlobStoreControlRequestType.class)) {
+    for (BlobStoreControlAction requestType : EnumSet.allOf(BlobStoreControlAction.class)) {
       doBlobStoreControlAdminRequestTest(requestType);
     }
   }
@@ -743,7 +743,7 @@ public class RequestResponseTest {
    * @param storeControlRequestType the type of store control request specified in {@link BlobStoreControlAdminRequest}.
    * @throws IOException
    */
-  private void doBlobStoreControlAdminRequestTest(BlobStoreControlRequestType storeControlRequestType)
+  private void doBlobStoreControlAdminRequestTest(BlobStoreControlAction storeControlRequestType)
       throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     PartitionId id = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
@@ -764,10 +764,10 @@ public class RequestResponseTest {
     Assert.assertEquals("Num caught up per partition not as set", numCaughtUpPerPartition,
         deserializedBlobStoreControlRequest.getNumReplicasCaughtUpPerPartition());
     Assert.assertEquals("Control request type is not expected", storeControlRequestType,
-        deserializedBlobStoreControlRequest.getControlRequestType());
+        deserializedBlobStoreControlRequest.getStoreControlAction());
     // test toString method
     String correctString = "BlobStoreControlAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId
-        + ", ControlRequestType=" + deserializedBlobStoreControlRequest.getControlRequestType()
+        + ", ControlRequestType=" + deserializedBlobStoreControlRequest.getStoreControlAction()
         + ", NumReplicasCaughtUpPerPartition="
         + deserializedBlobStoreControlRequest.getNumReplicasCaughtUpPerPartition() + ", PartitionId="
         + deserializedBlobStoreControlRequest.getPartitionId() + "]";

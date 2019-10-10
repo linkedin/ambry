@@ -42,6 +42,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.apache.helix.InstanceType;
@@ -175,9 +177,9 @@ public class VcrReplicationManager extends ReplicationEngine {
       partitionToPartitionInfo.put(partitionId, partitionInfo);
       mountPathToPartitionInfos.compute(cloudReplica.getMountPath(), (key, value) -> {
         // For CloudBackupManager, at most one PartitionInfo in the list.
-        List<PartitionInfo> retList = (value == null) ? new ArrayList<>() : value;
-        retList.add(partitionInfo);
-        return retList;
+        Set<PartitionInfo> retSet = (value == null) ? ConcurrentHashMap.newKeySet() : value;
+        retSet.add(partitionInfo);
+        return retSet;
       });
       partitionStoreMap.put(partitionId.toPathString(), store);
     } else {

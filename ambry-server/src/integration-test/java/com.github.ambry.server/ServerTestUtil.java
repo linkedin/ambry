@@ -64,7 +64,7 @@ import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
-import com.github.ambry.protocol.BlobStoreControlRequestType;
+import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOption;
@@ -402,7 +402,7 @@ final class ServerTestUtil {
       AdminRequest adminRequest =
           new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionIds.get(0), 1, "clientid2");
       BlobStoreControlAdminRequest controlRequest =
-          new BlobStoreControlAdminRequest((short) 0, BlobStoreControlRequestType.StopStore, adminRequest);
+          new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StopStore, adminRequest);
       channel.send(controlRequest);
       stream = channel.receive().getInputStream();
       AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
@@ -444,7 +444,7 @@ final class ServerTestUtil {
       System.out.println("Begin to restart the BlobStore");
       adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionIds.get(0), 1, "clientid2");
       controlRequest =
-          new BlobStoreControlAdminRequest((short) 0, BlobStoreControlRequestType.StartStore, adminRequest);
+          new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StartStore, adminRequest);
       channel.send(controlRequest);
       stream = channel.receive().getInputStream();
       adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
@@ -1345,7 +1345,7 @@ final class ServerTestUtil {
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, 1, "clientid2");
     BlobStoreControlAdminRequest controlRequest =
-        new BlobStoreControlAdminRequest((short) 0, BlobStoreControlRequestType.StopStore, adminRequest);
+        new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StopStore, adminRequest);
     channel.send(controlRequest);
     InputStream stream = channel.receive().getInputStream();
     AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
@@ -1390,7 +1390,7 @@ final class ServerTestUtil {
     // start the store via AdminRequest
     System.out.println("Begin to restart the BlobStore");
     adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, 1, "clientId");
-    controlRequest = new BlobStoreControlAdminRequest((short) 0, BlobStoreControlRequestType.StartStore, adminRequest);
+    controlRequest = new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StartStore, adminRequest);
     channel.send(controlRequest);
     stream = channel.receive().getInputStream();
     adminResponse = AdminResponse.readFrom(new DataInputStream(stream));

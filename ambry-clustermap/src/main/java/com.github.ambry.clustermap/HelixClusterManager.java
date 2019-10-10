@@ -382,51 +382,72 @@ class HelixClusterManager implements ClusterMap {
     return partitionSelectionHelper.getPartitions(partitionClass);
   }
 
+  /**
+   * {@inheritDoc}
+   * To create bootstrap replica, {@link HelixClusterManager} needs to fetch replica info (i.e. capacity, mount path)
+   * from Helix PropertyStore. This method looks up the ZNode in local datacenter and does some validation. Right now,
+   * {@link HelixClusterManager} supports getting bootstrap replica of new partition but it doesn't support getting replica
+   * residing on hosts that are not present in clustermap.
+   * The ZNRecord of REPLICA_ADDITION_ZNODE has following format in mapFields.
+   * <p/>
+   * "mapFields": {
+   *     "1": {
+   *         "replicaCapacityInBytes": 107374182400,
+   *         "partitionClass": "max-replicas-all-datacenters",
+   *         "localhost1_17088": "/tmp/c/1",
+   *         "localhost2_17088": "/tmp/d/1"
+   *     },
+   *     "2": {
+   *         "replicaCapacityInBytes": 107374182400,
+   *         "partitionClass": "max-replicas-all-datacenters",
+   *         "localhost3_17088": "/tmp/e/1"
+   *     }
+   * }
+   * In above example, two bootstrap replicas of partition[1] will be added to localhost1 and localhost2 respectively.
+   * The host name is followed by mount path on which the bootstrap replica should be placed.
+   */
   @Override
-  public ReplicaId getNewReplica(String partitionIdStr, DataNodeId dataNodeId) {
+  public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
     ReplicaId newReplica = null;
     logger.info("Getting ReplicaAddition ZNRecord from HelixPropertyStore in local DC.");
     ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(REPLICA_ADDITION_ZNODE_PATH, null, AccessOption.PERSISTENT);
-    if (zNRecord != null) {
-      String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
-      Map<String, Map<String, String>> partitionToReplicas = zNRecord.getMapFields();
-      Map<String, String> replicaInfos = partitionToReplicas.get(partitionIdStr);
-      if (replicaInfos != null && replicaInfos.containsKey(instanceName)) {
-        long replicaCapacity = Long.valueOf(replicaInfos.get(REPLICAS_CAPACITY_STR));
-        String partitionClass = replicaInfos.get(PARTITION_CLASS_STR);
-        AmbryPartition mappedPartition = partitionNameToAmbryPartition.get(partitionIdStr);
-        if (mappedPartition == null) {
-          logger.info("Partition {} is currently not present in cluster map, creating a new partition.",
-              partitionIdStr);
-          mappedPartition =
-              new AmbryPartition(Long.valueOf(partitionIdStr), partitionClass, helixClusterManagerCallback);
-        }
-        // Check if data node or disk is in current cluster map, if not, set newReplica to null.
-        AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
-        String mountPathFromHelix = replicaInfos.get(instanceName);
-        Set<AmbryDisk> disks = dataNode != null ? ambryDataNodeToAmbryDisks.get(dataNode) : null;
-        Optional<AmbryDisk> potentialDisk =
-            disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPathFromHelix)).findAny()
-                : Optional.empty();
-        if (dataNode != null && potentialDisk.isPresent()) {
-          try {
-            newReplica =
-                new AmbryReplica(clusterMapConfig, mappedPartition, potentialDisk.get(), true, replicaCapacity, false);
-          } catch (Exception e) {
-            logger.error("Failed to create new replica for partition {} on {} due to exception: ", partitionIdStr,
-                instanceName, e);
-            newReplica = null;
-          }
-        } else {
-          logger.error(
-              "Either datanode or disk that associated with new replica is not found in cluster map. Cannot create new replica.");
-        }
-      } else {
-        logger.warn("Partition {} or replica on host {} is not found in replica info map", partitionIdStr,
-            instanceName);
+    if (zNRecord == null) {
+      logger.warn("ZNRecord from HelixPropertyStore is NULL, partition to replicaInfo map doesn't exist.");
+      return null;
+    }
+    String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
+    Map<String, Map<String, String>> partitionToReplicas = zNRecord.getMapFields();
+    Map<String, String> replicaInfos = partitionToReplicas.get(partitionIdStr);
+    if (replicaInfos == null || !replicaInfos.containsKey(instanceName)) {
+      logger.warn("Partition {} or replica on host {} is not found in replica info map", partitionIdStr, instanceName);
+      return null;
+    }
+    long replicaCapacity = Long.parseLong(replicaInfos.get(REPLICAS_CAPACITY_STR));
+    String partitionClass = replicaInfos.get(PARTITION_CLASS_STR);
+    AmbryPartition mappedPartition = partitionNameToAmbryPartition.get(partitionIdStr);
+    if (mappedPartition == null) {
+      logger.info("Partition {} is currently not present in cluster map, creating a new partition.", partitionIdStr);
+      mappedPartition = new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass, helixClusterManagerCallback);
+    }
+    // Check if data node or disk is in current cluster map, if not, set newReplica to null.
+    AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
+    String mountPathFromHelix = replicaInfos.get(instanceName);
+    Set<AmbryDisk> disks = dataNode != null ? ambryDataNodeToAmbryDisks.get(dataNode) : null;
+    Optional<AmbryDisk> potentialDisk =
+        disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPathFromHelix)).findAny()
+            : Optional.empty();
+    if (potentialDisk.isPresent()) {
+      try {
+        newReplica =
+            new AmbryReplica(clusterMapConfig, mappedPartition, potentialDisk.get(), true, replicaCapacity, false);
+      } catch (Exception e) {
+        logger.error("Failed to create new replica for partition {} on {} due to exception: ", partitionIdStr,
+            instanceName, e);
+        newReplica = null;
       }
     } else {
-      logger.warn("ZNRecord from HelixPropertyStore is NULL, partition to replicaInfo map doesn't exist.");
+      logger.error(
+          "Either datanode or disk that associated with new replica is not found in cluster map. Cannot create new replica.");
     }
     return newReplica;
   }
