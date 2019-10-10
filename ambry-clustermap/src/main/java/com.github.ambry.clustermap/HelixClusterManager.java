@@ -408,7 +408,7 @@ class HelixClusterManager implements ClusterMap {
    */
   @Override
   public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
-    ReplicaId newReplica = null;
+    ReplicaId bootstrapReplica = null;
     logger.info("Getting ReplicaAddition ZNRecord from HelixPropertyStore in local DC.");
     ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(REPLICA_ADDITION_ZNODE_PATH, null, AccessOption.PERSISTENT);
     if (zNRecord == null) {
@@ -429,7 +429,7 @@ class HelixClusterManager implements ClusterMap {
       logger.info("Partition {} is currently not present in cluster map, creating a new partition.", partitionIdStr);
       mappedPartition = new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass, helixClusterManagerCallback);
     }
-    // Check if data node or disk is in current cluster map, if not, set newReplica to null.
+    // Check if data node or disk is in current cluster map, if not, set bootstrapReplica to null.
     AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
     String mountPathFromHelix = replicaInfos.get(instanceName);
     Set<AmbryDisk> disks = dataNode != null ? ambryDataNodeToAmbryDisks.get(dataNode) : null;
@@ -438,18 +438,18 @@ class HelixClusterManager implements ClusterMap {
             : Optional.empty();
     if (potentialDisk.isPresent()) {
       try {
-        newReplica =
+        bootstrapReplica =
             new AmbryReplica(clusterMapConfig, mappedPartition, potentialDisk.get(), true, replicaCapacity, false);
       } catch (Exception e) {
-        logger.error("Failed to create new replica for partition {} on {} due to exception: ", partitionIdStr,
+        logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
             instanceName, e);
-        newReplica = null;
+        bootstrapReplica = null;
       }
     } else {
       logger.error(
-          "Either datanode or disk that associated with new replica is not found in cluster map. Cannot create new replica.");
+          "Either datanode or disk that associated with bootstrap replica is not found in cluster map. Cannot create the replica.");
     }
-    return newReplica;
+    return bootstrapReplica;
   }
 
   /**
