@@ -743,8 +743,7 @@ public class RequestResponseTest {
    * @param storeControlRequestType the type of store control request specified in {@link BlobStoreControlAdminRequest}.
    * @throws IOException
    */
-  private void doBlobStoreControlAdminRequestTest(BlobStoreControlAction storeControlRequestType)
-      throws IOException {
+  private void doBlobStoreControlAdminRequestTest(BlobStoreControlAction storeControlRequestType) throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     PartitionId id = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = 1234;
@@ -767,7 +766,7 @@ public class RequestResponseTest {
         deserializedBlobStoreControlRequest.getStoreControlAction());
     // test toString method
     String correctString = "BlobStoreControlAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId
-        + ", ControlRequestType=" + deserializedBlobStoreControlRequest.getStoreControlAction()
+        + ", BlobStoreControlAction=" + deserializedBlobStoreControlRequest.getStoreControlAction()
         + ", NumReplicasCaughtUpPerPartition="
         + deserializedBlobStoreControlRequest.getNumReplicasCaughtUpPerPartition() + ", PartitionId="
         + deserializedBlobStoreControlRequest.getPartitionId() + "]";
