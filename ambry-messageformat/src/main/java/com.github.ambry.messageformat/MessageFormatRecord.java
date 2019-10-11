@@ -298,14 +298,16 @@ public class MessageFormatRecord {
     short getVersion();
 
     /**
-     * @return whether this message header has an update version
+     * @return whether this message header has an life version.  Life Version counts how many times
+     * a blob has been undeleted
      */
-    boolean hasUpdateVersion();
+    boolean hasLifeVersion();
 
     /**
-     * @return the update version of this Message Header Format
+     * @return the life version of this Message Header Format.  Life Version counts how many
+     * times a blob has been undeleted
      */
-    short getUpdateVersion();
+    short getLifeVersion();
 
     /**
      * @return the offset of the message payload (the part after the blob id) relative to the end of the header.
@@ -519,13 +521,13 @@ public class MessageFormatRecord {
     }
 
     @Override
-    public boolean hasUpdateVersion() {
+    public boolean hasLifeVersion() {
       return false;
     }
 
     @Override
-    public short getUpdateVersion() {
-      return -1;
+    public short getLifeVersion() {
+      return 0;
     }
 
     @Override
@@ -759,13 +761,13 @@ public class MessageFormatRecord {
     }
 
     @Override
-    public boolean hasUpdateVersion() {
+    public boolean hasLifeVersion() {
       return false;
     }
 
     @Override
-    public short getUpdateVersion() {
-      return -1;
+    public short getLifeVersion() {
+      return 0;
     }
 
     @Override
@@ -869,7 +871,7 @@ public class MessageFormatRecord {
    *
    *  - - - - - - - - - - -  - - - - - - - - - - - - - -- - -- - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - -
    * |         |           |              |                 |               |           |               |           |           |
-   * | version |  update   | payload size | Blob Encryption | Blob Property | Update    | User Metadata | Blob      | Crc       |
+   * | version |  life   | payload size | Blob Encryption | Blob Property | Update    | User Metadata | Blob      | Crc       |
    * |(2 bytes)|  version  |   (8 bytes)  | Key Relative    | Relative      | Relative  | Relative      | Relative  | (8 bytes) |
    * |         | (2 bytes) |              | Offset          | Offset        | Offset    | Offset        | Offset    |           |
    * |         |           |              | (4 bytes)       | (4 bytes)     | (4 bytes) | (4 bytes)     | (4 bytes) |           |
@@ -878,7 +880,7 @@ public class MessageFormatRecord {
    *
    *  version         - The version of the message header
    *
-   *  update version  - The update version of the message header
+   *  life version  - The life version of the message header
    *
    *  payload size    - The size of the message payload.
    *                    Blob Encryption Key Record Size (if present) + (Blob prop record size or update record size) +
@@ -908,10 +910,10 @@ public class MessageFormatRecord {
 
     private static final Logger logger = LoggerFactory.getLogger(MessageHeader_Format_V3.class);
     // total size field start offset and size
-    public static final int Update_Version_Field_Offset_In_Bytes = Version_Field_Size_In_Bytes;
-    public static final int Update_Version_Field_Size_In_Bytes = 2;
+    public static final int Life_Version_Field_Offset_In_Bytes = Version_Field_Size_In_Bytes;
+    public static final int Life_Version_Field_Size_In_Bytes = 2;
     public static final int Total_Size_Field_Offset_In_Bytes =
-        Update_Version_Field_Size_In_Bytes + Update_Version_Field_Offset_In_Bytes;
+        Life_Version_Field_Size_In_Bytes + Life_Version_Field_Offset_In_Bytes;
     public static final int Total_Size_Field_Size_In_Bytes = 8;
 
     // relative offset fields start offset and size
@@ -933,11 +935,11 @@ public class MessageFormatRecord {
         Blob_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
 
     public static int getHeaderSize() {
-      return Version_Field_Size_In_Bytes + Update_Version_Field_Size_In_Bytes + Total_Size_Field_Size_In_Bytes + (
+      return Version_Field_Size_In_Bytes + Life_Version_Field_Size_In_Bytes + Total_Size_Field_Size_In_Bytes + (
           Number_Of_Relative_Offset_Fields * Relative_Offset_Field_Sizes_In_Bytes) + Crc_Size;
     }
 
-    public static void serializeHeader(ByteBuffer outputBuffer, short updateVersion, long totalSize,
+    public static void serializeHeader(ByteBuffer outputBuffer, short lifeVersion, long totalSize,
         int blobEncryptionKeyRecordRelativeOffset, int blobPropertiesRecordRelativeOffset,
         int updateRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
         throws MessageFormatException {
@@ -945,7 +947,7 @@ public class MessageFormatRecord {
           updateRecordRelativeOffset, userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(Message_Header_Version_V3);
-      outputBuffer.putShort(updateVersion);
+      outputBuffer.putShort(lifeVersion);
       outputBuffer.putLong(totalSize);
       outputBuffer.putInt(blobEncryptionKeyRecordRelativeOffset);
       outputBuffer.putInt(blobPropertiesRecordRelativeOffset);
@@ -956,9 +958,9 @@ public class MessageFormatRecord {
       crc.update(outputBuffer.array(), startOffset, getHeaderSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
       logger.trace(
-          "serializing header : version {} updateVersion {} size {} blobEncryptionKeyRecordRelativeOffset {} blobPropertiesRecordRelativeOffset {} "
+          "serializing header : version {} lifeVersion {} size {} blobEncryptionKeyRecordRelativeOffset {} blobPropertiesRecordRelativeOffset {} "
               + "updateRecordRelativeOffset {} userMetadataRecordRelativeOffset {} blobRecordRelativeOffset {} crc {}",
-          Message_Header_Version_V3, updateVersion, totalSize, blobEncryptionKeyRecordRelativeOffset,
+          Message_Header_Version_V3, lifeVersion, totalSize, blobEncryptionKeyRecordRelativeOffset,
           blobPropertiesRecordRelativeOffset, updateRecordRelativeOffset, userMetadataRecordRelativeOffset,
           blobPropertiesRecordRelativeOffset, crc.getValue());
     }
@@ -1015,12 +1017,12 @@ public class MessageFormatRecord {
     }
 
     @Override
-    public short getUpdateVersion() {
+    public short getLifeVersion() {
       return buffer.getShort(Version_Field_Size_In_Bytes);
     }
 
     @Override
-    public boolean hasUpdateVersion() {
+    public boolean hasLifeVersion() {
       return true;
     }
 
