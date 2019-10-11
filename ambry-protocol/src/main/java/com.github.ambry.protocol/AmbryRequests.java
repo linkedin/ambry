@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.protocol;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
@@ -35,7 +35,6 @@ import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
-import com.github.ambry.network.CompositeSend;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
@@ -43,32 +42,12 @@ import com.github.ambry.network.ServerNetworkResponseMetrics;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.notification.UpdateType;
-import com.github.ambry.protocol.AdminRequest;
-import com.github.ambry.protocol.AdminResponse;
-import com.github.ambry.protocol.BlobStoreControlAdminRequest;
-import com.github.ambry.protocol.CatchupStatusAdminRequest;
-import com.github.ambry.protocol.CatchupStatusAdminResponse;
-import com.github.ambry.protocol.DeleteRequest;
-import com.github.ambry.protocol.DeleteResponse;
-import com.github.ambry.protocol.GetOption;
-import com.github.ambry.protocol.GetRequest;
-import com.github.ambry.protocol.GetResponse;
-import com.github.ambry.protocol.PartitionRequestInfo;
-import com.github.ambry.protocol.PartitionResponseInfo;
-import com.github.ambry.protocol.PutRequest;
-import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.protocol.ReplicaMetadataRequest;
-import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
-import com.github.ambry.protocol.ReplicaMetadataResponse;
-import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
-import com.github.ambry.protocol.ReplicationControlAdminRequest;
-import com.github.ambry.protocol.RequestControlAdminRequest;
-import com.github.ambry.protocol.RequestOrResponseType;
-import com.github.ambry.protocol.TtlUpdateRequest;
-import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
-import com.github.ambry.replication.ReplicationEngine;
+import com.github.ambry.replication.ReplicationAPI;
+import com.github.ambry.server.RequestAPI;
+import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
@@ -114,7 +93,7 @@ public class AmbryRequests implements RequestAPI {
   private final MessageFormatMetrics messageFormatMetrics;
   protected final FindTokenHelper findTokenHelper;
   private final NotificationSystem notification;
-  protected final ReplicationEngine replicationEngine;
+  protected final ReplicationAPI replicationEngine;
   private final StoreKeyFactory storeKeyFactory;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
@@ -125,7 +104,7 @@ public class AmbryRequests implements RequestAPI {
 
   public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
-      NotificationSystem operationNotification, ReplicationEngine replicationEngine, StoreKeyFactory storeKeyFactory,
+      NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
       boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
     this.storeManager = storeManager;
     this.requestResponseChannel = requestResponseChannel;

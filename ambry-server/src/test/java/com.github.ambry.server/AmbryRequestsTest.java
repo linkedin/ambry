@@ -45,6 +45,7 @@ import com.github.ambry.network.SocketRequestResponseChannel;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
@@ -117,6 +118,7 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 
+// TODO: want to move this to ambry-protocol but has dependencies
 /**
  * Tests for {@link AmbryRequests}.
  */

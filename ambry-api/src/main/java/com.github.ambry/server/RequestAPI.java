@@ -21,13 +21,21 @@ import java.io.IOException;
  * This defines the server request API. The commands below are the requests that can be issued against the server
  */
 public interface RequestAPI {
+
   /**
-   * Puts a blob into the store. It accepts a blob property, user metadata and the blob
-   * as a stream and stores them
-   * @param request The request that contains the blob property, user metadata and blob as a stream
-   * @throws IOException
+   * Handle a request.
+   * @param request The request to handle.
    * @throws InterruptedException
    */
+  void handleRequests(Request request) throws InterruptedException;
+
+    /**
+     * Puts a blob into the store. It accepts a blob property, user metadata and the blob
+     * as a stream and stores them
+     * @param request The request that contains the blob property, user metadata and blob as a stream
+     * @throws IOException
+     * @throws InterruptedException
+     */
   void handlePutRequest(Request request) throws IOException, InterruptedException;
 
   /**

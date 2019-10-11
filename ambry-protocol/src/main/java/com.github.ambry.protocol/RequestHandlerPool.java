@@ -11,9 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.protocol;
 
 import com.github.ambry.network.RequestResponseChannel;
+import com.github.ambry.server.RequestAPI;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +29,7 @@ public class RequestHandlerPool {
   private RequestHandler[] handlers = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, AmbryRequests requests) {
+  public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, RequestAPI requests) {
     threads = new Thread[numThreads];
     handlers = new RequestHandler[numThreads];
     for (int i = 0; i < numThreads; i++) {

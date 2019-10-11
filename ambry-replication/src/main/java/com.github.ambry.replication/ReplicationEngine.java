@@ -49,7 +49,7 @@ import org.slf4j.LoggerFactory;
  * 3. Set up replica token persistor used to recover from shutdown/crash
  * 4. Initialize and shutdown all the components required to perform replication
  */
-public abstract class ReplicationEngine {
+public abstract class ReplicationEngine implements ReplicationAPI {
 
   protected final ReplicationConfig replicationConfig;
   protected final ClusterMap clusterMap;
@@ -109,8 +109,6 @@ public abstract class ReplicationEngine {
     this.transformerClassName = transformerClassName;
   }
 
-  abstract public void start() throws ReplicationException;
-
   /**
    * Enables/disables replication of the given {@code ids} from {@code origins}. The disabling is in-memory and
    * therefore is not valid across restarts.
@@ -121,6 +119,7 @@ public abstract class ReplicationEngine {
    * @return {@code true} if disabling succeeded, {@code false} otherwise. Disabling fails if {@code origins} is empty
    * or contains unrecognized datacenters.
    */
+  @Override
   public boolean controlReplicationForPartitions(Collection<PartitionId> ids, List<String> origins, boolean enable) {
     if (origins.isEmpty()) {
       origins = new ArrayList<>(replicaThreadPoolByDc.keySet());
@@ -143,6 +142,7 @@ public abstract class ReplicationEngine {
    * @param replicaPath Replica Path of the replica interested in
    * @param totalBytesRead Total bytes read by the replica
    */
+  @Override
   public void updateTotalBytesReadByRemoteReplica(PartitionId partitionId, String hostName, String replicaPath,
       long totalBytesRead) {
     RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
@@ -158,6 +158,7 @@ public abstract class ReplicationEngine {
    * @param replicaPath The path of the remote replica on the host
    * @return The lag in bytes that the remote replica is behind the local store
    */
+  @Override
   public long getRemoteReplicaLagFromLocalInBytes(PartitionId partitionId, String hostName, String replicaPath) {
     RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
     if (remoteReplicaInfo != null) {
@@ -198,6 +199,7 @@ public abstract class ReplicationEngine {
    * then persists all the replica tokens
    * @throws ReplicationException
    */
+  @Override
   public void shutdown() throws ReplicationException {
     try {
       // stop all replica threads
@@ -330,7 +332,7 @@ public abstract class ReplicationEngine {
    * @throws ReplicationException
    * @throws IOException
    */
-  protected void retrieveReplicaTokensAndPersistIfNecessary(String mountPath) throws ReplicationException, IOException {
+  public void retrieveReplicaTokensAndPersistIfNecessary(String mountPath) throws ReplicationException, IOException {
     boolean tokenWasReset = false;
     long readStartTimeMs = SystemTime.getInstance().milliseconds();
     List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfoList = persistor.retrieve(mountPath);
