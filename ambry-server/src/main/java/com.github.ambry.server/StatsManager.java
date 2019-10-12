@@ -26,7 +26,6 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -356,9 +355,5 @@ class StatsManager {
       }
     }
     return unreachableStores;
-  }
-
-  Map<PartitionId, ReplicaId> getPartitionToReplicaMap() {
-    return Collections.unmodifiableMap(partitionToReplicaMap);
   }
 }
