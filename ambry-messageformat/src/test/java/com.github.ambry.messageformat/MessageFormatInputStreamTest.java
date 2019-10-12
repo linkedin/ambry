@@ -54,14 +54,19 @@ public class MessageFormatInputStreamTest {
    */
   @Test
   public void messageFormatRecordsTest() throws IOException, MessageFormatException {
-    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob, false);
-    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob, false);
-    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob, false);
-    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob, true);
-    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob, true);
+    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob,
+        MessageFormatRecord.Message_Header_Version_V1);
+    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob,
+        MessageFormatRecord.Message_Header_Version_V1);
+    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
+        MessageFormatRecord.Message_Header_Version_V1);
+    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob,
+        MessageFormatRecord.Message_Header_Version_V2);
+    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
+        MessageFormatRecord.Message_Header_Version_V2);
   }
 
-  private void messageFormatRecordsTest(short blobVersion, BlobType blobType, boolean useV2Header)
+  private void messageFormatRecordsTest(short blobVersion, BlobType blobType, short headerVersion)
       throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     StoreKeyFactory keyFactory = new MockIdFactory();
@@ -76,8 +81,7 @@ public class MessageFormatInputStreamTest {
     byte[] data = new byte[blobContentSize];
     new Random().nextBytes(data);
     long blobSize = -1;
-    MessageFormatRecord.headerVersionToUse =
-        useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1;
+    MessageFormatRecord.headerVersionToUse = headerVersion;
     if (blobVersion == MessageFormatRecord.Blob_Version_V1) {
       blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobContentSize);
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.DataBlob) {
@@ -97,12 +101,10 @@ public class MessageFormatInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize,
                 blobType);
 
-    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
-        useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1);
-
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(headerVersion);
     int blobEncryptionKeySize =
-        useV2Header ? MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(
-            ByteBuffer.wrap(encryptionKey)) : 0;
+        headerVersion != MessageFormatRecord.Message_Header_Version_V1 ? MessageFormatRecord.BlobEncryptionKey_Format_V1
+            .getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey)) : 0;
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop);
     int userMetadataSize =
         MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata));
@@ -115,27 +117,43 @@ public class MessageFormatInputStreamTest {
     byte[] headerOutput = new byte[headerSize];
     messageFormatStream.read(headerOutput);
     ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
-    Assert.assertEquals(
-        useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1,
-        headerBuf.getShort());
+    Assert.assertEquals(headerVersion, headerBuf.getShort());
     Assert.assertEquals(blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize + blobSize,
         headerBuf.getLong());
-    if (useV2Header) {
-      Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
-      Assert.assertEquals(headerSize + key.sizeInBytes() + blobEncryptionKeySize, headerBuf.getInt());
-      Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-      Assert.assertEquals(headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize,
-          headerBuf.getInt());
-      Assert.assertEquals(
-          headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize,
-          headerBuf.getInt());
-    } else {
-      Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
-      Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-      Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize, headerBuf.getInt());
-      Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize,
-          headerBuf.getInt());
+    switch (headerVersion) {
+      case MessageFormatRecord.Message_Header_Version_V1:
+        Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
+        Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+        Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize, headerBuf.getInt());
+        Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize,
+            headerBuf.getInt());
+        break;
+      default: //case MessageFormatRecord.Message_Header_Version_V2:
+        Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
+        Assert.assertEquals(headerSize + key.sizeInBytes() + blobEncryptionKeySize, headerBuf.getInt());
+        Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+        Assert.assertEquals(headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize,
+            headerBuf.getInt());
+        Assert.assertEquals(
+            headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize,
+            headerBuf.getInt());
     }
+//    if (headerVersion == MessageFormatRecord.Message_Header_Version_V2) {
+//      Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
+//      Assert.assertEquals(headerSize + key.sizeInBytes() + blobEncryptionKeySize, headerBuf.getInt());
+//      Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+//      Assert.assertEquals(headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize,
+//          headerBuf.getInt());
+//      Assert.assertEquals(
+//          headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize,
+//          headerBuf.getInt());
+//    } else {
+//      Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
+//      Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+//      Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize, headerBuf.getInt());
+//      Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize,
+//          headerBuf.getInt());
+//    }
     Crc32 crc = new Crc32();
     crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
@@ -150,7 +168,7 @@ public class MessageFormatInputStreamTest {
     Assert.assertArrayEquals(dest, key.toBytes());
 
     // verify encryption key
-    if (useV2Header) {
+    if (headerVersion != MessageFormatRecord.Message_Header_Version_V1) {
       byte[] blobEncryptionKeyOutput = new byte[blobEncryptionKeySize];
       ByteBuffer blobEncryptionKeyBuf = ByteBuffer.wrap(blobEncryptionKeyOutput);
       messageFormatStream.read(blobEncryptionKeyOutput);
@@ -215,12 +233,20 @@ public class MessageFormatInputStreamTest {
             blobType);
 
     int totalSize;
-    if (useV2Header) {
-      totalSize = headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize
-          + (int) blobSize;
-    } else {
-      totalSize = headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize + (int) blobSize;
+    switch (headerVersion) {
+      case MessageFormatRecord.Message_Header_Version_V1:
+        totalSize = headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize + (int) blobSize;
+        break;
+      default: //case MessageFormatRecord.Message_Header_Version_V2:
+        totalSize = headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize
+            + (int) blobSize;
     }
+//    if (useV2Header) {
+//      totalSize = headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize
+//          + (int) blobSize;
+//    } else {
+//      totalSize = headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize + (int) blobSize;
+//    }
     ByteBuffer allBuf = ByteBuffer.allocate(totalSize);
     messageFormatStream.read(allBuf.array());
 
@@ -229,7 +255,7 @@ public class MessageFormatInputStreamTest {
     Assert.assertArrayEquals(usermetadata, blobAll.getBlobInfo().getUserMetadata());
     Assert.assertEquals(blobContentSize, blobAll.getBlobData().getSize());
     Assert.assertEquals(blobType, blobAll.getBlobData().getBlobType());
-    if (useV2Header) {
+    if (headerVersion != MessageFormatRecord.Message_Header_Version_V1) {
       Assert.assertEquals(ByteBuffer.wrap(encryptionKey), blobAll.getBlobEncryptionKey());
     } else {
       Assert.assertEquals(null, blobAll.getBlobEncryptionKey());

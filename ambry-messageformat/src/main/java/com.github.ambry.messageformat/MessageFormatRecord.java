@@ -871,7 +871,7 @@ public class MessageFormatRecord {
    *
    *  - - - - - - - - - - -  - - - - - - - - - - - - - -- - -- - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - -
    * |         |           |              |                 |               |           |               |           |           |
-   * | version |  life   | payload size | Blob Encryption | Blob Property | Update    | User Metadata | Blob      | Crc       |
+   * | version |  life     | payload size | Blob Encryption | Blob Property | Update    | User Metadata | Blob      | Crc       |
    * |(2 bytes)|  version  |   (8 bytes)  | Key Relative    | Relative      | Relative  | Relative      | Relative  | (8 bytes) |
    * |         | (2 bytes) |              | Offset          | Offset        | Offset    | Offset        | Offset    |           |
    * |         |           |              | (4 bytes)       | (4 bytes)     | (4 bytes) | (4 bytes)     | (4 bytes) |           |
@@ -943,7 +943,7 @@ public class MessageFormatRecord {
         int blobEncryptionKeyRecordRelativeOffset, int blobPropertiesRecordRelativeOffset,
         int updateRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
         throws MessageFormatException {
-      checkHeaderConstraints(totalSize, blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset,
+      checkHeaderConstraints(totalSize, lifeVersion, blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset,
           updateRecordRelativeOffset, userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(Message_Header_Version_V3);
@@ -972,13 +972,19 @@ public class MessageFormatRecord {
     //    and blobRecordRelativeOffset is positive
     // 3. if updateRecordRelativeOffset is greater than 0, ensures that all the other offsets are set to
     //    Message_Header_Invalid_Relative_Offset
-    private static void checkHeaderConstraints(long totalSize, int blobEncryptionKeyRecordRelativeOffset,
+    private static void checkHeaderConstraints(long totalSize, short lifeVersion, int blobEncryptionKeyRecordRelativeOffset,
         int blobPropertiesRecordRelativeOffset, int updateRecordRelativeOffset, int userMetadataRecordRelativeOffset,
         int blobRecordRelativeOffset) throws MessageFormatException {
       // check constraints
       if (totalSize <= 0) {
         throw new MessageFormatException(
             "checkHeaderConstraints - totalSize " + totalSize + " needs to be greater than 0",
+            MessageFormatErrorCodes.Header_Constraint_Error);
+      }
+
+      if (lifeVersion < 0) {
+        throw new MessageFormatException(
+            "checkHeaderConstraints - lifeVersion " + lifeVersion + " needs to be greater than or equal to 0",
             MessageFormatErrorCodes.Header_Constraint_Error);
       }
 
@@ -1018,7 +1024,7 @@ public class MessageFormatRecord {
 
     @Override
     public short getLifeVersion() {
-      return buffer.getShort(Version_Field_Size_In_Bytes);
+      return buffer.getShort(Life_Version_Field_Offset_In_Bytes);
     }
 
     @Override
@@ -1109,7 +1115,7 @@ public class MessageFormatRecord {
     @Override
     public void verifyHeader() throws MessageFormatException {
       verifyCrc();
-      checkHeaderConstraints(getMessageSize(), getBlobEncryptionKeyRecordRelativeOffset(),
+      checkHeaderConstraints(getMessageSize(), getLifeVersion(), getBlobEncryptionKeyRecordRelativeOffset(),
           getBlobPropertiesRecordRelativeOffset(), getUpdateRecordRelativeOffset(),
           getUserMetadataRecordRelativeOffset(), getBlobRecordRelativeOffset());
     }
