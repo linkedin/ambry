@@ -389,7 +389,7 @@ class HelixClusterManager implements ClusterMap {
    * {@link HelixClusterManager} supports getting bootstrap replica of new partition but it doesn't support getting replica
    * residing on hosts that are not present in clustermap.
    * The ZNRecord of REPLICA_ADDITION_ZNODE has following format in mapFields.
-   * <p/>
+   * <pre>
    * "mapFields": {
    *     "1": {
    *         "replicaCapacityInBytes": 107374182400,
@@ -403,6 +403,7 @@ class HelixClusterManager implements ClusterMap {
    *         "localhost3_17088": "/tmp/e/1"
    *     }
    * }
+   * </pre>
    * In above example, two bootstrap replicas of partition[1] will be added to localhost1 and localhost2 respectively.
    * The host name is followed by mount path on which the bootstrap replica should be placed.
    */
