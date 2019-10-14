@@ -36,6 +36,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -52,7 +54,7 @@ public class CloudTokenPersistorTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     ClusterMap clusterMap = new MockClusterMap();
     DataNodeId dataNodeId = new CloudDataNode(cloudConfig, clusterMapConfig);
-    Map<String, List<PartitionInfo>> mountPathToPartitionInfoList = new HashMap<>();
+    Map<String, Set<PartitionInfo>> mountPathToPartitionInfoList = new HashMap<>();
     BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
     StoreFindTokenFactory factory = new StoreFindTokenFactory(blobIdFactory);
     PartitionId partitionId = clusterMap.getAllPartitionIds(null).get(0);
@@ -70,7 +72,7 @@ public class CloudTokenPersistorTest {
       replicaTokenInfos.add(new RemoteReplicaInfo.ReplicaTokenInfo(remoteReplicaInfo));
     }
     PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, partitionId, null, cloudReplicaId);
-    mountPathToPartitionInfoList.computeIfAbsent(cloudReplicaId.getMountPath(), key -> new ArrayList<>())
+    mountPathToPartitionInfoList.computeIfAbsent(cloudReplicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
         .add(partitionInfo);
 
     LatchBasedInMemoryCloudDestination cloudDestination =

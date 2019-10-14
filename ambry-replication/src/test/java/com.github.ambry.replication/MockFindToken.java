@@ -77,17 +77,4 @@ public class MockFindToken implements FindToken {
   public long getBytesRead() {
     return this.bytesRead;
   }
-
-  public static class MockFindTokenFactory implements FindTokenFactory {
-
-    @Override
-    public FindToken getFindToken(DataInputStream stream) throws IOException {
-      return new MockFindToken(stream);
-    }
-
-    @Override
-    public FindToken getNewFindToken() {
-      return new MockFindToken(0, 0);
-    }
-  }
 }

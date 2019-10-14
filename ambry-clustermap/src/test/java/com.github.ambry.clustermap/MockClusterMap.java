@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.json.JSONArray;
@@ -277,6 +278,19 @@ public class MockClusterMap implements ClusterMap {
   }
 
   /**
+   * Create a new partition and add it to mock clustermap.
+   * @param dataNodes the replicas of new partition should be placed on the given data nodes only.
+   * @return new {@link PartitionId}
+   */
+  public PartitionId createNewPartition(List<MockDataNodeId> dataNodes) {
+    int mountPathIndexToUse = (new Random()).nextInt(this.dataNodes.get(0).getMountPaths().size());
+    PartitionId partitionId =
+        new MockPartitionId(partitions.size(), DEFAULT_PARTITION_CLASS, dataNodes, mountPathIndexToUse);
+    partitions.put((long) partitions.size(), partitionId);
+    return partitionId;
+  }
+
+  /**
    * Return if ssl ports are enabled in this cluster.
    */
   public boolean isSslPortsEnabled() {
@@ -351,8 +365,7 @@ public class MockClusterMap implements ClusterMap {
     for (PartitionId partitionId : partitions.values()) {
       List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
       for (ReplicaId replicaId : replicaIds) {
-        if (replicaId.getDataNodeId().getHostname().compareTo(dataNodeId.getHostname()) == 0
-            && replicaId.getDataNodeId().getPort() == dataNodeId.getPort()) {
+        if (replicaId.getDataNodeId().compareTo(dataNodeId) == 0) {
           replicaIdsToReturn.add(replicaId);
         }
       }
@@ -488,6 +501,19 @@ public class MockClusterMap implements ClusterMap {
     partitions.values().forEach(partitionId -> partitionsJsonArray.put(partitionId.getSnapshot()));
     snapshot.put(PARTITIONS, partitionsJsonArray);
     return snapshot;
+  }
+
+  @Override
+  public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
+    ReplicaId newReplica = null;
+    PartitionId partition = partitions.get(Long.valueOf(partitionIdStr));
+    for (ReplicaId replicaId : partition.getReplicaIds()) {
+      if (replicaId.getDataNodeId().compareTo(dataNodeId) == 0) {
+        newReplica = replicaId;
+        break;
+      }
+    }
+    return newReplica;
   }
 
   @Override

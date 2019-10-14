@@ -18,9 +18,9 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.TestUtils.*;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -48,6 +48,7 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
@@ -87,6 +88,7 @@ public class HelixClusterManagerTest {
 
   // for verifying getPartitions() and getWritablePartitions()
   private static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
+  private static final String NEW_PARTITION_ID_STR = "100";
   private final PartitionRangeCheckParams defaultRw;
   private final PartitionRangeCheckParams specialRw;
   private final PartitionRangeCheckParams defaultRo;
@@ -127,7 +129,7 @@ public class HelixClusterManagerTest {
     int port = 2200;
     byte dcId = (byte) 0;
     for (String dcName : dcs) {
-      dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port++, false));
+      dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port++, true));
     }
     hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
     partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
@@ -135,7 +137,6 @@ public class HelixClusterManagerTest {
     JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
     testHardwareLayout = constructInitialHardwareLayoutJSON(clusterNameStatic);
     testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, 3, localDc);
-
     // for getPartitions() and getWritablePartitions() tests
     assertTrue("There should be more than 1 replica per partition in each DC for some of these tests to work",
         testPartitionLayout.replicaCountPerDc > 1);
@@ -172,7 +173,7 @@ public class HelixClusterManagerTest {
       partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>())
           .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_ONLY_STR);
     }
-    znRecord = new ZNRecord(ClusterMapUtils.PARTITION_OVERRIDE_STR);
+    znRecord = new ZNRecord(PARTITION_OVERRIDE_STR);
     znRecord.setMapFields(partitionOverrideMap);
 
     helixCluster =
@@ -198,7 +199,9 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
     props.setProperty("clustermap.listen.cross.colo", Boolean.toString(listenCrossColo));
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
+    Map<String, ZNRecord> znRecordMap = new HashMap<>();
+    znRecordMap.put(PARTITION_OVERRIDE_ZNODE_PATH, znRecord);
+    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecordMap, null);
     if (useComposite) {
       StaticClusterAgentsFactory staticClusterAgentsFactory =
           new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath);
@@ -218,6 +221,9 @@ public class HelixClusterManagerTest {
   public void after() {
     if (clusterManager != null) {
       clusterManager.close();
+    }
+    for (com.github.ambry.utils.TestUtils.ZkInfo zkInfo : dcsToZkInfo.values()) {
+      zkInfo.shutdown();
     }
   }
 
@@ -294,6 +300,9 @@ public class HelixClusterManagerTest {
   @Test
   public void emptyPartitionOverrideTest() throws Exception {
     assumeTrue(overrideEnabled);
+    // Close the one initialized in the constructor, as this test needs to test fetching override map from property store as well.
+    // Otherwise, the ZNRecord still exists and HelixClusterManager will populate override map based on ZNRecord.
+    clusterManager.close();
     metricRegistry = new MetricRegistry();
     // create a MockHelixManagerFactory
     ClusterMap clusterManagerWithEmptyRecord = new HelixClusterManager(clusterMapConfig, selfInstanceName,
@@ -310,6 +319,115 @@ public class HelixClusterManagerTest {
       writableInCluster = helixCluster.getAllWritablePartitions();
     }
     assertEquals("Mismatch in writable partitions during initialization", writableInCluster, writableInClusterManager);
+  }
+
+  /**
+   * Test HelixClusterManager can get a new replica with given partitionId, hostname and port number.
+   * @throws Exception
+   */
+  @Test
+  public void getNewReplicaTest() throws Exception {
+    assumeTrue(!useComposite);
+    clusterManager.close();
+    metricRegistry = new MetricRegistry();
+    // 1. test the case where ZNRecord is NULL in Helix PropertyStore
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
+            metricRegistry);
+    PartitionId partitionOfNewReplica = helixClusterManager.getAllPartitionIds(null).get(0);
+    DataNode dataNodeOfNewReplica = testHardwareLayout.getAllExistingDataNodes().get(0);
+    assertNull("New replica should be null because no replica infos ZNRecord in Helix",
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), dataNodeOfNewReplica));
+    helixClusterManager.close();
+
+    // Prepare new replica info map in Helix property store. We use the first partition and first data node in HardwareLayout
+    // and PartitionLayout to build the replica info map of an existing partition. Also, we place a new partition on last
+    // data node in HardwareLayout. The format should be as follows.
+    // {
+    //   "0":{
+    //       "partitionClass" : "defaultPartitionClass"
+    //       "replicaCapacityInBytes" : "107374182400"
+    //       "localhost_18088" : "/mnt0"
+    //   }
+    //   "100":{
+    //       "partitionClass" : "defaultPartitionClass"
+    //       "replicaCapacityInBytes" : "107374182400"
+    //       "localhost_18099" : "/mnt5"
+    //       "localhost_18088" : "/mnt10"
+    //       "newhost_001"     : "/mnt0"
+    //   }
+    // }
+    Map<String, Map<String, String>> partitionToReplicaInfosMap = new HashMap<>();
+    // new replica of existing partition
+    Map<String, String> newReplicaInfos1 = new HashMap<>();
+    newReplicaInfos1.put(PARTITION_CLASS_STR, DEFAULT_PARTITION_CLASS);
+    newReplicaInfos1.put(REPLICAS_CAPACITY_STR, String.valueOf(TestPartitionLayout.defaultReplicaCapacityInBytes));
+    newReplicaInfos1.put(dataNodeOfNewReplica.getHostname() + "_" + dataNodeOfNewReplica.getPort(),
+        dataNodeOfNewReplica.getDisks().get(0).getMountPath());
+    partitionToReplicaInfosMap.put(partitionOfNewReplica.toPathString(), newReplicaInfos1);
+    // new replica of a new partition
+    Map<String, String> newReplicaInfos2 = new HashMap<>();
+    newReplicaInfos2.put(PARTITION_CLASS_STR, DEFAULT_PARTITION_CLASS);
+    newReplicaInfos2.put(REPLICAS_CAPACITY_STR, String.valueOf(TestPartitionLayout.defaultReplicaCapacityInBytes));
+    DataNode dataNodeOfNewPartition =
+        testHardwareLayout.getAllExistingDataNodes().get(testHardwareLayout.getDataNodeCount() - 1);
+    int diskNum = dataNodeOfNewPartition.getDisks().size();
+    newReplicaInfos2.put(dataNodeOfNewPartition.getHostname() + "_" + dataNodeOfNewPartition.getPort(),
+        dataNodeOfNewPartition.getDisks().get(diskNum - 1).getMountPath());
+    // add two fake entries (fake disk and fake host)
+    newReplicaInfos2.put(getInstanceName(dataNodeOfNewReplica.getHostname(), dataNodeOfNewReplica.getPort()), "/mnt10");
+    newReplicaInfos2.put("newhost_100", "/mnt0");
+    partitionToReplicaInfosMap.put(NEW_PARTITION_ID_STR, newReplicaInfos2);
+    // fake node that doesn't exist in current clustermap
+    DataNodeId fakeNode = Mockito.mock(DataNode.class);
+    Mockito.when(fakeNode.getHostname()).thenReturn("new_host");
+    Mockito.when(fakeNode.getPort()).thenReturn(100);
+    // set ZNRecord
+    ZNRecord replicaInfosZNRecord = new ZNRecord(REPLICA_ADDITION_STR);
+    replicaInfosZNRecord.setMapFields(partitionToReplicaInfosMap);
+    // populate znRecordMap
+    Map<String, ZNRecord> znRecordMap = new HashMap<>();
+    znRecordMap.put(REPLICA_ADDITION_ZNODE_PATH, replicaInfosZNRecord);
+    // create a new cluster manager
+    metricRegistry = new MetricRegistry();
+    helixClusterManager = new HelixClusterManager(clusterMapConfig, hostname,
+        new MockHelixManagerFactory(helixCluster, znRecordMap, null), metricRegistry);
+
+    // 2. test that cases: 1) partition is not found  2) host is not found in helix property store that associates with new replica
+    // select a partition that doesn't equal to partitionOfNewReplica
+    PartitionId partitionForTest;
+    Random random = new Random();
+    List<PartitionId> partitionsInClusterManager = helixClusterManager.getAllPartitionIds(null);
+    do {
+      partitionForTest = partitionsInClusterManager.get(random.nextInt(partitionsInClusterManager.size()));
+    } while (partitionForTest.toString().equals(partitionOfNewReplica.toString()));
+    assertNull("New replica should be null because given partition id is not in Helix property store",
+        helixClusterManager.getBootstrapReplica(partitionForTest.toPathString(), dataNodeOfNewReplica));
+    // select partitionOfNewReplica but a random node that doesn't equal to
+    DataNode dataNodeForTest;
+    List<DataNode> dataNodesInHardwareLayout = testHardwareLayout.getAllExistingDataNodes();
+    do {
+      dataNodeForTest = dataNodesInHardwareLayout.get(random.nextInt(dataNodesInHardwareLayout.size()));
+    } while (dataNodeForTest == dataNodeOfNewReplica);
+    assertNull("New replica should be null because hostname is not found in replica info map",
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), dataNodeForTest));
+
+    // 3. test that new replica is from a new partition which doesn't exist in current cluster yet. (Mock adding new partition case)
+    //    3.1 test new partition on host that is not present in current clustermap
+    assertNull("New replica should be null because host is not present in clustermap",
+        helixClusterManager.getBootstrapReplica(NEW_PARTITION_ID_STR, fakeNode));
+    //    3.2 test new partition on disk that doesn't exist
+    assertNull("New replica should be null because disk doesn't exist",
+        helixClusterManager.getBootstrapReplica(NEW_PARTITION_ID_STR, dataNodeOfNewReplica));
+    //    3.3 test replica is created for new partition
+    assertNotNull("New replica should be created successfully",
+        helixClusterManager.getBootstrapReplica(NEW_PARTITION_ID_STR, dataNodeOfNewPartition));
+
+    // 4. test that new replica of existing partition is successfully created based on infos from Helix property store.
+    assertNotNull("New replica should be created successfully",
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), dataNodeOfNewReplica));
+
+    helixClusterManager.close();
   }
 
   /**
@@ -584,7 +702,9 @@ public class HelixClusterManagerTest {
       Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
       helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
       clusterManager.close();
-      MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
+      Map<String, ZNRecord> znRecordMap = new HashMap<>();
+      znRecordMap.put(PARTITION_OVERRIDE_ZNODE_PATH, znRecord);
+      MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecordMap, null);
       HelixClusterManager clusterManager =
           new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
       // Ensure the new RW partition is added
@@ -1037,18 +1157,19 @@ public class HelixClusterManagerTest {
   private static class MockHelixManagerFactory extends HelixFactory {
     private final MockHelixCluster helixCluster;
     private final Exception beBadException;
-    private final ZNRecord znRecord;
+    private final Map<String, ZNRecord> znRecordMap;
 
     /**
      * Construct this factory
      * @param helixCluster the {@link MockHelixCluster} that this factory's manager will be associated with.
-     * @param znRecord the {@link ZNRecord} that will be used to set HelixPropertyStore by this factory's manager.
+     * @param znRecordMap A map that maps ZNode path to corresponding {@link ZNRecord} that will be used in HelixPropertyStore.
      * @param beBadException the {@link Exception} that the Helix Manager constructed by this factory will throw.
      */
-    MockHelixManagerFactory(MockHelixCluster helixCluster, ZNRecord znRecord, Exception beBadException) {
+    MockHelixManagerFactory(MockHelixCluster helixCluster, Map<String, ZNRecord> znRecordMap,
+        Exception beBadException) {
       this.helixCluster = helixCluster;
       this.beBadException = beBadException;
-      this.znRecord = znRecord;
+      this.znRecordMap = znRecordMap;
     }
 
     /**
@@ -1061,7 +1182,7 @@ public class HelixClusterManagerTest {
      */
     HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
       if (helixCluster.getZkAddrs().contains(zkAddr)) {
-        return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, znRecord, beBadException);
+        return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, znRecordMap, beBadException);
       } else {
         throw new IllegalArgumentException("Invalid ZkAddr");
       }

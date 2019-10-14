@@ -27,7 +27,7 @@ public class ReplicationConfig {
   /**
    * The factory class the replication uses to create cloud token
    */
-  @Config("replication.cloudtoken.factory")
+  @Config("replication.cloud.token.factory")
   @Default("com.github.ambry.cloud.CloudFindTokenFactory")
   public final String replicationCloudTokenFactory;
 
@@ -134,7 +134,7 @@ public class ReplicationConfig {
   /**
    * The version of metadata request to be used for replication.
    */
-  @Config("replication.metadatarequest.version")
+  @Config("replication.metadata.request.version")
   @Default("1")
   public final short replicaMetadataRequestVersion;
 
@@ -142,7 +142,7 @@ public class ReplicationConfig {
 
     replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
-    replicationCloudTokenFactory = verifiableProperties.getString("replication.cloudtoken.factory",
+    replicationCloudTokenFactory = verifiableProperties.getString("replication.cloud.token.factory",
         "com.github.ambry.cloud.CloudFindTokenFactory");
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
@@ -172,6 +172,6 @@ public class ReplicationConfig {
     replicationTrackPerPartitionLagFromRemote =
         verifiableProperties.getBoolean("replication.track.per.partition.lag.from.remote", false);
     replicaMetadataRequestVersion =
-        verifiableProperties.getShortInRange("replication.metadatarequest.version", (short) 1, (short) 1, (short) 2);
+        verifiableProperties.getShortInRange("replication.metadata.request.version", (short) 1, (short) 1, (short) 2);
   }
 }

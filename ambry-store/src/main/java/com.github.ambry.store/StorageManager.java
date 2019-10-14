@@ -43,8 +43,8 @@ import org.slf4j.LoggerFactory;
  * {@link DiskManager}
  */
 public class StorageManager implements StoreManager {
-  private final ConcurrentMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
-  private final ConcurrentMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
   private final StorageManagerMetrics metrics;
   private final Time time;
   private final StoreConfig storeConfig;
@@ -161,8 +161,18 @@ public class StorageManager implements StoreManager {
 
   @Override
   public Store getStore(PartitionId id) {
+    return getStore(id, false);
+  }
+
+  /**
+   * @param id the {@link PartitionId} to find the store for.
+   * @param skipStateCheck whether to skip checking state of the store. if true, it also returns store that is not started yet.
+   * @return the {@link Store} corresponding to the given {@link PartitionId}, or {@code null} if no store was found for
+   *         that partition, or that store was not started.
+   */
+  public Store getStore(PartitionId id, boolean skipStateCheck) {
     DiskManager diskManager = partitionToDiskManager.get(id);
-    return diskManager != null ? diskManager.getStore(id) : null;
+    return diskManager != null ? diskManager.getStore(id, skipStateCheck) : null;
   }
 
   @Override
@@ -247,6 +257,7 @@ public class StorageManager implements StoreManager {
   @Override
   public boolean addBlobStore(ReplicaId replica) {
     if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
+      logger.info("{} already exists in storage manager, rejecting adding store request", replica.getPartitionId());
       return false;
     }
     DiskManager diskManager = diskToDiskManager.computeIfAbsent(replica.getDiskId(), disk -> {
@@ -289,7 +300,7 @@ public class StorageManager implements StoreManager {
     DiskManager diskManager = partitionToDiskManager.get(id);
     if (diskManager == null) {
       logger.info("Store {} is not found in storage manager", id);
-      return true;
+      return false;
     }
     if (!diskManager.removeBlobStore(id)) {
       logger.error("Fail to remove store {} from disk manager", id);

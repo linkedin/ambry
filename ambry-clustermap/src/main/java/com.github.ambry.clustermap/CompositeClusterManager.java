@@ -288,6 +288,11 @@ class CompositeClusterManager implements ClusterMap {
   }
 
   @Override
+  public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
+    return helixClusterManager.getBootstrapReplica(partitionIdStr, dataNodeId);
+  }
+
+  @Override
   public void close() {
     staticClusterManager.close();
     if (helixClusterManager != null) {

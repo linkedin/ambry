@@ -23,8 +23,8 @@ import java.io.IOException;
 public class BlobStoreControlAdminRequest extends AdminRequest {
   private static final short VERSION_V1 = 1;
   private final short numReplicasCaughtUpPerPartition;
-  private final boolean enable;
   private final long sizeInBytes;
+  private final BlobStoreControlAction storeControlAction;
 
   /**
    * Reads from a stream and constructs a {@link BlobStoreControlAdminRequest}.
@@ -35,21 +35,28 @@ public class BlobStoreControlAdminRequest extends AdminRequest {
    */
   public static BlobStoreControlAdminRequest readFrom(DataInputStream stream, AdminRequest adminRequest)
       throws IOException {
+    // read the version
     Short versionId = stream.readShort();
     if (!versionId.equals(VERSION_V1)) {
       throw new IllegalStateException("Unrecognized version for BlobStoreControlAdminRequest: " + versionId);
     }
     short numReplicasCaughtUpPerPartition = stream.readShort();
-    boolean enable = stream.readByte() == 1;
-    return new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, enable, adminRequest);
+    BlobStoreControlAction controlRequestType = BlobStoreControlAction.values()[stream.readByte()];
+    return new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, controlRequestType, adminRequest);
   }
 
-  public BlobStoreControlAdminRequest(short numReplicasCaughtUpPerPartition, boolean enable,
+  /**
+   * Ctor for {@link BlobStoreControlAdminRequest}
+   * @param numReplicasCaughtUpPerPartition the number of replicas that have to be within specified threshold per partition.
+   * @param storeControlAction the type of control request against blob store, defined in {@link BlobStoreControlAction}.
+   * @param adminRequest the {@link AdminRequest} that contains common admin request related information.
+   */
+  public BlobStoreControlAdminRequest(short numReplicasCaughtUpPerPartition, BlobStoreControlAction storeControlAction,
       AdminRequest adminRequest) {
     super(AdminRequestOrResponseType.BlobStoreControl, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
         adminRequest.getClientId());
     this.numReplicasCaughtUpPerPartition = numReplicasCaughtUpPerPartition;
-    this.enable = enable;
+    this.storeControlAction = storeControlAction;
     // parent size + version size + numReplicasCaughtUpPerPartition size + enable flag size
     sizeInBytes = super.sizeInBytes() + Short.BYTES + Short.BYTES + Byte.BYTES;
   }
@@ -61,11 +68,8 @@ public class BlobStoreControlAdminRequest extends AdminRequest {
     return numReplicasCaughtUpPerPartition;
   }
 
-  /**
-   * @return if BlobStore needs to be enabled/started ({@code true}) or disabled/stopped ({@code false}).
-   */
-  public boolean shouldEnable() {
-    return enable;
+  public BlobStoreControlAction getStoreControlAction() {
+    return storeControlAction;
   }
 
   @Override
@@ -76,8 +80,8 @@ public class BlobStoreControlAdminRequest extends AdminRequest {
   @Override
   public String toString() {
     return "BlobStoreControlAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId
-        + ", NumReplicasCaughtUpPerPartition=" + numReplicasCaughtUpPerPartition + ", PartitionId=" + getPartitionId()
-        + "]";
+        + ", BlobStoreControlAction=" + storeControlAction + ", NumReplicasCaughtUpPerPartition="
+        + numReplicasCaughtUpPerPartition + ", PartitionId=" + getPartitionId() + "]";
   }
 
   @Override
@@ -85,6 +89,6 @@ public class BlobStoreControlAdminRequest extends AdminRequest {
     super.serializeIntoBuffer();
     bufferToSend.putShort(VERSION_V1);
     bufferToSend.putShort(numReplicasCaughtUpPerPartition);
-    bufferToSend.put(enable ? (byte) 1 : 0);
+    bufferToSend.put((byte) storeControlAction.ordinal());
   }
 }

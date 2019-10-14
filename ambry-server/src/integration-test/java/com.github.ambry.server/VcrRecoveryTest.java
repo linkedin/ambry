@@ -57,7 +57,7 @@ public class VcrRecoveryTest {
   public void cloudRecoveryTest() throws Exception {
     String dcName = "DC1";
     Properties recoveryProperties = new Properties();
-    recoveryProperties.setProperty("replication.metadatarequest.version", "2");
+    recoveryProperties.setProperty("replication.metadata.request.version", "2");
 
     // create vcr node
     Port vcrClusterMapPort = new Port(12310, PortType.PLAINTEXT);

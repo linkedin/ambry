@@ -36,6 +36,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,8 +47,9 @@ import org.slf4j.LoggerFactory;
  */
 class DiskManager {
 
-  private final Map<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
-  private final Map<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();
+  private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
   private final Time time;
@@ -127,6 +130,7 @@ class DiskManager {
   void start() throws InterruptedException {
     long startTimeMs = time.milliseconds();
     final AtomicInteger numStoreFailures = new AtomicInteger(0);
+    rwLock.readLock().lock();
     try {
       checkMountPathAccessible();
 
@@ -181,6 +185,7 @@ class DiskManager {
         metrics.totalStoreStartFailures.inc(numStoreFailures.get());
       }
       metrics.diskStartTimeMs.update(time.milliseconds() - startTimeMs);
+      rwLock.readLock().unlock();
     }
   }
 
@@ -190,6 +195,7 @@ class DiskManager {
    */
   void shutdown() throws InterruptedException {
     long startTimeMs = time.milliseconds();
+    rwLock.readLock().lock();
     try {
       running = false;
       compactionManager.disable();
@@ -225,18 +231,27 @@ class DiskManager {
         logger.error("Could not terminate long live tasks after DiskManager shutdown");
       }
     } finally {
+      rwLock.readLock().unlock();
       metrics.diskShutdownTimeMs.update(time.milliseconds() - startTimeMs);
     }
   }
 
   /**
    * @param id the {@link PartitionId} to find the store for.
+   * @param skipStateCheck whether to skip checking state of store.
    * @return the associated {@link Store}, or {@code null} if the partition is not on this disk, or the store is not
    *         started.
    */
-  Store getStore(PartitionId id) {
-    BlobStore store = stores.get(id);
-    return (running && store != null && store.isStarted()) ? store : null;
+  Store getStore(PartitionId id, boolean skipStateCheck) {
+    BlobStore storeToReturn;
+    rwLock.readLock().lock();
+    try {
+      BlobStore store = stores.get(id);
+      storeToReturn = (running && store != null && (store.isStarted() || skipStateCheck)) ? store : null;
+    } finally {
+      rwLock.readLock().unlock();
+    }
+    return storeToReturn;
   }
 
   /**
@@ -259,7 +274,7 @@ class DiskManager {
    * @return {@code true} if the scheduling was successful. {@code false} if not.
    */
   boolean scheduleNextForCompaction(PartitionId id) {
-    BlobStore store = (BlobStore) getStore(id);
+    BlobStore store = (BlobStore) getStore(id, false);
     return store != null && compactionManager.scheduleNextForCompaction(store);
   }
 
@@ -270,12 +285,18 @@ class DiskManager {
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
-    BlobStore store = stores.get(id);
-    if (store == null) {
-      return false;
+    rwLock.readLock().lock();
+    boolean succeed = false;
+    try {
+      BlobStore store = stores.get(id);
+      if (store != null) {
+        compactionManager.controlCompactionForBlobStore(store, enabled);
+        succeed = true;
+      }
+    } finally {
+      rwLock.readLock().unlock();
     }
-    compactionManager.controlCompactionForBlobStore(store, enabled);
-    return true;
+    return succeed;
   }
 
   /**
@@ -284,33 +305,34 @@ class DiskManager {
    * @return {@code true} if adding store was successful. {@code false} if not.
    */
   boolean addBlobStore(ReplicaId replica) {
-    if (!running) {
-      logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
-      return false;
-    }
-    boolean succeed = true;
-    BlobStore store =
-        new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-            storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
-            time);
+    rwLock.writeLock().lock();
+    boolean succeed = false;
     try {
-      // TODO In future PR, store.start() should contain logic for recovery  OFFLINE -> BOOTSTRAP -> STANDBY
-      store.start();
-      // collect store segment requirements and add into DiskSpaceAllocator
-      List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
-      diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
+      if (!running) {
+        logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
+      } else {
+        BlobStore store =
+            new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
+                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
+                time);
+        // TODO In future PR, store.start() should contain logic for recovery  OFFLINE -> BOOTSTRAP -> STANDBY
+        store.start();
+        // collect store segment requirements and add into DiskSpaceAllocator
+        List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
+        diskSpaceAllocator.addRequiredSegments(diskSpaceAllocator.getOverallRequirements(storeRequirements), false);
+        // add store into CompactionManager
+        compactionManager.addBlobStore(store);
+        // add new created store into in-memory data structures.
+        stores.put(replica.getPartitionId(), store);
+        partitionToReplicaMap.put(replica.getPartitionId(), replica);
+        logger.info("New store is successfully added into DiskManager.");
+        succeed = true;
+      }
     } catch (Exception e) {
       logger.error("Failed to start new added store {} or add requirements to disk allocator",
           replica.getPartitionId());
-      succeed = false;
-    }
-    if (succeed) {
-      // add store into CompactionManager
-      compactionManager.addBlobStore(store);
-      // add new created store into in-memory data structures.
-      stores.put(replica.getPartitionId(), store);
-      partitionToReplicaMap.put(replica.getPartitionId(), replica);
-      logger.info("New store is successfully added into DiskManager.");
+    } finally {
+      rwLock.writeLock().unlock();
     }
     return succeed;
   }
@@ -321,20 +343,24 @@ class DiskManager {
    * @return {@code true} if start store was successful. {@code false} if not.
    */
   boolean startBlobStore(PartitionId id) {
-    BlobStore store = stores.get(id);
-    if (store == null || !running) {
-      return false;
-    } else if (store.isStarted()) {
-      return true;
-    } else {
-      try {
+    rwLock.readLock().lock();
+    boolean succeed = false;
+    try {
+      BlobStore store = stores.get(id);
+      if (store == null || !running) {
+        logger.error("Failed to start store because {} is not found or DiskManager is not running.", id);
+      } else if (store.isStarted()) {
+        succeed = true;
+      } else {
         store.start();
-      } catch (Exception e) {
-        logger.error("Exception while starting store {} on disk {}", id, disk, e);
-        return false;
+        succeed = true;
       }
-      return true;
+    } catch (Exception e) {
+      logger.error("Exception while starting store {} on disk {}", id, disk, e);
+    } finally {
+      rwLock.readLock().unlock();
     }
+    return succeed;
   }
 
   /**
@@ -343,20 +369,24 @@ class DiskManager {
    * @return {@code true} if shutdown store was successful. {@code false} if not.
    */
   boolean shutdownBlobStore(PartitionId id) {
-    BlobStore store = stores.get(id);
-    if (store == null || !running) {
-      return false;
-    } else if (!store.isStarted()) {
-      return true;
-    } else {
-      try {
+    rwLock.readLock().lock();
+    boolean succeed = false;
+    try {
+      BlobStore store = stores.get(id);
+      if (store == null || !running) {
+        logger.error("Failed to shut down store because {} is not found or DiskManager is not running", id);
+      } else if (!store.isStarted()) {
+        succeed = true;
+      } else {
         store.shutdown();
-      } catch (Exception e) {
-        logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
-        return false;
+        succeed = true;
       }
-      return true;
+    } catch (Exception e) {
+      logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
+    } finally {
+      rwLock.readLock().unlock();
     }
+    return succeed;
   }
 
   /**
@@ -365,24 +395,27 @@ class DiskManager {
    * @return {@code true} if store removal was successful. {@code false} if not.
    */
   boolean removeBlobStore(PartitionId id) {
-    BlobStore store = stores.get(id);
-    if (store == null) {
-      logger.info("Store {} is not found in disk manager", id);
-      return true;
+    rwLock.writeLock().lock();
+    boolean succeed = false;
+    try {
+      BlobStore store = stores.get(id);
+      if (store == null) {
+        logger.error("Store {} is not found in disk manager", id);
+      } else if (!running || store.isStarted()) {
+        logger.error("Removing store {} failed. Disk running = {}, store running = {}", id, running, store.isStarted());
+      } else if (!compactionManager.removeBlobStore(store)) {
+        logger.error("Fail to remove store {} from compaction manager.", id);
+      } else {
+        stores.remove(id);
+        stoppedReplicas.remove(id.toPathString());
+        partitionToReplicaMap.remove(id);
+        logger.info("Store {} is successfully removed from disk manager", id);
+        succeed = true;
+      }
+    } finally {
+      rwLock.writeLock().unlock();
     }
-    if (!running || store.isStarted()) {
-      logger.error("Removing store {} failed. Disk running = {}, store running = {}", id, running, store.isStarted());
-      return false;
-    }
-    if (!compactionManager.removeBlobStore(store)) {
-      logger.error("Fail to remove store {} from compaction manager.", id);
-      return false;
-    }
-    stores.remove(id);
-    stoppedReplicas.remove(id.toPathString());
-    partitionToReplicaMap.remove(id);
-    logger.info("Store {} is successfully removed from disk manager", id);
-    return true;
+    return succeed;
   }
 
   /**
@@ -394,15 +427,20 @@ class DiskManager {
   List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop) {
     Set<PartitionId> failToUpdateStores = new HashSet<>();
     List<ReplicaId> replicasToUpdate = new ArrayList<>();
-    for (PartitionId id : partitionIds) {
-      BlobStore store = stores.get(id);
-      if (store == null) {
-        // no need to check if the store is started because this method could be called after store is successfully shutdown.
-        logger.error("store is not found on this disk when trying to update stoppedReplicas list");
-        failToUpdateStores.add(id);
-      } else {
-        replicasToUpdate.add(partitionToReplicaMap.get(id));
+    rwLock.readLock().lock();
+    try {
+      for (PartitionId id : partitionIds) {
+        BlobStore store = stores.get(id);
+        if (store == null) {
+          // no need to check if the store is started because this method could be called after store is successfully shutdown.
+          logger.error("store is not found on this disk when trying to update stoppedReplicas list");
+          failToUpdateStores.add(id);
+        } else {
+          replicasToUpdate.add(partitionToReplicaMap.get(id));
+        }
       }
+    } finally {
+      rwLock.readLock().unlock();
     }
     boolean updated = false;
     if (replicaStatusDelegate != null) {
@@ -457,12 +495,19 @@ class DiskManager {
    * @return {@code true} if all stores are down. {@code false} at least one store is up.
    */
   boolean areAllStoresDown() {
-    for (BlobStore store : stores.values()) {
-      if (store.isStarted()) {
-        return false;
+    rwLock.readLock().lock();
+    boolean storesAllDown = true;
+    try {
+      for (BlobStore store : stores.values()) {
+        if (store.isStarted()) {
+          storesAllDown = false;
+          break;
+        }
       }
+    } finally {
+      rwLock.readLock().unlock();
     }
-    return true;
+    return storesAllDown;
   }
 
   /**

@@ -123,6 +123,16 @@ public interface ClusterMap extends AutoCloseable {
   JSONObject getSnapshot();
 
   /**
+   * Attempt to get a bootstrap replica of certain partition that is supposed to be added onto specified data node.
+   * This method is designed to fetch detailed infos about bootstrap replica and create an instance of this replica. The
+   * purpose is to support dynamically adding new replica to specified data node.
+   * @param partitionIdStr the partition id string
+   * @param dataNodeId the {@link DataNodeId} on which bootstrap replica is placed
+   * @return {@link ReplicaId} if there is a new replica satisfying given partition and data node. {@code null} otherwise.
+   */
+  ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId);
+
+  /**
    * Close the cluster map. Any cleanups should be done in this call.
    */
   @Override

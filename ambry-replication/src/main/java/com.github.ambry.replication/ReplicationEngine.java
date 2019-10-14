@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -72,7 +73,7 @@ public abstract class ReplicationEngine {
   protected final FindTokenHelper tokenHelper;
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
-  protected final Map<String, List<PartitionInfo>> mountPathToPartitionInfos;
+  protected final Map<String, Set<PartitionInfo>> mountPathToPartitionInfos;
   protected ReplicaTokenPersistor persistor = null;
 
   protected static final short Replication_Delay_Multiplier = 5;
@@ -194,7 +195,7 @@ public abstract class ReplicationEngine {
   }
 
   /**
-   * Shutsdown the replication manager. Shutsdown the individual replica threads and
+   * Shuts down the replication manager. Shuts down the individual replica threads and
    * then persists all the replica tokens
    * @throws ReplicationException
    */
@@ -224,7 +225,7 @@ public abstract class ReplicationEngine {
   protected void removeRemoteReplicaInfoFromReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos) {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
       // Thread safe with addRemoteReplicaInfoToReplicaThread.
-      // For ReplicationManger, this method is not used.
+      // For ReplicationManger, for same thread, removeRemoteReplicaInfo() ensures lock is held by only one thread at any time.
       // For CloudBackUpManager with HelixVcrCluster, Helix requires acknowledgement before next message for the same
       // resource, which means methods in HelixVcrStateModel will be executed sequentially for same partition.
       // So do listener actions in addPartition() and removePartition().

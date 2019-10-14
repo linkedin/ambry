@@ -133,7 +133,7 @@ class StatsManager {
    */
   void collectAndAggregate(StatsSnapshot aggregatedSnapshot, PartitionId partitionId,
       List<PartitionId> unreachablePartitions) {
-    Store store = storageManager.getStore(partitionId);
+    Store store = storageManager.getStore(partitionId, false);
     if (store == null) {
       unreachablePartitions.add(partitionId);
     } else {
@@ -158,7 +158,7 @@ class StatsManager {
   StatsSnapshot fetchSnapshot(PartitionId partitionId, List<PartitionId> unreachablePartitions,
       StatsReportType reportType) {
     StatsSnapshot statsSnapshot = null;
-    Store store = storageManager.getStore(partitionId);
+    Store store = storageManager.getStore(partitionId, false);
     if (store == null) {
       unreachablePartitions.add(partitionId);
     } else {
