@@ -25,12 +25,15 @@ public class MessageInfo {
   private final StoreKey key;
   private final long size;
   private final long expirationTimeInMs;
+  //TODO Replace booleans with enum defining MessageInfoType {PUT, DELETE, TTL_UPDATE, UNDELETE}
   private final boolean isDeleted;
   private final boolean isTtlUpdated;
+  private final boolean isUndeleted;
   private final Long crc;
   private final short accountId;
   private final short containerId;
   private final long operationTimeMs;
+  private final short lifeVersion;
 
   /**
    * Construct an instance of MessageInfo.
@@ -74,7 +77,8 @@ public class MessageInfo {
    */
   public MessageInfo(StoreKey key, long size, boolean deleted, boolean ttlUpdated, long expirationTimeInMs,
       short accountId, short containerId, long operationTimeMs) {
-    this(key, size, deleted, ttlUpdated, expirationTimeInMs, null, accountId, containerId, operationTimeMs);
+    this(key, size, deleted, ttlUpdated, false, expirationTimeInMs, null, accountId, containerId, operationTimeMs,
+        (short) 0);
   }
 
   /**
@@ -103,6 +107,25 @@ public class MessageInfo {
    */
   public MessageInfo(StoreKey key, long size, boolean deleted, boolean ttlUpdated, long expirationTimeInMs, Long crc,
       short accountId, short containerId, long operationTimeMs) {
+    this(key, size, deleted, ttlUpdated, false, expirationTimeInMs, crc, accountId, containerId, operationTimeMs,
+        (short) 0);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message in bytes.
+   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
+   * @param ttlUpdated {@code true} if the message's ttl has been updated, {@code false} otherwise
+   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
+   * @param crc the crc associated with this message. If unavailable, pass in null.
+   * @param accountId accountId of the blob
+   * @param containerId containerId of the blob
+   * @param operationTimeMs operation time in ms
+   * @param lifeVersion update version of update
+   */
+  public MessageInfo(StoreKey key, long size, boolean deleted, boolean ttlUpdated, boolean undeleted,
+      long expirationTimeInMs, Long crc, short accountId, short containerId, long operationTimeMs, short lifeVersion) {
     if (operationTimeMs < Utils.Infinite_Time) {
       throw new IllegalArgumentException("OperationTime cannot be negative " + operationTimeMs);
     }
@@ -110,11 +133,13 @@ public class MessageInfo {
     this.size = size;
     this.isDeleted = deleted;
     isTtlUpdated = ttlUpdated;
+    isUndeleted = undeleted;
     this.expirationTimeInMs = expirationTimeInMs;
     this.crc = crc;
     this.accountId = accountId;
     this.containerId = containerId;
     this.operationTimeMs = operationTimeMs;
+    this.lifeVersion = lifeVersion;
   }
 
   public StoreKey getStoreKey() {
@@ -144,6 +169,10 @@ public class MessageInfo {
     return isTtlUpdated;
   }
 
+  public boolean isUndeleted() {
+    return isUndeleted;
+  }
+
   public boolean isExpired() {
     return getExpirationTimeInMs() != Utils.Infinite_Time && System.currentTimeMillis() > getExpirationTimeInMs();
   }
@@ -167,6 +196,10 @@ public class MessageInfo {
     return operationTimeMs;
   }
 
+  public short getLifeVersion() {
+    return lifeVersion;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -177,14 +210,15 @@ public class MessageInfo {
     }
     MessageInfo that = (MessageInfo) o;
     return size == that.size && expirationTimeInMs == that.expirationTimeInMs && isDeleted == that.isDeleted
-        && isTtlUpdated == that.isTtlUpdated && accountId == that.accountId && containerId == that.containerId
-        && operationTimeMs == that.operationTimeMs && Objects.equals(key, that.key) && Objects.equals(crc, that.crc);
+        && isTtlUpdated == that.isTtlUpdated && isUndeleted == that.isUndeleted && accountId == that.accountId
+        && containerId == that.containerId && operationTimeMs == that.operationTimeMs && Objects.equals(key, that.key)
+        && lifeVersion == that.lifeVersion && Objects.equals(crc, that.crc);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(key, size, expirationTimeInMs, isDeleted, isTtlUpdated, crc, accountId, containerId,
-        operationTimeMs);
+    return Objects.hash(key, size, expirationTimeInMs, isDeleted, isTtlUpdated, isUndeleted, crc, accountId,
+        containerId, operationTimeMs, lifeVersion);
   }
 
   @Override
@@ -206,6 +240,9 @@ public class MessageInfo {
         .append("IsTtlUpdated-")
         .append(isTtlUpdated)
         .append(",")
+        .append("IsUndeleted-")
+        .append(isUndeleted)
+        .append(",")
         .append("Crc-")
         .append(crc)
         .append(",")
@@ -217,6 +254,9 @@ public class MessageInfo {
         .append(",")
         .append("OperationTimeMs-")
         .append(operationTimeMs)
+        .append(",")
+        .append("LifeVersion-")
+        .append(lifeVersion)
         .append("]");
     return stringBuilder.toString();
   }

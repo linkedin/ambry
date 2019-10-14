@@ -1218,8 +1218,8 @@ public class AmbryRequestsTest {
 
     // verify MessageInfo
     // since the record has been verified, the buffer size before verification is a good indicator of size
-    MessageInfoTest.checkGetters(info, key, expectedSize, false, true, expiresAtMs, null, key.getAccountId(),
-        key.getContainerId(), opTimeMs);
+    MessageInfoTest.checkGetters(info, key, expectedSize, false, true, false, expiresAtMs, null, key.getAccountId(),
+        key.getContainerId(), opTimeMs, (short) 0);
   }
 
   /**

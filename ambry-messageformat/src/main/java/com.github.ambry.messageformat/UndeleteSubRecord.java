@@ -1,5 +1,5 @@
 /**
- * Copyright 2017 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,13 +13,10 @@
  */
 package com.github.ambry.messageformat;
 
-/**
- * Contains the delete sub-record info
- */
-public class DeleteSubRecord implements SubRecord {
+public class UndeleteSubRecord implements SubRecord {
 
   @Override
   public Type getType() {
-    return SubRecord.Type.DELETE;
+    return SubRecord.Type.UNDELETE;
   }
 }
