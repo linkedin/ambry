@@ -880,7 +880,7 @@ public class MessageFormatRecord {
    *
    *  version         - The version of the message header
    *
-   *  life version  - The life version of the message header
+   *  life version    - The life version of the message header
    *
    *  payload size    - The size of the message payload.
    *                    Blob Encryption Key Record Size (if present) + (Blob prop record size or update record size) +

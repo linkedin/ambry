@@ -137,23 +137,8 @@ public class MessageFormatInputStreamTest {
         Assert.assertEquals(
             headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize,
             headerBuf.getInt());
+        //TODO Add MessageFormatRecord.Message_Header_Version_V3 test code
     }
-//    if (headerVersion == MessageFormatRecord.Message_Header_Version_V2) {
-//      Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
-//      Assert.assertEquals(headerSize + key.sizeInBytes() + blobEncryptionKeySize, headerBuf.getInt());
-//      Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-//      Assert.assertEquals(headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize,
-//          headerBuf.getInt());
-//      Assert.assertEquals(
-//          headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize,
-//          headerBuf.getInt());
-//    } else {
-//      Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
-//      Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-//      Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize, headerBuf.getInt());
-//      Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize,
-//          headerBuf.getInt());
-//    }
     Crc32 crc = new Crc32();
     crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
@@ -240,13 +225,8 @@ public class MessageFormatInputStreamTest {
       default: //case MessageFormatRecord.Message_Header_Version_V2:
         totalSize = headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize
             + (int) blobSize;
+      //TODO Add MessageFormatRecord.Message_Header_Version_V3 test code
     }
-//    if (useV2Header) {
-//      totalSize = headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize
-//          + (int) blobSize;
-//    } else {
-//      totalSize = headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize + (int) blobSize;
-//    }
     ByteBuffer allBuf = ByteBuffer.allocate(totalSize);
     messageFormatStream.read(allBuf.array());
 

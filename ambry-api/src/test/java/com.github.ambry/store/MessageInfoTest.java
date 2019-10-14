@@ -36,7 +36,7 @@ public class MessageInfoTest {
     boolean[] isDeletedVals = {false, true, false, true};
     boolean[] isTtlUpdatedVals = {true, false, false, true};
     boolean[] isUndeletedVals = {true, false};
-    short[] updateVersionVals = {(short) 0, (short) 1, (short) 2, (short) 3};
+    short[] lifeVersionVals = {(short) 0, (short) 1, (short) 2, (short) 3};
     Long[] crcs = {null, 100L, Long.MIN_VALUE, Long.MAX_VALUE};
     StoreKey[] keys = {new MockId(UtilsTest.getRandomString(10), accountIds[0], containerIds[0]),
         new MockId(UtilsTest.getRandomString(10), accountIds[1], containerIds[1]),
@@ -74,9 +74,9 @@ public class MessageInfoTest {
 
         info =
             new MessageInfo(keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], isUndeletedVals[j], times[i],
-                crcs[i], accountIds[i], containerIds[i], times[i], updateVersionVals[i]);
+                crcs[i], accountIds[i], containerIds[i], times[i], lifeVersionVals[i]);
         checkGetters(info, keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], isUndeletedVals[j], times[i],
-            crcs[i], accountIds[i], containerIds[i], times[i], updateVersionVals[i]);
+            crcs[i], accountIds[i], containerIds[i], times[i], lifeVersionVals[i]);
       }
     }
   }
@@ -94,11 +94,11 @@ public class MessageInfoTest {
    * @param accountId the expected account id in {@code info}.
    * @param containerId the expected container id in {@code info}.
    * @param operationTimeMs the expected operation time (ms) in {@code info}.
-   * @param updateVersion the expected updateVersion in {@code info}.
+   * @param lifeVersion the expected lifeVersion in {@code info}.
    */
   public static void checkGetters(MessageInfo info, StoreKey key, long size, boolean isDeleted, boolean isTtlUpdated,
       boolean isUndeleted, long expiresAtMs, Long crc, short accountId, short containerId, long operationTimeMs,
-      short updateVersion) {
+      short lifeVersion) {
     assertEquals("Key not as expected", key, info.getStoreKey());
     assertEquals("Size not as expected", size, info.getSize());
     assertEquals("Expiration time not as expected", expiresAtMs, info.getExpirationTimeInMs());
@@ -112,6 +112,6 @@ public class MessageInfoTest {
     assertEquals("Account ID not as expected", accountId, info.getAccountId());
     assertEquals("Container ID not as expected", containerId, info.getContainerId());
     assertEquals("Op time not as expected", operationTimeMs, info.getOperationTimeMs());
-    assertEquals("updateVersion not as expected", updateVersion, info.getLifeVersion());
+    assertEquals("lifeVersion not as expected", lifeVersion, info.getLifeVersion());
   }
 }
