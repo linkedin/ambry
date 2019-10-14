@@ -18,7 +18,6 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.UUID;
 
 
 public class MockId extends StoreKey {
@@ -26,30 +25,22 @@ public class MockId extends StoreKey {
   private String id;
   private final short accountId;
   private final short containerId;
-  private final String uuidStr;
   private static final int Id_Size_In_Bytes = 2;
-  private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
 
   public MockId(String id) {
     this(id, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
   }
 
   public MockId(String id, short accountId, short containerId) {
-    this(id, accountId, containerId, UUID.randomUUID().toString());
-  }
-
-  public MockId(String id, short accountId, short containerId, String uuidStr) {
     this.id = id;
     this.accountId = accountId;
     this.containerId = containerId;
-    this.uuidStr = uuidStr;
   }
 
   public MockId(DataInputStream stream) throws IOException {
     id = Utils.readShortString(stream);
     accountId = stream.readShort();
     containerId = stream.readShort();
-    uuidStr = Utils.readIntString(stream);
   }
 
   @Override
@@ -59,17 +50,14 @@ public class MockId extends StoreKey {
     idBuf.put(id.getBytes());
     idBuf.putShort(accountId);
     idBuf.putShort(containerId);
-    byte[] uuidBytes = uuidStr.getBytes();
-    idBuf.putInt(uuidBytes.length);
-    idBuf.put(uuidBytes);
     return idBuf.array();
   }
 
   @Override
   public byte[] getUuidBytesArray() {
-    byte[] uuidBytes = uuidStr.getBytes();
-    ByteBuffer uuidBuf = ByteBuffer.allocate(UUID_SIZE_FIELD_LENGTH_IN_BYTES + (short) uuidBytes.length);
-    uuidBuf.putInt(uuidBytes.length);
+    byte[] uuidBytes = id.getBytes();
+    ByteBuffer uuidBuf = ByteBuffer.allocate(Id_Size_In_Bytes + (short) uuidBytes.length);
+    uuidBuf.putShort((short) id.length());
     uuidBuf.put(uuidBytes);
     return uuidBuf.array();
   }
@@ -86,8 +74,7 @@ public class MockId extends StoreKey {
 
   @Override
   public short sizeInBytes() {
-    return (short) (Id_Size_In_Bytes + id.length() + Short.BYTES + Short.BYTES + UUID_SIZE_FIELD_LENGTH_IN_BYTES
-        + (short) uuidStr.getBytes().length);
+    return (short) (Id_Size_In_Bytes + id.length() + Short.BYTES + Short.BYTES);
   }
 
   public short getAccountId() {
@@ -109,11 +96,7 @@ public class MockId extends StoreKey {
       throw new NullPointerException();
     }
     MockId otherId = (MockId) o;
-    int result = id.compareTo(otherId.id);
-    if (result == 0) {
-      result = uuidStr.compareTo(otherId.uuidStr);
-    }
-    return result;
+    return id.compareTo(otherId.id);
   }
 
   @Override

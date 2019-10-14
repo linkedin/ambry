@@ -40,7 +40,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
@@ -453,10 +452,9 @@ public class IndexSegmentTest {
       containerId2 = getRandomShort(random);
     } while (containerId2 == containerId1);
     String idStr = UtilsTest.getRandomString(CUSTOM_ID_SIZE);
-    String uuidStr = UUID.randomUUID().toString();
-    // generate two ids with same uuid string but different account/container.
-    MockId id1 = new MockId(idStr, accountId1, containerId1, uuidStr);
-    MockId id2 = new MockId(idStr, accountId2, containerId2, uuidStr);
+    // generate two ids with same id string but different account/container.
+    MockId id1 = new MockId(idStr, accountId1, containerId1);
+    MockId id2 = new MockId(idStr, accountId2, containerId2);
     IndexValue value1 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName1, 0), Utils.Infinite_Time, time.milliseconds(),
             accountId1, containerId1, version);
