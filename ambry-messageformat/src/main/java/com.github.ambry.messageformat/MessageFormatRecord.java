@@ -1645,7 +1645,7 @@ public class MessageFormatRecord {
    * @return The {@link ByteBufferInputStream}
    * @throws IOException Unexpected IO errors.
    */
-  private static ByteBufferInputStream getByteBufferInputStreamForBlobRecord(CrcInputStream crcStream, int dataSize)
+  static ByteBufferInputStream getByteBufferInputStreamForBlobRecord(CrcInputStream crcStream, int dataSize)
       throws IOException {
     ByteBufferInputStream output = null;
     InputStream inputStream = crcStream.getUnderlyingInputStream();
