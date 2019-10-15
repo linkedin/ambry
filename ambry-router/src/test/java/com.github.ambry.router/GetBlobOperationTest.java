@@ -23,6 +23,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CryptoServiceConfig;
@@ -82,6 +83,7 @@ import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.PutManagerTest.*;
 import static com.github.ambry.router.RouterTestHelpers.*;
+import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
 
@@ -1369,8 +1371,13 @@ public class GetBlobOperationTest {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
-        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
-            new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+        DataInputStream dis = null;
+        if (routerConfig.routerGetBlobOperationShareMemory) {
+          dis = new CommonUtils.ByteBufferDataInputStream(responseInfo.getResponse());
+        } else {
+          dis = new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()));
+        }
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(dis, mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
       }
     }
@@ -1555,6 +1562,7 @@ public class GetBlobOperationTest {
     properties.setProperty("router.request.timeout.ms", Integer.toString(20));
     properties.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     properties.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "true");
+    properties.setProperty("router.get.blob.operation.share.memory", "true");
     return properties;
   }
 }

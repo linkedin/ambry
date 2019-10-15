@@ -15,7 +15,11 @@
 package com.github.ambry.commons;
 
 import com.github.ambry.config.HelixPropertyStoreConfig;
+import com.github.ambry.utils.ByteBufferInputStream;
+import java.io.DataInputStream;
+import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Objects;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.manager.zk.ZkBaseDataAccessor;
@@ -41,5 +45,30 @@ public class CommonUtils {
         propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
     return new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath,
         subscribedPaths);
+  }
+
+  /**
+   * ByteBufferDataInputStream wraps a {@link ByteBuffer} within a {@link DataInputStream}.
+   */
+  public static class ByteBufferDataInputStream extends DataInputStream {
+    private final ByteBuffer buffer;
+
+    /**
+     * The constructor to create a {@link ByteBufferDataInputStream}.
+     * @param buffer The buffer from which {@link DataInputStream} will be created upon.
+     */
+    public ByteBufferDataInputStream(ByteBuffer buffer) {
+      super(new ByteBufferInputStream(buffer));
+      Objects.requireNonNull(buffer);
+      this.buffer = buffer;
+    }
+
+    /**
+     * Return the underlying {@link ByteBuffer}.
+     * @return The underlying {@link ByteBuffer}.
+     */
+    public ByteBuffer getBuffer() {
+      return buffer;
+    }
   }
 }

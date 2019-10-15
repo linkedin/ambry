@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.NetworkClientErrorCode;
@@ -186,13 +187,19 @@ class RouterUtils {
    */
   static <R extends Response> R extractResponseAndNotifyResponseHandler(ResponseHandler responseHandler,
       NonBlockingRouterMetrics routerMetrics, ResponseInfo responseInfo, Deserializer<R> deserializer,
-      Function<R, ServerErrorCode> errorExtractor) {
+      Function<R, ServerErrorCode> errorExtractor, boolean shareMemory) {
     R response = null;
     ReplicaId replicaId = responseInfo.getRequestInfo().getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {
       try {
-        response = deserializer.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())));
+        DataInputStream dis = null;
+        if (shareMemory) {
+          dis = new CommonUtils.ByteBufferDataInputStream(responseInfo.getResponse());
+        } else {
+          dis = new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()));
+        }
+        response = deserializer.readFrom(dis);
         responseHandler.onEvent(replicaId, errorExtractor.apply(response));
       } catch (Exception e) {
         // Ignore. There is no value in notifying the response handler.

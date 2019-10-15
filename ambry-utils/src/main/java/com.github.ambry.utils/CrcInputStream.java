@@ -74,4 +74,12 @@ public class CrcInputStream extends InputStream {
   public long getValue() {
     return crc.getValue();
   }
+
+  /**
+   * Return underlying {@link InputStream}
+   * @return Underlying {@link InputStream}
+   */
+  public InputStream getUnderlyingInputStream() {
+    return stream;
+  }
 }

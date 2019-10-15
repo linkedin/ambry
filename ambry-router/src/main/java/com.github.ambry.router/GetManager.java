@@ -217,7 +217,7 @@ class GetManager {
                 serverError = response.getPartitionResponseInfoList().get(0).getErrorCode();
               }
               return serverError;
-            });
+            }, routerConfig.routerGetBlobOperationShareMemory);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     GetRequest getRequest = (GetRequest) routerRequestInfo.getRequest();
     GetOperation getOperation = correlationIdToGetOperation.remove(getRequest.getCorrelationId());

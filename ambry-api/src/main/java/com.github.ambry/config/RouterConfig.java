@@ -364,6 +364,10 @@ public class RouterConfig {
   @Default("4")
   public final int routerMaxInMemGetChunks;
 
+  @Config("router.get.blob.operation.share.memory")
+  @Default("false")
+  public final boolean routerGetBlobOperationShareMemory;
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -456,5 +460,6 @@ public class RouterConfig {
         Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
     routerMaxInMemGetChunks = verifiableProperties.getIntInRange("router.max.in.mem.get.chunks", 4, 1,
         Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
+    routerGetBlobOperationShareMemory = verifiableProperties.getBoolean("router.get.blob.operation.shared.memory", false);
   }
 }
