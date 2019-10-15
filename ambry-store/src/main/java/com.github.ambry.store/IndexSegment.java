@@ -394,7 +394,7 @@ class IndexSegment {
    * @return required {@link ByteBuffer} associated with the key.
    */
   private ByteBuffer getStoreKeyBytes(StoreKey key) {
-    return config.storePureUuidBasedBloomFilterEnabled ? ByteBuffer.wrap(key.getUuidBytesArray())
+    return config.storeUuidBasedBloomFilterEnabled ? ByteBuffer.wrap(key.getUuidBytesArray())
         : ByteBuffer.wrap(key.toBytes());
   }
 

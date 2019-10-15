@@ -48,6 +48,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.store.IndexSegment.*;
 import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
@@ -470,7 +471,7 @@ public class IndexSegmentTest {
     // create second index segment whose bloom filter is populated with UUID only.
     // We add id1 into indexSegment2 and attempt to get id2 which should succeed.
     Properties properties = new Properties();
-    properties.setProperty("store.pure.uuid.based.bloom.filter.enabled", Boolean.toString(true));
+    properties.setProperty("store.uuid.based.bloom.filter.enabled", Boolean.toString(true));
     StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
     String logSegmentName2 = LogSegmentNameHelper.getName(1, 0);
     IndexSegment indexSegment2 =
@@ -489,6 +490,31 @@ public class IndexSegmentTest {
     IndexValue indexValue = findResult.iterator().next();
     assertTrue("Account or container is not expected",
         indexValue.getAccountId() == accountId1 && indexValue.getContainerId() == containerId1);
+    File bloomFile1 =
+        new File(tempDir, generateIndexSegmentFilenamePrefix(new Offset(logSegmentName1, 0)) + BLOOM_FILE_NAME_SUFFIX);
+    assertTrue("The bloom file should exist", bloomFile1.exists());
+    // rebuild bloom filter in indexSegment1
+    properties.setProperty("store.index.rebuild.bloom.filter.enabled", Boolean.toString(true));
+    storeConfig = new StoreConfig(new VerifiableProperties(properties));
+    IndexSegment indexSegmentFromFile =
+        new IndexSegment(indexSegment1.getFile(), true, STORE_KEY_FACTORY, storeConfig, metrics, null, time);
+    // test that id2 is found in reconstructed index segment (with bloom filter rebuilt based on UUID only)
+    findResult = indexSegmentFromFile.find(id2);
+    assertNotNull("Should have found the id2", findResult);
+    indexValue = findResult.iterator().next();
+    assertTrue("Account or container is not expected",
+        indexValue.getAccountId() == accountId1 && indexValue.getContainerId() == containerId1);
+
+    // additional test: exception occurs when deleting previous bloom file
+    assertTrue("Could not make unwritable", tempDir.setWritable(false));
+    try {
+      new IndexSegment(indexSegment1.getFile(), true, STORE_KEY_FACTORY, storeConfig, metrics, null, time);
+      fail("Deletion on unwritable file should fail");
+    } catch (StoreException e) {
+      assertEquals("Error code is not expected.", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+    } finally {
+      assertTrue("Could not make writable", tempDir.setWritable(true));
+    }
   }
 
   // helpers
@@ -1103,7 +1129,7 @@ public class IndexSegmentTest {
     // journal should contain all the entries
     verifyJournal(referenceIndex, journal);
     File bloomFile = new File(file.getParent(),
-        IndexSegment.generateIndexSegmentFilenamePrefix(startOffset) + IndexSegment.BLOOM_FILE_NAME_SUFFIX);
+        IndexSegment.generateIndexSegmentFilenamePrefix(startOffset) + BLOOM_FILE_NAME_SUFFIX);
     fromDisk.seal();
     assertTrue("Bloom file does not exist", bloomFile.exists());
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,

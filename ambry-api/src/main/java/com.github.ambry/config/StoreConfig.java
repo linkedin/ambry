@@ -294,9 +294,9 @@ public class StoreConfig {
   /**
    * Whether to populate bloom filter with UUID only for index segment.
    */
-  @Config("store.pure.uuid.based.bloom.filter.enabled")
+  @Config("store.uuid.based.bloom.filter.enabled")
   @Default("false")
-  public final boolean storePureUuidBasedBloomFilterEnabled;
+  public final boolean storeUuidBasedBloomFilterEnabled;
 
   /**
    * Whether to rebuild index bloom filter during startup. If true, store will cleanup existing bloom files and rebuild
@@ -369,8 +369,7 @@ public class StoreConfig {
     String storeOperationFilePermissionStr =
         verifiableProperties.getString("store.operation.file.permission", "rw-rw-r--");
     storeOperationFilePermission = PosixFilePermissions.fromString(storeOperationFilePermissionStr);
-    storePureUuidBasedBloomFilterEnabled =
-        verifiableProperties.getBoolean("store.pure.uuid.based.bloom.filter.enabled", false);
+    storeUuidBasedBloomFilterEnabled = verifiableProperties.getBoolean("store.uuid.based.bloom.filter.enabled", false);
     storeIndexRebuildBloomFilterEnabled =
         verifiableProperties.getBoolean("store.index.rebuild.bloom.filter.enabled", false);
   }
