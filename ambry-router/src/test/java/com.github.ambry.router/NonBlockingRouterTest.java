@@ -24,7 +24,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
@@ -38,6 +37,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -991,12 +991,13 @@ public class NonBlockingRouterTest {
     FutureResult futureResult = opHelper.submitOperation(blobId);
     int requestParallelism = opHelper.requestParallelism;
     List<RequestInfo> allRequests = new ArrayList<>();
+    Set<Integer> allDropped = new HashSet<>();
     long loopStartTimeMs = SystemTime.getInstance().milliseconds();
     while (allRequests.size() < requestParallelism) {
       if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
         Assert.fail("Waited too long for requests.");
       }
-      opHelper.pollOpManager(allRequests);
+      opHelper.pollOpManager(allRequests, allDropped);
     }
     ReplicaId replicaIdToFail = indexToFail == -1 ? null : allRequests.get(indexToFail).getReplicaId();
     for (RequestInfo requestInfo : allRequests) {
@@ -1012,7 +1013,7 @@ public class NonBlockingRouterTest {
           if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
             Assert.fail("Waited too long for the response.");
           }
-          responseInfoList = networkClient.sendAndPoll(requestInfoListToSend, 10);
+          responseInfoList = networkClient.sendAndPoll(requestInfoListToSend, Collections.emptySet(), 10);
           requestInfoListToSend.clear();
         } while (responseInfoList.size() == 0);
         responseInfo = responseInfoList.get(0);
@@ -1024,9 +1025,10 @@ public class NonBlockingRouterTest {
     if (testEncryption) {
       opHelper.awaitOpCompletionOrTimeOut(futureResult);
     } else {
-      opHelper.pollOpManager(allRequests);
+      opHelper.pollOpManager(allRequests, allDropped);
     }
     futureResult.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    Assert.assertEquals(0, allDropped.size());
     if (indexToFail == -1) {
       Assert.assertEquals("Successful notification should have arrived for replicas that were up",
           opHelper.requestParallelism, successfulResponseCount.get());
@@ -1058,18 +1060,24 @@ public class NonBlockingRouterTest {
     invalidResponse.set(false);
     FutureResult futureResult = opHelper.submitOperation(blobId);
     List<RequestInfo> allRequests = new ArrayList<>();
+    Set<Integer> allDropped = new HashSet<>();
     long loopStartTimeMs = SystemTime.getInstance().milliseconds();
     while (!futureResult.isDone()) {
       if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
         Assert.fail("Waited too long for requests.");
       }
-      opHelper.pollOpManager(allRequests);
+      opHelper.pollOpManager(allRequests, allDropped);
       mockTime.sleep(REQUEST_TIMEOUT_MS + 1);
     }
+    System.out.println(allDropped);
     Assert.assertEquals("Successful notification should not have arrived for replicas that were up", 0,
         successfulResponseCount.get());
     Assert.assertEquals("Failure detector should not have been notified", 0, failedReplicaIds.size());
     Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
+    Set<Integer> allCorrelationIds = allRequests.stream()
+        .map(requestInfo -> requestInfo.getRequest().getCorrelationId())
+        .collect(Collectors.toSet());
+    Assert.assertEquals("Timed out requests should be dropped", allCorrelationIds, new HashSet<>(allDropped));
   }
 
   /**
@@ -1085,12 +1093,13 @@ public class NonBlockingRouterTest {
     FutureResult futureResult = opHelper.submitOperation(blobId);
     int requestParallelism = opHelper.requestParallelism;
     List<RequestInfo> allRequests = new ArrayList<>();
+    Set<Integer> allDropped = new HashSet<>();
     long loopStartTimeMs = SystemTime.getInstance().milliseconds();
     while (allRequests.size() < requestParallelism) {
       if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
         Assert.fail("Waited too long for requests.");
       }
-      opHelper.pollOpManager(allRequests);
+      opHelper.pollOpManager(allRequests, allDropped);
     }
     List<ResponseInfo> responseInfoList = new ArrayList<>();
     loopStartTimeMs = SystemTime.getInstance().milliseconds();
@@ -1098,7 +1107,7 @@ public class NonBlockingRouterTest {
       if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
         Assert.fail("Waited too long for the response.");
       }
-      responseInfoList.addAll(networkClient.sendAndPoll(allRequests, 10));
+      responseInfoList.addAll(networkClient.sendAndPoll(allRequests, allDropped, 10));
       allRequests.clear();
     } while (responseInfoList.size() < requestParallelism);
     // corrupt the first response.
@@ -1112,7 +1121,7 @@ public class NonBlockingRouterTest {
     if (testEncryption) {
       opHelper.awaitOpCompletionOrTimeOut(futureResult);
     } else {
-      opHelper.pollOpManager(allRequests);
+      opHelper.pollOpManager(allRequests, allDropped);
     }
     try {
       futureResult.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -1253,18 +1262,19 @@ public class NonBlockingRouterTest {
 
     /**
      * Poll the associated operation manager.
-     * @param requestInfos the list of {@link RequestInfo} to pass in the poll call.
+     * @param requestsToSend the list of {@link RequestInfo} to send to pass into the poll call.
+     * @param requestsToDrop the list of correlation IDs to drop to pass into the poll call.
      */
-    void pollOpManager(List<RequestInfo> requestInfos) {
+    void pollOpManager(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
       switch (opType) {
         case PUT:
-          putManager.poll(requestInfos);
+          putManager.poll(requestsToSend, requestsToDrop);
           break;
         case GET:
-          getManager.poll(requestInfos);
+          getManager.poll(requestsToSend, requestsToDrop);
           break;
         case DELETE:
-          deleteManager.poll(requestInfos);
+          deleteManager.poll(requestsToSend, requestsToDrop);
           break;
       }
     }
@@ -1277,11 +1287,13 @@ public class NonBlockingRouterTest {
     private void awaitOpCompletionOrTimeOut(FutureResult futureResult) throws InterruptedException {
       int timer = 0;
       List<RequestInfo> allRequests = new ArrayList<>();
+      Set<Integer> allDropped = new HashSet<>();
       while (timer < AWAIT_TIMEOUT_MS / 2 && !futureResult.completed()) {
-        pollOpManager(allRequests);
+        pollOpManager(allRequests, allDropped);
         Thread.sleep(50);
         timer += 50;
         allRequests.clear();
+        allDropped.clear();
       }
     }
 

@@ -21,7 +21,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
@@ -33,7 +32,7 @@ import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetResponse;
-import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
@@ -97,8 +96,8 @@ public class GetBlobInfoOperationTest {
   private final byte[] putContent;
   private final boolean testEncryption;
   private final String operationTrackerType;
-  private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
-      new GetTestRequestRegistrationCallbackImpl();
+  private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback =
+      new RequestRegistrationCallback<>(correlationIdToGetOperation);
   private final GetBlobOptionsInternal options;
   private String kmsSingleKey;
   private MockKeyManagementService kms = null;
@@ -107,16 +106,6 @@ public class GetBlobInfoOperationTest {
   private ReplicaId localReplica;
   private ReplicaId remoteReplica;
   private String localDcName;
-
-  private class GetTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
-    private List<RequestInfo> requestListToFill;
-
-    @Override
-    public void registerRequestToSend(GetOperation getOperation, RequestInfo requestInfo) {
-      requestListToFill.add(requestInfo);
-      correlationIdToGetOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), getOperation);
-    }
-  }
 
   /**
    * Running for both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}, with and without encryption
@@ -247,7 +236,7 @@ public class GetBlobInfoOperationTest {
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
             routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
+    requestRegistrationCallback.setRequestsToSend(requestListToFill);
     op.poll(requestRegistrationCallback);
     Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
         correlationIdToGetOperation.size());
@@ -284,7 +273,7 @@ public class GetBlobInfoOperationTest {
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
             routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
-    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     op.poll(requestRegistrationCallback);
     int count = 0;
     while (!op.isOperationComplete()) {
@@ -319,7 +308,7 @@ public class GetBlobInfoOperationTest {
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
             routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
-    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     op.poll(requestRegistrationCallback);
     while (!op.isOperationComplete()) {
       time.sleep(routerConfig.routerRequestTimeoutMs + 1);
@@ -355,7 +344,7 @@ public class GetBlobInfoOperationTest {
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
             routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
-    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
 
     op.poll(requestRegistrationCallback);
@@ -412,7 +401,7 @@ public class GetBlobInfoOperationTest {
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
             routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
-    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
 
     completeOp(op);
@@ -427,7 +416,6 @@ public class GetBlobInfoOperationTest {
     props.setProperty("router.datacenter.name", oldLocal);
     routerConfig = new RouterConfig(new VerifiableProperties(props));
   }
-
 
   /**
    * Test the case where origin replicas return Blob_Not_found and the rest times out.
@@ -461,7 +449,7 @@ public class GetBlobInfoOperationTest {
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
             routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
-    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
 
     // First three requests would come from local datacenter and they will all time out.
@@ -493,7 +481,7 @@ public class GetBlobInfoOperationTest {
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
             routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
+    requestRegistrationCallback.setRequestsToSend(requestListToFill);
 
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
@@ -528,8 +516,7 @@ public class GetBlobInfoOperationTest {
     assertOperationFailure(RouterErrorCode.BlobDoesNotExist);
     // Blob is created by putBlob function so the local datacenter will be the origin datecenter.
     // Thus only need two Blob_Not_Found to terminate the operation.
-    Assert.assertEquals("Must have attempted sending requests to all replicas", 2,
-        correlationIdToGetOperation.size());
+    Assert.assertEquals("Must have attempted sending requests to all replicas", 2, correlationIdToGetOperation.size());
   }
 
   /**
@@ -671,7 +658,7 @@ public class GetBlobInfoOperationTest {
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
             routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
-    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
 
     ArrayList<MockServer> mockServers = new ArrayList<>(mockServerLayout.getMockServers());
     // set the status to various server level or partition level errors (not Blob_Deleted or Blob_Expired).
@@ -707,7 +694,7 @@ public class GetBlobInfoOperationTest {
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
             routerCallback, kms, cryptoService, cryptoJobHandler, time, false);
-    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     op.poll(requestRegistrationCallback);
     Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
         correlationIdToGetOperation.size());
@@ -724,7 +711,7 @@ public class GetBlobInfoOperationTest {
   private void completeOp(GetBlobInfoOperation op) throws IOException {
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
-      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
             new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
@@ -745,10 +732,11 @@ public class GetBlobInfoOperationTest {
   private List<ResponseInfo> sendAndWaitForResponses(List<RequestInfo> requestList) {
     int sendCount = requestList.size();
     Collections.shuffle(requestList);
-    List<ResponseInfo> responseList = new ArrayList<>(networkClient.sendAndPoll(requestList, 100));
+    List<ResponseInfo> responseList =
+        new ArrayList<>(networkClient.sendAndPoll(requestList, Collections.emptySet(), 100));
     requestList.clear();
     while (responseList.size() < sendCount) {
-      responseList.addAll(networkClient.sendAndPoll(requestList, 100));
+      responseList.addAll(networkClient.sendAndPoll(requestList, Collections.emptySet(), 100));
     }
     return responseList;
   }

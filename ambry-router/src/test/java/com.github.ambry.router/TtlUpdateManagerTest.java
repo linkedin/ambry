@@ -21,7 +21,6 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -30,6 +29,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -349,14 +349,15 @@ public class TtlUpdateManagerTest {
   private void sendRequestsGetResponses(FutureResult<Void> futureResult, TtlUpdateManager manager, boolean advanceTime,
       boolean ignoreUnrecognizedRequests) {
     List<RequestInfo> requestInfoList = new ArrayList<>();
+    Set<Integer> requestsToDrop = new HashSet<>();
     Set<RequestInfo> requestAcks = new HashSet<>();
     List<RequestInfo> referenceRequestInfos = new ArrayList<>();
     while (!futureResult.isDone()) {
-      manager.poll(requestInfoList);
+      manager.poll(requestInfoList, requestsToDrop);
       referenceRequestInfos.addAll(requestInfoList);
       List<ResponseInfo> responseInfoList = new ArrayList<>();
       try {
-        responseInfoList = networkClient.sendAndPoll(requestInfoList, AWAIT_TIMEOUT_MS);
+        responseInfoList = networkClient.sendAndPoll(requestInfoList, requestsToDrop, AWAIT_TIMEOUT_MS);
       } catch (RuntimeException | Error e) {
         if (!advanceTime) {
           throw e;

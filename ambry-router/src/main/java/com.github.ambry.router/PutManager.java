@@ -26,7 +26,6 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.HashMap;
@@ -73,20 +72,9 @@ class PutManager {
   private final NonBlockingRouterMetrics routerMetrics;
   private final String defaultPartitionClass;
 
-  private class PutRequestRegistrationCallbackImpl implements RequestRegistrationCallback<PutOperation> {
-    private List<RequestInfo> requestListToFill;
-
-    @Override
-    public void registerRequestToSend(PutOperation putOperation, RequestInfo requestInfo) {
-      requestListToFill.add(requestInfo);
-      correlationIdToPutOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), putOperation);
-    }
-  }
-
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to the PutOperations, every time.
-  private final PutRequestRegistrationCallbackImpl requestRegistrationCallback =
-      new PutRequestRegistrationCallbackImpl();
+  private final RequestRegistrationCallback<PutOperation> requestRegistrationCallback;
 
   /**
    * Create a PutManager
@@ -134,6 +122,7 @@ class PutManager {
     this.time = time;
     putOperations = ConcurrentHashMap.newKeySet();
     correlationIdToPutOperation = new HashMap<>();
+    requestRegistrationCallback = new RequestRegistrationCallback<>(correlationIdToPutOperation);
     chunkFillerThread = Utils.newThread("ChunkFillerThread-" + suffix, new ChunkFiller(), true);
     chunkFillerThread.start();
     routerMetrics.initializePutManagerMetrics(chunkFillerThread);
@@ -200,11 +189,13 @@ class PutManager {
    * RequestResponseHandler thread in the {@link NonBlockingRouter} ({@link #handleResponse} gets called only if a
    * response is received for a put operation), any error handling or operation completion and cleanup also usually
    * gets done in the context of this method.
-   * @param requestListToFill list to be filled with the requests created
+   * @param requestsToSend list to be filled with the requests created
+   * @param requestsToDrop list to be filled with the requests to drop.
    */
-  void poll(List<RequestInfo> requestListToFill) {
+  void poll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
     long startTime = time.milliseconds();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
+    requestRegistrationCallback.setRequestsToSend(requestsToSend);
+    requestRegistrationCallback.setRequestsToDrop(requestsToDrop);
     for (PutOperation op : putOperations) {
       try {
         op.poll(requestRegistrationCallback);

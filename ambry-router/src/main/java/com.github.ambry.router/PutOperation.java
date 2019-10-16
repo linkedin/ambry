@@ -23,7 +23,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobId.BlobDataType;
 import com.github.ambry.commons.BlobId.BlobIdType;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
@@ -37,6 +36,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -1260,7 +1260,7 @@ class PutOperation {
      */
     void poll(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
       maybeFreeDefunctBuffers();
-      cleanupExpiredInFlightRequests();
+      cleanupExpiredInFlightRequests(requestRegistrationCallback);
       checkAndMaybeComplete();
       if (!isComplete()) {
         fetchRequests(requestRegistrationCallback);
@@ -1269,20 +1269,25 @@ class PutOperation {
 
     /**
      * Clean up requests sent out by this operation that have now timed out.
+     * @param requestRegistrationCallback The callback to use to notify the networking layer of dropped requests.
      */
-    private void cleanupExpiredInFlightRequests() {
+    private void cleanupExpiredInFlightRequests(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
       Iterator<Map.Entry<Integer, ChunkPutRequestInfo>> inFlightRequestsIterator =
           correlationIdToChunkPutRequestInfo.entrySet().iterator();
       while (inFlightRequestsIterator.hasNext()) {
         Map.Entry<Integer, ChunkPutRequestInfo> entry = inFlightRequestsIterator.next();
-        if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
-          onErrorResponse(entry.getValue().replicaId);
-          logger.trace("PutRequest with correlationId {} in flight has expired for replica {} ", entry.getKey(),
-              entry.getValue().replicaId.getDataNodeId());
+        int correlationId = entry.getKey();
+        ChunkPutRequestInfo info = entry.getValue();
+        if (time.milliseconds() - info.startTimeMs > routerConfig.routerRequestTimeoutMs) {
+          onErrorResponse(info.replicaId);
+          logger.trace("PutRequest with correlationId {} in flight has expired for replica {} ", correlationId,
+              info.replicaId.getDataNodeId());
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
           // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
           // response and the response handler will be notified accordingly.
-          chunkException = new RouterException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut);
+          chunkException =
+              RouterUtils.buildTimeoutException(correlationId, info.replicaId.getDataNodeId(), chunkBlobId);
+          requestRegistrationCallback.registerRequestToDrop(correlationId);
           inFlightRequestsIterator.remove();
         } else {
           // the entries are ordered by correlation id and time. Break on the first request that has not timed out.

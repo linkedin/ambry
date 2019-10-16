@@ -13,7 +13,7 @@
  */
 package com.github.ambry.protocol;
 
-import com.github.ambry.network.Send;
+import com.github.ambry.network.SendWithCorrelationId;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Request Response for serialization and de-serialization
  */
-public abstract class RequestOrResponse implements Send {
+public abstract class RequestOrResponse implements SendWithCorrelationId {
   protected final RequestOrResponseType type;
   protected final int correlationId;
   protected short versionId;
@@ -50,6 +50,7 @@ public abstract class RequestOrResponse implements Send {
     return type;
   }
 
+  @Override
   public int getCorrelationId() {
     return correlationId;
   }

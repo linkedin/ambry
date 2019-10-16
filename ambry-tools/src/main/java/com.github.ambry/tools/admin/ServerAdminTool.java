@@ -20,7 +20,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.SSLFactory;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
@@ -38,7 +37,7 @@ import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.network.Send;
+import com.github.ambry.network.SendWithCorrelationId;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
@@ -53,6 +52,7 @@ import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -779,8 +779,8 @@ public class ServerAdminTool implements Closeable {
    * @return the response as a {@link ByteBuffer} if the response was successfully received. {@code null} otherwise.
    * @throws TimeoutException
    */
-  private ByteBuffer sendRequestGetResponse(DataNodeId dataNodeId, PartitionId partitionId, Send request)
-      throws TimeoutException {
+  private ByteBuffer sendRequestGetResponse(DataNodeId dataNodeId, PartitionId partitionId,
+      SendWithCorrelationId request) throws TimeoutException {
     ReplicaId replicaId = getReplicaFromNode(dataNodeId, partitionId);
     String hostname = dataNodeId.getHostname();
     Port port = dataNodeId.getPortToConnectTo();
@@ -793,7 +793,8 @@ public class ServerAdminTool implements Closeable {
       if (time.milliseconds() - startTimeMs > OPERATION_TIMEOUT_MS) {
         throw new TimeoutException(identifier + ": Operation did not complete within " + OPERATION_TIMEOUT_MS + " ms");
       }
-      List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, POLL_TIMEOUT_MS);
+      List<ResponseInfo> responseInfos =
+          networkClient.sendAndPoll(requestInfos, Collections.emptySet(), POLL_TIMEOUT_MS);
       if (responseInfos.size() > 1) {
         // May need to relax this check because response list may contain more than 1 response
         throw new IllegalStateException("Received more than one response even though a single request was sent");

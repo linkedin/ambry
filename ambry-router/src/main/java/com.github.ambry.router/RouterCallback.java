@@ -41,7 +41,7 @@ class RouterCallback {
    * Called by the operation managers when a poll-eligible event occurs for any operation. A poll-eligible event is any
    * event that occurs asynchronously to the RequestResponseHandler thread such that there is a high chance of
    * meaningful work getting done when the operation is subsequently polled. When the callback is invoked, the
-   * RequestResponseHandler thread which could be sleeping in a {@link NetworkClient#sendAndPoll(List, int)} is woken up
+   * RequestResponseHandler thread which could be sleeping in a {@link NetworkClient#sendAndPoll(List, java.util.Set, int)} is woken up
    * so that the operations can be polled without additional delays. For example, when a chunk gets filled by the
    * ChunkFillerThread within the {@link PutManager}, this callback is invoked so that the RequestResponseHandler
    * immediately polls the operation to send out the request for the chunk.

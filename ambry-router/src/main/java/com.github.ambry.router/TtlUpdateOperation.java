@@ -17,13 +17,13 @@ package com.github.ambry.router;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
 import java.util.Map;
@@ -101,7 +101,7 @@ class TtlUpdateOperation {
    *                            that gets created as part of this poll operation.
    */
   void poll(RequestRegistrationCallback<TtlUpdateOperation> requestRegistrationCallback) {
-    cleanupExpiredInflightRequests();
+    cleanupExpiredInflightRequests(requestRegistrationCallback);
     checkAndMaybeComplete();
     if (!isOperationComplete()) {
       fetchRequests(requestRegistrationCallback);
@@ -231,21 +231,25 @@ class TtlUpdateOperation {
   /**
    * Goes through the inflight request list of this {@link TtlUpdateOperation} and remove those that
    * have been timed out.
+   * @param requestRegistrationCallback The callback to use to notify the networking layer of dropped requests.
    */
-  private void cleanupExpiredInflightRequests() {
+  private void cleanupExpiredInflightRequests(
+      RequestRegistrationCallback<TtlUpdateOperation> requestRegistrationCallback) {
     Iterator<Map.Entry<Integer, TtlUpdateRequestInfo>> itr = ttlUpdateRequestInfos.entrySet().iterator();
     while (itr.hasNext()) {
       Map.Entry<Integer, TtlUpdateRequestInfo> ttlUpdateRequestInfoEntry = itr.next();
+      int correlationId = ttlUpdateRequestInfoEntry.getKey();
       TtlUpdateRequestInfo ttlUpdateRequestInfo = ttlUpdateRequestInfoEntry.getValue();
       if (time.milliseconds() - ttlUpdateRequestInfo.startTimeMs > routerConfig.routerRequestTimeoutMs) {
         itr.remove();
-        LOGGER.trace("TTL Request with correlationid {} in flight has expired for replica {} ",
-            ttlUpdateRequestInfoEntry.getKey(), ttlUpdateRequestInfo.replica.getDataNodeId());
+        LOGGER.trace("TTL Request with correlationid {} in flight has expired for replica {} ", correlationId,
+            ttlUpdateRequestInfo.replica.getDataNodeId());
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
         // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
         // response and the response handler will be notified accordingly.
         onErrorResponse(ttlUpdateRequestInfo.replica,
-            new RouterException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut));
+            RouterUtils.buildTimeoutException(correlationId, ttlUpdateRequestInfo.replica.getDataNodeId(), blobId));
+        requestRegistrationCallback.registerRequestToDrop(correlationId);
       } else {
         // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
         break;

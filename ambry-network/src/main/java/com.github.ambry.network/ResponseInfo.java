@@ -73,4 +73,10 @@ public class ResponseInfo {
   public DataNodeId getDataNode() {
     return dataNode;
   }
+
+  @Override
+  public String toString() {
+    return "ResponseInfo{" + "requestInfo=" + requestInfo + ", error=" + error + ", response=" + response
+        + ", dataNode=" + dataNode + '}';
+  }
 }

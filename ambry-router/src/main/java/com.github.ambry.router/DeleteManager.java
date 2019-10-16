@@ -26,7 +26,6 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
-import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.HashMap;
@@ -55,22 +54,7 @@ class DeleteManager {
 
   private static final Logger logger = LoggerFactory.getLogger(DeleteManager.class);
 
-  /**
-   * Used by a {@link DeleteOperation} to associate a {@code CorrelationId} to a {@link DeleteOperation}.
-   */
-  private class DeleteRequestRegistrationCallbackImpl implements RequestRegistrationCallback<DeleteOperation> {
-    private List<RequestInfo> requestListToFill;
-
-    @Override
-    public void registerRequestToSend(DeleteOperation deleteOperation, RequestInfo requestInfo) {
-      requestListToFill.add(requestInfo);
-      correlationIdToDeleteOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(),
-          deleteOperation);
-    }
-  }
-
-  private final DeleteRequestRegistrationCallbackImpl requestRegistrationCallback =
-      new DeleteRequestRegistrationCallbackImpl();
+  private final RequestRegistrationCallback<DeleteOperation> requestRegistrationCallback;
 
   /**
    * Creates a DeleteManager.
@@ -96,6 +80,7 @@ class DeleteManager {
     this.time = time;
     deleteOperations = ConcurrentHashMap.newKeySet();
     correlationIdToDeleteOperation = new HashMap<>();
+    requestRegistrationCallback = new RequestRegistrationCallback<>(correlationIdToDeleteOperation);
   }
 
   /**
@@ -122,11 +107,13 @@ class DeleteManager {
   /**
    * Polls all delete operations and populates a list of {@link RequestInfo} to be sent to data nodes in order to
    * complete delete operations.
-   * @param requestListToFill list to be filled with the requests created.
+   * @param requestsToSend list to be filled with the requests created.
+   * @param requestsToDrop list to be filled with the requests to drop.
    */
-  public void poll(List<RequestInfo> requestListToFill) {
+  public void poll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
     long startTime = time.milliseconds();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
+    requestRegistrationCallback.setRequestsToSend(requestsToSend);
+    requestRegistrationCallback.setRequestsToDrop(requestsToDrop);
     for (DeleteOperation op : deleteOperations) {
       boolean exceptionEncountered = false;
       try {

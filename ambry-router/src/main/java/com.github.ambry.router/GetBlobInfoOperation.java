@@ -17,7 +17,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -31,6 +30,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
@@ -119,7 +119,7 @@ class GetBlobInfoOperation extends GetOperation {
   @Override
   void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
     //First, check if any of the existing requests have timed out.
-    cleanupExpiredInFlightRequests();
+    cleanupExpiredInFlightRequests(requestRegistrationCallback);
     checkAndMaybeComplete();
     if (!isOperationComplete()) {
       fetchRequests(requestRegistrationCallback);
@@ -128,20 +128,24 @@ class GetBlobInfoOperation extends GetOperation {
 
   /**
    * Clean up requests sent out by this operation that have now timed out.
+   * @param requestRegistrationCallback The callback to use to notify the networking layer of dropped requests.
    */
-  private void cleanupExpiredInFlightRequests() {
+  private void cleanupExpiredInFlightRequests(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
     Iterator<Map.Entry<Integer, GetRequestInfo>> inFlightRequestsIterator =
         correlationIdToGetRequestInfo.entrySet().iterator();
     while (inFlightRequestsIterator.hasNext()) {
       Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
-      if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
-        logger.trace("GetBlobInfoRequest with correlationId {} in flight has expired for replica {} ", entry.getKey(),
-            entry.getValue().replicaId.getDataNodeId());
+      int correlationId = entry.getKey();
+      GetRequestInfo info = entry.getValue();
+      if (time.milliseconds() - info.startTimeMs > routerConfig.routerRequestTimeoutMs) {
+        logger.trace("GetBlobInfoRequest with correlationId {} in flight has expired for replica {} ", correlationId,
+            info.replicaId.getDataNodeId());
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
         // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
         // response and the response handler will be notified accordingly.
         onErrorResponse(entry.getValue().replicaId,
-            new RouterException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut));
+            RouterUtils.buildTimeoutException(correlationId, info.replicaId.getDataNodeId(), blobId));
+        requestRegistrationCallback.registerRequestToDrop(correlationId);
         inFlightRequestsIterator.remove();
       } else {
         // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
@@ -191,7 +195,7 @@ class GetBlobInfoOperation extends GetOperation {
       // would be done. Since the store is immutable, currently we handle this by ignoring subsequent responses.
       return;
     }
-    int correlationId = ((GetRequest) responseInfo.getRequestInfo().getRequest()).getCorrelationId();
+    int correlationId = responseInfo.getRequestInfo().getRequest().getCorrelationId();
     // Get the GetOperation that generated the request.
     GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
     if (getRequestInfo == null) {

@@ -17,14 +17,15 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.Response;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -130,6 +131,18 @@ class RouterUtils {
     Account account = accountService.getAccountById(accountId);
     Container container = account == null ? null : account.getContainerById(containerId);
     return new Pair<>(account, container);
+  }
+
+  /**
+   * @param correlationId correlation ID for the request that timed out
+   * @param dataNode the node that the request was made to.
+   * @param blobId the blob ID of the request.
+   * @return a {@link RouterException} with the {@link RouterErrorCode#OperationTimedOut} error code.
+   */
+  static RouterException buildTimeoutException(int correlationId, DataNodeId dataNode, BlobId blobId) {
+    return new RouterException(
+        "Timed out waiting for a response. correlationId=" + correlationId + ", dataNode=" + dataNode + ", blobId="
+            + blobId, RouterErrorCode.OperationTimedOut);
   }
 
   /**

@@ -25,7 +25,6 @@ import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
@@ -47,8 +46,8 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
-import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.router.RouterTestHelpers.*;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -137,18 +136,8 @@ public class GetBlobOperationTest {
   // Options which are passed into GetBlobOperations
   private GetBlobOptionsInternal options;
 
-  private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
-      new GetTestRequestRegistrationCallbackImpl();
-
-  private class GetTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
-    List<RequestInfo> requestListToFill;
-
-    @Override
-    public void registerRequestToSend(GetOperation getOperation, RequestInfo requestInfo) {
-      requestListToFill.add(requestInfo);
-      correlationIdToGetOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), getOperation);
-    }
-  }
+  private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback =
+      new RequestRegistrationCallback<>(correlationIdToGetOperation);
 
   /**
    * A checker that either asserts that a get operation succeeds or returns the specified error code.
@@ -535,7 +524,7 @@ public class GetBlobOperationTest {
     // The request should have response from one local replica and all remote replicas.
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
-      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
             new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
@@ -589,7 +578,7 @@ public class GetBlobOperationTest {
     // The request should have response from all remote replicas.
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
-      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
             new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
@@ -618,14 +607,14 @@ public class GetBlobOperationTest {
     GetBlobOperation op = createOperation(routerConfig, null);
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
-      for (RequestInfo requestInfo : requestRegistrationCallback.requestListToFill) {
+      for (RequestInfo requestInfo : requestRegistrationCallback.getRequestsToSend()) {
         ResponseInfo fakeResponse = new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null);
         op.handleResponse(fakeResponse, null);
         if (op.isOperationComplete()) {
           break;
         }
       }
-      requestRegistrationCallback.requestListToFill.clear();
+      requestRegistrationCallback.getRequestsToSend().clear();
     }
 
     // At this time requests would have been created for all replicas, as none of them were delivered,
@@ -1378,7 +1367,7 @@ public class GetBlobOperationTest {
     GetBlobOperation op = createOperation(routerConfig, callback);
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
-      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
             new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
@@ -1399,7 +1388,7 @@ public class GetBlobOperationTest {
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
             routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false);
-    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     return op;
   }
 
@@ -1540,10 +1529,10 @@ public class GetBlobOperationTest {
     // Shuffle the replicas to introduce randomness in the order in which responses arrive.
     Collections.shuffle(requestList);
     List<ResponseInfo> responseList = new ArrayList<>();
-    responseList.addAll(mockNetworkClient.sendAndPoll(requestList, 100));
+    responseList.addAll(mockNetworkClient.sendAndPoll(requestList, Collections.emptySet(), 100));
     requestList.clear();
     while (responseList.size() < sendCount) {
-      responseList.addAll(mockNetworkClient.sendAndPoll(requestList, 100));
+      responseList.addAll(mockNetworkClient.sendAndPoll(requestList, Collections.emptySet(), 100));
     }
     return responseList;
   }
