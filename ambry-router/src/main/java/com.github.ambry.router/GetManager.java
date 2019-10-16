@@ -185,7 +185,7 @@ class GetManager {
    * @param requestsToSend list to be filled with the requests created
    * @param requestsToDrop list to be filled with the requests to drop.
    */
-  void poll(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop) {
+  void poll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
     long startTime = time.milliseconds();
     requestRegistrationCallback.setRequestsToSend(requestsToSend);
     requestRegistrationCallback.setRequestsToDrop(requestsToDrop);

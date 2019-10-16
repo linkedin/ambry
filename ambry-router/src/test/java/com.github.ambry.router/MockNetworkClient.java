@@ -25,6 +25,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 
 /**
@@ -66,7 +67,7 @@ class MockNetworkClient extends NetworkClient {
    * {@inheritDoc}
    */
   @Override
-  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop,
+  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
     processedResponseCount = responseCount;
     List<ResponseInfo> responseInfoList = super.sendAndPoll(requestsToSend, requestsToDrop, pollTimeoutMs);
@@ -86,7 +87,7 @@ class MockNetworkClient extends NetworkClient {
 
   /**
    * Get the number of responses received by the client before the current
-   * {@link NetworkClient#sendAndPoll(List, List, int)} call.
+   * {@link NetworkClient#sendAndPoll(List, Set, int)} call.
    * @return the number of processed responses.
    */
   int getProcessedResponseCount() {

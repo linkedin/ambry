@@ -35,8 +35,10 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
@@ -795,7 +797,7 @@ class NonBlockingRouter implements Router {
      * @param requestsToDrop a list of correlation IDs that will contain the IDs for requests that the network layer
      *                       should drop.
      */
-    protected void pollForRequests(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop) {
+    protected void pollForRequests(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
       try {
         putManager.poll(requestsToSend, requestsToDrop);
         getManager.poll(requestsToSend, requestsToDrop);
@@ -864,10 +866,11 @@ class NonBlockingRouter implements Router {
       try {
         while (isOpen.get()) {
           List<RequestInfo> requestsToSend = new ArrayList<>();
-          List<Integer> requestsToDrop = new ArrayList<>();
+          Set<Integer> requestsToDrop = new HashSet<>();
           pollForRequests(requestsToSend, requestsToDrop);
-          List<ResponseInfo> responseInfoList =
-              networkClient.sendAndPoll(requestsToSend, requestsToDrop, NETWORK_CLIENT_POLL_TIMEOUT);
+          List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestsToSend,
+              routerConfig.routerDropRequestOnTimeout ? requestsToDrop : Collections.emptySet(),
+              NETWORK_CLIENT_POLL_TIMEOUT);
           onResponse(responseInfoList);
         }
       } catch (Throwable e) {
@@ -951,7 +954,7 @@ class NonBlockingRouter implements Router {
      * {@inheritDoc}
      */
     @Override
-    protected void pollForRequests(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop) {
+    protected void pollForRequests(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
       try {
         getManager.poll(requestsToSend, requestsToDrop);
         deleteManager.poll(requestsToSend, requestsToDrop);

@@ -110,7 +110,7 @@ class DeleteManager {
    * @param requestsToSend list to be filled with the requests created.
    * @param requestsToDrop list to be filled with the requests to drop.
    */
-  public void poll(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop) {
+  public void poll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
     long startTime = time.milliseconds();
     requestRegistrationCallback.setRequestsToSend(requestsToSend);
     requestRegistrationCallback.setRequestsToDrop(requestsToDrop);

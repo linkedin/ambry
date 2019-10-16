@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.network.RequestInfo;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -28,7 +29,7 @@ import java.util.Map;
 class RequestRegistrationCallback<T> {
   private final Map<Integer, T> correlationIdToOperation;
   private List<RequestInfo> requestsToSend = null;
-  private List<Integer> requestsToDrop = null;
+  private Set<Integer> requestsToDrop = null;
 
   /**
    * @param correlationIdToOperation used to keep a mapping from correlation ID to the operation that the request
@@ -48,7 +49,7 @@ class RequestRegistrationCallback<T> {
   /**
    * @return the list where the correlation IDs of requests to drop are added.
    */
-  List<Integer> getRequestsToDrop() {
+  Set<Integer> getRequestsToDrop() {
     return requestsToDrop;
   }
 
@@ -62,7 +63,7 @@ class RequestRegistrationCallback<T> {
   /**
    * @param requestsToDrop the list to add the correlation IDs of requests to drop to.
    */
-  void setRequestsToDrop(List<Integer> requestsToDrop) {
+  void setRequestsToDrop(Set<Integer> requestsToDrop) {
     this.requestsToDrop = requestsToDrop;
   }
 

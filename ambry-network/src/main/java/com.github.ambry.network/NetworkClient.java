@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -33,7 +34,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * The NetworkClient provides a method for sending a list of requests in the form of {@link Send} to a host:port,
- * and receive responses for sent requests. Requests that come in via {@link #sendAndPoll(List, List, int)} call,
+ * and receive responses for sent requests. Requests that come in via {@link #sendAndPoll(List, Set, int)} call,
  * that could not be immediately sent is queued and an attempt will be made in subsequent invocations of the call (or
  * until they time out).
  * (Note: We will empirically determine whether, rather than queueing a request,
@@ -50,7 +51,7 @@ public class NetworkClient implements Closeable {
   private final Time time;
   private final LinkedList<RequestMetadata> pendingRequests;
   private final HashMap<String, RequestMetadata> connectionIdToRequestInFlight;
-  private final HashMap<Integer, String> correlationIdToConnectionId;
+  private final HashMap<Integer, String> correlationIdInFlightToConnectionId;
   private final HashMap<String, RequestMetadata> pendingConnectionsToAssociatedRequests;
   private final AtomicLong numPendingRequests;
   private final int checkoutTimeoutMs;
@@ -79,7 +80,7 @@ public class NetworkClient implements Closeable {
     pendingRequests = new LinkedList<>();
     numPendingRequests = new AtomicLong(0);
     connectionIdToRequestInFlight = new HashMap<>();
-    correlationIdToConnectionId = new HashMap<>();
+    correlationIdInFlightToConnectionId = new HashMap<>();
     pendingConnectionsToAssociatedRequests = new HashMap<>();
     networkMetrics.registerNetworkClientPendingConnections(numPendingRequests);
   }
@@ -97,7 +98,7 @@ public class NetworkClient implements Closeable {
    * so far.
    * @throws IllegalStateException if the NetworkClient is closed.
    */
-  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop,
+  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
     if (closed || !selector.isOpen()) {
       throw new IllegalStateException("The NetworkClient is closed.");
@@ -108,19 +109,9 @@ public class NetworkClient implements Closeable {
       for (RequestInfo requestInfo : requestsToSend) {
         pendingRequests.add(new RequestMetadata(requestInfo));
       }
-      List<NetworkSend> sends = prepareSends(responseInfoList);
-      if (networkConfig.networkClientEnableConnectionReplenishment) {
-        int connectionsInitiated = connectionTracker.replenishConnections(this::connect);
-        networkMetrics.connectionReplenished.inc(connectionsInitiated);
-      }
-      for (Integer correlationId : requestsToDrop) {
-        String connectionId = correlationIdToConnectionId.get(correlationId);
-        if (connectionId != null) {
-          // we do not need to mutate any of the bookkeeping data structures since that will be handled when dealing
-          // with the disconnected list in handleSelectorEvents()
-          selector.close(connectionId);
-        }
-      }
+      List<NetworkSend> sends = prepareSends(requestsToDrop, responseInfoList);
+      replenishConnections();
+      dropInFlightRequests(requestsToDrop);
       selector.poll(pollTimeoutMs, sends);
       handleSelectorEvents(responseInfoList);
     } catch (Exception e) {
@@ -137,11 +128,12 @@ public class NetworkClient implements Closeable {
    * Process the requests in the pendingRequestsQueue. Create {@link ResponseInfo} for those requests that have timed
    * out while waiting in the queue. Then, attempt to prepare {@link NetworkSend}s by checking out connections for
    * the rest of the requests in the queue.
+   * @param requestsToDrop the list of correlation IDs representing the requests that can be dropped.
    * @param responseInfoList the list to populate with responseInfos for requests that timed out waiting for
    *                         connections.
    * @return the list of {@link NetworkSend} objects to hand over to the Selector.
    */
-  private List<NetworkSend> prepareSends(List<ResponseInfo> responseInfoList) {
+  private List<NetworkSend> prepareSends(Set<Integer> requestsToDrop, List<ResponseInfo> responseInfoList) {
     List<NetworkSend> sends = new ArrayList<>();
     ListIterator<RequestMetadata> iter = pendingRequests.listIterator();
 
@@ -170,6 +162,12 @@ public class NetworkClient implements Closeable {
 
     while (iter.hasNext()) {
       RequestMetadata requestMetadata = iter.next();
+      if (requestsToDrop.contains(requestMetadata.requestInfo.getRequest().getCorrelationId())) {
+        responseInfoList.add(
+            new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.NetworkError, null));
+        iter.remove();
+        continue;
+      }
       try {
         String host = requestMetadata.requestInfo.getHost();
         Port port = requestMetadata.requestInfo.getPort();
@@ -198,7 +196,7 @@ public class NetworkClient implements Closeable {
           logger.trace("Connection checkout succeeded for {}:{} with connectionId {} ", host, port, connId);
           sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(), null, time));
           connectionIdToRequestInFlight.put(connId, requestMetadata);
-          correlationIdToConnectionId.put(requestMetadata.requestInfo.getRequest().getCorrelationId(), connId);
+          correlationIdInFlightToConnectionId.put(requestMetadata.requestInfo.getRequest().getCorrelationId(), connId);
           iter.remove();
           requestMetadata.onRequestDequeue();
         }
@@ -208,6 +206,33 @@ public class NetworkClient implements Closeable {
       }
     }
     return sends;
+  }
+
+  /**
+   * If enabled, initiate new connections to reach the minimum number of open connections per remote host.
+   */
+  private void replenishConnections() {
+    if (networkConfig.networkClientEnableConnectionReplenishment) {
+      int connectionsInitiated = connectionTracker.replenishConnections(this::connect);
+      networkMetrics.connectionReplenished.inc(connectionsInitiated);
+    }
+  }
+
+  /**
+   * Drop requests by telling the selector to close the connection associated with the request if the request is in
+   * flight or by removing the request from the list of pending requests if the request is currently waiting for an
+   * available connection. This should be called before the {@link Selector#poll} call.
+   * @param requestsToDrop the correlation IDs of the requests to drop.
+   */
+  private void dropInFlightRequests(Set<Integer> requestsToDrop) {
+    for (Integer correlationId : requestsToDrop) {
+      String connectionId = correlationIdInFlightToConnectionId.get(correlationId);
+      if (connectionId != null) {
+        // we do not need to mutate any of the bookkeeping data structures since that will be handled when dealing
+        // with the disconnected list in handleSelectorEvents()
+        selector.close(connectionId);
+      }
+    }
   }
 
   /**
@@ -301,7 +326,7 @@ public class NetworkClient implements Closeable {
         requestMetadata = connectionIdToRequestInFlight.remove(connId);
         if (requestMetadata != null) {
           logger.trace("ConnectionId {} with request in flight disconnected", connId);
-          correlationIdToConnectionId.remove(requestMetadata.requestInfo.getRequest().getCorrelationId());
+          correlationIdInFlightToConnectionId.remove(requestMetadata.requestInfo.getRequest().getCorrelationId());
           responseInfoList.add(
               new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.NetworkError, null));
         } else {
@@ -323,7 +348,7 @@ public class NetworkClient implements Closeable {
           connId);
       connectionTracker.checkInConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
-      correlationIdToConnectionId.remove(requestMetadata.requestInfo.getRequest().getCorrelationId());
+      correlationIdInFlightToConnectionId.remove(requestMetadata.requestInfo.getRequest().getCorrelationId());
       responseInfoList.add(new ResponseInfo(requestMetadata.requestInfo, null, recv.getReceivedBytes().getPayload()));
       requestMetadata.onResponseReceive();
     }
@@ -340,7 +365,7 @@ public class NetworkClient implements Closeable {
   }
 
   /**
-   * Wake up the NetworkClient if it is within a {@link #sendAndPoll(List, List, int)} sleep. This wakes
+   * Wake up the NetworkClient if it is within a {@link #sendAndPoll(List, Set, int)} sleep. This wakes
    * up the {@link Selector}, which in turn wakes up the {@link java.nio.channels.Selector}.
    * <br>
    * @see java.nio.channels.Selector#wakeup()

@@ -793,8 +793,8 @@ public class ServerAdminTool implements Closeable {
       if (time.milliseconds() - startTimeMs > OPERATION_TIMEOUT_MS) {
         throw new TimeoutException(identifier + ": Operation did not complete within " + OPERATION_TIMEOUT_MS + " ms");
       }
-      List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, Collections.emptyList(),
-          POLL_TIMEOUT_MS);
+      List<ResponseInfo> responseInfos =
+          networkClient.sendAndPoll(requestInfos, Collections.emptySet(), POLL_TIMEOUT_MS);
       if (responseInfos.size() > 1) {
         // May need to relax this check because response list may contain more than 1 response
         throw new IllegalStateException("Received more than one response even though a single request was sent");

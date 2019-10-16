@@ -1529,10 +1529,10 @@ public class GetBlobOperationTest {
     // Shuffle the replicas to introduce randomness in the order in which responses arrive.
     Collections.shuffle(requestList);
     List<ResponseInfo> responseList = new ArrayList<>();
-    responseList.addAll(mockNetworkClient.sendAndPoll(requestList, Collections.emptyList(), 100));
+    responseList.addAll(mockNetworkClient.sendAndPoll(requestList, Collections.emptySet(), 100));
     requestList.clear();
     while (responseList.size() < sendCount) {
-      responseList.addAll(mockNetworkClient.sendAndPoll(requestList, Collections.emptyList(), 100));
+      responseList.addAll(mockNetworkClient.sendAndPoll(requestList, Collections.emptySet(), 100));
     }
     return responseList;
   }

@@ -105,6 +105,13 @@ public class RouterConfig {
   public final int routerRequestTimeoutMs;
 
   /**
+   * {@code true} if the router should tell the network layer about requests that have timed out. The network client
+   * can choose how to drop these requests.
+   */
+  @Config("router.drop.request.on.timeout")
+  public final boolean routerDropRequestOnTimeout;
+
+  /**
    * The max chunk size to be used for put operations.
    */
   @Config("router.max.put.chunk.size.bytes")
@@ -377,6 +384,7 @@ public class RouterConfig {
     routerConnectionCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("router.connection.checkout.timeout.ms", 1000, 1, 5000);
     routerRequestTimeoutMs = verifiableProperties.getIntInRange("router.request.timeout.ms", 2000, 1, 10000);
+    routerDropRequestOnTimeout = verifiableProperties.getBoolean("router.drop.requests.on.timeout", false);
     routerMaxPutChunkSizeBytes =
         verifiableProperties.getIntInRange("router.max.put.chunk.size.bytes", 4 * 1024 * 1024, 1, Integer.MAX_VALUE);
     routerPutRequestParallelism =

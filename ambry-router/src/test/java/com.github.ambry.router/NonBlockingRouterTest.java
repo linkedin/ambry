@@ -991,7 +991,7 @@ public class NonBlockingRouterTest {
     FutureResult futureResult = opHelper.submitOperation(blobId);
     int requestParallelism = opHelper.requestParallelism;
     List<RequestInfo> allRequests = new ArrayList<>();
-    List<Integer> allDropped = new ArrayList<>();
+    Set<Integer> allDropped = new HashSet<>();
     long loopStartTimeMs = SystemTime.getInstance().milliseconds();
     while (allRequests.size() < requestParallelism) {
       if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
@@ -1013,7 +1013,7 @@ public class NonBlockingRouterTest {
           if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
             Assert.fail("Waited too long for the response.");
           }
-          responseInfoList = networkClient.sendAndPoll(requestInfoListToSend, Collections.emptyList(), 10);
+          responseInfoList = networkClient.sendAndPoll(requestInfoListToSend, Collections.emptySet(), 10);
           requestInfoListToSend.clear();
         } while (responseInfoList.size() == 0);
         responseInfo = responseInfoList.get(0);
@@ -1060,7 +1060,7 @@ public class NonBlockingRouterTest {
     invalidResponse.set(false);
     FutureResult futureResult = opHelper.submitOperation(blobId);
     List<RequestInfo> allRequests = new ArrayList<>();
-    List<Integer> allDropped = new ArrayList<>();
+    Set<Integer> allDropped = new HashSet<>();
     long loopStartTimeMs = SystemTime.getInstance().milliseconds();
     while (!futureResult.isDone()) {
       if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
@@ -1093,7 +1093,7 @@ public class NonBlockingRouterTest {
     FutureResult futureResult = opHelper.submitOperation(blobId);
     int requestParallelism = opHelper.requestParallelism;
     List<RequestInfo> allRequests = new ArrayList<>();
-    List<Integer> allDropped = new ArrayList<>();
+    Set<Integer> allDropped = new HashSet<>();
     long loopStartTimeMs = SystemTime.getInstance().milliseconds();
     while (allRequests.size() < requestParallelism) {
       if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
@@ -1107,7 +1107,7 @@ public class NonBlockingRouterTest {
       if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
         Assert.fail("Waited too long for the response.");
       }
-      responseInfoList.addAll(networkClient.sendAndPoll(allRequests, Collections.emptyList(), 10));
+      responseInfoList.addAll(networkClient.sendAndPoll(allRequests, allDropped, 10));
       allRequests.clear();
     } while (responseInfoList.size() < requestParallelism);
     // corrupt the first response.
@@ -1265,7 +1265,7 @@ public class NonBlockingRouterTest {
      * @param requestsToSend the list of {@link RequestInfo} to send to pass into the poll call.
      * @param requestsToDrop the list of correlation IDs to drop to pass into the poll call.
      */
-    void pollOpManager(List<RequestInfo> requestsToSend, List<Integer> requestsToDrop) {
+    void pollOpManager(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
       switch (opType) {
         case PUT:
           putManager.poll(requestsToSend, requestsToDrop);
@@ -1287,7 +1287,7 @@ public class NonBlockingRouterTest {
     private void awaitOpCompletionOrTimeOut(FutureResult futureResult) throws InterruptedException {
       int timer = 0;
       List<RequestInfo> allRequests = new ArrayList<>();
-      List<Integer> allDropped = new ArrayList<>();
+      Set<Integer> allDropped = new HashSet<>();
       while (timer < AWAIT_TIMEOUT_MS / 2 && !futureResult.completed()) {
         pollOpManager(allRequests, allDropped);
         Thread.sleep(50);
