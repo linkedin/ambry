@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +44,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
    * @param clusterMap the {@link ClusterMap} to deserialize tokens.
    * @param tokenHelper the {@link FindTokenHelper} to deserialize tokens.
    */
-  public DiskTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
+  public DiskTokenPersistor(String replicaTokenFileName, Map<String, Set<PartitionInfo>> partitionGroupedByMountPath,
       ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper tokenHelper) {
     super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenHelper);
     this.replicaTokenFileName = replicaTokenFileName;

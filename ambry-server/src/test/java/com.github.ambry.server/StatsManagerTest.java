@@ -21,9 +21,7 @@ import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StatsManagerConfig;
-import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
@@ -234,7 +232,7 @@ public class StatsManagerTest {
    * @throws IOException
    */
   @Test
-  public void testAddAndRemoveBlobStore() throws StoreException, IOException {
+  public void testAddAndRemoveReplica() throws StoreException, IOException {
     // setup testing environment
     Map<PartitionId, Store> testStoreMap = new HashMap<>();
     List<ReplicaId> testReplicas = new ArrayList<>();
@@ -519,44 +517,6 @@ public class StatsManagerTest {
     }
     return new Pair<>(new StatsSnapshot(baseSnapshot.getValue() - partialTotalSize, accountMap1),
         new StatsSnapshot(partialTotalSize, accountMap2));
-  }
-
-  /**
-   * Mocked {@link StorageManager} that is intended to have only the overwritten methods to be called and return
-   * predefined values.
-   */
-  static class MockStorageManager extends StorageManager {
-    private static final VerifiableProperties VPROPS = new VerifiableProperties(new Properties());
-    private final Map<PartitionId, Store> storeMap;
-    CountDownLatch waitOperationCountdown;
-    boolean firstCall;
-    List<PartitionId> unreachablePartitions;
-
-    MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
-      super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), null, new MetricRegistry(), new ArrayList<>(), null,
-          null, null, null, SystemTime.getInstance());
-      storeMap = map;
-      waitOperationCountdown = new CountDownLatch(0);
-      firstCall = true;
-      unreachablePartitions = new ArrayList<>();
-    }
-
-    @Override
-    public Store getStore(PartitionId id) {
-      if (!firstCall) {
-        try {
-          waitOperationCountdown.await();
-        } catch (InterruptedException e) {
-          throw new IllegalStateException("CountDown await was interrupted", e);
-        }
-      }
-      firstCall = false;
-      Store storeToReturn = storeMap.get(id);
-      if (storeToReturn == null) {
-        unreachablePartitions.add(id);
-      }
-      return storeToReturn;
-    }
   }
 
   /**

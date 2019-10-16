@@ -534,6 +534,12 @@ class StaticClusterManager implements ClusterMap {
   }
 
   @Override
+  public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
+    throw new UnsupportedOperationException(
+        "Adding new replica is currently not supported in static cluster manager.");
+  }
+
+  @Override
   public void close() {
     // No-op.
   }

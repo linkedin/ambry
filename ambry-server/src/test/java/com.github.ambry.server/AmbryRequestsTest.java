@@ -13,11 +13,10 @@
  */
 package com.github.ambry.server;
 
-import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
@@ -28,10 +27,8 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerMetrics;
-import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
@@ -47,6 +44,7 @@ import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
+import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
@@ -66,43 +64,32 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.protocol.TtlUpdateRequest;
-import com.github.ambry.replication.BlobIdTransformer;
-import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.MockFindTokenHelper;
+import com.github.ambry.replication.MockReplicationManager;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
-import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageInfoTest;
-import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.MockWrite;
-import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
-import com.github.ambry.store.StoreGetOptions;
-import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -114,8 +101,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Test;
+import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.MockClusterMap.*;
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 // TODO: want to move this to ambry-protocol but has dependencies
@@ -129,6 +119,7 @@ public class AmbryRequestsTest {
   private final DataNodeId dataNodeId;
   private final MockStorageManager storageManager;
   private final MockReplicationManager replicationManager;
+  private final MockStatsManager statsManager;
   private final AmbryRequests ambryRequests;
   private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
   private final Set<StoreKey> validKeysInStore = new HashSet<>();
@@ -148,6 +139,7 @@ public class AmbryRequestsTest {
     properties.setProperty("replication.no.of.inter.dc.replica.threads", "1");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
+    StatsManagerConfig statsManagerConfig = new StatsManagerConfig(verifiableProperties);
     dataNodeId = clusterMap.getDataNodeIds().get(0);
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
     findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
@@ -157,11 +149,14 @@ public class AmbryRequestsTest {
     replicationManager =
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId,
             storeKeyConverterFactory);
+    statsManager =
+        new MockStatsManager(storageManager, clusterMap.getReplicaIds(dataNodeId), clusterMap.getMetricRegistry(),
+            statsManagerConfig);
     ServerMetrics serverMetrics =
         new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, false,
-        storeKeyConverterFactory);
+        storeKeyConverterFactory, statsManager);
     storageManager.start();
   }
 
@@ -180,8 +175,7 @@ public class AmbryRequestsTest {
    */
   @Test
   public void scheduleCompactionSuccessTest() throws InterruptedException, IOException {
-    List<? extends PartitionId> partitionIds =
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
     for (PartitionId id : partitionIds) {
       doScheduleCompactionTest(id, ServerErrorCode.No_Error);
       assertEquals("Partition scheduled for compaction not as expected", id,
@@ -199,7 +193,7 @@ public class AmbryRequestsTest {
     // partitionId not specified
     doScheduleCompactionTest(null, ServerErrorCode.Bad_Request);
 
-    PartitionId id = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
     // store is not started - Replica_Unavailable
     storageManager.returnNullStore = true;
     doScheduleCompactionTest(id, ServerErrorCode.Replica_Unavailable);
@@ -244,8 +238,7 @@ public class AmbryRequestsTest {
         {RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.GetRequest,
             RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest};
     for (RequestOrResponseType requestType : requestOrResponseTypes) {
-      List<? extends PartitionId> partitionIds =
-          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+      List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
       for (PartitionId id : partitionIds) {
         doRequestControlRequestTest(requestType, id);
       }
@@ -271,8 +264,7 @@ public class AmbryRequestsTest {
    */
   @Test
   public void controlReplicationSuccessTest() throws InterruptedException, IOException {
-    List<? extends PartitionId> partitionIds =
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
     for (PartitionId id : partitionIds) {
       doControlReplicationTest(id, ServerErrorCode.No_Error);
     }
@@ -288,12 +280,11 @@ public class AmbryRequestsTest {
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = false;
     sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false,
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), ServerErrorCode.Bad_Request);
+        clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0), ServerErrorCode.Bad_Request);
     replicationManager.reset();
     replicationManager.exceptionToThrow = new IllegalStateException();
     sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false,
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
-        ServerErrorCode.Unknown_Error);
+        clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0), ServerErrorCode.Unknown_Error);
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
   }
 
@@ -388,7 +379,7 @@ public class AmbryRequestsTest {
    * @throws IOException
    */
   @Test
-  public void controlBlobStoreSuccessTest() throws InterruptedException, IOException {
+  public void controlBlobStoreSuccessTest() throws Exception {
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
     List<? extends ReplicaId> replicaIds = id.getReplicaIds();
@@ -399,17 +390,19 @@ public class AmbryRequestsTest {
     replicationManager.controlReplicationReturnVal = true;
     generateLagOverrides(0, acceptableLagInBytes);
     // stop BlobStore
-    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.No_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.No_Error);
     // verify APIs are called in the process of stopping BlobStore
     assertEquals("Compaction on store should be disabled after stopping the BlobStore", false,
         storageManager.compactionEnableVal);
     assertEquals("Partition disabled for compaction not as expected", id,
         storageManager.compactionControlledPartitionId);
-    assertEquals("Origins list should be empty", true, replicationManager.originsVal.isEmpty());
+    assertTrue("Origins list should be empty", replicationManager.originsVal.isEmpty());
     assertEquals("Replication on given BlobStore should be disabled", false, replicationManager.enableVal);
     assertEquals("Partition shutdown not as expected", id, storageManager.shutdownPartitionId);
     // start BlobStore
-    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.No_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.No_Error);
     // verify APIs are called in the process of starting BlobStore
     assertEquals("Partition started not as expected", id, storageManager.startedPartitionId);
     assertEquals("Replication on given BlobStore should be enabled", true, replicationManager.enableVal);
@@ -417,6 +410,81 @@ public class AmbryRequestsTest {
         storageManager.compactionControlledPartitionId);
     assertEquals("Compaction on store should be enabled after starting the BlobStore", true,
         storageManager.compactionEnableVal);
+    // add BlobStore (create a new partition and add one of its replicas to server)
+    PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.AddStore,
+        numReplicasCaughtUpPerPartition, ServerErrorCode.No_Error);
+    // remove BlobStore (remove previously added store)
+    BlobStore mockStore = Mockito.mock(BlobStore.class);
+    storageManager.overrideStoreToReturn = mockStore;
+    doNothing().when(mockStore).deleteStoreFiles();
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore,
+        numReplicasCaughtUpPerPartition, ServerErrorCode.No_Error);
+    storageManager.overrideStoreToReturn = null;
+  }
+
+  @Test
+  public void addBlobStoreFailureTest() throws Exception {
+    // create newPartition1 that no replica sits on current node.
+    List<MockDataNodeId> dataNodes = clusterMap.getDataNodes()
+        .stream()
+        .filter(node -> !node.getHostname().equals(dataNodeId.getHostname()) && node.getPort() != dataNodeId.getPort())
+        .collect(Collectors.toList());
+    PartitionId newPartition1 = clusterMap.createNewPartition(dataNodes);
+    // test that getting new replica from cluster map fails
+    sendAndVerifyStoreControlRequest(newPartition1, BlobStoreControlAction.AddStore, (short) 0,
+        ServerErrorCode.Replica_Unavailable);
+
+    // create newPartition2 that has one replica on current node
+    PartitionId newPartition2 = clusterMap.createNewPartition(clusterMap.getDataNodes());
+    // test that adding store into StorageManager fails
+    storageManager.returnValueOfAddBlobStore = false;
+    sendAndVerifyStoreControlRequest(newPartition2, BlobStoreControlAction.AddStore, (short) 0,
+        ServerErrorCode.Unknown_Error);
+    storageManager.returnValueOfAddBlobStore = true;
+
+    // test that adding replica into ReplicationManager fails (we first add replica into ReplicationManager to trigger failure)
+    ReplicaId replicaToAdd =
+        clusterMap.getBootstrapReplica(newPartition2.toPathString(), dataNodeId);
+    replicationManager.addReplica(replicaToAdd);
+    sendAndVerifyStoreControlRequest(newPartition2, BlobStoreControlAction.AddStore, (short) 0,
+        ServerErrorCode.Unknown_Error);
+    assertTrue("Remove replica from replication manager should succeed.",
+        replicationManager.removeReplica(replicaToAdd));
+
+    // test that adding replica into StatsManager fails
+    statsManager.returnValOfAddReplica = false;
+    sendAndVerifyStoreControlRequest(newPartition2, BlobStoreControlAction.AddStore, (short) 0,
+        ServerErrorCode.Unknown_Error);
+    statsManager.returnValOfAddReplica = true;
+  }
+
+  @Test
+  public void removeBlobStoreFailureTest() throws Exception {
+    // first, create new partition but don't add to current node
+    PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
+    // test store removal failure because store doesn't exist
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, (short) 0,
+        ServerErrorCode.Partition_Unknown);
+    // add store on current node for store removal testing
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.AddStore, (short) 0,
+        ServerErrorCode.No_Error);
+    // mock exception in StorageManager
+    storageManager.returnValueOfRemoveBlobStore = false;
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, (short) 0,
+        ServerErrorCode.Unknown_Error);
+    storageManager.returnValueOfRemoveBlobStore = true;
+    // mock exception when deleting files of removed store
+    BlobStore mockStore = Mockito.mock(BlobStore.class);
+    storageManager.overrideStoreToReturn = mockStore;
+    doThrow(new IOException()).when(mockStore).deleteStoreFiles();
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, (short) 0,
+        ServerErrorCode.Unknown_Error);
+    // test store removal success case
+    doNothing().when(mockStore).deleteStoreFiles();
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, (short) 0,
+        ServerErrorCode.No_Error);
+    storageManager.overrideStoreToReturn = null;
   }
 
   /**
@@ -431,23 +499,28 @@ public class AmbryRequestsTest {
     short numReplicasCaughtUpPerPartition = 3;
     // test start BlobStore failure
     storageManager.returnValueOfStartingBlobStore = false;
-    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfStartingBlobStore = true;
     // test start BlobStore with runtime exception
     storageManager.exceptionToThrowOnStartingBlobStore = new IllegalStateException();
-    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnStartingBlobStore = null;
     // test enable replication failure
     replicationManager.controlReplicationReturnVal = false;
-    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
     replicationManager.controlReplicationReturnVal = true;
     // test enable compaction failure
     storageManager.returnValueOfControllingCompaction = false;
-    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfControllingCompaction = true;
     // test enable compaction with runtime exception
     storageManager.exceptionToThrowOnControllingCompaction = new IllegalStateException();
-    sendAndVerifyStoreControlRequest(id, true, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StartStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnControllingCompaction = null;
   }
 
@@ -462,48 +535,58 @@ public class AmbryRequestsTest {
     PartitionId id = partitionIds.get(0);
     short numReplicasCaughtUpPerPartition = 3;
     // test partition unknown
-    sendAndVerifyStoreControlRequest(null, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Bad_Request);
+    sendAndVerifyStoreControlRequest(null, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Bad_Request);
     // test validate request failure - Replica_Unavailable
     storageManager.returnNullStore = true;
-    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Replica_Unavailable);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Replica_Unavailable);
     storageManager.returnNullStore = false;
     // test validate request failure - Disk_Unavailable
     storageManager.shutdown();
     storageManager.returnNullStore = true;
-    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Disk_Unavailable);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Disk_Unavailable);
     storageManager.returnNullStore = false;
     storageManager.start();
     // test invalid numReplicasCaughtUpPerPartition
     numReplicasCaughtUpPerPartition = -1;
-    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Bad_Request);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Bad_Request);
     numReplicasCaughtUpPerPartition = 3;
     // test disable compaction failure
     storageManager.returnValueOfControllingCompaction = false;
-    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
     storageManager.returnValueOfControllingCompaction = true;
     // test disable compaction with runtime exception
     storageManager.exceptionToThrowOnControllingCompaction = new IllegalStateException();
-    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnControllingCompaction = null;
     // test disable replication failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = false;
-    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
     // test peers catchup failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     // all replicas of this partition > acceptableLag
     generateLagOverrides(1, 1);
-    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Retry_After_Backoff);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Retry_After_Backoff);
     // test shutdown BlobStore failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     storageManager.returnValueOfShutdownBlobStore = false;
     generateLagOverrides(0, 0);
-    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
     // test shutdown BlobStore with runtime exception
     storageManager.exceptionToThrowOnShuttingDownBlobStore = new IllegalStateException();
-    sendAndVerifyStoreControlRequest(id, false, numReplicasCaughtUpPerPartition, ServerErrorCode.Unknown_Error);
+    sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.Unknown_Error);
     storageManager.exceptionToThrowOnShuttingDownBlobStore = null;
   }
 
@@ -579,8 +662,7 @@ public class AmbryRequestsTest {
    */
   @Test
   public void ttlUpdateTest() throws InterruptedException, IOException, MessageFormatException, StoreException {
-    MockPartitionId id =
-        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
@@ -685,21 +767,21 @@ public class AmbryRequestsTest {
    * Sends and verifies that a {@link AdminRequestOrResponseType#BlobStoreControl} request received the error code
    * expected.
    * @param partitionId the {@link PartitionId} to send the request for. Can be {@code null}.
-   * @param enable {@code true} if BlobStore needs to be started. {@code false} otherwise.
+   * @param storeControlRequestType type of control operation that will be performed on certain store.
    * @param numReplicasCaughtUpPerPartition the number of peer replicas which have caught up with this store before proceeding.
    * @param expectedServerErrorCode the {@link ServerErrorCode} expected in the response.
    * @throws InterruptedException
    * @throws IOException
    */
-  private void sendAndVerifyStoreControlRequest(PartitionId partitionId, boolean enable,
-      short numReplicasCaughtUpPerPartition, ServerErrorCode expectedServerErrorCode)
-      throws InterruptedException, IOException {
+  private void sendAndVerifyStoreControlRequest(PartitionId partitionId,
+      BlobStoreControlAction storeControlRequestType, short numReplicasCaughtUpPerPartition,
+      ServerErrorCode expectedServerErrorCode) throws InterruptedException, IOException {
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, correlationId, clientId);
     BlobStoreControlAdminRequest blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, enable, adminRequest);
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, storeControlRequestType, adminRequest);
     Response response = sendRequestGetResponse(blobStoreControlAdminRequest, expectedServerErrorCode);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
   }
@@ -1081,7 +1163,7 @@ public class AmbryRequestsTest {
    * @throws IOException
    */
   private void miscTtlUpdateFailuresTest() throws InterruptedException, IOException {
-    PartitionId id = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
     // store exceptions
     for (StoreErrorCodes code : StoreErrorCodes.values()) {
       MockStorageManager.storeException = new StoreException("expected", code);
@@ -1138,8 +1220,8 @@ public class AmbryRequestsTest {
 
     // verify MessageInfo
     // since the record has been verified, the buffer size before verification is a good indicator of size
-    MessageInfoTest.checkGetters(info, key, expectedSize, false, true, expiresAtMs, null, key.getAccountId(),
-        key.getContainerId(), opTimeMs);
+    MessageInfoTest.checkGetters(info, key, expectedSize, false, true, false, expiresAtMs, null, key.getAccountId(),
+        key.getContainerId(), opTimeMs, (short) 0);
   }
 
   /**
@@ -1205,443 +1287,6 @@ public class AmbryRequestsTest {
     public void sendResponse(Send payloadToSend, Request originalRequest, ServerNetworkResponseMetrics metrics) {
       lastResponse = payloadToSend;
       lastOriginalRequest = originalRequest;
-    }
-  }
-
-  /**
-   * An extension of {@link StorageManager} to help with tests.
-   */
-  private static class MockStorageManager extends StorageManager {
-
-    /**
-     * The operation received at the store.
-     */
-    static RequestOrResponseType operationReceived = null;
-
-    /**
-     * The {@link MessageWriteSet} received at the store (only for put, delete and ttl update)
-     */
-    static MessageWriteSet messageWriteSetReceived = null;
-
-    /**
-     * The IDs received at the store (only for get)
-     */
-    static List<? extends StoreKey> idsReceived = null;
-
-    /**
-     * The {@link StoreGetOptions} received at the store (only for get)
-     */
-    static EnumSet<StoreGetOptions> storeGetOptionsReceived;
-
-    /**
-     * The {@link FindToken} received at the store (only for findEntriesSince())
-     */
-    static FindToken tokenReceived = null;
-
-    /**
-     * The maxTotalSizeOfEntries received at the store (only for findEntriesSince())
-     */
-    static Long maxTotalSizeOfEntriesReceived = null;
-
-    /**
-     * StoreException to throw when an API is invoked
-     */
-    static StoreException storeException = null;
-
-    /**
-     * RuntimeException to throw when an API is invoked. Will be preferred over {@link #storeException}.
-     */
-    static RuntimeException runtimeException = null;
-
-    /**
-     * An empty {@link Store} implementation.
-     */
-    private Store store = new Store() {
-      boolean started;
-
-      @Override
-      public void start() throws StoreException {
-        throwExceptionIfRequired();
-        started = true;
-      }
-
-      @Override
-      public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions)
-          throws StoreException {
-        operationReceived = RequestOrResponseType.GetRequest;
-        idsReceived = ids;
-        storeGetOptionsReceived = storeGetOptions;
-        throwExceptionIfRequired();
-        checkValidityOfIds(ids);
-        return new StoreInfo(new MessageReadSet() {
-          @Override
-          public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) {
-            return 0;
-          }
-
-          @Override
-          public int count() {
-            return 0;
-          }
-
-          @Override
-          public long sizeInBytes(int index) {
-            return 0;
-          }
-
-          @Override
-          public StoreKey getKeyAt(int index) {
-            return null;
-          }
-
-          @Override
-          public void doPrefetch(int index, long relativeOffset, long size) {
-          }
-        }, Collections.emptyList());
-      }
-
-      @Override
-      public void put(MessageWriteSet messageSetToWrite) throws StoreException {
-        operationReceived = RequestOrResponseType.PutRequest;
-        messageWriteSetReceived = messageSetToWrite;
-        throwExceptionIfRequired();
-      }
-
-      @Override
-      public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
-        operationReceived = RequestOrResponseType.DeleteRequest;
-        messageWriteSetReceived = messageSetToDelete;
-        throwExceptionIfRequired();
-        checkValidityOfIds(
-            messageSetToDelete.getMessageSetInfo().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()));
-      }
-
-      @Override
-      public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
-        operationReceived = RequestOrResponseType.TtlUpdateRequest;
-        messageWriteSetReceived = messageSetToUpdate;
-        throwExceptionIfRequired();
-        checkValidityOfIds(
-            messageSetToUpdate.getMessageSetInfo().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()));
-      }
-
-      @Override
-      public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
-        operationReceived = RequestOrResponseType.ReplicaMetadataRequest;
-        tokenReceived = token;
-        maxTotalSizeOfEntriesReceived = maxTotalSizeOfEntries;
-        throwExceptionIfRequired();
-        return new FindInfo(Collections.emptyList(),
-            findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken());
-      }
-
-      @Override
-      public Set<StoreKey> findMissingKeys(List<StoreKey> keys) {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public StoreStats getStoreStats() {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public boolean isKeyDeleted(StoreKey key) {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override
-      public long getSizeInBytes() {
-        return 0;
-      }
-
-      @Override
-      public boolean isEmpty() {
-        return false;
-      }
-
-      @Override
-      public boolean isStarted() {
-        return started;
-      }
-
-      public void shutdown() throws StoreException {
-        throwExceptionIfRequired();
-        started = false;
-      }
-
-      /**
-       * Throws a {@link RuntimeException} or {@link StoreException} if so configured
-       * @throws StoreException
-       */
-      private void throwExceptionIfRequired() throws StoreException {
-        if (runtimeException != null) {
-          throw runtimeException;
-        }
-        if (storeException != null) {
-          throw storeException;
-        }
-      }
-
-      /**
-       * Checks the validity of the {@code ids}
-       * @param ids the {@link StoreKey}s to check
-       * @throws StoreException if the key is not valid
-       */
-      private void checkValidityOfIds(Collection<? extends StoreKey> ids) throws StoreException {
-        for (StoreKey id : ids) {
-          if (!validKeysInStore.contains(id)) {
-            throw new StoreException("Not a valid key.", StoreErrorCodes.ID_Not_Found);
-          }
-        }
-      }
-    };
-
-    private static final VerifiableProperties VPROPS = new VerifiableProperties(new Properties());
-
-    /**
-     * if {@code true}, a {@code null} {@link Store} is returned on a call to {@link #getStore(PartitionId)}. Otherwise
-     * {@link #store} is returned.
-     */
-    boolean returnNullStore = false;
-    /**
-     * If non-null, the given exception is thrown when {@link #scheduleNextForCompaction(PartitionId)} is called.
-     */
-    RuntimeException exceptionToThrowOnSchedulingCompaction = null;
-    /**
-     * If non-null, the given exception is thrown when {@link #controlCompactionForBlobStore(PartitionId, boolean)} is called.
-     */
-    RuntimeException exceptionToThrowOnControllingCompaction = null;
-    /**
-     * If non-null, the given exception is thrown when {@link #shutdownBlobStore(PartitionId)} is called.
-     */
-    RuntimeException exceptionToThrowOnShuttingDownBlobStore = null;
-    /**
-     * If non-null, the given exception is thrown when {@link #startBlobStore(PartitionId)} is called.
-     */
-    RuntimeException exceptionToThrowOnStartingBlobStore = null;
-    /**
-     * The return value for a call to {@link #scheduleNextForCompaction(PartitionId)}.
-     */
-    boolean returnValueOfSchedulingCompaction = true;
-    /**
-     * The return value for a call to {@link #controlCompactionForBlobStore(PartitionId, boolean)}.
-     */
-    boolean returnValueOfControllingCompaction = true;
-    /**
-     * The return value for a call to {@link #shutdownBlobStore(PartitionId)}.
-     */
-    boolean returnValueOfShutdownBlobStore = true;
-    /**
-     * The return value for a call to {@link #startBlobStore(PartitionId)}.
-     */
-    boolean returnValueOfStartingBlobStore = true;
-    /**
-     * The {@link PartitionId} that was provided in the call to {@link #scheduleNextForCompaction(PartitionId)}
-     */
-    PartitionId compactionScheduledPartitionId = null;
-    /**
-     * The {@link PartitionId} that was provided in the call to {@link #controlCompactionForBlobStore(PartitionId, boolean)}
-     */
-    PartitionId compactionControlledPartitionId = null;
-    /**
-     * The {@link boolean} that was provided in the call to {@link #controlCompactionForBlobStore(PartitionId, boolean)}
-     */
-    Boolean compactionEnableVal = null;
-    /**
-     * The {@link PartitionId} that was provided in the call to {@link #shutdownBlobStore(PartitionId)}
-     */
-    PartitionId shutdownPartitionId = null;
-    /**
-     * The {@link PartitionId} that was provided in the call to {@link #startBlobStore(PartitionId)}
-     */
-    PartitionId startedPartitionId = null;
-
-    private final Set<StoreKey> validKeysInStore;
-
-    private final FindTokenHelper findTokenHelper;
-
-    MockStorageManager(Set<StoreKey> validKeysInStore, List<? extends ReplicaId> replicas,
-        FindTokenHelper findTokenHelper) throws StoreException {
-      super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
-          replicas, null, null, null, null, new MockTime());
-      this.validKeysInStore = validKeysInStore;
-      this.findTokenHelper = findTokenHelper;
-    }
-
-    @Override
-    public Store getStore(PartitionId id) {
-      return returnNullStore ? null : store;
-    }
-
-    @Override
-    public boolean scheduleNextForCompaction(PartitionId id) {
-      if (exceptionToThrowOnSchedulingCompaction != null) {
-        throw exceptionToThrowOnSchedulingCompaction;
-      }
-      compactionScheduledPartitionId = id;
-      return returnValueOfSchedulingCompaction;
-    }
-
-    @Override
-    public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
-      if (exceptionToThrowOnControllingCompaction != null) {
-        throw exceptionToThrowOnControllingCompaction;
-      }
-      compactionControlledPartitionId = id;
-      compactionEnableVal = enabled;
-      return returnValueOfControllingCompaction;
-    }
-
-    @Override
-    public boolean shutdownBlobStore(PartitionId id) {
-      if (exceptionToThrowOnShuttingDownBlobStore != null) {
-        throw exceptionToThrowOnShuttingDownBlobStore;
-      }
-      shutdownPartitionId = id;
-      return returnValueOfShutdownBlobStore;
-    }
-
-    @Override
-    public boolean startBlobStore(PartitionId id) {
-      if (exceptionToThrowOnStartingBlobStore != null) {
-        throw exceptionToThrowOnStartingBlobStore;
-      }
-      startedPartitionId = id;
-      return returnValueOfStartingBlobStore;
-    }
-
-    /**
-     * Resets variables associated with the {@link Store} impl
-     */
-    void resetStore() {
-      operationReceived = null;
-      messageWriteSetReceived = null;
-      idsReceived = null;
-      storeGetOptionsReceived = null;
-      tokenReceived = null;
-      maxTotalSizeOfEntriesReceived = null;
-    }
-  }
-
-  /**
-   * An extension of {@link ReplicationManager} to help with testing.
-   */
-  private static class MockReplicationManager extends ReplicationManager {
-    // General variables
-    RuntimeException exceptionToThrow = null;
-    // Variables for controlling and examining the values provided to controlReplicationForPartitions()
-    Boolean controlReplicationReturnVal;
-    Collection<PartitionId> idsVal;
-    List<String> originsVal;
-    Boolean enableVal;
-    // Variables for controlling getRemoteReplicaLagFromLocalInBytes()
-    // the key is partitionId:hostname:replicaPath
-    Map<String, Long> lagOverrides = null;
-
-    /**
-     * Static construction helper
-     * @param verifiableProperties the {@link VerifiableProperties} to use for config.
-     * @param storageManager the {@link StorageManager} to use.
-     * @param clusterMap the {@link ClusterMap} to use.
-     * @param dataNodeId the {@link DataNodeId} to use.
-     * @param storeKeyConverterFactory the {@link StoreKeyConverterFactory} to use.
-     * @return an instance of {@link MockReplicationManager}
-     * @throws ReplicationException
-     */
-    static MockReplicationManager getReplicationManager(VerifiableProperties verifiableProperties,
-        StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
-        StoreKeyConverterFactory storeKeyConverterFactory) throws ReplicationException {
-      ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
-      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-      StoreConfig storeConfig = new StoreConfig(verifiableProperties);
-      return new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-          dataNodeId, storeKeyConverterFactory);
-    }
-
-    /**
-     * Constructor for MockReplicationManager.
-     * @param replicationConfig the config for replication.
-     * @param clusterMapConfig the config for clustermap.
-     * @param storeConfig the config for the store.
-     * @param storageManager the {@link StorageManager} to use.
-     * @param clusterMap the {@link ClusterMap} to use.
-     * @param dataNodeId the {@link DataNodeId} to use.
-     * @throws ReplicationException
-     */
-    MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
-        StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
-        StoreKeyConverterFactory storeKeyConverterFactory) throws ReplicationException {
-      super(replicationConfig, clusterMapConfig, storeConfig, storageManager, new StoreKeyFactory() {
-            @Override
-            public StoreKey getStoreKey(DataInputStream stream) {
-              return null;
-            }
-
-            @Override
-            public StoreKey getStoreKey(String input) {
-              return null;
-            }
-          }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
-          BlobIdTransformer.class.getName());
-      reset();
-    }
-
-    @Override
-    public boolean controlReplicationForPartitions(Collection<PartitionId> ids, List<String> origins, boolean enable) {
-      failIfRequired();
-      if (controlReplicationReturnVal == null) {
-        throw new IllegalStateException("Return val not set. Don't know what to return");
-      }
-      idsVal = ids;
-      originsVal = origins;
-      enableVal = enable;
-      return controlReplicationReturnVal;
-    }
-
-    @Override
-    public long getRemoteReplicaLagFromLocalInBytes(PartitionId partitionId, String hostName, String replicaPath) {
-      failIfRequired();
-      long lag;
-      String key = getPartitionLagKey(partitionId, hostName, replicaPath);
-      if (lagOverrides == null || !lagOverrides.containsKey(key)) {
-        lag = super.getRemoteReplicaLagFromLocalInBytes(partitionId, hostName, replicaPath);
-      } else {
-        lag = lagOverrides.get(key);
-      }
-      return lag;
-    }
-
-    /**
-     * Resets all state
-     */
-    void reset() {
-      exceptionToThrow = null;
-      controlReplicationReturnVal = null;
-      idsVal = null;
-      originsVal = null;
-      enableVal = null;
-      lagOverrides = null;
-    }
-
-    /**
-     * Gets the key for the lag override in {@code lagOverrides} using the given parameters.
-     * @param partitionId the {@link PartitionId} whose replica {@code hostname} is.
-     * @param hostname the hostname of the replica whose lag override key is required.
-     * @param replicaPath the replica path of the replica whose lag override key is required.
-     * @return
-     */
-    static String getPartitionLagKey(PartitionId partitionId, String hostname, String replicaPath) {
-      return partitionId.toString() + ":" + hostname + ":" + replicaPath;
-    }
-
-    /**
-     * Throws a {@link RuntimeException} if the {@link MockReplicationManager} is required to.
-     */
-    private void failIfRequired() {
-      if (exceptionToThrow != null) {
-        throw exceptionToThrow;
-      }
     }
   }
 }

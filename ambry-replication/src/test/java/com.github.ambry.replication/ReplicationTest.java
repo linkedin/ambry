@@ -20,11 +20,15 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
@@ -41,6 +45,7 @@ import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
+import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
@@ -65,6 +70,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
@@ -77,8 +83,10 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -95,7 +103,8 @@ public class ReplicationTest {
   private static final short VERSION_2 = 2;
   private static final short VERSION_5 = 5;
   private final MockTime time = new MockTime();
-  private ReplicationConfig config;
+  private VerifiableProperties verifiableProperties;
+  private ReplicationConfig replicationConfig;
 
   /**
    * Running for the two sets of compatible ReplicaMetadataRequest and ReplicaMetadataResponse,
@@ -116,13 +125,18 @@ public class ReplicationTest {
    */
   public ReplicationTest(short requestVersion, short responseVersion) {
     Properties properties = new Properties();
-    properties.setProperty("replication.metadatarequest.version", Short.toString(requestVersion));
+    properties.setProperty("replication.metadata.request.version", Short.toString(requestVersion));
     properties.setProperty("replication.metadataresponse.version", Short.toString(responseVersion));
+    properties.setProperty("replication.cloud.token.factory", "com.github.ambry.replication.MockFindTokenFactory");
+    properties.setProperty("clustermap.cluster.name", "test");
+    properties.setProperty("clustermap.datacenter.name", "DC1");
+    properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("replication.synced.replica.backoff.duration.ms", "3000");
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "200");
     properties.setProperty("replication.replica.thread.idle.sleep.duration.ms", "1000");
-    config = new ReplicationConfig(new VerifiableProperties(properties));
+    verifiableProperties = new VerifiableProperties(properties);
+    replicationConfig = new ReplicationConfig(verifiableProperties);
   }
 
   /**
@@ -150,8 +164,8 @@ public class ReplicationTest {
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 4);
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, config), clusterMap,
-            new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
+        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
+            new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
             mockStoreKeyConverterFactory.getStoreKeyConverter(), transformer, clusterMap.getMetricRegistry(), false,
             localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
@@ -171,6 +185,84 @@ public class ReplicationTest {
     Collections.sort(actualRemoteReplicaInfoList, remoteReplicaInfoComparator);
     remoteReplicaInfoList.remove(remoteReplicaInfoList.size() - 1);
     assertEquals("getRemoteReplicaInfos not correct", remoteReplicaInfoList, actualRemoteReplicaInfoList);
+  }
+
+  /**
+   * Test dynamically add/remove replica in {@link ReplicationManager}
+   * @throws Exception
+   */
+  @Test
+  public void addAndRemoveReplicaTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
+    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    StorageManager storageManager =
+        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
+            new MetricRegistry(), clusterMap.getReplicaIds(dataNodeId), null, null, null, null, new MockTime());
+    storageManager.start();
+    MockReplicationManager replicationManager =
+        new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
+            dataNodeId, storeKeyConverterFactory);
+    ReplicaId replicaToTest = clusterMap.getReplicaIds(dataNodeId).get(0);
+    // Attempting to add replica that already exists should fail
+    assertFalse("Adding an existing replica should fail", replicationManager.addReplica(replicaToTest));
+    // Create a brand new replica that sits on one of the disk of datanode, add it into replication manager
+    PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
+    for (ReplicaId replicaId : newPartition.getReplicaIds()) {
+      if (replicaId.getDataNodeId() == dataNodeId) {
+        replicaToTest = replicaId;
+        break;
+      }
+    }
+    // Before adding replica, partitionToPartitionInfo and mountPathToPartitionInfos should not contain new partition
+    assertFalse("partitionToPartitionInfo should not contain new partition",
+        replicationManager.getPartitionToPartitionInfoMap().containsKey(newPartition));
+    for (PartitionInfo partitionInfo : replicationManager.getMountPathToPartitionInfosMap()
+        .get(replicaToTest.getMountPath())) {
+      assertNotSame("mountPathToPartitionInfos should not contain new partition", partitionInfo.getPartitionId(),
+          newPartition);
+    }
+    // Add new replica to replication manager
+    assertTrue("Adding new replica to replication manager should succeed",
+        replicationManager.addReplica(replicaToTest));
+    // After adding replica, partitionToPartitionInfo and mountPathToPartitionInfos should contain new partition
+    assertTrue("partitionToPartitionInfo should contain new partition",
+        replicationManager.getPartitionToPartitionInfoMap().containsKey(newPartition));
+    Optional<PartitionInfo> newPartitionInfo = replicationManager.getMountPathToPartitionInfosMap()
+        .get(replicaToTest.getMountPath())
+        .stream()
+        .filter(partitionInfo -> partitionInfo.getPartitionId() == newPartition)
+        .findAny();
+    assertTrue("mountPathToPartitionInfos should contain new partition info", newPartitionInfo.isPresent());
+    // Verify that all remoteReplicaInfos of new added replica have assigned thread
+    for (RemoteReplicaInfo remoteReplicaInfo : newPartitionInfo.get().getRemoteReplicaInfos()) {
+      assertNotNull("The remote replica should be assigned to one replica thread",
+          remoteReplicaInfo.getReplicaThread());
+    }
+
+    // Remove replica
+    assertTrue("Remove replica from replication manager should succeed",
+        replicationManager.removeReplica(replicaToTest));
+    // Verify replica is removed, so partitionToPartitionInfo and mountPathToPartitionInfos should not contain new partition
+    assertFalse("partitionToPartitionInfo should not contain new partition",
+        replicationManager.getPartitionToPartitionInfoMap().containsKey(newPartition));
+    for (PartitionInfo partitionInfo : replicationManager.getMountPathToPartitionInfosMap()
+        .get(replicaToTest.getMountPath())) {
+      assertNotSame("mountPathToPartitionInfos should not contain new partition", partitionInfo.getPartitionId(),
+          newPartition);
+    }
+    // Verify that none of remoteReplicaInfo should have assigned thread
+    for (RemoteReplicaInfo remoteReplicaInfo : newPartitionInfo.get().getRemoteReplicaInfos()) {
+      assertNull("The remote replica should be assigned to one replica thread", remoteReplicaInfo.getReplicaThread());
+    }
+    // Remove the same replica that doesn't exist should be no-op
+    ReplicationManager mockManager = Mockito.spy(replicationManager);
+    assertFalse("Remove non-existent replica should return false", replicationManager.removeReplica(replicaToTest));
+    verify(mockManager, never()).removeRemoteReplicaInfoFromReplicaThread(anyList());
+    storageManager.shutdown();
   }
 
   /**
@@ -1133,8 +1225,8 @@ public class ReplicationTest {
     MockHost remoteHost = localAndRemoteHosts.getSecond();
     long expectedThrottleDurationMs =
         localHost.dataNodeId.getDatacenterName().equals(remoteHost.dataNodeId.getDatacenterName())
-            ? config.replicationIntraReplicaThreadThrottleSleepDurationMs
-            : config.replicationInterReplicaThreadThrottleSleepDurationMs;
+            ? replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs
+            : replicationConfig.replicationInterReplicaThreadThrottleSleepDurationMs;
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     storeKeyConverterFactory.setReturnInputIfAbsent(true);
@@ -1164,19 +1256,20 @@ public class ReplicationTest {
     List<List<RemoteReplicaInfo>> replicasToReplicateList = new ArrayList<>(replicasToReplicate.values());
     // replicate is called and time is moved forward to prepare the replicas for testing.
     replicaThread.replicate();
-    time.sleep(config.replicationSyncedReplicaBackoffDurationMs + 1);
+    time.sleep(replicationConfig.replicationSyncedReplicaBackoffDurationMs + 1);
     long currentTimeMs = time.milliseconds();
     replicaThread.replicate();
     for (List<RemoteReplicaInfo> replicaInfos : replicasToReplicateList) {
       for (RemoteReplicaInfo replicaInfo : replicaInfos) {
         assertEquals("Unexpected re-enable replication time",
-            currentTimeMs + config.replicationSyncedReplicaBackoffDurationMs, replicaInfo.getReEnableReplicationTime());
+            currentTimeMs + replicationConfig.replicationSyncedReplicaBackoffDurationMs,
+            replicaInfo.getReEnableReplicationTime());
       }
     }
     currentTimeMs = time.milliseconds();
     replicaThread.replicate();
     assertEquals("Replicas are in sync, replica thread should sleep by replication.thread.idle.sleep.duration.ms",
-        currentTimeMs + config.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
+        currentTimeMs + replicationConfig.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
 
     // 2. add 3 messages to a partition in the remote host only and verify replication for all replicas should be disabled.
     PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
@@ -1192,11 +1285,11 @@ public class ReplicationTest {
     currentTimeMs = time.milliseconds();
     replicaThread.replicate();
     assertEquals("Replication for all replicas should be disabled and the thread should sleep",
-        currentTimeMs + config.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
+        currentTimeMs + replicationConfig.replicationReplicaThreadIdleSleepDurationMs, time.milliseconds());
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
 
     // 3. forward the time and run replicate and verify the replication.
-    time.sleep(config.replicationSyncedReplicaBackoffDurationMs);
+    time.sleep(replicationConfig.replicationSyncedReplicaBackoffDurationMs);
     replicaThread.replicate();
     missingKeys = new int[replicasToReplicate.get(remoteHost.dataNodeId).size()];
     assertMissingKeys(missingKeys, batchSize, replicaThread, remoteHost, replicasToReplicate);
@@ -1213,7 +1306,7 @@ public class ReplicationTest {
     Properties properties = new Properties();
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "0");
     properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "0");
-    config = new ReplicationConfig(new VerifiableProperties(properties));
+    replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
     replicasAndThread =
         getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
             null);
@@ -1362,8 +1455,8 @@ public class ReplicationTest {
     hosts.put(remoteHost.dataNodeId, remoteHost);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, config), clusterMap,
-            new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
+        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
+            new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
             localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {

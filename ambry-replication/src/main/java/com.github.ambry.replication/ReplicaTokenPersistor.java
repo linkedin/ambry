@@ -29,6 +29,7 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,11 +42,11 @@ import static com.github.ambry.replication.RemoteReplicaInfo.*;
 public abstract class ReplicaTokenPersistor implements Runnable {
 
   private static final Logger logger = LoggerFactory.getLogger(DiskTokenPersistor.class);
-  protected final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
+  protected final Map<String, Set<PartitionInfo>> partitionGroupedByMountPath;
   protected final ReplicationMetrics replicationMetrics;
   protected final ReplicaTokenSerde replicaTokenSerde;
 
-  public ReplicaTokenPersistor(Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
+  public ReplicaTokenPersistor(Map<String, Set<PartitionInfo>> partitionGroupedByMountPath,
       ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper findTokenHelper) {
     this.partitionGroupedByMountPath = partitionGroupedByMountPath;
     this.replicationMetrics = replicationMetrics;

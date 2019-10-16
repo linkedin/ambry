@@ -122,6 +122,11 @@ public class ResponseHandlerTest {
     }
 
     @Override
+    public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
+      return null;
+    }
+
+    @Override
     public void close() {
     }
 

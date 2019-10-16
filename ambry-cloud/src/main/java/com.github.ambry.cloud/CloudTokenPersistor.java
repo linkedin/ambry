@@ -26,6 +26,7 @@ import java.io.InputStream;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,7 +50,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
    * @param clusterMap the {@link ClusterMap} to deserialize tokens.
    * @param tokenHelper the {@link FindTokenHelper} to deserialize tokens.
    */
-  public CloudTokenPersistor(String replicaTokenFileName, Map<String, List<PartitionInfo>> partitionGroupedByMountPath,
+  public CloudTokenPersistor(String replicaTokenFileName, Map<String, Set<PartitionInfo>> partitionGroupedByMountPath,
       ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper tokenHelper,
       CloudDestination cloudDestination) {
     super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenHelper);

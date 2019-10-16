@@ -51,7 +51,7 @@ import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.messageformat.UpdateRecord;
+import com.github.ambry.messageformat.SubRecord;
 import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
@@ -64,6 +64,7 @@ import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
+import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOption;
@@ -400,7 +401,8 @@ final class ServerTestUtil {
       System.out.println("Begin to stop a BlobStore");
       AdminRequest adminRequest =
           new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionIds.get(0), 1, "clientid2");
-      BlobStoreControlAdminRequest controlRequest = new BlobStoreControlAdminRequest((short) 0, false, adminRequest);
+      BlobStoreControlAdminRequest controlRequest =
+          new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StopStore, adminRequest);
       channel.send(controlRequest);
       stream = channel.receive().getInputStream();
       AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
@@ -441,7 +443,8 @@ final class ServerTestUtil {
       // start the store via AdminRequest
       System.out.println("Begin to restart the BlobStore");
       adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionIds.get(0), 1, "clientid2");
-      controlRequest = new BlobStoreControlAdminRequest((short) 0, true, adminRequest);
+      controlRequest =
+          new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StartStore, adminRequest);
       channel.send(controlRequest);
       stream = channel.receive().getInputStream();
       adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
@@ -1341,7 +1344,8 @@ final class ServerTestUtil {
     System.out.println("Begin to stop a BlobStore");
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, 1, "clientid2");
-    BlobStoreControlAdminRequest controlRequest = new BlobStoreControlAdminRequest((short) 0, false, adminRequest);
+    BlobStoreControlAdminRequest controlRequest =
+        new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StopStore, adminRequest);
     channel.send(controlRequest);
     InputStream stream = channel.receive().getInputStream();
     AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
@@ -1386,7 +1390,7 @@ final class ServerTestUtil {
     // start the store via AdminRequest
     System.out.println("Begin to restart the BlobStore");
     adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, 1, "clientId");
-    controlRequest = new BlobStoreControlAdminRequest((short) 0, true, adminRequest);
+    controlRequest = new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StartStore, adminRequest);
     channel.send(controlRequest);
     stream = channel.receive().getInputStream();
     adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
@@ -1566,7 +1570,7 @@ final class ServerTestUtil {
       checkTtlUpdateStatus(channel3, clusterMap, blobIdFactory, blobIdList.get(5), dataList.get(5), false,
           getExpiryTimeMs(propertyList.get(5)));
       updateBlobTtl(channel3, blobIdList.get(5));
-      expectedTokenSize += getUpdateRecordSize(blobIdList.get(5), UpdateRecord.Type.TTL_UPDATE);
+      expectedTokenSize += getUpdateRecordSize(blobIdList.get(5), SubRecord.Type.TTL_UPDATE);
       checkTtlUpdateStatus(channel3, clusterMap, blobIdFactory, blobIdList.get(5), dataList.get(5), true,
           Utils.Infinite_Time);
       notificationSystem.awaitBlobUpdates(blobIdList.get(5).getID(), UpdateType.TTL_UPDATE);
@@ -1718,7 +1722,7 @@ final class ServerTestUtil {
 
       // delete a blob and ensure it is propagated
       DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIdList.get(0), System.currentTimeMillis());
-      expectedTokenSize += getUpdateRecordSize(blobIdList.get(0), UpdateRecord.Type.DELETE);
+      expectedTokenSize += getUpdateRecordSize(blobIdList.get(0), SubRecord.Type.DELETE);
       channel1.send(deleteRequest);
       InputStream deleteResponseStream = channel1.receive().getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
@@ -1741,7 +1745,7 @@ final class ServerTestUtil {
       // get the data node to inspect replication tokens on
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
       checkReplicaTokens(clusterMap, dataNodeId,
-          expectedTokenSize - getUpdateRecordSize(blobIdList.get(0), UpdateRecord.Type.DELETE), "0");
+          expectedTokenSize - getUpdateRecordSize(blobIdList.get(0), SubRecord.Type.DELETE), "0");
 
       // Shut down server 1
       cluster.getServers().get(0).shutdown();
@@ -1811,7 +1815,7 @@ final class ServerTestUtil {
       checkTtlUpdateStatus(channel2, clusterMap, blobIdFactory, blobIdList.get(10), dataList.get(10), false,
           getExpiryTimeMs(propertyList.get(10)));
       updateBlobTtl(channel2, blobIdList.get(10));
-      expectedTokenSize += getUpdateRecordSize(blobIdList.get(10), UpdateRecord.Type.TTL_UPDATE);
+      expectedTokenSize += getUpdateRecordSize(blobIdList.get(10), SubRecord.Type.TTL_UPDATE);
       checkTtlUpdateStatus(channel2, clusterMap, blobIdFactory, blobIdList.get(10), dataList.get(10), true,
           Utils.Infinite_Time);
 
@@ -1951,7 +1955,7 @@ final class ServerTestUtil {
    * @param updateType the type of update
    * @return the size of the update record in the log
    */
-  private static long getUpdateRecordSize(BlobId blobId, UpdateRecord.Type updateType) {
+  private static long getUpdateRecordSize(BlobId blobId, SubRecord.Type updateType) {
     return MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() + blobId.sizeInBytes()
         + MessageFormatRecord.Update_Format_V3.getRecordSize(updateType);
   }
