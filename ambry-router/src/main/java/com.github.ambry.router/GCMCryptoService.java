@@ -18,6 +18,9 @@ import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -46,6 +49,7 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
   private static final String GCM_CRYPTO_INSTANCE = "AES/GCM/NoPadding";
   private final SecureRandom random = new SecureRandom();
   private final int ivValSize;
+  private final byte[] fixedIvVal; // this is used only for testing
   private final CryptoServiceConfig config;
 
   private static final Logger logger = LoggerFactory.getLogger(GCMCryptoService.class);
@@ -58,14 +62,33 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
       throw new IllegalArgumentException(
           "Unrecognized Encryption Decryption Mode " + config.cryptoServiceEncryptionDecryptionMode);
     }
+    fixedIvVal = new byte[ivValSize];
   }
 
   @Override
   public ByteBuffer encrypt(ByteBuffer toEncrypt, SecretKeySpec key) throws GeneralSecurityException {
+    return encrypt(toEncrypt, key, false);
+  }
+
+  /**
+   * Helper function to encrypt ByteBuffer with the given key. When useFixedIv is true, don't use a random iv byte
+   * array, using a all zero byte array instead. Only set it to be true in test.
+   * @param toEncrypt {@link ByteBuffer} that needs to be encrypted
+   * @param key the secret key (of type T) to use to encrypt
+   * @return the {@link ByteBuffer} containing the encrypted content. Ensure the result has all
+   * the information like the IV along with the encrypted content, in order to decrypt the content with a given key
+   * @throws {@link GeneralSecurityException} on any exception with encryption
+   */
+  ByteBuffer encrypt(ByteBuffer toEncrypt, SecretKeySpec key, boolean useFixedIv) throws GeneralSecurityException {
     try {
       Cipher encrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
-      byte[] iv = new byte[ivValSize];
-      random.nextBytes(iv);
+      byte[] iv = null;
+      if (useFixedIv) {
+        iv = fixedIvVal;
+      } else {
+        iv = new byte[ivValSize];
+        random.nextBytes(iv);
+      }
       encrypter.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
       int outputSize = encrypter.getOutputSize(toEncrypt.remaining());
       ByteBuffer encryptedContent = ByteBuffer.allocate(IVRecord_Format_V1.getIVRecordSize(iv) + outputSize);
@@ -79,6 +102,55 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
   }
 
   @Override
+  public ByteBuf encrypt(ByteBuf toEncrypt, SecretKeySpec key) throws GeneralSecurityException {
+    return encrypt(toEncrypt, key, false);
+  }
+
+  /**
+   * Helper function to encrypt ByteBuf with the given key. When useFixedIv is true, don't use a random iv byte
+   * array, using a all zero byte array instead. Only set it to be true in test.
+   * @param toEncrypt {@link ByteBuf} that needs to be encrypted
+   * @param key the secret key (of type T) to use to encrypt
+   * @return the {@link ByteBuf} containing the encrypted content. Ensure the result has all
+   * the information like the IV along with the encrypted content, in order to decrypt the content with a given key
+   * @throws {@link GeneralSecurityException} on any exception with encryption
+   */
+  public ByteBuf encrypt(ByteBuf toEncrypt, SecretKeySpec key, boolean useFixedIv) throws GeneralSecurityException {
+    try {
+      Cipher encrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
+      byte[] iv = null;
+      if (useFixedIv) {
+        iv = fixedIvVal;
+      } else {
+        iv = new byte[ivValSize];
+        random.nextBytes(iv);
+      }
+      encrypter.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
+      int outputSize = encrypter.getOutputSize(toEncrypt.readableBytes());
+      // We need to expose the array address to the encrypter, so here we need to allocate a ByteBuf at heap.
+      ByteBuf encryptedContent =
+          ByteBufAllocator.DEFAULT.heapBuffer(IVRecord_Format_V1.getIVRecordSize(iv) + outputSize);
+      IVRecord_Format_V1.serializeIVRecord(encryptedContent, iv);
+      if (toEncrypt.hasArray()) {
+        int n = encrypter.doFinal(toEncrypt.array(), toEncrypt.arrayOffset() + toEncrypt.readerIndex(),
+            toEncrypt.readableBytes(), encryptedContent.array(),
+            encryptedContent.arrayOffset() + encryptedContent.writerIndex());
+        toEncrypt.readerIndex(toEncrypt.readerIndex() + toEncrypt.readableBytes());
+        encryptedContent.writerIndex(encryptedContent.writerIndex() + n);
+      } else {
+        byte[] toEncryptedArray = new byte[toEncrypt.readableBytes()];
+        toEncrypt.readBytes(toEncryptedArray);
+        int n = encrypter.doFinal(toEncryptedArray, 0, toEncryptedArray.length, encryptedContent.array(),
+            encryptedContent.arrayOffset() + encryptedContent.writerIndex());
+        encryptedContent.writerIndex(encryptedContent.writerIndex() + n);
+      }
+      return encryptedContent;
+    } catch (Exception e) {
+      throw new GeneralSecurityException("Expception thrown while encrypting data", e);
+    }
+  }
+
+  @Override
   public ByteBuffer decrypt(ByteBuffer toDecrypt, SecretKeySpec key) throws GeneralSecurityException {
     try {
       Cipher decrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
@@ -87,6 +159,33 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
       ByteBuffer decryptedContent = ByteBuffer.allocate(decrypter.getOutputSize(toDecrypt.remaining()));
       decrypter.doFinal(toDecrypt, decryptedContent);
       decryptedContent.flip();
+      return decryptedContent;
+    } catch (Exception e) {
+      throw new GeneralSecurityException("Exception thrown while decrypting data", e);
+    }
+  }
+
+  @Override
+  public ByteBuf decrypt(ByteBuf toDecrypt, SecretKeySpec key) throws GeneralSecurityException {
+    try {
+      Cipher decrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
+      byte[] iv = deserializeIV(new ByteBufInputStream(toDecrypt));
+      decrypter.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
+      ByteBuf decryptedContent =
+          ByteBufAllocator.DEFAULT.heapBuffer(decrypter.getOutputSize(toDecrypt.readableBytes()));
+      if (toDecrypt.hasArray()) {
+        int n = decrypter.doFinal(toDecrypt.array(), toDecrypt.arrayOffset() + toDecrypt.readerIndex(),
+            toDecrypt.readableBytes(), decryptedContent.array(),
+            decryptedContent.arrayOffset() + decryptedContent.writerIndex());
+        toDecrypt.readerIndex(toDecrypt.readerIndex() + toDecrypt.readableBytes());
+        decryptedContent.writerIndex(decryptedContent.writerIndex() + n);
+      } else {
+        byte[] toDecryptArray = new byte[toDecrypt.readableBytes()];
+        toDecrypt.readBytes(toDecryptArray);
+        int n = decrypter.doFinal(toDecryptArray, 0, toDecryptArray.length, decryptedContent.array(),
+            decryptedContent.arrayOffset() + decryptedContent.writerIndex());
+        decryptedContent.writerIndex(decryptedContent.writerIndex() + n);
+      }
       return decryptedContent;
     } catch (Exception e) {
       throw new GeneralSecurityException("Exception thrown while decrypting data", e);
@@ -188,6 +287,17 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
       outputBuffer.putShort(IV_RECORD_VERSION_V_1);
       outputBuffer.putInt(iv.length);
       outputBuffer.put(iv);
+    }
+
+    /**
+     * Serialize IV into {@link ByteBuf}
+     * @param outputBuf the {@link ByteBuf} to which the IV needs to be serialized
+     * @param iv the iv of type byte array that needs to be serialized
+     */
+    private static void serializeIVRecord(ByteBuf outputBuf, byte[] iv) {
+      outputBuf.writeShort(IV_RECORD_VERSION_V_1);
+      outputBuf.writeInt(iv.length);
+      outputBuf.writeBytes(iv);
     }
 
     /**
