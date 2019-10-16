@@ -82,11 +82,8 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
   ByteBuffer encrypt(ByteBuffer toEncrypt, SecretKeySpec key, boolean useFixedIv) throws GeneralSecurityException {
     try {
       Cipher encrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
-      byte[] iv = null;
-      if (useFixedIv) {
-        iv = fixedIvVal;
-      } else {
-        iv = new byte[ivValSize];
+      byte[] iv = useFixedIv ? fixedIvVal : new byte[ivValSize];
+      if (!useFixedIv) {
         random.nextBytes(iv);
       }
       encrypter.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
@@ -118,11 +115,8 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
   public ByteBuf encrypt(ByteBuf toEncrypt, SecretKeySpec key, boolean useFixedIv) throws GeneralSecurityException {
     try {
       Cipher encrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
-      byte[] iv = null;
-      if (useFixedIv) {
-        iv = fixedIvVal;
-      } else {
-        iv = new byte[ivValSize];
+      byte[] iv = useFixedIv ? fixedIvVal : new byte[ivValSize];
+      if (!useFixedIv) {
         random.nextBytes(iv);
       }
       encrypter.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
