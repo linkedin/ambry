@@ -67,4 +67,10 @@ public class RequestInfo {
   public ReplicaId getReplicaId() {
     return replicaId;
   }
+
+  @Override
+  public String toString() {
+    return "RequestInfo{" + "host='" + host + '\'' + ", port=" + port + ", request=" + request + ", replicaId="
+        + replicaId + '}';
+  }
 }

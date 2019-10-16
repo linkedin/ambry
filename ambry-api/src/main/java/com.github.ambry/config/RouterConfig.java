@@ -109,6 +109,7 @@ public class RouterConfig {
    * can choose how to drop these requests.
    */
   @Config("router.drop.request.on.timeout")
+  @Default("false")
   public final boolean routerDropRequestOnTimeout;
 
   /**

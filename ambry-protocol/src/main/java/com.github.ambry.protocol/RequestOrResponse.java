@@ -13,7 +13,6 @@
  */
 package com.github.ambry.protocol;
 
-import com.github.ambry.network.Send;
 import com.github.ambry.network.SendWithCorrelationId;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;

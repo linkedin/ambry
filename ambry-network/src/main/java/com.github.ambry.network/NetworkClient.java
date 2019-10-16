@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -111,7 +112,14 @@ public class NetworkClient implements Closeable {
       }
       List<NetworkSend> sends = prepareSends(requestsToDrop, responseInfoList);
       replenishConnections();
-      dropInFlightRequests(requestsToDrop);
+      for (Integer correlationId : requestsToDrop) {
+        String connectionId = correlationIdInFlightToConnectionId.get(correlationId);
+        if (connectionId != null) {
+          // we do not need to mutate any of the bookkeeping data structures since that will be handled when dealing
+          // with the disconnected list in handleSelectorEvents()
+          selector.close(connectionId);
+        }
+      }
       selector.poll(pollTimeoutMs, sends);
       handleSelectorEvents(responseInfoList);
     } catch (Exception e) {
@@ -128,7 +136,8 @@ public class NetworkClient implements Closeable {
    * Process the requests in the pendingRequestsQueue. Create {@link ResponseInfo} for those requests that have timed
    * out while waiting in the queue. Then, attempt to prepare {@link NetworkSend}s by checking out connections for
    * the rest of the requests in the queue.
-   * @param requestsToDrop the list of correlation IDs representing the requests that can be dropped.
+   * @param requestsToDrop the list of correlation IDs representing the requests that can be dropped. If any of these
+   *                       correlation IDs match pending requests, those pending requests will not be sent out.
    * @param responseInfoList the list to populate with responseInfos for requests that timed out waiting for
    *                         connections.
    * @return the list of {@link NetworkSend} objects to hand over to the Selector.
@@ -162,12 +171,6 @@ public class NetworkClient implements Closeable {
 
     while (iter.hasNext()) {
       RequestMetadata requestMetadata = iter.next();
-      if (requestsToDrop.contains(requestMetadata.requestInfo.getRequest().getCorrelationId())) {
-        responseInfoList.add(
-            new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.NetworkError, null));
-        iter.remove();
-        continue;
-      }
       try {
         String host = requestMetadata.requestInfo.getHost();
         Port port = requestMetadata.requestInfo.getPort();
@@ -175,30 +178,41 @@ public class NetworkClient implements Closeable {
         if (replicaId == null) {
           throw new IllegalStateException("ReplicaId in request is null.");
         }
-        String connId = connectionTracker.checkOutConnection(host, port, replicaId.getDataNodeId());
-        if (connId == null) {
-          networkMetrics.connectionNotAvailable.inc();
-          if (requestMetadata.pendingConnectionId == null) {
-            if (connectionTracker.mayCreateNewConnection(host, port, replicaId.getDataNodeId())) {
-              connId = connectionTracker.connectAndTrack(this::connect, host, port, replicaId.getDataNodeId());
-              requestMetadata.pendingConnectionId = connId;
-              pendingConnectionsToAssociatedRequests.put(connId, requestMetadata);
-              logger.trace("Initiated a connection to host {} port {} ", host, port);
-            } else {
-              networkMetrics.connectionReachLimit.inc();
-            }
-          }
-        } else {
+        if (requestsToDrop.contains(requestMetadata.requestInfo.getRequest().getCorrelationId())) {
+          responseInfoList.add(
+              new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.ConnectionUnavailable, null));
           if (requestMetadata.pendingConnectionId != null) {
             pendingConnectionsToAssociatedRequests.remove(requestMetadata.pendingConnectionId);
             requestMetadata.pendingConnectionId = null;
           }
-          logger.trace("Connection checkout succeeded for {}:{} with connectionId {} ", host, port, connId);
-          sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(), null, time));
-          connectionIdToRequestInFlight.put(connId, requestMetadata);
-          correlationIdInFlightToConnectionId.put(requestMetadata.requestInfo.getRequest().getCorrelationId(), connId);
           iter.remove();
-          requestMetadata.onRequestDequeue();
+        } else {
+          String connId = connectionTracker.checkOutConnection(host, port, replicaId.getDataNodeId());
+          if (connId == null) {
+            networkMetrics.connectionNotAvailable.inc();
+            if (requestMetadata.pendingConnectionId == null) {
+              if (connectionTracker.mayCreateNewConnection(host, port, replicaId.getDataNodeId())) {
+                connId = connectionTracker.connectAndTrack(this::connect, host, port, replicaId.getDataNodeId());
+                requestMetadata.pendingConnectionId = connId;
+                pendingConnectionsToAssociatedRequests.put(connId, requestMetadata);
+                logger.trace("Initiated a connection to host {} port {} ", host, port);
+              } else {
+                networkMetrics.connectionReachLimit.inc();
+              }
+            }
+          } else {
+            if (requestMetadata.pendingConnectionId != null) {
+              pendingConnectionsToAssociatedRequests.remove(requestMetadata.pendingConnectionId);
+              requestMetadata.pendingConnectionId = null;
+            }
+            logger.trace("Connection checkout succeeded for {}:{} with connectionId {} ", host, port, connId);
+            sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(), null, time));
+            connectionIdToRequestInFlight.put(connId, requestMetadata);
+            correlationIdInFlightToConnectionId.put(requestMetadata.requestInfo.getRequest().getCorrelationId(),
+                connId);
+            iter.remove();
+            requestMetadata.onRequestDequeue();
+          }
         }
       } catch (IOException e) {
         networkMetrics.networkClientIOError.inc();
@@ -215,23 +229,6 @@ public class NetworkClient implements Closeable {
     if (networkConfig.networkClientEnableConnectionReplenishment) {
       int connectionsInitiated = connectionTracker.replenishConnections(this::connect);
       networkMetrics.connectionReplenished.inc(connectionsInitiated);
-    }
-  }
-
-  /**
-   * Drop requests by telling the selector to close the connection associated with the request if the request is in
-   * flight or by removing the request from the list of pending requests if the request is currently waiting for an
-   * available connection. This should be called before the {@link Selector#poll} call.
-   * @param requestsToDrop the correlation IDs of the requests to drop.
-   */
-  private void dropInFlightRequests(Set<Integer> requestsToDrop) {
-    for (Integer correlationId : requestsToDrop) {
-      String connectionId = correlationIdInFlightToConnectionId.get(correlationId);
-      if (connectionId != null) {
-        // we do not need to mutate any of the bookkeeping data structures since that will be handled when dealing
-        // with the disconnected list in handleSelectorEvents()
-        selector.close(connectionId);
-      }
     }
   }
 

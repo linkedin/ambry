@@ -380,11 +380,14 @@ public class NetworkClientTest {
         .collect(Collectors.toList());
     List<ResponseInfo> responseInfoList;
 
+    // Drop requests while the requests are waiting for a connection.
+    // First poll will require connections to be created, so no responses will be returned.
     responseInfoList = networkClient.sendAndPoll(requestGen.apply(3), Collections.emptySet(), POLL_TIMEOUT_MS);
     Assert.assertEquals("No responses expected in first poll.", 0, responseInfoList.size());
-
+    // Drop requests on the second poll. The requests should be removed from the pending request list as a result.
     responseInfoList =
         networkClient.sendAndPoll(Collections.emptyList(), new HashSet<>(Arrays.asList(2, 3)), POLL_TIMEOUT_MS);
+    Assert.assertEquals("Should receive only as many responses as there were requests", 3, responseInfoList.size());
     for (ResponseInfo responseInfo : responseInfoList) {
       MockSend send = (MockSend) responseInfo.getRequestInfo().getRequest();
       if (send.getCorrelationId() == 1) {
@@ -396,14 +399,42 @@ public class NetworkClientTest {
         int correlationIdInResponse = response.getInt();
         Assert.assertEquals("Received response for the wrong request", correlationIdInRequest, correlationIdInResponse);
       } else {
-        Assert.assertEquals("Expected disconnect", NetworkClientErrorCode.NetworkError, responseInfo.getError());
+        Assert.assertEquals("Expected connection unavailable on dropped request",
+            NetworkClientErrorCode.ConnectionUnavailable, responseInfo.getError());
         Assert.assertNull("Should not receive a response", responseInfo.getResponse());
       }
     }
-    Assert.assertEquals("Should receive only as many responses as there were requests", 3, responseInfoList.size());
 
-    responseInfoList = networkClient.sendAndPoll(Collections.emptyList(), Collections.emptySet(), POLL_TIMEOUT_MS);
-    Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
+    // Test dropping of requests while the requests are in flight.
+    // Set the selector to idle mode to prevent responses from coming back (even though connections are available at
+    // this moment in time).
+    selector.setState(MockSelectorState.IdlePoll);
+    responseInfoList = networkClient.sendAndPoll(requestGen.apply(3), Collections.emptySet(), POLL_TIMEOUT_MS);
+    Assert.assertEquals("No responses expected in idle poll.", 0, responseInfoList.size());
+    // Set the selector back to normal mode and drop a request. It should be dropped by closing the connection.
+    selector.setState(MockSelectorState.Good);
+    responseInfoList = networkClient.sendAndPoll(Collections.emptyList(), Collections.singleton(4), POLL_TIMEOUT_MS);
+    Assert.assertEquals("Should receive only as many responses as there were requests", 3, responseInfoList.size());
+    for (ResponseInfo responseInfo : responseInfoList) {
+      MockSend send = (MockSend) responseInfo.getRequestInfo().getRequest();
+      if (send.getCorrelationId() != 4) {
+        NetworkClientErrorCode error = responseInfo.getError();
+        ByteBuffer response = responseInfo.getResponse();
+        Assert.assertNull("Should not have encountered an error", error);
+        Assert.assertNotNull("Should receive a valid response", response);
+        int correlationIdInRequest = send.getCorrelationId();
+        int correlationIdInResponse = response.getInt();
+        Assert.assertEquals("Received response for the wrong request", correlationIdInRequest, correlationIdInResponse);
+      } else {
+        Assert.assertEquals("Expected network error (from closed connection for dropped request)",
+            NetworkClientErrorCode.NetworkError, responseInfo.getError());
+        Assert.assertNull("Should not receive a response", responseInfo.getResponse());
+      }
+    }
+
+    // Dropping a request that is not currently pending or in flight should be a no-op.
+    responseInfoList = networkClient.sendAndPoll(Collections.emptyList(), Collections.singleton(1), POLL_TIMEOUT_MS);
+    Assert.assertEquals("No more responses expected.", 0, responseInfoList.size());
   }
 
   /**
@@ -601,6 +632,11 @@ class MockSend implements SendWithCorrelationId {
   @Override
   public long sizeInBytes() {
     return size;
+  }
+
+  @Override
+  public String toString() {
+    return "MockSend{" + "buf=" + buf + ", correlationId=" + correlationId + ", size=" + size + '}';
   }
 }
 
@@ -861,6 +897,7 @@ class MockSelector extends Selector {
   public void close(String conn) {
     if (connectionIds.contains(conn)) {
       closedConnections.add(conn);
+      receives.removeIf(receive -> conn.equals(receive.getConnectionId()));
     }
   }
 
