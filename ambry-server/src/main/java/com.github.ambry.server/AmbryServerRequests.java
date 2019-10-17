@@ -87,7 +87,7 @@ public class AmbryServerRequests extends AmbryRequests {
         RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest)) {
       requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     }
-    localPartitionToReplicaMap = Collections.unmodifiableMap(createLocalPartitionToReplicaMap());
+    localPartitionToReplicaMap = createLocalPartitionToReplicaMap();
   }
 
   @Override

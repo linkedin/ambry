@@ -530,6 +530,9 @@ public class AmbryRequests implements RequestAPI {
 
   @Override
   public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
+    if (replicationEngine == null) {
+      throw new IllegalStateException("Replication not supported on this node.");
+    }
     ReplicaMetadataRequest replicaMetadataRequest =
         ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenHelper);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
