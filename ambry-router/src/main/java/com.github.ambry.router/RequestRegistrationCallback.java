@@ -86,7 +86,7 @@ class RequestRegistrationCallback<T> {
     if (requestsToDrop != null) {
       requestsToDrop.add(correlationId);
     }
-//    // TODO remove from correlationId map okay or should extra bookkeeping be done??
-//    correlationIdToOperation.remove(correlationId);
+    // do not remove from correlationIdToOperation here because it will be handled by manager classes when they receive
+    // a ResponseInfo.
   }
 }
