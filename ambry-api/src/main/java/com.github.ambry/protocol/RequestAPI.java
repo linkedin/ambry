@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.protocol;
 
 import com.github.ambry.network.Request;
 import java.io.IOException;

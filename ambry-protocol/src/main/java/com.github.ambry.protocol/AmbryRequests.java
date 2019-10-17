@@ -43,7 +43,6 @@ import com.github.ambry.notification.UpdateType;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
-import com.github.ambry.server.RequestAPI;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.FindInfo;
