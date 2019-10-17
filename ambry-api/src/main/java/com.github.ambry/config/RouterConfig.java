@@ -385,7 +385,7 @@ public class RouterConfig {
     routerConnectionCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("router.connection.checkout.timeout.ms", 1000, 1, 5000);
     routerRequestTimeoutMs = verifiableProperties.getIntInRange("router.request.timeout.ms", 2000, 1, 10000);
-    routerDropRequestOnTimeout = verifiableProperties.getBoolean("router.drop.requests.on.timeout", false);
+    routerDropRequestOnTimeout = verifiableProperties.getBoolean("router.drop.request.on.timeout", false);
     routerMaxPutChunkSizeBytes =
         verifiableProperties.getIntInRange("router.max.put.chunk.size.bytes", 4 * 1024 * 1024, 1, Integer.MAX_VALUE);
     routerPutRequestParallelism =
