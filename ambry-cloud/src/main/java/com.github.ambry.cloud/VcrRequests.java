@@ -17,25 +17,20 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationEngine;
-import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,7 +48,7 @@ public class VcrRequests extends AmbryRequests {
       NotificationSystem notification, ReplicationEngine replicationEngine, StoreKeyFactory storageKeyFactory,
       boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
     super(storeManager, requestResponseChannel, clusterMap, currentNode, registry, serverMetrics, findTokenHelper,
-        notification, replicationEngine, storageKeyFactory, enableDataPrefetch, storeKeyConverterFactory, null);
+        notification, replicationEngine, storageKeyFactory, enableDataPrefetch, storeKeyConverterFactory);
   }
 
   @Override
@@ -85,13 +80,5 @@ public class VcrRequests extends AmbryRequests {
   @Override
   protected long getRemoteReplicaLag(Store store, long totalBytesRead) {
     return -1;
-  }
-
-  @Override
-  protected Map<PartitionId, ReplicaId> createLocalPartitionToReplicaMap() {
-    //Vcr should be able to handle requests for all partitions
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
-    return partitionIds.stream()
-        .collect(Collectors.toMap(Function.identity(), partitionId -> new CloudReplica(partitionId, currentNode)));
   }
 }

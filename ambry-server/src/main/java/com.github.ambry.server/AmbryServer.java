@@ -171,7 +171,7 @@ public class AmbryServer {
       FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
       ServerMetrics serverMetrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       requests =
-          new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
+          new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               serverMetrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory,
               serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory, statsManager);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
