@@ -14,7 +14,6 @@
 package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.PartitionId;
-import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 

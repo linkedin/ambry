@@ -663,7 +663,7 @@ public class AmbryRequests implements RequestAPI {
     }
   }
 
-  protected void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, Request request,
+  private void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, Request request,
       Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
       long blobSize, MessageFormatFlags flags, ServerMetrics metrics) throws InterruptedException {
 
@@ -722,7 +722,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
-   * Check that the provided partition is valid, on the disk, and can be written to.
+   * Check that the provided partition is valid and writable, and the disk (if any) is available.
    * @param partition the partition to validate.
    * @param requestType the {@link RequestOrResponseType} being validated.
    * @param skipPartitionAndDiskAvailableCheck whether to skip ({@code true}) conditions check for the availability of

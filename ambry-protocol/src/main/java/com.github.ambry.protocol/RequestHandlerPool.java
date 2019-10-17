@@ -26,7 +26,7 @@ public class RequestHandlerPool {
 
   private Thread[] threads = null;
   private RequestHandler[] handlers = null;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(RequestHandlerPool.class);
 
   public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, RequestAPI requests) {
     threads = new Thread[numThreads];

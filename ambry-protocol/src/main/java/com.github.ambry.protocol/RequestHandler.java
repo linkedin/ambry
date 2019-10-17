@@ -27,7 +27,7 @@ public class RequestHandler implements Runnable {
   private final int id;
   private final RequestResponseChannel requestChannel;
   private final RequestAPI requests;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(RequestHandler.class);
 
   public RequestHandler(int id, RequestResponseChannel requestChannel, RequestAPI requests) {
     this.id = id;

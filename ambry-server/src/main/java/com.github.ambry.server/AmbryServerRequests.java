@@ -573,20 +573,19 @@ public class AmbryServerRequests extends AmbryRequests {
   @Override
   protected ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType,
       boolean skipPartitionAndDiskAvailableCheck) {
-    // 1. Check partition is null
-    if (partition == null) {
-      metrics.badRequestError.inc();
-      return ServerErrorCode.Bad_Request;
+    ServerErrorCode errorCode = super.validateRequest(partition, requestType, skipPartitionAndDiskAvailableCheck);
+    if (errorCode != ServerErrorCode.No_Error) {
+      return errorCode;
     }
     if (!skipPartitionAndDiskAvailableCheck) {
-      // 2. ensure the disk for the partition/replica is available
+      // Ensure the disk for the partition/replica is available
       ReplicaId localReplica = localPartitionToReplicaMap.get(partition);
       if (localReplica != null && localReplica.getDiskId().getState() == HardwareState.UNAVAILABLE) {
         metrics.diskUnavailableError.inc();
         return ServerErrorCode.Disk_Unavailable;
       }
-      // 3. check if partition exists on this node and that the store for this partition is available
-      ServerErrorCode errorCode = storeManager.checkLocalPartitionStatus(partition, localReplica);
+      // Check if partition exists on this node and that the store for this partition is available
+      errorCode = storeManager.checkLocalPartitionStatus(partition, localReplica);
       switch (errorCode) {
         case Disk_Unavailable:
           metrics.diskUnavailableError.inc();
@@ -600,13 +599,13 @@ public class AmbryServerRequests extends AmbryRequests {
           return errorCode;
       }
     }
-    // 4. ensure if the partition can be written to
+    // Ensure the partition is writable
     if (requestType.equals(RequestOrResponseType.PutRequest)
         && partition.getPartitionState() == PartitionState.READ_ONLY) {
       metrics.partitionReadOnlyError.inc();
       return ServerErrorCode.Partition_ReadOnly;
     }
-    // 5. Ensure that the request is enabled.
+    // Ensure the request is enabled.
     if (!isRequestEnabled(requestType, partition)) {
       metrics.temporarilyDisabledError.inc();
       return ServerErrorCode.Temporarily_Disabled;
