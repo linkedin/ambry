@@ -132,7 +132,7 @@ public class AmbryRequests implements RequestAPI {
           handleReplicaMetadataRequest(request);
           break;
         case AdminRequest:
-          throw new UnsupportedOperationException("Request type not supported");
+          handleAdminRequest(request);
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }
@@ -531,7 +531,7 @@ public class AmbryRequests implements RequestAPI {
   @Override
   public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
     if (replicationEngine == null) {
-      throw new IllegalStateException("Replication not supported on this node.");
+      throw new UnsupportedOperationException("Replication not supported on this node.");
     }
     ReplicaMetadataRequest replicaMetadataRequest =
         ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenHelper);
