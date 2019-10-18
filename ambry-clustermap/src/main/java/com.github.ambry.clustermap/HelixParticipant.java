@@ -149,16 +149,16 @@ class HelixParticipant implements ClusterParticipant {
     }
     boolean setStoppedResult;
     synchronized (helixAdministrationLock) {
-      logger.trace("Getting stopped replicas from instanceConfig");
+      logger.info("Getting stopped replicas from instanceConfig");
       List<String> stoppedListInHelix = getStoppedReplicas();
       Set<String> stoppedSet = new HashSet<>(stoppedListInHelix);
       boolean stoppedSetUpdated =
           markStop ? stoppedSet.addAll(replicasToUpdate) : stoppedSet.removeAll(replicasToUpdate);
       if (stoppedSetUpdated) {
-        logger.trace("Updating the stopped list in Helix InstanceConfig");
+        logger.info("Updating the stopped list in Helix InstanceConfig");
         setStoppedResult = setStoppedReplicas(new ArrayList<>(stoppedSet));
       } else {
-        logger.trace("No replicas should be added or removed, no need to update the stopped list");
+        logger.info("No replicas should be added or removed, no need to update the stopped list");
         setStoppedResult = true;
       }
     }

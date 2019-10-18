@@ -563,6 +563,7 @@ public class AmbryServerRequests extends AmbryRequests {
       ((BlobStore) store).deleteStoreFiles();
       ReplicaStatusDelegate replicaStatusDelegate = ((BlobStore) store).getReplicaStatusDelegate();
       // Remove this store from sealed and stopped list (if present)
+      logger.info("Removing store from sealed and stopped list(if present)");
       replicaStatusDelegate.unseal(replicaId);
       replicaStatusDelegate.unmarkStopped(Collections.singletonList(replicaId));
       localPartitionToReplicaMap.remove(partitionId);
