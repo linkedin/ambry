@@ -15,11 +15,11 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
-import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.store.MockId;
 import com.github.ambry.store.MockIdFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Crc32;
@@ -30,7 +30,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
-import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -41,7 +40,6 @@ import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Assert;
 import org.junit.Test;
-import sun.util.resources.ga.LocaleNames_ga;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
@@ -694,7 +692,7 @@ public class MessageFormatRecordTest {
     buffer.flip();
     byte[] expectedArray = firstRandomBytes;
     while (expectedArray != null) {
-      CrcInputStream cis = new CrcInputStream(new CommonUtils.ByteBufferDataInputStream(buffer));
+      CrcInputStream cis = new CrcInputStream(new ByteBufferDataInputStream(buffer));
       DataInputStream dis = new DataInputStream(cis);
       long dataSize = dis.readLong();
       assertEquals((long) dataSize, blobSize);

@@ -13,9 +13,9 @@
  */
 package com.github.ambry.messageformat;
 
-import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
@@ -1639,7 +1639,7 @@ public class MessageFormatRecord {
 
   /**
    * Creating a {@link ByteBufferInputStream} from the {@link CrcInputStream} by sharing the underlying memory if the
-   * crcStream is built upon a {@link com.github.ambry.commons.CommonUtils.ByteBufferDataInputStream}.
+   * crcStream is built upon a {@link ByteBufferDataInputStream}.
    * @param crcStream The crcStream to read {@link ByteBuffer} out.
    * @param dataSize The size of {@link ByteBuffer}.
    * @return The {@link ByteBufferInputStream}
@@ -1647,30 +1647,23 @@ public class MessageFormatRecord {
    */
   static ByteBufferInputStream getByteBufferInputStreamForBlobRecord(CrcInputStream crcStream, int dataSize)
       throws IOException {
-    ByteBufferInputStream output = null;
+    ByteBufferInputStream output;
     InputStream inputStream = crcStream.getUnderlyingInputStream();
-    if (inputStream instanceof CommonUtils.ByteBufferDataInputStream) {
-      ByteBuffer byteBuffer = ((CommonUtils.ByteBufferDataInputStream) inputStream).getBuffer();
-      int startPosition = byteBuffer.position();
-      // exhaust dataSize bytes and update crc for it.
-      byte[] dummy = new byte[4];
-      int read = 0;
-      while (read < (int) dataSize) {
-        int toRead = Math.min(4, (int) dataSize - read);
-        int n = crcStream.read(dummy, 0, toRead);
-        read += n;
-      }
+    if (inputStream instanceof ByteBufferDataInputStream) {
+      ByteBuffer byteBuffer = ((ByteBufferDataInputStream) inputStream).getBuffer();
+      int startIndex = byteBuffer.position();
+      int oldLimit = byteBuffer.limit();
 
-      int endPosition = byteBuffer.position();
-      int endLimit = byteBuffer.limit();
-      byteBuffer.position(startPosition);
-      byteBuffer.limit(endPosition);
-      output = new ByteBufferInputStream(byteBuffer.slice());
+      byteBuffer.limit(startIndex + dataSize);
+      ByteBuffer dataBuffer = byteBuffer.slice();
+      crcStream.update(dataBuffer.duplicate());
+
+      output = new ByteBufferInputStream(dataBuffer);
       // resume the byteBuffer for future use.
-      byteBuffer.position(endPosition);
-      byteBuffer.limit(endLimit);
+      byteBuffer.position(startIndex+dataSize);
+      byteBuffer.limit(oldLimit);
     } else {
-      output = new ByteBufferInputStream(crcStream, (int) dataSize);
+      output = new ByteBufferInputStream(crcStream, dataSize);
     }
     return output;
   }

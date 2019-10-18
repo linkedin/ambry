@@ -1,16 +1,16 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- */
+* Copyright 2016 LinkedIn Corp. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+*/
 package com.github.ambry.router;
 
 import com.github.ambry.account.Account;
@@ -27,6 +27,7 @@ import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -193,12 +194,8 @@ class RouterUtils {
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {
       try {
-        DataInputStream dis = null;
-        if (shareMemory) {
-          dis = new CommonUtils.ByteBufferDataInputStream(responseInfo.getResponse());
-        } else {
-          dis = new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()));
-        }
+        DataInputStream dis = shareMemory ? new ByteBufferDataInputStream(responseInfo.getResponse())
+            : new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()));
         response = deserializer.readFrom(dis);
         responseHandler.onEvent(replicaId, errorExtractor.apply(response));
       } catch (Exception e) {

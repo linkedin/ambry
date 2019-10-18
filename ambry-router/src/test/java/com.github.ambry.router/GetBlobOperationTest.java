@@ -23,7 +23,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
-import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CryptoServiceConfig;
@@ -51,6 +50,7 @@ import com.github.ambry.router.RouterTestHelpers.*;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferChannel;
+import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
@@ -1373,7 +1373,7 @@ public class GetBlobOperationTest {
       for (ResponseInfo responseInfo : responses) {
         DataInputStream dis = null;
         if (routerConfig.routerGetBlobOperationShareMemory) {
-          dis = new CommonUtils.ByteBufferDataInputStream(responseInfo.getResponse());
+          dis = new ByteBufferDataInputStream(responseInfo.getResponse());
         } else {
           dis = new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()));
         }

@@ -15,6 +15,7 @@ package com.github.ambry.utils;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,6 +58,10 @@ public class CrcInputStream extends InputStream {
     int ret = stream.read(b, off, len);
     crc.update(b, off, ret);
     return ret;
+  }
+
+  public void update(ByteBuffer buffer) throws IOException {
+    crc.update(buffer);
   }
 
   @Override
