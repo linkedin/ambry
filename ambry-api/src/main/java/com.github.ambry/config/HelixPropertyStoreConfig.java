@@ -22,6 +22,10 @@ public class HelixPropertyStoreConfig {
       HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms";
   public static final String HELIX_ZK_CLIENT_SESSION_TIMEOUT_MS =
       HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms";
+  public static final String HELIX_ZK_CLIENT_RETRY_ON_FAILURE =
+      HELIX_PROPERTY_STORE_PREFIX + "zk.client.retry.on.failure";
+  public static final String HELIX_ZK_CLIENT_RETRY_BACKOFF_MS =
+      HELIX_PROPERTY_STORE_PREFIX + "zk.client.retry.backoff.ms";
   public static final String HELIX_ROOT_PATH = HELIX_PROPERTY_STORE_PREFIX + "root.path";
 
   /**
@@ -40,6 +44,17 @@ public class HelixPropertyStoreConfig {
   public final int zkClientSessionTimeoutMs;
 
   /**
+   * If {@code true}, create a new thread to retry on establishing session to zookeeper.
+   */
+  @Config(HELIX_ZK_CLIENT_RETRY_ON_FAILURE)
+  @Default("false")
+  public final boolean zkClientRetryOnFailure;
+
+  @Config(HELIX_ZK_CLIENT_RETRY_BACKOFF_MS)
+  @Default("10 * 60 * 1000")
+  public final int zkClientRetryBackoffMs;
+
+  /**
    * The root path of helix property store in the ZooKeeper. Must start with {@code /}, and must not end with {@code /}.
    * It is recommended to make root path in the form of {@code /ambry/<clustername>/helixPropertyStore}
    */
@@ -52,6 +67,9 @@ public class HelixPropertyStoreConfig {
         verifiableProperties.getIntInRange(HELIX_ZK_CLIENT_CONNECTION_TIMEOUT_MS, 20 * 1000, 1, Integer.MAX_VALUE);
     zkClientSessionTimeoutMs =
         verifiableProperties.getIntInRange(HELIX_ZK_CLIENT_SESSION_TIMEOUT_MS, 20 * 1000, 1, Integer.MAX_VALUE);
+    zkClientRetryOnFailure = verifiableProperties.getBoolean(HELIX_ZK_CLIENT_RETRY_ON_FAILURE, false);
+    zkClientRetryBackoffMs =
+        verifiableProperties.getIntInRange(HELIX_ZK_CLIENT_RETRY_BACKOFF_MS, 10 * 60 * 1000, 1000, Integer.MAX_VALUE);
     rootPath = verifiableProperties.getString(HELIX_ROOT_PATH, "/ambry/defaultCluster/helixPropertyStore");
   }
 }
