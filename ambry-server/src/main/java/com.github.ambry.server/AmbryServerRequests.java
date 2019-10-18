@@ -165,7 +165,8 @@ public class AmbryServerRequests extends AmbryRequests {
    * @throws InterruptedException if response sending is interrupted.
    * @throws IOException if there are I/O errors carrying our the required operation.
    */
-  private void handleAdminRequest(Request request) throws InterruptedException, IOException {
+  @Override
+  public void handleAdminRequest(Request request) throws InterruptedException, IOException {
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
