@@ -33,6 +33,7 @@ import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -697,6 +698,7 @@ public class MessageFormatRecordTest {
       long dataSize = dis.readLong();
       assertEquals((long) dataSize, blobSize);
       ByteBufferInputStream obtained = getByteBufferInputStreamForBlobRecord(cis, (int) dataSize);
+      assertEquals(getByteArrayFromByteBuffer(buffer), getByteArrayFromByteBuffer(obtained.getByteBuffer()));
       byte[] obtainedArray = new byte[blobSize];
       obtained.read(obtainedArray);
       assertArrayEquals(obtainedArray, expectedArray);
@@ -708,6 +710,16 @@ public class MessageFormatRecordTest {
         expectedArray = null;
       }
     }
+  }
+
+  private byte[] getByteArrayFromByteBuffer(ByteBuffer buffer) throws Exception {
+    assertFalse(buffer.isDirect());
+    if (buffer.hasArray()) {
+      return buffer.array();
+    }
+    Field arrayField = ByteBuffer.class.getDeclaredField("hb");
+    arrayField.setAccessible(true);
+    return (byte[])arrayField.get(buffer);
   }
 
   /**
