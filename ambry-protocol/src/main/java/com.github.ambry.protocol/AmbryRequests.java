@@ -133,6 +133,7 @@ public class AmbryRequests implements RequestAPI {
           break;
         case AdminRequest:
           handleAdminRequest(request);
+          break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }
