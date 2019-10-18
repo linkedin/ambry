@@ -698,6 +698,7 @@ public class MessageFormatRecordTest {
       long dataSize = dis.readLong();
       assertEquals((long) dataSize, blobSize);
       ByteBufferInputStream obtained = getByteBufferInputStreamForBlobRecord(cis, (int) dataSize);
+      // Make sure these two ByteBuffers actually share the underlying memory.
       assertEquals(getByteArrayFromByteBuffer(buffer), getByteArrayFromByteBuffer(obtained.getByteBuffer()));
       byte[] obtainedArray = new byte[blobSize];
       obtained.read(obtainedArray);
@@ -712,6 +713,13 @@ public class MessageFormatRecordTest {
     }
   }
 
+  /**
+   * Return the internal byte array of the given {@link ByteBuffer}. It only works when the {@link ByteBuffer} is not
+   * a direct {@link ByteBuffer}.
+   * @param buffer The {@link ByteBuffer}.
+   * @return The internal byte array.
+   * @throws Exception Any unexpected error.
+   */
   private byte[] getByteArrayFromByteBuffer(ByteBuffer buffer) throws Exception {
     assertFalse(buffer.isDirect());
     if (buffer.hasArray()) {
@@ -719,7 +727,7 @@ public class MessageFormatRecordTest {
     }
     Field arrayField = ByteBuffer.class.getDeclaredField("hb");
     arrayField.setAccessible(true);
-    return (byte[])arrayField.get(buffer);
+    return (byte[]) arrayField.get(buffer);
   }
 
   /**
