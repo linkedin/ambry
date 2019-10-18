@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -406,6 +407,7 @@ class DiskSpaceAllocator {
       // remove store reserve dir from in-mem data structure and then delete whole directory
       storeReserveFiles.remove(storeId);
       File storeReserveDir = new File(reserveDir, STORE_DIR_PREFIX + storeId);
+      logger.info("Deleting reserve store dir: {}", storeReserveDir.getAbsolutePath());
       Utils.deleteFileOrDirectory(storeReserveDir);
     }
   }
@@ -416,9 +418,15 @@ class DiskSpaceAllocator {
    * @throws IOException
    */
   private void deleteExtraSegments(Map<String, Map<Long, Long>> overallRequirements) throws IOException {
-    for (String storeId : storeReserveFiles.keySet()) {
+    // delete extra store segments
+    Iterator<Map.Entry<String, ReserveFileMap>> iter = storeReserveFiles.entrySet().iterator();
+    while (iter.hasNext()) {
+      Map.Entry<String, ReserveFileMap> entry = iter.next();
+      String storeId = entry.getKey();
       File storeReserveDir = new File(reserveDir, STORE_DIR_PREFIX + storeId);
       if (!overallRequirements.containsKey(storeId)) {
+        // remove store id from in-mem store reserve map
+        iter.remove();
         Utils.deleteFileOrDirectory(storeReserveDir);
       } else {
         ReserveFileMap sizeToFilesMap = storeReserveFiles.get(storeId);

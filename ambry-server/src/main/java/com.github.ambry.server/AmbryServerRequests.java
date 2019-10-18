@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
@@ -51,7 +52,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -66,7 +66,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AmbryServerRequests extends AmbryRequests {
 
-  private final Map<PartitionId, ReplicaId> localPartitionToReplicaMap;
+  private final ConcurrentHashMap<PartitionId, ReplicaId> localPartitionToReplicaMap;
   private final StatsManager statsManager;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
@@ -125,11 +125,17 @@ public class AmbryServerRequests extends AmbryRequests {
 
   /**
    * Get the list of replicas on current node.
-   * @return list of {@link ReplicaId}s on current node.
+   * @return a map of {@link PartitionId} to {@link ReplicaId} on current node.
    */
-  protected Map<PartitionId, ReplicaId> createLocalPartitionToReplicaMap() {
+  protected ConcurrentHashMap<PartitionId, ReplicaId> createLocalPartitionToReplicaMap() {
     List<? extends ReplicaId> localReplicaIds = clusterMap.getReplicaIds(currentNode);
-    return localReplicaIds.stream().collect(Collectors.toMap(ReplicaId::getPartitionId, Function.identity()));
+    return localReplicaIds.stream()
+        .collect(Collectors.toMap(ReplicaId::getPartitionId, Function.identity(), (o1, o2) -> {
+          // This a merge function that handles collisions between values associated with the same key.
+          // In the context of ambry server, this means two replicas are associated with same partition on current node
+          // For now, we treat it as an illegal case and throw an exception here.
+          throw new IllegalStateException("Found two replicas from same partition on local node!");
+        }, ConcurrentHashMap::new));
   }
 
   /**
@@ -516,12 +522,12 @@ public class AmbryServerRequests extends AmbryRequests {
     }
     // Attempt to add store into storage manager. If store already exists, fail adding store request.
     if (!storeManager.addBlobStore(replicaToAdd)) {
-      logger.debug("Failed to add {} into storage manager", partitionId);
+      logger.error("Failed to add {} into storage manager", partitionId);
       return ServerErrorCode.Unknown_Error;
     }
     // Attempt to add replica into replication manager. If replica already exists, fail adding replica request
     if (!((ReplicationManager) replicationEngine).addReplica(replicaToAdd)) {
-      logger.debug("Failed to add {} into replication manager", partitionId);
+      logger.error("Failed to add {} into replication manager", partitionId);
       return ServerErrorCode.Unknown_Error;
     }
     // Attempt to add replica into stats manager. If replica already exists, fail adding replica request
@@ -530,7 +536,7 @@ public class AmbryServerRequests extends AmbryRequests {
       localPartitionToReplicaMap.put(partitionId, replicaToAdd);
     } else {
       errorCode = ServerErrorCode.Unknown_Error;
-      logger.debug("Failed to add {} into stats manager", partitionId);
+      logger.error("Failed to add {} into stats manager", partitionId);
     }
     return errorCode;
   }
@@ -544,7 +550,7 @@ public class AmbryServerRequests extends AmbryRequests {
     ServerErrorCode errorCode = ServerErrorCode.No_Error;
     ReplicaId replicaId = localPartitionToReplicaMap.get(partitionId);
     if (replicaId == null) {
-      logger.info("{} doesn't exist on current node", partitionId);
+      logger.error("{} doesn't exist on current node", partitionId);
       return ServerErrorCode.Partition_Unknown;
     }
     // Attempt to remove replica from stats manager. If replica doesn't exist, log info but don't fail the request
@@ -555,6 +561,10 @@ public class AmbryServerRequests extends AmbryRequests {
     // Attempt to remove store from storage manager.
     if (storeManager.removeBlobStore(partitionId) && store != null) {
       ((BlobStore) store).deleteStoreFiles();
+      ReplicaStatusDelegate replicaStatusDelegate = ((BlobStore) store).getReplicaStatusDelegate();
+      // Remove this store from sealed and stopped list (if present)
+      replicaStatusDelegate.unseal(replicaId);
+      replicaStatusDelegate.unmarkStopped(Collections.singletonList(replicaId));
       localPartitionToReplicaMap.remove(partitionId);
     } else {
       errorCode = ServerErrorCode.Unknown_Error;
