@@ -25,8 +25,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Request;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.MockFindTokenHelper;
-import com.github.ambry.server.AmbryRequests;
-import com.github.ambry.server.AmbryServer;
+import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
@@ -69,7 +68,7 @@ public class VcrRequestsTest {
     FindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
     StoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     ServerMetrics serverMetrics =
-        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
+        new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, this.getClass());
 
     CloudDestination cloudDestination = new LatchBasedInMemoryCloudDestination(Collections.emptyList());
     StoreManager storeManager =

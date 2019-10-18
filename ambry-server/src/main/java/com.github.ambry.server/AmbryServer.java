@@ -41,6 +41,8 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.AmbryRequests;
+import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.StorageManager;
@@ -169,7 +171,7 @@ public class AmbryServer {
       FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
       ServerMetrics serverMetrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       requests =
-          new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
+          new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               serverMetrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory,
               serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory, statsManager);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,

@@ -42,8 +42,9 @@ import com.github.ambry.network.SocketRequestResponseChannel;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
-import com.github.ambry.protocol.BlobStoreControlAdminRequest;
+import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.BlobStoreControlAction;
+import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
@@ -108,9 +109,9 @@ import static org.mockito.Mockito.*;
 
 
 /**
- * Tests for {@link AmbryRequests}.
+ * Tests for {@link AmbryServerRequests}.
  */
-public class AmbryRequestsTest {
+public class AmbryServerRequestsTest {
 
   private final FindTokenHelper findTokenHelper;
   private final MockClusterMap clusterMap;
@@ -118,14 +119,14 @@ public class AmbryRequestsTest {
   private final MockStorageManager storageManager;
   private final MockReplicationManager replicationManager;
   private final MockStatsManager statsManager;
-  private final AmbryRequests ambryRequests;
+  private final AmbryServerRequests ambryRequests;
   private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
   private final Set<StoreKey> validKeysInStore = new HashSet<>();
   private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
   private final MockStoreKeyConverterFactory storeKeyConverterFactory;
   private final ReplicationConfig replicationConfig;
 
-  public AmbryRequestsTest()
+  public AmbryServerRequestsTest()
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
     clusterMap = new MockClusterMap();
     Properties properties = new Properties();
@@ -152,7 +153,7 @@ public class AmbryRequestsTest {
             statsManagerConfig);
     ServerMetrics serverMetrics =
         new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
-    ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, false,
         storeKeyConverterFactory, statsManager);
     storageManager.start();
@@ -410,14 +411,14 @@ public class AmbryRequestsTest {
         storageManager.compactionEnableVal);
     // add BlobStore (create a new partition and add one of its replicas to server)
     PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
-    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.AddStore,
-        numReplicasCaughtUpPerPartition, ServerErrorCode.No_Error);
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.AddStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.No_Error);
     // remove BlobStore (remove previously added store)
     BlobStore mockStore = Mockito.mock(BlobStore.class);
     storageManager.overrideStoreToReturn = mockStore;
     doNothing().when(mockStore).deleteStoreFiles();
-    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore,
-        numReplicasCaughtUpPerPartition, ServerErrorCode.No_Error);
+    sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, numReplicasCaughtUpPerPartition,
+        ServerErrorCode.No_Error);
     storageManager.overrideStoreToReturn = null;
   }
 
@@ -442,8 +443,7 @@ public class AmbryRequestsTest {
     storageManager.returnValueOfAddBlobStore = true;
 
     // test that adding replica into ReplicationManager fails (we first add replica into ReplicationManager to trigger failure)
-    ReplicaId replicaToAdd =
-        clusterMap.getBootstrapReplica(newPartition2.toPathString(), dataNodeId);
+    ReplicaId replicaToAdd = clusterMap.getBootstrapReplica(newPartition2.toPathString(), dataNodeId);
     replicationManager.addReplica(replicaToAdd);
     sendAndVerifyStoreControlRequest(newPartition2, BlobStoreControlAction.AddStore, (short) 0,
         ServerErrorCode.Unknown_Error);
@@ -771,9 +771,9 @@ public class AmbryRequestsTest {
    * @throws InterruptedException
    * @throws IOException
    */
-  private void sendAndVerifyStoreControlRequest(PartitionId partitionId,
-      BlobStoreControlAction storeControlRequestType, short numReplicasCaughtUpPerPartition,
-      ServerErrorCode expectedServerErrorCode) throws InterruptedException, IOException {
+  private void sendAndVerifyStoreControlRequest(PartitionId partitionId, BlobStoreControlAction storeControlRequestType,
+      short numReplicasCaughtUpPerPartition, ServerErrorCode expectedServerErrorCode)
+      throws InterruptedException, IOException {
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);
     AdminRequest adminRequest =
