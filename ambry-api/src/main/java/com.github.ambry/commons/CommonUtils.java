@@ -17,6 +17,7 @@ package com.github.ambry.commons;
 import com.github.ambry.account.HolderHelixZkClient;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.List;
+import org.I0Itec.zkclient.exception.ZkTimeoutException;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.manager.zk.ZkBaseDataAccessor;
@@ -43,11 +44,13 @@ public class CommonUtils {
     try {
       zkClient = new ZkClient(zkServers, propertyStoreConfig.zkClientSessionTimeoutMs,
           propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
-    } catch (Exception e) {
+    } catch (ZkTimeoutException e) {
+      // Only catch timeout exception to see if we want to retry.
       if (!propertyStoreConfig.zkClientRetryOnFailure) {
         throw e;
       }
     }
+
     final HelixZkClient helixZkClient = zkClient != null ? zkClient : new HolderHelixZkClient();
     if (zkClient == null) {
       new Thread(new Runnable() {
@@ -60,6 +63,8 @@ public class CommonUtils {
               ((HolderHelixZkClient) helixZkClient).setZkClient(client);
               return;
             } catch (Exception e) {
+              // If we are here, there is only one exception that would possible happen here, which is
+              // ZkTimeoutException.
               e.printStackTrace();
             }
 
