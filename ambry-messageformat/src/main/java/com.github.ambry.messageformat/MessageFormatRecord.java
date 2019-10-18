@@ -1645,7 +1645,7 @@ public class MessageFormatRecord {
    * @return The {@link ByteBufferInputStream}
    * @throws IOException Unexpected IO errors.
    */
-  static ByteBufferInputStream getByteBufferInputStreamForBlobRecord(CrcInputStream crcStream, int dataSize)
+  static ByteBufferInputStream getByteBufferInputStreamForBlobRecord(CrcInputStream crcStream, long dataSize)
       throws IOException {
     ByteBufferInputStream output;
     InputStream inputStream = crcStream.getUnderlyingInputStream();
@@ -1654,16 +1654,16 @@ public class MessageFormatRecord {
       int startIndex = byteBuffer.position();
       int oldLimit = byteBuffer.limit();
 
-      byteBuffer.limit(startIndex + dataSize);
+      byteBuffer.limit(startIndex + (int) dataSize);
       ByteBuffer dataBuffer = byteBuffer.slice();
-      crcStream.update(dataBuffer.duplicate());
+      crcStream.updateCrc(dataBuffer.duplicate());
 
       output = new ByteBufferInputStream(dataBuffer);
       byteBuffer.limit(oldLimit);
       // Change the byte buffer's position as if the data is fetched.
-      byteBuffer.position(startIndex+dataSize);
+      byteBuffer.position(startIndex + (int) dataSize);
     } else {
-      output = new ByteBufferInputStream(crcStream, dataSize);
+      output = new ByteBufferInputStream(crcStream, (int) dataSize);
     }
     return output;
   }
@@ -1703,7 +1703,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, (int) dataSize);
+      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
@@ -1761,7 +1761,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, (int) dataSize);
+      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {

@@ -60,7 +60,12 @@ public class CrcInputStream extends InputStream {
     return ret;
   }
 
-  public void update(ByteBuffer buffer) throws IOException {
+  /**
+   * update crc with the all the data reading from given buffer.
+   * @param buffer The buffer to update the crc value.
+   * @throws IOException any I/O error.
+   */
+  public void updateCrc(ByteBuffer buffer) throws IOException {
     crc.update(buffer);
   }
 
