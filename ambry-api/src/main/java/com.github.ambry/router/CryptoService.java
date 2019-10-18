@@ -14,7 +14,7 @@
 package com.github.ambry.router;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 
@@ -48,9 +48,7 @@ public interface CryptoService<T> {
    */
   default ByteBuf encrypt(ByteBuf toEncrypt, T key) throws GeneralSecurityException {
     ByteBuffer encrypted = encrypt(toEncrypt.nioBuffer(), key);
-    ByteBuf result = ByteBufAllocator.DEFAULT.ioBuffer(encrypted.remaining());
-    result.writeBytes(encrypted);
-    return result;
+    return Unpooled.wrappedBuffer(encrypted);
   }
 
   /**
@@ -72,9 +70,7 @@ public interface CryptoService<T> {
    */
   default ByteBuf decrypt(ByteBuf toDecrypt, T key) throws GeneralSecurityException {
     ByteBuffer decrypted = decrypt(toDecrypt.nioBuffer(), key);
-    ByteBuf result = ByteBufAllocator.DEFAULT.ioBuffer(decrypted.remaining());
-    result.writeBytes(decrypted);
-    return result;
+    return Unpooled.wrappedBuffer(decrypted);
   }
 
   /**

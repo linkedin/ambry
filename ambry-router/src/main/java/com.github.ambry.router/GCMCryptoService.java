@@ -140,7 +140,7 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
       }
       return encryptedContent;
     } catch (Exception e) {
-      throw new GeneralSecurityException("Expception thrown while encrypting data", e);
+      throw new GeneralSecurityException("Exception thrown while encrypting data", e);
     }
   }
 
