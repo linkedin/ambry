@@ -1659,9 +1659,9 @@ public class MessageFormatRecord {
       crcStream.update(dataBuffer.duplicate());
 
       output = new ByteBufferInputStream(dataBuffer);
-      // resume the byteBuffer for future use.
-      byteBuffer.position(startIndex+dataSize);
       byteBuffer.limit(oldLimit);
+      // Change the byte buffer's position as if the data is fetched.
+      byteBuffer.position(startIndex+dataSize);
     } else {
       output = new ByteBufferInputStream(crcStream, dataSize);
     }
