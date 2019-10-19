@@ -334,6 +334,14 @@ public class DiskSpaceAllocatorTest {
     // create extra file inside invalid directory to mock non-empty directory
     File extraFile = new File(invalidDir, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
     assertTrue(extraFile.createNewFile());
+    // create an extra store reserve dir (storeId1) to test if DSA can correctly delete the unrecognized dir
+    File extraStoreReserveDir = new File(reserveFileDir, DiskSpaceAllocator.STORE_DIR_PREFIX + storeId1);
+    assertTrue("Couldn't create an extra store reserve directory", extraStoreReserveDir.mkdir());
+    // create size dir and put some files into this extra store reserve dir
+    File sizeDir = new File(extraStoreReserveDir, DiskSpaceAllocator.FILE_SIZE_DIR_PREFIX + 50);
+    assertTrue("Couldn't create file size directory in extra store reserve dir", sizeDir.mkdir());
+    File randomFile = new File(sizeDir, DiskSpaceAllocator.RESERVE_FILE_PREFIX + UUID.randomUUID());
+    assertTrue("Couldn't create random file in extra store reserve dir", randomFile.createNewFile());
     // instantiate DiskSpaceAllocator
     alloc = constructAllocator();
     // verify invalid directories and files no longer exist
@@ -341,8 +349,9 @@ public class DiskSpaceAllocatorTest {
     assertFalse("Invalid file shouldn't exist after inventory", invalidFile.exists());
     // verify inventoried in-mem store/swap reserve file maps match those existing valid files
     Map<String, DiskSpaceAllocator.ReserveFileMap> storeFileMap = alloc.getStoreReserveFileMap();
+    // note that, after inventory, store reserve file map contains extra storeId1, which will be deleted when initializePool is called.
     assertTrue("Store reserve file map doesn't match existing directory/file",
-        storeFileMap.containsKey(storeId0) && storeFileMap.keySet().size() == 1);
+        storeFileMap.containsKey(storeId0) && storeFileMap.containsKey(storeId1) && storeFileMap.size() == 2);
     DiskSpaceAllocator.ReserveFileMap swapFileMap = alloc.getSwapReserveFileMap();
     assertTrue("Swap reserve file map doesn't match existing directory/file",
         swapFileMap.getCount(30) == 1 && swapFileMap.getFileSizeSet().size() == 2);
@@ -357,6 +366,8 @@ public class DiskSpaceAllocatorTest {
     assertNull("The swap segment should not exist in in-mem swap map", swapFileMap.remove(30));
     assertNull("The swap segment should not exist in in-mem swap map", swapFileMap.remove(50));
     storeFileMap = alloc.getStoreReserveFileMap();
+    assertTrue("Store reserve file map should not contain storeId1 dir",
+        !storeFileMap.containsKey(storeId1) && storeFileMap.size() == 1);
     assertNull("The store segment with size 50 should not exist in in-mem store file map",
         storeFileMap.get(storeId0).remove(50));
     assertNotNull("The store segment with size 30 should exist", storeFileMap.get(storeId0).remove(30));

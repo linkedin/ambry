@@ -130,8 +130,8 @@ public class AmbryServerRequests extends AmbryRequests {
   protected ConcurrentHashMap<PartitionId, ReplicaId> createLocalPartitionToReplicaMap() {
     List<? extends ReplicaId> localReplicaIds = clusterMap.getReplicaIds(currentNode);
     return localReplicaIds.stream()
-        .collect(Collectors.toMap(ReplicaId::getPartitionId, Function.identity(), (o1, o2) -> {
-          // This a merge function that handles collisions between values associated with the same key.
+        .collect(Collectors.toMap(ReplicaId::getPartitionId, Function.identity(), (v1, v2) -> {
+          // This is a merge function that handles collisions between values associated with the same key.
           // In the context of ambry server, this means two replicas are associated with same partition on current node
           // For now, we treat it as an illegal case and throw an exception here.
           throw new IllegalStateException("Found two replicas from same partition on local node!");
@@ -562,7 +562,7 @@ public class AmbryServerRequests extends AmbryRequests {
     if (storeManager.removeBlobStore(partitionId) && store != null) {
       ((BlobStore) store).deleteStoreFiles();
       ReplicaStatusDelegate replicaStatusDelegate = ((BlobStore) store).getReplicaStatusDelegate();
-      // Remove this store from sealed and stopped list (if present)
+      // Remove store from sealed and stopped list (if present)
       logger.info("Removing store from sealed and stopped list(if present)");
       replicaStatusDelegate.unseal(replicaId);
       replicaStatusDelegate.unmarkStopped(Collections.singletonList(replicaId));
