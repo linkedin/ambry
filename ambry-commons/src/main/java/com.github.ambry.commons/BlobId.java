@@ -502,8 +502,7 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V4:
       case BLOB_ID_V5:
         byte[] uuidBytes = getUuid().getBytes();
-        uuidBuf = ByteBuffer.allocate(UUID_SIZE_FIELD_LENGTH_IN_BYTES + (short) uuidBytes.length);
-        uuidBuf.putInt(uuidBytes.length);
+        uuidBuf = ByteBuffer.allocate((short) uuidBytes.length);
         uuidBuf.put(uuidBytes);
         break;
       case BLOB_ID_V6:

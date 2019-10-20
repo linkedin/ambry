@@ -56,8 +56,7 @@ public class MockId extends StoreKey {
   @Override
   public byte[] getUuidBytesArray() {
     byte[] uuidBytes = id.getBytes();
-    ByteBuffer uuidBuf = ByteBuffer.allocate(Id_Size_In_Bytes + (short) uuidBytes.length);
-    uuidBuf.putShort((short) id.length());
+    ByteBuffer uuidBuf = ByteBuffer.allocate((short) uuidBytes.length);
     uuidBuf.put(uuidBytes);
     return uuidBuf.array();
   }
