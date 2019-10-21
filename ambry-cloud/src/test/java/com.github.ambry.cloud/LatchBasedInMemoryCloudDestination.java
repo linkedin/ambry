@@ -143,7 +143,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       long maxTotalSizeOfEntries) {
     List<CloudBlobMetadata> entries = new LinkedList<>();
     for (BlobId blobId : map.keySet()) {
-      if (map.get(blobId).getFirst().getUploadTime() > findToken.getLatestUploadTime()) {
+      if (map.get(blobId).getFirst().getUploadTime() > findToken.getLastUpdateTime()) {
         entries.add(map.get(blobId).getFirst());
       }
     }

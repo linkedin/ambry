@@ -31,7 +31,7 @@ public class CloudFindToken implements FindToken {
   static final short CURRENT_VERSION = VERSION_0;
   private final short version;
   private final FindTokenType type;
-  private final long latestUploadTime;
+  private final long lastUpdateTime;
   private final String latestBlobId;
   private final long bytesRead;
 
@@ -41,20 +41,20 @@ public class CloudFindToken implements FindToken {
   }
 
   /** Constructor for in-progress token */
-  public CloudFindToken(long latestUploadTime, String latestBlobId, long bytesRead) {
+  public CloudFindToken(long lastUpdateTime, String latestBlobId, long bytesRead) {
     this.version = CURRENT_VERSION;
     this.type = FindTokenType.CloudBased;
-    this.latestUploadTime = latestUploadTime;
+    this.lastUpdateTime = lastUpdateTime;
     this.latestBlobId = latestBlobId;
     this.bytesRead = bytesRead;
   }
 
   /** Constructor for reading token that can have older version*/
-  public CloudFindToken(short version, long latestUploadTime, String latestBlobId, long bytesRead) {
+  public CloudFindToken(short version, long lastUpdateTime, String latestBlobId, long bytesRead) {
     this.version = version;
     this.type = FindTokenType.CloudBased;
     this.latestBlobId = latestBlobId;
-    this.latestUploadTime = latestUploadTime;
+    this.lastUpdateTime = lastUpdateTime;
     this.bytesRead = bytesRead;
   }
 
@@ -91,7 +91,7 @@ public class CloudFindToken implements FindToken {
         // add type
         bufWrap.putShort((short) type.ordinal());
         // add latestUploadTime
-        bufWrap.putLong(latestUploadTime);
+        bufWrap.putLong(lastUpdateTime);
         // add bytesRead
         bufWrap.putLong(bytesRead);
         if (latestBlobId != null) {
@@ -146,8 +146,8 @@ public class CloudFindToken implements FindToken {
     return latestBlobId;
   }
 
-  public long getLatestUploadTime() {
-    return latestUploadTime;
+  public long getLastUpdateTime() {
+    return lastUpdateTime;
   }
 
   @Override
@@ -159,20 +159,20 @@ public class CloudFindToken implements FindToken {
       return false;
     }
     CloudFindToken that = (CloudFindToken) o;
-    return version == that.version && latestUploadTime == that.latestUploadTime && bytesRead == that.bytesRead
+    return version == that.version && lastUpdateTime == that.lastUpdateTime && bytesRead == that.bytesRead
         && Objects.equals(latestBlobId, that.latestBlobId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(version, latestUploadTime, latestBlobId, bytesRead);
+    return Objects.hash(version, lastUpdateTime, latestBlobId, bytesRead);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("version: ").append(version);
-    sb.append(" latestUploadTime: ").append(latestUploadTime);
+    sb.append(" latestUploadTime: ").append(lastUpdateTime);
     sb.append(" latestBlobId: ").append(latestBlobId);
     sb.append(" bytesRead: ").append(bytesRead);
     return sb.toString();

@@ -155,7 +155,7 @@ public class CloudFindTokenTest {
     // add type
     bufWrap.putShort((short) token.getType().ordinal());
     // add latestUploadTime
-    bufWrap.putLong(token.getLatestUploadTime());
+    bufWrap.putLong(token.getLastUpdateTime());
     // add bytesRead
     bufWrap.putLong(token.getBytesRead());
     if (token.getLatestBlobId() != null) {

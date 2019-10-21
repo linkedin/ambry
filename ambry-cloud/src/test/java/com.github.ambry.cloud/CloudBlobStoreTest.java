@@ -273,7 +273,7 @@ public class CloudBlobStoreTest {
     FindInfo findInfo = store.findEntriesSince(startToken, maxTotalSize);
     assertEquals(numBlobsFound, findInfo.getMessageEntries().size());
     CloudFindToken outputToken = (CloudFindToken) findInfo.getFindToken();
-    assertEquals(startTime + numBlobsFound - 1, outputToken.getLatestUploadTime());
+    assertEquals(startTime + numBlobsFound - 1, outputToken.getLastUpdateTime());
     assertEquals(blobSize * numBlobsFound, outputToken.getBytesRead());
     assertEquals(metadataList.get(numBlobsFound - 1).getId(), outputToken.getLatestBlobId());
 
@@ -283,7 +283,7 @@ public class CloudBlobStoreTest {
     when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(metadataList);
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
     outputToken = (CloudFindToken) findInfo.getFindToken();
-    assertEquals(startTime + numBlobsFound - 1, outputToken.getLatestUploadTime());
+    assertEquals(startTime + numBlobsFound - 1, outputToken.getLastUpdateTime());
     assertEquals(blobSize * 2 * numBlobsFound, outputToken.getBytesRead());
     assertEquals(metadataList.get(numBlobsFound - 1).getId(), outputToken.getLatestBlobId());
 

@@ -84,8 +84,8 @@ class AzureCloudDestination implements CloudDestination {
   // be multiple VCR's uploading same partition).  We track the lastBlobId in the CloudFindToken and skip it if
   // is returned in successive queries.
   static final String ENTRIES_SINCE_QUERY_TEMPLATE =
-      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " >= "
-          + TIME_SINCE_PARAM + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPDATE_TIME + " >= "
+          + TIME_SINCE_PARAM + " ORDER BY c." + CloudBlobMetadata.FIELD_UPDATE_TIME + " ASC";
   private static final String SEPARATOR = "-";
   private static final int findSinceQueryLimit = 1000;
   private final CloudStorageAccount azureAccount;
@@ -345,7 +345,7 @@ class AzureCloudDestination implements CloudDestination {
       long maxTotalSizeOfEntries) throws CloudStorageException {
     SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
         new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, findSinceQueryLimit),
-            new SqlParameter(TIME_SINCE_PARAM, findToken.getLatestUploadTime())));
+            new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime())));
     try {
       List<CloudBlobMetadata> results =
           cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
