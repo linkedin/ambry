@@ -198,8 +198,6 @@ class CloudBlobStore implements Store {
   private long getOperationTime(CloudBlobMetadata metadata, long currentTimeStamp) {
     if (isBlobDeleted(metadata)) {
       return metadata.getDeletionTime();
-    } else if (isBlobExpired(metadata, currentTimeStamp)) {
-      return metadata.getExpirationTime();
     }
     return (metadata.getCreationTime() == Utils.Infinite_Time) ? metadata.getUploadTime() : metadata.getCreationTime();
   }
