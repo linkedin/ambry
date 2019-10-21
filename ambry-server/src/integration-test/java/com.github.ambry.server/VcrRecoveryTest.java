@@ -197,7 +197,7 @@ public class VcrRecoveryTest {
       assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,
           partitionResponseInfo.getErrorCode());
       for (MessageInfo messageInfo : partitionResponseInfo.getMessageInfoList()) {
-        assertEquals(blobIdToSizeMap.get((BlobId) messageInfo.getStoreKey()) + 270, messageInfo.getSize());
+        assertEquals(blobIdToSizeMap.get(messageInfo.getStoreKey()) + 270, messageInfo.getSize());
       }
     }
   }
