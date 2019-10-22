@@ -83,8 +83,7 @@ class Partition implements PartitionId {
   }
 
   static byte[] readPartitionBytesFromStream(InputStream stream) throws IOException {
-    byte[] partitionBytes = Utils.readBytesFromStream(stream, Partition_Size_In_Bytes);
-    return partitionBytes;
+    return Utils.readBytesFromStream(stream, Partition_Size_In_Bytes);
   }
 
   @Override
@@ -95,7 +94,21 @@ class Partition implements PartitionId {
   @Override
   public List<ReplicaId> getReplicaIds() {
     List<Replica> replicas = getReplicas();
-    return new ArrayList<ReplicaId>(replicas);
+    return new ArrayList<>(replicas);
+  }
+
+  @Override
+  public List<ReplicaId> getReplicaIdsInRequiredState(String state, String dcName) {
+    // for static clustermap we assume all replicas are in StandBy state.
+    List<ReplicaId> result = new ArrayList<>();
+    if (state.equals(ReplicaState.STANDBY.name())) {
+      for (ReplicaId replicaId : replicas) {
+        if (dcName == null || replicaId.getDataNodeId().getDatacenterName().equals(dcName)) {
+          result.add(replicaId);
+        }
+      }
+    }
+    return result;
   }
 
   @Override

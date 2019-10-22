@@ -64,7 +64,9 @@ class MockHelixManager implements HelixManager {
   private LiveInstanceChangeListener liveInstanceChangeListener;
   private ExternalViewChangeListener externalViewChangeListener;
   private InstanceConfigChangeListener instanceConfigChangeListener;
+  private IdealStateChangeListener idealStateChangeListener;
   private final MockHelixAdmin mockAdmin;
+  private final MockHelixDataAccessor dataAccessor;
   private final Exception beBadException;
   private final Map<String, ZNRecord> znRecordMap;
   private ZkHelixPropertyStore<ZNRecord> helixPropertyStore;
@@ -85,6 +87,7 @@ class MockHelixManager implements HelixManager {
     mockAdmin = helixCluster.getHelixAdminFactory().getHelixAdmin(zkAddr);
     mockAdmin.addHelixManager(this);
     clusterName = helixCluster.getClusterName();
+    dataAccessor = new MockHelixDataAccessor(clusterName);
     this.beBadException = beBadException;
     this.znRecordMap = znRecordMap;
     Properties storeProps = new Properties();
@@ -190,6 +193,14 @@ class MockHelixManager implements HelixManager {
     instanceConfigChangeListener.onInstanceConfigChange(mockAdmin.getInstanceConfigs(clusterName), notificationContext);
   }
 
+  void triggerIdealStateNotification(boolean init) throws InterruptedException {
+    NotificationContext notificationContext = new NotificationContext(this);
+    if (init) {
+      notificationContext.setType(NotificationContext.Type.INIT);
+    }
+    idealStateChangeListener.onIdealStateChange(mockAdmin.getIdealStates(), notificationContext);
+  }
+
   //****************************
   // Not implemented.
   //****************************
@@ -200,14 +211,15 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public void addIdealStateChangeListener(IdealStateChangeListener idealStateChangeListener) throws Exception {
-    throw new IllegalStateException("Not implemented");
+    if (beBadException != null) {
+      throw beBadException;
+    }
+    this.idealStateChangeListener = idealStateChangeListener;
+    triggerIdealStateNotification(true);
   }
 
   @Override
   public void addLiveInstanceChangeListener(LiveInstanceChangeListener liveInstanceChangeListener) throws Exception {
-    if (beBadException != null) {
-      throw beBadException;
-    }
     this.liveInstanceChangeListener = liveInstanceChangeListener;
     triggerLiveInstanceNotification(true);
   }
@@ -227,9 +239,6 @@ class MockHelixManager implements HelixManager {
   @Override
   public void addInstanceConfigChangeListener(InstanceConfigChangeListener instanceConfigChangeListener)
       throws Exception {
-    if (beBadException != null) {
-      throw beBadException;
-    }
     this.instanceConfigChangeListener = instanceConfigChangeListener;
     triggerConfigChangeNotification(true);
   }
@@ -264,7 +273,7 @@ class MockHelixManager implements HelixManager {
   @Override
   public void addCurrentStateChangeListener(CurrentStateChangeListener currentStateChangeListener, String s, String s1)
       throws Exception {
-    throw new IllegalStateException("Not implemented");
+    // do nothing
   }
 
   @Override
@@ -322,7 +331,7 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public HelixDataAccessor getHelixDataAccessor() {
-    throw new IllegalStateException("Not implemented");
+    return dataAccessor;
   }
 
   @Override

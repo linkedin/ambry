@@ -261,6 +261,11 @@ public class DynamicClusterManagerComponentsTest {
     }
 
     @Override
+    public List<AmbryReplica> getReplicaIdsInRequiredState(AmbryPartition partition, String state, String dcName) {
+      throw new UnsupportedOperationException("Temporarily unsupported");
+    }
+
+    @Override
     public Collection<AmbryDisk> getDisks(AmbryDataNode dataNode) {
       if (dataNode != null) {
         return dataNodeToDisks.get(dataNode);

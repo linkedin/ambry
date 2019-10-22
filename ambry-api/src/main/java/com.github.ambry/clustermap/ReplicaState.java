@@ -17,7 +17,7 @@ package com.github.ambry.clustermap;
  * The states of ambry replica that are managed by Helix controller.
  * Ambry router makes decision based on these states when routing requests.
  */
-public enum AmbryHelixState {
+public enum ReplicaState {
   /**
    * Initial state of replica when starting up.
    * Router should not send any request to replica in this state.

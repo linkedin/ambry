@@ -40,7 +40,7 @@ class AmbryStateModelDefinition {
 
     StateModelDefinition.Builder builder = new StateModelDefinition.Builder(AMBRY_LEADER_STANDBY_MODEL);
     // Init state
-    builder.initialState(AmbryHelixState.OFFLINE.name());
+    builder.initialState(ReplicaState.OFFLINE.name());
 
     /*
      * States and their priority which are managed by Helix controller.
@@ -49,35 +49,35 @@ class AmbryStateModelDefinition {
      * considered a "downward" transition by Helix. Downward transitions are not
      * throttled.
      */
-    builder.addState(AmbryHelixState.LEADER.name(), 0);
-    builder.addState(AmbryHelixState.STANDBY.name(), 1);
-    builder.addState(AmbryHelixState.BOOTSTRAP.name(), 2);
-    builder.addState(AmbryHelixState.INACTIVE.name(), 2);
-    builder.addState(AmbryHelixState.OFFLINE.name(), 3);
+    builder.addState(ReplicaState.LEADER.name(), 0);
+    builder.addState(ReplicaState.STANDBY.name(), 1);
+    builder.addState(ReplicaState.BOOTSTRAP.name(), 2);
+    builder.addState(ReplicaState.INACTIVE.name(), 2);
+    builder.addState(ReplicaState.OFFLINE.name(), 3);
     // HelixDefinedState adds two additional states: ERROR and DROPPED. The priority is Integer.MAX_VALUE
     for (HelixDefinedState state : HelixDefinedState.values()) {
       builder.addState(state.name());
     }
 
     // Add valid transitions between the states.
-    builder.addTransition(AmbryHelixState.OFFLINE.name(), AmbryHelixState.BOOTSTRAP.name(), 3);
-    builder.addTransition(AmbryHelixState.BOOTSTRAP.name(), AmbryHelixState.STANDBY.name(), 2);
-    builder.addTransition(AmbryHelixState.STANDBY.name(), AmbryHelixState.LEADER.name(), 1);
-    builder.addTransition(AmbryHelixState.LEADER.name(), AmbryHelixState.STANDBY.name(), 0);
-    builder.addTransition(AmbryHelixState.STANDBY.name(), AmbryHelixState.INACTIVE.name(), 2);
-    builder.addTransition(AmbryHelixState.INACTIVE.name(), AmbryHelixState.OFFLINE.name(), 3);
-    builder.addTransition(AmbryHelixState.OFFLINE.name(), HelixDefinedState.DROPPED.name());
+    builder.addTransition(ReplicaState.OFFLINE.name(), ReplicaState.BOOTSTRAP.name(), 3);
+    builder.addTransition(ReplicaState.BOOTSTRAP.name(), ReplicaState.STANDBY.name(), 2);
+    builder.addTransition(ReplicaState.STANDBY.name(), ReplicaState.LEADER.name(), 1);
+    builder.addTransition(ReplicaState.LEADER.name(), ReplicaState.STANDBY.name(), 0);
+    builder.addTransition(ReplicaState.STANDBY.name(), ReplicaState.INACTIVE.name(), 2);
+    builder.addTransition(ReplicaState.INACTIVE.name(), ReplicaState.OFFLINE.name(), 3);
+    builder.addTransition(ReplicaState.OFFLINE.name(), HelixDefinedState.DROPPED.name());
 
     // States constraints
     /*
      * Static constraint: number of leader replica for certain partition shouldn't exceed 1 at any time.
      */
-    builder.upperBound(AmbryHelixState.LEADER.name(), 1);
+    builder.upperBound(ReplicaState.LEADER.name(), 1);
     /*
      * Dynamic constraint: R means it should be derived based on the replication factor for the cluster
      * this allows a different replication factor for each resource without having to define a new state model.
      */
-    builder.dynamicUpperBound(AmbryHelixState.STANDBY.name(), UPPER_BOUND_REPLICATION_FACTOR);
+    builder.dynamicUpperBound(ReplicaState.STANDBY.name(), UPPER_BOUND_REPLICATION_FACTOR);
 
     return builder.build();
   }

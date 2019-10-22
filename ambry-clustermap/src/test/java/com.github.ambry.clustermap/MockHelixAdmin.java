@@ -182,6 +182,13 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   /**
+   * @return a list of {@link IdealState} via Helix admin.
+   */
+  List<IdealState> getIdealStates() {
+    return new ArrayList<>(new HashSet<>(resourcesToIdealStates.values()));
+  }
+
+  /**
    * @return all instances registered via this Helix admin that are up.
    */
   List<String> getUpInstances() {

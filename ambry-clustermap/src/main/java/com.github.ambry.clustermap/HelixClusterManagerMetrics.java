@@ -28,8 +28,9 @@ class HelixClusterManagerMetrics {
   private final MetricRegistry registry;
 
   public final Counter liveInstanceChangeTriggerCount;
-  public final Counter externalViewChangeTriggerCount;
   public final Counter instanceConfigChangeTriggerCount;
+  public final Counter idealStateChangeTriggerCount;
+  public final Counter routingTableChangeTriggerCount;
   public final Counter getPartitionIdFromStreamMismatchCount;
   public final Counter getWritablePartitionIdsMismatchCount;
   public final Counter getAllPartitionIdsMismatchCount;
@@ -56,10 +57,12 @@ class HelixClusterManagerMetrics {
     this.registry = registry;
     liveInstanceChangeTriggerCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "liveInstanceChangeTriggerCount"));
-    externalViewChangeTriggerCount =
-        registry.counter(MetricRegistry.name(HelixClusterManager.class, "externalViewChangeTriggerCount"));
     instanceConfigChangeTriggerCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceConfigChangeTriggerCount"));
+    idealStateChangeTriggerCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "idealStateChangeTriggerCount"));
+    routingTableChangeTriggerCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "routingTableChangeTriggerCount"));
     getPartitionIdFromStreamMismatchCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "getPartitionIdFromStreamMismatchCount"));
     getWritablePartitionIdsMismatchCount =
