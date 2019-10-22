@@ -27,7 +27,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.stream.Stream;
@@ -271,7 +273,23 @@ public class AccountUpdateTool {
     long startTime = System.currentTimeMillis();
     Collection<Account> accountsToUpdate = getAccountsFromJson(accountJsonPath);
     if (!hasDuplicateAccountIdOrName(accountsToUpdate)) {
-      if (accountService.updateAccounts(accountsToUpdate)) {
+      Collection<Account> allAccounts = accountService.getAllAccounts();
+      // Update the snapshot version to resolve conflict
+      Map<Short, Account> existingAccountsMap = new HashMap<>();
+      for (Account account : allAccounts) {
+        existingAccountsMap.put(account.getId(), account);
+      }
+      Collection<Account> newAccounts = new ArrayList<>(accountsToUpdate.size());
+      // resolve the snapshot conflict.
+      for (Account account : accountsToUpdate) {
+        Account accountInMap = existingAccountsMap.get(account.getId());
+        if (accountInMap != null && accountInMap.getSnapshotVersion() != account.getSnapshotVersion()) {
+          newAccounts.add(new AccountBuilder(account).snapshotVersion(accountInMap.getSnapshotVersion()).build());
+        } else {
+          newAccounts.add(account);
+        }
+      }
+      if (accountService.updateAccounts(newAccounts)) {
         System.out.println(
             accountsToUpdate.size() + " account(s) successfully created or updated, took " + (System.currentTimeMillis()
                 - startTime) + " ms");
