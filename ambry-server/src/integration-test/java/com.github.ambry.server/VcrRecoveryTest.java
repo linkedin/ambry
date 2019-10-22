@@ -197,7 +197,7 @@ public class VcrRecoveryTest {
       assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,
           partitionResponseInfo.getErrorCode());
       for (MessageInfo messageInfo : partitionResponseInfo.getMessageInfoList()) {
-        assertEquals(blobIdToSizeMap.get(messageInfo.getStoreKey()) + 270, messageInfo.getSize());
+        assertEquals(blobIdToSizeMap.get((BlobId) messageInfo.getStoreKey()) + 270, messageInfo.getSize());
       }
     }
   }
@@ -256,7 +256,7 @@ public class VcrRecoveryTest {
     byte[] userMetadata = new byte[userMetaDataSize];
     TestUtils.RANDOM.nextBytes(userMetadata);
     Map<BlobId, Integer> blobIdToSizeMap = new HashMap<>();
-    int blobSize = FOUR_MB_SZ;
+    int blobSize = FOUR_MB_SZ; // Currently ambry supports max size of 4MB for blobs.
     for (BlobId blobId : blobIds) {
       byte[] data = new byte[blobSize];
       BlobProperties blobProperties =
