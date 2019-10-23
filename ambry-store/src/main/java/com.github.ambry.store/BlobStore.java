@@ -703,7 +703,9 @@ public class BlobStore implements Store {
     }
     // Step 2: if segmented, delete remaining store segments in reserve pool
     if (log.isLogSegmented()) {
-      diskSpaceAllocator.deleteAllSegmentsForStoreIds(Collections.singletonList(storeId));
+      logger.info("Deleting remaining segments associated with store {} in reserve pool", storeId);
+      diskSpaceAllocator.deleteAllSegmentsForStoreIds(
+          Collections.singletonList(replicaId.getPartitionId().toPathString()));
     }
     // Step 3: delete all files in current store directory
     logger.info("Deleting store {} directory", storeId);
@@ -713,7 +715,14 @@ public class BlobStore implements Store {
     } catch (Exception e) {
       throw new IOException("Couldn't delete store directory " + dataDir, e);
     }
-    logger.info("All files of store {} deleted", storeId);
+    logger.info("All files of store {} are deleted", storeId);
+  }
+
+  /**
+   * @return {@link ReplicaStatusDelegate} associated with this store
+   */
+  public ReplicaStatusDelegate getReplicaStatusDelegate() {
+    return replicaStatusDelegate;
   }
 
   @Override
