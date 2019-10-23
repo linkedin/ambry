@@ -15,6 +15,7 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
@@ -943,8 +944,9 @@ public class MessageFormatRecord {
         int blobEncryptionKeyRecordRelativeOffset, int blobPropertiesRecordRelativeOffset,
         int updateRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
         throws MessageFormatException {
-      checkHeaderConstraints(totalSize, lifeVersion, blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset,
-          updateRecordRelativeOffset, userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
+      checkHeaderConstraints(totalSize, lifeVersion, blobEncryptionKeyRecordRelativeOffset,
+          blobPropertiesRecordRelativeOffset, updateRecordRelativeOffset, userMetadataRecordRelativeOffset,
+          blobRecordRelativeOffset);
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(Message_Header_Version_V3);
       outputBuffer.putShort(lifeVersion);
@@ -972,9 +974,10 @@ public class MessageFormatRecord {
     //    and blobRecordRelativeOffset is positive
     // 3. if updateRecordRelativeOffset is greater than 0, ensures that all the other offsets are set to
     //    Message_Header_Invalid_Relative_Offset
-    private static void checkHeaderConstraints(long totalSize, short lifeVersion, int blobEncryptionKeyRecordRelativeOffset,
-        int blobPropertiesRecordRelativeOffset, int updateRecordRelativeOffset, int userMetadataRecordRelativeOffset,
-        int blobRecordRelativeOffset) throws MessageFormatException {
+    private static void checkHeaderConstraints(long totalSize, short lifeVersion,
+        int blobEncryptionKeyRecordRelativeOffset, int blobPropertiesRecordRelativeOffset,
+        int updateRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
+        throws MessageFormatException {
       // check constraints
       if (totalSize <= 0) {
         throw new MessageFormatException(
@@ -1635,6 +1638,37 @@ public class MessageFormatRecord {
   }
 
   /**
+   * Creating a {@link ByteBufferInputStream} from the {@link CrcInputStream} by sharing the underlying memory if the
+   * crcStream is built upon a {@link ByteBufferDataInputStream}.
+   * @param crcStream The crcStream to read {@link ByteBuffer} out.
+   * @param dataSize The size of {@link ByteBuffer}.
+   * @return The {@link ByteBufferInputStream}
+   * @throws IOException Unexpected IO errors.
+   */
+  static ByteBufferInputStream getByteBufferInputStreamForBlobRecord(CrcInputStream crcStream, long dataSize)
+      throws IOException {
+    ByteBufferInputStream output;
+    InputStream inputStream = crcStream.getUnderlyingInputStream();
+    if (inputStream instanceof ByteBufferDataInputStream) {
+      ByteBuffer byteBuffer = ((ByteBufferDataInputStream) inputStream).getBuffer();
+      int startIndex = byteBuffer.position();
+      int oldLimit = byteBuffer.limit();
+
+      byteBuffer.limit(startIndex + (int) dataSize);
+      ByteBuffer dataBuffer = byteBuffer.slice();
+      crcStream.updateCrc(dataBuffer.duplicate());
+
+      output = new ByteBufferInputStream(dataBuffer);
+      byteBuffer.limit(oldLimit);
+      // Change the byte buffer's position as if the data is fetched.
+      byteBuffer.position(startIndex + (int) dataSize);
+    } else {
+      output = new ByteBufferInputStream(crcStream, (int) dataSize);
+    }
+    return output;
+  }
+
+  /**
    *  - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |           |            |            |
    * | version |   size    |  content   |     Crc    |
@@ -1669,7 +1703,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = new ByteBufferInputStream(crcStream, (int) dataSize);
+      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
@@ -1727,7 +1761,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = new ByteBufferInputStream(crcStream, (int) dataSize);
+      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {

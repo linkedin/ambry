@@ -13,6 +13,7 @@
  */
 package com.github.ambry.utils;
 
+import java.nio.ByteBuffer;
 import java.util.zip.Checksum;
 
 
@@ -88,6 +89,51 @@ public class Crc32 implements Checksum {
         localCrc = (localCrc >>> 8) ^ T[T8_0_start + ((localCrc ^ b[off++]) & 0xff)];
       case 1:
         localCrc = (localCrc >>> 8) ^ T[T8_0_start + ((localCrc ^ b[off++]) & 0xff)];
+      default:
+    /* nothing */
+    }
+
+    // Publish crc out to object
+    crc = localCrc;
+  }
+
+  public void update(ByteBuffer buffer) {
+    if (buffer.remaining() == 0) {
+      return;
+    }
+    int localCrc = crc;
+
+    while (buffer.remaining() > 7) {
+      final int c0 = (buffer.get() ^ localCrc) & 0xff;
+      final int c1 = (buffer.get() ^ (localCrc >>>= 8)) & 0xff;
+      final int c2 = (buffer.get() ^ (localCrc >>>= 8)) & 0xff;
+      final int c3 = (buffer.get() ^ (localCrc >>>= 8)) & 0xff;
+      localCrc = (T[T8_7_start + c0] ^ T[T8_6_start + c1]) ^ (T[T8_5_start + c2] ^ T[T8_4_start + c3]);
+
+      final int c4 = buffer.get() & 0xff;
+      final int c5 = buffer.get() & 0xff;
+      final int c6 = buffer.get() & 0xff;
+      final int c7 = buffer.get() & 0xff;
+
+      localCrc ^= (T[T8_3_start + c4] ^ T[T8_2_start + c5]) ^ (T[T8_1_start + c6] ^ T[T8_0_start + c7]);
+    }
+
+    /* loop unroll - duff's device style */
+    switch (buffer.remaining()) {
+      case 7:
+        localCrc = (localCrc >>> 8) ^ T[T8_0_start + ((localCrc ^ buffer.get()) & 0xff)];
+      case 6:
+        localCrc = (localCrc >>> 8) ^ T[T8_0_start + ((localCrc ^ buffer.get()) & 0xff)];
+      case 5:
+        localCrc = (localCrc >>> 8) ^ T[T8_0_start + ((localCrc ^ buffer.get()) & 0xff)];
+      case 4:
+        localCrc = (localCrc >>> 8) ^ T[T8_0_start + ((localCrc ^ buffer.get()) & 0xff)];
+      case 3:
+        localCrc = (localCrc >>> 8) ^ T[T8_0_start + ((localCrc ^ buffer.get()) & 0xff)];
+      case 2:
+        localCrc = (localCrc >>> 8) ^ T[T8_0_start + ((localCrc ^ buffer.get()) & 0xff)];
+      case 1:
+        localCrc = (localCrc >>> 8) ^ T[T8_0_start + ((localCrc ^ buffer.get()) & 0xff)];
       default:
     /* nothing */
     }

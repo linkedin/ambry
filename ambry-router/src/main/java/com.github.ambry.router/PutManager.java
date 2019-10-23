@@ -220,7 +220,7 @@ class PutManager {
     long startTime = time.milliseconds();
     PutResponse putResponse =
         RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
-            PutResponse::readFrom, PutResponse::getError);
+            PutResponse::readFrom, PutResponse::getError, false);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
     int correlationId = ((PutRequest) routerRequestInfo.getRequest()).getCorrelationId();
     // Get the PutOperation that generated the request.
