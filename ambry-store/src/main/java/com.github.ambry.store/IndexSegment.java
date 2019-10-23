@@ -296,7 +296,7 @@ class IndexSegment {
   }
 
   /**
-   * @return set the format version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
+   * set the format version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
    */
   void setVersion(short version) {
     this.version = version;

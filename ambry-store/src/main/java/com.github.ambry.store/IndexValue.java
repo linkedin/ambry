@@ -41,7 +41,7 @@ import static com.github.ambry.account.Container.*;
  *
  * Version_3
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
- * | Blob Size |   Offset  |  Flags  | Expiration Time | Orig msg  | OperationTime | ServiceId | ContainerId | UpdateVersion |
+ * | Blob Size |   Offset  |  Flags  | Expiration Time | Orig msg  | OperationTime | ServiceId | ContainerId | LifeVersion   |
  * | (8 bytes) | (8 bytes) | (1 byte)|   in  Secs      | offset    |   in secs     | (2 bytes) | (2 bytes)   | (2 bytes)     |
  * |           |           |         |   ( 4 bytes)    | (8 bytes) |   (4 bytes)   |           |             |               |
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -66,7 +66,7 @@ class IndexValue implements Comparable<IndexValue> {
   private final static int OPERATION_TIME_SECS_SIZE_IN_BYTES = 4;
   private final static int ACCOUNT_ID_SIZE_IN_BYTES = 2;
   private final static int CONTAINER_ID_SIZE_IN_BYTES = 2;
-  private final static int UPDATE_VERSION_SIZE_IN_BYTES = 2;
+  private final static int LIFE_VERSION_SIZE_IN_BYTES = 2;
 
   final static int INDEX_VALUE_SIZE_IN_BYTES_V0 =
       BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_MS_SIZE_IN_BYTES_V0
@@ -77,10 +77,7 @@ class IndexValue implements Comparable<IndexValue> {
           + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + ACCOUNT_ID_SIZE_IN_BYTES
           + CONTAINER_ID_SIZE_IN_BYTES;
 
-  final static int INDEX_VALUE_SIZE_IN_BYTES_V3 =
-      BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1
-          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + ACCOUNT_ID_SIZE_IN_BYTES
-          + CONTAINER_ID_SIZE_IN_BYTES + UPDATE_VERSION_SIZE_IN_BYTES;
+  final static int INDEX_VALUE_SIZE_IN_BYTES_V3 = INDEX_VALUE_SIZE_IN_BYTES_V1_V2 + LIFE_VERSION_SIZE_IN_BYTES;
 
   private long size;
   private Offset offset;
@@ -90,7 +87,7 @@ class IndexValue implements Comparable<IndexValue> {
   private final long operationTimeInMs;
   private final short accountId;
   private final short containerId;
-  private final short updateVersion;
+  private final short lifeVersion;
   private final short formatVersion;
 
   /**
@@ -114,7 +111,7 @@ class IndexValue implements Comparable<IndexValue> {
         operationTimeInMs = (int) Utils.Infinite_Time;
         accountId = UNKNOWN_ACCOUNT_ID;
         containerId = UNKNOWN_CONTAINER_ID;
-        updateVersion = 0;
+        lifeVersion = 0;
         break;
       case PersistentIndex.VERSION_1:
       case PersistentIndex.VERSION_2:
@@ -133,7 +130,7 @@ class IndexValue implements Comparable<IndexValue> {
             : Utils.Infinite_Time;
         accountId = value.getShort();
         containerId = value.getShort();
-        updateVersion = 0;
+        lifeVersion = 0;
         break;
       case PersistentIndex.VERSION_3:
         if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V3) {
@@ -151,7 +148,7 @@ class IndexValue implements Comparable<IndexValue> {
             : Utils.Infinite_Time;
         accountId = value.getShort();
         containerId = value.getShort();
-        updateVersion = value.getShort();
+        lifeVersion = value.getShort();
         break;
       default:
         throw new IllegalArgumentException(
@@ -182,12 +179,11 @@ class IndexValue implements Comparable<IndexValue> {
    * @param operationTimeInMs operation time in ms of the entry
    * @param accountId the accountId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
-   * @param updateVersion the update version of the record in the log.
+   * @param lifeVersion the update version of the record in the log.
    */
   IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInMs, short accountId,
-      short containerId, short updateVersion) {
-    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, accountId, containerId,
-        updateVersion);
+      short containerId, short lifeVersion) {
+    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, accountId, containerId, lifeVersion);
   }
 
   /**
@@ -201,10 +197,10 @@ class IndexValue implements Comparable<IndexValue> {
    * @param operationTimeInMs the time in ms at which the operation occurred.
    * @param accountId the accountId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
-   * @param updateVersion
+   * @param lifeVersion the life version of this blob.
    */
   private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset,
-      long operationTimeInMs, short accountId, short containerId, short updateVersion) {
+      long operationTimeInMs, short accountId, short containerId, short lifeVersion) {
     this.size = size;
     this.offset = offset;
     this.flags = flags;
@@ -213,7 +209,7 @@ class IndexValue implements Comparable<IndexValue> {
     this.operationTimeInMs = Utils.getTimeInMsToTheNearestSec(operationTimeInMs);
     this.accountId = accountId;
     this.containerId = containerId;
-    this.updateVersion = updateVersion;
+    this.lifeVersion = lifeVersion;
     formatVersion = PersistentIndex.CURRENT_VERSION;
   }
 
@@ -284,10 +280,10 @@ class IndexValue implements Comparable<IndexValue> {
   }
 
   /**
-   * @return the updateVersion of the {@link IndexValue}
+   * @return the lifeVersion of the {@link IndexValue}
    */
-  short getUpdateVersion() {
-    return updateVersion;
+  short getLifeVersion() {
+    return lifeVersion;
   }
 
   /**
@@ -378,7 +374,7 @@ class IndexValue implements Comparable<IndexValue> {
             : (int) operationTimeInMs);
         value.putShort(accountId);
         value.putShort(containerId);
-        value.putShort(updateVersion);
+        value.putShort(lifeVersion);
         value.position(0);
         break;
       default:
@@ -394,7 +390,7 @@ class IndexValue implements Comparable<IndexValue> {
         Flags.Undelete_Index) + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: "
         + getOriginalMessageOffset() + (formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs "
         + getOperationTimeInMs() + ", AccountId " + getAccountId() + ", ContainerId " + getContainerId())
-        : "" + ", Update Version:" + updateVersion);
+        : "") + (formatVersion > PersistentIndex.VERSION_2 ? ", Update Version:" + lifeVersion : "");
   }
 
   /**

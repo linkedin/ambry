@@ -272,7 +272,7 @@ public class IndexValueTest {
     assertEquals("AccountId mismatch ", accountId, value.getAccountId());
     assertEquals("ContainerId mismatch ", containerId, value.getContainerId());
     assertEquals("Original message offset not as expected", originalMessageOffset, value.getOriginalMessageOffset());
-    assertEquals("UpdateVersion mismatch", updateVersion, value.getUpdateVersion());
+    assertEquals("UpdateVersion mismatch", updateVersion, value.getLifeVersion());
   }
 
   /**
