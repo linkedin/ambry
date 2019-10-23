@@ -234,8 +234,8 @@ public class VcrRecoveryTest {
     }
 
     // Waiting for download attempt
-    assertTrue("Did not recover all blobs in 2 minutes",
-        latchBasedInMemoryCloudDestination.awaitDownload(2, TimeUnit.MINUTES));
+    assertTrue("Did not recover all blobs in 1 minute",
+        latchBasedInMemoryCloudDestination.awaitDownload(1, TimeUnit.MINUTES));
 
     // Waiting for replication to complete
     Thread.sleep(10000);
@@ -276,8 +276,8 @@ public class VcrRecoveryTest {
     }
 
     // Waiting for download attempt
-    assertTrue("Did not recover all blobs in 2 minutes",
-        latchBasedInMemoryCloudDestination.awaitDownload(2, TimeUnit.MINUTES));
+    assertTrue("Did not recover all blobs in 1 minute",
+        latchBasedInMemoryCloudDestination.awaitDownload(1, TimeUnit.MINUTES));
 
     // Waiting for replication to complete
     Thread.sleep(10000);
