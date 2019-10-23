@@ -135,8 +135,7 @@ class CloudBlobStore implements Store {
       for (BlobId blobId : blobIdList) {
         CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
         MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), blobMetadata.getExpirationTime(),
-            (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(),
-            getOperationTime(blobMetadata, currentTimeStamp));
+            (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), getOperationTime(blobMetadata));
         messageInfos.add(messageInfo);
         blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
       }
@@ -195,11 +194,9 @@ class CloudBlobStore implements Store {
    * @param metadata blob metadata from which to derive operation time.
    * @return operation time.
    */
-  private long getOperationTime(CloudBlobMetadata metadata, long currentTimeStamp) {
+  private long getOperationTime(CloudBlobMetadata metadata) {
     if (isBlobDeleted(metadata)) {
       return metadata.getDeletionTime();
-    } else if (isBlobExpired(metadata, currentTimeStamp)) {
-      return metadata.getExpirationTime();
     }
     return (metadata.getCreationTime() == Utils.Infinite_Time) ? metadata.getUploadTime() : metadata.getCreationTime();
   }

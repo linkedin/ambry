@@ -51,7 +51,9 @@ class CloudMessageReadSet implements MessageReadSet {
     try {
       if (blobReadInfo.isPrefetched()) {
         ByteBuffer outputBuffer = blobReadInfo.getPrefetchedBuffer();
-        outputBuffer.flip();
+        long sizeToRead = Math.min(maxSize, blobReadInfo.getBlobSize() - relativeOffset);
+        outputBuffer.limit((int) (relativeOffset + sizeToRead));
+        outputBuffer.position((int) (relativeOffset));
         written = channel.write(outputBuffer);
       } else {
         blobReadInfo.downloadBlob(blobStore, Channels.newOutputStream(channel));
