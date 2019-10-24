@@ -259,7 +259,7 @@ public class BlobIdTest {
    */
   @Test
   public void testCrafting() throws Exception {
-    BlobId inputs[];
+    BlobId[] inputs;
     if (version >= BLOB_ID_V3) {
       inputs = new BlobId[]{
           new BlobId(version, BlobIdType.NATIVE, referenceDatacenterId, referenceAccountId, referenceContainerId,
@@ -345,6 +345,44 @@ public class BlobIdTest {
           blobId.isAccountContainerMatch((short) -1, (short) -1));
       assertFalse("isAccountContainerMatch() should return false because account or container mismatch.",
           blobId.isAccountContainerMatch(getRandomShort(random), getRandomShort(random)));
+    }
+  }
+
+  /**
+   * For version > BLOB_ID_V1, test that if two blob ids have same uuid/uuidStr, even though they have different account
+   * id or container id, their uuid bytes array are identical. For version > BLOB_ID_V2, these two blob ids are considered
+   * to be same.
+   */
+  @Test
+  public void testUuid() {
+    assumeTrue(version > BLOB_ID_V1);
+    byte[] bytes = new byte[1];
+    random.nextBytes(bytes);
+    byte datacenterId = bytes[0];
+    short accountId1 = getRandomShort(random);
+    short containerId1 = getRandomShort(random);
+    short accountId2;
+    short containerId2;
+    do {
+      accountId2 = getRandomShort(random);
+    } while (accountId2 == accountId1);
+    do {
+      containerId2 = getRandomShort(random);
+    } while (containerId2 == containerId1);
+    BlobIdType type = random.nextBoolean() ? BlobIdType.NATIVE : BlobIdType.CRAFTED;
+    PartitionId partitionId =
+        referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(random.nextInt(3));
+    boolean isEncrypted = random.nextBoolean();
+    BlobDataType dataType = BlobDataType.values()[random.nextInt(BlobDataType.values().length)];
+    String uuidStr = UUID.randomUUID().toString();
+    // create two blobs with different account/container ids but same uuid str
+    BlobId blob1 =
+        new BlobId(version, type, datacenterId, accountId1, containerId1, partitionId, isEncrypted, dataType, uuidStr);
+    BlobId blob2 =
+        new BlobId(version, type, datacenterId, accountId2, containerId2, partitionId, isEncrypted, dataType, uuidStr);
+    assertArrayEquals("Uuid bytes array doesn't match", blob1.getUuidBytesArray(), blob2.getUuidBytesArray());
+    if (version >= 3) {
+      assertEquals("Two blobs should be considered same", blob1, blob2);
     }
   }
 
