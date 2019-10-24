@@ -108,6 +108,7 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
    * array, using a all zero byte array instead. Only set it to be true in test.
    * @param toEncrypt {@link ByteBuf} that needs to be encrypted
    * @param key the secret key (of type T) to use to encrypt
+   * @param useFixedIv If true, then use a all zero iv array.
    * @return the {@link ByteBuf} containing the encrypted content. Ensure the result has all
    * the information like the IV along with the encrypted content, in order to decrypt the content with a given key
    * @throws {@link GeneralSecurityException} on any exception with encryption
