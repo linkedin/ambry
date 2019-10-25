@@ -21,7 +21,6 @@ import com.github.ambry.utils.ByteBufferOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
 import org.slf4j.Logger;
@@ -47,23 +46,21 @@ class CloudMessageReadSet implements MessageReadSet {
     validateIndex(index);
     long written = 0;
     BlobReadInfo blobReadInfo = blobReadInfoList.get(index);
+    String blobIdStr = blobReadInfo.getBlobId().getID();
 
     try {
-      if (blobReadInfo.isPrefetched()) {
-        ByteBuffer outputBuffer = blobReadInfo.getPrefetchedBuffer();
-        long sizeToRead = Math.min(maxSize, blobReadInfo.getBlobSize() - relativeOffset);
-        outputBuffer.limit((int) (relativeOffset + sizeToRead));
-        outputBuffer.position((int) (relativeOffset));
-        written = channel.write(outputBuffer);
-      } else {
-        blobReadInfo.downloadBlob(blobStore, Channels.newOutputStream(channel));
-        written = blobReadInfo.getBlobSize();
+      if (!blobReadInfo.isPrefetched()) {
+        blobReadInfo.prefetchBlob(blobStore);
       }
+      ByteBuffer outputBuffer = blobReadInfo.getPrefetchedBuffer();
+      long sizeToRead = Math.min(maxSize, blobReadInfo.getBlobSize() - relativeOffset);
+      outputBuffer.limit((int) (relativeOffset + sizeToRead));
+      outputBuffer.position((int) (relativeOffset));
+      written = channel.write(outputBuffer);
     } catch (StoreException ex) {
-      throw new IOException("Download of cloud blob " + blobReadInfoList.get(index).getBlobId().getID() + " failed");
+      throw new IOException("Write of cloud blob " + blobIdStr + " failed");
     }
-    logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written,
-        blobReadInfo.getBlobId().getID());
+    logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written, blobIdStr);
     return written;
   }
 

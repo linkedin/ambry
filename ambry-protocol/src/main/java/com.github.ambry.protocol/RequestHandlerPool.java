@@ -26,16 +26,22 @@ public class RequestHandlerPool {
 
   private Thread[] threads = null;
   private RequestHandler[] handlers = null;
+  private final RequestResponseChannel requestResponseChannel;
   private static final Logger logger = LoggerFactory.getLogger(RequestHandlerPool.class);
 
   public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, RequestAPI requests) {
     threads = new Thread[numThreads];
     handlers = new RequestHandler[numThreads];
+    this.requestResponseChannel = requestResponseChannel;
     for (int i = 0; i < numThreads; i++) {
       handlers[i] = new RequestHandler(i, requestResponseChannel, requests);
       threads[i] = Utils.daemonThread("request-handler-" + i, handlers[i]);
       threads[i].start();
     }
+  }
+
+  public RequestResponseChannel getChannel() {
+    return requestResponseChannel;
   }
 
   public void shutdown() {

@@ -42,9 +42,9 @@ import org.junit.Test;
 
 
 /**
- * Test the {@link NetworkClient}
+ * Test the {@link SocketNetworkClient}
  */
-public class NetworkClientTest {
+public class SocketNetworkClientTest {
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 4;
@@ -54,7 +54,7 @@ public class NetworkClientTest {
   private final Time time;
 
   private MockSelector selector;
-  private NetworkClient networkClient;
+  private SocketNetworkClient networkClient;
   private NetworkMetrics networkMetrics;
   private String sslHost;
   private Port sslPort;
@@ -75,12 +75,12 @@ public class NetworkClientTest {
     NetworkConfig networkConfig = new NetworkConfig(vprops);
     NetworkMetrics networkMetrics = new NetworkMetrics(new MetricRegistry());
     NetworkClientFactory networkClientFactory =
-        new NetworkClientFactory(networkMetrics, networkConfig, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+        new SocketNetworkClientFactory(networkMetrics, networkConfig, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockTime());
-    Assert.assertNotNull("NetworkClient returned should be non-null", networkClientFactory.getNetworkClient());
+    Assert.assertNotNull("SocketNetworkClient returned should be non-null", networkClientFactory.getNetworkClient());
   }
 
-  public NetworkClientTest() throws IOException {
+  public SocketNetworkClientTest() throws IOException {
     Properties props = new Properties();
     props.setProperty("network.client.enable.connection.replenishment", "true");
     VerifiableProperties vprops = new VerifiableProperties(props);
@@ -88,7 +88,7 @@ public class NetworkClientTest {
     selector = new MockSelector(networkConfig);
     time = new MockTime();
     networkMetrics = new NetworkMetrics(new MetricRegistry());
-    networkClient = new NetworkClient(selector, networkConfig, networkMetrics, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+    networkClient = new SocketNetworkClient(selector, networkConfig, networkMetrics, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
         CHECKOUT_TIMEOUT_MS, time);
     sslEnabledClusterMap = new MockClusterMap(true, 9, 3, 3, false);
     localSslDataNodes = sslEnabledClusterMap.getDataNodeIds()
@@ -109,7 +109,7 @@ public class NetworkClientTest {
   }
 
   /**
-   * Test {@link NetworkClient#warmUpConnections(List, int, long, List)}
+   * Test {@link SocketNetworkClient#warmUpConnections(List, int, long, List)}
    */
   @Test
   public void testWarmUpConnectionsSslAndPlainText() {
@@ -178,7 +178,7 @@ public class NetworkClientTest {
   }
 
   /**
-   * Tests a failure scenario where requests remain too long in the {@link NetworkClient}'s pending requests queue.
+   * Tests a failure scenario where requests remain too long in the {@link SocketNetworkClient}'s pending requests queue.
    */
   @Test
   public void testConnectionUnavailable() throws InterruptedException {
@@ -192,7 +192,7 @@ public class NetworkClientTest {
     responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
     requestInfoList.clear();
     // The first sendAndPoll() initiates the connections. So, after the selector poll, new connections
-    // would have been established, but no new responses or disconnects, so the NetworkClient should not have been
+    // would have been established, but no new responses or disconnects, so the SocketNetworkClient should not have been
     // able to create any ResponseInfos.
     Assert.assertEquals("There are no responses expected", 0, responseInfoList.size());
     // the requests were queued. Now increment the time so that they get timed out in the next sendAndPoll.
@@ -322,7 +322,7 @@ public class NetworkClientTest {
   }
 
   /**
-   * Test that connections get replenished in {@link NetworkClient#sendAndPoll(List, Set, int)} to maintain the minimum
+   * Test that connections get replenished in {@link SocketNetworkClient#sendAndPoll(List, Set, int)} to maintain the minimum
    * number of active connections.
    */
   @Test
@@ -537,7 +537,7 @@ public class NetworkClientTest {
   }
 
   /**
-   * Test that the NetworkClient wakeup wakes up the associated Selector.
+   * Test that the SocketNetworkClient wakeup wakes up the associated Selector.
    */
   @Test
   public void testWakeup() {
@@ -561,7 +561,7 @@ public class NetworkClientTest {
   }
 
   /**
-   * Helper function to test {@link NetworkClient#warmUpConnections(List, int, long, List)}. This will build up to 100%
+   * Helper function to test {@link SocketNetworkClient#warmUpConnections(List, int, long, List)}. This will build up to 100%
    * pre-warmed connections.
    */
   private void doTestWarmUpConnections(List<DataNodeId> localDataNodeIds, int maxPort, PortType expectedPortType) {

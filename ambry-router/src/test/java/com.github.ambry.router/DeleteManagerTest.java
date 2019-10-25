@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -404,7 +405,7 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Test the case when the {@link com.github.ambry.network.Selector} of {@link com.github.ambry.network.NetworkClient}
+   * Test the case when the {@link com.github.ambry.network.Selector} of {@link SocketNetworkClient}
    * experiences various exceptions. The order of received responses is the same as defined in {@code serverErrorCodes}.
    */
   @Test

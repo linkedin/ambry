@@ -30,7 +30,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.network.NetworkClient;
+import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -71,6 +71,8 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.router.RouterTestHelpers.*;
 import static com.github.ambry.utils.TestUtils.*;
@@ -111,6 +113,7 @@ public class NonBlockingRouterTest {
   private final int metadataContentVersion;
   private final InMemAccountService accountService;
   private CryptoJobHandler cryptoJobHandler;
+  private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterTest.class);
 
   // Request params;
   BlobProperties putBlobProperties;
@@ -267,6 +270,7 @@ public class NonBlockingRouterTest {
     for (int i = 0; i < 2; i++) {
       setOperationParams();
       String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+      logger.debug("Put blob {}", blobId);
       blobIds.add(blobId);
     }
     setOperationParams();
@@ -909,7 +913,7 @@ public class NonBlockingRouterTest {
       mockServer.setServerErrorForAllRequests(ServerErrorCode.No_Error);
     }
 
-    NetworkClient networkClient =
+    SocketNetworkClient networkClient =
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime).getNetworkClient();
     cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
@@ -970,7 +974,7 @@ public class NonBlockingRouterTest {
    * Test that failure detector is correctly notified for all responses regardless of the order in which successful
    * and failed responses arrive.
    * @param opHelper the {@link OperationHelper}
-   * @param networkClient the {@link NetworkClient}
+   * @param networkClient the {@link SocketNetworkClient}
    * @param failedReplicaIds the list that will contain all the replicas for which failure was notified.
    * @param blobId the id of the blob to get/delete. For puts, this will be null.
    * @param successfulResponseCount the AtomicInteger that will contain the count of replicas for which success was
@@ -981,7 +985,7 @@ public class NonBlockingRouterTest {
    *                    If the index is -1, no responses will be failed, and successful responses will be returned to
    *                    the operation managers.
    */
-  private void testFailureDetectorNotification(OperationHelper opHelper, NetworkClient networkClient,
+  private void testFailureDetectorNotification(OperationHelper opHelper, SocketNetworkClient networkClient,
       List<ReplicaId> failedReplicaIds, BlobId blobId, AtomicInteger successfulResponseCount,
       AtomicBoolean invalidResponse, int indexToFail) throws Exception {
     failedReplicaIds.clear();
@@ -1083,11 +1087,11 @@ public class NonBlockingRouterTest {
   /**
    * Test that operations succeed even in the presence of responses that are corrupt and fail to deserialize.
    * @param opHelper the {@link OperationHelper}
-   * @param networkClient the {@link NetworkClient}
+   * @param networkClient the {@link SocketNetworkClient}
    * @param blobId the id of the blob to get/delete. For puts, this will be null.
    * @throws Exception
    */
-  private void testResponseDeserializationError(OperationHelper opHelper, NetworkClient networkClient, BlobId blobId)
+  private void testResponseDeserializationError(OperationHelper opHelper, SocketNetworkClient networkClient, BlobId blobId)
       throws Exception {
     mockSelectorState.set(MockSelectorState.Good);
     FutureResult futureResult = opHelper.submitOperation(blobId);
@@ -1199,9 +1203,7 @@ public class NonBlockingRouterTest {
   /**
    * Enum for the three operation types.
    */
-  private enum OperationType {
-    PUT, GET, DELETE,
-  }
+  private enum OperationType {PUT, GET, DELETE,}
 
   /**
    * A helper class to abstract away the details about specific operation manager.

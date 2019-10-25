@@ -24,7 +24,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -222,7 +221,7 @@ class PutManager {
         RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
             PutResponse::readFrom, PutResponse::getError, false);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
-    int correlationId = ((PutRequest) routerRequestInfo.getRequest()).getCorrelationId();
+    int correlationId = routerRequestInfo.getRequest().getCorrelationId();
     // Get the PutOperation that generated the request.
     PutOperation putOperation = correlationIdToPutOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
@@ -240,6 +239,7 @@ class PutManager {
       }
       routerMetrics.putManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
     } else {
+      logger.debug("Put operation not found in map for {} : {}", correlationId, putOperation);
       routerMetrics.ignoredResponseCount.inc();
     }
   }

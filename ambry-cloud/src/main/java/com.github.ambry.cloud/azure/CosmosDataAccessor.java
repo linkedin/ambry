@@ -140,12 +140,14 @@ public class CosmosDataAccessor {
     azureMetrics.documentQueryCount.inc();
     FeedOptions feedOptions = new FeedOptions();
     feedOptions.setPartitionKey(new PartitionKey(partitionPath));
+    // TODO: consolidate error count here
     FeedResponse<Document> response =
         retryQueryWithThrottling(() -> documentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions),
             timer);
     try {
       // Note: internal query iterator wraps DocumentClientException in IllegalStateException!
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
+      // TODO: this iteration can also get TOO_MANY_REQUESTS so should be inside retry loop
       response.getQueryIterable()
           .iterator()
           .forEachRemaining(doc -> metadataList.add(doc.toObject(CloudBlobMetadata.class)));

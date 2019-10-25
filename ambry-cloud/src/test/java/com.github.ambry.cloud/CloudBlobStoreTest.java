@@ -712,11 +712,12 @@ public class CloudBlobStoreTest {
     assertEquals("Number of records returned by get should be same as uploaded",
         storeInfo.getMessageReadSetInfo().size(), blobIds.size());
     for (int i = 0; i < storeInfo.getMessageReadSetInfo().size(); i++) {
-      if (blobIdToUploadedDataMap.containsKey(storeInfo.getMessageReadSetInfo().get(i).getStoreKey())) {
-        ByteBuffer uploadedData = blobIdToUploadedDataMap.get(storeInfo.getMessageReadSetInfo().get(i).getStoreKey());
-        ByteBuffer downloadedData = ByteBuffer.allocate((int) storeInfo.getMessageReadSetInfo().get(i).getSize());
+      MessageInfo messageInfo = storeInfo.getMessageReadSetInfo().get(i);
+      if (blobIdToUploadedDataMap.containsKey(messageInfo.getStoreKey())) {
+        ByteBuffer uploadedData = blobIdToUploadedDataMap.get(messageInfo.getStoreKey());
+        ByteBuffer downloadedData = ByteBuffer.allocate((int) messageInfo.getSize());
         WritableByteChannel writableByteChannel = Channels.newChannel(new ByteBufferOutputStream(downloadedData));
-        storeInfo.getMessageReadSet().writeTo(i, writableByteChannel, -1, -1);
+        storeInfo.getMessageReadSet().writeTo(i, writableByteChannel, 0, messageInfo.getSize());
         downloadedData.flip();
         assertEquals(uploadedData, downloadedData);
         break;

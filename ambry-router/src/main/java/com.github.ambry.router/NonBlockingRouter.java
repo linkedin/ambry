@@ -27,6 +27,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.store.StoreKey;
@@ -70,6 +71,7 @@ class NonBlockingRouter implements Router {
   private final CryptoJobHandler cryptoJobHandler;
   private final AccountService accountService;
   private final Time time;
+  private RequestHandlerPool requestHandlerPool = null;
 
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
   static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
@@ -118,6 +120,10 @@ class NonBlockingRouter implements Router {
     backgroundDeleter = new BackgroundDeleter();
     ocList.add(backgroundDeleter);
     routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount, currentBackgroundOperationsCount);
+  }
+
+  void setRequestHandlerPool(RequestHandlerPool pool) {
+    this.requestHandlerPool = pool;
   }
 
   /**
@@ -410,6 +416,9 @@ class NonBlockingRouter implements Router {
     // close the crypto job handler
     if (cryptoJobHandler != null) {
       cryptoJobHandler.close();
+    }
+    if (requestHandlerPool != null) {
+      requestHandlerPool.shutdown();
     }
     // close router metrics
     routerMetrics.close();
@@ -828,6 +837,7 @@ class NonBlockingRouter implements Router {
             responseHandler.onConnectionTimeout(dataNodeId);
           } else {
             RequestOrResponseType type = ((RequestOrResponse) requestInfo.getRequest()).getRequestType();
+            logger.debug("Handling response of type {} for {}", type, requestInfo.getRequest().getCorrelationId());
             switch (type) {
               case PutRequest:
                 putManager.handleResponse(responseInfo);
@@ -871,6 +881,8 @@ class NonBlockingRouter implements Router {
           List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestsToSend,
               routerConfig.routerDropRequestOnTimeout ? requestsToDrop : Collections.emptySet(),
               NETWORK_CLIENT_POLL_TIMEOUT);
+          if (!responseInfoList.isEmpty())
+            logger.info(getClass().toString() + " " + responseInfoList);
           onResponse(responseInfoList);
         }
       } catch (Throwable e) {

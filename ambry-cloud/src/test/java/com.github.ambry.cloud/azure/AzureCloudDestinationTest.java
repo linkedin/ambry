@@ -55,6 +55,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.http.HttpHost;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -390,6 +391,7 @@ public class AzureCloudDestinationTest {
   }
 
   @Test
+  @Ignore // until we set the retry policy to fail faster
   public void testAzureConnection() throws Exception {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));

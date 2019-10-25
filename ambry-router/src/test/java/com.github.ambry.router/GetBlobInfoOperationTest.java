@@ -27,7 +27,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.NetworkClient;
+import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -84,7 +84,7 @@ public class GetBlobInfoOperationTest {
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>();
   private final ResponseHandler responseHandler;
   private final MockNetworkClientFactory networkClientFactory;
-  private final NetworkClient networkClient;
+  private final SocketNetworkClient networkClient;
   private final MockRouterCallback routerCallback;
   private final MockTime time = new MockTime();
   private final Map<Integer, GetOperation> correlationIdToGetOperation = new HashMap<>();
@@ -471,7 +471,7 @@ public class GetBlobInfoOperationTest {
   }
 
   /**
-   * Test the case where all requests time out within the NetworkClient.
+   * Test the case where all requests time out within the SocketNetworkClient.
    * @throws Exception
    */
   @Test
@@ -785,7 +785,7 @@ class MockRouterCallback extends RouterCallback {
 
   private CountDownLatch onPollLatch;
 
-  MockRouterCallback(NetworkClient networkClient, List<BackgroundDeleteRequest> backgroundDeleteRequests) {
+  MockRouterCallback(SocketNetworkClient networkClient, List<BackgroundDeleteRequest> backgroundDeleteRequests) {
     super(networkClient, backgroundDeleteRequests);
   }
 

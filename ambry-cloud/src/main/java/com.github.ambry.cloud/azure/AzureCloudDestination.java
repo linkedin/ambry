@@ -131,6 +131,7 @@ class AzureCloudDestination implements CloudDestination {
       connectionPolicy.setProxy(new HttpHost(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
       connectionPolicy.setHandleServiceUnavailableFromProxy(true);
     }
+    // TODO: test option to set connectionPolicy.setEnableEndpointDiscovery(false);
     documentClient = new DocumentClient(azureCloudConfig.cosmosEndpoint, azureCloudConfig.cosmosKey, connectionPolicy,
         ConsistencyLevel.Session);
     cosmosDataAccessor = new CosmosDataAccessor(documentClient, azureCloudConfig, azureMetrics);

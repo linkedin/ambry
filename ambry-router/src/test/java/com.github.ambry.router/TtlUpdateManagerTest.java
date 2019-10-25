@@ -24,7 +24,7 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.NetworkClient;
+import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
@@ -73,7 +73,7 @@ public class TtlUpdateManagerTest {
   private static final String LOCAL_DC = "DC1";
   private final NonBlockingRouter router;
   private final TtlUpdateManager ttlUpdateManager;
-  private final NetworkClient networkClient;
+  private final SocketNetworkClient networkClient;
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>(MockSelectorState.Good);
   private final MockClusterMap clusterMap = new MockClusterMap();
   private final MockServerLayout serverLayout = new MockServerLayout(clusterMap);

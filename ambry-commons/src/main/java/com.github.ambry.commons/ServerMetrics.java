@@ -200,6 +200,10 @@ public class ServerMetrics {
   public final Counter ttlUpdateRejectedError;
   public final Counter replicationResponseMessageSizeTooHigh;
 
+  public ServerMetrics(MetricRegistry registry, Class<?> requestClass) {
+    this(registry, requestClass, null);
+  }
+
   public ServerMetrics(MetricRegistry registry, Class<?> requestClass, Class<?> serverClass) {
     putBlobRequestQueueTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobRequestQueueTime"));
     putBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PutBlobProcessingTime"));
@@ -377,8 +381,13 @@ public class ServerMetrics {
     blobSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobUserMetadataSize"));
 
-    serverStartTimeInMs = registry.histogram(MetricRegistry.name(serverClass, "ServerStartTimeInMs"));
-    serverShutdownTimeInMs = registry.histogram(MetricRegistry.name(serverClass, "ServerShutdownTimeInMs"));
+    if (serverClass != null) {
+      serverStartTimeInMs = registry.histogram(MetricRegistry.name(serverClass, "ServerStartTimeInMs"));
+      serverShutdownTimeInMs = registry.histogram(MetricRegistry.name(serverClass, "ServerShutdownTimeInMs"));
+    } else {
+      serverStartTimeInMs = null;
+      serverShutdownTimeInMs = null;
+    }
 
     putBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutBlobRequestRate"));
     getBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobRequestRate"));
