@@ -189,9 +189,9 @@ public class AccountUpdateToolTest {
     createOrUpdateAccountsAndWait(idToRefAccountMap.values());
     assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
 
+    // then, update the name of all the accounts but make the snapshot version smaller than current number.
     String accountNameAppendix = "-accountNameAppendix";
     Collection<Account> updatedAccounts = new ArrayList<>();
-    // Create a different set of accounts to update, but this time, make snapshot version smaller than the existing one.
     updatedAccounts = new ArrayList<>();
     for (Account account : accountService.getAllAccounts()) {
       AccountBuilder accountBuilder = new AccountBuilder(account).snapshotVersion(account.getSnapshotVersion() - 1)
