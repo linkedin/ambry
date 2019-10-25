@@ -80,6 +80,7 @@ public class GCMCryptoServiceTest {
     SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
     GCMCryptoService cryptoService =
         (GCMCryptoService) (new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService());
+    byte[] fixedIv = new byte[12];
     for (int i = 0; i < 5; i++) {
       int size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE);
       byte[] randomData = new byte[size];
@@ -90,9 +91,9 @@ public class GCMCryptoServiceTest {
       toEncryptByteBufHeap.writeBytes(randomData);
       toEncryptByteBufDirect.writeBytes(randomData);
 
-      ByteBuffer encryptedBytes = cryptoService.encrypt(toEncrypt, secretKeySpec, true);
-      ByteBuf encryptedBytesByteBufHeap = cryptoService.encrypt(toEncryptByteBufHeap, secretKeySpec, true);
-      ByteBuf encryptedBytesByteBufDirect = cryptoService.encrypt(toEncryptByteBufDirect, secretKeySpec, true);
+      ByteBuffer encryptedBytes = cryptoService.encrypt(toEncrypt, secretKeySpec, fixedIv);
+      ByteBuf encryptedBytesByteBufHeap = cryptoService.encrypt(toEncryptByteBufHeap, secretKeySpec, fixedIv);
+      ByteBuf encryptedBytesByteBufDirect = cryptoService.encrypt(toEncryptByteBufDirect, secretKeySpec, fixedIv);
 
       // EncryptedByteBuf should be a head buffer always.
       Assert.assertTrue(encryptedBytesByteBufHeap.hasArray());

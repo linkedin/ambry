@@ -49,7 +49,6 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
   private static final String GCM_CRYPTO_INSTANCE = "AES/GCM/NoPadding";
   private final SecureRandom random = new SecureRandom();
   private final int ivValSize;
-  private final byte[] fixedIvVal; // this is used only for testing
   private final CryptoServiceConfig config;
 
   private static final Logger logger = LoggerFactory.getLogger(GCMCryptoService.class);
@@ -62,12 +61,11 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
       throw new IllegalArgumentException(
           "Unrecognized Encryption Decryption Mode " + config.cryptoServiceEncryptionDecryptionMode);
     }
-    fixedIvVal = new byte[ivValSize];
   }
 
   @Override
   public ByteBuffer encrypt(ByteBuffer toEncrypt, SecretKeySpec key) throws GeneralSecurityException {
-    return encrypt(toEncrypt, key, false);
+    return encrypt(toEncrypt, key, null);
   }
 
   /**
@@ -75,15 +73,16 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
    * array, using a all zero byte array instead. Only set it to be true in test.
    * @param toEncrypt {@link ByteBuffer} that needs to be encrypted
    * @param key the secret key (of type T) to use to encrypt
+   * @param iv If null, will create a random byte array serve as iv bytes.
    * @return the {@link ByteBuffer} containing the encrypted content. Ensure the result has all
    * the information like the IV along with the encrypted content, in order to decrypt the content with a given key
    * @throws {@link GeneralSecurityException} on any exception with encryption
    */
-  ByteBuffer encrypt(ByteBuffer toEncrypt, SecretKeySpec key, boolean useFixedIv) throws GeneralSecurityException {
+  ByteBuffer encrypt(ByteBuffer toEncrypt, SecretKeySpec key, byte[] iv) throws GeneralSecurityException {
     try {
       Cipher encrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
-      byte[] iv = useFixedIv ? fixedIvVal : new byte[ivValSize];
-      if (!useFixedIv) {
+      if (iv == null) {
+        iv = new byte[ivValSize];
         random.nextBytes(iv);
       }
       encrypter.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
@@ -100,7 +99,7 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
 
   @Override
   public ByteBuf encrypt(ByteBuf toEncrypt, SecretKeySpec key) throws GeneralSecurityException {
-    return encrypt(toEncrypt, key, false);
+    return encrypt(toEncrypt, key, null);
   }
 
   /**
@@ -108,37 +107,31 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
    * array, using a all zero byte array instead. Only set it to be true in test.
    * @param toEncrypt {@link ByteBuf} that needs to be encrypted
    * @param key the secret key (of type T) to use to encrypt
-   * @param useFixedIv If true, then use a all zero iv array.
+   * @param iv If null, will create a random byte array serve as iv bytes.
    * @return the {@link ByteBuf} containing the encrypted content. Ensure the result has all
    * the information like the IV along with the encrypted content, in order to decrypt the content with a given key
    * @throws {@link GeneralSecurityException} on any exception with encryption
    */
-  public ByteBuf encrypt(ByteBuf toEncrypt, SecretKeySpec key, boolean useFixedIv) throws GeneralSecurityException {
+  public ByteBuf encrypt(ByteBuf toEncrypt, SecretKeySpec key, byte[] iv) throws GeneralSecurityException {
     try {
       Cipher encrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
-      byte[] iv = useFixedIv ? fixedIvVal : new byte[ivValSize];
-      if (!useFixedIv) {
+      if (iv == null) {
+        iv = new byte[ivValSize];
         random.nextBytes(iv);
       }
       encrypter.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
       int outputSize = encrypter.getOutputSize(toEncrypt.readableBytes());
-      // We need to expose the array address to the encrypter, so here we need to allocate a ByteBuf at heap.
+
+      // stick with heap memory for now so to compare with the java.nio.ByteBuffer.
       ByteBuf encryptedContent =
           ByteBufAllocator.DEFAULT.heapBuffer(IVRecord_Format_V1.getIVRecordSize(iv) + outputSize);
       IVRecord_Format_V1.serializeIVRecord(encryptedContent, iv);
-      if (toEncrypt.hasArray()) {
-        int n = encrypter.doFinal(toEncrypt.array(), toEncrypt.arrayOffset() + toEncrypt.readerIndex(),
-            toEncrypt.readableBytes(), encryptedContent.array(),
-            encryptedContent.arrayOffset() + encryptedContent.writerIndex());
-        toEncrypt.readerIndex(toEncrypt.readerIndex() + toEncrypt.readableBytes());
-        encryptedContent.writerIndex(encryptedContent.writerIndex() + n);
-      } else {
-        byte[] toEncryptedArray = new byte[toEncrypt.readableBytes()];
-        toEncrypt.readBytes(toEncryptedArray);
-        int n = encrypter.doFinal(toEncryptedArray, 0, toEncryptedArray.length, encryptedContent.array(),
-            encryptedContent.arrayOffset() + encryptedContent.writerIndex());
-        encryptedContent.writerIndex(encryptedContent.writerIndex() + n);
-      }
+      ByteBuffer toEncryptBuffer = toEncrypt.nioBuffer();
+      ByteBuffer encryptedContentBuffer = encryptedContent.nioBuffer(encryptedContent.writerIndex(),
+          encryptedContent.capacity() - encryptedContent.writerIndex());
+      int n = encrypter.doFinal(toEncryptBuffer, encryptedContentBuffer);
+      toEncrypt.readerIndex(toEncrypt.readerIndex() + toEncrypt.readableBytes());
+      encryptedContent.writerIndex(encryptedContent.writerIndex() + n);
       return encryptedContent;
     } catch (Exception e) {
       throw new GeneralSecurityException("Exception thrown while encrypting data", e);
@@ -166,21 +159,13 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
       Cipher decrypter = Cipher.getInstance(GCM_CRYPTO_INSTANCE, "BC");
       byte[] iv = deserializeIV(new ByteBufInputStream(toDecrypt));
       decrypter.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
-      ByteBuf decryptedContent =
-          ByteBufAllocator.DEFAULT.heapBuffer(decrypter.getOutputSize(toDecrypt.readableBytes()));
-      if (toDecrypt.hasArray()) {
-        int n = decrypter.doFinal(toDecrypt.array(), toDecrypt.arrayOffset() + toDecrypt.readerIndex(),
-            toDecrypt.readableBytes(), decryptedContent.array(),
-            decryptedContent.arrayOffset() + decryptedContent.writerIndex());
-        toDecrypt.readerIndex(toDecrypt.readerIndex() + toDecrypt.readableBytes());
-        decryptedContent.writerIndex(decryptedContent.writerIndex() + n);
-      } else {
-        byte[] toDecryptArray = new byte[toDecrypt.readableBytes()];
-        toDecrypt.readBytes(toDecryptArray);
-        int n = decrypter.doFinal(toDecryptArray, 0, toDecryptArray.length, decryptedContent.array(),
-            decryptedContent.arrayOffset() + decryptedContent.writerIndex());
-        decryptedContent.writerIndex(decryptedContent.writerIndex() + n);
-      }
+      int outputSize = decrypter.getOutputSize(toDecrypt.readableBytes());
+      ByteBuf decryptedContent = ByteBufAllocator.DEFAULT.heapBuffer(outputSize);
+      ByteBuffer toDecryptBuffer = toDecrypt.nioBuffer();
+      ByteBuffer decryptedContentBuffer = decryptedContent.nioBuffer(0, outputSize);
+      int n = decrypter.doFinal(toDecryptBuffer, decryptedContentBuffer);
+      toDecrypt.readerIndex(toDecrypt.readerIndex() + toDecrypt.readableBytes());
+      decryptedContent.writerIndex(decryptedContent.writerIndex() + n);
       return decryptedContent;
     } catch (Exception e) {
       throw new GeneralSecurityException("Exception thrown while decrypting data", e);
