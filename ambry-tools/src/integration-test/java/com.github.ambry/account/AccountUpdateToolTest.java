@@ -176,11 +176,26 @@ public class AccountUpdateToolTest {
     }
     createOrUpdateAccountsAndWait(updatedAccounts);
     assertAccountsInAccountService(updatedAccounts, NUM_REF_ACCOUNT, accountService);
+  }
 
+  /**
+   * Tests updating {@link Account}s to {@code ZooKeeper}, where the {@link Account}s to update already exist and the
+   * snapshotVersion is less than the existing one.
+   * @throws Exception Any unexpected exception.
+   */
+  @Test
+  public void testUpdateAccountSmallerSnapshotVersion() throws Exception {
+    // first, create NUM_REF_ACCOUNT accounts through the tool
+    createOrUpdateAccountsAndWait(idToRefAccountMap.values());
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
+
+    String accountNameAppendix = "-accountNameAppendix";
+    Collection<Account> updatedAccounts = new ArrayList<>();
     // Create a different set of accounts to update, but this time, make snapshot version smaller than the existing one.
     updatedAccounts = new ArrayList<>();
     for (Account account : accountService.getAllAccounts()) {
-      AccountBuilder accountBuilder = new AccountBuilder(account).snapshotVersion(account.getSnapshotVersion() - 1);
+      AccountBuilder accountBuilder = new AccountBuilder(account).snapshotVersion(account.getSnapshotVersion() - 1)
+          .name(account.getName() + accountNameAppendix);
       updatedAccounts.add(accountBuilder.build());
     }
     updateAccountsWithSmallerSnapshotVersionAndWait(updatedAccounts);
@@ -257,25 +272,24 @@ public class AccountUpdateToolTest {
   private void updateAccountsWithSmallerSnapshotVersionAndWait(Collection<Account> accounts) throws Exception {
     String jsonFilePath = tempDirPath + File.separator + UUID.randomUUID().toString() + ".json";
     writeAccountsToFile(accounts, jsonFilePath);
-    accountUpdateConsumer.reset();
     boolean hasRuntimeException = false;
     try (AccountService accountService = AccountUpdateTool.getHelixAccountService(ZK_SERVER_ADDRESS,
         HELIX_STORE_ROOT_PATH, BACKUP_DIR, ZK_CONNECTION_TIMEOUT_MS, ZK_SESSION_TIMEOUT_MS)) {
       new AccountUpdateTool(accountService, containerJsonVersion).updateAccountsFromFile(jsonFilePath, false);
     } catch (RuntimeException e) {
       hasRuntimeException = true;
-    } finally {
-      assertTrue(hasRuntimeException);
     }
+    assertTrue(hasRuntimeException);
 
+    hasRuntimeException = false;
+    accountUpdateConsumer.reset();
     try (AccountService accountService = AccountUpdateTool.getHelixAccountService(ZK_SERVER_ADDRESS,
         HELIX_STORE_ROOT_PATH, BACKUP_DIR, ZK_CONNECTION_TIMEOUT_MS, ZK_SESSION_TIMEOUT_MS)) {
       new AccountUpdateTool(accountService, containerJsonVersion).updateAccountsFromFile(jsonFilePath, true);
     } catch (RuntimeException e) {
       hasRuntimeException = true;
-    } finally {
-      assertFalse(hasRuntimeException);
     }
+    assertFalse(hasRuntimeException);
     accountUpdateConsumer.awaitUpdate();
   }
 
