@@ -13,6 +13,8 @@
  */
 package com.github.ambry.router;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 
@@ -30,10 +32,24 @@ public interface CryptoService<T> {
    * @param toEncrypt {@link ByteBuffer} that needs to be encrypted
    * @param key the secret key (of type T) to use to encrypt
    * @return the {@link ByteBuffer} containing the encrypted content. Ensure the result has all
-   * the information like the IV along with the encrypted content, inorder to decrypt the content with a given key
+   * the information like the IV along with the encrypted content, in order to decrypt the content with a given key
    * @throws {@link GeneralSecurityException} on any exception with encryption
    */
   ByteBuffer encrypt(ByteBuffer toEncrypt, T key) throws GeneralSecurityException;
+
+  /**
+   * Encrypts the {@code toEncrypt} with the given key. The {@code toEncrypt} is a netty {@link ByteBuf}. This is used
+   * for encrypting data chunks.
+   * @param toEncrypt {@link ByteBuf} that needs to be encrypted
+   * @param key the secret key (of type T) to use to encrypt
+   * @return the {@link ByteBuf} containing the encrypted content. Ensure the result has all
+   * the information lik the IV along with the encrypted content, in order to decrypt the content with a given key
+   * @throws {@link GeneralSecurityException} on any exception with encryption
+   */
+  default ByteBuf encrypt(ByteBuf toEncrypt, T key) throws GeneralSecurityException {
+    ByteBuffer encrypted = encrypt(toEncrypt.nioBuffer(), key);
+    return Unpooled.wrappedBuffer(encrypted);
+  }
 
   /**
    * Decrypts the {@code toDecrypt} with the given key. This is used for decrypting data chunks.
@@ -43,6 +59,19 @@ public interface CryptoService<T> {
    * @throws {@link GeneralSecurityException} on any exception with decryption
    */
   ByteBuffer decrypt(ByteBuffer toDecrypt, T key) throws GeneralSecurityException;
+
+  /**
+   * Decrypts the {@code toDecrypt} with the given key. The {@code toDecrypt} is a netty {@link ByteBuf}. This is used
+   * for decrypting data chunks.
+   * @param toDecrypt {@link ByteBuf} that needs to be decrypted
+   * @param key the secret key (of type T) to use to decrypt
+   * @return the {@link ByteBuffer} containing the decrypted content
+   * @throws {@link GeneralSecurityException} on any exception with decryption
+   */
+  default ByteBuf decrypt(ByteBuf toDecrypt, T key) throws GeneralSecurityException {
+    ByteBuffer decrypted = decrypt(toDecrypt.nioBuffer(), key);
+    return Unpooled.wrappedBuffer(decrypted);
+  }
 
   /**
    * Returns the encrypted form of the key in bytes.
