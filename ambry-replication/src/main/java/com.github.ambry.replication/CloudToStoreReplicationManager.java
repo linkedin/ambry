@@ -298,9 +298,6 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     }
   }
 
-  Add CloudToStoreReplicationManager to separate out replication from cloud replicas to data nodes.
-  Add Code to enable spectator on helix vcr cluster and to react to changes on helix.
-
   /**
    * Remove a replica of given partition and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionName the partition of the replica to removed.
