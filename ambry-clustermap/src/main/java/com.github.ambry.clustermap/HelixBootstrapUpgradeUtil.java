@@ -539,7 +539,6 @@ class HelixBootstrapUpgradeUtil {
    *
    * @param startValidatingClusterManager whether validation should include staring up a {@link HelixClusterManager}
    */
-
   private void updateClusterMapInHelix(boolean startValidatingClusterManager) throws IOException {
     info("Initializing admins and possibly adding cluster in Helix (if non-existent)");
     maybeAddCluster();

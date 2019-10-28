@@ -36,7 +36,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
@@ -165,6 +164,8 @@ class HelixClusterManager implements ClusterMap {
             dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcName);
             dcToRoutingTableSnapshotRef.put(dcName,
                 new AtomicReference<>(routingTableProvider.getRoutingTableSnapshot()));
+            routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
+            logger.info("Registered routing table change listeners in {}", dcName);
 
             // The initial instance config change notification is required to populate the static cluster
             // information, and only after that is complete do we want the live instance change notification to
@@ -179,8 +180,6 @@ class HelixClusterManager implements ClusterMap {
             // Now register listeners to get notified on live instance change in every datacenter.
             manager.addLiveInstanceChangeListener(clusterChangeHandler);
             logger.info("Registered live instance change listeners for Helix manager at {}", zkConnectStr);
-            routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
-            logger.info("Registered routing table change listeners in {}", dcName);
             if (!clusterMapConfig.clustermapListenCrossColo && manager != localManager) {
               manager.disconnect();
               logger.info("Stopped listening to cross colo ZK server {}", zkConnectStr);
@@ -501,19 +500,29 @@ class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * @return a map of datacenter names to {@link HelixManager}
-   */
-  Map<String, HelixManager> getHelixManagerMap() {
-    return dcToDcZkInfo.entrySet()
-        .stream()
-        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().helixManager));
-  }
-
-  /**
    * @return the count of errors encountered by the Cluster Manager.
    */
   long getErrorCount() {
     return errorCount.get();
+  }
+
+  /**
+   * @return a map of datacenter names to {@link DcInfo}
+   */
+  Map<String, DcInfo> getDcInfosMap() {
+    return Collections.unmodifiableMap(dcToDcZkInfo);
+  }
+
+  Map<String, ConcurrentHashMap<String, String>> getPartitionToResourceMap() {
+    return Collections.unmodifiableMap(partitionToResourceNameByDc);
+  }
+
+  Map<String, Set<AmbryDataNode>> getDcToDataNodesMap() {
+    return Collections.unmodifiableMap(dcToNodes);
+  }
+
+  Map<String, AtomicReference<RoutingTableSnapshot>> getRoutingTableSnapshots() {
+    return Collections.unmodifiableMap(dcToRoutingTableSnapshotRef);
   }
 
   /**
@@ -568,7 +577,7 @@ class HelixClusterManager implements ClusterMap {
     public void onIdealStateChange(List<IdealState> idealState, NotificationContext changeContext)
         throws InterruptedException {
       if (!idealStateInitialized.get()) {
-        logger.info("Received initial notification for ideal state change from {}", dcName);
+        logger.info("Received initial notification for IdealState change from {}", dcName);
         idealStateInitialized.set(true);
       } else {
         logger.info("IdealState change triggered from {}", dcName);
@@ -613,6 +622,15 @@ class HelixClusterManager implements ClusterMap {
       synchronized (notificationLock) {
         dcToRoutingTableSnapshotRef.get(dcName).getAndSet(routingTableSnapshot);
         helixClusterManagerMetrics.routingTableChangeTriggerCount.inc();
+//        System.out.println("======= ROUTING TABLE CHANGE! " + dcName + " =====");
+//        for (String partitionName : partitionNameToAmbryPartition.keySet()) {
+//          System.out.println(partitionName + ": leader instances are: ");
+//          routingTableSnapshot.getInstancesForResource("0", partitionName, ReplicaState.LEADER.name())
+//              .forEach(e -> System.out.println(e));
+//          System.out.println(partitionName + ": standby instances are: ");
+//          routingTableSnapshot.getInstancesForResource("0", partitionName, ReplicaState.STANDBY.name())
+//              .forEach(e -> System.out.println(e));
+//        }
       }
     }
 
@@ -822,7 +840,7 @@ class HelixClusterManager implements ClusterMap {
   /**
    * Class that stores all the information associated with a datacenter.
    */
-  private static class DcInfo {
+  static class DcInfo {
     final String dcName;
     final DcZkInfo dcZkInfo;
     final HelixManager helixManager;
@@ -835,7 +853,7 @@ class HelixClusterManager implements ClusterMap {
      * @param dcZkInfo the {@link DcZkInfo} associated with the DC.
      * @param helixManager the associated {@link HelixManager} for this datacenter.
      * @param clusterChangeHandler the associated {@link ClusterChangeHandler} for this datacenter.
-     * @param routingTableProvider the associated {@link RoutingTableProvider} for this datacenter.
+     * @param routingTableProvider
      */
     DcInfo(String dcName, DcZkInfo dcZkInfo, HelixManager helixManager, ClusterChangeHandler clusterChangeHandler,
         RoutingTableProvider routingTableProvider) {

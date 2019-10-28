@@ -50,6 +50,7 @@ import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.participant.StateMachineEngine;
+import org.apache.helix.spectator.RoutingTableProvider;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 
 
@@ -65,6 +66,7 @@ class MockHelixManager implements HelixManager {
   private ExternalViewChangeListener externalViewChangeListener;
   private InstanceConfigChangeListener instanceConfigChangeListener;
   private IdealStateChangeListener idealStateChangeListener;
+  private RoutingTableProvider routingTableProvider;
   private final MockHelixAdmin mockAdmin;
   private final MockHelixDataAccessor dataAccessor;
   private final Exception beBadException;
@@ -87,7 +89,7 @@ class MockHelixManager implements HelixManager {
     mockAdmin = helixCluster.getHelixAdminFactory().getHelixAdmin(zkAddr);
     mockAdmin.addHelixManager(this);
     clusterName = helixCluster.getClusterName();
-    dataAccessor = new MockHelixDataAccessor(clusterName);
+    dataAccessor = new MockHelixDataAccessor(clusterName, mockAdmin);
     this.beBadException = beBadException;
     this.znRecordMap = znRecordMap;
     Properties storeProps = new Properties();
@@ -201,6 +203,10 @@ class MockHelixManager implements HelixManager {
     idealStateChangeListener.onIdealStateChange(mockAdmin.getIdealStates(), notificationContext);
   }
 
+  void triggerRoutingTableProviderNotification() {
+    //routingTableProvider.onR();
+  }
+
   //****************************
   // Not implemented.
   //****************************
@@ -221,7 +227,7 @@ class MockHelixManager implements HelixManager {
   @Override
   public void addLiveInstanceChangeListener(LiveInstanceChangeListener liveInstanceChangeListener) throws Exception {
     this.liveInstanceChangeListener = liveInstanceChangeListener;
-    triggerLiveInstanceNotification(true);
+    triggerLiveInstanceNotification(false);
   }
 
   @Override
@@ -273,7 +279,8 @@ class MockHelixManager implements HelixManager {
   @Override
   public void addCurrentStateChangeListener(CurrentStateChangeListener currentStateChangeListener, String s, String s1)
       throws Exception {
-    // do nothing
+    // Note: routingTableProvider implements current state change listener
+    this.routingTableProvider = (RoutingTableProvider) currentStateChangeListener;
   }
 
   @Override

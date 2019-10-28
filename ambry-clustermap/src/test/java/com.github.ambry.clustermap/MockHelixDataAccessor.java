@@ -13,7 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.I0Itec.zkclient.DataUpdater;
@@ -22,6 +23,8 @@ import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixProperty;
 import org.apache.helix.PropertyKey;
 import org.apache.helix.ZNRecord;
+import org.apache.helix.model.CurrentState;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.model.MaintenanceSignal;
 import org.apache.helix.model.Message;
@@ -30,12 +33,19 @@ import org.apache.helix.model.StateModelDefinition;
 
 
 public class MockHelixDataAccessor implements HelixDataAccessor {
+  private static final String SESSION_ID = "sessionId";
+  private final String LIVEINSTANCE_PATH;
+  private final String INSTANCECONFIG_PATH;
   private final String clusterName;
   private final PropertyKey.Builder propertyKeyBuilder;
+  private final MockHelixAdmin mockHelixAdmin;
 
-  MockHelixDataAccessor(String clusterName) {
+  MockHelixDataAccessor(String clusterName, MockHelixAdmin mockHelixAdmin) {
     this.clusterName = clusterName;
+    this.mockHelixAdmin = mockHelixAdmin;
     propertyKeyBuilder = new PropertyKey.Builder(clusterName);
+    LIVEINSTANCE_PATH = "/" + clusterName + "/LIVEINSTANCES";
+    INSTANCECONFIG_PATH = "/" + clusterName + "/CONFIGS/PARTICIPANT";
   }
 
   @Override
@@ -91,7 +101,22 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
 
   @Override
   public <T extends HelixProperty> List<T> getProperty(List<PropertyKey> keys, boolean throwException) {
-    return Collections.emptyList();
+    List<T> result = new ArrayList<>();
+    // example for key
+    for (PropertyKey key : keys) {
+      if (key.toString().matches("/Ambry-/INSTANCES/.*/CURRENTSTATES/sessionId/\\d+")) {
+        // an example for the key: /Ambry-/INSTANCES/localhost_18089/CURRENTSTATES/sessionId/0
+        String[] segments = key.toString().split("/");
+        String instanceName = segments[3];
+        String resourceName = segments[6];
+        Map<String, Map<String, String>> partitionStateMap =
+            mockHelixAdmin.getPartitionStateMapForInstance(instanceName);
+        ZNRecord record = new ZNRecord(resourceName);
+        record.setMapFields(partitionStateMap);
+        result.add((T) (new CurrentState(record)));
+      }
+    }
+    return result;
   }
 
   @Override
@@ -106,12 +131,22 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
 
   @Override
   public List<HelixProperty.Stat> getPropertyStats(List<PropertyKey> keys) {
-    return Collections.emptyList();
+    List<HelixProperty.Stat> result = new ArrayList<>();
+    for (PropertyKey key : keys) {
+      // Adding null forces AbstractDataCache to reload PropertyKey from ZK
+      result.add(null);
+    }
+    return result;
   }
 
   @Override
   public List<String> getChildNames(PropertyKey key) {
-    return Collections.emptyList();
+    List<String> result = new ArrayList<>();
+    if (key.toString().endsWith("/CURRENTSTATES/" + SESSION_ID)) {
+      // Add resource name into result. Note that, in current test setup, all partitions within same dc are under same resource.
+      result.add(mockHelixAdmin.getResourcesInCluster(clusterName).get(0));
+    }
+    return result;
   }
 
   @Override
@@ -131,7 +166,19 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
 
   @Override
   public <T extends HelixProperty> Map<String, T> getChildValuesMap(PropertyKey key, boolean throwException) {
-    return Collections.emptyMap();
+    Map<String, T> result = new HashMap<>();
+    if (key.toString().equals(LIVEINSTANCE_PATH)) {
+      for (String instance : mockHelixAdmin.getUpInstances()) {
+        LiveInstance liveInstance = new LiveInstance(instance);
+        liveInstance.setSessionId(SESSION_ID);
+        result.put(instance, (T) liveInstance);
+      }
+    } else if (key.toString().equals(INSTANCECONFIG_PATH)) {
+      for (InstanceConfig config : mockHelixAdmin.getInstanceConfigs(clusterName)) {
+        result.put(config.getInstanceName(), (T) config);
+      }
+    }
+    return result;
   }
 
   @Override

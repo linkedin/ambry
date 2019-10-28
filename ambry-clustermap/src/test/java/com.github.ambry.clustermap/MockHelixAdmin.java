@@ -24,6 +24,7 @@ import java.util.Set;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.ClusterConstraints;
 import org.apache.helix.model.ConstraintItem;
+import org.apache.helix.model.CurrentState;
 import org.apache.helix.model.ExternalView;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.IdealState;
@@ -45,6 +46,8 @@ public class MockHelixAdmin implements HelixAdmin {
   private final List<MockHelixManager> helixManagersForThisAdmin = new ArrayList<>();
   private Map<String, Set<String>> partitionToInstances = new HashMap<>();
   private Map<String, PartitionState> partitionToPartitionStates = new HashMap<>();
+  private Map<String, ReplicaStateInfos> instanceToReplicaStateInfos = new HashMap<>();
+  private Map<String, String> partitionToLeaderReplica = new HashMap<>();
   private long totalDiskCapacity;
 
   /**
@@ -95,15 +98,26 @@ public class MockHelixAdmin implements HelixAdmin {
         partitionToInstances.put(partition, instanceSet);
         partitionToPartitionStates.put(partition, PartitionState.READ_WRITE);
       }
-      partitionToInstances.get(partition).addAll(idealstate.getInstanceSet(partition));
+      List<String> instances = new ArrayList<>(idealstate.getInstanceSet(partition));
+      partitionToInstances.get(partition).addAll(instances);
+      for (int i = 0; i < instances.size(); ++i) {
+        String instanceName = instances.get(i);
+        String stateStr;
+        if (i == 0) {
+          stateStr = ReplicaState.LEADER.name();
+          partitionToLeaderReplica.put(partition, instanceName);
+        } else {
+          stateStr = ReplicaState.STANDBY.name();
+        }
+        instanceToReplicaStateInfos.computeIfAbsent(instanceName, k -> new ReplicaStateInfos())
+            .setReplicaState(partition, stateStr);
+      }
     }
   }
 
   @Override
   public List<String> getResourcesInCluster(String clusterName) {
-    List<String> resources = new ArrayList<>();
-    resources.addAll(resourcesToIdealStates.keySet());
-    return resources;
+    return new ArrayList<>(resourcesToIdealStates.keySet());
   }
 
   @Override
@@ -113,9 +127,7 @@ public class MockHelixAdmin implements HelixAdmin {
 
   @Override
   public List<String> getInstancesInCluster(String clusterName) {
-    List<String> instances = new ArrayList<>();
-    instances.addAll(instanceNameToinstanceConfigs.keySet());
-    return instances;
+    return new ArrayList<>(instanceNameToinstanceConfigs.keySet());
   }
 
   List<InstanceConfig> getInstanceConfigs(String clusterName) {
@@ -171,6 +183,11 @@ public class MockHelixAdmin implements HelixAdmin {
     }
     instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);
     triggerInstanceConfigChangeNotification(tagAsInit);
+  }
+
+  void addNewResource(String resourceName, IdealState idealstate) throws Exception {
+    resourcesToIdealStates.put(resourceName, idealstate);
+    triggerIdealStateChangeNotification();
   }
 
   /**
@@ -261,6 +278,12 @@ public class MockHelixAdmin implements HelixAdmin {
     }
   }
 
+  void triggerIdealStateChangeNotification() throws Exception {
+    for (MockHelixManager helixManager : helixManagersForThisAdmin) {
+      helixManager.triggerIdealStateNotification(false);
+    }
+  }
+
   /**
    * @return a list of all partitions registered via this admin.
    */
@@ -303,6 +326,15 @@ public class MockHelixAdmin implements HelixAdmin {
     return writablePartitions;
   }
 
+  Map<String, Map<String, String>> getPartitionStateMapForInstance(String instanceName) {
+    ReplicaStateInfos replicaStateInfos = instanceToReplicaStateInfos.get(instanceName);
+    return replicaStateInfos != null ? replicaStateInfos.getReplicaStateMap() : new HashMap<>();
+  }
+
+  Map<String, String> getPartitionToLeaderReplica(){
+    return Collections.unmodifiableMap(partitionToLeaderReplica);
+  }
+
   /**
    * @return the count of disks registered via this admin.
    */
@@ -324,6 +356,24 @@ public class MockHelixAdmin implements HelixAdmin {
    */
   long getTotalDiskCapacity() {
     return totalDiskCapacity;
+  }
+
+  class ReplicaStateInfos {
+    Map<String, Map<String, String>> replicaStateMap;
+
+    ReplicaStateInfos() {
+      replicaStateMap = new HashMap<>();
+    }
+
+    void setReplicaState(String partition, String state) {
+      Map<String, String> stateMap = new HashMap<>();
+      stateMap.put(CurrentState.CurrentStateProperty.CURRENT_STATE.name(), state);
+      replicaStateMap.put(partition, stateMap);
+    }
+
+    Map<String, Map<String, String>> getReplicaStateMap() {
+      return replicaStateMap;
+    }
   }
 
   // ***************************************
