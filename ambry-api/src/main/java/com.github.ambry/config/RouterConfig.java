@@ -460,6 +460,7 @@ public class RouterConfig {
         Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
     routerMaxInMemGetChunks = verifiableProperties.getIntInRange("router.max.in.mem.get.chunks", 4, 1,
         Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
-    routerGetBlobOperationShareMemory = verifiableProperties.getBoolean("router.get.blob.operation.share.memory", false);
+    routerGetBlobOperationShareMemory =
+        verifiableProperties.getBoolean("router.get.blob.operation.share.memory", false);
   }
 }

@@ -27,7 +27,7 @@ public enum TrackedRequestFinalState {
    * @return The corresponding {@link TrackedRequestFinalState}.
    */
   public static TrackedRequestFinalState fromRouterErrorCodeToFinalState(RouterErrorCode code) {
-    switch(code){
+    switch (code) {
       case OperationTimedOut:
         return TIMED_OUT;
       case BlobDoesNotExist:

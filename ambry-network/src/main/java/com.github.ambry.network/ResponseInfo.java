@@ -14,7 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
-import java.nio.ByteBuffer;
+import io.netty.util.ReferenceCountUtil;
 
 
 /**
@@ -26,7 +26,7 @@ import java.nio.ByteBuffer;
 public class ResponseInfo {
   private final RequestInfo requestInfo;
   private final NetworkClientErrorCode error;
-  private final ByteBuffer response;
+  private final Object response;
   private final DataNodeId dataNode;
 
   /**
@@ -35,11 +35,11 @@ public class ResponseInfo {
    * @param error the error encountered in sending this request, if there is any.
    * @param response the response received for this request.
    */
-  public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, ByteBuffer response) {
+  public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, Object response) {
     this(requestInfo, error, response, requestInfo == null ? null : requestInfo.getReplicaId().getDataNodeId());
   }
 
-  public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, ByteBuffer response, DataNodeId dataNode) {
+  public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, Object response, DataNodeId dataNode) {
     this.requestInfo = requestInfo;
     this.error = error;
     this.response = response;
@@ -63,8 +63,14 @@ public class ResponseInfo {
   /**
    * @return the response received for this request.
    */
-  public ByteBuffer getResponse() {
+  public Object getResponse() {
     return response;
+  }
+
+  public void release() {
+    if (response != null) {
+      ReferenceCountUtil.release(response);
+    }
   }
 
   /**

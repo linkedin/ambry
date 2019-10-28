@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -418,7 +417,7 @@ class Processor extends AbstractServerThread {
         for (NetworkReceive networkReceive : completedReceives) {
           String connectionId = networkReceive.getConnectionId();
           SocketServerRequest req = new SocketServerRequest(id, connectionId,
-              new ByteBufferInputStream(networkReceive.getReceivedBytes().getPayload()));
+              Utils.createDataInputStreamFromBuffer(networkReceive.getReceivedBytes().getAndRelease()));
           channel.sendRequest(req);
         }
       }

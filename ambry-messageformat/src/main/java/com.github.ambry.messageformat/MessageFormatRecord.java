@@ -19,8 +19,10 @@ import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -1645,7 +1647,7 @@ public class MessageFormatRecord {
    * @return The {@link ByteBufferInputStream}
    * @throws IOException Unexpected IO errors.
    */
-  static ByteBufferInputStream getByteBufferInputStreamForBlobRecord(CrcInputStream crcStream, long dataSize)
+  static ByteBufferInputStream getByteBufferInputStreamForBlobRecord(CrcInputStream crcStream, int dataSize)
       throws IOException {
     ByteBufferInputStream output;
     InputStream inputStream = crcStream.getUnderlyingInputStream();
@@ -1654,16 +1656,25 @@ public class MessageFormatRecord {
       int startIndex = byteBuffer.position();
       int oldLimit = byteBuffer.limit();
 
-      byteBuffer.limit(startIndex + (int) dataSize);
+      byteBuffer.limit(startIndex + dataSize);
       ByteBuffer dataBuffer = byteBuffer.slice();
       crcStream.updateCrc(dataBuffer.duplicate());
 
       output = new ByteBufferInputStream(dataBuffer);
       byteBuffer.limit(oldLimit);
       // Change the byte buffer's position as if the data is fetched.
-      byteBuffer.position(startIndex + (int) dataSize);
+      byteBuffer.position(startIndex + dataSize);
+    } else if (inputStream instanceof NettyByteBufDataInputStream) {
+      // getBuffer function doesn't increase the reference count on this ByteBuf.
+      ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
+      // construct a java.nio.ByteBuf to create a ByteBufferInputStream
+      int startIndex = nettyByteBuf.readerIndex();
+      ByteBuffer dataBuffer = nettyByteBuf.nioBuffer(startIndex, dataSize);
+      crcStream.updateCrc(dataBuffer.duplicate());
+      nettyByteBuf.readerIndex(startIndex + dataSize);
+      output = new ByteBufferInputStream(dataBuffer);
     } else {
-      output = new ByteBufferInputStream(crcStream, (int) dataSize);
+      output = new ByteBufferInputStream(crcStream, dataSize);
     }
     return output;
   }
@@ -1703,7 +1714,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, dataSize);
+      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
@@ -1761,7 +1772,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, dataSize);
+      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {

@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -57,11 +58,11 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private long handshakeStartTime;
 
   public SSLTransmission(SSLFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
-      String remoteHost, int remotePort, Time time, NetworkMetrics metrics, SSLFactory.Mode mode,
-      boolean useDirectBuffers) throws IOException {
-    super(connectionId, socketChannel, key, time, metrics);
+      String remoteHost, int remotePort, Time time, NetworkMetrics metrics, SSLFactory.Mode mode, NetworkConfig config)
+      throws IOException {
+    super(connectionId, socketChannel, key, time, config, metrics);
     this.sslEngine = sslFactory.createSSLEngine(remoteHost, remotePort, mode);
-    if (useDirectBuffers) {
+    if (config.selectorUseDirectBuffers) {
       this.netReadBuffer = ByteBuffer.allocateDirect(netReadBufferSize());
       this.netWriteBuffer = ByteBuffer.allocateDirect(netWriteBufferSize());
       this.appReadBuffer = ByteBuffer.allocateDirect(appReadBufferSize());
@@ -148,6 +149,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       logger.debug("Failed to send SSL close message ", ie);
     } finally {
       try {
+        release();
         clearReceive();
         clearSend();
         clearBuffers();
@@ -404,7 +406,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   @Override
   public boolean read() throws IOException {
     if (!hasReceive()) {
-      this.networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
+      initializeNetworkReceive();
       metrics.transmissionRoundTripTime.update(time.milliseconds() - sendCompleteTime);
     }
     long startTimeMs = time.milliseconds();

@@ -190,7 +190,8 @@ class SimpleOperationTracker implements OperationTracker {
           generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck));
     }
     if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled && numReplicasInOriginatingDc > 0) {
-      this.originatingDcNotFoundFailureThreshold = Math.max(numReplicasInOriginatingDc - routerConfig.routerPutSuccessTarget + 1, 0);
+      this.originatingDcNotFoundFailureThreshold =
+          Math.max(numReplicasInOriginatingDc - routerConfig.routerPutSuccessTarget + 1, 0);
     }
     this.otIterator = new OpTrackerIterator();
   }

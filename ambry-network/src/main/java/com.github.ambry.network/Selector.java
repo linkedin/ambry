@@ -613,12 +613,12 @@ public class Selector implements Selectable {
       PortType portType, SSLFactory.Mode mode) throws IOException {
     Transmission transmission;
     if (portType == PortType.PLAINTEXT) {
-      transmission = new PlainTextTransmission(connectionId, channel(key), key, time, metrics);
+      transmission = new PlainTextTransmission(connectionId, channel(key), key, time, metrics, networkConfig);
     } else if (portType == PortType.SSL) {
       try {
         transmission =
             new SSLTransmission(sslFactory, connectionId, channel(key), key, hostname, port, time, metrics, mode,
-                networkConfig.selectorUseDirectBuffers);
+                networkConfig);
         metrics.sslTransmissionInitializationCount.inc();
       } catch (IOException e) {
         metrics.sslTransmissionInitializationErrorCount.inc();

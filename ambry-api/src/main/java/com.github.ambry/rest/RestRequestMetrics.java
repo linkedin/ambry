@@ -96,7 +96,9 @@ public class RestRequestMetrics {
     operationRate = metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + OPERATION_RATE_SUFFIX));
     operationError = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + OPERATION_ERROR_SUFFIX));
 
-    unsatisfiedRequestCount = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + UNSATISFIED_REQUEST_COUNT_SUFFIX));
-    satisfiedRequestCount = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + SATISFIED_REQUEST_COUNT_SUFFIX));
+    unsatisfiedRequestCount =
+        metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + UNSATISFIED_REQUEST_COUNT_SUFFIX));
+    satisfiedRequestCount =
+        metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + SATISFIED_REQUEST_COUNT_SUFFIX));
   }
 }
