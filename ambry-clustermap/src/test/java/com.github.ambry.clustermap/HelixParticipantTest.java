@@ -365,7 +365,8 @@ public class HelixParticipantTest {
      * @return the {@link MockHelixManager}
      */
     @Override
-    HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
+    public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
+        String zkAddr) {
       return helixManager;
     }
 
@@ -375,7 +376,7 @@ public class HelixParticipantTest {
      * @return the {@link MockHelixAdmin}
      */
     @Override
-    HelixAdmin getHelixAdmin(String zkAddr) {
+    public HelixAdmin getHelixAdmin(String zkAddr) {
       return new MockHelixAdmin();
     }
   }

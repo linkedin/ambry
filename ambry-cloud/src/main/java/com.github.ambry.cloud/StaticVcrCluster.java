@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;

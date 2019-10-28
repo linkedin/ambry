@@ -11,15 +11,8 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.DiskId;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.PartitionState;
-import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.ReplicaType;
-import com.github.ambry.protocol.GetRequest;
 import java.io.File;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -31,9 +24,10 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 /**
  * {@link ReplicaId} implementation to use within virtual cloud replicator.
  */
-class CloudReplica implements ReplicaId {
+public class CloudReplica implements ReplicaId {
   private final PartitionId partitionId;
   private final DataNodeId dataNodeId;
+  public static final String Cloud_Replica_Keyword = "vcr";
 
   /**
    * Instantiate an CloudReplica instance.
@@ -41,7 +35,7 @@ class CloudReplica implements ReplicaId {
    * @param dataNodeId which hosts this replica.
    *
    */
-  CloudReplica(PartitionId partitionId, DataNodeId dataNodeId) {
+  public CloudReplica(PartitionId partitionId, DataNodeId dataNodeId) {
     this.partitionId = partitionId;
     this.dataNodeId = dataNodeId;
   }
@@ -64,8 +58,7 @@ class CloudReplica implements ReplicaId {
   @Override
   public String getReplicaPath() {
     // GetRequest.Cloud_Replica_Keyword is added to avoid error on its peers.
-    return GetRequest.Cloud_Replica_Keyword + File.separator + getMountPath() + File.separator
-        + partitionId.toPathString();
+    return Cloud_Replica_Keyword + File.separator + getMountPath() + File.separator + partitionId.toPathString();
   }
 
   @Override
@@ -104,7 +97,8 @@ class CloudReplica implements ReplicaId {
 
   @Override
   public boolean isDown() {
-    throw new UnsupportedOperationException("isDown() is not supported.");
+    // Cloud replica is the vcr replica that stays on public cloud, so we dont expect it to go down.
+    return false;
   }
 
   @Override

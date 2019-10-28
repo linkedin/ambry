@@ -310,8 +310,7 @@ public class HelixClusterManagerTest {
 
     Set<String> writableInClusterManager = new HashSet<>();
     for (PartitionId partition : clusterManagerWithEmptyRecord.getWritablePartitionIds(null)) {
-      String partitionStr =
-          useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
+      String partitionStr = useComposite ? partition.toPathString() : partition.toPathString();
       writableInClusterManager.add(partitionStr);
     }
     Set<String> writableInCluster = helixCluster.getWritablePartitions();
@@ -1043,8 +1042,7 @@ public class HelixClusterManagerTest {
   private Pair<Set<String>, Set<String>> getWritablePartitions() {
     Set<String> writableInClusterManager = new HashSet<>();
     for (PartitionId partition : clusterManager.getWritablePartitionIds(null)) {
-      String partitionStr =
-          useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
+      String partitionStr = useComposite ? partition.toPathString() : partition.toPathString();
       writableInClusterManager.add(partitionStr);
     }
     Set<String> writableInCluster = helixCluster.getWritablePartitions();
@@ -1061,8 +1059,7 @@ public class HelixClusterManagerTest {
   private void testAllPartitions() {
     Set<String> partitionsInClusterManager = new HashSet<>();
     for (PartitionId partition : clusterManager.getAllPartitionIds(null)) {
-      String partitionStr =
-          useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
+      String partitionStr = useComposite ? partition.toPathString() : partition.toPathString();
       partitionsInClusterManager.add(partitionStr);
     }
     Set<String> allPartitions = helixCluster.getAllPartitions();
@@ -1180,7 +1177,8 @@ public class HelixClusterManagerTest {
      * @param zkAddr the address identifying the zk service to which this request is to be made.
      * @return the {@link MockHelixManager}
      */
-    HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
+    public HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
+        String zkAddr) {
       if (helixCluster.getZkAddrs().contains(zkAddr)) {
         return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, znRecordMap, beBadException);
       } else {
@@ -1189,4 +1187,3 @@ public class HelixClusterManagerTest {
     }
   }
 }
-

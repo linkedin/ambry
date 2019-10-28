@@ -11,10 +11,8 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
@@ -38,11 +36,12 @@ public class CloudDataNode implements DataNodeId {
   private final Port plainTextPort;
   private final Port sslPort;
   private final String dataCenterName;
+  private final boolean isSslEnabled;
   private final List<String> sslEnabledDataCenters;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
-   * Instantiate an CloudDataNode object.
+   * Instantiate a CloudDataNode object.
    * @param cloudConfig the {@link CloudConfig} to use.
    * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    */
@@ -55,8 +54,25 @@ public class CloudDataNode implements DataNodeId {
     this.sslPort = (cloudConfig.vcrSslPort != null) ? new Port(cloudConfig.vcrSslPort, PortType.SSL) : null;
     this.dataCenterName = clusterMapConfig.clusterMapDatacenterName;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
+    this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
-    validatePorts(plainTextPort, sslPort, sslEnabledDataCenters.contains(dataCenterName));
+    validatePorts(plainTextPort, sslPort, isSslEnabled);
+  }
+
+  /**
+   * Instantiate a CloudDataNode object from hostname, port and datacentername.
+   * @return
+   */
+  public CloudDataNode(String hostName, Port plainTextPort, Port sslPort, String dataCenterName,
+      ClusterMapConfig clusterMapConfig) {
+    this.hostName = hostName;
+    this.plainTextPort = plainTextPort;
+    this.sslPort = sslPort;
+    this.dataCenterName = dataCenterName;
+    this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
+    this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
+    validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
+    validatePorts(plainTextPort, sslPort, isSslEnabled);
   }
 
   @Override
@@ -81,7 +97,7 @@ public class CloudDataNode implements DataNodeId {
 
   @Override
   public Port getPortToConnectTo() {
-    return sslEnabledDataCenters.contains(dataCenterName) ? sslPort : plainTextPort;
+    return isSslEnabled ? sslPort : plainTextPort;
   }
 
   @Override

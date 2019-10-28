@@ -44,7 +44,7 @@ public class AmbryStateModelFactoryTest {
 
   @Test
   public void testDifferentStateModelDefs() {
-    AmbryStateModelFactory factory = new AmbryStateModelFactory(stateModelDef);
+    AmbryStateModelFactory factory = new AmbryStateModelFactory(stateModelDef, null);
     StateModel stateModel;
     switch (stateModelDef) {
       case ClusterMapConfig.DEFAULT_STATE_MODEL_DEF:

@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -270,6 +271,10 @@ class PartitionLayout {
       jsonObject.accumulate("partitions", partition.toJSONObject());
     }
     return jsonObject;
+  }
+
+  public List<String> getAllPartitionNames() {
+    return partitionMap.values().stream().map(partition -> partition.toPathString()).collect(Collectors.toList());
   }
 
   @Override

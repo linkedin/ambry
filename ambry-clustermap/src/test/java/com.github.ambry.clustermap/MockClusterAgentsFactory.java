@@ -108,6 +108,11 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         public List<String> getStoppedReplicas() {
           return new ArrayList<>();
         }
+
+        @Override
+        public void registerPartitionStateChangeListener(PartitionStateChangeListener partitionStateChangeListener) {
+
+        }
       };
     }
     return clusterParticipant;

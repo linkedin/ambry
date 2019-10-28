@@ -18,10 +18,13 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.ClusterSpectator;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.HelixClusterSpectatorFactory;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ServerMetrics;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
@@ -43,6 +46,7 @@ import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
+import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.StorageManager;
@@ -78,11 +82,13 @@ public class AmbryServer {
   private StorageManager storageManager = null;
   private StatsManager statsManager = null;
   private ReplicationManager replicationManager = null;
+  private CloudToStoreReplicationManager cloudToStoreReplicationManager = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
   private ClusterMap clusterMap;
   private ClusterParticipant clusterParticipant;
+  private ClusterSpectator vcrClusterSpectator;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
@@ -126,6 +132,7 @@ public class AmbryServer {
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
+      CloudConfig cloudConfig = new CloudConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -155,6 +162,16 @@ public class AmbryServer {
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
               serverConfig.serverMessageTransformer);
       replicationManager.start();
+
+      if (replicationConfig.isVcrClusterReplicationEnabled) {
+        vcrClusterSpectator = new HelixClusterSpectatorFactory().getClusterSpectator(cloudConfig, clusterMapConfig);
+        cloudToStoreReplicationManager =
+            new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
+                storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem,
+                storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
+                clusterParticipant);
+        cloudToStoreReplicationManager.start();
+      }
 
       logger.info("Creating StatsManager to publish stats");
       statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time);
@@ -192,6 +209,9 @@ public class AmbryServer {
         });
       }
 
+      if (vcrClusterSpectator != null) {
+        vcrClusterSpectator.spectate();
+      }
       clusterParticipant.participate(ambryHealthReports);
 
       logger.info("started");

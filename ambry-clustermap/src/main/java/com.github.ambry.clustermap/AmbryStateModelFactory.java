@@ -23,9 +23,11 @@ import org.apache.helix.participant.statemachine.StateModelFactory;
  */
 class AmbryStateModelFactory extends StateModelFactory<StateModel> {
   private final String ambryStateModelDef;
+  private final PartitionStateChangeListener partitionStateChangeListener;
 
-  AmbryStateModelFactory(String stateModelDef) {
+  AmbryStateModelFactory(String stateModelDef, PartitionStateChangeListener partitionStateChangeListener) {
     ambryStateModelDef = stateModelDef;
+    this.partitionStateChangeListener = partitionStateChangeListener;
   }
 
   /**
@@ -39,7 +41,7 @@ class AmbryStateModelFactory extends StateModelFactory<StateModel> {
     StateModel stateModelToReturn;
     switch (ambryStateModelDef) {
       case AmbryStateModelDefinition.AMBRY_LEADER_STANDBY_MODEL:
-        stateModelToReturn = new AmbryPartitionStateModel(resourceName, partitionName);
+        stateModelToReturn = new AmbryPartitionStateModel(resourceName, partitionName, partitionStateChangeListener);
         break;
       case LeaderStandbySMD.name:
         stateModelToReturn = new DefaultLeaderStandbyStateModel();
@@ -50,4 +52,3 @@ class AmbryStateModelFactory extends StateModelFactory<StateModel> {
     return stateModelToReturn;
   }
 }
-
