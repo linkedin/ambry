@@ -881,8 +881,6 @@ class NonBlockingRouter implements Router {
           List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestsToSend,
               routerConfig.routerDropRequestOnTimeout ? requestsToDrop : Collections.emptySet(),
               NETWORK_CLIENT_POLL_TIMEOUT);
-          if (!responseInfoList.isEmpty())
-            logger.info(getClass().toString() + " " + responseInfoList);
           onResponse(responseInfoList);
         }
       } catch (Throwable e) {

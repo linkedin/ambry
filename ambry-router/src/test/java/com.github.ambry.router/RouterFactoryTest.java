@@ -55,6 +55,7 @@ public class RouterFactoryTest {
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("clustermap.port", "1666");
     properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     properties.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS, LatchBasedInMemoryCloudDestinationFactory.class.getName());
     return new VerifiableProperties(properties);

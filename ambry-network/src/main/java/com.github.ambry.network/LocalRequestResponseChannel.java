@@ -40,12 +40,35 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   private static final byte[] sizeByteArray = new byte[Long.BYTES];
 
   @Override
+  public void sendRequest(Request request) {
+    requestQueue.offer(request);
+    if (request instanceof LocalChannelRequest) {
+      LocalChannelRequest localRequest = (LocalChannelRequest) request;
+      logger.debug("Added request for {}, queue size now {}", localRequest.processorId, requestQueue.size());
+    }
+  }
+
+  @Override
+  public Request receiveRequest() throws InterruptedException {
+    Request request = requestQueue.take();
+    if (request instanceof LocalChannelRequest) {
+      LocalChannelRequest localRequest = (LocalChannelRequest) request;
+      logger.debug("Removed request for {}, queue size now {}", localRequest.processorId, requestQueue.size());
+    }
+    return request;
+  }
+
+  @Override
   public void sendResponse(Send payloadToSend, Request originalRequest, ServerNetworkResponseMetrics metrics) {
     try {
-      LocalChannelRequest localChannelRequest = (LocalChannelRequest) originalRequest;
+      LocalChannelRequest localRequest = (LocalChannelRequest) originalRequest;
       ResponseInfo responseInfo =
-          new ResponseInfo(localChannelRequest.requestInfo, null, byteBufferFromPayload(payloadToSend));
-      getResponseList(localChannelRequest.processorId).add(responseInfo);
+          new ResponseInfo(localRequest.requestInfo, null, byteBufferFromPayload(payloadToSend));
+      List<ResponseInfo> responseList = getResponseList(localRequest.processorId);
+      synchronized (responseList) {
+        responseList.add(responseInfo);
+        logger.debug("Added response for {}, size now {}", localRequest.processorId, responseList.size());
+      }
     } catch (IOException ex) {
       logger.error("Could not extract response", ex);
     }
@@ -54,33 +77,19 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   public List<ResponseInfo> receiveResponses(int processorId) {
     List<ResponseInfo> responseList = getResponseList(processorId);
     synchronized (responseList) {
-      List<ResponseInfo> result = new ArrayList<>(responseList);
-      responseList.clear();
-      return result;
+      if (responseList.isEmpty()) {
+        return Collections.emptyList();
+      } else {
+        List<ResponseInfo> result = new ArrayList<>(responseList);
+        responseList.clear();
+        logger.debug("Returning {} responses for {}", result.size(), processorId);
+        return result;
+      }
     }
   }
 
   private List<ResponseInfo> getResponseList(int processorId) {
     return responseMap.computeIfAbsent(processorId, p -> new ArrayList<>());
-  }
-
-  @Override
-  public void sendRequest(Request request) throws InterruptedException {
-    requestQueue.offer(request);
-  }
-
-  @Override
-  public Request receiveRequest() throws InterruptedException {
-    Request request = requestQueue.take();
-    // Note: need to read inputstream past size header, to simulate BoundedByteBufferReceive
-    /*
-    try {
-      long requestSize = new DataInputStream(request.getInputStream()).readLong();
-      logger.trace("Got request of size {}", requestSize);
-    } catch (IOException ex) {
-      throw new IllegalStateException("Could not read size from request buffer");
-    }*/
-    return request;
   }
 
   @Override

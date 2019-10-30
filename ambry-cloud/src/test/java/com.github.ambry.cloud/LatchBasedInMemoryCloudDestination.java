@@ -31,6 +31,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.commons.io.IOUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -45,12 +47,14 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final Map<String, byte[]> tokenMap = new ConcurrentHashMap<>();
   private final AtomicLong bytesUploadedCounter = new AtomicLong(0);
   private final AtomicInteger blobsUploadedCounter = new AtomicInteger(0);
+  private final static Logger logger = LoggerFactory.getLogger(LatchBasedInMemoryCloudDestination.class);
 
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
    * @param blobIdsToTrack a list of blobs that {@link LatchBasedInMemoryCloudDestination} tracks.
    */
   public LatchBasedInMemoryCloudDestination(List<BlobId> blobIdsToTrack) {
+    logger.debug("Constructing LatchBasedInMemoryCloudDestination with {} tracked blobs", blobIdsToTrack.size());
     this.blobIdsToTrack.addAll(blobIdsToTrack);
     uploadLatch = new CountDownLatch(blobIdsToTrack.size());
     downloadLatch = new CountDownLatch(blobIdsToTrack.size());

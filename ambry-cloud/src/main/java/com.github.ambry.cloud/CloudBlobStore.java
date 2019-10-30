@@ -134,8 +134,15 @@ class CloudBlobStore implements Store {
       validateCloudMetadata(cloudBlobMetadataListMap, storeGetOptions, currentTimeStamp);
       for (BlobId blobId : blobIdList) {
         CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
-        MessageInfo messageInfo = new MessageInfo(blobId, blobMetadata.getSize(), blobMetadata.getExpirationTime(),
-            (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(), getOperationTime(blobMetadata));
+        // TODO: need to add ttlUpdated to CloudBlobMetadata so we can use it here
+        // For now, set ttlUpdated = true for all permanent blobs, so the correct ttl
+        // is applied by GetOperation.
+        boolean ttlUpdated = blobMetadata.getExpirationTime() == Utils.Infinite_Time;
+        boolean deleted = blobMetadata.getDeletionTime() > 0;
+        MessageInfo messageInfo =
+            new MessageInfo(blobId, blobMetadata.getSize(), deleted, ttlUpdated, blobMetadata.getExpirationTime(),
+                (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(),
+                getOperationTime(blobMetadata));
         messageInfos.add(messageInfo);
         blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
       }
@@ -157,6 +164,8 @@ class CloudBlobStore implements Store {
   void downloadBlob(CloudBlobMetadata cloudBlobMetadata, BlobId blobId, OutputStream outputStream)
       throws StoreException {
     try {
+      // TODO: for GET ops, avoid extra trip to fetch metadata unless config flag is set
+      // TODO: if needed, fetch metadata here and check encryption
       if (cloudBlobMetadata.getEncryptionOrigin().equals(EncryptionOrigin.VCR)) {
         ByteBuffer encryptedBlob = ByteBuffer.allocate((int) cloudBlobMetadata.getEncryptedSize());
         cloudDestination.downloadBlob(blobId, new ByteBufferOutputStream(encryptedBlob));

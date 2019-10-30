@@ -78,12 +78,8 @@ import static org.junit.Assert.*;
 public class CloudRouterTest {
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
   private static final int REQUEST_TIMEOUT_MS = 1000;
-  private static final int PUT_REQUEST_PARALLELISM = 1;
-  private static final int PUT_SUCCESS_TARGET = 1;
-  private static final int GET_REQUEST_PARALLELISM = 1;
-  private static final int GET_SUCCESS_TARGET = 1;
-  private static final int DELETE_REQUEST_PARALLELISM = 1;
-  private static final int DELETE_SUCCESS_TARGET = 1;
+  private static final int SUCCESS_TARGET = 1;
+  private static final int REQUEST_PARALLELISM = 1;
   private static final int PUT_CONTENT_SIZE = 1000;
   private static final int USER_METADATA_SIZE = 10;
   private int maxPutChunkSize = PUT_CONTENT_SIZE;
@@ -127,7 +123,8 @@ public class CloudRouterTest {
     this.testEncryption = testEncryption;
     this.metadataContentVersion = metadataContentVersion;
     mockTime = new MockTime();
-    mockClusterMap = new MockClusterMap();
+    // Single node cloud clustermap
+    mockClusterMap = new MockClusterMap(false, 1, 1, 1, false);
     NonBlockingRouter.currentOperationsCount.set(0);
     VerifiableProperties vProps = new VerifiableProperties(new Properties());
     singleKeyForKMS = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
@@ -139,6 +136,10 @@ public class CloudRouterTest {
 
   @After
   public void after() {
+    // Any single test failure should not impact others.
+    if (router != null && router.isOpen()) {
+      router.close();
+    }
     Assert.assertEquals("Current operations count should be 0", 0, NonBlockingRouter.currentOperationsCount.get());
   }
 
@@ -151,13 +152,15 @@ public class CloudRouterTest {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", routerDataCenter);
-    properties.setProperty("router.put.request.parallelism", Integer.toString(PUT_REQUEST_PARALLELISM));
-    properties.setProperty("router.put.success.target", Integer.toString(PUT_SUCCESS_TARGET));
+    properties.setProperty("router.put.request.parallelism", Integer.toString(REQUEST_PARALLELISM));
+    properties.setProperty("router.put.success.target", Integer.toString(SUCCESS_TARGET));
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(maxPutChunkSize));
-    properties.setProperty("router.get.request.parallelism", Integer.toString(GET_REQUEST_PARALLELISM));
-    properties.setProperty("router.get.success.target", Integer.toString(GET_SUCCESS_TARGET));
-    properties.setProperty("router.delete.request.parallelism", Integer.toString(DELETE_REQUEST_PARALLELISM));
-    properties.setProperty("router.delete.success.target", Integer.toString(DELETE_SUCCESS_TARGET));
+    properties.setProperty("router.get.request.parallelism", Integer.toString(REQUEST_PARALLELISM));
+    properties.setProperty("router.get.success.target", Integer.toString(SUCCESS_TARGET));
+    properties.setProperty("router.delete.request.parallelism", Integer.toString(REQUEST_PARALLELISM));
+    properties.setProperty("router.delete.success.target", Integer.toString(SUCCESS_TARGET));
+    properties.setProperty("router.ttl.update.request.parallelism", Integer.toString(REQUEST_PARALLELISM));
+    properties.setProperty("router.ttl.update.success.target", Integer.toString(SUCCESS_TARGET));
     properties.setProperty("router.connection.checkout.timeout.ms", Integer.toString(CHECKOUT_TIMEOUT_MS));
     properties.setProperty("router.request.timeout.ms", Integer.toString(REQUEST_TIMEOUT_MS));
     properties.setProperty("router.connections.local.dc.warm.up.percentage", Integer.toString(67));

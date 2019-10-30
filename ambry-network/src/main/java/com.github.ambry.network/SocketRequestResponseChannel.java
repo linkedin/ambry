@@ -30,7 +30,7 @@ class SocketServerRequest implements Request {
   private final String connectionId;
   private final InputStream input;
   private final long startTimeInMs;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(SocketServerRequest.class);
 
   public SocketServerRequest(int processor, String connectionId, InputStream input) throws IOException {
     this.processor = processor;
