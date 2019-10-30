@@ -31,6 +31,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * An implementation of {@link RequestResponseChannel} that buffers messages in local queues.
+ * This class enables the Frontend router to call AmbryRequest methods in process.
+ */
 public class LocalRequestResponseChannel implements RequestResponseChannel {
 
   private static final Logger logger = LoggerFactory.getLogger(LocalRequestResponseChannel.class);
@@ -74,6 +78,11 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
     }
   }
 
+  /**
+   * Receive all queued responses corresponding to requests matching a processor id.
+   * @param processorId the processor id to match.
+   * @return the applicable responses.
+   */
   public List<ResponseInfo> receiveResponses(int processorId) {
     List<ResponseInfo> responseList = getResponseList(processorId);
     synchronized (responseList) {
@@ -88,6 +97,10 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
     }
   }
 
+  /**
+   * @return the response list corresponding to a processor id.
+   * @param processorId the processor id to match.
+   */
   private List<ResponseInfo> getResponseList(int processorId) {
     return responseMap.computeIfAbsent(processorId, p -> new ArrayList<>());
   }
@@ -115,6 +128,9 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
     return buffer;
   }
 
+  /**
+   * A {@link Request} implementation that works with {@link LocalRequestResponseChannel}.
+   */
   static class LocalChannelRequest implements Request {
     private RequestInfo requestInfo;
     private InputStream input;
