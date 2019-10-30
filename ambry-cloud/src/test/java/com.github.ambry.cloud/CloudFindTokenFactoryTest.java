@@ -38,11 +38,11 @@ public class CloudFindTokenFactoryTest {
     short version = 0;
     FindTokenType findTokenType = FindTokenType.CloudBased;
     Random random = new Random();
-    long latestBlobUploadTime = random.nextLong();
+    long latestBlobUdateTime = random.nextLong();
     String latestBlobId = UtilsTest.getRandomString(10);
     long bytesRead = random.nextLong();
 
-    CloudFindToken cloudFindToken1 = new CloudFindToken(version, latestBlobUploadTime, latestBlobId, bytesRead);
+    CloudFindToken cloudFindToken1 = new CloudFindToken(version, latestBlobUdateTime, latestBlobId, bytesRead);
     DataInputStream stream = new DataInputStream(new ByteArrayInputStream(cloudFindToken1.toBytes()));
     CloudFindToken cloudFindToken2 = (CloudFindToken) new CloudFindTokenFactory().getFindToken(stream);
     assertEquals("incorrect token returned from factory", cloudFindToken1, cloudFindToken2);

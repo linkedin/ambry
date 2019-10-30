@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
 import java.util.Objects;
@@ -48,6 +49,10 @@ public class CloudBlobMetadata {
   private String cryptoAgentFactory;
   private String cloudBlobName;
   private long encryptedSize;
+  // this field is derived from the system generated last Update Time in the cloud db
+  // and hence shouldn't be serializable.
+  @JsonIgnore
+  private long lastUpdateTime;
 
   /**
    * Possible values of encryption origin for cloud stored blobs.
@@ -111,6 +116,7 @@ public class CloudBlobMetadata {
     this.cryptoAgentFactory = cryptoAgentFactory;
     this.cloudBlobName = blobId.getID();
     this.encryptedSize = encryptedSize;
+    this.lastUpdateTime = Utils.Infinite_Time;
   }
 
   /**
@@ -344,6 +350,21 @@ public class CloudBlobMetadata {
   public CloudBlobMetadata setEncryptedSize(long encryptedSize) {
     this.encryptedSize = encryptedSize;
     return this;
+  }
+
+  /**
+   * @return the last update time of the blob.
+   */
+  public long getLastUpdateTime() {
+    return lastUpdateTime;
+  }
+
+  /**
+   * Sets the last update time of the blob.
+   * @param lastUpdateTime last update time.
+   */
+  public void setLastUpdateTime(long lastUpdateTime) {
+    this.lastUpdateTime = lastUpdateTime;
   }
 
   @Override

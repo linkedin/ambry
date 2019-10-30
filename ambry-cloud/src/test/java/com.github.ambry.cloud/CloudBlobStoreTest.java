@@ -291,7 +291,7 @@ public class CloudBlobStoreTest {
     when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(Collections.emptyList());
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
     assertTrue(findInfo.getMessageEntries().isEmpty());
-    FindToken finalToken = (CloudFindToken) findInfo.getFindToken();
+    FindToken finalToken = findInfo.getFindToken();
     assertEquals(outputToken, finalToken);
   }
 
@@ -562,6 +562,7 @@ public class CloudBlobStoreTest {
       CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, blobSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       metadata.setUploadTime(startTime + j);
+      metadata.setLastUpdateTime(startTime + j);
       metadataList.add(metadata);
     }
     return metadataList;

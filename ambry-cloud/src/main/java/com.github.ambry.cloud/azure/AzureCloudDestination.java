@@ -118,7 +118,7 @@ class AzureCloudDestination implements CloudDestination {
     // Check for proxy
     if (cloudConfig.vcrProxyHost != null) {
       logger.info("Using proxy: {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
-      blobOpContext.setDefaultProxy(
+      OperationContext.setDefaultProxy(
           new Proxy(Proxy.Type.HTTP, new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort)));
     }
     // Set up CosmosDB connection, including any proxy setting
@@ -654,6 +654,7 @@ class AzureCloudDestination implements CloudDestination {
     map.put(CloudBlobMetadata.FIELD_VCR_KMS_CONTEXT, String.valueOf(cloudBlobMetadata.getVcrKmsContext()));
     map.put(CloudBlobMetadata.FIELD_CRYPTO_AGENT_FACTORY, String.valueOf(cloudBlobMetadata.getCryptoAgentFactory()));
     map.put(CloudBlobMetadata.FIELD_CLOUD_BLOB_NAME, String.valueOf(cloudBlobMetadata.getCloudBlobName()));
+    map.put(CloudBlobMetadata.FIELD_UPDATE_TIME, String.valueOf(cloudBlobMetadata.getLastUpdateTime()));
     return map;
   }
 }

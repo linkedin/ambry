@@ -70,7 +70,7 @@ public class CloudFindToken implements FindToken {
     } else {
       CloudBlobMetadata lastResult = queryResults.get(queryResults.size() - 1);
       long bytesReadThisQuery = queryResults.stream().mapToLong(CloudBlobMetadata::getSize).sum();
-      return new CloudFindToken(lastResult.getUploadTime(), lastResult.getId(),
+      return new CloudFindToken(lastResult.getLastUpdateTime(), lastResult.getId(),
           prevToken.getBytesRead() + bytesReadThisQuery);
     }
   }
@@ -120,7 +120,7 @@ public class CloudFindToken implements FindToken {
     switch (version) {
       case VERSION_0:
         FindTokenType type = FindTokenType.values()[stream.readShort()];
-        long latestUploadTime = stream.readLong();
+        long lastUpdateTime = stream.readLong();
         long bytesRead = stream.readLong();
         short latestBlobIdLength = stream.readShort();
         String latestBlobId = null;
@@ -129,7 +129,7 @@ public class CloudFindToken implements FindToken {
           stream.read(latestBlobIdbytes, 0, (int) latestBlobIdLength);
           latestBlobId = new String(latestBlobIdbytes);
         }
-        cloudFindToken = new CloudFindToken(version, latestUploadTime, latestBlobId, bytesRead);
+        cloudFindToken = new CloudFindToken(version, lastUpdateTime, latestBlobId, bytesRead);
         break;
       default:
         throw new IllegalStateException("Unknown version: " + version);
@@ -172,7 +172,7 @@ public class CloudFindToken implements FindToken {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("version: ").append(version);
-    sb.append(" latestUploadTime: ").append(lastUpdateTime);
+    sb.append(" lastUpdateTime: ").append(lastUpdateTime);
     sb.append(" latestBlobId: ").append(latestBlobId);
     sb.append(" bytesRead: ").append(bytesRead);
     return sb.toString();

@@ -80,6 +80,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
+    cloudBlobMetadata.setLastUpdateTime(System.currentTimeMillis());
     map.put(blobId, new Pair<>(cloudBlobMetadata, outputStream.toByteArray()));
     blobsUploadedCounter.incrementAndGet();
     if (blobIdsToTrack.remove(blobId)) {
@@ -109,6 +110,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       return false;
     }
     map.get(blobId).getFirst().setDeletionTime(deletionTime);
+    map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
     return true;
   }
 
@@ -116,6 +118,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   public boolean updateBlobExpiration(BlobId blobId, long expirationTime) {
     if (map.containsKey(blobId)) {
       map.get(blobId).getFirst().setExpirationTime(expirationTime);
+      map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
       return true;
     } else {
       return false;
@@ -143,7 +146,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       long maxTotalSizeOfEntries) {
     List<CloudBlobMetadata> entries = new LinkedList<>();
     for (BlobId blobId : map.keySet()) {
-      if (map.get(blobId).getFirst().getUploadTime() > findToken.getLastUpdateTime()) {
+      if (map.get(blobId).getFirst().getLastUpdateTime() > findToken.getLastUpdateTime()) {
         entries.add(map.get(blobId).getFirst());
       }
     }

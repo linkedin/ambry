@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
@@ -37,6 +38,7 @@ import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
 import com.microsoft.azure.documentdb.SqlQuerySpec;
 import com.microsoft.azure.storage.CloudStorageAccount;
+import com.microsoft.azure.storage.OperationContext;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
@@ -287,7 +289,7 @@ public class AzureCloudDestinationTest {
       blobIdList.add(blobId);
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
-      docList.add(new Document(objectMapper.writeValueAsString(inputMetadata)));
+      docList.add(createDocumentFromCloudBlobMetadata(inputMetadata));
     }
     when(mockIterable.iterator()).thenReturn(docList.iterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
@@ -307,7 +309,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testGetDeadBlobs() throws Exception {
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
-    when(mockIterable.iterator()).thenReturn(Collections.<Document>emptyList().iterator());
+    when(mockIterable.iterator()).thenReturn(Collections.emptyIterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
@@ -335,7 +337,7 @@ public class AzureCloudDestinationTest {
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       inputMetadata.setUploadTime(startTime + j);
-      docList.add(new Document(objectMapper.writeValueAsString(inputMetadata)));
+      docList.add(createDocumentFromCloudBlobMetadata(inputMetadata));
     }
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
     when(mockIterable.iterator()).thenReturn(docList.iterator());
@@ -417,7 +419,7 @@ public class AzureCloudDestinationTest {
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics);
     // check operation context proxy
-    assertNull("Expected null proxy in blob op context", dest.getBlobOpContext().getDefaultProxy());
+    assertNull("Expected null proxy in blob op context", OperationContext.getDefaultProxy());
     assertNull("Expected null proxy in doc client", dest.getDocumentClient().getConnectionPolicy().getProxy());
 
     // Test with proxy
@@ -427,7 +429,7 @@ public class AzureCloudDestinationTest {
     configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics);
-    assertNotNull("Expected proxy in blob op context", dest.getBlobOpContext().getDefaultProxy());
+    assertNotNull("Expected proxy in blob op context", OperationContext.getDefaultProxy());
     HttpHost policyProxy = dest.getDocumentClient().getConnectionPolicy().getProxy();
     assertNotNull("Expected proxy in doc client", policyProxy);
     assertEquals("Wrong host", proxyHost, policyProxy.getHostName());
@@ -514,6 +516,18 @@ public class AzureCloudDestinationTest {
     assertTrue("Expected retrieveTokens to return true", azureDest.retrieveTokens(path, tokenFile, outputStream));
     mockBlobExistence(false);
     assertFalse("Expected retrieveTokens to return false", azureDest.retrieveTokens(path, tokenFile, outputStream));
+  }
+
+  /**
+   * Create {@link Document} object from {@link CloudBlobMetadata} object.
+   * @param cloudBlobMetadata {@link CloudBlobMetadata} object.
+   * @return {@link Document} object.
+   */
+  private Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata)
+      throws JsonProcessingException {
+    Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
+    document.set(CloudBlobMetadata.FIELD_UPDATE_TIME, System.currentTimeMillis());
+    return document;
   }
 
   /**
