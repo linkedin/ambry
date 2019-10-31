@@ -85,8 +85,8 @@ class AzureCloudDestination implements CloudDestination {
   // be multiple VCR's uploading same partition).  We track the lastBlobId in the CloudFindToken and skip it if
   // is returned in successive queries.
   static final String ENTRIES_SINCE_QUERY_TEMPLATE =
-      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPDATE_TIME + " >= "
-          + TIME_SINCE_PARAM + " ORDER BY c." + CloudBlobMetadata.FIELD_UPDATE_TIME + " ASC";
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN + " >= "
+          + TIME_SINCE_PARAM + " ORDER BY c." + CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN + " ASC";
   private static final String SEPARATOR = "-";
   private static final int findSinceQueryLimit = 1000;
   private final CloudStorageAccount azureAccount;
@@ -675,7 +675,7 @@ class AzureCloudDestination implements CloudDestination {
     map.put(CloudBlobMetadata.FIELD_VCR_KMS_CONTEXT, String.valueOf(cloudBlobMetadata.getVcrKmsContext()));
     map.put(CloudBlobMetadata.FIELD_CRYPTO_AGENT_FACTORY, String.valueOf(cloudBlobMetadata.getCryptoAgentFactory()));
     map.put(CloudBlobMetadata.FIELD_CLOUD_BLOB_NAME, String.valueOf(cloudBlobMetadata.getCloudBlobName()));
-    map.put(CloudBlobMetadata.FIELD_UPDATE_TIME, String.valueOf(cloudBlobMetadata.getLastUpdateTime()));
+    map.put(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, String.valueOf(cloudBlobMetadata.getLastUpdateTime()));
     return map;
   }
 }

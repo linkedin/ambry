@@ -620,7 +620,7 @@ public class AzureCloudDestinationTest {
   private Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, long uploadTime)
       throws JsonProcessingException {
     Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
-    document.set(CloudBlobMetadata.FIELD_UPDATE_TIME, uploadTime);
+    document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, uploadTime);
     return document;
   }
 

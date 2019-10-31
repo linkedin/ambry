@@ -38,6 +38,7 @@ public class CosmosDataAccessor {
   private static final Logger logger = LoggerFactory.getLogger(CosmosDataAccessor.class);
   private static final int HTTP_TOO_MANY_REQUESTS = 429;
   private static final String DOCS = "/docs/";
+  public static final String COSMOS_LAST_UPDATED_COLUMN = "_ts";
   private final DocumentClient documentClient;
   private final String cosmosCollectionLink;
   private final AzureMetrics azureMetrics;
@@ -167,7 +168,7 @@ public class CosmosDataAccessor {
    */
   CloudBlobMetadata createMetadataFromDocument(Document document) {
     CloudBlobMetadata cloudBlobMetadata = document.toObject(CloudBlobMetadata.class);
-    cloudBlobMetadata.setLastUpdateTime(document.getLong(CloudBlobMetadata.FIELD_UPDATE_TIME));
+    cloudBlobMetadata.setLastUpdateTime(document.getLong(COSMOS_LAST_UPDATED_COLUMN));
     return cloudBlobMetadata;
   }
 

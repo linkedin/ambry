@@ -33,7 +33,6 @@ public class CloudBlobMetadata {
   public static final String FIELD_VCR_KMS_CONTEXT = "vcrKmsContext";
   public static final String FIELD_CRYPTO_AGENT_FACTORY = "cryptoAgentFactory";
   public static final String FIELD_CLOUD_BLOB_NAME = "cloudBlobName";
-  public static final String FIELD_UPDATE_TIME = "_ts";
 
   private String id;
   private String partitionId;
@@ -116,7 +115,7 @@ public class CloudBlobMetadata {
     this.cryptoAgentFactory = cryptoAgentFactory;
     this.cloudBlobName = blobId.getID();
     this.encryptedSize = encryptedSize;
-    this.lastUpdateTime = Utils.Infinite_Time;
+    this.lastUpdateTime = System.currentTimeMillis();
   }
 
   /**
