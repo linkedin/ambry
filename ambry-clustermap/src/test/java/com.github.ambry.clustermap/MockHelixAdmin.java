@@ -185,6 +185,14 @@ public class MockHelixAdmin implements HelixAdmin {
     triggerInstanceConfigChangeNotification(tagAsInit);
   }
 
+  /**
+   * Add new resource and its associated ideal state into cluster (Note that, each dc has its own HelixAdmin so resource
+   * is actually added into dc where current HelixAdmin sits). This would trigger ideal state change which should be captured
+   * by Helix Cluster Manager on each node.
+   * @param resourceName name of resource. (The resource may contain one or more partitions)
+   * @param idealstate ideal state associated with the resource. (it defines location of each replica from each partition)
+   * @throws Exception
+   */
   void addNewResource(String resourceName, IdealState idealstate) throws Exception {
     resourcesToIdealStates.put(resourceName, idealstate);
     triggerIdealStateChangeNotification();
@@ -326,12 +334,20 @@ public class MockHelixAdmin implements HelixAdmin {
     return writablePartitions;
   }
 
+  /**
+   * Get states of all partitions that reside on given instance.
+   * @param instanceName the name of instance where partitions reside
+   * @return a map representing states of partitions from given instance.
+   */
   Map<String, Map<String, String>> getPartitionStateMapForInstance(String instanceName) {
     ReplicaStateInfos replicaStateInfos = instanceToReplicaStateInfos.get(instanceName);
     return replicaStateInfos != null ? replicaStateInfos.getReplicaStateMap() : new HashMap<>();
   }
 
-  Map<String, String> getPartitionToLeaderReplica(){
+  /**
+   * @return a map of partition to its leader replica in current dc.
+   */
+  Map<String, String> getPartitionToLeaderReplica() {
     return Collections.unmodifiableMap(partitionToLeaderReplica);
   }
 
@@ -358,6 +374,9 @@ public class MockHelixAdmin implements HelixAdmin {
     return totalDiskCapacity;
   }
 
+  /**
+   * Private class that holds partition state infos from one data node.
+   */
   class ReplicaStateInfos {
     Map<String, Map<String, String>> replicaStateMap;
 

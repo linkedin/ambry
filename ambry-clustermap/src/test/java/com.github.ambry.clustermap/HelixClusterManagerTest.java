@@ -500,6 +500,10 @@ public class HelixClusterManagerTest {
     assertStateEquivalency(expectedDownInstances, expectedUpInstances);
   }
 
+  /**
+   * Test helix initiated ideal state change can be correctly handled by {@link HelixClusterManager}.
+   * @throws Exception
+   */
   @Test
   public void helixInitiatedIdealStateChangeTest() throws Exception {
     assumeTrue(!useComposite && !overrideEnabled);
@@ -519,6 +523,10 @@ public class HelixClusterManagerTest {
         .containsKey(partitionName));
   }
 
+  /**
+   * Test that routing table change reflects correct state of each replica and {@link HelixClusterManager} is able to get
+   * replica in required state.
+   */
   @Test
   public void routingTableProviderChangeTest() {
     assumeTrue(!useComposite && !overrideEnabled);
@@ -1078,8 +1086,8 @@ public class HelixClusterManagerTest {
   // Helpers
 
   /**
-   * Verify that {@link HelixClusterManager} received and handled initial cluster changes (i.e InstanceConfig, IdealState
-   * change), and populated the in-mem clustermap is correctly
+   * Verify that {@link HelixClusterManager} receives and handles initial cluster changes (i.e InstanceConfig, IdealState
+   * change), and populates the in-mem clustermap correctly.
    * @param clusterManager the {@link HelixClusterManager} to use for verification.
    * @param helixCluster the {@link MockHelixCluster} to provide cluster infos
    */

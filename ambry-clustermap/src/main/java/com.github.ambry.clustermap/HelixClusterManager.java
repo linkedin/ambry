@@ -383,7 +383,7 @@ class HelixClusterManager implements ClusterMap {
     byte[] partitionBytes = AmbryPartition.readPartitionBytesFromStream(stream);
     AmbryPartition partition = partitionMap.get(ByteBuffer.wrap(partitionBytes));
     if (partition == null) {
-      throw new IOException("Partition id from stream is null");
+      throw new IOException("Partition id from stream is unknown (not present in current clustermap)");
     }
     return partition;
   }
@@ -513,14 +513,23 @@ class HelixClusterManager implements ClusterMap {
     return Collections.unmodifiableMap(dcToDcZkInfo);
   }
 
+  /**
+   * @return a map of partition to its corresponding resource grouped by data center
+   */
   Map<String, ConcurrentHashMap<String, String>> getPartitionToResourceMap() {
     return Collections.unmodifiableMap(partitionToResourceNameByDc);
   }
 
+  /**
+   * @return a map of data center to its data nodes
+   */
   Map<String, Set<AmbryDataNode>> getDcToDataNodesMap() {
     return Collections.unmodifiableMap(dcToNodes);
   }
 
+  /**
+   * @return a map of data center to its {@link RoutingTableSnapshot}
+   */
   Map<String, AtomicReference<RoutingTableSnapshot>> getRoutingTableSnapshots() {
     return Collections.unmodifiableMap(dcToRoutingTableSnapshotRef);
   }
@@ -573,6 +582,12 @@ class HelixClusterManager implements ClusterMap {
       }
     }
 
+    /**
+     * Triggered whenever the IdealState in current data center has changed (for now, it is usually updated by Helix Bootstrap tool).
+     * @param idealState a list of {@link IdealState} that specifies ideal location of replicas.
+     * @param changeContext the {@link NotificationContext} associated.
+     * @throws InterruptedException
+     */
     @Override
     public void onIdealStateChange(List<IdealState> idealState, NotificationContext changeContext)
         throws InterruptedException {
@@ -616,21 +631,18 @@ class HelixClusterManager implements ClusterMap {
       }
     }
 
+    /**
+     * Triggered whenever the state of replica in cluster has changed. The snapshot contains up-to-date state of all
+     * resources(replicas) in this data center.
+     * @param routingTableSnapshot a snapshot of routing table for this data center.
+     * @param context additional context associated with this change.
+     */
     @Override
     public void onRoutingTableChange(RoutingTableSnapshot routingTableSnapshot, Object context) {
       logger.info("Routing table change triggered from {}", dcName);
       synchronized (notificationLock) {
         dcToRoutingTableSnapshotRef.get(dcName).getAndSet(routingTableSnapshot);
         helixClusterManagerMetrics.routingTableChangeTriggerCount.inc();
-//        System.out.println("======= ROUTING TABLE CHANGE! " + dcName + " =====");
-//        for (String partitionName : partitionNameToAmbryPartition.keySet()) {
-//          System.out.println(partitionName + ": leader instances are: ");
-//          routingTableSnapshot.getInstancesForResource("0", partitionName, ReplicaState.LEADER.name())
-//              .forEach(e -> System.out.println(e));
-//          System.out.println(partitionName + ": standby instances are: ");
-//          routingTableSnapshot.getInstancesForResource("0", partitionName, ReplicaState.STANDBY.name())
-//              .forEach(e -> System.out.println(e));
-//        }
       }
     }
 
@@ -853,7 +865,7 @@ class HelixClusterManager implements ClusterMap {
      * @param dcZkInfo the {@link DcZkInfo} associated with the DC.
      * @param helixManager the associated {@link HelixManager} for this datacenter.
      * @param clusterChangeHandler the associated {@link ClusterChangeHandler} for this datacenter.
-     * @param routingTableProvider
+     * @param routingTableProvider the associated {@link RoutingTableProvider} for this datacenter.
      */
     DcInfo(String dcName, DcZkInfo dcZkInfo, HelixManager helixManager, ClusterChangeHandler clusterChangeHandler,
         RoutingTableProvider routingTableProvider) {

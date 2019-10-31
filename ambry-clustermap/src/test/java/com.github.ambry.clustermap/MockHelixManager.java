@@ -203,10 +203,6 @@ class MockHelixManager implements HelixManager {
     idealStateChangeListener.onIdealStateChange(mockAdmin.getIdealStates(), notificationContext);
   }
 
-  void triggerRoutingTableProviderNotification() {
-    //routingTableProvider.onR();
-  }
-
   //****************************
   // Not implemented.
   //****************************

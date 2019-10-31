@@ -1101,7 +1101,8 @@ class HelixBootstrapUpgradeUtil {
       }
     }
     if (expectMoreInHelixDuringValidate) {
-      ensureOrThrow(allPartitionsToInstancesInHelix.keySet().equals(partitionsNotForceRemovedByDc.get(dcName)),
+      ensureOrThrow(allPartitionsToInstancesInHelix.keySet()
+              .equals(partitionsNotForceRemovedByDc.getOrDefault(dcName, new HashSet<>())),
           "Additional partitions in Helix: " + allPartitionsToInstancesInHelix.keySet() + " not what is expected "
               + partitionsNotForceRemovedByDc.get(dcName));
       info("*** Helix may have more partitions or replicas than in the given clustermap as removals were not forced.");

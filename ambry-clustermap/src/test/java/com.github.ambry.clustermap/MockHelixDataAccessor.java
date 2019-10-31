@@ -32,6 +32,10 @@ import org.apache.helix.model.PauseSignal;
 import org.apache.helix.model.StateModelDefinition;
 
 
+/**
+ * A class that mocks {@link HelixDataAccessor} to help with {@link org.apache.helix.spectator.RoutingTableProvider}
+ * creation and any state changes within cluster. Some methods are hard coded to directly return result we need.
+ */
 public class MockHelixDataAccessor implements HelixDataAccessor {
   private static final String SESSION_ID = "sessionId";
   private final String LIVEINSTANCE_PATH;
