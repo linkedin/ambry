@@ -18,7 +18,6 @@ import com.github.ambry.network.LocalRequestResponseChannel.LocalChannelRequest;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.nio.ByteBuffer;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -47,7 +46,8 @@ public class LocalNetworkClient implements NetworkClient {
    * @param networkMetrics the metrics to track the network related metrics
    * @param time The Time instance to use.
    */
-  public LocalNetworkClient(LocalRequestResponseChannel channel, int processorId, NetworkMetrics networkMetrics, Time time) {
+  public LocalNetworkClient(LocalRequestResponseChannel channel, int processorId, NetworkMetrics networkMetrics,
+      Time time) {
     this.channel = channel;
     this.processorId = processorId;
     this.networkMetrics = networkMetrics;
@@ -89,16 +89,9 @@ public class LocalNetworkClient implements NetworkClient {
       networkMetrics.networkClientException.inc();
     }
 
-    try {
-      return channel.receiveResponses(processorId);
-      // TODO: update network metrics?
-    } catch (Exception e) {
-      logger.error("Received an unexpected error during sendAndPoll(): ", e);
-      networkMetrics.networkClientException.inc();
-      return Collections.emptyList();
-    } finally {
-      networkMetrics.networkClientSendAndPollTime.update(time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
-    }
+    List<ResponseInfo> responses = channel.receiveResponses(processorId);
+    networkMetrics.networkClientSendAndPollTime.update(time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
+    return responses;
   }
 
   /**

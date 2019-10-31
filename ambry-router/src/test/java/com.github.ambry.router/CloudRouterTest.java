@@ -48,7 +48,6 @@ import org.slf4j.LoggerFactory;
 public class CloudRouterTest extends NonBlockingRouterTest {
   private static final int SUCCESS_TARGET = 1;
   private static final int REQUEST_PARALLELISM = 1;
-  private static final int PUT_CONTENT_SIZE = 1000;
   private static final Logger logger = LoggerFactory.getLogger(CloudRouterTest.class);
 
   /**
@@ -89,6 +88,7 @@ public class CloudRouterTest extends NonBlockingRouterTest {
   @Override
   protected Properties getNonBlockingRouterProperties(String routerDataCenter) {
     Properties properties = super.getNonBlockingRouterProperties(routerDataCenter);
+    // Set parallelism and success quorum to 1 for all operations
     properties.setProperty("router.put.request.parallelism", Integer.toString(REQUEST_PARALLELISM));
     properties.setProperty("router.put.success.target", Integer.toString(SUCCESS_TARGET));
     properties.setProperty("router.get.request.parallelism", Integer.toString(REQUEST_PARALLELISM));
