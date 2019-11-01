@@ -25,8 +25,8 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -56,6 +56,7 @@ public class NetworkClient implements Closeable {
   private final HashMap<String, RequestMetadata> pendingConnectionsToAssociatedRequests;
   private final AtomicLong numPendingRequests;
   private final int checkoutTimeoutMs;
+  private long nextReplenishMs;
   private boolean closed = false;
   private static final Logger logger = LoggerFactory.getLogger(NetworkClient.class);
 
@@ -83,6 +84,7 @@ public class NetworkClient implements Closeable {
     connectionIdToRequestInFlight = new HashMap<>();
     correlationIdInFlightToConnectionId = new HashMap<>();
     pendingConnectionsToAssociatedRequests = new HashMap<>();
+    nextReplenishMs = time.milliseconds() + ThreadLocalRandom.current().nextInt(Time.MsPerSec);
     networkMetrics.registerNetworkClientPendingConnections(numPendingRequests);
   }
 
@@ -226,9 +228,15 @@ public class NetworkClient implements Closeable {
    * If enabled, initiate new connections to reach the minimum number of open connections per remote host.
    */
   private void replenishConnections() {
-    if (networkConfig.networkClientEnableConnectionReplenishment) {
-      int connectionsInitiated = connectionTracker.replenishConnections(this::connect);
-      networkMetrics.connectionReplenished.inc(connectionsInitiated);
+    long currentTimeMs = time.milliseconds();
+    if (networkConfig.networkClientEnableConnectionReplenishment && currentTimeMs >= nextReplenishMs) {
+      int connectionsInitiated = connectionTracker.replenishConnections(this::connect,
+          networkConfig.networkClientMaxReplenishmentPerHostPerSecond);
+      if (connectionsInitiated > 0) {
+        networkMetrics.connectionReplenished.inc(connectionsInitiated);
+        logger.debug("replenishConnections initiated {} connections", connectionsInitiated);
+        nextReplenishMs = currentTimeMs + Time.MsPerSec;
+      }
     }
   }
 
@@ -257,7 +265,7 @@ public class NetworkClient implements Closeable {
     }
     dataNodeIds.forEach(dataNodeId -> connectionTracker.setMinimumActiveConnectionsPercentage(dataNodeId,
         connectionWarmUpPercentagePerDataNode));
-    int expectedConnections = connectionTracker.replenishConnections(this::connect);
+    int expectedConnections = connectionTracker.replenishConnections(this::connect, Integer.MAX_VALUE);
 
     long startTime = System.currentTimeMillis();
     int successfulConnections = 0;
