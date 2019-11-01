@@ -211,7 +211,7 @@ class BlockingChannelInfo {
           if (config.connectionPoolSocketResetOnError) {
             channel.reset();
           } else {
-            channel.disconnect()
+            channel.disconnect();
           }
           numberOfConnections.decrementAndGet();
         } while (true);
