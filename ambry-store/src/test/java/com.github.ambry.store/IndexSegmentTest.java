@@ -437,12 +437,12 @@ public class IndexSegmentTest {
    */
   @Test
   public void populateBloomFilterWithUuidTest() throws Exception {
-    assumeTrue(version > PersistentIndex.VERSION_0);
+    assumeTrue(formatVersion > PersistentIndex.VERSION_0);
     // with default config, bloom filter will be populated by whole blob id bytes array
     String logSegmentName1 = LogSegmentNameHelper.getName(0, 0);
     IndexSegment indexSegment1 =
         new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName1, 0), STORE_KEY_FACTORY,
-            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, config,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, config,
             metrics, time);
     Random random = new Random();
     short accountId1 = getRandomShort(random);
@@ -460,7 +460,7 @@ public class IndexSegmentTest {
     MockId id2 = new MockId(idStr, accountId2, containerId2);
     IndexValue value1 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName1, 0), Utils.Infinite_Time, time.milliseconds(),
-            accountId1, containerId1, version);
+            accountId1, containerId1, (short) 0, formatVersion);
     indexSegment1.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName1, 1000));
     indexSegment1.writeIndexSegmentToFile(new Offset(logSegmentName1, 1000));
     indexSegment1.seal();
@@ -478,7 +478,7 @@ public class IndexSegmentTest {
     String logSegmentName2 = LogSegmentNameHelper.getName(1, 0);
     IndexSegment indexSegment2 =
         new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName2, 0), STORE_KEY_FACTORY,
-            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, storeConfig,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, storeConfig,
             metrics, time);
     indexSegment2.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName2, 1000));
     indexSegment2.writeIndexSegmentToFile(new Offset(logSegmentName2, 1000));
