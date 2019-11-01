@@ -208,7 +208,7 @@ class BlockingChannelInfo {
           if (channel == null) {
             break;
           }
-          channel.disconnect();
+          channel.reset();
           numberOfConnections.decrementAndGet();
         } while (true);
       }
