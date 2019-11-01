@@ -41,8 +41,8 @@ import com.github.ambry.network.SendWithCorrelationId;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
-import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.BlobStoreControlAction;
+import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.GetOption;
@@ -253,7 +253,7 @@ public class ServerAdminTool implements Closeable {
       origins = verifiableProperties.getString("replication.origins", "").split(",");
       acceptableLagInBytes = verifiableProperties.getLongInRange("acceptable.lag.in.bytes", 0, 0, Long.MAX_VALUE);
       numReplicasCaughtUpPerPartition =
-          verifiableProperties.getShortInRange("num.replicas.caught.up.per.partition", Short.MAX_VALUE, (short) 1,
+          verifiableProperties.getShortInRange("num.replicas.caught.up.per.partition", Short.MAX_VALUE, (short) 0,
               Short.MAX_VALUE);
       storeControlRequestType =
           BlobStoreControlAction.valueOf(verifiableProperties.getString("store.control.request.type"));
@@ -413,6 +413,8 @@ public class ServerAdminTool implements Closeable {
     serverAdminTool.close();
     outputFileStream.close();
     clusterMap.close();
+    System.out.println("Server admin tool is safely closed");
+    System.exit(0);
   }
 
   /**
@@ -513,8 +515,8 @@ public class ServerAdminTool implements Closeable {
    * @throws TimeoutException
    */
   private static void sendBlobStoreControlRequest(ServerAdminTool serverAdminTool, DataNodeId dataNodeId,
-      PartitionId partitionId, short numReplicasCaughtUpPerPartition,
-      BlobStoreControlAction storeControlRequestType) throws IOException, TimeoutException {
+      PartitionId partitionId, short numReplicasCaughtUpPerPartition, BlobStoreControlAction storeControlRequestType)
+      throws IOException, TimeoutException {
     ServerErrorCode errorCode =
         serverAdminTool.controlBlobStore(dataNodeId, partitionId, numReplicasCaughtUpPerPartition,
             storeControlRequestType);

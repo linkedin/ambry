@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
@@ -125,6 +126,7 @@ public class AmbryServerRequestsTest {
   private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
   private final MockStoreKeyConverterFactory storeKeyConverterFactory;
   private final ReplicationConfig replicationConfig;
+  private final ReplicaStatusDelegate mockDelegate = Mockito.mock(ReplicaStatusDelegate.class);
 
   public AmbryServerRequestsTest()
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
@@ -157,6 +159,8 @@ public class AmbryServerRequestsTest {
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, false,
         storeKeyConverterFactory, statsManager);
     storageManager.start();
+    Mockito.when(mockDelegate.unseal(any())).thenReturn(true);
+    Mockito.when(mockDelegate.unmarkStopped(anyList())).thenReturn(true);
   }
 
   /**
@@ -278,11 +282,11 @@ public class AmbryServerRequestsTest {
   public void controlReplicationFailureTest() throws InterruptedException, IOException {
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = false;
-    sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false,
+    sendAndVerifyReplicationControlRequest(Collections.emptyList(), false,
         clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0), ServerErrorCode.Bad_Request);
     replicationManager.reset();
     replicationManager.exceptionToThrow = new IllegalStateException();
-    sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false,
+    sendAndVerifyReplicationControlRequest(Collections.emptyList(), false,
         clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0), ServerErrorCode.Unknown_Error);
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
   }
@@ -417,6 +421,7 @@ public class AmbryServerRequestsTest {
     BlobStore mockStore = Mockito.mock(BlobStore.class);
     storageManager.overrideStoreToReturn = mockStore;
     doNothing().when(mockStore).deleteStoreFiles();
+    Mockito.when(mockStore.getReplicaStatusDelegate()).thenReturn(mockDelegate);
     sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.No_Error);
     storageManager.overrideStoreToReturn = null;
@@ -480,6 +485,7 @@ public class AmbryServerRequestsTest {
         ServerErrorCode.Unknown_Error);
     // test store removal success case
     doNothing().when(mockStore).deleteStoreFiles();
+    Mockito.when(mockStore.getReplicaStatusDelegate()).thenReturn(mockDelegate);
     sendAndVerifyStoreControlRequest(newPartition, BlobStoreControlAction.RemoveStore, (short) 0,
         ServerErrorCode.No_Error);
     storageManager.overrideStoreToReturn = null;

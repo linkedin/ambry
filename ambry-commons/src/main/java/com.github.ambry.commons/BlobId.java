@@ -195,8 +195,8 @@ public class BlobId extends StoreKey {
    * @param blobDataType The blob data type.
    * @param uuidStr The uuid that is to be used to construct this id.
    */
-  private BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
-      PartitionId partitionId, boolean isEncrypted, BlobDataType blobDataType, String uuidStr) {
+  BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId, PartitionId partitionId,
+      boolean isEncrypted, BlobDataType blobDataType, String uuidStr) {
     if (partitionId == null) {
       throw new IllegalArgumentException("partitionId cannot be null");
     }
@@ -490,6 +490,29 @@ public class BlobId extends StoreKey {
         break;
     }
     return idBuf.array();
+  }
+
+  @Override
+  public byte[] getUuidBytesArray() {
+    ByteBuffer uuidBuf;
+    switch (version) {
+      case BLOB_ID_V1:
+      case BLOB_ID_V2:
+      case BLOB_ID_V3:
+      case BLOB_ID_V4:
+      case BLOB_ID_V5:
+        byte[] uuidBytes = getUuid().getBytes();
+        uuidBuf = ByteBuffer.allocate((short) uuidBytes.length);
+        uuidBuf.put(uuidBytes);
+        break;
+      case BLOB_ID_V6:
+        uuidBuf = ByteBuffer.allocate(UuidSerDe.SIZE_IN_BYTES);
+        UuidSerDe.serialize(uuid, uuidBuf);
+        break;
+      default:
+        throw new IllegalArgumentException("blobId version=" + version + " not supported");
+    }
+    return uuidBuf.array();
   }
 
   @Override

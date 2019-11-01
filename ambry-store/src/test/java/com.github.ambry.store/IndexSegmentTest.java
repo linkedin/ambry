@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -47,6 +48,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.store.IndexSegment.*;
+import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -425,6 +428,94 @@ public class IndexSegmentTest {
       fail("should fail");
     } catch (StoreException e) {
       assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Test populating bloom filter with whole blob id and with UUID respectively.
+   * @throws Exception
+   */
+  @Test
+  public void populateBloomFilterWithUuidTest() throws Exception {
+    assumeTrue(version > PersistentIndex.VERSION_0);
+    // with default config, bloom filter will be populated by whole blob id bytes array
+    String logSegmentName1 = LogSegmentNameHelper.getName(0, 0);
+    IndexSegment indexSegment1 =
+        new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName1, 0), STORE_KEY_FACTORY,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, config,
+            metrics, time);
+    Random random = new Random();
+    short accountId1 = getRandomShort(random);
+    short containerId1 = getRandomShort(random);
+    short accountId2, containerId2;
+    do {
+      accountId2 = getRandomShort(random);
+    } while (accountId2 == accountId1);
+    do {
+      containerId2 = getRandomShort(random);
+    } while (containerId2 == containerId1);
+    String idStr = UtilsTest.getRandomString(CUSTOM_ID_SIZE);
+    // generate two ids with same id string but different account/container.
+    MockId id1 = new MockId(idStr, accountId1, containerId1);
+    MockId id2 = new MockId(idStr, accountId2, containerId2);
+    IndexValue value1 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName1, 0), Utils.Infinite_Time, time.milliseconds(),
+            accountId1, containerId1, version);
+    indexSegment1.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName1, 1000));
+    indexSegment1.writeIndexSegmentToFile(new Offset(logSegmentName1, 1000));
+    indexSegment1.seal();
+    // test that id1 can be found in index segment but id2 should be non-existent because bloom filter considers it not present
+    Set<IndexValue> findResult = indexSegment1.find(id1);
+    assertNotNull("Should have found the added key", findResult);
+    assertEquals(accountId1, findResult.iterator().next().getAccountId());
+    assertNull("Should have failed to find non existent key", indexSegment1.find(id2));
+
+    // create second index segment whose bloom filter is populated with UUID only.
+    // We add id1 into indexSegment2 and attempt to get id2 which should succeed.
+    Properties properties = new Properties();
+    properties.setProperty("store.uuid.based.bloom.filter.enabled", Boolean.toString(true));
+    StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
+    String logSegmentName2 = LogSegmentNameHelper.getName(1, 0);
+    IndexSegment indexSegment2 =
+        new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName2, 0), STORE_KEY_FACTORY,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1, storeConfig,
+            metrics, time);
+    indexSegment2.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName2, 1000));
+    indexSegment2.writeIndexSegmentToFile(new Offset(logSegmentName2, 1000));
+    indexSegment2.seal();
+    findResult = indexSegment2.find(id1);
+    assertNotNull("Should have found the id1", findResult);
+    // test that we are able to get id2 from indexSegment2
+    findResult = indexSegment2.find(id2);
+    assertNotNull("Should have found the id2", findResult);
+    // verify that the found entry actually has account/container associated with id1
+    IndexValue indexValue = findResult.iterator().next();
+    assertTrue("Account or container is not expected",
+        indexValue.getAccountId() == accountId1 && indexValue.getContainerId() == containerId1);
+    File bloomFile1 =
+        new File(tempDir, generateIndexSegmentFilenamePrefix(new Offset(logSegmentName1, 0)) + BLOOM_FILE_NAME_SUFFIX);
+    assertTrue("The bloom file should exist", bloomFile1.exists());
+    // rebuild bloom filter in indexSegment1
+    properties.setProperty("store.index.rebuild.bloom.filter.enabled", Boolean.toString(true));
+    storeConfig = new StoreConfig(new VerifiableProperties(properties));
+    IndexSegment indexSegmentFromFile =
+        new IndexSegment(indexSegment1.getFile(), true, STORE_KEY_FACTORY, storeConfig, metrics, null, time);
+    // test that id2 is found in reconstructed index segment (with bloom filter rebuilt based on UUID only)
+    findResult = indexSegmentFromFile.find(id2);
+    assertNotNull("Should have found the id2", findResult);
+    indexValue = findResult.iterator().next();
+    assertTrue("Account or container is not expected",
+        indexValue.getAccountId() == accountId1 && indexValue.getContainerId() == containerId1);
+
+    // additional test: exception occurs when deleting previous bloom file
+    assertTrue("Could not make unwritable", tempDir.setWritable(false));
+    try {
+      new IndexSegment(indexSegment1.getFile(), true, STORE_KEY_FACTORY, storeConfig, metrics, null, time);
+      fail("Deletion on unwritable file should fail");
+    } catch (StoreException e) {
+      assertEquals("Error code is not expected.", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+    } finally {
+      assertTrue("Could not make writable", tempDir.setWritable(true));
     }
   }
 
@@ -1060,12 +1151,11 @@ public class IndexSegmentTest {
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time of the index segment in ms
    * @param resetKey the resetKey of the index segment
-   * @throws IOException
    * @throws StoreException
    */
   private void verifyReadFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, File file,
       Offset startOffset, int numItems, int expectedSizeWritten, long endOffset, long lastModifiedTimeInMs,
-      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) throws IOException, StoreException {
+      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) throws StoreException {
     // read from file (not sealed) and verify that everything is ok
     Journal journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     IndexSegment fromDisk = createIndexSegmentFromFile(file, false, journal);
@@ -1074,7 +1164,7 @@ public class IndexSegmentTest {
     // journal should contain all the entries
     verifyJournal(referenceIndex, journal);
     File bloomFile = new File(file.getParent(),
-        IndexSegment.generateIndexSegmentFilenamePrefix(startOffset) + IndexSegment.BLOOM_FILE_NAME_SUFFIX);
+        IndexSegment.generateIndexSegmentFilenamePrefix(startOffset) + BLOOM_FILE_NAME_SUFFIX);
     fromDisk.seal();
     assertTrue("Bloom file does not exist", bloomFile.exists());
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
@@ -1113,13 +1203,11 @@ public class IndexSegmentTest {
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time of the index segment in ms
    * @param resetKey the resetKey of the index segment
-   * @throws IOException
    * @throws StoreException
    */
   private void verifyAllForIndexSegmentFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
       IndexSegment fromDisk, Offset startOffset, int numItems, int expectedSizeWritten, boolean sealed, long endOffset,
-      long lastModifiedTimeInMs, Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey)
-      throws StoreException, IOException {
+      long lastModifiedTimeInMs, Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) throws StoreException {
     verifyIndexSegmentDetails(fromDisk, startOffset, numItems, expectedSizeWritten, sealed, endOffset,
         lastModifiedTimeInMs, resetKey);
     verifyFind(referenceIndex, fromDisk);

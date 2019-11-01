@@ -16,6 +16,8 @@ package com.github.ambry.router;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
@@ -60,6 +62,69 @@ public class GCMCryptoServiceTest {
         ByteBuffer decryptedBytes = cryptoService.decrypt(encryptedBytes, secretKeySpec);
         Assert.assertArrayEquals("Decrypted bytes and plain bytes should match", randomData, decryptedBytes.array());
       }
+    }
+  }
+
+  /**
+   * Test basic encryption and decryption for random data in {@link ByteBuf}.
+   * @throws Exception Any unexpected error
+   */
+  @Test
+  public void testEncryptDecryptNettyByteBuf() throws Exception {
+    // testEncryptDecryptBytes already tests the correctness of the encrypt decrypt methods with ByteBuffer, in this
+    // test case, we can make the assumption that these two functions always provide correct answers.
+
+    String key = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+    Properties props = getKMSProperties(key, DEFAULT_KEY_SIZE_IN_CHARS);
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
+    GCMCryptoService cryptoService =
+        (GCMCryptoService) (new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService());
+    byte[] fixedIv = new byte[12];
+    for (int i = 0; i < 5; i++) {
+      int size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE);
+      byte[] randomData = new byte[size];
+      TestUtils.RANDOM.nextBytes(randomData);
+      ByteBuffer toEncrypt = ByteBuffer.wrap(randomData);
+      ByteBuf toEncryptByteBufHeap = ByteBufAllocator.DEFAULT.heapBuffer(size);
+      ByteBuf toEncryptByteBufDirect = ByteBufAllocator.DEFAULT.ioBuffer(size);
+      toEncryptByteBufHeap.writeBytes(randomData);
+      toEncryptByteBufDirect.writeBytes(randomData);
+
+      ByteBuffer encryptedBytes = cryptoService.encrypt(toEncrypt, secretKeySpec, fixedIv);
+      ByteBuf encryptedBytesByteBufHeap = cryptoService.encrypt(toEncryptByteBufHeap, secretKeySpec, fixedIv);
+      ByteBuf encryptedBytesByteBufDirect = cryptoService.encrypt(toEncryptByteBufDirect, secretKeySpec, fixedIv);
+
+      // EncryptedByteBuf should be a head buffer always.
+      Assert.assertTrue(encryptedBytesByteBufHeap.hasArray());
+      Assert.assertTrue(encryptedBytesByteBufDirect.hasArray());
+      Assert.assertEquals(encryptedBytes.remaining(), encryptedBytesByteBufHeap.readableBytes());
+      Assert.assertEquals(encryptedBytes.remaining(), encryptedBytesByteBufDirect.readableBytes());
+
+      byte[] arrayFromByteBuf = new byte[encryptedBytesByteBufHeap.readableBytes()];
+      encryptedBytesByteBufHeap.getBytes(encryptedBytesByteBufHeap.readerIndex(), arrayFromByteBuf);
+      Assert.assertArrayEquals(encryptedBytes.array(), arrayFromByteBuf);
+      encryptedBytesByteBufDirect.getBytes(encryptedBytesByteBufDirect.readerIndex(), arrayFromByteBuf);
+      Assert.assertArrayEquals(encryptedBytes.array(), arrayFromByteBuf);
+
+      ByteBuf toDecryptByteBufHeap = encryptedBytesByteBufHeap;
+      ByteBuf toDecryptByteBufDirect = ByteBufAllocator.DEFAULT.ioBuffer(encryptedBytesByteBufHeap.readableBytes());
+      toDecryptByteBufDirect.writeBytes(toDecryptByteBufHeap, 0, toDecryptByteBufHeap.readableBytes());
+
+      ByteBuffer decryptedBytes = cryptoService.decrypt(encryptedBytes, secretKeySpec);
+      ByteBuf decryptedBytesByteBufHeap = cryptoService.decrypt(toDecryptByteBufHeap, secretKeySpec);
+      ByteBuf decryptedBytesByteBufDirect = cryptoService.decrypt(toDecryptByteBufDirect, secretKeySpec);
+
+      Assert.assertTrue(decryptedBytesByteBufHeap.hasArray());
+      Assert.assertTrue(decryptedBytesByteBufDirect.hasArray());
+      Assert.assertEquals(decryptedBytes.remaining(), decryptedBytesByteBufHeap.readableBytes());
+      Assert.assertEquals(decryptedBytes.remaining(), decryptedBytesByteBufDirect.readableBytes());
+
+      arrayFromByteBuf = new byte[decryptedBytesByteBufHeap.readableBytes()];
+      decryptedBytesByteBufHeap.getBytes(decryptedBytesByteBufHeap.readerIndex(), arrayFromByteBuf);
+      Assert.assertArrayEquals(decryptedBytes.array(), arrayFromByteBuf);
+      decryptedBytesByteBufDirect.getBytes(decryptedBytesByteBufDirect.readerIndex(), arrayFromByteBuf);
+      Assert.assertArrayEquals(decryptedBytes.array(), arrayFromByteBuf);
     }
   }
 

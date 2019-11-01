@@ -168,6 +168,12 @@ class IndexSegment {
       endOffset = new AtomicReference<>(startOffset);
       indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix(startOffset);
       bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
+      if (bloomFile.exists() && config.storeIndexRebuildBloomFilterEnabled) {
+        if (!bloomFile.delete()) {
+          throw new StoreException("Could not delete bloom file named " + bloomFile, StoreErrorCodes.Unknown_Error);
+        }
+        logger.info(bloomFile + " is successfully deleted and will be rebuilt based on index segment");
+      }
       if (sealed) {
         map();
         if (!bloomFile.exists()) {
@@ -331,7 +337,7 @@ class IndexSegment {
         if (bloomFilter != null) {
           metrics.bloomAccessedCount.inc();
         }
-        if (bloomFilter == null || bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
+        if (bloomFilter == null || bloomFilter.isPresent(getStoreKeyBytes(keyToFind))) {
           if (bloomFilter == null) {
             logger.trace("IndexSegment {} bloom filter empty. Searching file with start offset {} and for key {}",
                 indexFile.getAbsolutePath(), startOffset, keyToFind);
@@ -389,6 +395,17 @@ class IndexSegment {
   }
 
   /**
+   * According to config, get the {@link ByteBuffer} of {@link StoreKey} for bloom filter. The store config specifies
+   * whether to populate bloom filter with key's UUID only.
+   * @param key the store key to use in bloom filter.
+   * @return required {@link ByteBuffer} associated with the key.
+   */
+  private ByteBuffer getStoreKeyBytes(StoreKey key) {
+    return config.storeUuidBasedBloomFilterEnabled ? ByteBuffer.wrap(key.getUuidBytesArray())
+        : ByteBuffer.wrap(key.toBytes());
+  }
+
+  /**
    * Generate bloom filter by walking through all index entries in this segment and persist it.
    * @throws StoreException
    */
@@ -397,7 +414,7 @@ class IndexSegment {
     bloomFilter = FilterFactory.getFilter(numOfIndexEntries, config.storeIndexBloomMaxFalsePositiveProbability);
     for (int i = 0; i < numOfIndexEntries; i++) {
       StoreKey key = getKeyAt(serEntries, i);
-      bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
+      bloomFilter.add(getStoreKeyBytes(key));
     }
     persistBloomFilter();
   }
@@ -517,7 +534,7 @@ class IndexSegment {
       boolean isPresent = index.containsKey(entry.getKey());
       index.computeIfAbsent(entry.getKey(), key -> new ConcurrentSkipListSet<>()).add(entry.getValue());
       if (!isPresent) {
-        bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
+        bloomFilter.add(getStoreKeyBytes(entry.getKey()));
       }
       if (resetKey == null) {
         PersistentIndex.IndexEntryType type = PersistentIndex.IndexEntryType.PUT;
@@ -885,7 +902,7 @@ class IndexSegment {
               blobValue.getOffset(), blobValue.getSize());
           // regenerate the bloom filter for index segments that are not sealed
           if (!isPresent) {
-            bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
+            bloomFilter.add(getStoreKeyBytes(key));
           }
           // add to the journal
           long oMsgOff = blobValue.getOriginalMessageOffset();
