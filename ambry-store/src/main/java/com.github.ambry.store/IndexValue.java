@@ -134,7 +134,7 @@ class IndexValue implements Comparable<IndexValue> {
         break;
       case PersistentIndex.VERSION_3:
         if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V3) {
-          throw new IllegalArgumentException("Invalid buffer size for formatVersion 1");
+          throw new IllegalArgumentException("Invalid buffer size for formatVersion 3");
         }
         size = value.getLong();
         offset = new Offset(logSegmentName, value.getLong());
@@ -386,11 +386,11 @@ class IndexValue implements Comparable<IndexValue> {
   @Override
   public String toString() {
     return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isFlagSet(Flags.Delete_Index)
-        + ", TTL Updated: " + isFlagSet(Flags.Ttl_Update_Index) + ", Undelete Updated: " + isFlagSet(
+        + ", TTL Updated: " + isFlagSet(Flags.Ttl_Update_Index) + ", Undelete: " + isFlagSet(
         Flags.Undelete_Index) + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: "
         + getOriginalMessageOffset() + (formatVersion != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs "
         + getOperationTimeInMs() + ", AccountId " + getAccountId() + ", ContainerId " + getContainerId())
-        : "") + (formatVersion > PersistentIndex.VERSION_2 ? ", Update Version:" + lifeVersion : "");
+        : "") + (formatVersion > PersistentIndex.VERSION_2 ? ", Life Version:" + lifeVersion : "");
   }
 
   /**

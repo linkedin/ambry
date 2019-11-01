@@ -59,7 +59,7 @@ class PersistentIndex {
    * Represents the different types of index entries.
    */
   enum IndexEntryType {
-    TTL_UPDATE, PUT, DELETE
+    TTL_UPDATE, PUT, DELETE, UNDELETE
   }
 
   static final short VERSION_0 = 0;
