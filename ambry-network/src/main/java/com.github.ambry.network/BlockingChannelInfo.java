@@ -208,7 +208,11 @@ class BlockingChannelInfo {
           if (channel == null) {
             break;
           }
-          channel.reset();
+          if (config.connectionPoolSocketResetOnError) {
+            channel.reset();
+          } else {
+            channel.disconnect()
+          }
           numberOfConnections.decrementAndGet();
         } while (true);
       }

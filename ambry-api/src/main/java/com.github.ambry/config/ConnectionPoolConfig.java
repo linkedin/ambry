@@ -60,6 +60,13 @@ public class ConnectionPoolConfig {
   @Default("2")
   public final int connectionPoolMaxConnectionsPerPortSSL;
 
+  /**
+   * Use TCP RST instead of FIN on replication socket error
+   */
+  @Config("connectionpool.socket.reset.on.error")
+  @Default(true)
+  public final boolean connectionPoolSocketResetOnError;
+
   public ConnectionPoolConfig(VerifiableProperties verifiableProperties) {
     connectionPoolReadBufferSizeBytes =
         verifiableProperties.getIntInRange("connectionpool.read.buffer.size.bytes", 1048576, 1, 1024 * 1024 * 1024);
