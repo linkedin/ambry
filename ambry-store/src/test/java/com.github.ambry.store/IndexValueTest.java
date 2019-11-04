@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -48,7 +49,8 @@ public class IndexValueTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{PersistentIndex.VERSION_0}, {PersistentIndex.VERSION_1}, {PersistentIndex.VERSION_2}});
+        new Object[][]{{PersistentIndex.VERSION_0}, {PersistentIndex.VERSION_1}, {PersistentIndex.VERSION_2},
+            {PersistentIndex.VERSION_3}});
   }
 
   /**
@@ -73,6 +75,7 @@ public class IndexValueTest {
     long expectedOperationTimeV1 = Utils.getTimeInMsToTheNearestSec(operationTimeAtMs);
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    short updateVersion = (short) 0;
 
     List<Long> testExpiresAtMs = new ArrayList<>();
     // random value
@@ -99,9 +102,9 @@ public class IndexValueTest {
     for (long expiresAtMs : testExpiresAtMs) {
       IndexValue value =
           getIndexValue(size, new Offset(logSegmentName, offset), expiresAtMs, operationTimeAtMs, accountId,
-              containerId, version);
+              containerId, updateVersion, version);
       verifyIndexValue(value, logSegmentName, size, offset, EnumSet.noneOf(IndexValue.Flags.class), expiresAtMs, offset,
-          expectedOperationTimeV1, accountId, containerId);
+          expectedOperationTimeV1, accountId, containerId, updateVersion);
     }
   }
 
@@ -121,9 +124,10 @@ public class IndexValueTest {
     long expectedOperationTimeMs = Utils.getTimeInMsToTheNearestSec(operationTimeAtMs);
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    short updateVersion = (short) 0;
     IndexValue value =
         getIndexValue(size, new Offset(logSegmentName, offset), expiresAtMs, operationTimeAtMs, accountId, containerId,
-            version);
+            updateVersion, version);
     long originalMsgOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long originalMsgSize = Utils.getRandomLong(TestUtils.RANDOM, 1000);
 
@@ -151,12 +155,12 @@ public class IndexValueTest {
         newValue.setOriginalMessageOffset(originalMsgOff);
       }
       verifyIndexValue(newValue, logSegmentName, expectedSize, expectedOffset, EnumSet.of(flag), expiresAtMs,
-          expectedOriginalMsgOffset, expectedOperationTimeMs, accountId, containerId);
+          expectedOriginalMsgOffset, expectedOperationTimeMs, accountId, containerId, updateVersion);
 
       // original message offset cleared
       newValue.clearOriginalMessageOffset();
       verifyIndexValue(newValue, logSegmentName, expectedSize, expectedOffset, EnumSet.of(flag), expiresAtMs,
-          IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET, expectedOperationTimeMs, accountId, containerId);
+          IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET, expectedOperationTimeMs, accountId, containerId, updateVersion);
 
       newValue = new IndexValue(logSegmentName, value.getBytes(), version);
       String newLogSegmentName = LogSegmentNameHelper.getNextPositionName(logSegmentName);
@@ -174,7 +178,7 @@ public class IndexValueTest {
         newValue.setOriginalMessageOffset(originalMsgOff);
       }
       verifyIndexValue(newValue, expectedLogSegmentName, expectedSize, expectedOffset, EnumSet.of(flag), expiresAtMs,
-          IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET, expectedOperationTimeMs, accountId, containerId);
+          IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET, expectedOperationTimeMs, accountId, containerId, updateVersion);
     }
 
     // clearFlag() test
@@ -184,17 +188,17 @@ public class IndexValueTest {
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     verifyIndexValue(newValue, logSegmentName, size, offset,
         EnumSet.of(IndexValue.Flags.Ttl_Update_Index, IndexValue.Flags.Delete_Index), expiresAtMs, offset,
-        expectedOperationTimeMs, accountId, containerId);
+        expectedOperationTimeMs, accountId, containerId, updateVersion);
     // clear the delete flag
     newValue.clearFlag(IndexValue.Flags.Delete_Index);
     verifyIndexValue(newValue, logSegmentName, size, offset, EnumSet.of(IndexValue.Flags.Ttl_Update_Index), expiresAtMs,
-        offset, expectedOperationTimeMs, accountId, containerId);
+        offset, expectedOperationTimeMs, accountId, containerId, updateVersion);
     // clear again (to check that it does not cause problems)
     newValue.clearFlag(IndexValue.Flags.Delete_Index);
     // clear the ttl update flag
     newValue.clearFlag(IndexValue.Flags.Ttl_Update_Index);
     verifyIndexValue(newValue, logSegmentName, size, offset, EnumSet.noneOf(IndexValue.Flags.class), expiresAtMs,
-        offset, expectedOperationTimeMs, accountId, containerId);
+        offset, expectedOperationTimeMs, accountId, containerId, updateVersion);
   }
 
   /**
@@ -211,10 +215,11 @@ public class IndexValueTest {
    * @param operationTimeInMs the operation time in ms
    * @param accountId the accountId of the Index value
    * @param containerId the containerId of the Index value
+   * @param updateVersion the update version of the Index value
    */
   private void verifyIndexValue(IndexValue value, String logSegmentName, long size, long offset,
       EnumSet<IndexValue.Flags> flags, long expiresAtMs, long originalMessageOffset, long operationTimeInMs,
-      short accountId, short containerId) {
+      short accountId, short containerId, short updateVersion) {
     switch (version) {
       case PersistentIndex.VERSION_0:
         operationTimeInMs = Utils.Infinite_Time;
@@ -223,16 +228,17 @@ public class IndexValueTest {
         break;
       case PersistentIndex.VERSION_1:
       case PersistentIndex.VERSION_2:
+      case PersistentIndex.VERSION_3:
         expiresAtMs = expiresAtMs >= 0 ? Utils.getTimeInMsToTheNearestSec(expiresAtMs) : Utils.Infinite_Time;
         expiresAtMs =
             TimeUnit.MILLISECONDS.toSeconds(expiresAtMs) > Integer.MAX_VALUE ? Utils.Infinite_Time : expiresAtMs;
         break;
     }
     verifyGetters(value, logSegmentName, size, offset, flags, expiresAtMs, originalMessageOffset, operationTimeInMs,
-        accountId, containerId);
+        accountId, containerId, updateVersion);
     // check value after ser-deser
     verifyGetters(new IndexValue(logSegmentName, value.getBytes(), version), logSegmentName, size, offset, flags,
-        expiresAtMs, originalMessageOffset, operationTimeInMs, accountId, containerId);
+        expiresAtMs, originalMessageOffset, operationTimeInMs, accountId, containerId, updateVersion);
     verifyInvalidValueSize(value, logSegmentName);
   }
 
@@ -249,11 +255,12 @@ public class IndexValueTest {
    * @param operationTimeInMs the operation time in ms
    * @param accountId the accountId of the Index value
    * @param containerId the containerId of the Index value
+   * @param updateVersion the update version of the Index value
    */
   private void verifyGetters(IndexValue value, String logSegmentName, long size, long offset,
       EnumSet<IndexValue.Flags> flags, long expiresAtMs, long originalMessageOffset, long operationTimeInMs,
-      short accountId, short containerId) {
-    assertEquals("Version is not as expected", version, value.getVersion());
+      short accountId, short containerId, short updateVersion) {
+    assertEquals("Version is not as expected", version, value.getFormatVersion());
     assertEquals("Size is not as expected", size, value.getSize());
     assertEquals("Offset is not as expected", new Offset(logSegmentName, offset), value.getOffset());
     for (IndexValue.Flags flagToCheck : IndexValue.Flags.values()) {
@@ -265,11 +272,12 @@ public class IndexValueTest {
     assertEquals("AccountId mismatch ", accountId, value.getAccountId());
     assertEquals("ContainerId mismatch ", containerId, value.getContainerId());
     assertEquals("Original message offset not as expected", originalMessageOffset, value.getOriginalMessageOffset());
+    assertEquals("UpdateVersion mismatch", updateVersion, value.getLifeVersion());
   }
 
   /**
    * Verifies that construction of {@link IndexValue} fails with an invalid {@link ByteBuffer} value
-   * @param value the source {@link IndexValue} to contruct the bad one
+   * @param value the source {@link IndexValue} to construct the bad one
    * @param logSegmentName the log segment name to be used to construct the {@link IndexValue}
    */
   private void verifyInvalidValueSize(IndexValue value, String logSegmentName) {
@@ -279,7 +287,7 @@ public class IndexValueTest {
     try {
       new IndexValue(logSegmentName, invalidValue, version);
       fail(
-          "Contruction of IndexValue expected to fail with invalid byte buffer capacity of " + invalidValue.capacity());
+          "Construction of IndexValue expected to fail with invalid byte buffer capacity of " + invalidValue.capacity());
     } catch (IllegalArgumentException e) {
     }
   }
@@ -292,13 +300,14 @@ public class IndexValueTest {
    * @param operationTimeInMs operation time of the entry in ms
    * @param accountId the accountId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
-   * @param version the version with which to construct the {@link IndexValue}
+   * @param updateVersion the update version of the Index value
+   * @param formatVersion the format version with which to construct the {@link IndexValue}
    * @return the {@link IndexValue} thus constructed
    */
   static IndexValue getIndexValue(long size, Offset offset, long expirationTimeInMs, long operationTimeInMs,
-      short accountId, short containerId, short version) {
+      short accountId, short containerId, short updateVersion, short formatVersion) {
     return getIndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, expirationTimeInMs, offset.getOffset(),
-        operationTimeInMs, accountId, containerId, version);
+        operationTimeInMs, accountId, containerId, updateVersion, formatVersion);
   }
 
   /**
@@ -310,7 +319,7 @@ public class IndexValueTest {
   static IndexValue getIndexValue(IndexValue value, short version) {
     return getIndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
         value.getOriginalMessageOffset(), value.getOperationTimeInMs(), value.getAccountId(), value.getContainerId(),
-        version);
+        (short) 0, version);
   }
 
   // Instantiation of {@link IndexValue} in version {@link PersistentIndex#VERSION_0}
@@ -324,12 +333,13 @@ public class IndexValueTest {
    * @param operationTimeMs the time of the operation in ms (irrelevant to V0)
    * @param accountId the account that the blob represented by this value belongs to (irrelevant to V0)
    * @param containerId the container that the blob represented by this value belongs to (irrelevant to V0)
+   * @param updateVersion the update version of the Index value
    * @return the {@link IndexValue} thus constructed
    */
   static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset,
-      long operationTimeMs, short accountId, short containerId, short version) {
+      long operationTimeMs, short accountId, short containerId, short updateVersion, short persistentIndexVersion) {
     IndexValue indexValue;
-    switch (version) {
+    switch (persistentIndexVersion) {
       case PersistentIndex.VERSION_0:
         ByteBuffer value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0);
         value.putLong(size);
@@ -341,14 +351,32 @@ public class IndexValueTest {
         indexValue = new IndexValue(offset.getName(), value, PersistentIndex.VERSION_0);
         break;
       case PersistentIndex.VERSION_1:
-        IndexValue interim = new IndexValue(size, offset, flags, expiresAtMs, operationTimeMs, accountId, containerId);
+        IndexValue interim =
+            new IndexValue(size, offset, flags, expiresAtMs, operationTimeMs, accountId, containerId, updateVersion);
         indexValue = new IndexValue(offset.getName(), interim.getBytes(), PersistentIndex.VERSION_1);
         break;
       case PersistentIndex.VERSION_2:
-        indexValue = new IndexValue(size, offset, flags, expiresAtMs, operationTimeMs, accountId, containerId);
+        indexValue =
+            new IndexValue(size, offset, flags, expiresAtMs, operationTimeMs, accountId, containerId, updateVersion);
+        break;
+
+      case PersistentIndex.VERSION_3:
+        value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3);
+        value.putLong(size);
+        value.putLong(offset.getOffset());
+        value.put(flags);
+        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
+        value.putLong(originalMessageOffset);
+        value.putInt(
+            operationTimeMs != Utils.Infinite_Time ? (int) (operationTimeMs / Time.MsPerSec) : (int) operationTimeMs);
+        value.putShort(accountId);
+        value.putShort(containerId);
+        value.putShort(updateVersion);
+        value.position(0);
+        indexValue = new IndexValue(offset.getName(), value, PersistentIndex.VERSION_3);
         break;
       default:
-        throw new IllegalArgumentException("Unrecognized version: " + version);
+        throw new IllegalArgumentException("Unrecognized version: " + persistentIndexVersion);
     }
     return indexValue;
   }
