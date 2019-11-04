@@ -102,6 +102,20 @@ public class BlockingChannel implements ConnectedChannel {
     }
   }
 
+  public void reset() {
+    synchronized (lock) {
+      try {
+        if (connected || channel != null) {
+          // Setting SO_LINGER to true and time to 0 to send TCP RST instead of TCP FIN
+          channel.socket().setSoLinger(true, 0);
+        }
+      } catch (Exception e) {
+        logger.error("Error while setting socket linger option {}", e);
+      }
+    }
+    this.disconnect();
+  }
+
   public boolean isConnected() {
     return connected;
   }
