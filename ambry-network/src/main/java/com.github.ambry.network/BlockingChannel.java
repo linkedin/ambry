@@ -16,6 +16,7 @@ package com.github.ambry.network;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SocketChannel;
@@ -39,6 +40,7 @@ public class BlockingChannel implements ConnectedChannel {
   protected InputStream readChannel = null;
   protected WritableByteChannel writeChannel = null;
   protected Object lock = new Object();
+  private Socket socket = null;
   private SocketChannel channel = null;
 
   public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs,
@@ -62,17 +64,18 @@ public class BlockingChannel implements ConnectedChannel {
           channel.socket().setSendBufferSize(writeBufferSize);
         }
         channel.configureBlocking(true);
-        channel.socket().setSoTimeout(readTimeoutMs);
-        channel.socket().setKeepAlive(true);
-        channel.socket().setTcpNoDelay(true);
-        channel.socket().connect(new InetSocketAddress(host, port), connectTimeoutMs);
+        socket = channel.socket();
+        socket.setSoTimeout(readTimeoutMs);
+        socket.setKeepAlive(true);
+        socket.setTcpNoDelay(true);
+        socket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
         writeChannel = channel;
-        readChannel = channel.socket().getInputStream();
+        readChannel = socket.getInputStream();
         connected = true;
         logger.debug("Created socket with SO_TIMEOUT = {} (requested {}), "
-                + "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})", channel.socket().getSoTimeout(),
-            readTimeoutMs, channel.socket().getReceiveBufferSize(), readBufferSize,
-            channel.socket().getSendBufferSize(), writeBufferSize);
+                + "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})", socket.getSoTimeout(),
+            readTimeoutMs, socket.getReceiveBufferSize(), readBufferSize,
+            socket.getSendBufferSize(), writeBufferSize);
       }
     }
   }
@@ -80,11 +83,10 @@ public class BlockingChannel implements ConnectedChannel {
   public void disconnect() {
     synchronized (lock) {
       try {
-        if (connected || channel != null) {
+        if (connected || socket != null) {
           // closing the main socket channel *should* close the read channel
           // but let's do it to be sure.
-          channel.close();
-          channel.socket().close();
+          socket.close();
           if (readChannel != null) {
             readChannel.close();
             readChannel = null;
@@ -105,9 +107,9 @@ public class BlockingChannel implements ConnectedChannel {
   public void reset() {
     synchronized (lock) {
       try {
-        if (connected || channel != null) {
+        if (connected || socket != null) {
           // Setting SO_LINGER to true and time to 0 to send TCP RST instead of TCP FIN
-          channel.socket().setSoLinger(true, 0);
+          socket.setSoLinger(true, 0);
         }
       } catch (Exception e) {
         logger.error("Error while setting socket linger option {}", e);
