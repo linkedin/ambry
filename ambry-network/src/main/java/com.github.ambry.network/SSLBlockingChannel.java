@@ -53,18 +53,8 @@ public class SSLBlockingChannel extends BlockingChannel {
   @Override
   public void connect() throws IOException {
     synchronized (lock) {
-      if (!connected) {
-        Socket socket = new Socket();
-        socket.setSoTimeout(readTimeoutMs);
-        socket.setKeepAlive(true);
-        socket.setTcpNoDelay(true);
-        if (readBufferSize > 0) {
-          socket.setReceiveBufferSize(readBufferSize);
-        }
-        if (writeBufferSize > 0) {
-          socket.setSendBufferSize(writeBufferSize);
-        }
-        socket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
+      super.connect();
+      if (connected) {
         sslSocket = (SSLSocket) sslSocketFactory.createSocket(socket, host, port, true);
 
         ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
