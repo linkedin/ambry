@@ -86,7 +86,6 @@ public class BlockingChannel implements ConnectedChannel {
         if (connected || socket != null) {
           // closing the main socket channel *should* close the read channel
           // but let's do it to be sure.
-          socket.close();
           if (readChannel != null) {
             readChannel.close();
             readChannel = null;
@@ -95,6 +94,7 @@ public class BlockingChannel implements ConnectedChannel {
             writeChannel.close();
             writeChannel = null;
           }
+          socket.close();
           channel = null;
           connected = false;
         }
