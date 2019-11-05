@@ -30,7 +30,7 @@ import javax.net.ssl.SSLSocketFactory;
  * A blocking channel that is used to communicate with a server using SSL
  */
 public class SSLBlockingChannel extends BlockingChannel {
-  private SSLSocket sslSocket = null;
+  private SSLSocket socket = null;
   private final SSLSocketFactory sslSocketFactory;
   private final SSLConfig sslConfig;
   public final Counter sslClientHandshakeErrorCount;
@@ -54,34 +54,34 @@ public class SSLBlockingChannel extends BlockingChannel {
   public void connect() throws IOException {
     synchronized (lock) {
       if (!connected) {
-        Socket socket = new Socket();
-        socket.setSoTimeout(readTimeoutMs);
-        socket.setKeepAlive(true);
-        socket.setTcpNoDelay(true);
+        Socket tcpSocket = new Socket();
+        tcpSocket.setSoTimeout(readTimeoutMs);
+        tcpSocket.setKeepAlive(true);
+        tcpSocket.setTcpNoDelay(true);
         if (readBufferSize > 0) {
-          socket.setReceiveBufferSize(readBufferSize);
+          tcpSocket.setReceiveBufferSize(readBufferSize);
         }
         if (writeBufferSize > 0) {
-          socket.setSendBufferSize(writeBufferSize);
+          tcpSocket.setSendBufferSize(writeBufferSize);
         }
-        socket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
-        sslSocket = (SSLSocket) sslSocketFactory.createSocket(socket, host, port, true);
+        tcpSocket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
+        socket = (SSLSocket) sslSocketFactory.createSocket(tcpSocket, host, port, true);
 
         ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
         if (!protocolsList.isEmpty()) {
           String[] enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
-          sslSocket.setEnabledProtocols(enabledProtocols);
+          socket.setEnabledProtocols(enabledProtocols);
         }
 
         ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
         if (!cipherSuitesList.isEmpty()) {
           String[] cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
-          sslSocket.setEnabledCipherSuites(cipherSuites);
+          socket.setEnabledCipherSuites(cipherSuites);
         }
 
         // handshake in a blocking way
         try {
-          sslSocket.startHandshake();
+          socket.startHandshake();
           sslClientHandshakeCount.inc();
         } catch (IOException e) {
           sslClientHandshakeErrorCount.inc();
@@ -94,31 +94,6 @@ public class SSLBlockingChannel extends BlockingChannel {
             "Created socket with SO_TIMEOUT = {} (requested {}), SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})",
             sslSocket.getSoTimeout(), readTimeoutMs, sslSocket.getReceiveBufferSize(), readBufferSize,
             sslSocket.getSendBufferSize(), writeBufferSize);
-      }
-    }
-  }
-
-  @Override
-  public void disconnect() {
-    synchronized (lock) {
-      try {
-        if (connected || sslSocket != null) {
-          // closing the main socket channel *should* close the read channel
-          // but let's do it to be sure.
-          sslSocket.close();
-          if (readChannel != null) {
-            readChannel.close();
-            readChannel = null;
-          }
-          if (writeChannel != null) {
-            writeChannel.close();
-            writeChannel = null;
-          }
-          sslSocket = null;
-          connected = false;
-        }
-      } catch (Exception e) {
-        logger.error("error while disconnecting {}", e);
       }
     }
   }
