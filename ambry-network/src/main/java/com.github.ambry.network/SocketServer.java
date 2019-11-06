@@ -17,12 +17,16 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
+import com.github.ambry.utils.ByteBufferDataInputStream;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
+import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
@@ -393,6 +397,7 @@ class Processor extends AbstractServerThread {
   private final Selector selector;
   private final ServerNetworkMetrics metrics;
   private static final long pollTimeoutMs = 300;
+  private final NetworkConfig networkConfig;
 
   Processor(int id, int maxRequestSize, RequestResponseChannel channel, ServerNetworkMetrics metrics,
       SSLFactory sslFactory, NetworkConfig networkConfig) throws IOException {
@@ -401,6 +406,7 @@ class Processor extends AbstractServerThread {
     this.time = SystemTime.getInstance();
     selector = new Selector(metrics, time, sslFactory, networkConfig);
     this.metrics = metrics;
+    this.networkConfig = networkConfig;
   }
 
   public void run() {
@@ -419,7 +425,7 @@ class Processor extends AbstractServerThread {
           String connectionId = networkReceive.getConnectionId();
           Object buffer = networkReceive.getReceivedBytes().getAndRelease();
           SocketServerRequest req = new SocketServerRequest(id, connectionId, buffer,
-              Utils.createDataInputStreamFromBuffer(buffer));
+              Utils.createDataInputStreamFromBuffer(buffer, networkConfig.networkPutRequestShareMemory));
           channel.sendRequest(req);
         }
       }

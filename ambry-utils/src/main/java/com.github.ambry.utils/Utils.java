@@ -17,6 +17,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -210,6 +211,73 @@ public class Utils {
       throw new IllegalArgumentException("readShortBuffer the size of the input does not match the actual data size");
     }
     return buffer;
+  }
+
+  /**
+   * Creating a {@link ByteBufferInputStream} from the {@link CrcInputStream} by sharing the underlying memory if the
+   * crcStream is built upon a {@link ByteBufferDataInputStream}.
+   * @param crcStream The crcStream to read {@link ByteBuffer} out.
+   * @param dataSize The size of {@link ByteBuffer}.
+   * @return The {@link ByteBufferInputStream}
+   * @throws IOException Unexpected IO errors.
+   */
+  public static ByteBufferInputStream getByteBufferInputStreamFromCRCInputStream(CrcInputStream crcStream, int dataSize)
+      throws IOException {
+    ByteBufferInputStream output;
+    InputStream inputStream = crcStream.getUnderlyingInputStream();
+    if (inputStream instanceof ByteBufferDataInputStream) {
+      ByteBuffer byteBuffer = ((ByteBufferDataInputStream) inputStream).getBuffer();
+      int startIndex = byteBuffer.position();
+      int oldLimit = byteBuffer.limit();
+
+      byteBuffer.limit(startIndex + dataSize);
+      ByteBuffer dataBuffer = byteBuffer.slice();
+      crcStream.updateCrc(dataBuffer.duplicate());
+
+      output = new ByteBufferInputStream(dataBuffer);
+      byteBuffer.limit(oldLimit);
+      // Change the byte buffer's position as if the data is fetched.
+      byteBuffer.position(startIndex + dataSize);
+    } else if (inputStream instanceof NettyByteBufDataInputStream) {
+      // getBuffer() doesn't increase the reference count on this ByteBuf.
+      ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
+      // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
+      int startIndex = nettyByteBuf.readerIndex();
+      ByteBuffer dataBuffer = nettyByteBuf.nioBuffer(startIndex, dataSize);
+      crcStream.updateCrc(dataBuffer.duplicate());
+      nettyByteBuf.readerIndex(startIndex + dataSize);
+      output = new ByteBufferInputStream(dataBuffer);
+    } else {
+      output = new ByteBufferInputStream(crcStream, dataSize);
+    }
+    return output;
+  }
+
+  public static ByteBuffer readByteBufferFromCRCInputStream(CrcInputStream crcStream, int dataSize) throws IOException {
+    ByteBuffer result;
+    InputStream inputStream = crcStream.getUnderlyingInputStream();
+    if (inputStream instanceof ByteBufferDataInputStream) {
+      ByteBuffer byteBuffer = ((ByteBufferDataInputStream) inputStream).getBuffer();
+      int startIndex = byteBuffer.position();
+      int oldLimit = byteBuffer.limit();
+
+      byteBuffer.limit(startIndex + dataSize);
+      result = byteBuffer.slice();
+      crcStream.updateCrc(result.duplicate());
+      byteBuffer.limit(oldLimit);
+      byteBuffer.position(startIndex + dataSize);
+    } else {
+      result = ByteBuffer.allocate(dataSize);
+      int read = 0;
+      while (read < dataSize) {
+        int readBytes = crcStream.read(result.array(), result.arrayOffset() + read, dataSize - read);
+        if (readBytes == -1 || readBytes == 0) {
+          throw new EOFException();
+        }
+        read += readBytes;
+      }
+    }
+    return result;
   }
 
   /**

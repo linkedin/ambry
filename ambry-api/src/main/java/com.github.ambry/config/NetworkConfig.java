@@ -33,6 +33,7 @@ public class NetworkConfig {
   public static final String SELECTOR_MAX_KEY_TO_PROCESS = "selector.max.key.to.process";
   public static final String SELECTOR_USE_DIRECT_BUFFERS = "selector.use.direct.buffers";
   public static final String NETWORK_USE_NETTY_BYTE_BUF = "network.use.netty.byte.buf";
+  public static final String NETWORK_PUT_REQUEST_SHARE_MEMORY = "network.put.request.share.memory";
 
   /**
    * The number of io threads that the server uses for carrying out network requests
@@ -124,6 +125,10 @@ public class NetworkConfig {
   @Default("false")
   public final boolean networkUseNettyByteBuf;
 
+  @Config(NETWORK_PUT_REQUEST_SHARE_MEMORY)
+  @Default("false")
+  public final boolean networkPutRequestShareMemory;
+
   public NetworkConfig(VerifiableProperties verifiableProperties) {
     numIoThreads = verifiableProperties.getIntInRange(NUM_IO_THREADS, 8, 1, Integer.MAX_VALUE);
     queuedMaxRequests = verifiableProperties.getIntInRange(QUEUED_MAX_REQUESTS, 500, 1, Integer.MAX_VALUE);
@@ -143,5 +148,6 @@ public class NetworkConfig {
         verifiableProperties.getIntInRange(SELECTOR_MAX_KEY_TO_PROCESS, -1, -1, Integer.MAX_VALUE);
     selectorUseDirectBuffers = verifiableProperties.getBoolean(SELECTOR_USE_DIRECT_BUFFERS, false);
     networkUseNettyByteBuf = verifiableProperties.getBoolean(NETWORK_USE_NETTY_BYTE_BUF, false);
+    networkPutRequestShareMemory = verifiableProperties.getBoolean(NETWORK_PUT_REQUEST_SHARE_MEMORY, false);
   }
 }

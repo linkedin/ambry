@@ -15,7 +15,6 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
@@ -1640,46 +1639,6 @@ public class MessageFormatRecord {
   }
 
   /**
-   * Creating a {@link ByteBufferInputStream} from the {@link CrcInputStream} by sharing the underlying memory if the
-   * crcStream is built upon a {@link ByteBufferDataInputStream}.
-   * @param crcStream The crcStream to read {@link ByteBuffer} out.
-   * @param dataSize The size of {@link ByteBuffer}.
-   * @return The {@link ByteBufferInputStream}
-   * @throws IOException Unexpected IO errors.
-   */
-  static ByteBufferInputStream getByteBufferInputStreamForBlobRecord(CrcInputStream crcStream, int dataSize)
-      throws IOException {
-    ByteBufferInputStream output;
-    InputStream inputStream = crcStream.getUnderlyingInputStream();
-    if (inputStream instanceof ByteBufferDataInputStream) {
-      ByteBuffer byteBuffer = ((ByteBufferDataInputStream) inputStream).getBuffer();
-      int startIndex = byteBuffer.position();
-      int oldLimit = byteBuffer.limit();
-
-      byteBuffer.limit(startIndex + dataSize);
-      ByteBuffer dataBuffer = byteBuffer.slice();
-      crcStream.updateCrc(dataBuffer.duplicate());
-
-      output = new ByteBufferInputStream(dataBuffer);
-      byteBuffer.limit(oldLimit);
-      // Change the byte buffer's position as if the data is fetched.
-      byteBuffer.position(startIndex + dataSize);
-    } else if (inputStream instanceof NettyByteBufDataInputStream) {
-      // getBuffer() doesn't increase the reference count on this ByteBuf.
-      ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
-      // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
-      int startIndex = nettyByteBuf.readerIndex();
-      ByteBuffer dataBuffer = nettyByteBuf.nioBuffer(startIndex, dataSize);
-      crcStream.updateCrc(dataBuffer.duplicate());
-      nettyByteBuf.readerIndex(startIndex + dataSize);
-      output = new ByteBufferInputStream(dataBuffer);
-    } else {
-      output = new ByteBufferInputStream(crcStream, dataSize);
-    }
-    return output;
-  }
-
-  /**
    *  - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |           |            |            |
    * | version |   size    |  content   |     Crc    |
@@ -1714,7 +1673,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, (int) dataSize);
+      ByteBufferInputStream output = Utils.getByteBufferInputStreamFromCRCInputStream(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
@@ -1772,7 +1731,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = getByteBufferInputStreamForBlobRecord(crcStream, (int) dataSize);
+      ByteBufferInputStream output = Utils.getByteBufferInputStreamFromCRCInputStream(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
