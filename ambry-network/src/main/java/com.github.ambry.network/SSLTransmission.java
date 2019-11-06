@@ -462,7 +462,8 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         }
         netReadBuffer.compact();
         // handle ssl renegotiation.
-        if (unwrapResult.getHandshakeStatus() != HandshakeStatus.NOT_HANDSHAKING) {
+        if (unwrapResult.getHandshakeStatus() != HandshakeStatus.NOT_HANDSHAKING
+            && unwrapResult.getStatus() == Status.OK) {
           logger.trace(
               "SSLChannel Read begin renegotiation getConnectionId() {}, appReadBuffer pos {}, netReadBuffer pos {}, netWriteBuffer pos {}",
               getConnectionId(), appReadBuffer.position(), netReadBuffer.position(), netWriteBuffer.position());
@@ -567,7 +568,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
       }
       netWriteBuffer.flip();
       //handle ssl renegotiation
-      if (wrapResult.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
+      if (wrapResult.getHandshakeStatus() != HandshakeStatus.NOT_HANDSHAKING && wrapResult.getStatus() == Status.OK) {
         handshake();
         metrics.sslRenegotiationCount.inc();
         break;
