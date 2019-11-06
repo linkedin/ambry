@@ -21,9 +21,9 @@ import com.github.ambry.config.ClusterMapConfig;
  * A factory to create {@link ClusterSpectator} object.
  */
 public class HelixClusterSpectatorFactory implements ClusterSpectatorFactory {
-  
+
   @Override
   public ClusterSpectator getClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
-    return new VcrHelixClusterSpectator(cloudConfig, clusterMapConfig);
+    return new HelixClusterSpectator(cloudConfig, clusterMapConfig);
   }
 }

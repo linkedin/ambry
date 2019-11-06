@@ -32,19 +32,19 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 /**
  * Spectator for vcr helix cluster.
  */
-public class VcrHelixClusterSpectator implements ClusterSpectator {
+public class HelixClusterSpectator implements ClusterSpectator {
 
   private final ClusterMapConfig clusterMapConfig;
   private final CloudConfig cloudConfig;
-  private List<InstanceConfigChangeListener> registeredInstanceConfigChangeListeners;
-  private List<LiveInstanceChangeListener> registeredLiveInstanceChangeListeners;
+  private final List<InstanceConfigChangeListener> registeredInstanceConfigChangeListeners;
+  private final List<LiveInstanceChangeListener> registeredLiveInstanceChangeListeners;
 
   /**
-   * Constructor for {@link VcrHelixClusterSpectator}.
+   * Constructor for {@link HelixClusterSpectator}.
    * @param cloudConfig Cluster config of vcr.
    * @param clusterMapConfig Cluster Map config.
    */
-  public VcrHelixClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
+  public HelixClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
     this.cloudConfig = cloudConfig;
     this.clusterMapConfig = clusterMapConfig;
     registeredInstanceConfigChangeListeners = new LinkedList<>();
@@ -56,8 +56,13 @@ public class VcrHelixClusterSpectator implements ClusterSpectator {
     Map<String, DcZkInfo> dataCenterToZkAddress =
         parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
     HelixFactory helixFactory = new HelixFactory();
-    String selfInstanceName = ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, 12111);
+    String selfInstanceName = ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
 
+    // Should we fail here if even one of the remote zk connection fails? If we have just one datacenter, then this will not be a problem.
+    // If we have two data centers, then its not clear if we should pass the startup with one remote zk connection failure. Because if remote
+    // zk connection fails on both data centers, then things like replication between data centers might just stop.
+    // For now, since we have only one fabric in cloud, and the spectator is being used for only cloud to store replication, this will work.
+    // Once we add more fabrics, we should revisit this.
     for (Map.Entry<String, DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
       String zkConnectStr = entry.getValue().getZkConnectStr();
       HelixManager helixManager =

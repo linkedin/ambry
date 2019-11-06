@@ -82,7 +82,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         public void participate(List<AmbryHealthReport> ambryHealthReports) {
           for (PartitionStateChangeListener listener : listeners) {
             for (String partitionName : partitionLayout.getAllPartitionNames()) {
-              listener.onPartitionLeadFromStandby(partitionName);
+              listener.onPartitionStateChangeToLeaderFromStandby(partitionName);
             }
           }
         }

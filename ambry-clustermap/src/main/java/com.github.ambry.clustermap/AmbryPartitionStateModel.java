@@ -34,6 +34,9 @@ public class AmbryPartitionStateModel extends StateModel {
       PartitionStateChangeListener partitionStateChangeListener) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
+    if(partitionStateChangeListener == null) {
+      throw new IllegalArgumentException("partition state change listener cannot be null");
+    }
     this.partitionStateChangeListener = partitionStateChangeListener;
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(DefaultLeaderStandbyStateModel.class);
@@ -55,14 +58,14 @@ public class AmbryPartitionStateModel extends StateModel {
   public void onBecomeLeaderFromStandby(Message message, NotificationContext context) {
     logger.info("Partition {} in resource {} is becoming LEADER from STANDBY", message.getPartitionName(),
         message.getResourceName());
-    partitionStateChangeListener.onPartitionLeadFromStandby(message.getPartitionName());
+    partitionStateChangeListener.onPartitionStateChangeToLeaderFromStandby(message.getPartitionName());
   }
 
   @Transition(to = "STANDBY", from = "LEADER")
   public void onBecomeStandbyFromLeader(Message message, NotificationContext context) {
     logger.info("Partition {} in resource {} is becoming STANDBY from LEADER", message.getPartitionName(),
         message.getResourceName());
-    partitionStateChangeListener.onPartitionStandbyFromLead(message.getPartitionName());
+    partitionStateChangeListener.onPartitionStateChangeToStandbyFromLeader(message.getPartitionName());
   }
 
   @Transition(to = "INACTIVE", from = "STANDBY")

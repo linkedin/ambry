@@ -275,16 +275,16 @@ class HelixParticipant implements ClusterParticipant, PartitionStateChangeListen
   }
 
   @Override
-  public void onPartitionLeadFromStandby(String partitionName) {
+  public void onPartitionStateChangeToLeaderFromStandby(String partitionName) {
     for (PartitionStateChangeListener partitionStateChangeListener : partitionStateChangeListeners) {
-      partitionStateChangeListener.onPartitionLeadFromStandby(partitionName);
+      partitionStateChangeListener.onPartitionStateChangeToLeaderFromStandby(partitionName);
     }
   }
 
   @Override
-  public void onPartitionStandbyFromLead(String partitionName) {
+  public void onPartitionStateChangeToStandbyFromLeader(String partitionName) {
     for (PartitionStateChangeListener partitionStateChangeListener : partitionStateChangeListeners) {
-      partitionStateChangeListener.onPartitionLeadFromStandby(partitionName);
+      partitionStateChangeListener.onPartitionStateChangeToStandbyFromLeader(partitionName);
     }
   }
 }

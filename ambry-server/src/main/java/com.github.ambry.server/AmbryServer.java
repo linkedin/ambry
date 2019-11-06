@@ -163,7 +163,7 @@ public class AmbryServer {
               serverConfig.serverMessageTransformer);
       replicationManager.start();
 
-      if (replicationConfig.isVcrClusterReplicationEnabled) {
+      if (replicationConfig.replicationEnabledWithVcrCluster) {
         vcrClusterSpectator = new HelixClusterSpectatorFactory().getClusterSpectator(cloudConfig, clusterMapConfig);
         cloudToStoreReplicationManager =
             new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
@@ -246,6 +246,9 @@ public class AmbryServer {
       }
       if (requestHandlerPool != null) {
         requestHandlerPool.shutdown();
+      }
+      if (cloudToStoreReplicationManager != null) {
+        cloudToStoreReplicationManager.shutdown();
       }
       if (replicationManager != null) {
         replicationManager.shutdown();

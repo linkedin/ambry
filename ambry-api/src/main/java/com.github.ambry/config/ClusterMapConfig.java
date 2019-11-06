@@ -23,7 +23,6 @@ public class ClusterMapConfig {
   public static final String DEFAULT_STATE_MODEL_DEF = LeaderStandbySMD.name;
   public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
-  private static final String DEFAULT_VCR_DATACENTER_NAME = "ei4";
 
   /**
    * The factory class used to get the resource state policies.
@@ -184,10 +183,9 @@ public class ClusterMapConfig {
   public final boolean clustermapListenCrossColo;
 
   /**
-   * Name of the datacenter of vcrnodes. It is expected that all the vcr nodes will reside in the same datacenter.
+   * Name of the datacenter of vcr nodes. It is expected that all the vcr nodes will reside in the same datacenter.
    */
   @Config("clustermap.vcr.datacenter.name")
-  @Default(DEFAULT_VCR_DATACENTER_NAME)
   public final String clustermapVcrDatacenterName;
 
   /**
@@ -232,7 +230,7 @@ public class ClusterMapConfig {
     clustermapStateModelDefinition =
         verifiableProperties.getString("clustermap.state.model.definition", DEFAULT_STATE_MODEL_DEF);
     clustermapVcrDatacenterName =
-        verifiableProperties.getString("clustermap.vcr.datacenter.name", DEFAULT_VCR_DATACENTER_NAME);
+        verifiableProperties.getString("clustermap.vcr.datacenter.name", null);
     if (!clustermapStateModelDefinition.equals(DEFAULT_STATE_MODEL_DEF) && !clustermapStateModelDefinition.equals(
         AMBRY_STATE_MODEL_DEF)) {
       throw new IllegalArgumentException("Unsupported state model definition: " + clustermapStateModelDefinition);

@@ -61,7 +61,6 @@ public class CloudDataNode implements DataNodeId {
 
   /**
    * Instantiate a CloudDataNode object from hostname, port and datacentername.
-   * @return
    */
   public CloudDataNode(String hostName, Port plainTextPort, Port sslPort, String dataCenterName,
       ClusterMapConfig clusterMapConfig) {

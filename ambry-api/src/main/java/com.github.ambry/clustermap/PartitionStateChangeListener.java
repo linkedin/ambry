@@ -22,11 +22,11 @@ public interface PartitionStateChangeListener {
    * Action to take on becoming leader of a partition.
    * @param partitionName of the partition.
    */
-  void onPartitionLeadFromStandby(String partitionName);
+  void onPartitionStateChangeToLeaderFromStandby(String partitionName);
 
   /**
    * Action to take on being removed as leader of a partition.
    * @param partitionName of the partition.
    */
-  void onPartitionStandbyFromLead(String partitionName);
+  void onPartitionStateChangeToStandbyFromLeader(String partitionName);
 }

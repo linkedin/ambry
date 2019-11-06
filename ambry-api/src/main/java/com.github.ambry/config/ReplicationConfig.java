@@ -141,9 +141,9 @@ public class ReplicationConfig {
   /**
    * If set to true, the Ambry data nodes will also replicate from vcr nodes based on vcr helix cluster map.
    */
-  @Config("vcr.cluster.replication.enabled")
+  @Config("replication.enabled.with.vcr.cluster")
   @Default("false")
-  public final boolean isVcrClusterReplicationEnabled;
+  public final boolean replicationEnabledWithVcrCluster;
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
@@ -180,6 +180,6 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean("replication.track.per.partition.lag.from.remote", false);
     replicaMetadataRequestVersion =
         verifiableProperties.getShortInRange("replication.metadata.request.version", (short) 1, (short) 1, (short) 2);
-    isVcrClusterReplicationEnabled = verifiableProperties.getBoolean("vcr.cluster.replication.enabled", false);
+    replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("vcr.cluster.replication.enabled", false);
   }
 }

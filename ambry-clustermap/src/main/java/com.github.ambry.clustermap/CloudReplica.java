@@ -33,7 +33,6 @@ public class CloudReplica implements ReplicaId {
    * Instantiate an CloudReplica instance.
    * @param partitionId the {@link PartitionId} of which this is a replica.
    * @param dataNodeId which hosts this replica.
-   *
    */
   public CloudReplica(PartitionId partitionId, DataNodeId dataNodeId) {
     this.partitionId = partitionId;

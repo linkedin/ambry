@@ -24,6 +24,8 @@ public interface ClusterSpectatorFactory {
 
   /**
    * Create and return a {@link ClusterSpectator} object.
+   * @param cloudConfig {@link CloudConfig} object.
+   * @param clusterMapConfig {@link ClusterMapConfig} object.
    * @return {@link ClusterSpectator} object.
    */
   ClusterSpectator getClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig);

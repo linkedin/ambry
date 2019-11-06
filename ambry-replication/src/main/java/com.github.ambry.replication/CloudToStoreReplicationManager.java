@@ -48,6 +48,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.api.listeners.InstanceConfigChangeListener;
@@ -68,8 +69,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private final ClusterSpectator vcrClusterSpectator;
   private final ClusterParticipant clusterParticipant;
   private static final String cloudReplicaTokenFileName = "cloudReplicaTokens";
-  private ConcurrentHashMap<String, CloudDataNode> instanceNameToCloudDataNode;
-  private ConcurrentSkipListSet<CloudDataNode> vcrNodes;
+  private AtomicReference<ConcurrentHashMap<String, CloudDataNode>> instanceNameToCloudDataNode;
+  private AtomicReference<ConcurrentSkipListSet<CloudDataNode>> vcrNodes;
   private final ConcurrentHashMap<String, PartitionId> localPartitionNameToPartition;
   private final Object notificationLock = new Object();
 
@@ -106,8 +107,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     this.storeManager = storeManager;
     this.vcrClusterSpectator = vcrClusterSpectator;
     this.clusterParticipant = clusterParticipant;
-    this.instanceNameToCloudDataNode = new ConcurrentHashMap<>();
-    this.vcrNodes = new ConcurrentSkipListSet<>();
+    this.instanceNameToCloudDataNode = new AtomicReference<>(new ConcurrentHashMap<>());
+    this.vcrNodes = new AtomicReference<>(new ConcurrentSkipListSet<>());
     this.persistor =
         new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper);
@@ -116,21 +117,21 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
   private ConcurrentHashMap<String, PartitionId> mapPartitionNameToPartition(ClusterMap clusterMap,
       DataNodeId localNode) {
-    List<? extends ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
-    return localReplicas.stream()
+    return clusterMap.getReplicaIds(localNode)
+        .stream()
         .collect(Collectors.toMap(replicaId -> replicaId.getPartitionId().toPathString(), ReplicaId::getPartitionId,
             (e1, e2) -> e2, ConcurrentHashMap::new));
   }
 
   @Override
-  public void start() throws ReplicationException {
+  public void start() {
     // Add listener for vcr instance config changes
     vcrClusterSpectator.registerInstanceConfigChangeListener(new InstanceConfigChangeListener() {
       @Override
       public void onInstanceConfigChange(List<InstanceConfig> instanceConfigs, NotificationContext context) {
         ConcurrentSkipListSet<CloudDataNode> newVcrNodes = new ConcurrentSkipListSet<>();
         ConcurrentHashMap<String, CloudDataNode> newInstanceNameToCloudDataNode = new ConcurrentHashMap<>();
-        Set<CloudDataNode> removedNodes = new HashSet<>(vcrNodes);
+        Set<CloudDataNode> removedNodes = new HashSet<>(vcrNodes.get());
         synchronized (notificationLock) {
           for (InstanceConfig instanceConfig : instanceConfigs) {
             String instanceName = instanceConfig.getInstanceName();
@@ -143,8 +144,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
             newVcrNodes.add(cloudDataNode);
           }
           removedNodes.removeAll(newVcrNodes);
-          vcrNodes = newVcrNodes;
-          instanceNameToCloudDataNode = newInstanceNameToCloudDataNode;
+          vcrNodes.set(newVcrNodes);
+          instanceNameToCloudDataNode.set(newInstanceNameToCloudDataNode);
           List<PartitionId> partitionsOnRemovedNodes = getPartitionsOnRemovedNodes(removedNodes);
           for (PartitionId partitionId : partitionsOnRemovedNodes) {
             try {
@@ -165,13 +166,13 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         ConcurrentSkipListSet<CloudDataNode> newVcrNodes = new ConcurrentSkipListSet<>();
         synchronized (notificationLock) {
           for (LiveInstance liveInstance : liveInstances) {
-            if (instanceNameToCloudDataNode.containsKey(liveInstance.getInstanceName())) {
-              newVcrNodes.add(instanceNameToCloudDataNode.get(liveInstance.getInstanceName()));
+            if (instanceNameToCloudDataNode.get().containsKey(liveInstance.getInstanceName())) {
+              newVcrNodes.add(instanceNameToCloudDataNode.get().get(liveInstance.getInstanceName()));
             }
           }
-          Set<CloudDataNode> removedNodes = new HashSet<>(vcrNodes);
+          Set<CloudDataNode> removedNodes = new HashSet<>(vcrNodes.get());
           removedNodes.removeAll(newVcrNodes);
-          vcrNodes = newVcrNodes;
+          vcrNodes.set(newVcrNodes);
           List<PartitionId> partitionsOnRemovedNodes = getPartitionsOnRemovedNodes(removedNodes);
           for (PartitionId partitionId : partitionsOnRemovedNodes) {
             try {
@@ -188,7 +189,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     // Add listener for new coming assigned partition
     clusterParticipant.registerPartitionStateChangeListener(new PartitionStateChangeListener() {
       @Override
-      public void onPartitionLeadFromStandby(String partitionName) {
+      public void onPartitionStateChangeToLeaderFromStandby(String partitionName) {
         synchronized (notificationLock) {
           try {
             addCloudReplica(partitionName);
@@ -199,7 +200,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
       }
 
       @Override
-      public void onPartitionStandbyFromLead(String partitionName) {
+      public void onPartitionStateChangeToStandbyFromLeader(String partitionName) {
         synchronized (notificationLock) {
           try {
             removeCloudReplica(partitionName);
@@ -217,6 +218,11 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
   }
 
+  /**
+   * Return the list of {@link PartitionId}s that have a replica on the specified list of nodes.
+   * @param removedNodes list of specified nodes.
+   * @return {@link List} of {@link PartitionId}s.
+   */
   private List<PartitionId> getPartitionsOnRemovedNodes(Set<CloudDataNode> removedNodes) {
     List<PartitionId> partitionsOnRemovedNodes = new LinkedList<>();
     Set<String> removedHostNames = removedNodes.stream().map(DataNodeId::getHostname).collect(Collectors.toSet());
@@ -328,6 +334,6 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   }
 
   private DataNodeId getCloudDataNode() {
-    return vcrNodes.toArray(new CloudDataNode[0])[Utils.getRandomShort(new Random()) % vcrNodes.size()];
+    return vcrNodes.get().toArray(new CloudDataNode[0])[Utils.getRandomShort(new Random()) % vcrNodes.get().size()];
   }
 }
