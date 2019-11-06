@@ -1673,7 +1673,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = Utils.getByteBufferInputStreamFromCRCInputStream(crcStream, (int) dataSize);
+      ByteBufferInputStream output = Utils.getByteBufferInputStreamFromCrcInputStream(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
@@ -1731,7 +1731,7 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
-      ByteBufferInputStream output = Utils.getByteBufferInputStreamFromCRCInputStream(crcStream, (int) dataSize);
+      ByteBufferInputStream output = Utils.getByteBufferInputStreamFromCrcInputStream(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {

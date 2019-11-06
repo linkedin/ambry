@@ -197,7 +197,7 @@ public class UtilsTest {
   }
 
   @Test
-  public void testBlobDataShareMemory() throws Exception {
+  public void testGetByteBufferInputStreamFromCrcStreamShareMemory() throws Exception {
     int blobSize = 1000;
     // The first 8 bytes are the size of blob, the next 1000 bytes are the blob content, the next 8 bytes are the crc
     // value, and we do this twice.
@@ -218,11 +218,7 @@ public class UtilsTest {
       dos.writeLong((long) blobSize);
       dos.write(arrayToFill);
       buffer.putLong(crcStream.getValue());
-      if (arrayToFill == firstRandomBytes) {
-        arrayToFill = secondRandomBytes;
-      } else {
-        arrayToFill = null;
-      }
+      arrayToFill = (arrayToFill == firstRandomBytes) ? secondRandomBytes : null;
     }
 
     buffer.flip();
@@ -232,7 +228,7 @@ public class UtilsTest {
       DataInputStream dis = new DataInputStream(cis);
       long dataSize = dis.readLong();
       assertEquals((long) dataSize, blobSize);
-      ByteBufferInputStream obtained = Utils.getByteBufferInputStreamFromCRCInputStream(cis, (int) dataSize);
+      ByteBufferInputStream obtained = Utils.getByteBufferInputStreamFromCrcInputStream(cis, (int) dataSize);
       // Make sure these two ByteBuffers actually share the underlying memory.
       assertEquals(getByteArrayFromByteBuffer(buffer), getByteArrayFromByteBuffer(obtained.getByteBuffer()));
       byte[] obtainedArray = new byte[blobSize];
@@ -240,11 +236,7 @@ public class UtilsTest {
       assertArrayEquals(obtainedArray, expectedArray);
       long crcRead = buffer.getLong();
       assertEquals(crcRead, cis.getValue());
-      if (expectedArray == firstRandomBytes) {
-        expectedArray = secondRandomBytes;
-      } else {
-        expectedArray = null;
-      }
+      expectedArray = (expectedArray == firstRandomBytes) ? secondRandomBytes : null;
     }
   }
 

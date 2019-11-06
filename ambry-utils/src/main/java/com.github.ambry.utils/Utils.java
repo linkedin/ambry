@@ -214,30 +214,44 @@ public class Utils {
   }
 
   /**
-   * Creating a {@link ByteBufferInputStream} from the {@link CrcInputStream} by sharing the underlying memory if the
+   * A helper function to return a {@link ByteBuffer} from given {@link ByteBufferDataInputStream} at the given size.
+   * The returned {@link ByteBuffer} will share the memory with the underlying {@link ByteBuffer} in {@link ByteBufferDataInputStream}.
+   * @param stream The {@link ByteBufferDataInputStream} to read {@link ByteBuffer} out.
+   * @param dataSize The size of {@link ByteBuffer}.
+   * @return The {@link ByteBuffer}
+   * @throws IOException Unexpected IO errors.
+   */
+  private static ByteBuffer getByteBufferFromByteBufferDataInputStream(ByteBufferDataInputStream stream, int dataSize)
+      throws IOException {
+    ByteBuffer byteBuffer = stream.getBuffer();
+    int startIndex = byteBuffer.position();
+    int oldLimit = byteBuffer.limit();
+
+    byteBuffer.limit(startIndex + dataSize);
+    ByteBuffer dataBuffer = byteBuffer.slice();
+    byteBuffer.limit(oldLimit);
+    // Change the byte buffer's position as if the data is fetched.
+    byteBuffer.position(startIndex + dataSize);
+    return dataBuffer;
+  }
+
+  /**
+   * Create a {@link ByteBufferInputStream} from the {@link CrcInputStream} by sharing the underlying memory if the
    * crcStream is built upon a {@link ByteBufferDataInputStream}.
    * @param crcStream The crcStream to read {@link ByteBuffer} out.
    * @param dataSize The size of {@link ByteBuffer}.
    * @return The {@link ByteBufferInputStream}
    * @throws IOException Unexpected IO errors.
    */
-  public static ByteBufferInputStream getByteBufferInputStreamFromCRCInputStream(CrcInputStream crcStream, int dataSize)
+  public static ByteBufferInputStream getByteBufferInputStreamFromCrcInputStream(CrcInputStream crcStream, int dataSize)
       throws IOException {
     ByteBufferInputStream output;
     InputStream inputStream = crcStream.getUnderlyingInputStream();
     if (inputStream instanceof ByteBufferDataInputStream) {
-      ByteBuffer byteBuffer = ((ByteBufferDataInputStream) inputStream).getBuffer();
-      int startIndex = byteBuffer.position();
-      int oldLimit = byteBuffer.limit();
-
-      byteBuffer.limit(startIndex + dataSize);
-      ByteBuffer dataBuffer = byteBuffer.slice();
+      ByteBuffer dataBuffer =
+          getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
       crcStream.updateCrc(dataBuffer.duplicate());
-
       output = new ByteBufferInputStream(dataBuffer);
-      byteBuffer.limit(oldLimit);
-      // Change the byte buffer's position as if the data is fetched.
-      byteBuffer.position(startIndex + dataSize);
     } else if (inputStream instanceof NettyByteBufDataInputStream) {
       // getBuffer() doesn't increase the reference count on this ByteBuf.
       ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
@@ -253,19 +267,20 @@ public class Utils {
     return output;
   }
 
-  public static ByteBuffer readByteBufferFromCRCInputStream(CrcInputStream crcStream, int dataSize) throws IOException {
+  /**
+   * Transfer {@code dataSize} bytes of data from the given crc stream to a newly create {@link ByteBuffer}. The method
+   * would also update the crc value in the crc stream.
+   * @param crcStream The crc stream.
+   * @param dataSize The number of bytes to transfer.
+   * @return the newly created {@link ByteBuffer} which contains the transferred data.
+   * @throws IOException Any I/O error.
+   */
+  public static ByteBuffer readByteBufferFromCrcInputStream(CrcInputStream crcStream, int dataSize) throws IOException {
     ByteBuffer result;
     InputStream inputStream = crcStream.getUnderlyingInputStream();
     if (inputStream instanceof ByteBufferDataInputStream) {
-      ByteBuffer byteBuffer = ((ByteBufferDataInputStream) inputStream).getBuffer();
-      int startIndex = byteBuffer.position();
-      int oldLimit = byteBuffer.limit();
-
-      byteBuffer.limit(startIndex + dataSize);
-      result = byteBuffer.slice();
+      result = getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
       crcStream.updateCrc(result.duplicate());
-      byteBuffer.limit(oldLimit);
-      byteBuffer.position(startIndex + dataSize);
     } else {
       result = ByteBuffer.allocate(dataSize);
       int read = 0;

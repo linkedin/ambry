@@ -209,11 +209,11 @@ public class PutRequest extends RequestOrResponse {
       BlobId id = new BlobId(stream, map);
       BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
       int mdSize = stream.readInt();
-      ByteBuffer metadata = Utils.readByteBufferFromCRCInputStream(crcInputStream, mdSize);
+      ByteBuffer metadata = Utils.readByteBufferFromCrcInputStream(crcInputStream, mdSize);
       BlobType blobType = BlobType.values()[stream.readShort()];
       long blobSize = stream.readLong();
       ByteBufferInputStream blobStream =
-          Utils.getByteBufferInputStreamFromCRCInputStream(crcInputStream, (int) blobSize);
+          Utils.getByteBufferInputStreamFromCrcInputStream(crcInputStream, (int) blobSize);
       long computedCrc = crcInputStream.getValue();
       long receivedCrc = stream.readLong();
       if (computedCrc != receivedCrc) {
@@ -236,12 +236,12 @@ public class PutRequest extends RequestOrResponse {
       BlobId id = new BlobId(stream, map);
       BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
       int mdSize = stream.readInt();
-      ByteBuffer metadata = Utils.readByteBufferFromCRCInputStream(crcInputStream, mdSize);
+      ByteBuffer metadata = Utils.readByteBufferFromCrcInputStream(crcInputStream, mdSize);
       BlobType blobType = BlobType.values()[stream.readShort()];
       ByteBuffer blobEncryptionKey = Utils.readShortBuffer(stream);
       long blobSize = stream.readLong();
       ByteBufferInputStream blobStream =
-          Utils.getByteBufferInputStreamFromCRCInputStream(crcInputStream, (int) blobSize);
+          Utils.getByteBufferInputStreamFromCrcInputStream(crcInputStream, (int) blobSize);
       long computedCrc = crcInputStream.getValue();
       long receivedCrc = stream.readLong();
       if (computedCrc != receivedCrc) {
