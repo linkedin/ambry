@@ -291,6 +291,21 @@ public class StoreConfig {
   @Default("rw-rw-r--")
   public final Set<PosixFilePermission> storeOperationFilePermission;
 
+  /**
+   * Whether to populate bloom filter with UUID only for index segment.
+   */
+  @Config("store.uuid.based.bloom.filter.enabled")
+  @Default("false")
+  public final boolean storeUuidBasedBloomFilterEnabled;
+
+  /**
+   * Whether to rebuild index bloom filter during startup. If true, store will cleanup existing bloom files and rebuild
+   * them based on index segments when server restarts.
+   */
+  @Config("store.index.rebuild.bloom.filter.enabled")
+  @Default("false")
+  public final boolean storeIndexRebuildBloomFilterEnabled;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -354,6 +369,9 @@ public class StoreConfig {
     String storeOperationFilePermissionStr =
         verifiableProperties.getString("store.operation.file.permission", "rw-rw-r--");
     storeOperationFilePermission = PosixFilePermissions.fromString(storeOperationFilePermissionStr);
+    storeUuidBasedBloomFilterEnabled = verifiableProperties.getBoolean("store.uuid.based.bloom.filter.enabled", false);
+    storeIndexRebuildBloomFilterEnabled =
+        verifiableProperties.getBoolean("store.index.rebuild.bloom.filter.enabled", false);
   }
 }
 

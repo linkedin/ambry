@@ -26,6 +26,12 @@ public abstract class StoreKey implements Comparable<StoreKey> {
   public abstract byte[] toBytes();
 
   /**
+   * The byte version of UUID for this key
+   * @return A byte buffer that represents the UUID of this key
+   */
+  public abstract byte[] getUuidBytesArray();
+
+  /**
    * The size of the serialized version of the key
    * @return The size of the key
    */

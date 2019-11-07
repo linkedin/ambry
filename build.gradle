@@ -138,6 +138,7 @@ project(':ambry-api') {
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "org.codehaus.jackson:jackson-core-asl:$jacksonVersion"
         compile "org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion"
+        compile "io.netty:netty-buffer:$nettyVersion"
         testCompile project(':ambry-clustermap')
         testCompile project(':ambry-utils').sourceSets.test.output
     }
@@ -331,6 +332,7 @@ project(':ambry-router') {
                 project(':ambry-cloud')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
+        compile "io.netty:netty-buffer:$nettyVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output

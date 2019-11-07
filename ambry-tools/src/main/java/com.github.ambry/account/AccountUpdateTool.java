@@ -27,7 +27,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.stream.Stream;
@@ -184,8 +186,8 @@ public class AccountUpdateTool {
             .ofType(String.class)
             .defaultsTo(DEFAULT_LOCAL_BACKUP_DIR);
 
+    parser.accepts("ignoreSnapshotVersion", "Ignore the snapshot version conflict. Defaults to false");
     parser.accepts("help", "print this help message.");
-
     parser.accepts("h", "print this help message.");
 
     OptionSet options = parser.parse(args);
@@ -202,6 +204,7 @@ public class AccountUpdateTool {
     Short containerJsonVersion = options.valueOf(containerJsonVersionOpt);
     String accountJsonPath = options.valueOf(accountJsonPathOpt);
     List<String> accountsToEdit = options.valuesOf(accountsToEditOpt);
+    boolean ignoreSnapshotVersion = options.has("ignoreSnapshotVersion");
     if (!((accountJsonPath == null) ^ (accountsToEdit.isEmpty()))) {
       System.err.println("Must provide exactly one of --accountJsonPath or --accountsToEdit");
       parser.printHelpOn(System.err);
@@ -211,9 +214,9 @@ public class AccountUpdateTool {
         zkSessionTimeoutMs)) {
       AccountUpdateTool accountUpdateTool = new AccountUpdateTool(accountService, containerJsonVersion);
       if (accountJsonPath != null) {
-        accountUpdateTool.updateAccountsFromFile(accountJsonPath);
+        accountUpdateTool.updateAccountsFromFile(accountJsonPath, ignoreSnapshotVersion);
       } else {
-        accountUpdateTool.editAccounts(accountsToEdit);
+        accountUpdateTool.editAccounts(accountsToEdit, ignoreSnapshotVersion);
       }
     } catch (Exception e) {
       System.err.println("Updating accounts failed with exception: " + e);
@@ -235,10 +238,12 @@ public class AccountUpdateTool {
   /**
    * Edit accounts in a text editor and upload them to zookeeper.
    * @param accountNames the name of the accounts to edit.
+   * @param ignoreSnapshotVersion if {@code true}, don't verify the snapshot version.
    * @throws IOException
    * @throws InterruptedException
    */
-  void editAccounts(Collection<String> accountNames) throws IOException, InterruptedException {
+  void editAccounts(Collection<String> accountNames, boolean ignoreSnapshotVersion)
+      throws IOException, InterruptedException {
     Path accountJsonPath = Files.createTempFile("account-update-", ".json");
     JSONArray accountsToEdit = new JSONArray();
     accountNames.stream()
@@ -255,7 +260,7 @@ public class AccountUpdateTool {
       lines.forEach(System.out::println);
     }
     if (ToolUtils.yesNoPrompt("Do you want to update these accounts?")) {
-      updateAccountsFromFile(accountJsonPath.toAbsolutePath().toString());
+      updateAccountsFromFile(accountJsonPath.toAbsolutePath().toString(), ignoreSnapshotVersion);
     } else {
       System.out.println("Not updating any accounts");
     }
@@ -265,12 +270,32 @@ public class AccountUpdateTool {
   /**
    * Update accounts from a file containing a json array of account metadata.
    * @param accountJsonPath the path to the file containing the account metadata to upload.
+   * @param ignoreSnapshotVersion if {@code true}, don't verify the snapshot version.
    * @throws IOException
    */
-  void updateAccountsFromFile(String accountJsonPath) throws IOException {
+  void updateAccountsFromFile(String accountJsonPath, boolean ignoreSnapshotVersion) throws IOException {
     long startTime = System.currentTimeMillis();
     Collection<Account> accountsToUpdate = getAccountsFromJson(accountJsonPath);
     if (!hasDuplicateAccountIdOrName(accountsToUpdate)) {
+      if (ignoreSnapshotVersion) {
+        Collection<Account> allAccounts = accountService.getAllAccounts();
+        // Update the snapshot version to resolve conflict
+        Map<Short, Account> existingAccountsMap = new HashMap<>();
+        for (Account account : allAccounts) {
+          existingAccountsMap.put(account.getId(), account);
+        }
+        Collection<Account> newAccounts = new ArrayList<>(accountsToUpdate.size());
+        // resolve the snapshot conflict.
+        for (Account account : accountsToUpdate) {
+          Account accountInMap = existingAccountsMap.get(account.getId());
+          if (accountInMap != null && accountInMap.getSnapshotVersion() != account.getSnapshotVersion()) {
+            newAccounts.add(new AccountBuilder(account).snapshotVersion(accountInMap.getSnapshotVersion()).build());
+          } else {
+            newAccounts.add(account);
+          }
+        }
+        accountsToUpdate = newAccounts;
+      }
       if (accountService.updateAccounts(accountsToUpdate)) {
         System.out.println(
             accountsToUpdate.size() + " account(s) successfully created or updated, took " + (System.currentTimeMillis()

@@ -282,7 +282,7 @@ class CuratedLogIndexState {
     if (value != null) {
       newValue =
           new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), Utils.Infinite_Time, time.milliseconds(),
-              value.getAccountId(), value.getContainerId());
+              value.getAccountId(), value.getContainerId(), (short) 0);
       newValue.setNewOffset(startOffset);
       newValue.setNewSize(CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE);
     } else {
@@ -348,7 +348,7 @@ class CuratedLogIndexState {
     IndexValue newValue;
     if (value != null) {
       newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-          time.milliseconds(), value.getAccountId(), value.getContainerId());
+          time.milliseconds(), value.getAccountId(), value.getContainerId(), (short) 0);
       newValue.setNewOffset(startOffset);
       newValue.setNewSize(CuratedLogIndexState.DELETE_RECORD_SIZE);
     } else if (allKeys.containsKey(idToDelete)) {
@@ -356,7 +356,7 @@ class CuratedLogIndexState {
       value = allKeys.get(idToDelete).last();
       newValue =
           new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, startOffset, value.getFlags(), value.getExpiresAtMs(),
-              time.milliseconds(), value.getAccountId(), value.getContainerId());
+              time.milliseconds(), value.getAccountId(), value.getContainerId(), (short) 0);
       newValue.clearOriginalMessageOffset();
       forcePut = true;
     } else {
@@ -506,7 +506,7 @@ class CuratedLogIndexState {
       IndexValue latest = toConsider.get(toConsider.size() - 1);
       if (latest.getExpiresAtMs() != retCandidate.getExpiresAtMs()) {
         retCandidate =
-            new IndexValue(retCandidate.getOffset().getName(), retCandidate.getBytes(), retCandidate.getVersion());
+            new IndexValue(retCandidate.getOffset().getName(), retCandidate.getBytes(), retCandidate.getFormatVersion());
         retCandidate.setFlag(IndexValue.Flags.Ttl_Update_Index);
         retCandidate.setExpiresAtMs(latest.getExpiresAtMs());
       }

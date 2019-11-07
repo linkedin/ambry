@@ -84,31 +84,36 @@ class ConnectionTracker {
    * For (host, port) pools that are below the minimum number of active connections, initiate new connections to each
    * host until they meet it.
    * @param connectionFactory the {@link ConnectionFactory} for interfacing with the networking layer.
+   * @param maxNewConnectionsPerHost the max number of connections to be initiated in this call for each host.
    * @return the number of connections initiated.
    */
-  int replenishConnections(ConnectionFactory connectionFactory) {
-    int connectionsInitiated = 0;
+  int replenishConnections(ConnectionFactory connectionFactory, int maxNewConnectionsPerHost) {
+    int newConnections = 0;
     Iterator<HostPortPoolManager> iter = poolManagersBelowMinActiveConnections.iterator();
     while (iter.hasNext()) {
       HostPortPoolManager poolManager = iter.next();
       try {
         // avoid continuously attempting to connect to down nodes.
         if (poolManager.dataNodeId.getState() == HardwareState.AVAILABLE) {
-          while (!poolManager.hasMinActiveConnections()) {
+          int newConnectionsToHost = 0;
+          while (newConnectionsToHost < maxNewConnectionsPerHost && !poolManager.hasMinActiveConnections()) {
             String connId = connectionFactory.connect(poolManager.host, poolManager.port);
             poolManager.incrementPoolCount();
             connectionIdToPoolManager.put(connId, poolManager);
             totalManagedConnectionsCount++;
-            connectionsInitiated++;
+            newConnections++;
+            newConnectionsToHost++;
           }
-          iter.remove();
+          if (poolManager.hasMinActiveConnections()) {
+            iter.remove();
+          }
         }
       } catch (IOException e) {
         LOGGER.warn("Encountered exception while replenishing connections to {}:{}.", poolManager.host,
             poolManager.port.getPort(), e);
       }
     }
-    return connectionsInitiated;
+    return newConnections;
   }
 
   /**

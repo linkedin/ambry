@@ -51,7 +51,7 @@ public class SocketNetworkClientTest {
   public static final int POLL_TIMEOUT_MS = 100;
   public static final int TIME_FOR_WARM_UP_MS = 2000;
 
-  private final Time time;
+  private final MockTime time;
 
   private MockSelector selector;
   private SocketNetworkClient networkClient;
@@ -342,26 +342,49 @@ public class SocketNetworkClientTest {
     checkConnectCalls.run();
 
     selector.setState(MockSelectorState.Good);
-    // this sendAndPoll() should use one of the pre-warmed connections
+    // 1. this sendAndPoll() should use one of the pre-warmed connections
     List<ResponseInfo> responseInfoList =
         networkClient.sendAndPoll(requestGen.apply(3), Collections.emptySet(), POLL_TIMEOUT_MS);
     checkConnectCalls.run();
     Assert.assertEquals(3, responseInfoList.size());
 
-    // this sendAndPoll() should disconnect two of the pre-warmed connections
+    // 2. this sendAndPoll() should disconnect two of the pre-warmed connections
     selector.setState(MockSelectorState.DisconnectOnSend);
     responseInfoList = networkClient.sendAndPoll(requestGen.apply(2), Collections.emptySet(), POLL_TIMEOUT_MS);
     checkConnectCalls.run();
     Assert.assertEquals(2, responseInfoList.size());
 
-    // the two connections lost in the previous sendAndPoll should be replenished
+    // 3. the two connections lost in the previous sendAndPoll should not be replenished yet since a second has not yet
+    // passed since startup
     selector.setState(MockSelectorState.Good);
     responseInfoList = networkClient.sendAndPoll(requestGen.apply(1), Collections.emptySet(), POLL_TIMEOUT_MS);
-    expectedConnectCalls.addAndGet(2);
     checkConnectCalls.run();
     Assert.assertEquals(1, responseInfoList.size());
 
-    // this call should use the existing connections in the pool
+    // 4. one of the connection lost in sendAndPoll 3 should be replenished
+    time.setCurrentMilliseconds(time.milliseconds() + Time.MsPerSec);
+    selector.setState(MockSelectorState.Good);
+    responseInfoList = networkClient.sendAndPoll(requestGen.apply(0), Collections.emptySet(), POLL_TIMEOUT_MS);
+    expectedConnectCalls.addAndGet(1);
+    checkConnectCalls.run();
+    Assert.assertEquals(0, responseInfoList.size());
+
+    // 5. no connections replenished this time since only half a second passed.
+    time.setCurrentMilliseconds(time.milliseconds() + 500);
+    selector.setState(MockSelectorState.Good);
+    responseInfoList = networkClient.sendAndPoll(requestGen.apply(0), Collections.emptySet(), POLL_TIMEOUT_MS);
+    checkConnectCalls.run();
+    Assert.assertEquals(0, responseInfoList.size());
+
+    // 6. the second connection lost in sendAndPoll 3 should be replenished
+    time.setCurrentMilliseconds(time.milliseconds() + 500);
+    selector.setState(MockSelectorState.Good);
+    responseInfoList = networkClient.sendAndPoll(requestGen.apply(0), Collections.emptySet(), POLL_TIMEOUT_MS);
+    expectedConnectCalls.addAndGet(1);
+    checkConnectCalls.run();
+    Assert.assertEquals(0, responseInfoList.size());
+
+    // 7. this call should use the existing connections in the pool
     selector.setState(MockSelectorState.Good);
     responseInfoList = networkClient.sendAndPoll(requestGen.apply(3), Collections.emptySet(), POLL_TIMEOUT_MS);
     checkConnectCalls.run();

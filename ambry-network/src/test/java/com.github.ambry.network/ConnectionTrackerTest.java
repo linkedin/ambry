@@ -230,7 +230,7 @@ public class ConnectionTrackerTest {
 
     // call replenishConnections to warm up connections
     assertCounts(totalConnectionsCount, availableCount);
-    connectionTracker.replenishConnections(this::mockNewConnection);
+    connectionTracker.replenishConnections(this::mockNewConnection, Integer.MAX_VALUE);
     totalConnectionsCount += minActiveConnectionsCount;
     assertCounts(totalConnectionsCount, availableCount);
     List<String> newConnections = getNewlyEstablishedConnections();
@@ -247,7 +247,7 @@ public class ConnectionTrackerTest {
     assertCounts(totalConnectionsCount, availableCount);
 
     // replenish connections again
-    connectionTracker.replenishConnections(this::mockNewConnection);
+    connectionTracker.replenishConnections(this::mockNewConnection, Integer.MAX_VALUE);
     totalConnectionsCount += 2;
     assertCounts(totalConnectionsCount, availableCount);
     newConnections = getNewlyEstablishedConnections();
@@ -269,7 +269,24 @@ public class ConnectionTrackerTest {
     totalConnectionsCount -= 1;
     availableCount += 1;
     assertCounts(totalConnectionsCount, availableCount);
-    connectionTracker.replenishConnections(this::mockNewConnection);
+    connectionTracker.replenishConnections(this::mockNewConnection, Integer.MAX_VALUE);
+    totalConnectionsCount += 1;
+    assertCounts(totalConnectionsCount, availableCount);
+
+    // check out and destroy all host2 connections
+    String connId;
+    while ((connId = connectionTracker.checkOutConnection("host2", sslPort, dataNodeId2)) != null) {
+      connectionTracker.removeConnection(connId);
+    }
+    totalConnectionsCount -= 2;
+    availableCount -= 2;
+    assertCounts(totalConnectionsCount, availableCount);
+
+    // Replenish connection with rate limit of 1 connection per host per call.
+    connectionTracker.replenishConnections(this::mockNewConnection, 1);
+    totalConnectionsCount += 1;
+    assertCounts(totalConnectionsCount, availableCount);
+    connectionTracker.replenishConnections(this::mockNewConnection, 1);
     totalConnectionsCount += 1;
     assertCounts(totalConnectionsCount, availableCount);
   }
