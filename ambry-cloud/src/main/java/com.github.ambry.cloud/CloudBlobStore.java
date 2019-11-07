@@ -402,6 +402,12 @@ class CloudBlobStore implements Store {
     }
   }
 
+  /**
+   * Create {@link MessageInfo} object from {@link CloudBlobMetadata} object.
+   * @param metadata {@link CloudBlobMetadata} object.
+   * @return {@link MessageInfo} object.
+   * @throws IOException
+   */
   private MessageInfo getMessageInfoFromMetadata(CloudBlobMetadata metadata) throws IOException {
     BlobId blobId = new BlobId(metadata.getId(), clusterMap);
     long operationTime = (metadata.getDeletionTime() > 0) ? metadata.getDeletionTime()

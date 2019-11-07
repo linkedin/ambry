@@ -14,7 +14,6 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
@@ -349,7 +348,7 @@ public class AzureCloudDestinationTest {
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       inputMetadata.setUploadTime(startTime + j);
-      docList.add(createDocumentFromCloudBlobMetadata(inputMetadata, startTime + j));
+      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + j, objectMapper));
     }
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
     when(mockIterable.iterator()).thenReturn(docList.iterator());
@@ -400,13 +399,13 @@ public class AzureCloudDestinationTest {
       blobIdList.add(blobId.getID());
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
-      docList.add(createDocumentFromCloudBlobMetadata(inputMetadata, startTime));
+      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime, objectMapper));
     }
     BlobId blobId = generateBlobId();
     blobIdList.add(blobId.getID());
     CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
         CloudBlobMetadata.EncryptionOrigin.NONE);
-    docList.add(createDocumentFromCloudBlobMetadata(inputMetadata, startTime + 1));
+    docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + 1, objectMapper));
 
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
     when(mockIterable.iterator()).thenReturn(docList.iterator());
@@ -609,19 +608,6 @@ public class AzureCloudDestinationTest {
     assertTrue("Expected retrieveTokens to return true", azureDest.retrieveTokens(path, tokenFile, outputStream));
     mockBlobExistence(false);
     assertFalse("Expected retrieveTokens to return false", azureDest.retrieveTokens(path, tokenFile, outputStream));
-  }
-
-  /**
-   * Create {@link Document} object from {@link CloudBlobMetadata} object with specified updateTime.
-   * @param cloudBlobMetadata {@link CloudBlobMetadata} object.
-   * @param uploadTime specified upload time.
-   * @return {@link Document} object.
-   */
-  private Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, long uploadTime)
-      throws JsonProcessingException {
-    Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
-    document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, uploadTime);
-    return document;
   }
 
   /**
