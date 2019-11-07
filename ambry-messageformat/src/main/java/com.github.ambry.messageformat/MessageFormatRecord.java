@@ -1665,9 +1665,9 @@ public class MessageFormatRecord {
       // Change the byte buffer's position as if the data is fetched.
       byteBuffer.position(startIndex + dataSize);
     } else if (inputStream instanceof NettyByteBufDataInputStream) {
-      // getBuffer function doesn't increase the reference count on this ByteBuf.
+      // getBuffer() doesn't increase the reference count on this ByteBuf.
       ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
-      // construct a java.nio.ByteBuf to create a ByteBufferInputStream
+      // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
       int startIndex = nettyByteBuf.readerIndex();
       ByteBuffer dataBuffer = nettyByteBuf.nioBuffer(startIndex, dataSize);
       crcStream.updateCrc(dataBuffer.duplicate());

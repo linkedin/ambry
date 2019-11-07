@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.SystemTime;
+import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -30,11 +31,13 @@ class SocketServerRequest implements Request {
   private final String connectionId;
   private final InputStream input;
   private final long startTimeInMs;
+  private Object buffer;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public SocketServerRequest(int processor, String connectionId, InputStream input) throws IOException {
+  public SocketServerRequest(int processor, String connectionId, Object buffer, InputStream input) throws IOException {
     this.processor = processor;
     this.connectionId = connectionId;
+    this.buffer = buffer;
     this.input = input;
     this.startTimeInMs = SystemTime.getInstance().milliseconds();
     logger.trace("Processor {} received request : {}", processor, connectionId);
@@ -48,6 +51,14 @@ class SocketServerRequest implements Request {
   @Override
   public long getStartTimeInMs() {
     return startTimeInMs;
+  }
+
+  @Override
+  public void release() {
+    if (buffer != null) {
+      ReferenceCountUtil.release(buffer);
+      buffer = null;
+    }
   }
 
   public int getProcessor() {
@@ -186,6 +197,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   }
 
   public void shutdown() {
+    requestQueue.forEach(Request::release);
     requestQueue.clear();
   }
 }

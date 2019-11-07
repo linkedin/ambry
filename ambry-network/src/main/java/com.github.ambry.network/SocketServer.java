@@ -156,7 +156,7 @@ public class SocketServer implements NetworkServer {
 
     requestResponseChannel.addResponseListener(new ResponseListener() {
       @Override
-      public void onResponse(int processorId) {
+      public void onResponse(int processorId){
         processors.get(processorId).wakeup();
       }
     });
@@ -191,6 +191,7 @@ public class SocketServer implements NetworkServer {
         processor.shutdown();
       }
       logger.info("Shutdown completed");
+      requestResponseChannel.shutdown();
     } catch (Exception e) {
       logger.error("Error shutting down socket server {}", e);
     }
@@ -416,8 +417,9 @@ class Processor extends AbstractServerThread {
         List<NetworkReceive> completedReceives = selector.completedReceives();
         for (NetworkReceive networkReceive : completedReceives) {
           String connectionId = networkReceive.getConnectionId();
-          SocketServerRequest req = new SocketServerRequest(id, connectionId,
-              Utils.createDataInputStreamFromBuffer(networkReceive.getReceivedBytes().getAndRelease()));
+          Object buffer = networkReceive.getReceivedBytes().getAndRelease();
+          SocketServerRequest req = new SocketServerRequest(id, connectionId, buffer,
+              Utils.createDataInputStreamFromBuffer(buffer));
           channel.sendRequest(req);
         }
       }

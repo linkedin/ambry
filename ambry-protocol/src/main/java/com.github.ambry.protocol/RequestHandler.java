@@ -36,9 +36,10 @@ public class RequestHandler implements Runnable {
   }
 
   public void run() {
+    Request req = null;
     while (true) {
       try {
-        Request req = requestChannel.receiveRequest();
+        req = requestChannel.receiveRequest();
         if (req.equals(EmptyRequest.getInstance())) {
           logger.debug("Request handler {} received shut down command", id);
           return;
@@ -50,6 +51,11 @@ public class RequestHandler implements Runnable {
         logger.error("Exception when handling request", e);
         // this is bad and we need to shutdown the app
         Runtime.getRuntime().halt(1);
+      } finally {
+        if (req != null) {
+          req.release();
+          req = null;
+        }
       }
     }
   }

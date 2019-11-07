@@ -142,6 +142,6 @@ public class NetworkConfig {
     selectorMaxKeyToProcess =
         verifiableProperties.getIntInRange(SELECTOR_MAX_KEY_TO_PROCESS, -1, -1, Integer.MAX_VALUE);
     selectorUseDirectBuffers = verifiableProperties.getBoolean(SELECTOR_USE_DIRECT_BUFFERS, false);
-    networkUseNettyByteBuf = verifiableProperties.getBoolean(NETWORK_USE_NETTY_BYTE_BUF, false);
+    networkUseNettyByteBuf = verifiableProperties.getBoolean(NETWORK_USE_NETTY_BYTE_BUF, true);
   }
 }

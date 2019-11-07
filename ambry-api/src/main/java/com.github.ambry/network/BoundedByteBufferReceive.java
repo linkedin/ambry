@@ -30,17 +30,17 @@ public class BoundedByteBufferReceive implements BoundedReceive<ByteBuffer> {
   private ByteBuffer sizeBuffer;
   private long sizeToRead;
   private long sizeRead;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final static Logger logger = LoggerFactory.getLogger(BoundedByteBufferReceive.class);
 
   public BoundedByteBufferReceive() {
     sizeToRead = 0;
     sizeRead = 0;
-    sizeBuffer = ByteBuffer.allocate(8);
+    sizeBuffer = ByteBuffer.allocate(Long.BYTES);
   }
 
   @Override
   public boolean isReadComplete() {
-    return !(buffer == null || sizeRead < sizeToRead);
+    return buffer != null && sizeRead >= sizeToRead;
   }
 
   @Override
@@ -54,8 +54,8 @@ public class BoundedByteBufferReceive implements BoundedReceive<ByteBuffer> {
       if (sizeBuffer.position() == sizeBuffer.capacity()) {
         sizeBuffer.flip();
         sizeToRead = sizeBuffer.getLong();
-        sizeRead += 8;
-        buffer = ByteBuffer.allocate((int) sizeToRead - 8);
+        sizeRead += Long.BYTES;
+        buffer = ByteBuffer.allocate((int) sizeToRead - Long.BYTES);
         sizeBuffer = null;
       }
     }

@@ -33,11 +33,11 @@ public class BoundedNettyByteBufReceive implements BoundedReceive<ByteBuf> {
   private ByteBuf sizeBuffer = null;
   private long sizeToRead = 0;
   private long sizeRead = 0;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final static Logger logger = LoggerFactory.getLogger(BoundedNettyByteBufReceive.class);
 
   @Override
   public boolean isReadComplete() {
-    return !(buffer == null || sizeRead < sizeToRead);
+    return buffer != null &&  sizeRead >= sizeToRead;
   }
 
   /**
@@ -49,7 +49,7 @@ public class BoundedNettyByteBufReceive implements BoundedReceive<ByteBuf> {
    * @throws IOException Any I/O error.
    */
   private int readBytesFromReadableByteChannel(ReadableByteChannel channel, ByteBuf buffer) throws IOException {
-    int n = channel.read(buffer.internalNioBuffer(buffer.writerIndex(), buffer.capacity() - buffer.writerIndex()));
+    int n = channel.read(buffer.nioBuffer(buffer.writerIndex(), buffer.capacity() - buffer.writerIndex()));
     if (n > 0) {
       buffer.writerIndex(buffer.writerIndex() + n);
     }
@@ -61,7 +61,7 @@ public class BoundedNettyByteBufReceive implements BoundedReceive<ByteBuf> {
     long bytesRead = 0;
     if (buffer == null) {
       if (sizeBuffer == null) {
-        sizeBuffer = ByteBufAllocator.DEFAULT.heapBuffer(8);
+        sizeBuffer = ByteBufAllocator.DEFAULT.heapBuffer(Long.BYTES);
       }
       try {
         bytesRead = readBytesFromReadableByteChannel(channel, sizeBuffer);
@@ -75,9 +75,9 @@ public class BoundedNettyByteBufReceive implements BoundedReceive<ByteBuf> {
       }
       if (sizeBuffer.writerIndex() == sizeBuffer.capacity()) {
         sizeToRead = sizeBuffer.readLong();
-        sizeRead += 8;
+        sizeRead += Long.BYTES;
         sizeBuffer.release();
-        buffer = ByteBufAllocator.DEFAULT.heapBuffer((int) sizeToRead - 8);
+        buffer = ByteBufAllocator.DEFAULT.heapBuffer((int) sizeToRead - Long.BYTES);
       }
     }
     if (buffer != null && sizeRead < sizeToRead) {
@@ -101,7 +101,7 @@ public class BoundedNettyByteBufReceive implements BoundedReceive<ByteBuf> {
 
   /**
    * Returns the payload as {@link ByteBuf}, at the same time release the current reference to this payload.
-   * It's not safe to call this function again.
+   * It's not safe to call this function multiple times.
    * @return
    */
   @Override
