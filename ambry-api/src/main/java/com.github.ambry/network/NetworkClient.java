@@ -18,7 +18,6 @@ import java.io.Closeable;
 import java.util.List;
 import java.util.Set;
 
-// TODO: move to api along with Request/ResponseInfo
 
 /**
  * A {@link NetworkClient}  provides a method for sending a list of requests to one or more destinations,
@@ -41,11 +40,22 @@ public interface NetworkClient extends Closeable {
    */
   List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop, int pollTimeoutMs);
 
+  /**
+   * Warm up connections to dataNodes in a specified time window.
+   * @param dataNodeIds warm up target nodes.
+   * @param connectionWarmUpPercentagePerDataNode percentage of max connections would like to establish in the warmup.
+   * @param timeForWarmUp max time to wait for connections' establish in milliseconds.
+   * @param responseInfoList records responses from disconnected connections.
+   * @return number of connections established successfully.
+   */
   int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionWarmUpPercentagePerDataNode, long timeForWarmUp,
       List<ResponseInfo> responseInfoList);
 
+  /**
+   * Wake up the NetworkClient if it is within a {@link #sendAndPoll(List, Set, int)} sleep.
+   */
   void wakeup();
 
   @Override
-  public void close();
+  void close();
 }

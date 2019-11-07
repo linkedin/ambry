@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +40,7 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
 
   private static final Logger logger = LoggerFactory.getLogger(LocalRequestResponseChannel.class);
   private BlockingQueue<Request> requestQueue = new LinkedBlockingQueue<>();
-  private Map<Integer, List<ResponseInfo>> responseMap = new ConcurrentHashMap<>();
+  private Map<Integer, BlockingQueue<ResponseInfo>> responseMap = new ConcurrentHashMap<>();
   // buffer to hold size header that we strip off payloads
   private static final byte[] sizeByteArray = new byte[Long.BYTES];
 
@@ -68,12 +69,10 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
       LocalChannelRequest localRequest = (LocalChannelRequest) originalRequest;
       ResponseInfo responseInfo =
           new ResponseInfo(localRequest.requestInfo, null, byteBufferFromPayload(payloadToSend));
-      List<ResponseInfo> responseList = getResponseList(localRequest.processorId);
-      synchronized (responseList) {
-        responseList.add(responseInfo);
-        logger.debug("Added response for {}, size now {}", localRequest.processorId, responseList.size());
-      }
-    } catch (IOException ex) {
+      BlockingQueue<ResponseInfo> responseQueue = getResponseQueue(localRequest.processorId);
+      responseQueue.put(responseInfo);
+      logger.debug("Added response for {}, size now {}", localRequest.processorId, responseQueue.size());
+    } catch (IOException | InterruptedException ex) {
       logger.error("Could not extract response", ex);
     }
   }
@@ -81,28 +80,33 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   /**
    * Receive all queued responses corresponding to requests matching a processor id.
    * @param processorId the processor id to match.
+   * @param pollTimeoutMs the poll timeout in msec.
    * @return the applicable responses.
    */
-  public List<ResponseInfo> receiveResponses(int processorId) {
-    List<ResponseInfo> responseList = getResponseList(processorId);
-    synchronized (responseList) {
-      if (responseList.isEmpty()) {
-        return Collections.emptyList();
-      } else {
-        List<ResponseInfo> result = new ArrayList<>(responseList);
-        responseList.clear();
-        logger.debug("Returning {} responses for {}", result.size(), processorId);
-        return result;
-      }
+  public List<ResponseInfo> receiveResponses(int processorId, int pollTimeoutMs) {
+    BlockingQueue<ResponseInfo> responseQueue = getResponseQueue(processorId);
+    ResponseInfo firstResponse = null;
+    try {
+      firstResponse = responseQueue.poll(pollTimeoutMs, TimeUnit.MILLISECONDS);
+    } catch (InterruptedException ie) {
+      logger.debug("Interrupted polling responses for {}", processorId);
     }
+    if (firstResponse == null) {
+      return Collections.emptyList();
+    }
+    List<ResponseInfo> responseList = new ArrayList<>();
+    responseList.add(firstResponse);
+    responseQueue.drainTo(responseList);
+    logger.debug("Returning {} responses for {}", responseList.size(), processorId);
+    return responseList;
   }
 
   /**
    * @return the response list corresponding to a processor id.
    * @param processorId the processor id to match.
    */
-  private List<ResponseInfo> getResponseList(int processorId) {
-    return responseMap.computeIfAbsent(processorId, p -> new ArrayList<>());
+  private BlockingQueue<ResponseInfo> getResponseQueue(int processorId) {
+    return responseMap.computeIfAbsent(processorId, p -> new LinkedBlockingQueue<>());
   }
 
   @Override

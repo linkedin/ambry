@@ -138,7 +138,7 @@ class CloudBlobStore implements Store {
         // For now, set ttlUpdated = true for all permanent blobs, so the correct ttl
         // is applied by GetOperation.
         boolean ttlUpdated = blobMetadata.getExpirationTime() == Utils.Infinite_Time;
-        boolean deleted = blobMetadata.getDeletionTime() > 0;
+        boolean deleted = blobMetadata.getDeletionTime() != Utils.Infinite_Time;
         MessageInfo messageInfo =
             new MessageInfo(blobId, blobMetadata.getSize(), deleted, ttlUpdated, blobMetadata.getExpirationTime(),
                 (short) blobMetadata.getAccountId(), (short) blobMetadata.getContainerId(),

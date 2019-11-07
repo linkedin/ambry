@@ -26,5 +26,5 @@ public interface NetworkClientFactory {
    * @return return a new {@link NetworkClient}
    * @throws IOException if the {@link NetworkClient} could not be instantiated.
    */
-  public NetworkClient getNetworkClient() throws IOException;
+  NetworkClient getNetworkClient() throws IOException;
 }

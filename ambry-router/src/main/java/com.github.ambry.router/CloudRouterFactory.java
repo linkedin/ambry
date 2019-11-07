@@ -22,6 +22,7 @@ import com.github.ambry.cloud.CloudStorageManager;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
@@ -29,7 +30,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.ServerConfig;
-import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.LocalNetworkClientFactory;
 import com.github.ambry.network.LocalRequestResponseChannel;
@@ -44,13 +44,14 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
  * Implementation of {@link RouterFactory} that creates routers that work with cloud storage.
+ * This is somewhat experimental, written to enable Ambry frontend to talk to Azure.  Eventually
+ * the router will need to work with both cloud and data stores.
  */
 public class CloudRouterFactory implements RouterFactory {
   private static final Logger logger = LoggerFactory.getLogger(CloudRouterFactory.class);
@@ -60,12 +61,11 @@ public class CloudRouterFactory implements RouterFactory {
   private final NotificationSystem notificationSystem;
   private final AccountService accountService;
   private final Time time;
-  private final NetworkClientFactory networkClientFactory;
   private final KeyManagementService kms;
   private final CryptoService cryptoService;
   private final CryptoJobHandler cryptoJobHandler;
   private final String defaultPartitionClass;
-  private final RequestHandlerPool requestHandlerPool;
+  private final VerifiableProperties verifiableProperties;
 
   /**
    * Creates an instance of NonBlockingRouterFactory with the given {@code verifiableProperties},
@@ -83,6 +83,7 @@ public class CloudRouterFactory implements RouterFactory {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null argument passed in");
     }
+    this.verifiableProperties = verifiableProperties;
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     if (sslFactory == null && clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0) {
       throw new IllegalArgumentException("NonBlockingRouter requires SSL, but sslFactory is null");
@@ -107,22 +108,49 @@ public class CloudRouterFactory implements RouterFactory {
     cryptoService = cryptoServiceFactory.getCryptoService();
     cryptoJobHandler = new CryptoJobHandler(routerConfig.routerCryptoJobsWorkerCount);
     defaultPartitionClass = clusterMapConfig.clusterMapDefaultPartitionClass;
-
-    // TODO: need to shut pool down on exit, may need to move to RestServer
-    // Or pass it to router
-    requestHandlerPool = getRequestHandlerPool(verifiableProperties, clusterMap, notificationSystem);
-    networkClientFactory = new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(),
-        new NetworkConfig(verifiableProperties), new NetworkMetrics(registry), time);
     logger.info("Instantiated CloudRouterFactory");
   }
 
-  public static RequestHandlerPool getRequestHandlerPool(VerifiableProperties verifiableProperties,
-      ClusterMap clusterMap, NotificationSystem notificationSystem) throws Exception {
+  /**
+   * Construct and return a {@link NonBlockingRouter} that works with cloud storage.
+   * @return a {@link NonBlockingRouter}
+   */
+  @Override
+  public Router getRouter() throws InstantiationException {
+    try {
+      MetricRegistry registry = clusterMap.getMetricRegistry();
+      RequestHandlerPool requestHandlerPool =
+          getRequestHandlerPool(verifiableProperties, clusterMap, notificationSystem);
+      NetworkClientFactory networkClientFactory =
+          new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(),
+              new NetworkConfig(verifiableProperties), new NetworkMetrics(registry), time);
+      NonBlockingRouter router =
+          new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap, kms,
+              cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
+      // Make sure requestHandlerPool is shut down properly
+      router.addResourceToClose(requestHandlerPool);
+      logger.info("Instantiated NonBlockingRouter");
+      return router;
+    } catch (Exception e) {
+      logger.error("Error instantiating NonBlocking Router", e);
+      throw new InstantiationException("Error instantiating NonBlocking Router: " + e.toString());
+    }
+  }
+
+  /**
+   * Utility method to build  a {@link RequestHandlerPool}.
+   * @param verifiableProperties the properties to use.
+   * @param clusterMap the {@link ClusterMap} to use.
+   * @param notificationSystem the {@link NotificationSystem} to use.
+   * @return the constructed {@link RequestHandlerPool}.
+   * @throws Exception if the construction fails.
+   */
+  static RequestHandlerPool getRequestHandlerPool(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      NotificationSystem notificationSystem) throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
     // TODO: move properties into maybe routerConfig, frontendConfig
     ServerConfig serverConfig = new ServerConfig(verifiableProperties);
-    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
     MetricRegistry registry = clusterMap.getMetricRegistry();
 
     DataNodeId nodeId = new CloudDataNode(cloudConfig, clusterMapConfig);
@@ -134,7 +162,7 @@ public class CloudRouterFactory implements RouterFactory {
         new CloudStorageManager(verifiableProperties, vcrMetrics, cloudDestination, clusterMap);
     LocalRequestResponseChannel channel = new LocalRequestResponseChannel();
     ServerMetrics serverMetrics = new ServerMetrics(registry, AmbryRequests.class);
-    StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
     StoreKeyConverterFactory storeKeyConverterFactory =
         Utils.getObj(serverConfig.serverStoreKeyConverterFactory, verifiableProperties, registry);
     AmbryRequests requests =
@@ -142,22 +170,6 @@ public class CloudRouterFactory implements RouterFactory {
             notificationSystem, null, storeKeyFactory, serverConfig.serverEnableStoreDataPrefetch,
             storeKeyConverterFactory);
     return new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, channel, requests);
-  }
-
-  /**
-   * Construct and return a {@link NonBlockingRouter} that works with cloud storage.
-   * @return a {@link NonBlockingRouter}
-   */
-  @Override
-  public Router getRouter() {
-    try {
-      NonBlockingRouter router = new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
-      router.setRequestHandlerPool(requestHandlerPool);
-      return router;
-    } catch (IOException e) {
-      throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
-    }
   }
 }
 

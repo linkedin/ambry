@@ -65,15 +65,12 @@ public class LocalNetworkClient implements NetworkClient {
    * @param pollTimeoutMs the poll timeout.
    * @return a list of {@link ResponseInfo} representing the responses received for any requests that were sent out
    * so far.
-   * @throws IllegalStateException if the SocketNetworkClient is closed.
+   * @throws IllegalStateException if the client is closed.
    */
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
     if (closed) {
       throw new IllegalStateException("The client is closed.");
-    }
-    if (processorId < 0) {
-      throw new IllegalStateException("The processorId has not been set.");
     }
 
     // TODO: do anything with requestsToDrop?
@@ -89,17 +86,17 @@ public class LocalNetworkClient implements NetworkClient {
       networkMetrics.networkClientException.inc();
     }
 
-    List<ResponseInfo> responses = channel.receiveResponses(processorId);
+    List<ResponseInfo> responses = channel.receiveResponses(processorId, pollTimeoutMs);
     networkMetrics.networkClientSendAndPollTime.update(time.milliseconds() - startTime, TimeUnit.MILLISECONDS);
     return responses;
   }
 
   /**
-   * Close the SocketNetworkClient and cleanup.
+   * Close the LocalNetworkClient and cleanup.
    */
   @Override
   public void close() {
-    logger.trace("Closing the SocketNetworkClient");
+    logger.trace("Closing the LocalNetworkClient");
     closed = true;
   }
 
@@ -111,6 +108,6 @@ public class LocalNetworkClient implements NetworkClient {
 
   @Override
   public void wakeup() {
-
+    // TODO: need to do anything here?
   }
 }

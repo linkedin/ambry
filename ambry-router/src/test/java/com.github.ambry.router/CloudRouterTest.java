@@ -134,7 +134,7 @@ public class CloudRouterTest extends NonBlockingRouterTest {
     router =
         new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, mockClusterMap,
             kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    router.setRequestHandlerPool(requestHandlerPool);
+    router.addResourceToClose(requestHandlerPool);
   }
 
   /**

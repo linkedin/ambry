@@ -18,7 +18,7 @@ import java.nio.ByteBuffer;
 
 
 /**
- * The response from a {@link SocketNetworkClient} comes in the form of an object of this class.
+ * The response from a {@link NetworkClient} comes in the form of an object of this class.
  * This class consists of the request associated with this response, along with either a non-null exception if there
  * was an error sending the request or a non-null ByteBuffer containing the successful response received for this
  * request. Also, this class contains {@link DataNodeId} to which the request is issued.

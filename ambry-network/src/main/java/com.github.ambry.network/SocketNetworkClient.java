@@ -97,6 +97,7 @@ public class SocketNetworkClient implements NetworkClient {
    * so far.
    * @throws IllegalStateException if the SocketNetworkClient is closed.
    */
+  @Override
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
     if (closed || !selector.isOpen()) {
@@ -247,6 +248,7 @@ public class SocketNetworkClient implements NetworkClient {
    * @param responseInfoList records responses from disconnected connections.
    * @return number of connections established successfully.
    */
+  @Override
   public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionWarmUpPercentagePerDataNode,
       long timeForWarmUp, List<ResponseInfo> responseInfoList) {
     logger.info("Connection warm up start.");
@@ -365,6 +367,7 @@ public class SocketNetworkClient implements NetworkClient {
    * <br>
    * @see java.nio.channels.Selector#wakeup()
    */
+  @Override
   public void wakeup() {
     selector.wakeup();
   }
