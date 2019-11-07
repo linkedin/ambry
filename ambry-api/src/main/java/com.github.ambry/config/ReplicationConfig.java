@@ -180,6 +180,6 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean("replication.track.per.partition.lag.from.remote", false);
     replicaMetadataRequestVersion =
         verifiableProperties.getShortInRange("replication.metadata.request.version", (short) 1, (short) 1, (short) 2);
-    replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("vcr.cluster.replication.enabled", false);
+    replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
   }
 }
