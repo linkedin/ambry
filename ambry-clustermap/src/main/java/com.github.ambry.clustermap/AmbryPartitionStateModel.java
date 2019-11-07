@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
 
 @StateModelInfo(initialState = "OFFLINE", states = {"BOOTSTRAP", "LEADER", "STANDBY", "INACTIVE"})
 public class AmbryPartitionStateModel extends StateModel {
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(AmbryPartitionStateModel.class);
   private final String resourceName;
   private final String partitionName;
 
@@ -33,7 +33,7 @@ public class AmbryPartitionStateModel extends StateModel {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
     StateModelParser parser = new StateModelParser();
-    _currentState = parser.getInitialState(DefaultLeaderStandbyStateModel.class);
+    _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
   }
 
   @Transition(to = "BOOTSTRAP", from = "OFFLINE")

@@ -68,8 +68,8 @@ class AmbryPartition implements PartitionId {
   }
 
   @Override
-  public List<AmbryReplica> getReplicaIdsInRequiredState(String state, String dcName) {
-    return clusterManagerCallback.getReplicaIdsInRequiredState(this, state, dcName);
+  public List<AmbryReplica> getReplicaIdsByState(ReplicaState state, String dcName) {
+    return clusterManagerCallback.getReplicaIdsByState(this, state, dcName);
   }
 
   @Override

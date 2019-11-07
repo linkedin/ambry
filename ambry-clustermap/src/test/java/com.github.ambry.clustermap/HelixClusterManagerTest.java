@@ -40,6 +40,8 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixManager;
@@ -61,6 +63,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -507,16 +510,17 @@ public class HelixClusterManagerTest {
   @Test
   public void helixInitiatedIdealStateChangeTest() throws Exception {
     assumeTrue(!useComposite && !overrideEnabled);
-    verifyInitialClusterChanges((HelixClusterManager) clusterManager, helixCluster, dcs);
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, dcs);
     String resourceName = "newResource";
     String partitionName = String.valueOf(helixCluster.getAllPartitions().size());
     IdealState idealState = new IdealState(resourceName);
     idealState.setPreferenceList(partitionName, new ArrayList<>());
     helixCluster.addNewResource(resourceName, idealState, localDc);
-    verifyInitialClusterChanges((HelixClusterManager) clusterManager, helixCluster, new String[]{localDc});
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, new String[]{localDc});
     // localDc should have one more partition compared with remoteDc
     Map<String, ConcurrentHashMap<String, String>> partitionToResource =
-        ((HelixClusterManager) clusterManager).getPartitionToResourceMap();
+        (helixClusterManager).getPartitionToResourceMap();
     assertEquals("localDc should have one more partition", partitionToResource.get(localDc).size(),
         partitionToResource.get(remoteDc).size() + 1);
     assertTrue(partitionToResource.get(localDc).containsKey(partitionName) && !partitionToResource.get(remoteDc)
@@ -528,10 +532,23 @@ public class HelixClusterManagerTest {
    * replica in required state.
    */
   @Test
-  public void routingTableProviderChangeTest() {
+  public void routingTableProviderChangeTest() throws Exception {
     assumeTrue(!useComposite && !overrideEnabled);
-    Map<String, AtomicReference<RoutingTableSnapshot>> snapshotsByDc =
-        ((HelixClusterManager) clusterManager).getRoutingTableSnapshots();
+    metricRegistry = new MetricRegistry();
+    // Mock metricRegistry here to introduce a latch based counter for testing purpose
+    MetricRegistry mockMetricRegistry = Mockito.spy(metricRegistry);
+    Counter mockCounter = Mockito.mock(Counter.class);
+    AtomicReference<CountDownLatch> routingTableChangeLatch = new AtomicReference<>();
+    routingTableChangeLatch.set(new CountDownLatch(4));
+    doAnswer(invocation -> {
+      routingTableChangeLatch.get().countDown();
+      return null;
+    }).when(mockCounter).inc();
+    doReturn(mockCounter).when(mockMetricRegistry)
+        .counter(MetricRegistry.name(HelixClusterManager.class, "routingTableChangeTriggerCount"));
+    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
+        new MockHelixManagerFactory(helixCluster, null, null), mockMetricRegistry);
+    Map<String, AtomicReference<RoutingTableSnapshot>> snapshotsByDc = helixClusterManager.getRoutingTableSnapshots();
     RoutingTableSnapshot localDcSnapshot = snapshotsByDc.get(localDc).get();
 
     Set<InstanceConfig> instanceConfigsInSnapshot = new HashSet<>(localDcSnapshot.getInstanceConfigs());
@@ -539,20 +556,27 @@ public class HelixClusterManagerTest {
         new HashSet<>(helixCluster.getInstanceConfigsFromDcs(new String[]{localDc}));
     assertEquals("Mismatch in instance configs", instanceConfigsInCluster, instanceConfigsInSnapshot);
     // verify leader replica of each partition is correct
-    Map<String, String> leaderReplicasInSnapshot = new HashMap<>();
-    Map<String, String> leaderReplicasInCluster = helixCluster.getPartitionToLeaderReplica(localDc);
-    for (PartitionId partitionId : clusterManager.getAllPartitionIds(null)) {
-      List<? extends ReplicaId> leadReplicas =
-          partitionId.getReplicaIdsInRequiredState(ReplicaState.LEADER.name(), localDc);
-      assertTrue("There should not be more than one lead replica", leadReplicas.size() <= 1);
-      // some special partition class has replicas in one dc only
-      if (leadReplicas.size() == 1) {
-        DataNodeId dataNodeId = leadReplicas.get(0).getDataNodeId();
-        leaderReplicasInSnapshot.put(partitionId.toPathString(),
-            getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort()));
-      }
-    }
-    assertEquals("Mismatch in leader replicas", leaderReplicasInCluster, leaderReplicasInSnapshot);
+    verifyLeaderReplicasInDc(helixClusterManager, localDc);
+
+    // randomly choose a partition and change the leader replica of it in cluster
+    List<? extends PartitionId> defaultPartitionIds = helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS);
+    PartitionId partitionToChange =
+        defaultPartitionIds.get(0);//get((new Random()).nextInt(defaultPartitionIds.size()));
+    MockHelixAdmin mockHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
+    String currentLeaderInstance = mockHelixAdmin.getPartitionToLeaderReplica().get(partitionToChange.toPathString());
+    String newLeaderInstance = mockHelixAdmin.getInstancesForPartition(partitionToChange.toPathString())
+        .stream()
+        .filter(k -> !k.equals(currentLeaderInstance))
+        .findFirst()
+        .get();
+    routingTableChangeLatch.set(new CountDownLatch(1));
+    mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
+    mockHelixAdmin.triggerRoutingTableNotification();
+    assertTrue("Routing table change didn't come within 1 second",
+        routingTableChangeLatch.get().await(1, TimeUnit.SECONDS));
+    verifyLeaderReplicasInDc(helixClusterManager, localDc);
+
+    helixClusterManager.close();
   }
 
   /**
@@ -1119,6 +1143,28 @@ public class HelixClusterManagerTest {
         }
       }
     }
+  }
+
+  /**
+   * Helper method to verify leader replicas in cluster match those in routing table snapshot.
+   * @param helixClusterManager the {@link HelixClusterManager} from which routing table snapshot is retrieved to check.
+   * @param dcName name of the data center in which this verification is performed.
+   */
+  private void verifyLeaderReplicasInDc(HelixClusterManager helixClusterManager, String dcName) {
+    // Following are maps of partitionId to the instance that holds its leader replica.
+    Map<String, String> leaderReplicasInSnapshot = new HashMap<>();
+    Map<String, String> leaderReplicasInCluster = helixCluster.getPartitionToLeaderReplica(dcName);
+    for (PartitionId partitionId : helixClusterManager.getAllPartitionIds(null)) {
+      List<? extends ReplicaId> leadReplicas = partitionId.getReplicaIdsByState(ReplicaState.LEADER, dcName);
+      assertTrue("There should not be more than one lead replica", leadReplicas.size() <= 1);
+      // some special partition class has replicas in one dc only
+      if (leadReplicas.size() == 1) {
+        DataNodeId dataNodeId = leadReplicas.get(0).getDataNodeId();
+        leaderReplicasInSnapshot.put(partitionId.toPathString(),
+            getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort()));
+      }
+    }
+    assertEquals("Mismatch in leader replicas", leaderReplicasInCluster, leaderReplicasInSnapshot);
   }
 
   /**

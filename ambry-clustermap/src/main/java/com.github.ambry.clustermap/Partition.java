@@ -98,7 +98,7 @@ class Partition implements PartitionId {
   }
 
   @Override
-  public List<ReplicaId> getReplicaIdsInRequiredState(String state, String dcName) {
+  public List<ReplicaId> getReplicaIdsByState(ReplicaState state, String dcName) {
     // for static clustermap we assume all replicas are in StandBy state.
     List<ReplicaId> result = new ArrayList<>();
     if (state.equals(ReplicaState.STANDBY.name())) {

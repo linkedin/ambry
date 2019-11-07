@@ -46,7 +46,9 @@ public class MockHelixAdmin implements HelixAdmin {
   private final List<MockHelixManager> helixManagersForThisAdmin = new ArrayList<>();
   private Map<String, Set<String>> partitionToInstances = new HashMap<>();
   private Map<String, PartitionState> partitionToPartitionStates = new HashMap<>();
+  // A map of instanceName to state infos of all replicas on this instance
   private Map<String, ReplicaStateInfos> instanceToReplicaStateInfos = new HashMap<>();
+  // A map of partitionId to instanceName associated with leader replica
   private Map<String, String> partitionToLeaderReplica = new HashMap<>();
   private long totalDiskCapacity;
 
@@ -143,6 +145,20 @@ public class MockHelixAdmin implements HelixAdmin {
   public boolean setInstanceConfig(String clusterName, String instanceName, InstanceConfig instanceConfig) {
     instanceNameToinstanceConfigs.put(instanceName, instanceConfig);
     return true;
+  }
+
+  /**
+   * Change leader replica of certain partition from current one to the replica on specified instance.
+   * @param partition the partition whose leader replica should be changed.
+   * @param newLeaderInstance the instance on which new leader replica resides.
+   */
+  void changeLeaderReplicaForPartition(String partition, String newLeaderInstance) {
+    String currentLeaderInstance = partitionToLeaderReplica.get(partition);
+    // set current leader replica to STANDBY state
+    instanceToReplicaStateInfos.get(currentLeaderInstance).setReplicaState(partition, ReplicaState.STANDBY.name());
+    // set previous standby replica to LEADER state
+    instanceToReplicaStateInfos.get(newLeaderInstance).setReplicaState(partition, ReplicaState.LEADER.name());
+    partitionToLeaderReplica.put(partition, newLeaderInstance);
   }
 
   /**
@@ -289,6 +305,15 @@ public class MockHelixAdmin implements HelixAdmin {
   void triggerIdealStateChangeNotification() throws Exception {
     for (MockHelixManager helixManager : helixManagersForThisAdmin) {
       helixManager.triggerIdealStateNotification(false);
+    }
+  }
+
+  /**
+   * Trigger a routing table change notification
+   */
+  void triggerRoutingTableNotification() {
+    for (MockHelixManager helixManager : helixManagersForThisAdmin) {
+      helixManager.triggerRoutingTableNotification();
     }
   }
 
