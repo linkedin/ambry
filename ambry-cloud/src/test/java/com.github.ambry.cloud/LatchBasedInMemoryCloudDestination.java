@@ -19,6 +19,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -146,11 +147,34 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       long maxTotalSizeOfEntries) {
     List<CloudBlobMetadata> entries = new LinkedList<>();
     for (BlobId blobId : map.keySet()) {
-      if (map.get(blobId).getFirst().getLastUpdateTime() > findToken.getLastUpdateTime()) {
+      if (map.get(blobId).getFirst().getLastUpdateTime() >= findToken.getLastUpdateTime()) {
+        if (findToken.getLastUpdateTimeReadBlobIds().contains(map.get(blobId).getFirst().getId())) {
+          continue;
+        }
         entries.add(map.get(blobId).getFirst());
       }
     }
-    return entries;
+    Collections.sort(entries, (CloudBlobMetadata o1, CloudBlobMetadata o2) -> {
+      if (o1.getLastUpdateTime() == o2.getLastUpdateTime()) {
+        return 0;
+      }
+      return o1.getLastUpdateTime() > o2.getLastUpdateTime() ? 1 : -1;
+    });
+    long totalSize = 0;
+    List<CloudBlobMetadata> results = new ArrayList<>();
+    for (CloudBlobMetadata metadata : entries) {
+      // Cap results at max size
+      if (totalSize + metadata.getSize() > maxTotalSizeOfEntries) {
+        if (results.size() == 0) {
+          // We must add at least one regardless of size
+          results.add(metadata);
+        }
+        break;
+      }
+      results.add(metadata);
+      totalSize += metadata.getSize();
+    }
+    return results;
   }
 
   @Override

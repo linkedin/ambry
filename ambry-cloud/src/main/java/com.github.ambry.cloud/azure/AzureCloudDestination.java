@@ -51,6 +51,7 @@ import java.security.InvalidKeyException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -347,23 +348,22 @@ class AzureCloudDestination implements CloudDestination {
         new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, findSinceQueryLimit),
             new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime())));
     try {
-      List<CloudBlobMetadata> results =
+      List<CloudBlobMetadata> queryResults =
           cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
-      if (results.isEmpty()) {
-        return results;
+      if (queryResults.isEmpty()) {
+        return queryResults;
       }
-      long totalSize = 0;
-      List<CloudBlobMetadata> cappedResults = new ArrayList<>();
-      for (CloudBlobMetadata metadata : results) {
-        // Skip the last blobId in the token
-        if (metadata.getId().equals(findToken.getLatestBlobId())) {
-          continue;
-        }
+      if (queryResults.get(0).getLastUpdateTime() == findToken.getLastUpdateTime()) {
+        filterOutLastReadBlobs(queryResults, findToken.getLastUpdateTimeReadBlobIds(), findToken.getLastUpdateTime());
+      }
 
+      List<CloudBlobMetadata> cappedResults = new ArrayList<>();
+      long totalSize = 0;
+      for (CloudBlobMetadata metadata : queryResults) {
         // Cap results at max size
         if (totalSize + metadata.getSize() > maxTotalSizeOfEntries) {
-          // If we have no results yet, must add at least one regardless of size
-          if (cappedResults.isEmpty()) {
+          if (cappedResults.size() == 0) {
+            // We must add at least one regardless of size
             cappedResults.add(metadata);
           }
           break;
@@ -375,6 +375,27 @@ class AzureCloudDestination implements CloudDestination {
     } catch (DocumentClientException dex) {
       throw new CloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
     }
+  }
+
+  /**
+   * Filter out {@link CloudBlobMetadata} objects from lastUpdateTime ordered {@code cloudBlobMetadataList} whose
+   * lastUpdateTime is {@code lastUpdateTime} and id is in {@code lastReadBlobIds}.
+   * @param cloudBlobMetadataList list of {@link CloudBlobMetadata} objects to filter out from.
+   * @param lastReadBlobIds set if blobIds which need to be filtered out.
+   * @param lastUpdateTime lastUpdateTime of the blobIds to filter out.
+   */
+  private void filterOutLastReadBlobs(List<CloudBlobMetadata> cloudBlobMetadataList, Set<String> lastReadBlobIds,
+      long lastUpdateTime) {
+    List<CloudBlobMetadata> removeList = new LinkedList<>();
+    for (CloudBlobMetadata cloudBlobMetadata : cloudBlobMetadataList) {
+      if (removeList.size() == lastReadBlobIds.size() || cloudBlobMetadata.getLastUpdateTime() > lastUpdateTime) {
+        break;
+      }
+      if (lastReadBlobIds.contains(cloudBlobMetadata.getId())) {
+        removeList.add(cloudBlobMetadata);
+      }
+    }
+    cloudBlobMetadataList.removeAll(removeList);
   }
 
   /**

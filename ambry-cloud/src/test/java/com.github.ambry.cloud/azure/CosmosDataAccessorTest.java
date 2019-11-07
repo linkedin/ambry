@@ -14,7 +14,6 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -205,23 +204,12 @@ public class CosmosDataAccessorTest {
   }
 
   /**
-   * Create {@link Document} object from {@link CloudBlobMetadata} object.
-   * @param cloudBlobMetadata {@link CloudBlobMetadata} object.
-   * @return {@link Document} object.
-   */
-  private Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata)
-      throws JsonProcessingException {
-    Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
-    document.set(CloudBlobMetadata.FIELD_UPDATE_TIME, System.currentTimeMillis());
-    return document;
-  }
-
-  /**
    * @return a FeedResponse with a single document.
    */
   private FeedResponse<Document> getFeedResponse() throws Exception {
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
-    List<Document> docList = Collections.singletonList(createDocumentFromCloudBlobMetadata(blobMetadata));
+    List<Document> docList =
+        Collections.singletonList(AzureTestUtils.createDocumentFromCloudBlobMetadata(blobMetadata, objectMapper));
     when(mockIterable.iterator()).thenReturn(docList.iterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     when(feedResponse.getQueryIterable()).thenReturn(mockIterable);

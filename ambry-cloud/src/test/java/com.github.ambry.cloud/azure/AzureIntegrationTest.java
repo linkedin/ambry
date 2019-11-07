@@ -302,7 +302,7 @@ public class AzureIntegrationTest {
 
     CloudFindToken findToken = new CloudFindToken();
     // Call findEntriesSince in a loop until no new entries are returned
-    List<CloudBlobMetadata> results = Collections.emptyList();
+    List<CloudBlobMetadata> results;
     int numQueries = 0;
     int totalBlobsReturned = 0;
     do {

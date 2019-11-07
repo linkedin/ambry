@@ -13,12 +13,12 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.replication.FindTokenType;
-import com.github.ambry.utils.UtilsTest;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -36,13 +36,14 @@ public class CloudFindTokenFactoryTest {
   @Test
   public void getFindTokenTest() throws IOException {
     short version = 0;
-    FindTokenType findTokenType = FindTokenType.CloudBased;
     Random random = new Random();
     long latestBlobUdateTime = random.nextLong();
-    String latestBlobId = UtilsTest.getRandomString(10);
     long bytesRead = random.nextLong();
+    Set<String> lastReadBlobIds = new HashSet<>();
+    lastReadBlobIds.add("blobid1");
+    lastReadBlobIds.add("blobid2");
 
-    CloudFindToken cloudFindToken1 = new CloudFindToken(version, latestBlobUdateTime, latestBlobId, bytesRead);
+    CloudFindToken cloudFindToken1 = new CloudFindToken(version, latestBlobUdateTime, bytesRead, lastReadBlobIds);
     DataInputStream stream = new DataInputStream(new ByteArrayInputStream(cloudFindToken1.toBytes()));
     CloudFindToken cloudFindToken2 = (CloudFindToken) new CloudFindTokenFactory().getFindToken(stream);
     assertEquals("incorrect token returned from factory", cloudFindToken1, cloudFindToken2);

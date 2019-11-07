@@ -389,27 +389,27 @@ class CloudBlobStore implements Store {
           cloudDestination.findEntriesSince(partitionId.toPathString(), inputToken, maxTotalSizeOfEntries);
       if (results.isEmpty()) {
         return new FindInfo(Collections.emptyList(), inputToken);
-      } else {
-        List<MessageInfo> messageEntries = new ArrayList<>();
-        for (CloudBlobMetadata metadata : results) {
-          BlobId blobId = new BlobId(metadata.getId(), clusterMap);
-          long operationTime = (metadata.getDeletionTime() > 0) ? metadata.getDeletionTime()
-              : (metadata.getCreationTime() > 0) ? metadata.getCreationTime() : metadata.getUploadTime();
-          boolean isDeleted = metadata.getDeletionTime() > 0;
-          boolean isTtlUpdated = false;  // No way to know
-          MessageInfo messageInfo =
-              new MessageInfo(blobId, metadata.getSize(), isDeleted, isTtlUpdated, metadata.getExpirationTime(),
-                  (short) metadata.getAccountId(), (short) metadata.getContainerId(), operationTime);
-          messageEntries.add(messageInfo);
-        }
-
-        // Build the new find token from the original one and the query results
-        CloudFindToken outputToken = CloudFindToken.getUpdatedToken(inputToken, results);
-        return new FindInfo(messageEntries, outputToken);
       }
+      List<MessageInfo> messageEntries = new ArrayList<>();
+      for (CloudBlobMetadata metadata : results) {
+        messageEntries.add(getMessageInfoFromMetadata(metadata));
+      }
+      // Build the new find token from the original one and the query results
+      CloudFindToken outputToken = CloudFindToken.getUpdatedToken(inputToken, results);
+      return new FindInfo(messageEntries, outputToken);
     } catch (CloudStorageException | IOException ex) {
       throw new StoreException(ex, StoreErrorCodes.IOError);
     }
+  }
+
+  private MessageInfo getMessageInfoFromMetadata(CloudBlobMetadata metadata) throws IOException {
+    BlobId blobId = new BlobId(metadata.getId(), clusterMap);
+    long operationTime = (metadata.getDeletionTime() > 0) ? metadata.getDeletionTime()
+        : (metadata.getCreationTime() > 0) ? metadata.getCreationTime() : metadata.getUploadTime();
+    boolean isDeleted = metadata.getDeletionTime() > 0;
+    boolean isTtlUpdated = false;  // No way to know
+    return new MessageInfo(blobId, metadata.getSize(), isDeleted, isTtlUpdated, metadata.getExpirationTime(),
+        (short) metadata.getAccountId(), (short) metadata.getContainerId(), operationTime);
   }
 
   @Override

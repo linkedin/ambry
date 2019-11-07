@@ -275,7 +275,8 @@ public class CloudBlobStoreTest {
     CloudFindToken outputToken = (CloudFindToken) findInfo.getFindToken();
     assertEquals(startTime + numBlobsFound - 1, outputToken.getLastUpdateTime());
     assertEquals(blobSize * numBlobsFound, outputToken.getBytesRead());
-    assertEquals(metadataList.get(numBlobsFound - 1).getId(), outputToken.getLatestBlobId());
+    assertEquals(Collections.singletonList(metadataList.get(numBlobsFound - 1).getId()),
+        new ArrayList<String>(outputToken.getLastUpdateTimeReadBlobIds()));
 
     // 2) call find with new token, return more data including lastBlob, verify token updated
     startTime += 1000;
@@ -285,7 +286,8 @@ public class CloudBlobStoreTest {
     outputToken = (CloudFindToken) findInfo.getFindToken();
     assertEquals(startTime + numBlobsFound - 1, outputToken.getLastUpdateTime());
     assertEquals(blobSize * 2 * numBlobsFound, outputToken.getBytesRead());
-    assertEquals(metadataList.get(numBlobsFound - 1).getId(), outputToken.getLatestBlobId());
+    assertEquals(Collections.singletonList(metadataList.get(numBlobsFound - 1).getId()),
+        new ArrayList<String>(outputToken.getLastUpdateTimeReadBlobIds()));
 
     // 3) call find with new token, no more data, verify token unchanged
     when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(Collections.emptyList());
