@@ -36,7 +36,7 @@ public interface NetworkClient extends Closeable {
    * @param pollTimeoutMs the poll timeout.
    * @return a list of {@link ResponseInfo} representing the responses received for any requests that were sent out
    * so far.
-   * @throws IllegalStateException if the SocketNetworkClient is closed.
+   * @throws IllegalStateException if the NetworkClient is closed.
    */
   List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop, int pollTimeoutMs);
 
