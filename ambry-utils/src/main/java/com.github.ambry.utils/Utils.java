@@ -13,6 +13,8 @@
  */
 package com.github.ambry.utils;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
@@ -733,6 +735,33 @@ public class Utils {
       offset += sizeRead;
     }
     return data;
+  }
+
+  /**
+   * Create a {@link DataInputStream} from the given buffer, which has to be either a {@link ByteBuffer} or a {@link ByteBuf}.
+   * This is equivalent to {@link #createDataInputStreamFromBuffer(Object, boolean)}, where the {@lcode shareMemory} is false.
+   * @param buffer The buffer where we are going to create a {@link DataInputStream} from.
+   * @return {@link DataInputStream}.
+   */
+  public static DataInputStream createDataInputStreamFromBuffer(Object buffer) {
+    return createDataInputStreamFromBuffer(buffer, false);
+  }
+
+  /**
+   * Create a {@link DataInputStream} from the given buffer, which has to be either a {@link ByteBuffer} or a {@link ByteBuf}.
+   * @param buffer The buffer where we are going to create a {@link DataInputStream} from.
+   * @param shareMemory If true, the {@link DataInputStream} would share the memory with the given buffer.
+   * @return {@link DataInputStream}.
+   */
+  public static DataInputStream createDataInputStreamFromBuffer(Object buffer, boolean shareMemory) {
+    if (shareMemory) {
+      return buffer instanceof ByteBuf ? new NettyByteBufDataInputStream((ByteBuf) buffer)
+          : new ByteBufferDataInputStream((ByteBuffer) buffer);
+    } else {
+      InputStream src = buffer instanceof ByteBuf ? new ByteBufInputStream((ByteBuf) buffer)
+          : new ByteBufferInputStream((ByteBuffer) buffer);
+      return new DataInputStream(src);
+    }
   }
 
   /**

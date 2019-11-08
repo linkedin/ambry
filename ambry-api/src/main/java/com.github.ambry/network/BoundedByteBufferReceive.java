@@ -24,23 +24,23 @@ import org.slf4j.LoggerFactory;
 /**
  * A byte buffer version of Receive to buffer the incoming request or response.
  */
-public class BoundedByteBufferReceive implements Receive {
+public class BoundedByteBufferReceive implements BoundedReceive<ByteBuffer> {
 
   private ByteBuffer buffer = null;
   private ByteBuffer sizeBuffer;
   private long sizeToRead;
   private long sizeRead;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final static Logger logger = LoggerFactory.getLogger(BoundedByteBufferReceive.class);
 
   public BoundedByteBufferReceive() {
     sizeToRead = 0;
     sizeRead = 0;
-    sizeBuffer = ByteBuffer.allocate(8);
+    sizeBuffer = ByteBuffer.allocate(Long.BYTES);
   }
 
   @Override
   public boolean isReadComplete() {
-    return !(buffer == null || sizeRead < sizeToRead);
+    return buffer != null && sizeRead >= sizeToRead;
   }
 
   @Override
@@ -54,8 +54,9 @@ public class BoundedByteBufferReceive implements Receive {
       if (sizeBuffer.position() == sizeBuffer.capacity()) {
         sizeBuffer.flip();
         sizeToRead = sizeBuffer.getLong();
-        sizeRead += 8;
-        buffer = ByteBuffer.allocate((int) sizeToRead - 8);
+        sizeRead += Long.BYTES;
+        buffer = ByteBuffer.allocate((int) sizeToRead - Long.BYTES);
+        sizeBuffer = null;
       }
     }
     if (buffer != null && sizeRead < sizeToRead) {
@@ -73,8 +74,13 @@ public class BoundedByteBufferReceive implements Receive {
     return bytesRead;
   }
 
-  public ByteBuffer getPayload() {
-    return buffer;
+  @Override
+  public ByteBuffer getAndRelease() {
+    try {
+      return buffer;
+    } finally {
+      buffer = null;
+    }
   }
 
   /**
@@ -82,7 +88,8 @@ public class BoundedByteBufferReceive implements Receive {
    * It will be initialized only after header is read.
    * @return the size of the data in bytes to receive after reading header, otherwise return 0
    */
-  long sizeRead() {
+  @Override
+  public long sizeRead() {
     return sizeRead;
   }
 }

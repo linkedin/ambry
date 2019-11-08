@@ -27,14 +27,14 @@ public class NetworkReceive {
   /**
    * The bytes received from the destination
    */
-  private final BoundedByteBufferReceive receivedBytes;
+  private final BoundedReceive receivedBytes;
 
   /**
    * The start time of when the receive started
    */
   private final long receiveStartTimeInMs;
 
-  public NetworkReceive(String connectionId, BoundedByteBufferReceive receivedBytes, Time time) {
+  public NetworkReceive(String connectionId, BoundedReceive receivedBytes, Time time) {
     this.connectionId = connectionId;
     this.receivedBytes = receivedBytes;
     this.receiveStartTimeInMs = time.milliseconds();
@@ -44,7 +44,7 @@ public class NetworkReceive {
     return connectionId;
   }
 
-  public BoundedByteBufferReceive getReceivedBytes() {
+  public BoundedReceive getReceivedBytes() {
     return receivedBytes;
   }
 

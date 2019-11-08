@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
@@ -37,13 +38,15 @@ public abstract class Transmission {
   protected final Time time;
   protected final NetworkMetrics metrics;
   protected long sendCompleteTime;
+  protected NetworkConfig config;
 
   public Transmission(String connectionId, SocketChannel socketChannel, SelectionKey key, Time time,
-      NetworkMetrics metrics) {
+      NetworkConfig config, NetworkMetrics metrics) {
     this.connectionId = connectionId;
     this.socketChannel = socketChannel;
     this.key = key;
     this.time = time;
+    this.config = config;
     this.metrics = metrics;
   }
 
@@ -69,6 +72,12 @@ public abstract class Transmission {
     this.networkSend = networkSend;
     metrics.sendInFlight.inc();
     key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+  }
+
+  protected void initializeNetworkReceive() {
+    BoundedReceive boundedReceive =
+        config.networkUseNettyByteBuf ? new BoundedNettyByteBufReceive() : new BoundedByteBufferReceive();
+    networkReceive = new NetworkReceive(getConnectionId(), boundedReceive, time);
   }
 
   /**
@@ -112,7 +121,7 @@ public abstract class Transmission {
   }
 
   /**
-   * Actions to be taken on completion of {@link BoundedByteBufferReceive} in {@link NetworkReceive}
+   * Actions to be taken on completion of {@link BoundedReceive} in {@link NetworkReceive}
    */
   public void onReceiveComplete() {
     long receiveTimeMs = time.milliseconds() - networkReceive.getReceiveStartTimeInMs();
@@ -167,6 +176,12 @@ public abstract class Transmission {
 
   public void clearReceive() {
     networkReceive = null;
+  }
+
+  protected void release() {
+    if (networkReceive != null) {
+      networkReceive.getReceivedBytes().getAndRelease();
+    }
   }
 
   public NetworkReceive getNetworkReceive() {

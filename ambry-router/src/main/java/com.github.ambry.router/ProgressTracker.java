@@ -83,8 +83,7 @@ class ProgressTracker {
       throw new IllegalStateException(new RouterException("hasSucceeded called before operation is complete",
           RouterErrorCode.UnexpectedInternalError));
     }
-    return operationTracker.hasSucceeded() && (cryptoJobStatusTracker == null
-        || cryptoJobStatusTracker.hasSucceeded());
+    return operationTracker.hasSucceeded() && (cryptoJobStatusTracker == null || cryptoJobStatusTracker.hasSucceeded());
   }
 
   /**
@@ -96,8 +95,7 @@ class ProgressTracker {
 }
 
 enum CryptoJobType {
-  ENCRYPTION,
-  DECRYPTION
+  ENCRYPTION, DECRYPTION
 }
 
 /**

@@ -84,6 +84,7 @@ subprojects {
             exceptionFormat = 'full'
         }
         maxHeapSize = "3g"
+        systemProperty 'io.netty.leakDetection.level', 'paranoid'
     }
 
     task intTest(type: Test) {
@@ -95,6 +96,7 @@ subprojects {
             exceptionFormat = 'full'
         }
         maxHeapSize = "3g"
+        systemProperty 'io.netty.leakDetection.level', 'paranoid'
     }
 
     task allTest {
@@ -127,6 +129,7 @@ project(':ambry-utils') {
         compile "commons-codec:commons-codec:$commonsVersion"
         compile "org.json:json:$jsonVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+        compile "io.netty:netty-buffer:$nettyVersion"
         testCompile "org.apache.helix:helix-core:$helixVersion"
     }
 }

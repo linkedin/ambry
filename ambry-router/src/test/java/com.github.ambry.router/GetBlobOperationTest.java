@@ -50,7 +50,6 @@ import com.github.ambry.router.RouterTestHelpers.*;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferChannel;
-import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
@@ -529,8 +528,9 @@ public class GetBlobOperationTest {
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
-            new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+            Utils.createDataInputStreamFromBuffer(responseInfo.getResponse()), mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
+        responseInfo.release();
       }
     }
 
@@ -583,8 +583,9 @@ public class GetBlobOperationTest {
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
-            new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+            Utils.createDataInputStreamFromBuffer(responseInfo.getResponse()), mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
+        responseInfo.release();
       }
     }
 
@@ -612,6 +613,7 @@ public class GetBlobOperationTest {
       for (RequestInfo requestInfo : requestRegistrationCallback.getRequestsToSend()) {
         ResponseInfo fakeResponse = new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null);
         op.handleResponse(fakeResponse, null);
+        fakeResponse.release();
         if (op.isOperationComplete()) {
           break;
         }
@@ -1371,14 +1373,11 @@ public class GetBlobOperationTest {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
-        DataInputStream dis = null;
-        if (routerConfig.routerGetBlobOperationShareMemory) {
-          dis = new ByteBufferDataInputStream(responseInfo.getResponse());
-        } else {
-          dis = new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()));
-        }
+        DataInputStream dis = Utils.createDataInputStreamFromBuffer(responseInfo.getResponse(),
+            routerConfig.routerGetBlobOperationShareMemory);
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(dis, mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
+        responseInfo.release();
       }
     }
     return op;

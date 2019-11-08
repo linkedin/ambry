@@ -32,6 +32,7 @@ public class NetworkConfig {
   public static final String SELECTOR_EXECUTOR_POOL_SIZE = "selector.executor.pool.size";
   public static final String SELECTOR_MAX_KEY_TO_PROCESS = "selector.max.key.to.process";
   public static final String SELECTOR_USE_DIRECT_BUFFERS = "selector.use.direct.buffers";
+  public static final String NETWORK_USE_NETTY_BYTE_BUF = "network.use.netty.byte.buf";
 
   /**
    * The number of io threads that the server uses for carrying out network requests
@@ -119,16 +120,19 @@ public class NetworkConfig {
   @Default("false")
   public final boolean selectorUseDirectBuffers;
 
-  public NetworkConfig(VerifiableProperties verifiableProperties) {
+  @Config(NETWORK_USE_NETTY_BYTE_BUF)
+  @Default("false")
+  public final boolean networkUseNettyByteBuf;
 
+  public NetworkConfig(VerifiableProperties verifiableProperties) {
     numIoThreads = verifiableProperties.getIntInRange(NUM_IO_THREADS, 8, 1, Integer.MAX_VALUE);
+    queuedMaxRequests = verifiableProperties.getIntInRange(QUEUED_MAX_REQUESTS, 500, 1, Integer.MAX_VALUE);
     port = verifiableProperties.getInt(PORT, 6667);
     hostName = verifiableProperties.getString(HOST_NAME, "localhost");
     socketSendBufferBytes = verifiableProperties.getInt(SOCKET_SEND_BUFFER_BYTES, 1 * 1024 * 1024);
     socketReceiveBufferBytes = verifiableProperties.getInt(SOCKET_RECEIVE_BUFFER_BYTES, 1 * 1024 * 1024);
     socketRequestMaxBytes =
         verifiableProperties.getIntInRange(SOCKET_REQUEST_MAX_BYTES, 100 * 1024 * 1024, 1, Integer.MAX_VALUE);
-    queuedMaxRequests = verifiableProperties.getIntInRange(QUEUED_MAX_REQUESTS, 500, 1, Integer.MAX_VALUE);
     networkClientEnableConnectionReplenishment =
         verifiableProperties.getBoolean(NETWORK_CLIENT_ENABLE_CONNECTION_REPLENISHMENT, false);
     networkClientMaxReplenishmentPerHostPerSecond =
@@ -138,5 +142,6 @@ public class NetworkConfig {
     selectorMaxKeyToProcess =
         verifiableProperties.getIntInRange(SELECTOR_MAX_KEY_TO_PROCESS, -1, -1, Integer.MAX_VALUE);
     selectorUseDirectBuffers = verifiableProperties.getBoolean(SELECTOR_USE_DIRECT_BUFFERS, false);
+    networkUseNettyByteBuf = verifiableProperties.getBoolean(NETWORK_USE_NETTY_BYTE_BUF, false);
   }
 }

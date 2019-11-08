@@ -1019,6 +1019,7 @@ public class NonBlockingRouterTest {
         responseInfo = responseInfoList.get(0);
       }
       opHelper.handleResponse(responseInfo);
+      responseInfo.release();
     }
     // Poll once again so that the operation gets a chance to complete.
     allRequests.clear();
@@ -1111,12 +1112,13 @@ public class NonBlockingRouterTest {
       allRequests.clear();
     } while (responseInfoList.size() < requestParallelism);
     // corrupt the first response.
-    ByteBuffer response = responseInfoList.get(0).getResponse();
+    ByteBuffer response = (ByteBuffer) responseInfoList.get(0).getResponse();
     byte b = response.get(response.limit() - 1);
     response.put(response.limit() - 1, (byte) ~b);
     for (ResponseInfo responseInfo : responseInfoList) {
       opHelper.handleResponse(responseInfo);
     }
+    responseInfoList.forEach(ResponseInfo::release);
     allRequests.clear();
     if (testEncryption) {
       opHelper.awaitOpCompletionOrTimeOut(futureResult);

@@ -115,7 +115,8 @@ public class PerformanceConfig {
             new Criteria(successThresholdObject.optLong(method.name(), Long.MAX_VALUE), Criteria.BoundType.UpperBound));
       }
       nonSuccessPerfIndexMap.put(PerformanceIndex.RoundTripTime,
-          new Criteria(nonSuccessThresholdObject.optLong(method.name(), Long.MAX_VALUE), Criteria.BoundType.UpperBound));
+          new Criteria(nonSuccessThresholdObject.optLong(method.name(), Long.MAX_VALUE),
+              Criteria.BoundType.UpperBound));
       successRequestThresholds.put(method, new Thresholds(successPerfIndexMap));
       nonSuccessRequestThresholds.put(method, new Thresholds(nonSuccessPerfIndexMap));
     }

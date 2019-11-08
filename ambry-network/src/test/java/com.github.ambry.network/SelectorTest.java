@@ -197,11 +197,11 @@ public class SelectorTest {
 
       // handle any responses we may have gotten
       for (NetworkReceive receive : selector.completedReceives()) {
-        String[] pieces = asString(receive).split("&");
+        ByteBuffer payload = (ByteBuffer) (receive.getReceivedBytes().getAndRelease());
+        String[] pieces = asString(payload).split("&");
         assertEquals("Should be in the form 'conn-counter'", 2, pieces.length);
         assertEquals("Check the source", receive.getConnectionId(), pieces[0]);
-        assertEquals("Check that the receive has kindly been rewound", 0,
-            receive.getReceivedBytes().getPayload().position());
+        assertEquals("Check that the receive has kindly been rewound", 0, payload.position());
         int index = Integer.parseInt(receive.getConnectionId().split("_")[1]);
         assertEquals("Check the request counter", responses[index], Integer.parseInt(pieces[1]));
         responses[index]++; // increment the expected counter
@@ -247,7 +247,8 @@ public class SelectorTest {
       selector.poll(1000L);
       for (NetworkReceive receive : selector.completedReceives()) {
         if (receive.getConnectionId() == connectionId) {
-          return asString(receive);
+          ByteBuffer payload = (ByteBuffer) (receive.getReceivedBytes().getAndRelease());
+          return asString(payload);
         }
       }
     }
@@ -271,8 +272,8 @@ public class SelectorTest {
     return new NetworkSend(connectionId, new BoundedByteBufferSend(buf), null, SystemTime.getInstance());
   }
 
-  static String asString(NetworkReceive receive) {
-    return new String(receive.getReceivedBytes().getPayload().array());
+  static String asString(ByteBuffer payload) {
+    return new String(payload.array(), payload.arrayOffset());
   }
 
   /**
