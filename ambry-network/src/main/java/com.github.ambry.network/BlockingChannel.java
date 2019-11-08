@@ -16,9 +16,10 @@ package com.github.ambry.network;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +29,7 @@ import org.slf4j.LoggerFactory;
  * A blocking channel that is used to communicate with a server
  */
 public class BlockingChannel implements ConnectedChannel {
-  protected static final Logger logger = LoggerFactory.getLogger(BlockingChannel.class);
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final String host;
   protected final int port;
   protected final int readBufferSize;
@@ -38,8 +39,7 @@ public class BlockingChannel implements ConnectedChannel {
   protected boolean connected = false;
   protected InputStream readChannel = null;
   protected WritableByteChannel writeChannel = null;
-  protected Object lock = new Object();
-  private SocketChannel channel = null;
+  private Socket socket = null;
 
   public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs,
       int connectTimeoutMs) {
@@ -51,40 +51,61 @@ public class BlockingChannel implements ConnectedChannel {
     this.connectTimeoutMs = connectTimeoutMs;
   }
 
+  /**
+   * Connect a socket and create writeChannel (WriteByteChannel) and readChannel (InputStream)
+   *
+   * @throws IOException
+   */
   public void connect() throws IOException {
-    synchronized (lock) {
+    synchronized (this) {
       if (!connected) {
-        channel = SocketChannel.open();
-        if (readBufferSize > 0) {
-          channel.socket().setReceiveBufferSize(readBufferSize);
-        }
-        if (writeBufferSize > 0) {
-          channel.socket().setSendBufferSize(writeBufferSize);
-        }
-        channel.configureBlocking(true);
-        channel.socket().setSoTimeout(readTimeoutMs);
-        channel.socket().setKeepAlive(true);
-        channel.socket().setTcpNoDelay(true);
-        channel.socket().connect(new InetSocketAddress(host, port), connectTimeoutMs);
-        writeChannel = channel;
-        readChannel = channel.socket().getInputStream();
+
+        socket = createSocket();
+
+        writeChannel = Channels.newChannel(socket.getOutputStream());
+        readChannel = socket.getInputStream();
+
         connected = true;
-        logger.debug("Created socket with SO_TIMEOUT = {} (requested {}), "
-                + "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})", channel.socket().getSoTimeout(),
-            readTimeoutMs, channel.socket().getReceiveBufferSize(), readBufferSize,
-            channel.socket().getSendBufferSize(), writeBufferSize);
+
+        logger.debug("Connection established to {}({}):{}", host, socket.getRemoteSocketAddress(), socket.getPort());
+
       }
     }
   }
 
-  public void disconnect() {
-    synchronized (lock) {
+  /**
+   * Creates and connects a Socket
+   * @return Socket
+   * @throws IOException
+   */
+  public Socket createSocket() throws IOException {
+    Socket tcpSocket = new Socket();
+
+    if (readBufferSize > 0) {
+      tcpSocket.setReceiveBufferSize(readBufferSize);
+    }
+    if (writeBufferSize > 0) {
+      tcpSocket.setSendBufferSize(writeBufferSize);
+    }
+    tcpSocket.setSoTimeout(readTimeoutMs);
+    tcpSocket.setKeepAlive(true);
+    tcpSocket.setTcpNoDelay(true);
+    tcpSocket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
+
+    logger.debug("Created socket with SO_TIMEOUT = {} (requested {}), "
+            + "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})", tcpSocket.getSoTimeout(), readTimeoutMs,
+        tcpSocket.getReceiveBufferSize(), readBufferSize, tcpSocket.getSendBufferSize(), writeBufferSize);
+
+    return tcpSocket;
+  }
+
+    /**
+     * Disconnect readChannel, writeChannel and close underlying Socket
+     */
+    public void disconnect() {
+    synchronized (this) {
       try {
-        if (connected || channel != null) {
-          // closing the main socket channel *should* close the read channel
-          // but let's do it to be sure.
-          channel.close();
-          channel.socket().close();
+        if (connected || socket != null) {
           if (readChannel != null) {
             readChannel.close();
             readChannel = null;
@@ -93,7 +114,8 @@ public class BlockingChannel implements ConnectedChannel {
             writeChannel.close();
             writeChannel = null;
           }
-          channel = null;
+          socket.close();
+          socket = null;
           connected = false;
         }
       } catch (Exception e) {
@@ -102,18 +124,22 @@ public class BlockingChannel implements ConnectedChannel {
     }
   }
 
+  /**
+   * Sets socket options to close immediately
+   * (subsequent Socket.close() will cause connection closure by sending TCP RST instead of FIN
+   */
   public void reset() {
-    synchronized (lock) {
+    synchronized (this) {
       try {
-        if (connected || channel != null) {
+        if (connected || socket != null) {
           // Setting SO_LINGER to true and time to 0 to send TCP RST instead of TCP FIN
-          channel.socket().setSoLinger(true, 0);
+          socket.setSoLinger(true, 0);
+          disconnect();
         }
       } catch (Exception e) {
         logger.error("Error while setting socket linger option {}", e);
       }
     }
-    this.disconnect();
   }
 
   public boolean isConnected() {
