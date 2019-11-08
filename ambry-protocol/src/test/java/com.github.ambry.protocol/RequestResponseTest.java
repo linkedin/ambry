@@ -238,7 +238,9 @@ public class RequestResponseTest {
           PutRequest.ReceivedPutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
           Assert.assertEquals(blobId, deserializedPutRequest.getBlobId());
           Assert.assertEquals(sizeInBlobProperties, deserializedPutRequest.getBlobProperties().getBlobSize());
-          Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
+          byte[] obtainedMD = new byte[deserializedPutRequest.getUsermetadata().remaining()];
+          deserializedPutRequest.getUsermetadata().get(obtainedMD);
+          Assert.assertArrayEquals(userMetadata, obtainedMD);
           Assert.assertEquals(blobSize, deserializedPutRequest.getBlobSize());
           Assert.assertEquals(blobType, deserializedPutRequest.getBlobType());
           if (expectedKey == null) {
