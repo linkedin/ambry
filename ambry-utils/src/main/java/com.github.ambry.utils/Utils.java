@@ -276,23 +276,8 @@ public class Utils {
    * @throws IOException Any I/O error.
    */
   public static ByteBuffer readByteBufferFromCrcInputStream(CrcInputStream crcStream, int dataSize) throws IOException {
-    ByteBuffer result;
-    InputStream inputStream = crcStream.getUnderlyingInputStream();
-    if (inputStream instanceof ByteBufferDataInputStream) {
-      result = getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
-      crcStream.updateCrc(result.duplicate());
-    } else {
-      result = ByteBuffer.allocate(dataSize);
-      int read = 0;
-      while (read < dataSize) {
-        int readBytes = crcStream.read(result.array(), result.arrayOffset() + read, dataSize - read);
-        if (readBytes == -1 || readBytes == 0) {
-          throw new EOFException();
-        }
-        read += readBytes;
-      }
-    }
-    return result;
+    ByteBufferInputStream bbis = getByteBufferInputStreamFromCrcInputStream(crcStream, dataSize);
+    return bbis.getByteBuffer();
   }
 
   /**
