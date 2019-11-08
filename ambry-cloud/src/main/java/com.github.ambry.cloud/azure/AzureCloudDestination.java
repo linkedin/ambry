@@ -53,6 +53,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -371,16 +372,18 @@ class AzureCloudDestination implements CloudDestination {
    */
   private void filterOutLastReadBlobs(List<CloudBlobMetadata> cloudBlobMetadataList, Set<String> lastReadBlobIds,
       long lastUpdateTime) {
-    List<CloudBlobMetadata> removeList = new LinkedList<>();
-    for (CloudBlobMetadata cloudBlobMetadata : cloudBlobMetadataList) {
-      if (removeList.size() == lastReadBlobIds.size() || cloudBlobMetadata.getLastUpdateTime() > lastUpdateTime) {
+    ListIterator<CloudBlobMetadata> iterator = cloudBlobMetadataList.listIterator();
+    int numRemovedBlobs = 0;
+    while(iterator.hasNext()) {
+      CloudBlobMetadata cloudBlobMetadata = iterator.next();
+      if(numRemovedBlobs == lastReadBlobIds.size() || cloudBlobMetadata.getLastUpdateTime() > lastUpdateTime) {
         break;
       }
       if (lastReadBlobIds.contains(cloudBlobMetadata.getId())) {
-        removeList.add(cloudBlobMetadata);
+        iterator.remove();
+        numRemovedBlobs++;
       }
     }
-    cloudBlobMetadataList.removeAll(removeList);
   }
 
   /**

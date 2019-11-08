@@ -372,7 +372,7 @@ public class CloudBlobMetadata {
    * Utility to cap specified {@link CloudBlobMetadata} list by specified size of its blobs.
    * Always returns at least one metadata object irrespective of size.
    * @param originalList List of {@link CloudBlobMetadata}.
-   * @param size size total size of metadata's blobs.
+   * @param size total size of metadata's blobs.
    * @return {@link List} of {@link CloudBlobMetadata} capped by size.
    */
   public static List<CloudBlobMetadata> capMetadataListBySize(List<CloudBlobMetadata> originalList, long size) {
@@ -381,7 +381,7 @@ public class CloudBlobMetadata {
     for (CloudBlobMetadata metadata : originalList) {
       // Cap results at max size
       if (totalSize + metadata.getSize() > size) {
-        if (cappedList.size() == 0) {
+        if (cappedList.isEmpty()) {
           // We must add at least one regardless of size
           cappedList.add(metadata);
         }
