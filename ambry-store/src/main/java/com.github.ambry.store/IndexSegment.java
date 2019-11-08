@@ -411,10 +411,9 @@ class IndexSegment {
    */
   private void generateBloomFilterAndPersist() throws StoreException {
     int numOfIndexEntries = numberOfEntries(serEntries);
-    // The number of elements that used to create bloom filter should be no less than "storeIndexMaxNumberOfInmemElements"
-    // specified in current config. The number of entries in each index segment varies (from hundreds to thousands), we
-    // have to ensure bloom filter of each index segment uses at least storeIndexMaxNumberOfInmemElements as parameter
-    // for creation.
+    // This is a workaround since we found higher than intended false positive rates with small bloom filter sizes. Note
+    // that the number of entries in each index segment varies (from hundreds to thousands), the workaround ensures bloom
+    // filter uses at least storeIndexMaxNumberOfInmemElements for creation to achieve decent performance.
     bloomFilter = FilterFactory.getFilter(Math.max(numOfIndexEntries, config.storeIndexMaxNumberOfInmemElements),
         config.storeIndexBloomMaxFalsePositiveProbability);
     for (int i = 0; i < numOfIndexEntries; i++) {
