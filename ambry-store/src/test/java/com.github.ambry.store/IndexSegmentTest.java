@@ -366,7 +366,8 @@ public class IndexSegmentTest {
    */
   @Test
   public void memoryMapFailureTest() throws IOException, StoreException {
-    assumeTrue(formatVersion == PersistentIndex.VERSION_1 && config.storeIndexMemState == IndexMemState.MMAP_WITHOUT_FORCE_LOAD);
+    assumeTrue(formatVersion == PersistentIndex.VERSION_1
+        && config.storeIndexMemState == IndexMemState.MMAP_WITHOUT_FORCE_LOAD);
     String logSegmentName = LogSegmentNameHelper.getName(0, 0);
     StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
     IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), mockStoreKeyFactory);
@@ -462,7 +463,9 @@ public class IndexSegmentTest {
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName1, 0), Utils.Infinite_Time, time.milliseconds(),
             accountId1, containerId1, (short) 0, formatVersion);
     indexSegment1.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName1, 1000));
-    indexSegment1.writeIndexSegmentToFile(new Offset(logSegmentName1, 1000));
+    // deliberately add one more entry for later bloom rebuilding test
+    indexSegment1.addEntry(new IndexEntry(id2, value1), new Offset(logSegmentName1, 2000));
+    indexSegment1.writeIndexSegmentToFile(new Offset(logSegmentName1, 2000));
     indexSegment1.seal();
     // test that id1 can be found in index segment but id2 should be non-existent because bloom filter considers it not present
     Set<IndexValue> findResult = indexSegment1.find(id1);
@@ -478,8 +481,8 @@ public class IndexSegmentTest {
     String logSegmentName2 = LogSegmentNameHelper.getName(1, 0);
     IndexSegment indexSegment2 =
         new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName2, 0), STORE_KEY_FACTORY,
-            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, storeConfig,
-            metrics, time);
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2,
+            storeConfig, metrics, time);
     indexSegment2.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName2, 1000));
     indexSegment2.writeIndexSegmentToFile(new Offset(logSegmentName2, 1000));
     indexSegment2.seal();
@@ -495,6 +498,8 @@ public class IndexSegmentTest {
     File bloomFile1 =
         new File(tempDir, generateIndexSegmentFilenamePrefix(new Offset(logSegmentName1, 0)) + BLOOM_FILE_NAME_SUFFIX);
     assertTrue("The bloom file should exist", bloomFile1.exists());
+    long lengthBeforeRebuild = bloomFile1.length();
+
     // rebuild bloom filter in indexSegment1
     properties.setProperty("store.index.rebuild.bloom.filter.enabled", Boolean.toString(true));
     storeConfig = new StoreConfig(new VerifiableProperties(properties));
@@ -506,6 +511,15 @@ public class IndexSegmentTest {
     indexValue = findResult.iterator().next();
     assertTrue("Account or container is not expected",
         indexValue.getAccountId() == accountId1 && indexValue.getContainerId() == containerId1);
+    // verify that bloom file length didn't change
+    assertEquals("Bloom file length has changed", lengthBeforeRebuild, bloomFile1.length());
+
+    // now, change value of storeIndexMaxNumberOfInmemElements to 1
+    properties.setProperty("store.index.max.number.of.inmem.elements", Integer.toString(1));
+    storeConfig = new StoreConfig(new VerifiableProperties(properties));
+    // rebuild bloomFile1 again and file size should be changed
+    new IndexSegment(indexSegment1.getFile(), true, STORE_KEY_FACTORY, storeConfig, metrics, null, time);
+    assertTrue("Bloom file length has changed", lengthBeforeRebuild > bloomFile1.length());
 
     // additional test: exception occurs when deleting previous bloom file
     assertTrue("Could not make unwritable", tempDir.setWritable(false));
