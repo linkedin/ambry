@@ -356,22 +356,7 @@ class AzureCloudDestination implements CloudDestination {
       if (queryResults.get(0).getLastUpdateTime() == findToken.getLastUpdateTime()) {
         filterOutLastReadBlobs(queryResults, findToken.getLastUpdateTimeReadBlobIds(), findToken.getLastUpdateTime());
       }
-
-      List<CloudBlobMetadata> cappedResults = new ArrayList<>();
-      long totalSize = 0;
-      for (CloudBlobMetadata metadata : queryResults) {
-        // Cap results at max size
-        if (totalSize + metadata.getSize() > maxTotalSizeOfEntries) {
-          if (cappedResults.size() == 0) {
-            // We must add at least one regardless of size
-            cappedResults.add(metadata);
-          }
-          break;
-        }
-        cappedResults.add(metadata);
-        totalSize += metadata.getSize();
-      }
-      return cappedResults;
+      return CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
     } catch (DocumentClientException dex) {
       throw new CloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
     }

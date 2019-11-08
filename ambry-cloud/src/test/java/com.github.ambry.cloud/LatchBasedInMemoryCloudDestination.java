@@ -19,8 +19,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -154,27 +154,9 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
         entries.add(map.get(blobId).getFirst());
       }
     }
-    Collections.sort(entries, (CloudBlobMetadata o1, CloudBlobMetadata o2) -> {
-      if (o1.getLastUpdateTime() == o2.getLastUpdateTime()) {
-        return 0;
-      }
-      return o1.getLastUpdateTime() > o2.getLastUpdateTime() ? 1 : -1;
-    });
-    long totalSize = 0;
-    List<CloudBlobMetadata> results = new ArrayList<>();
-    for (CloudBlobMetadata metadata : entries) {
-      // Cap results at max size
-      if (totalSize + metadata.getSize() > maxTotalSizeOfEntries) {
-        if (results.size() == 0) {
-          // We must add at least one regardless of size
-          results.add(metadata);
-        }
-        break;
-      }
-      results.add(metadata);
-      totalSize += metadata.getSize();
-    }
-    return results;
+    Collections.sort(entries, Comparator.comparingLong(CloudBlobMetadata::getLastUpdateTime));
+
+    return CloudBlobMetadata.capMetadataListBySize(entries, maxTotalSizeOfEntries);
   }
 
   @Override

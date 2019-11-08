@@ -195,7 +195,7 @@ public class CloudFindToken implements FindToken {
     sb.append("version: ").append(version);
     sb.append(" lastUpdateTime: ").append(lastUpdateTime);
     sb.append(" bytesRead: ").append(bytesRead);
-    sb.append(" numLastUpdateTimeBlobsRead: ").append(lastUpdateTimeReadBlobIds);
+    sb.append(" lastUpdateTimeReadBlobIds: ").append(lastUpdateTimeReadBlobIds);
     return sb.toString();
   }
 

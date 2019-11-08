@@ -16,6 +16,8 @@ package com.github.ambry.cloud;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 
@@ -364,6 +366,31 @@ public class CloudBlobMetadata {
    */
   public void setLastUpdateTime(long lastUpdateTime) {
     this.lastUpdateTime = lastUpdateTime;
+  }
+
+  /**
+   * Utility to cap specified {@link CloudBlobMetadata} list by specified size of its blobs.
+   * Always returns at least one metadata object irrespective of size.
+   * @param originalList List of {@link CloudBlobMetadata}.
+   * @param size size total size of metadata's blobs.
+   * @return {@link List} of {@link CloudBlobMetadata} capped by size.
+   */
+  public static List<CloudBlobMetadata> capMetadataListBySize(List<CloudBlobMetadata> originalList, long size) {
+    long totalSize = 0;
+    List<CloudBlobMetadata> cappedList = new ArrayList<>();
+    for (CloudBlobMetadata metadata : originalList) {
+      // Cap results at max size
+      if (totalSize + metadata.getSize() > size) {
+        if (cappedList.size() == 0) {
+          // We must add at least one regardless of size
+          cappedList.add(metadata);
+        }
+        break;
+      }
+      cappedList.add(metadata);
+      totalSize += metadata.getSize();
+    }
+    return cappedList;
   }
 
   @Override
