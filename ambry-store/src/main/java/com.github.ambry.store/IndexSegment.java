@@ -411,7 +411,12 @@ class IndexSegment {
    */
   private void generateBloomFilterAndPersist() throws StoreException {
     int numOfIndexEntries = numberOfEntries(serEntries);
-    bloomFilter = FilterFactory.getFilter(numOfIndexEntries, config.storeIndexBloomMaxFalsePositiveProbability);
+    // The number of elements that used to create bloom filter should be no less than "storeIndexMaxNumberOfInmemElements"
+    // specified in current config. The number of entries in each index segment varies (from hundreds to thousands), we
+    // have to ensure bloom filter of each index segment uses at least storeIndexMaxNumberOfInmemElements as parameter
+    // for creation.
+    bloomFilter = FilterFactory.getFilter(Math.max(numOfIndexEntries, config.storeIndexMaxNumberOfInmemElements),
+        config.storeIndexBloomMaxFalsePositiveProbability);
     for (int i = 0; i < numOfIndexEntries; i++) {
       StoreKey key = getKeyAt(serEntries, i);
       bloomFilter.add(getStoreKeyBytes(key));
