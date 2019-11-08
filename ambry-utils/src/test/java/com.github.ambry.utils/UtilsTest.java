@@ -241,7 +241,7 @@ public class UtilsTest {
   }
 
   @Test
-  public void testBlobDataShareMemoryWithNettyByteBuf() throws Exception {
+  public void testGetByteBufferInputStreamFromCrcStreamShareMemoryWithNettyByteBuf() throws Exception {
     int blobSize = 1000;
     // The first 8 bytes are the size of blob, the next 1000 bytes are the blob content, the next 8 bytes are the crc
     // value, and we do this twice.
@@ -262,11 +262,7 @@ public class UtilsTest {
       dos.writeLong((long) blobSize);
       dos.write(arrayToFill);
       buffer.putLong(crcStream.getValue());
-      if (arrayToFill == firstRandomBytes) {
-        arrayToFill = secondRandomBytes;
-      } else {
-        arrayToFill = null;
-      }
+      arrayToFill = (arrayToFill == firstRandomBytes) ? secondRandomBytes : null;
     }
     buffer.flip();
     ByteBuf byteBuf = ByteBufAllocator.DEFAULT.heapBuffer(buffer.remaining());
@@ -286,11 +282,7 @@ public class UtilsTest {
         assertArrayEquals(obtainedArray, expectedArray);
         long crcRead = byteBuf.readLong();
         assertEquals(crcRead, cis.getValue());
-        if (expectedArray == firstRandomBytes) {
-          expectedArray = secondRandomBytes;
-        } else {
-          expectedArray = null;
-        }
+        expectedArray = (expectedArray == firstRandomBytes) ? secondRandomBytes : null;
       }
     } finally {
       byteBuf.release();

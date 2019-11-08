@@ -17,16 +17,12 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
-import com.github.ambry.utils.ByteBufferDataInputStream;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
-import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
@@ -160,7 +156,7 @@ public class SocketServer implements NetworkServer {
 
     requestResponseChannel.addResponseListener(new ResponseListener() {
       @Override
-      public void onResponse(int processorId){
+      public void onResponse(int processorId) {
         processors.get(processorId).wakeup();
       }
     });
