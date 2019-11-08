@@ -114,6 +114,13 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     this.localPartitionNameToPartition = mapPartitionNameToPartition(clusterMap, currentNode);
   }
 
+  /**
+   * Create a {@link Map} of partition name to {@link PartitionId} for local replicas on specified node from
+   * specified cluster map.
+   * @param clusterMap specified {@link ClusterMap} object.
+   * @param localNode specified {@link DataNodeId} object.
+   * @return
+   */
   private ConcurrentHashMap<String, PartitionId> mapPartitionNameToPartition(ClusterMap clusterMap,
       DataNodeId localNode) {
     return clusterMap.getReplicaIds(localNode)
