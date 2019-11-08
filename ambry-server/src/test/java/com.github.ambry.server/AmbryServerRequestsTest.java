@@ -82,6 +82,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferChannel;
+import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -91,6 +92,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -102,6 +104,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.MockClusterMap.*;
@@ -112,6 +116,7 @@ import static org.mockito.Mockito.*;
 /**
  * Tests for {@link AmbryServerRequests}.
  */
+@RunWith(Parameterized.class)
 public class AmbryServerRequestsTest {
 
   private final FindTokenHelper findTokenHelper;
@@ -127,9 +132,16 @@ public class AmbryServerRequestsTest {
   private final MockStoreKeyConverterFactory storeKeyConverterFactory;
   private final ReplicationConfig replicationConfig;
   private final ReplicaStatusDelegate mockDelegate = Mockito.mock(ReplicaStatusDelegate.class);
+  private final boolean putRequestShareMemory;
 
-  public AmbryServerRequestsTest()
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  public AmbryServerRequestsTest(boolean putRequestShareMemory)
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
+    this.putRequestShareMemory = putRequestShareMemory;
     clusterMap = new MockClusterMap();
     Properties properties = new Properties();
     properties.setProperty("clustermap.cluster.name", "test");
@@ -716,7 +728,7 @@ public class AmbryServerRequestsTest {
    */
   private Response sendRequestGetResponse(RequestOrResponse request, ServerErrorCode expectedServerErrorCode)
       throws InterruptedException, IOException {
-    Request mockRequest = MockRequest.fromRequest(request);
+    Request mockRequest = MockRequest.fromRequest(request, this.putRequestShareMemory);
     ambryRequests.handleRequests(mockRequest);
     assertEquals("Request accompanying response does not match original request", mockRequest,
         requestResponseChannel.lastOriginalRequest);
@@ -1241,13 +1253,13 @@ public class AmbryServerRequestsTest {
      * @return an instance of {@link MockRequest} that represents {@code request}.
      * @throws IOException
      */
-    static MockRequest fromRequest(RequestOrResponse request) throws IOException {
+    static MockRequest fromRequest(RequestOrResponse request, boolean shareMemory) throws IOException {
       ByteBuffer buffer = ByteBuffer.allocate((int) request.sizeInBytes());
       request.writeTo(new ByteBufferChannel(buffer));
       buffer.flip();
       // read length (to bring it to a state where AmbryRequests can handle it).
       buffer.getLong();
-      return new MockRequest(new ByteBufferInputStream(buffer));
+      return new MockRequest(shareMemory ? new ByteBufferDataInputStream(buffer) : new ByteBufferInputStream(buffer));
     }
 
     /**

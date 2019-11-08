@@ -28,7 +28,9 @@ import java.io.RandomAccessFile;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
@@ -245,26 +247,8 @@ public class Utils {
    */
   public static ByteBufferInputStream getByteBufferInputStreamFromCrcInputStream(CrcInputStream crcStream, int dataSize)
       throws IOException {
-    ByteBufferInputStream output;
-    InputStream inputStream = crcStream.getUnderlyingInputStream();
-    if (inputStream instanceof ByteBufferDataInputStream) {
-      ByteBuffer dataBuffer =
-          getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
-      crcStream.updateCrc(dataBuffer.duplicate());
-      output = new ByteBufferInputStream(dataBuffer);
-    } else if (inputStream instanceof NettyByteBufDataInputStream) {
-      // getBuffer() doesn't increase the reference count on this ByteBuf.
-      ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
-      // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
-      int startIndex = nettyByteBuf.readerIndex();
-      ByteBuffer dataBuffer = nettyByteBuf.nioBuffer(startIndex, dataSize);
-      crcStream.updateCrc(dataBuffer.duplicate());
-      nettyByteBuf.readerIndex(startIndex + dataSize);
-      output = new ByteBufferInputStream(dataBuffer);
-    } else {
-      output = new ByteBufferInputStream(crcStream, dataSize);
-    }
-    return output;
+    ByteBuffer buffer = readByteBufferFromCrcInputStream(crcStream, dataSize);
+    return new ByteBufferInputStream(buffer);
   }
 
   /**
@@ -276,8 +260,34 @@ public class Utils {
    * @throws IOException Any I/O error.
    */
   public static ByteBuffer readByteBufferFromCrcInputStream(CrcInputStream crcStream, int dataSize) throws IOException {
-    ByteBufferInputStream bbis = getByteBufferInputStreamFromCrcInputStream(crcStream, dataSize);
-    return bbis.getByteBuffer();
+    ByteBuffer output;
+    InputStream inputStream = crcStream.getUnderlyingInputStream();
+    if (inputStream instanceof ByteBufferDataInputStream) {
+      output =
+          getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
+      crcStream.updateCrc(output.duplicate());
+    } else if (inputStream instanceof NettyByteBufDataInputStream) {
+      // getBuffer() doesn't increase the reference count on this ByteBuf.
+      ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
+      // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
+      int startIndex = nettyByteBuf.readerIndex();
+      output = nettyByteBuf.nioBuffer(startIndex, dataSize);
+      crcStream.updateCrc(output.duplicate());
+      nettyByteBuf.readerIndex(startIndex + dataSize);
+    } else {
+      output = ByteBuffer.allocate(dataSize);
+      int read = 0;
+      ReadableByteChannel readableByteChannel = Channels.newChannel(crcStream);
+      while (read < dataSize) {
+        int sizeRead = readableByteChannel.read(output);
+        if (sizeRead == 0 || sizeRead == -1) {
+          throw new IOException("Total size read " + read + " is less than the size to be read " + dataSize);
+        }
+        read += sizeRead;
+      }
+      output.flip();
+    }
+    return output;
   }
 
   /**

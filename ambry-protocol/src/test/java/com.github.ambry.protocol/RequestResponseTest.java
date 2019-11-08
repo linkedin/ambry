@@ -212,7 +212,7 @@ public class RequestResponseTest {
             ByteBuffer.wrap(blob), blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey)).sizeInBytes();
     // Initialize channel write limits in such a way that writeTo() may or may not be able to write out all the
     // data at once.
-    int channelWriteLimits[] =
+   int channelWriteLimits[] =
         {sizeInBytes, 2 * sizeInBytes, sizeInBytes / 2, sizeInBytes / (TestUtils.RANDOM.nextInt(sizeInBytes - 1) + 1)};
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
     DataInputStream requestStream;
@@ -238,9 +238,7 @@ public class RequestResponseTest {
           PutRequest.ReceivedPutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
           Assert.assertEquals(blobId, deserializedPutRequest.getBlobId());
           Assert.assertEquals(sizeInBlobProperties, deserializedPutRequest.getBlobProperties().getBlobSize());
-          byte[] obtainedMD = new byte[deserializedPutRequest.getUsermetadata().remaining()];
-          deserializedPutRequest.getUsermetadata().get(obtainedMD);
-          Assert.assertArrayEquals(userMetadata, obtainedMD);
+          Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
           Assert.assertEquals(blobSize, deserializedPutRequest.getBlobSize());
           Assert.assertEquals(blobType, deserializedPutRequest.getBlobType());
           if (expectedKey == null) {
