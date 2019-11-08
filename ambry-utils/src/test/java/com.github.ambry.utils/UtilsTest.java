@@ -279,7 +279,7 @@ public class UtilsTest {
         DataInputStream dis = new DataInputStream(cis);
         long dataSize = dis.readLong();
         assertEquals((long) dataSize, blobSize);
-        ByteBufferInputStream obtained = Utils.getByteBufferInputStreamFromCRCInputStream(cis, (int) dataSize);
+        ByteBufferInputStream obtained = Utils.getByteBufferInputStreamFromCrcInputStream(cis, (int) dataSize);
         assertEquals(byteBuf.array(), getByteArrayFromByteBuffer(obtained.getByteBuffer()));
         byte[] obtainedArray = new byte[blobSize];
         obtained.read(obtainedArray);

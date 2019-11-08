@@ -66,7 +66,7 @@ public class Utils {
 
   /**
    * Constant to define "infinite" time.
-   * <p/>
+   * <p />
    * Currently used in lieu of either an epoch based ms expiration time or a seconds based TTL (relative to creation
    * time).
    */
@@ -822,7 +822,7 @@ public class Utils {
 
   /**
    * Create a {@link DataInputStream} from the given buffer, which has to be either a {@link ByteBuffer} or a {@link ByteBuf}.
-   * This is equivalent to {@link #createDataInputStreamFromBuffer(Object, boolean)}, where the {@lcode shareMemory} is false.
+   * This is equivalent to {@link #createDataInputStreamFromBuffer(Object, boolean)}, where the {@code shareMemory} is false.
    * @param buffer The buffer where we are going to create a {@link DataInputStream} from.
    * @return {@link DataInputStream}.
    */
@@ -1010,7 +1010,7 @@ public class Utils {
    * Set permissions for given files.
    * @param files a list of files that set specified permissions
    * @param permissions a set of {@link PosixFilePermission} associated with given files
-   * @throws IOException
+   * @throws IOException Any I/O error.
    */
   public static void setFilesPermission(List<File> files, Set<PosixFilePermission> permissions) throws IOException {
     for (File file : files) {
