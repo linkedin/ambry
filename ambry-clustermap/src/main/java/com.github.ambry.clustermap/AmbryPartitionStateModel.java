@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import java.util.Objects;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.Message;
 import org.apache.helix.participant.statemachine.StateModel;
@@ -34,10 +35,7 @@ public class AmbryPartitionStateModel extends StateModel {
       PartitionStateChangeListener partitionStateChangeListener) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
-    if(partitionStateChangeListener == null) {
-      throw new IllegalArgumentException("partition state change listener cannot be null");
-    }
-    this.partitionStateChangeListener = partitionStateChangeListener;
+    this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(DefaultLeaderStandbyStateModel.class);
   }

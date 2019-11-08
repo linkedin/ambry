@@ -36,7 +36,6 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -126,91 +125,11 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   @Override
   public void start() {
     // Add listener for vcr instance config changes
-    vcrClusterSpectator.registerInstanceConfigChangeListener(new InstanceConfigChangeListener() {
-      @Override
-      public void onInstanceConfigChange(List<InstanceConfig> instanceConfigs, NotificationContext context) {
-        ConcurrentSkipListSet<CloudDataNode> newVcrNodes = new ConcurrentSkipListSet<>();
-        ConcurrentHashMap<String, CloudDataNode> newInstanceNameToCloudDataNode = new ConcurrentHashMap<>();
-        Set<CloudDataNode> removedNodes = new HashSet<>(vcrNodes.get());
-        synchronized (notificationLock) {
-          for (InstanceConfig instanceConfig : instanceConfigs) {
-            String instanceName = instanceConfig.getInstanceName();
-            Port sslPort =
-                getSslPortStr(instanceConfig) == null ? null : new Port(getSslPortStr(instanceConfig), PortType.SSL);
-            CloudDataNode cloudDataNode = new CloudDataNode(instanceConfig.getHostName(),
-                new Port(Integer.valueOf(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort,
-                clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
-            newInstanceNameToCloudDataNode.put(instanceName, cloudDataNode);
-            newVcrNodes.add(cloudDataNode);
-          }
-          removedNodes.removeAll(newVcrNodes);
-          vcrNodes.set(newVcrNodes);
-          instanceNameToCloudDataNode.set(newInstanceNameToCloudDataNode);
-          List<PartitionId> partitionsOnRemovedNodes = getPartitionsOnRemovedNodes(removedNodes);
-          for (PartitionId partitionId : partitionsOnRemovedNodes) {
-            try {
-              removeCloudReplica(partitionId.toPathString());
-              addCloudReplica(partitionId.toPathString());
-            } catch (ReplicationException rex) {
-              logger.error("Could not remove/add replica for partitionId {}", partitionId);
-            }
-          }
-        }
-      }
-    });
-
-    // Add listener for vcr instance liveness changes
-    vcrClusterSpectator.registerLiveInstanceChangeListener(new LiveInstanceChangeListener() {
-      @Override
-      public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
-        ConcurrentSkipListSet<CloudDataNode> newVcrNodes = new ConcurrentSkipListSet<>();
-        synchronized (notificationLock) {
-          for (LiveInstance liveInstance : liveInstances) {
-            if (instanceNameToCloudDataNode.get().containsKey(liveInstance.getInstanceName())) {
-              newVcrNodes.add(instanceNameToCloudDataNode.get().get(liveInstance.getInstanceName()));
-            }
-          }
-          Set<CloudDataNode> removedNodes = new HashSet<>(vcrNodes.get());
-          removedNodes.removeAll(newVcrNodes);
-          vcrNodes.set(newVcrNodes);
-          List<PartitionId> partitionsOnRemovedNodes = getPartitionsOnRemovedNodes(removedNodes);
-          for (PartitionId partitionId : partitionsOnRemovedNodes) {
-            try {
-              removeCloudReplica(partitionId.toPathString());
-              addCloudReplica(partitionId.toPathString());
-            } catch (ReplicationException rex) {
-              logger.error("Could not remove/add replica for partitionId {}", partitionId);
-            }
-          }
-        }
-      }
-    });
+    vcrClusterSpectator.registerInstanceConfigChangeListener(new InstanceConfigChangeListenerImpl());
+    vcrClusterSpectator.registerLiveInstanceChangeListener(new LiveInstanceChangeListenerImpl());
 
     // Add listener for new coming assigned partition
-    clusterParticipant.registerPartitionStateChangeListener(new PartitionStateChangeListener() {
-      @Override
-      public void onPartitionStateChangeToLeaderFromStandby(String partitionName) {
-        synchronized (notificationLock) {
-          try {
-            addCloudReplica(partitionName);
-          } catch (ReplicationException rex) {
-            logger.error("Could not add replication for paritition {}", partitionName);
-          }
-        }
-      }
-
-      @Override
-      public void onPartitionStateChangeToStandbyFromLeader(String partitionName) {
-        synchronized (notificationLock) {
-          try {
-            removeCloudReplica(partitionName);
-          } catch (Exception e) {
-            // Helix will run into error state if exception throws in Helix context.
-            logger.error("Exception on removing Partition {} from {}: ", partitionName, dataNodeId, e);
-          }
-        }
-      }
-    });
+    clusterParticipant.registerPartitionStateChangeListener(new PartitionStateChangeListenerImpl());
 
     // start background persistent thread
     // start scheduler thread to persist index in the background
@@ -220,12 +139,12 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
   /**
    * Return the list of {@link PartitionId}s that have a replica on the specified list of nodes.
-   * @param removedNodes list of specified nodes.
+   * @param nodes list of specified nodes.
    * @return {@link List} of {@link PartitionId}s.
    */
-  private List<PartitionId> getPartitionsOnRemovedNodes(Set<CloudDataNode> removedNodes) {
-    List<PartitionId> partitionsOnRemovedNodes = new LinkedList<>();
-    Set<String> removedHostNames = removedNodes.stream().map(DataNodeId::getHostname).collect(Collectors.toSet());
+  private List<PartitionId> getPartitionsOnNodes(Set<CloudDataNode> nodes) {
+    List<PartitionId> partitionsOnNodes = new LinkedList<>();
+    Set<String> removedHostNames = nodes.stream().map(DataNodeId::getHostname).collect(Collectors.toSet());
     for (Map.Entry<PartitionId, PartitionInfo> entry : partitionToPartitionInfo.entrySet()) {
       List<RemoteReplicaInfo> remotes = entry.getValue()
           .getRemoteReplicaInfos()
@@ -234,10 +153,10 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
               remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname()))
           .collect(Collectors.toList());
       if (!remotes.isEmpty()) {
-        partitionsOnRemovedNodes.add(entry.getKey());
+        partitionsOnNodes.add(entry.getKey());
       }
     }
-    return partitionsOnRemovedNodes;
+    return partitionsOnNodes;
   }
 
   /**
@@ -247,13 +166,13 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    */
   private void addCloudReplica(String partitionName) throws ReplicationException {
     if (!localPartitionNameToPartition.containsKey(partitionName)) {
-      logger.error("Got partition leader notification for partition {} that is not present on the node", partitionName);
+      logger.warn("Got partition leader notification for partition {} that is not present on the node", partitionName);
       return;
     }
     PartitionId partitionId = localPartitionNameToPartition.get(partitionName);
     Store store = storeManager.getStore(partitionId);
     if (store == null) {
-      logger.error("Unable to add cloud replica for partition {} as store for the partition doesn't exist.",
+      logger.warn("Unable to add cloud replica for partition {} as store for the partition doesn't exist.",
           partitionName);
       return;
     }
@@ -268,6 +187,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
             storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
             SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
     replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo);
+
+    // Note that for each replica on a Ambry server node, there is only one cloud replica that it will be replicating from.
     List<RemoteReplicaInfo> remoteReplicaInfos = Collections.singletonList(remoteReplicaInfo);
     PartitionInfo partitionInfo = new PartitionInfo(remoteReplicaInfos, partitionId, store, localReplicaId);
     partitionToPartitionInfo.put(partitionId, partitionInfo);
@@ -276,27 +197,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     logger.info("Cloud Partition {} added to {}", partitionName, dataNodeId);
 
     // Reload replication token if exist.
-    List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfos = persistor.retrieve(localReplicaId.getMountPath());
-    if (tokenInfos.size() != 0) {
-      for (RemoteReplicaInfo remoteInfo : remoteReplicaInfos) {
-        boolean tokenReloaded = false;
-        for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfos) {
-          if (isTokenForRemoteReplicaInfo(remoteInfo, tokenInfo)) {
-            logger.info("Read token for partition {} remote host {} port {} token {}", partitionId,
-                tokenInfo.getHostname(), tokenInfo.getPort(), tokenInfo.getReplicaToken());
-            tokenReloaded = true;
-            remoteInfo.initializeTokens(tokenInfo.getReplicaToken());
-            remoteInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
-            break;
-          }
-        }
-        if (!tokenReloaded) {
-          // This may happen on clusterMap update: replica removed or added.
-          // Or error on token persist/retrieve.
-          logger.warn("Token not found or reload failed. remoteReplicaInfo: {} tokenInfos: {}", remoteInfo, tokenInfos);
-        }
-      }
-    }
+    reloadReplicationTokenIfExists(localReplicaId, remoteReplicaInfos);
+
     // Add remoteReplicaInfos to {@link ReplicaThread}.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
     if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
@@ -311,29 +213,125 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    */
   private void removeCloudReplica(String partitionName) throws ReplicationException {
     if (!localPartitionNameToPartition.containsKey(partitionName)) {
-      logger.error("Got partition standby notification for partition {} that is not present on the node",
-          partitionName);
+      logger.warn("Got partition standby notification for partition {} that is not present on the node", partitionName);
       return;
     }
     PartitionId partitionId = localPartitionNameToPartition.get(partitionName);
-    PartitionInfo partitionInfo = partitionToPartitionInfo.remove(partitionId);
-    if (partitionInfo == null) {
-      logger.error("Partition {} not exist when remove from {}. ", partitionId, dataNodeId);
-      throw new ReplicationException("Partition not found");
-    }
-    removeRemoteReplicaInfoFromReplicaThread(partitionInfo.getRemoteReplicaInfos());
-    if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove) {
-      try {
-        persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
-      } catch (IOException | ReplicationException e) {
-        logger.error("Exception on token write when remove Partition {} from {}: ", partitionId, dataNodeId, e);
-        throw new ReplicationException("Exception on token write.");
-      }
-    }
+    stopPartitionReplication(partitionId);
     logger.info("Cloud Partition {} removed from {}", partitionId, dataNodeId);
   }
 
+  /**
+   * Randomly select a {@link DataNodeId} from list of {@code vcrNodes}.
+   * @return randomly selected {@link DataNodeId} object.
+   */
   private DataNodeId getCloudDataNode() {
     return vcrNodes.get().toArray(new CloudDataNode[0])[Utils.getRandomShort(new Random()) % vcrNodes.get().size()];
+  }
+
+  /**
+   * When there is a change in vcr nodes state, update the new list of live vcr nodes.
+   * Also if there are nodes that are removed as part of change, then replication from
+   * those nodes should stop and the partitions should find new nodes to replicate from.
+   * Note that this method is not thread safe in the wake of arriving helix notifications.
+   * @param newVcrNodes Set of new vcr nodes.
+   */
+  private void handleChangeInVcrNodes(ConcurrentSkipListSet<CloudDataNode> newVcrNodes) {
+    Set<CloudDataNode> removedNodes = new HashSet<>(vcrNodes.get());
+    removedNodes.removeAll(newVcrNodes);
+    vcrNodes.set(newVcrNodes);
+    List<PartitionId> partitionsOnRemovedNodes = getPartitionsOnNodes(removedNodes);
+    for (PartitionId partitionId : partitionsOnRemovedNodes) {
+      try {
+        // We first remove replica to stop replication from removed node, and then add replica so that it can pick a
+        // new cloud node to start replicating from.
+        removeCloudReplica(partitionId.toPathString());
+        addCloudReplica(partitionId.toPathString());
+      } catch (ReplicationException rex) {
+        logger.error("Could not remove/add replica for partitionId {}", partitionId);
+      }
+    }
+  }
+
+  /**
+   * {@link InstanceConfigChangeListener} for vcr cluster.
+   */
+  private class InstanceConfigChangeListenerImpl implements InstanceConfigChangeListener {
+    @Override
+    public void onInstanceConfigChange(List<InstanceConfig> instanceConfigs, NotificationContext context) {
+      logger.debug("Instance config change notification received with instanceConfigs: {}", instanceConfigs);
+      ConcurrentSkipListSet<CloudDataNode> newVcrNodes = new ConcurrentSkipListSet<>();
+      ConcurrentHashMap<String, CloudDataNode> newInstanceNameToCloudDataNode = new ConcurrentHashMap<>();
+
+      // create a new list of available vcr nodes.
+      for (InstanceConfig instanceConfig : instanceConfigs) {
+        String instanceName = instanceConfig.getInstanceName();
+        Port sslPort =
+            getSslPortStr(instanceConfig) == null ? null : new Port(getSslPortStr(instanceConfig), PortType.SSL);
+        CloudDataNode cloudDataNode = new CloudDataNode(instanceConfig.getHostName(),
+            new Port(Integer.valueOf(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort,
+            clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
+        newInstanceNameToCloudDataNode.put(instanceName, cloudDataNode);
+        newVcrNodes.add(cloudDataNode);
+      }
+
+      synchronized (notificationLock) {
+        instanceNameToCloudDataNode.set(newInstanceNameToCloudDataNode);
+        handleChangeInVcrNodes(newVcrNodes);
+      }
+    }
+  }
+
+  /**
+   * {@link LiveInstanceChangeListener} for vcr cluster.
+   */
+  private class LiveInstanceChangeListenerImpl implements LiveInstanceChangeListener {
+    @Override
+    public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
+      logger.debug("Live instance change notification received. liveInstances: {}", liveInstances);
+      ConcurrentSkipListSet<CloudDataNode> newVcrNodes = new ConcurrentSkipListSet<>();
+      // react to change in liveness of vcr nodes if the instance was earlier reported by helix as part of
+      // {@code onInstanceConfigChange} notification.
+      synchronized (notificationLock) {
+        for (LiveInstance liveInstance : liveInstances) {
+          if (instanceNameToCloudDataNode.get().containsKey(liveInstance.getInstanceName())) {
+            newVcrNodes.add(instanceNameToCloudDataNode.get().get(liveInstance.getInstanceName()));
+          }
+        }
+        handleChangeInVcrNodes(newVcrNodes);
+      }
+    }
+  }
+
+  /**
+   * {@link PartitionStateChangeListener} to capture changes in partition state.
+   */
+  private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+    @Override
+    public void onPartitionStateChangeToLeaderFromStandby(String partitionName) {
+      logger.debug("Partition state change notification from Standby to Leader received for partition {}",
+          partitionName);
+      synchronized (notificationLock) {
+        try {
+          addCloudReplica(partitionName);
+        } catch (ReplicationException rex) {
+          logger.error("Could not add replication for paritition {}", partitionName);
+        }
+      }
+    }
+
+    @Override
+    public void onPartitionStateChangeToStandbyFromLeader(String partitionName) {
+      logger.debug("Partition state change notification from Leader to Standby received for partition {}",
+          partitionName);
+      synchronized (notificationLock) {
+        try {
+          removeCloudReplica(partitionName);
+        } catch (ReplicationException rex) {
+          // Helix will run into error state if exception throws in Helix context.
+          logger.error("Exception on removing Partition {} from {}: ", partitionName, dataNodeId, rex);
+        }
+      }
+    }
   }
 }

@@ -36,7 +36,6 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -189,29 +188,9 @@ public class VcrReplicationManager extends ReplicationEngine {
       }
     }
     // Reload replication token if exist.
-    List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfos = persistor.retrieve(cloudReplica.getMountPath());
-    if (tokenInfos.size() != 0) {
-      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
-        boolean tokenReloaded = false;
-        for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfos) {
-          if (isTokenForRemoteReplicaInfo(remoteReplicaInfo, tokenInfo)) {
-            logger.info("Read token for partition {} remote host {} port {} token {}", partitionId,
-                tokenInfo.getHostname(), tokenInfo.getPort(), tokenInfo.getReplicaToken());
-            tokenReloaded = true;
-            remoteReplicaInfo.initializeTokens(tokenInfo.getReplicaToken());
-            remoteReplicaInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
-            break;
-          }
-        }
-        if (!tokenReloaded) {
-          // This may happen on clusterMap update: replica removed or added.
-          // Or error on token persist/retrieve.
-          logger.warn("Token not found or reload failed. remoteReplicaInfo: {} tokenInfos: {}", remoteReplicaInfo,
-              tokenInfos);
-          vcrMetrics.tokenReloadWarnCount.inc();
-        }
-      }
-    }
+    int tokenReloadFailCount = reloadReplicationTokenIfExists(cloudReplica, remoteReplicaInfos);
+    vcrMetrics.tokenReloadWarnCount.inc(tokenReloadFailCount);
+
     // Add remoteReplicaInfos to {@link ReplicaThread}.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
     if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
@@ -225,20 +204,7 @@ public class VcrReplicationManager extends ReplicationEngine {
    * @throws ReplicationException if replicas initialization failed.
    */
   void removeReplica(PartitionId partitionId) throws ReplicationException {
-    PartitionInfo partitionInfo = partitionToPartitionInfo.remove(partitionId);
-    if (partitionInfo == null) {
-      logger.error("Partition {} not exist when remove from {}. ", partitionId, dataNodeId);
-      throw new ReplicationException("Partition not found");
-    }
-    removeRemoteReplicaInfoFromReplicaThread(partitionInfo.getRemoteReplicaInfos());
-    if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove) {
-      try {
-        persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
-      } catch (IOException | ReplicationException e) {
-        logger.error("Exception on token write when remove Partition {} from {}: ", partitionId, dataNodeId, e);
-        throw new ReplicationException("Exception on token write.");
-      }
-    }
+    stopPartitionReplication(partitionId);
     Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
     if (cloudStore != null) {
       storeManager.shutdownBlobStore(partitionId);
