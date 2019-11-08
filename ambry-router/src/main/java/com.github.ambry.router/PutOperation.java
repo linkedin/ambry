@@ -35,7 +35,6 @@ import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -462,8 +461,9 @@ class PutOperation {
    * @param putResponse the {@link PutResponse} associated with this response.
    */
   void handleResponse(ResponseInfo responseInfo, PutResponse putResponse) {
-    PutChunk putChunk = correlationIdToPutChunk.remove(
-        ((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
+    int correlationId = responseInfo.getRequestInfo().getRequest().getCorrelationId();
+    PutChunk putChunk = correlationIdToPutChunk.remove(correlationId);
+    logger.debug("Handling response for {}", correlationId);
     putChunk.handleResponse(responseInfo, putResponse);
     if (putChunk.isComplete()) {
       onChunkOperationComplete(putChunk);
@@ -1280,7 +1280,7 @@ class PutOperation {
         ChunkPutRequestInfo info = entry.getValue();
         if (time.milliseconds() - info.startTimeMs > routerConfig.routerRequestTimeoutMs) {
           onErrorResponse(info.replicaId);
-          logger.trace("PutRequest with correlationId {} in flight has expired for replica {} ", correlationId,
+          logger.debug("PutRequest with correlationId {} in flight has expired for replica {} ", correlationId,
               info.replicaId.getDataNodeId());
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
           // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
@@ -1367,7 +1367,7 @@ class PutOperation {
      * @param putResponse the {@link PutResponse} associated with this response.
      */
     void handleResponse(ResponseInfo responseInfo, PutResponse putResponse) {
-      int correlationId = ((PutRequest) responseInfo.getRequestInfo().getRequest()).getCorrelationId();
+      int correlationId = responseInfo.getRequestInfo().getRequest().getCorrelationId();
       ChunkPutRequestInfo chunkPutRequestInfo = correlationIdToChunkPutRequestInfo.remove(correlationId);
       if (chunkPutRequestInfo == null) {
         // Ignore right away. This could mean:
@@ -1375,6 +1375,7 @@ class PutOperation {
         // - the response is for an earlier attempt of this chunk (slipped put scenario). And the map was cleared
         // before attempting the slipped put.
         // - the response is for an earlier chunk held by this PutChunk.
+        logger.debug("No matching request found for {}", correlationId);
         return;
       }
       long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.startTimeMs;
@@ -1383,13 +1384,13 @@ class PutOperation {
           requestLatencyMs);
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
-        logger.trace("PutRequest with response correlationId {} timed out for replica {} ", correlationId,
+        logger.debug("PutRequest with response correlationId {} timed out for replica {} ", correlationId,
             chunkPutRequestInfo.replicaId.getDataNodeId());
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
         isSuccessful = false;
       } else {
         if (putResponse == null) {
-          logger.trace(
+          logger.debug(
               "PutRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
               correlationId, chunkPutRequestInfo.replicaId.getDataNodeId());
           setChunkException(new RouterException("Response deserialization received an unexpected error",

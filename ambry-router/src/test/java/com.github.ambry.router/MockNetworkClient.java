@@ -16,7 +16,7 @@ package com.github.ambry.router;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.NetworkConfig;
-import com.github.ambry.network.NetworkClient;
+import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -29,10 +29,10 @@ import java.util.Set;
 
 
 /**
- * A mock class used for verifying whether certain methods of the {@link NetworkClient} gets called in certain
+ * A mock class used for verifying whether certain methods of the {@link SocketNetworkClient} gets called in certain
  * tests and how many responses are received by the client.
  */
-class MockNetworkClient extends NetworkClient {
+class MockNetworkClient extends SocketNetworkClient {
   private boolean wokenUp = false;
   private int responseCount = 0;
   private int processedResponseCount = 0;
@@ -87,7 +87,7 @@ class MockNetworkClient extends NetworkClient {
 
   /**
    * Get the number of responses received by the client before the current
-   * {@link NetworkClient#sendAndPoll(List, Set, int)} call.
+   * {@link SocketNetworkClient#sendAndPoll(List, Set, int)} call.
    * @return the number of processed responses.
    */
   int getProcessedResponseCount() {

@@ -31,8 +31,8 @@ class SocketServerRequest implements Request {
   private final String connectionId;
   private final InputStream input;
   private final long startTimeInMs;
+  private static final Logger logger = LoggerFactory.getLogger(SocketServerRequest.class);
   private Object buffer;
-  private Logger logger = LoggerFactory.getLogger(getClass());
 
   public SocketServerRequest(int processor, String connectionId, Object buffer, InputStream input) throws IOException {
     this.processor = processor;

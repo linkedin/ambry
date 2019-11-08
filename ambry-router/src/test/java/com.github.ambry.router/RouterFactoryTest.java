@@ -14,8 +14,10 @@
 package com.github.ambry.router;
 
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -53,7 +55,9 @@ public class RouterFactoryTest {
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("clustermap.port", "1666");
     properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
+    properties.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS, LatchBasedInMemoryCloudDestinationFactory.class.getName());
     return new VerifiableProperties(properties);
   }
 
@@ -67,6 +71,8 @@ public class RouterFactoryTest {
     InMemAccountService accountService = new InMemAccountService(false, true);
     List<FactoryAndRouter> factoryAndRouters = new ArrayList<FactoryAndRouter>();
     factoryAndRouters.add(new FactoryAndRouter("com.github.ambry.router.NonBlockingRouterFactory",
+        "com.github.ambry.router.NonBlockingRouter"));
+    factoryAndRouters.add(new FactoryAndRouter("com.github.ambry.router.CloudRouterFactory",
         "com.github.ambry.router.NonBlockingRouter"));
 
     for (FactoryAndRouter factoryAndRouter : factoryAndRouters) {

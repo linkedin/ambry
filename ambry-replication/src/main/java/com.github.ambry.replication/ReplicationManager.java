@@ -23,7 +23,7 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.store.StorageManager;
+import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -41,11 +41,11 @@ import java.util.concurrent.TimeUnit;
  * Set up replicas based on {@link ReplicationEngine} and do replication across all colos.
  */
 public class ReplicationManager extends ReplicationEngine {
-  private final StorageManager storageManager;
+  private final StoreManager storageManager;
   private final StoreConfig storeConfig;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
-      StoreConfig storeConfig, StorageManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
+      StoreConfig storeConfig, StoreManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
@@ -58,7 +58,7 @@ public class ReplicationManager extends ReplicationEngine {
     // initialize all partitions
     for (ReplicaId replicaId : replicaIds) {
       PartitionId partition = replicaId.getPartitionId();
-      Store store = storageManager.getStore(partition, false);
+      Store store = storageManager.getStore(partition);
       if (store != null) {
         List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
         if (peerReplicas != null) {

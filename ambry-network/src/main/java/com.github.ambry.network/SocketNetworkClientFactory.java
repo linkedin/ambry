@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,9 @@ import java.io.IOException;
 
 
 /**
- * A factory class used to get new instances of a {@link NetworkClient}
+ * A factory class used to get new instances of a {@link SocketNetworkClient}
  */
-public class NetworkClientFactory {
+public class SocketNetworkClientFactory implements NetworkClientFactory {
   protected final NetworkMetrics networkMetrics;
   protected final NetworkConfig networkConfig;
   protected final SSLFactory sslFactory;
@@ -40,7 +40,7 @@ public class NetworkClientFactory {
    * @param maxConnectionsPerPortSsl the max number of ports per ssl port for this connection manager.
    * @param time the Time instance to use.
    */
-  public NetworkClientFactory(NetworkMetrics networkMetrics, NetworkConfig networkConfig, SSLFactory sslFactory,
+  public SocketNetworkClientFactory(NetworkMetrics networkMetrics, NetworkConfig networkConfig, SSLFactory sslFactory,
       int maxConnectionsPerPortPlainText, int maxConnectionsPerPortSsl, int connectionCheckoutTimeoutMs, Time time) {
     this.networkMetrics = networkMetrics;
     this.networkConfig = networkConfig;
@@ -52,13 +52,14 @@ public class NetworkClientFactory {
   }
 
   /**
-   * Construct and return a new {@link NetworkClient}
-   * @return return a new {@link NetworkClient}
+   * Construct and return a new {@link SocketNetworkClient}
+   * @return return a new {@link SocketNetworkClient}
    * @throws IOException if the {@link Selector} could not be instantiated.
    */
-  public NetworkClient getNetworkClient() throws IOException {
+  @Override
+  public SocketNetworkClient getNetworkClient() throws IOException {
     Selector selector = new Selector(networkMetrics, time, sslFactory, networkConfig);
-    return new NetworkClient(selector, networkConfig, networkMetrics, maxConnectionsPerPortPlainText,
+    return new SocketNetworkClient(selector, networkConfig, networkMetrics, maxConnectionsPerPortPlainText,
         maxConnectionsPerPortSsl, connectionCheckoutTimeoutMs, time);
   }
 }

@@ -31,13 +31,13 @@ import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.network.NetworkClient;
-import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.SendWithCorrelationId;
+import com.github.ambry.network.SocketNetworkClient;
+import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
@@ -94,7 +94,7 @@ public class ServerAdminTool implements Closeable {
   private static final String CLIENT_ID = "ServerAdminTool";
   private static final Logger LOGGER = LoggerFactory.getLogger(ServerAdminTool.class);
 
-  private final NetworkClient networkClient;
+  private final SocketNetworkClient networkClient;
   private final AtomicInteger correlationId = new AtomicInteger(0);
   private final Time time = SystemTime.getInstance();
   private final ClusterMap clusterMap;
@@ -542,9 +542,8 @@ public class ServerAdminTool implements Closeable {
     NetworkMetrics metrics = new NetworkMetrics(clusterMap.getMetricRegistry());
     NetworkConfig config = new NetworkConfig(verifiableProperties);
     this.clusterMap = clusterMap;
-    networkClient =
-        new NetworkClientFactory(metrics, config, sslFactory, MAX_CONNECTIONS_PER_SERVER, MAX_CONNECTIONS_PER_SERVER,
-            CONNECTION_CHECKOUT_TIMEOUT_MS, time).getNetworkClient();
+    networkClient = new SocketNetworkClientFactory(metrics, config, sslFactory, MAX_CONNECTIONS_PER_SERVER,
+        MAX_CONNECTIONS_PER_SERVER, CONNECTION_CHECKOUT_TIMEOUT_MS, time).getNetworkClient();
   }
 
   /**

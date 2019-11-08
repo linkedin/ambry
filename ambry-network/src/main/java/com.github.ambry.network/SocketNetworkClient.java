@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.Time;
-import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -34,9 +33,9 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * The NetworkClient provides a method for sending a list of requests in the form of {@link Send} to a host:port,
+ * A {@link NetworkClient} that provides a method for sending a list of requests in the form of {@link Send} to a host:port,
  * and receive responses for sent requests. Requests that come in via {@link #sendAndPoll(List, Set, int)} call,
- * that could not be immediately sent is queued and an attempt will be made in subsequent invocations of the call (or
+ * that could not be immediately sent are queued, and an attempt will be made in subsequent invocations of the call (or
  * until they time out).
  * (Note: We will empirically determine whether, rather than queueing a request,
  * a request should be failed if connections could not be checked out if pool limit for its hostPort has been reached
@@ -44,7 +43,7 @@ import org.slf4j.LoggerFactory;
  *
  * This class is not thread safe.
  */
-public class NetworkClient implements Closeable {
+public class SocketNetworkClient implements NetworkClient {
   private final Selector selector;
   private final ConnectionTracker connectionTracker;
   private final NetworkConfig networkConfig;
@@ -58,20 +57,20 @@ public class NetworkClient implements Closeable {
   private final int checkoutTimeoutMs;
   private long nextReplenishMs;
   private boolean closed = false;
-  private static final Logger logger = LoggerFactory.getLogger(NetworkClient.class);
+  private static final Logger logger = LoggerFactory.getLogger(SocketNetworkClient.class);
 
   /**
-   * Instantiates a NetworkClient.
-   * @param selector the {@link Selector} for this NetworkClient
+   * Instantiates a SocketNetworkClient.
+   * @param selector the {@link Selector} for this SocketNetworkClient
    * @param maxConnectionsPerPortPlainText the maximum number of connections per node per plain text port
    * @param maxConnectionsPerPortSsl the maximum number of connections per node per ssl port
-   * @param networkConfig the {@link NetworkConfig} for this NetworkClient
+   * @param networkConfig the {@link NetworkConfig} for this SocketNetworkClient
    * @param networkMetrics the metrics to track the network related metrics
-   * @param checkoutTimeoutMs the maximum time a request should remain in this NetworkClient's pending queue waiting
+   * @param checkoutTimeoutMs the maximum time a request should remain in this SocketNetworkClient's pending queue waiting
    *                          for an available connection to its destination.
    * @param time The Time instance to use.
    */
-  public NetworkClient(Selector selector, NetworkConfig networkConfig, NetworkMetrics networkMetrics,
+  public SocketNetworkClient(Selector selector, NetworkConfig networkConfig, NetworkMetrics networkMetrics,
       int maxConnectionsPerPortPlainText, int maxConnectionsPerPortSsl, int checkoutTimeoutMs, Time time) {
     this.selector = selector;
     this.connectionTracker = new ConnectionTracker(maxConnectionsPerPortPlainText, maxConnectionsPerPortSsl);
@@ -99,12 +98,13 @@ public class NetworkClient implements Closeable {
    * @param pollTimeoutMs the poll timeout.
    * @return a list of {@link ResponseInfo} representing the responses received for any requests that were sent out
    * so far.
-   * @throws IllegalStateException if the NetworkClient is closed.
+   * @throws IllegalStateException if the SocketNetworkClient is closed.
    */
+  @Override
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
     if (closed || !selector.isOpen()) {
-      throw new IllegalStateException("The NetworkClient is closed.");
+      throw new IllegalStateException("The SocketNetworkClient is closed.");
     }
     long startTime = time.milliseconds();
     List<ResponseInfo> responseInfoList = new ArrayList<>();
@@ -249,14 +249,15 @@ public class NetworkClient implements Closeable {
    * If a connection established after this time window of timeForWarmUp, it can be handled in next selector.poll().
    * <p>
    * This will also set the minimum number of active connections for each of the data nodes. This means that the
-   * NetworkClient will attempt to keep a percentage of connections ready for use at all times by initiating extra
-   * connections in {@link NetworkClient#sendAndPoll} when a pool drops below this number.
+   * SocketNetworkClient will attempt to keep a percentage of connections ready for use at all times by initiating extra
+   * connections in {@link SocketNetworkClient#sendAndPoll} when a pool drops below this number.
    * @param dataNodeIds warm up target nodes.
    * @param connectionWarmUpPercentagePerDataNode percentage of max connections would like to establish in the warmup.
    * @param timeForWarmUp max time to wait for connections' establish in milliseconds.
    * @param responseInfoList records responses from disconnected connections.
    * @return number of connections established successfully.
    */
+  @Override
   public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionWarmUpPercentagePerDataNode,
       long timeForWarmUp, List<ResponseInfo> responseInfoList) {
     logger.info("Connection warm up start.");
@@ -360,21 +361,22 @@ public class NetworkClient implements Closeable {
   }
 
   /**
-   * Close the NetworkClient and cleanup.
+   * Close the SocketNetworkClient and cleanup.
    */
   @Override
   public void close() {
-    logger.trace("Closing the NetworkClient");
+    logger.trace("Closing the SocketNetworkClient");
     selector.close();
     closed = true;
   }
 
   /**
-   * Wake up the NetworkClient if it is within a {@link #sendAndPoll(List, Set, int)} sleep. This wakes
+   * Wake up the SocketNetworkClient if it is within a {@link #sendAndPoll(List, Set, int)} sleep. This wakes
    * up the {@link Selector}, which in turn wakes up the {@link java.nio.channels.Selector}.
    * <br>
    * @see java.nio.channels.Selector#wakeup()
    */
+  @Override
   public void wakeup() {
     selector.wakeup();
   }
@@ -390,7 +392,7 @@ public class NetworkClient implements Closeable {
     // the time at which this request was sent(or moved from queue to in flight state)
     private long requestDequeuedAtMs;
     // if non-null, this is the connection that was initiated (and not established) on behalf of this request. This
-    // information is kept so that the NetworkClient does not keep initiating new connections for the same request, and
+    // information is kept so that the SocketNetworkClient does not keep initiating new connections for the same request, and
     // so that in case this connection establishment fails, the request is failed immediately.
     // Note that this is not necessarily the connection on which this request is sent eventually. This is because
     // if another connection to the same destination becomes available before this pending connection is established,

@@ -32,6 +32,7 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -70,6 +71,8 @@ class NonBlockingRouter implements Router {
   private final CryptoJobHandler cryptoJobHandler;
   private final AccountService accountService;
   private final Time time;
+  // Resources that need to be shut down when the router does.
+  private final List<Closeable> resourcesToClose;
 
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
   static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
@@ -118,6 +121,15 @@ class NonBlockingRouter implements Router {
     backgroundDeleter = new BackgroundDeleter();
     ocList.add(backgroundDeleter);
     routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount, currentBackgroundOperationsCount);
+    resourcesToClose = new ArrayList<>();
+  }
+
+  /**
+   * Add a resource to close when the router shuts down.
+   * @param resource the resource that needs closing.
+   */
+  void addResourceToClose(Closeable resource) {
+    resourcesToClose.add(resource);
   }
 
   /**
@@ -410,6 +422,13 @@ class NonBlockingRouter implements Router {
     // close the crypto job handler
     if (cryptoJobHandler != null) {
       cryptoJobHandler.close();
+    }
+    for (Closeable resource : resourcesToClose) {
+      try {
+        resource.close();
+      } catch (IOException e) {
+        logger.error("Exception thrown on closing {}", resource.getClass().getName());
+      }
     }
     // close router metrics
     routerMetrics.close();
@@ -828,6 +847,7 @@ class NonBlockingRouter implements Router {
             responseHandler.onConnectionTimeout(dataNodeId);
           } else {
             RequestOrResponseType type = ((RequestOrResponse) requestInfo.getRequest()).getRequestType();
+            logger.debug("Handling response of type {} for {}", type, requestInfo.getRequest().getCorrelationId());
             switch (type) {
               case PutRequest:
                 putManager.handleResponse(responseInfo);

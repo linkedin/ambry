@@ -13,24 +13,33 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.VerifiableProperties;
+import java.util.Collections;
+
+
 /**
  * An implementation of {@link CloudDestinationFactory} to produce {@link LatchBasedInMemoryCloudDestination}
  */
 public class LatchBasedInMemoryCloudDestinationFactory implements CloudDestinationFactory {
-  LatchBasedInMemoryCloudDestination _latchBasedInMemoryCloudDestination;
+  LatchBasedInMemoryCloudDestination destination;
 
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestinationFactory}.
-   * @param latchBasedInMemoryCloudDestination the instance of {@link LatchBasedInMemoryCloudDestination}.
+   * @param destination the instance of {@link LatchBasedInMemoryCloudDestination}.
    */
-  public LatchBasedInMemoryCloudDestinationFactory(
-      LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination) {
-    this._latchBasedInMemoryCloudDestination = latchBasedInMemoryCloudDestination;
+  public LatchBasedInMemoryCloudDestinationFactory(LatchBasedInMemoryCloudDestination destination) {
+    this.destination = destination;
+  }
+
+  public LatchBasedInMemoryCloudDestinationFactory(VerifiableProperties verifiableProperties,
+      MetricRegistry metricRegistry) {
+    destination = new LatchBasedInMemoryCloudDestination(Collections.emptyList());
   }
 
   @Override
   public CloudDestination getCloudDestination() throws IllegalStateException {
-    return _latchBasedInMemoryCloudDestination;
+    return destination;
   }
 }
 

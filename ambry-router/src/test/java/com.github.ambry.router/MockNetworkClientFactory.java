@@ -16,19 +16,20 @@ package com.github.ambry.router;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.NetworkClient;
+import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
+import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
- * A class that mocks {@link NetworkClientFactory} and returns a {@link NetworkClient} created using a {@link
+ * A class that mocks {@link NetworkClientFactory} and returns a {@link SocketNetworkClient} created using a {@link
  * MockSelector}
  */
-class MockNetworkClientFactory extends NetworkClientFactory {
+class MockNetworkClientFactory extends SocketNetworkClientFactory {
   private final Time time;
   private AtomicReference<MockSelectorState> state;
   private MockServerLayout serverLayout;
@@ -59,14 +60,14 @@ class MockNetworkClientFactory extends NetworkClientFactory {
   }
 
   /**
-   * Return a {@link NetworkClient} instantiated with a {@link MockSelector}
-   * @return the constructed {@link NetworkClient}
+   * Return a {@link SocketNetworkClient} instantiated with a {@link MockSelector}
+   * @return the constructed {@link SocketNetworkClient}
    * @throws IOException if the selector could not be constructed.
    */
   @Override
-  public NetworkClient getNetworkClient() throws IOException {
+  public SocketNetworkClient getNetworkClient() throws IOException {
     MockSelector selector = new MockSelector(serverLayout, state, time);
-    return new NetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), maxPortsPlainText,
+    return new SocketNetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), maxPortsPlainText,
         maxPortsSsl, checkoutTimeoutMs, time);
   }
 

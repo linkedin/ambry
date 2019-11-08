@@ -15,6 +15,8 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.utils.Utils;
+import java.io.Closeable;
+import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,15 +24,23 @@ import org.slf4j.LoggerFactory;
 /**
  * Request handler pool. A pool of threads that handle requests
  */
-public class RequestHandlerPool {
+public class RequestHandlerPool implements Closeable {
 
   private Thread[] threads = null;
   private RequestHandler[] handlers = null;
+  private final RequestResponseChannel requestResponseChannel;
   private static final Logger logger = LoggerFactory.getLogger(RequestHandlerPool.class);
 
+  /**
+   * Create and start a pool of {@link RequestHandler}s.
+   * @param numThreads the number of handler threads to create.
+   * @param requestResponseChannel the {@link RequestResponseChannel} for the handlers to use.
+   * @param requests the {@link RequestAPI} instance used by the handlers for dispatching requests.
+   */
   public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, RequestAPI requests) {
     threads = new Thread[numThreads];
     handlers = new RequestHandler[numThreads];
+    this.requestResponseChannel = requestResponseChannel;
     for (int i = 0; i < numThreads; i++) {
       handlers[i] = new RequestHandler(i, requestResponseChannel, requests);
       threads[i] = Utils.daemonThread("request-handler-" + i, handlers[i]);
@@ -38,6 +48,16 @@ public class RequestHandlerPool {
     }
   }
 
+  /**
+   * @return the {@link RequestResponseChannel} used by this pool.
+   */
+  public RequestResponseChannel getChannel() {
+    return requestResponseChannel;
+  }
+
+  /**
+   * Drain the pool: shut down the handler threads.
+   */
   public void shutdown() {
     try {
       logger.info("shutting down");
@@ -51,5 +71,10 @@ public class RequestHandlerPool {
     } catch (Exception e) {
       logger.error("error when shutting down request handler pool {}", e);
     }
+  }
+
+  @Override
+  public void close() throws IOException {
+    shutdown();
   }
 }

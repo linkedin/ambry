@@ -253,7 +253,6 @@ project(':ambry-replication') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
-                project(':ambry-store'),
                 project(':ambry-commons'),
                 project(':ambry-protocol'),
                 project(':ambry-network')
@@ -263,6 +262,7 @@ project(':ambry-replication') {
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
         testCompile project(':ambry-messageformat').sourceSets.test.output
+        testCompile project(':ambry-store').sourceSets.main.output
     }
 }
 
@@ -331,7 +331,8 @@ project(':ambry-router') {
                 project(':ambry-clustermap'),
                 project(':ambry-messageformat'),
                 project(':ambry-protocol'),
-                project(':ambry-network')
+                project(':ambry-network'),
+                project(':ambry-cloud')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
         compile "io.netty:netty-buffer:$nettyVersion"
@@ -342,6 +343,7 @@ project(':ambry-router') {
         testCompile project(':ambry-commons').sourceSets.test.output
         testCompile project(':ambry-account').sourceSets.main.output
         testCompile project(':ambry-account').sourceSets.test.output
+        testCompile project(':ambry-cloud').sourceSets.test.output
     }
 }
 
@@ -369,10 +371,8 @@ project(':ambry-cloud') {
     dependencies {
         compile project(':ambry-api'),
             project(':ambry-utils'),
-            project(':ambry-store'),
             project(':ambry-commons'),
-            project(':ambry-replication'),
-            project(':ambry-server')
+            project(':ambry-replication')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "com.microsoft.azure:azure-storage:$azureStorageVersion"
         compile "com.microsoft.azure:azure-documentdb:$azureDocumentDbVersion"
@@ -381,6 +381,7 @@ project(':ambry-cloud') {
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
+        testCompile project(':ambry-store').sourceSets.main.output
         testCompile project(':ambry-store').sourceSets.test.output
         testCompile project(':ambry-replication').sourceSets.test.output
     }

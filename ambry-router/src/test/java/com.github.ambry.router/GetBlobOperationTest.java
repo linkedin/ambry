@@ -37,7 +37,7 @@ import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
-import com.github.ambry.network.NetworkClient;
+import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -90,8 +90,8 @@ import static org.junit.Assume.*;
  * Tests for {@link GetBlobOperation}
  * This class creates a {@link NonBlockingRouter} with a {@link MockServer} and does puts through it. The gets,
  * however are done directly by the tests - that is, the tests create {@link GetBlobOperation} and get requests from
- * it and then use a {@link NetworkClient} directly to send requests to and get responses from the {@link MockServer}.
- * Since the {@link NetworkClient} used by the router and the test are different, and since the
+ * it and then use a {@link SocketNetworkClient} directly to send requests to and get responses from the {@link MockServer}.
+ * Since the {@link SocketNetworkClient} used by the router and the test are different, and since the
  * {@link GetBlobOperation} created by the tests are never known by the router, there are no conflicts with the
  * RequestResponseHandler of the router.
  * Many of the variables are made member variables, so that they can be shared between the router and the
@@ -601,7 +601,7 @@ public class GetBlobOperationTest {
   }
 
   /**
-   * Test the case where all requests time out within the NetworkClient.
+   * Test the case where all requests time out within the SocketNetworkClient.
    * @throws Exception
    */
   @Test
