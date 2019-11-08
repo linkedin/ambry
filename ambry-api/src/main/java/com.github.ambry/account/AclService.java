@@ -76,7 +76,6 @@ public interface AclService<P> extends Closeable {
      * Delete existing content from a resource. For example, delete a blob from a container.
      */
     DELETE,
-
   }
 
   /**

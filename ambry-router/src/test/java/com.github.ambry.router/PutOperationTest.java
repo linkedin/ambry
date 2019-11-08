@@ -27,12 +27,11 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.ByteBufferChannel;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -117,8 +116,9 @@ public class PutOperationTest {
     // 1.
     ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0));
     PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
-        new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+        Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
     op.handleResponse(responseInfo, putResponse);
+    responseInfo.release();
     // 2.
     PutRequest putRequest = (PutRequest) requestInfos.get(1).getRequest();
     ByteBuffer buf = ByteBuffer.allocate((int) putRequest.sizeInBytes());
@@ -135,8 +135,9 @@ public class PutOperationTest {
     for (int i = 3; i < requestInfos.size(); i++) {
       responseInfo = getResponseInfo(requestInfos.get(i));
       putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
-          new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+          Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
       op.handleResponse(responseInfo, putResponse);
+      responseInfo.release();
     }
     // fill the first PutChunk with the last chunk.
     op.fillChunks();
@@ -163,8 +164,9 @@ public class PutOperationTest {
     for (int i = 0; i < requestInfos.size(); i++) {
       responseInfo = getResponseInfo(requestInfos.get(i));
       putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
-          new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+          Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
       op.handleResponse(responseInfo, putResponse);
+      responseInfo.release();
     }
     requestInfos.clear();
     // this should return requests for the metadata chunk
@@ -174,8 +176,9 @@ public class PutOperationTest {
     // once the metadata request succeeds, it should complete the operation.
     responseInfo = getResponseInfo(requestInfos.get(0));
     putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
-        new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+        Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
     op.handleResponse(responseInfo, putResponse);
+    responseInfo.release();
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
   }
 
@@ -276,7 +279,7 @@ public class PutOperationTest {
    */
   private ResponseInfo getResponseInfo(RequestInfo requestInfo) throws IOException {
     NetworkReceive networkReceive = new NetworkReceive(null, mockServer.send(requestInfo.getRequest()), time);
-    return new ResponseInfo(requestInfo, null, networkReceive.getReceivedBytes().getPayload());
+    return new ResponseInfo(requestInfo, null, networkReceive.getReceivedBytes().getAndRelease());
   }
 }
 

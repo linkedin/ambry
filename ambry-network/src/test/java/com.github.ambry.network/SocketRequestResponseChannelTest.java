@@ -62,14 +62,16 @@ public class SocketRequestResponseChannelTest {
       String connectionId = "test_connectionId";
       ByteBuffer buffer = ByteBuffer.allocate(1000);
       new Random().nextBytes(buffer.array());
-      channel.sendRequest(new SocketServerRequest(0, connectionId, new ByteBufferInputStream(buffer)));
-      SocketServerRequest request = (SocketServerRequest) channel.receiveRequest();
+      SocketServerRequest request = new SocketServerRequest(0, connectionId, buffer, new ByteBufferInputStream(buffer));
+      channel.sendRequest(request);
+      request = (SocketServerRequest) channel.receiveRequest();
       Assert.assertEquals(request.getProcessor(), 0);
       Assert.assertEquals(request.getConnectionId(), connectionId);
       InputStream stream = request.getInputStream();
       for (int i = 0; i < 1000; i++) {
         Assert.assertEquals((byte) stream.read(), buffer.array()[i]);
       }
+      request.release();
 
       ResponseListenerMock mock = new ResponseListenerMock();
       channel.addResponseListener(mock);

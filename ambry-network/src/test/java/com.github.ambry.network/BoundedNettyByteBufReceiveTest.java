@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.ByteBufferInputStream;
+import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.Random;
@@ -21,10 +22,10 @@ import org.junit.Assert;
 import org.junit.Test;
 
 
-public class BoundedByteBufferReceiveTest {
+public class BoundedNettyByteBufReceiveTest {
 
   /**
-   * Test basic operation of {@link BoundedByteBufferReceive}.
+   * Test basic operation of {@link BoundedNettyByteBufReceive}.
    * @throws Exception
    */
   @Test
@@ -36,13 +37,14 @@ public class BoundedByteBufferReceiveTest {
     new Random().nextBytes(buf);
     buffer.put(buf);
     buffer.flip();
-    BoundedByteBufferReceive set = new BoundedByteBufferReceive();
+    BoundedNettyByteBufReceive set = new BoundedNettyByteBufReceive();
     Assert.assertEquals("Wrong number of bytes read", bufferSize,
         set.readFrom(Channels.newChannel(new ByteBufferInputStream(buffer))));
     buffer.clear();
-    ByteBuffer payload = set.getAndRelease();
+    ByteBuf payload = set.getAndRelease();
     for (int i = 8; i < bufferSize; i++) {
-      Assert.assertEquals(buffer.array()[i], payload.get());
+      Assert.assertEquals(buffer.array()[i], payload.readByte());
     }
+    payload.release();
   }
 }

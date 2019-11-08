@@ -22,6 +22,9 @@ import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Time;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -37,13 +40,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
 /**
  * Test the {@link SocketNetworkClient}
  */
+@RunWith(Parameterized.class)
 public class SocketNetworkClientTest {
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
@@ -63,6 +70,12 @@ public class SocketNetworkClientTest {
   private List<DataNodeId> localSslDataNodes;
   private MockClusterMap sslEnabledClusterMap;
   private MockClusterMap sslDisabledClusterMap;
+  private boolean usingNettyByteBuffer;
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
 
   /**
    * Test the {@link NetworkClientFactory}
@@ -80,9 +93,11 @@ public class SocketNetworkClientTest {
     Assert.assertNotNull("SocketNetworkClient returned should be non-null", networkClientFactory.getNetworkClient());
   }
 
-  public SocketNetworkClientTest() throws IOException {
+  public SocketNetworkClientTest(boolean usingNettyByteBuffer) throws IOException {
+    this.usingNettyByteBuffer = usingNettyByteBuffer;
     Properties props = new Properties();
-    props.setProperty("network.client.enable.connection.replenishment", "true");
+    props.setProperty(NetworkConfig.NETWORK_CLIENT_ENABLE_CONNECTION_REPLENISHMENT, "true");
+    props.setProperty(NetworkConfig.NETWORK_USE_NETTY_BYTE_BUF, usingNettyByteBuffer ? "true" : "false");
     VerifiableProperties vprops = new VerifiableProperties(props);
     NetworkConfig networkConfig = new NetworkConfig(vprops);
     selector = new MockSelector(networkConfig);
@@ -106,6 +121,12 @@ public class SocketNetworkClientTest {
     sslHost = dataNodeId.getHostname();
     sslPort = dataNodeId.getPortToConnectTo();
     replicaOnSslNode = sslEnabledClusterMap.getReplicaIds(dataNodeId).get(0);
+  }
+
+  @After
+  public void cleanup() {
+    // force JVM to gc to trigger more intense resource leak detection.
+    System.gc();
   }
 
   /**
@@ -161,18 +182,21 @@ public class SocketNetworkClientTest {
       for (ResponseInfo responseInfo : responseInfoList) {
         MockSend send = (MockSend) responseInfo.getRequestInfo().getRequest();
         NetworkClientErrorCode error = responseInfo.getError();
-        ByteBuffer response = responseInfo.getResponse();
+        Object response = responseInfo.getResponse();
         Assert.assertNull("Should not have encountered an error", error);
         Assert.assertNotNull("Should receive a valid response", response);
         int correlationIdInRequest = send.getCorrelationId();
-        int correlationIdInResponse = response.getInt();
+        int correlationIdInResponse =
+            usingNettyByteBuffer ? ((ByteBuf) response).readInt() : ((ByteBuffer) response).getInt();
         Assert.assertEquals("Received response for the wrong request", correlationIdInRequest, correlationIdInResponse);
         responseCount++;
+        responseInfo.release();
       }
     } while (requestCount > responseCount);
     Assert.assertEquals("Should receive only as many responses as there were requests", requestCount, responseCount);
 
     responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
+    responseInfoList.forEach(ResponseInfo::release);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
   }
@@ -203,15 +227,17 @@ public class SocketNetworkClientTest {
       requestInfoList.clear();
       for (ResponseInfo responseInfo : responseInfoList) {
         NetworkClientErrorCode error = responseInfo.getError();
-        ByteBuffer response = responseInfo.getResponse();
+        Object response = responseInfo.getResponse();
         Assert.assertNotNull("Should have encountered an error", error);
         Assert.assertEquals("Should have received a connection unavailable error",
             NetworkClientErrorCode.ConnectionUnavailable, error);
         Assert.assertNull("Should not have received a valid response", response);
         responseCount++;
+        responseInfo.release();
       }
     } while (requestCount > responseCount);
     responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
+    responseInfoList.forEach(ResponseInfo::release);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
   }
@@ -235,15 +261,17 @@ public class SocketNetworkClientTest {
       requestInfoList.clear();
       for (ResponseInfo responseInfo : responseInfoList) {
         NetworkClientErrorCode error = responseInfo.getError();
-        ByteBuffer response = responseInfo.getResponse();
+        Object response = responseInfo.getResponse();
         Assert.assertNotNull("Should have encountered an error", error);
         Assert.assertEquals("Should have received a connection unavailable error", NetworkClientErrorCode.NetworkError,
             error);
         Assert.assertNull("Should not have received a valid response", response);
         responseCount++;
+        responseInfo.release();
       }
     } while (requestCount > responseCount);
     responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
+    responseInfoList.forEach(ResponseInfo::release);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
     selector.setState(MockSelectorState.Good);
@@ -266,7 +294,9 @@ public class SocketNetworkClientTest {
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
     selector.setState(MockSelectorState.ThrowExceptionOnConnect);
     try {
-      networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
+      List<ResponseInfo> responseInfos =
+          networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
+      responseInfos.forEach(ResponseInfo::release);
     } catch (Exception e) {
       Assert.fail("If selector throws on connect, sendAndPoll() should not throw");
     }
@@ -292,24 +322,28 @@ public class SocketNetworkClientTest {
     // At this time a single connection would have been initiated for the above request.
     Assert.assertEquals(1, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
     requestInfoList.clear();
 
     // Subsequent calls to sendAndPoll() should not initiate any connections.
     responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
     Assert.assertEquals(1, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
 
     // Another connection should get initialized if a new request comes in for the same destination.
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(1), replicaOnSslNode));
     responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
     requestInfoList.clear();
 
     // Subsequent calls to sendAndPoll() should not initiate any more connections.
     responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
 
     // Once connect failure kicks in, the pending requests should be failed immediately.
     selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
@@ -318,6 +352,7 @@ public class SocketNetworkClientTest {
     Assert.assertEquals(2, responseInfoList.size());
     Assert.assertEquals(NetworkClientErrorCode.NetworkError, responseInfoList.get(0).getError());
     Assert.assertEquals(NetworkClientErrorCode.NetworkError, responseInfoList.get(1).getError());
+    responseInfoList.forEach(ResponseInfo::release);
     responseInfoList.clear();
   }
 
@@ -347,12 +382,14 @@ public class SocketNetworkClientTest {
         networkClient.sendAndPoll(requestGen.apply(3), Collections.emptySet(), POLL_TIMEOUT_MS);
     checkConnectCalls.run();
     Assert.assertEquals(3, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
 
     // 2. this sendAndPoll() should disconnect two of the pre-warmed connections
     selector.setState(MockSelectorState.DisconnectOnSend);
     responseInfoList = networkClient.sendAndPoll(requestGen.apply(2), Collections.emptySet(), POLL_TIMEOUT_MS);
     checkConnectCalls.run();
     Assert.assertEquals(2, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
 
     // 3. the two connections lost in the previous sendAndPoll should not be replenished yet since a second has not yet
     // passed since startup
@@ -360,6 +397,7 @@ public class SocketNetworkClientTest {
     responseInfoList = networkClient.sendAndPoll(requestGen.apply(1), Collections.emptySet(), POLL_TIMEOUT_MS);
     checkConnectCalls.run();
     Assert.assertEquals(1, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
 
     // 4. one of the connection lost in sendAndPoll 3 should be replenished
     time.setCurrentMilliseconds(time.milliseconds() + Time.MsPerSec);
@@ -389,6 +427,7 @@ public class SocketNetworkClientTest {
     responseInfoList = networkClient.sendAndPoll(requestGen.apply(3), Collections.emptySet(), POLL_TIMEOUT_MS);
     checkConnectCalls.run();
     Assert.assertEquals(3, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
   }
 
   /**
@@ -415,11 +454,12 @@ public class SocketNetworkClientTest {
       MockSend send = (MockSend) responseInfo.getRequestInfo().getRequest();
       if (send.getCorrelationId() == 1) {
         NetworkClientErrorCode error = responseInfo.getError();
-        ByteBuffer response = responseInfo.getResponse();
+        Object response = responseInfo.getResponse();
         Assert.assertNull("Should not have encountered an error", error);
         Assert.assertNotNull("Should receive a valid response", response);
         int correlationIdInRequest = send.getCorrelationId();
-        int correlationIdInResponse = response.getInt();
+        int correlationIdInResponse =
+            usingNettyByteBuffer ? ((ByteBuf) response).readInt() : ((ByteBuffer) response).getInt();
         Assert.assertEquals("Received response for the wrong request", correlationIdInRequest, correlationIdInResponse);
       } else {
         Assert.assertEquals("Expected connection unavailable on dropped request",
@@ -427,6 +467,7 @@ public class SocketNetworkClientTest {
         Assert.assertNull("Should not receive a response", responseInfo.getResponse());
       }
     }
+    responseInfoList.forEach(ResponseInfo::release);
 
     // Test dropping of requests while the requests are in flight.
     // Set the selector to idle mode to prevent responses from coming back (even though connections are available at
@@ -442,22 +483,26 @@ public class SocketNetworkClientTest {
       MockSend send = (MockSend) responseInfo.getRequestInfo().getRequest();
       if (send.getCorrelationId() != 4) {
         NetworkClientErrorCode error = responseInfo.getError();
-        ByteBuffer response = responseInfo.getResponse();
+        Object response = responseInfo.getResponse();
         Assert.assertNull("Should not have encountered an error", error);
         Assert.assertNotNull("Should receive a valid response", response);
         int correlationIdInRequest = send.getCorrelationId();
-        int correlationIdInResponse = response.getInt();
+        int correlationIdInResponse =
+            usingNettyByteBuffer ? ((ByteBuf) response).readInt() : ((ByteBuffer) response).getInt();
         Assert.assertEquals("Received response for the wrong request", correlationIdInRequest, correlationIdInResponse);
+        responseInfo.release();
       } else {
         Assert.assertEquals("Expected network error (from closed connection for dropped request)",
             NetworkClientErrorCode.NetworkError, responseInfo.getError());
         Assert.assertNull("Should not receive a response", responseInfo.getResponse());
+        responseInfo.release();
       }
     }
 
     // Dropping a request that is not currently pending or in flight should be a no-op.
     responseInfoList = networkClient.sendAndPoll(Collections.emptyList(), Collections.singleton(1), POLL_TIMEOUT_MS);
     Assert.assertEquals("No more responses expected.", 0, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
   }
 
   /**
@@ -483,6 +528,7 @@ public class SocketNetworkClientTest {
     requestInfoList.clear();
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
 
     // Invoke sendAndPoll() again, the Connection C1 will get disconnected
     responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
@@ -497,6 +543,7 @@ public class SocketNetworkClientTest {
     Assert.assertEquals("Mismatch in error code", NetworkClientErrorCode.NetworkError,
         responseInfoList.get(0).getError());
     Assert.assertNull(responseInfoList.get(0).getRequestInfo());
+    responseInfoList.forEach(ResponseInfo::release);
     responseInfoList.clear();
 
     // Invoke sendAndPoll() again, Request R2 will get sent via Connection C2
@@ -506,6 +553,7 @@ public class SocketNetworkClientTest {
     Assert.assertNull(responseInfoList.get(0).getError());
     // Verify the correlation Id of Request R2
     Assert.assertEquals(3, responseInfoList.get(0).getRequestInfo().getRequest().getCorrelationId());
+    responseInfoList.forEach(ResponseInfo::release);
     responseInfoList.clear();
     selector.setState(MockSelectorState.Good);
   }
@@ -523,6 +571,7 @@ public class SocketNetworkClientTest {
     List<ResponseInfo> responseInfoList =
         networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
     Assert.assertEquals(0, responseInfoList.size());
+    responseInfoList.forEach(ResponseInfo::release);
     requestInfoList.clear();
     // now make the selector return any attempted connections as disconnections.
     selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
@@ -538,6 +587,7 @@ public class SocketNetworkClientTest {
         NetworkClientErrorCode.ConnectionUnavailable, responseInfoList.get(0).getError());
     Assert.assertEquals("Error received in second response should be NetworkError", NetworkClientErrorCode.NetworkError,
         responseInfoList.get(1).getError());
+    responseInfoList.forEach(ResponseInfo::release);
     responseInfoList.clear();
     selector.setState(MockSelectorState.Good);
   }
@@ -552,7 +602,9 @@ public class SocketNetworkClientTest {
     requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
     selector.setState(MockSelectorState.ThrowExceptionOnPoll);
     try {
-      networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
+      List<ResponseInfo> responseInfoList =
+          networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
+      responseInfoList.forEach(ResponseInfo::release);
     } catch (Exception e) {
       Assert.fail("If selector throws on poll, sendAndPoll() should not throw.");
     }
@@ -664,11 +716,46 @@ class MockSend implements SendWithCorrelationId {
 }
 
 /**
+ * A mock implementation of {@link BoundedNettyByteBufReceive} that constructs a buffer with the passed in correlation
+ * id and returns that buffer as part of {@link #getAndRelease()}.
+ */
+class MockBoundedNettyByteBufReceive extends BoundedNettyByteBufReceive {
+  private ByteBuf buf;
+
+  /**
+   * Construct a MockBoundedByteBufferReceive with the given correlation id.
+   * @param correlationId the correlation id associated with this object.
+   */
+  public MockBoundedNettyByteBufReceive(int correlationId) {
+    buf = ByteBufAllocator.DEFAULT.heapBuffer(16);
+    buf.writeInt(correlationId);
+  }
+
+  /**
+   * Return the buffer associated with this object.
+   * @return the buffer associated with this object.
+   */
+  @Override
+  public ByteBuf getAndRelease() {
+    if (buf == null) {
+      return null;
+    } else {
+      try {
+        return buf.retainedDuplicate();
+      } finally {
+        buf.release();
+        buf = null;
+      }
+    }
+  }
+}
+
+/**
  * A mock implementation of {@link BoundedByteBufferReceive} that constructs a buffer with the passed in correlation
- * id and returns that buffer as part of {@link #getPayload()}.
+ * id and returns that buffer as part of {@link #getAndRelease()}.
  */
 class MockBoundedByteBufferReceive extends BoundedByteBufferReceive {
-  private final ByteBuffer buf;
+  private ByteBuffer buf;
 
   /**
    * Construct a MockBoundedByteBufferReceive with the given correlation id.
@@ -676,7 +763,7 @@ class MockBoundedByteBufferReceive extends BoundedByteBufferReceive {
    */
   public MockBoundedByteBufferReceive(int correlationId) {
     buf = ByteBuffer.allocate(16);
-    buf.putInt(0, correlationId);
+    buf.putInt(correlationId);
     buf.rewind();
   }
 
@@ -685,8 +772,12 @@ class MockBoundedByteBufferReceive extends BoundedByteBufferReceive {
    * @return the buffer associated with this object.
    */
   @Override
-  public ByteBuffer getPayload() {
-    return buf;
+  public ByteBuffer getAndRelease() {
+    try {
+      return buf;
+    } finally {
+      buf = null;
+    }
   }
 }
 
@@ -745,6 +836,7 @@ class MockSelector extends Selector {
   private boolean wakeUpCalled = false;
   private int connectCallCount = 0;
   private boolean isOpen = true;
+  private boolean usingNettyByteBuf;
 
   /**
    * Create a MockSelector
@@ -753,6 +845,7 @@ class MockSelector extends Selector {
   MockSelector(NetworkConfig networkConfig) throws IOException {
     super(new NetworkMetrics(new MetricRegistry()), new MockTime(), null, networkConfig);
     super.close();
+    this.usingNettyByteBuf = networkConfig.networkUseNettyByteBuf;
   }
 
   /**
@@ -832,9 +925,10 @@ class MockSelector extends Selector {
         if (state == MockSelectorState.DisconnectOnSend) {
           disconnected.add(send.getConnectionId());
         } else if (!closedConnections.contains(send.getConnectionId())) {
-          receives.add(
-              new NetworkReceive(send.getConnectionId(), new MockBoundedByteBufferReceive(mockSend.getCorrelationId()),
-                  new MockTime()));
+          BoundedReceive boundedReceive =
+              usingNettyByteBuf ? new MockBoundedNettyByteBufReceive(mockSend.getCorrelationId())
+                  : new MockBoundedByteBufferReceive(mockSend.getCorrelationId());
+          receives.add(new NetworkReceive(send.getConnectionId(), boundedReceive, new MockTime()));
         }
       }
     }
@@ -920,7 +1014,13 @@ class MockSelector extends Selector {
   public void close(String conn) {
     if (connectionIds.contains(conn)) {
       closedConnections.add(conn);
-      receives.removeIf(receive -> conn.equals(receive.getConnectionId()));
+      receives.removeIf((receive) -> {
+        boolean r = conn.equals(receive.getConnectionId());
+        if (r) {
+          ReferenceCountUtil.release(receive.getReceivedBytes().getAndRelease());
+        }
+        return r;
+      });
     }
   }
 

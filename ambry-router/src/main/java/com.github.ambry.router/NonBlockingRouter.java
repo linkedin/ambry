@@ -892,6 +892,7 @@ class NonBlockingRouter implements Router {
               routerConfig.routerDropRequestOnTimeout ? requestsToDrop : Collections.emptySet(),
               NETWORK_CLIENT_POLL_TIMEOUT);
           onResponse(responseInfoList);
+          responseInfoList.forEach(ResponseInfo::release);
         }
       } catch (Throwable e) {
         logger.error("Aborting, as requestResponseHandlerThread received an unexpected error: ", e);

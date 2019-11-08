@@ -31,4 +31,9 @@ public interface Request {
    * @return The start time in ms when the request started
    */
   long getStartTimeInMs();
+
+  /**
+   * Release any resource this request is holding.
+   */
+  default void release() {};
 }

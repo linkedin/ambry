@@ -13,7 +13,7 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.utils.SystemTime;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.nio.channels.SelectionKey;
@@ -29,8 +29,8 @@ public class PlainTextTransmission extends Transmission {
   private static final Logger logger = LoggerFactory.getLogger(PlainTextTransmission.class);
 
   public PlainTextTransmission(String connectionId, SocketChannel socketChannel, SelectionKey key, Time time,
-      NetworkMetrics metrics) {
-    super(connectionId, socketChannel, key, time, metrics);
+      NetworkMetrics metrics, NetworkConfig config) {
+    super(connectionId, socketChannel, key, time, config, metrics);
   }
 
   /**
@@ -59,7 +59,7 @@ public class PlainTextTransmission extends Transmission {
   @Override
   public boolean read() throws IOException {
     if (!hasReceive()) {
-      networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
+      initializeNetworkReceive();
       metrics.transmissionRoundTripTime.update(time.milliseconds() - sendCompleteTime);
     }
     long startTimeMs = time.milliseconds();
@@ -106,6 +106,7 @@ public class PlainTextTransmission extends Transmission {
    */
   @Override
   public void close() {
+    release();
     clearReceive();
     clearSend();
     key.attach(null);

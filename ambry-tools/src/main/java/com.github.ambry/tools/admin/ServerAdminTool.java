@@ -60,6 +60,7 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBufInputStream;
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.File;
@@ -640,8 +641,9 @@ public class ServerAdminTool implements Closeable {
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.TriggerCompaction, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, partitionId, adminRequest);
-    AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
+    ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, adminRequest);
+    AdminResponse adminResponse = AdminResponse.readFrom(Utils.createDataInputStreamFromBuffer(response.getResponse()));
+    response.release();
     return adminResponse.getError();
   }
 
@@ -662,8 +664,9 @@ public class ServerAdminTool implements Closeable {
         new AdminRequest(AdminRequestOrResponseType.RequestControl, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
     RequestControlAdminRequest controlRequest = new RequestControlAdminRequest(toControl, enable, adminRequest);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
-    AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
+    ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
+    AdminResponse adminResponse = AdminResponse.readFrom(Utils.createDataInputStreamFromBuffer(response.getResponse()));
+    response.release();
     return adminResponse.getError();
   }
 
@@ -684,8 +687,9 @@ public class ServerAdminTool implements Closeable {
         new AdminRequest(AdminRequestOrResponseType.ReplicationControl, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
     ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
-    AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
+    ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
+    AdminResponse adminResponse = AdminResponse.readFrom(Utils.createDataInputStreamFromBuffer(response.getResponse()));
+    response.release();
     return adminResponse.getError();
   }
 
@@ -709,8 +713,9 @@ public class ServerAdminTool implements Closeable {
             CLIENT_ID);
     BlobStoreControlAdminRequest controlRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, storeControlRequestType, adminRequest);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
-    AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
+    ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, controlRequest);
+    AdminResponse adminResponse = AdminResponse.readFrom(Utils.createDataInputStreamFromBuffer(response.getResponse()));
+    response.release();
     return adminResponse.getError();
   }
 
@@ -735,10 +740,12 @@ public class ServerAdminTool implements Closeable {
             CLIENT_ID);
     CatchupStatusAdminRequest catchupStatusRequest =
         new CatchupStatusAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, partitionId, catchupStatusRequest);
-    CatchupStatusAdminResponse response =
-        CatchupStatusAdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
-    return new Pair<>(response.getError(), response.getError() == ServerErrorCode.No_Error && response.isCaughtUp());
+    ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, catchupStatusRequest);
+    CatchupStatusAdminResponse adminResponse =
+        CatchupStatusAdminResponse.readFrom(Utils.createDataInputStreamFromBuffer(response.getResponse()));
+    response.release();
+    return new Pair<>(adminResponse.getError(),
+        adminResponse.getError() == ServerErrorCode.No_Error && adminResponse.isCaughtUp());
   }
 
   /**
@@ -762,8 +769,9 @@ public class ServerAdminTool implements Closeable {
     partitionRequestInfos.add(partitionRequestInfo);
     GetRequest getRequest =
         new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, flags, partitionRequestInfos, getOption);
-    InputStream serverResponseStream =
-        new ByteBufferInputStream(sendRequestGetResponse(dataNodeId, partitionId, getRequest));
+    ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, getRequest);
+    InputStream serverResponseStream = Utils.createDataInputStreamFromBuffer(response.getResponse());
+    response.release();
     GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
     ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
     ServerErrorCode errorCode =
@@ -777,10 +785,10 @@ public class ServerAdminTool implements Closeable {
    * @param dataNodeId the {@link DataNodeId} to contact.
    * @param partitionId the {@link PartitionId} associated with request.
    * @param request the request to send.
-   * @return the response as a {@link ByteBuffer} if the response was successfully received. {@code null} otherwise.
+   * @return the response as a {@link ResponseInfo} if the response was successfully received. {@code null} otherwise.
    * @throws TimeoutException
    */
-  private ByteBuffer sendRequestGetResponse(DataNodeId dataNodeId, PartitionId partitionId,
+  private ResponseInfo sendRequestGetResponse(DataNodeId dataNodeId, PartitionId partitionId,
       SendWithCorrelationId request) throws TimeoutException {
     ReplicaId replicaId = getReplicaFromNode(dataNodeId, partitionId);
     String hostname = dataNodeId.getHostname();
@@ -808,7 +816,7 @@ public class ServerAdminTool implements Closeable {
       throw new IllegalStateException(
           identifier + ": Encountered error while trying to send request - " + responseInfo.getError());
     }
-    return responseInfo.getResponse();
+    return responseInfo;
   }
 
   /**

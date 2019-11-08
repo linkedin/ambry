@@ -33,11 +33,9 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.server.ServerErrorCode;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -248,8 +246,9 @@ public class GetBlobInfoOperationTest {
     List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
     for (ResponseInfo responseInfo : responses) {
       GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
-          new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+          Utils.createDataInputStreamFromBuffer(responseInfo.getResponse()), mockClusterMap) : null;
       op.handleResponse(responseInfo, getResponse);
+      responseInfo.release();
       if (op.isOperationComplete()) {
         break;
       }
@@ -488,6 +487,7 @@ public class GetBlobInfoOperationTest {
       for (RequestInfo requestInfo : requestListToFill) {
         ResponseInfo fakeResponse = new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null);
         op.handleResponse(fakeResponse, null);
+        fakeResponse.release();
         if (op.isOperationComplete()) {
           break;
         }
@@ -714,8 +714,9 @@ public class GetBlobInfoOperationTest {
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
-            new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+            Utils.createDataInputStreamFromBuffer(responseInfo.getResponse()), mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
+        responseInfo.release();
         if (op.isOperationComplete()) {
           break;
         }

@@ -355,7 +355,7 @@ public class SocketNetworkClient implements NetworkClient {
       connectionTracker.checkInConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
       correlationIdInFlightToConnectionId.remove(requestMetadata.requestInfo.getRequest().getCorrelationId());
-      responseInfoList.add(new ResponseInfo(requestMetadata.requestInfo, null, recv.getReceivedBytes().getPayload()));
+      responseInfoList.add(new ResponseInfo(requestMetadata.requestInfo, null, recv.getReceivedBytes().getAndRelease()));
       requestMetadata.onResponseReceive();
     }
   }

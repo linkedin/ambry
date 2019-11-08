@@ -525,7 +525,8 @@ public class RestUtils {
       GetOption getOption, int blobSegmentIdx) throws RestServiceException {
     String rangeHeaderValue = getHeader(args, Headers.RANGE, false);
     if (subResource != null && !subResource.equals(SubResource.Segment) && rangeHeaderValue != null) {
-      throw new RestServiceException("Ranges not supported for sub-resources that aren't Segment.", RestServiceErrorCode.InvalidArgs);
+      throw new RestServiceException("Ranges not supported for sub-resources that aren't Segment.",
+          RestServiceErrorCode.InvalidArgs);
     }
     return new GetBlobOptionsBuilder().operationType(
         subResource == null || subResource == SubResource.Segment ? GetBlobOptions.OperationType.All

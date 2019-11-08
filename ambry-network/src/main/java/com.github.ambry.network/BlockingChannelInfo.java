@@ -103,8 +103,7 @@ class BlockingChannelInfo {
     }
   }
 
-  BlockingChannel getBlockingChannel(long timeoutInMs)
-      throws InterruptedException, ConnectionPoolTimeoutException {
+  BlockingChannel getBlockingChannel(long timeoutInMs) throws InterruptedException, ConnectionPoolTimeoutException {
     rwlock.readLock().lock();
     try {
       // check if the max connections for this queue has reached or if there are any connections available
