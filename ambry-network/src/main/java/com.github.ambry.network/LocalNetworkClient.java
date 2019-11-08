@@ -78,6 +78,8 @@ public class LocalNetworkClient implements NetworkClient {
     long startTime = time.milliseconds();
     try {
       for (RequestInfo requestInfo : requestInfos) {
+        // TODO: inefficient to serialize request before sending, better to convert Send to an InputStream
+        // that handles the header skipping.
         ByteBuffer buffer = LocalRequestResponseChannel.byteBufferFromPayload(requestInfo.getRequest());
         channel.sendRequest(new LocalChannelRequest(requestInfo, processorId, new ByteBufferInputStream(buffer)));
       }

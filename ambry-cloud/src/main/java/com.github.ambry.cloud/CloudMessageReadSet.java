@@ -49,6 +49,8 @@ class CloudMessageReadSet implements MessageReadSet {
     String blobIdStr = blobReadInfo.getBlobId().getID();
 
     try {
+      // TODO: Need to refactor the code to avoid prefetching blobs for BlobInfo request,
+      // or at least to prefetch only the header (requires CloudDestination enhancement)
       if (!blobReadInfo.isPrefetched()) {
         blobReadInfo.prefetchBlob(blobStore);
       }
@@ -58,7 +60,7 @@ class CloudMessageReadSet implements MessageReadSet {
       outputBuffer.position((int) (relativeOffset));
       written = channel.write(outputBuffer);
     } catch (StoreException ex) {
-      throw new IOException("Write of cloud blob " + blobIdStr + " failed");
+      throw new IOException("Write of cloud blob " + blobIdStr + " failed", ex);
     }
     logger.trace("Downloaded {} bytes to the write channel from the cloud blob : {}", written, blobIdStr);
     return written;
@@ -83,10 +85,11 @@ class CloudMessageReadSet implements MessageReadSet {
 
   @Override
   public void doPrefetch(int index, long relativeOffset, long size) throws IOException {
+    BlobReadInfo blobReadInfo = blobReadInfoList.get(index);
     try {
-      blobReadInfoList.get(index).prefetchBlob(blobStore);
+      blobReadInfo.prefetchBlob(blobStore);
     } catch (StoreException ex) {
-      throw new IOException("Prefetch of cloud blob " + blobReadInfoList.get(index).getBlobId().getID() + " failed");
+      throw new IOException("Prefetch of cloud blob " + blobReadInfo.getBlobId().getID() + " failed", ex);
     }
   }
 
