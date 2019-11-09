@@ -273,9 +273,10 @@ public class CloudBlobStoreTest {
     FindInfo findInfo = store.findEntriesSince(startToken, maxTotalSize);
     assertEquals(numBlobsFound, findInfo.getMessageEntries().size());
     CloudFindToken outputToken = (CloudFindToken) findInfo.getFindToken();
-    assertEquals(startTime + numBlobsFound - 1, outputToken.getLatestUploadTime());
+    assertEquals(startTime + numBlobsFound - 1, outputToken.getLastUpdateTime());
     assertEquals(blobSize * numBlobsFound, outputToken.getBytesRead());
-    assertEquals(metadataList.get(numBlobsFound - 1).getId(), outputToken.getLatestBlobId());
+    assertEquals(Collections.singletonList(metadataList.get(numBlobsFound - 1).getId()),
+        new ArrayList<String>(outputToken.getLastUpdateTimeReadBlobIds()));
 
     // 2) call find with new token, return more data including lastBlob, verify token updated
     startTime += 1000;
@@ -283,15 +284,16 @@ public class CloudBlobStoreTest {
     when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(metadataList);
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
     outputToken = (CloudFindToken) findInfo.getFindToken();
-    assertEquals(startTime + numBlobsFound - 1, outputToken.getLatestUploadTime());
+    assertEquals(startTime + numBlobsFound - 1, outputToken.getLastUpdateTime());
     assertEquals(blobSize * 2 * numBlobsFound, outputToken.getBytesRead());
-    assertEquals(metadataList.get(numBlobsFound - 1).getId(), outputToken.getLatestBlobId());
+    assertEquals(Collections.singletonList(metadataList.get(numBlobsFound - 1).getId()),
+        new ArrayList<String>(outputToken.getLastUpdateTimeReadBlobIds()));
 
     // 3) call find with new token, no more data, verify token unchanged
     when(dest.findEntriesSince(anyString(), any(CloudFindToken.class), anyLong())).thenReturn(Collections.emptyList());
     findInfo = store.findEntriesSince(outputToken, maxTotalSize);
     assertTrue(findInfo.getMessageEntries().isEmpty());
-    FindToken finalToken = (CloudFindToken) findInfo.getFindToken();
+    FindToken finalToken = findInfo.getFindToken();
     assertEquals(outputToken, finalToken);
   }
 
@@ -562,6 +564,7 @@ public class CloudBlobStoreTest {
       CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, startTime, Utils.Infinite_Time, blobSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       metadata.setUploadTime(startTime + j);
+      metadata.setLastUpdateTime(startTime + j);
       metadataList.add(metadata);
     }
     return metadataList;

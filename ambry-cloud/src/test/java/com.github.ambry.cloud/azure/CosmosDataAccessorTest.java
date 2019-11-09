@@ -208,7 +208,8 @@ public class CosmosDataAccessorTest {
    */
   private FeedResponse<Document> getFeedResponse() throws Exception {
     QueryIterable<Document> mockIterable = mock(QueryIterable.class);
-    List<Document> docList = Collections.singletonList(new Document(objectMapper.writeValueAsString(blobMetadata)));
+    List<Document> docList =
+        Collections.singletonList(AzureTestUtils.createDocumentFromCloudBlobMetadata(blobMetadata, objectMapper));
     when(mockIterable.iterator()).thenReturn(docList.iterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     when(feedResponse.getQueryIterable()).thenReturn(mockIterable);

@@ -81,7 +81,7 @@ public interface CloudDestination {
   List<CloudBlobMetadata> getDeadBlobs(String partitionPath) throws CloudStorageException;
 
   /**
-   * Returns a sequenced list of blobs in the specified partition, ordered by upload time starting from the
+   * Returns a sequenced list of blobs in the specified partition, ordered by update time starting from the
    * specified time.
    * @param partitionPath the partition to query.
    * @param findToken the {@link CloudFindToken} specifying the boundary for the query.

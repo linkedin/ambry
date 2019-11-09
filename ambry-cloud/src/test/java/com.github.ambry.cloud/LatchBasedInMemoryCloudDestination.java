@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -80,6 +81,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
+    cloudBlobMetadata.setLastUpdateTime(System.currentTimeMillis());
     map.put(blobId, new Pair<>(cloudBlobMetadata, outputStream.toByteArray()));
     blobsUploadedCounter.incrementAndGet();
     if (blobIdsToTrack.remove(blobId)) {
@@ -109,6 +111,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       return false;
     }
     map.get(blobId).getFirst().setDeletionTime(deletionTime);
+    map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
     return true;
   }
 
@@ -116,6 +119,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   public boolean updateBlobExpiration(BlobId blobId, long expirationTime) {
     if (map.containsKey(blobId)) {
       map.get(blobId).getFirst().setExpirationTime(expirationTime);
+      map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
       return true;
     } else {
       return false;
@@ -143,11 +147,16 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       long maxTotalSizeOfEntries) {
     List<CloudBlobMetadata> entries = new LinkedList<>();
     for (BlobId blobId : map.keySet()) {
-      if (map.get(blobId).getFirst().getUploadTime() > findToken.getLatestUploadTime()) {
+      if (map.get(blobId).getFirst().getLastUpdateTime() >= findToken.getLastUpdateTime()) {
+        if (findToken.getLastUpdateTimeReadBlobIds().contains(map.get(blobId).getFirst().getId())) {
+          continue;
+        }
         entries.add(map.get(blobId).getFirst());
       }
     }
-    return entries;
+    Collections.sort(entries, Comparator.comparingLong(CloudBlobMetadata::getLastUpdateTime));
+
+    return CloudBlobMetadata.capMetadataListBySize(entries, maxTotalSizeOfEntries);
   }
 
   @Override

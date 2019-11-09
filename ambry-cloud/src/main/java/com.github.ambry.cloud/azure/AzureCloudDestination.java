@@ -51,7 +51,9 @@ import java.security.InvalidKeyException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -84,8 +86,8 @@ class AzureCloudDestination implements CloudDestination {
   // be multiple VCR's uploading same partition).  We track the lastBlobId in the CloudFindToken and skip it if
   // is returned in successive queries.
   static final String ENTRIES_SINCE_QUERY_TEMPLATE =
-      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " >= "
-          + TIME_SINCE_PARAM + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
+      "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN + " >= "
+          + TIME_SINCE_PARAM + " ORDER BY c." + CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN + " ASC";
   private static final String SEPARATOR = "-";
   private static final int findSinceQueryLimit = 1000;
   private final CloudStorageAccount azureAccount;
@@ -118,7 +120,7 @@ class AzureCloudDestination implements CloudDestination {
     // Check for proxy
     if (cloudConfig.vcrProxyHost != null) {
       logger.info("Using proxy: {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
-      blobOpContext.setDefaultProxy(
+      OperationContext.setDefaultProxy(
           new Proxy(Proxy.Type.HTTP, new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort)));
     }
     // Set up CosmosDB connection, including any proxy setting
@@ -345,35 +347,42 @@ class AzureCloudDestination implements CloudDestination {
       long maxTotalSizeOfEntries) throws CloudStorageException {
     SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
         new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, findSinceQueryLimit),
-            new SqlParameter(TIME_SINCE_PARAM, findToken.getLatestUploadTime())));
+            new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime())));
     try {
-      List<CloudBlobMetadata> results =
+      List<CloudBlobMetadata> queryResults =
           cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
-      if (results.isEmpty()) {
-        return results;
+      if (queryResults.isEmpty()) {
+        return queryResults;
       }
-      long totalSize = 0;
-      List<CloudBlobMetadata> cappedResults = new ArrayList<>();
-      for (CloudBlobMetadata metadata : results) {
-        // Skip the last blobId in the token
-        if (metadata.getId().equals(findToken.getLatestBlobId())) {
-          continue;
-        }
-
-        // Cap results at max size
-        if (totalSize + metadata.getSize() > maxTotalSizeOfEntries) {
-          // If we have no results yet, must add at least one regardless of size
-          if (cappedResults.isEmpty()) {
-            cappedResults.add(metadata);
-          }
-          break;
-        }
-        cappedResults.add(metadata);
-        totalSize += metadata.getSize();
+      if (queryResults.get(0).getLastUpdateTime() == findToken.getLastUpdateTime()) {
+        filterOutLastReadBlobs(queryResults, findToken.getLastUpdateTimeReadBlobIds(), findToken.getLastUpdateTime());
       }
-      return cappedResults;
+      return CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
     } catch (DocumentClientException dex) {
       throw new CloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
+    }
+  }
+
+  /**
+   * Filter out {@link CloudBlobMetadata} objects from lastUpdateTime ordered {@code cloudBlobMetadataList} whose
+   * lastUpdateTime is {@code lastUpdateTime} and id is in {@code lastReadBlobIds}.
+   * @param cloudBlobMetadataList list of {@link CloudBlobMetadata} objects to filter out from.
+   * @param lastReadBlobIds set if blobIds which need to be filtered out.
+   * @param lastUpdateTime lastUpdateTime of the blobIds to filter out.
+   */
+  private void filterOutLastReadBlobs(List<CloudBlobMetadata> cloudBlobMetadataList, Set<String> lastReadBlobIds,
+      long lastUpdateTime) {
+    ListIterator<CloudBlobMetadata> iterator = cloudBlobMetadataList.listIterator();
+    int numRemovedBlobs = 0;
+    while(iterator.hasNext()) {
+      CloudBlobMetadata cloudBlobMetadata = iterator.next();
+      if(numRemovedBlobs == lastReadBlobIds.size() || cloudBlobMetadata.getLastUpdateTime() > lastUpdateTime) {
+        break;
+      }
+      if (lastReadBlobIds.contains(cloudBlobMetadata.getId())) {
+        iterator.remove();
+        numRemovedBlobs++;
+      }
     }
   }
 
@@ -654,6 +663,7 @@ class AzureCloudDestination implements CloudDestination {
     map.put(CloudBlobMetadata.FIELD_VCR_KMS_CONTEXT, String.valueOf(cloudBlobMetadata.getVcrKmsContext()));
     map.put(CloudBlobMetadata.FIELD_CRYPTO_AGENT_FACTORY, String.valueOf(cloudBlobMetadata.getCryptoAgentFactory()));
     map.put(CloudBlobMetadata.FIELD_CLOUD_BLOB_NAME, String.valueOf(cloudBlobMetadata.getCloudBlobName()));
+    map.put(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, String.valueOf(cloudBlobMetadata.getLastUpdateTime()));
     return map;
   }
 }

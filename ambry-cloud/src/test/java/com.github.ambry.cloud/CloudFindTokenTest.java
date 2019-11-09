@@ -13,13 +13,13 @@
  */
 package com.github.ambry.cloud;
 
-import com.github.ambry.replication.FindTokenType;
-import com.github.ambry.utils.UtilsTest;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -36,35 +36,45 @@ public class CloudFindTokenTest {
   @Test
   public void equalityTest() {
     short version = 0;
-    FindTokenType findTokenType = FindTokenType.CloudBased;
     Random random = new Random();
-    long latestBlobUploadTime = random.nextLong();
-    String latestBlobId = UtilsTest.getRandomString(10);
+    long lastBlobUpdateTime = random.nextLong();
     long bytesRead = random.nextLong();
+    Set<String> lastReadBlobIds = new HashSet<>();
+    lastReadBlobIds.add("blobid1");
+    lastReadBlobIds.add("blobid2");
 
     //compare empty tokens
     ensureEqual(new CloudFindToken(), new CloudFindToken());
 
     //compare token constructed from all constructors
-    CloudFindToken token1 = new CloudFindToken(latestBlobUploadTime, latestBlobId, bytesRead);
-    CloudFindToken token2 = new CloudFindToken(latestBlobUploadTime, latestBlobId, bytesRead);
+    CloudFindToken token1 = new CloudFindToken(lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    CloudFindToken token2 = new CloudFindToken(lastBlobUpdateTime, bytesRead, lastReadBlobIds);
     ensureEqual(token1, token2);
 
-    token1 = new CloudFindToken(version, latestBlobUploadTime, latestBlobId, bytesRead);
-    token2 = new CloudFindToken(version, latestBlobUploadTime, latestBlobId, bytesRead);
+    token1 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
+    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
     ensureEqual(token1, token2);
 
     //ensure inequality for any unequal field
-    token2 = new CloudFindToken((short) 1, latestBlobUploadTime, latestBlobId, bytesRead);
+    token2 = new CloudFindToken((short) 1, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(version, latestBlobUploadTime + 100, latestBlobId, bytesRead);
+    token2 = new CloudFindToken(version, lastBlobUpdateTime + 100, bytesRead, lastReadBlobIds);
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(version, latestBlobUploadTime, "", bytesRead);
+    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, new HashSet<>());
     ensureUnequal(token1, token2);
 
-    token2 = new CloudFindToken(version, latestBlobUploadTime, latestBlobId, bytesRead + 10);
+    Set<String> unEqualBlobidSet = new HashSet<>();
+    unEqualBlobidSet.add("blobid1");
+    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, unEqualBlobidSet);
+    ensureUnequal(token1, token2);
+
+    unEqualBlobidSet.add("blobid3");
+    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, unEqualBlobidSet);
+    ensureUnequal(token1, token2);
+
+    token2 = new CloudFindToken(version, lastBlobUpdateTime, bytesRead + 10, lastReadBlobIds);
     ensureUnequal(token1, token2);
 
     token2 = new CloudFindToken();
@@ -78,25 +88,26 @@ public class CloudFindTokenTest {
   @Test
   public void serdeTest() throws IOException {
     short version = 0;
-    FindTokenType findTokenType = FindTokenType.CloudBased;
     Random random = new Random();
-    long latestBlobUploadTime = random.nextLong();
-    String latestBlobId = UtilsTest.getRandomString(10);
+    long lastBlobUpdateTime = random.nextLong();
     long bytesRead = random.nextLong();
+    Set<String> lastReadBlobIds = new HashSet<>();
+    lastReadBlobIds.add("blobid1");
+    lastReadBlobIds.add("blobid2");
 
     //Deserialization test
 
     //token with invalid version
-    CloudFindToken invalidToken = new CloudFindToken((short) 1, latestBlobUploadTime, latestBlobId, bytesRead);
+    CloudFindToken invalidToken = new CloudFindToken((short) 1, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
     DataInputStream tokenStream = getSerializedStream(invalidToken);
     try {
-      CloudFindToken deSerToken = CloudFindToken.fromBytes(tokenStream);
+      CloudFindToken.fromBytes(tokenStream);
       fail("deserialization of token with invalid version should have failed");
     } catch (IllegalStateException ise) {
     }
 
     //valid token
-    CloudFindToken token = new CloudFindToken(version, latestBlobUploadTime, latestBlobId, bytesRead);
+    CloudFindToken token = new CloudFindToken(version, lastBlobUpdateTime, bytesRead, lastReadBlobIds);
     tokenStream = getSerializedStream(token);
     CloudFindToken deSerToken = CloudFindToken.fromBytes(tokenStream);
     assertEquals("Stream should have ended ", 0, tokenStream.available());
@@ -107,7 +118,7 @@ public class CloudFindTokenTest {
     //token with invalid version
     DataInputStream serializedStream = getSerializedStream(invalidToken);
     try {
-      deSerToken = CloudFindToken.fromBytes(serializedStream);
+      CloudFindToken.fromBytes(serializedStream);
       fail("serialization of token with invalid version should have failed");
     } catch (IllegalStateException ise) {
     }
@@ -135,7 +146,7 @@ public class CloudFindTokenTest {
    * @param token2
    */
   private void ensureUnequal(CloudFindToken token1, CloudFindToken token2) {
-    assertFalse("Tokens should match", token1.equals(token2));
+    assertFalse("Tokens shouldn't match", token1.equals(token2));
   }
 
   /**
@@ -144,9 +155,10 @@ public class CloudFindTokenTest {
    * @return DataInputStream serialized stream
    */
   private DataInputStream getSerializedStream(CloudFindToken token) {
-    int size = 3 * Short.BYTES + 2 * Long.BYTES;
-    if (token.getLatestBlobId() != null) {
-      size += token.getLatestBlobId().length();
+    int size = 2 * Short.BYTES + 2 * Long.BYTES + Short.BYTES;
+    for (String blobId : token.getLastUpdateTimeReadBlobIds()) {
+      size += Short.BYTES; //for size of string
+      size += blobId.length(); //for the string itself
     }
     byte[] buf = new byte[size];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
@@ -155,14 +167,14 @@ public class CloudFindTokenTest {
     // add type
     bufWrap.putShort((short) token.getType().ordinal());
     // add latestUploadTime
-    bufWrap.putLong(token.getLatestUploadTime());
+    bufWrap.putLong(token.getLastUpdateTime());
     // add bytesRead
     bufWrap.putLong(token.getBytesRead());
-    if (token.getLatestBlobId() != null) {
-      bufWrap.putShort((short) token.getLatestBlobId().length());
-      bufWrap.put(token.getLatestBlobId().getBytes());
-    } else {
-      bufWrap.putShort((short) 0);
+    // add lastUpdateTimeReadBlobIds
+    bufWrap.putShort((short) token.getLastUpdateTimeReadBlobIds().size());
+    for (String blobId : token.getLastUpdateTimeReadBlobIds()) {
+      bufWrap.putShort((short) blobId.length());
+      bufWrap.put(blobId.getBytes());
     }
     return new DataInputStream(new ByteArrayInputStream(buf));
   }

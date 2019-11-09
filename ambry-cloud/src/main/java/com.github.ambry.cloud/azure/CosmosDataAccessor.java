@@ -38,6 +38,7 @@ public class CosmosDataAccessor {
   private static final Logger logger = LoggerFactory.getLogger(CosmosDataAccessor.class);
   private static final int HTTP_TOO_MANY_REQUESTS = 429;
   private static final String DOCS = "/docs/";
+  public static final String COSMOS_LAST_UPDATED_COLUMN = "_ts";
   private final DocumentClient documentClient;
   private final String cosmosCollectionLink;
   private final AzureMetrics azureMetrics;
@@ -148,9 +149,7 @@ public class CosmosDataAccessor {
       // Note: internal query iterator wraps DocumentClientException in IllegalStateException!
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
       // TODO: this iteration can also get TOO_MANY_REQUESTS so should be inside retry loop
-      response.getQueryIterable()
-          .iterator()
-          .forEachRemaining(doc -> metadataList.add(doc.toObject(CloudBlobMetadata.class)));
+      response.getQueryIterable().iterator().forEachRemaining(doc -> metadataList.add(createMetadataFromDocument(doc)));
       return metadataList;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
@@ -160,6 +159,17 @@ public class CosmosDataAccessor {
         throw rex;
       }
     }
+  }
+
+  /**
+   * Create {@link CloudBlobMetadata} object from {@link Document} object.
+   * @param document {@link Document} object from which {@link CloudBlobMetadata} object will be created.
+   * @return {@link CloudBlobMetadata} object.
+   */
+  CloudBlobMetadata createMetadataFromDocument(Document document) {
+    CloudBlobMetadata cloudBlobMetadata = document.toObject(CloudBlobMetadata.class);
+    cloudBlobMetadata.setLastUpdateTime(document.getLong(COSMOS_LAST_UPDATED_COLUMN));
+    return cloudBlobMetadata;
   }
 
   /**

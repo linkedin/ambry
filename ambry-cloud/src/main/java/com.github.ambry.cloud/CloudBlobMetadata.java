@@ -13,8 +13,11 @@
  */
 package com.github.ambry.cloud;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 
@@ -47,6 +50,10 @@ public class CloudBlobMetadata {
   private String cryptoAgentFactory;
   private String cloudBlobName;
   private long encryptedSize;
+  // this field is derived from the system generated last Update Time in the cloud db
+  // and hence shouldn't be serializable.
+  @JsonIgnore
+  private long lastUpdateTime;
 
   /**
    * Possible values of encryption origin for cloud stored blobs.
@@ -110,6 +117,7 @@ public class CloudBlobMetadata {
     this.cryptoAgentFactory = cryptoAgentFactory;
     this.cloudBlobName = blobId.getID();
     this.encryptedSize = encryptedSize;
+    this.lastUpdateTime = System.currentTimeMillis();
   }
 
   /**
@@ -343,6 +351,46 @@ public class CloudBlobMetadata {
   public CloudBlobMetadata setEncryptedSize(long encryptedSize) {
     this.encryptedSize = encryptedSize;
     return this;
+  }
+
+  /**
+   * @return the last update time of the blob.
+   */
+  public long getLastUpdateTime() {
+    return lastUpdateTime;
+  }
+
+  /**
+   * Sets the last update time of the blob.
+   * @param lastUpdateTime last update time.
+   */
+  public void setLastUpdateTime(long lastUpdateTime) {
+    this.lastUpdateTime = lastUpdateTime;
+  }
+
+  /**
+   * Utility to cap specified {@link CloudBlobMetadata} list by specified size of its blobs.
+   * Always returns at least one metadata object irrespective of size.
+   * @param originalList List of {@link CloudBlobMetadata}.
+   * @param size total size of metadata's blobs.
+   * @return {@link List} of {@link CloudBlobMetadata} capped by size.
+   */
+  public static List<CloudBlobMetadata> capMetadataListBySize(List<CloudBlobMetadata> originalList, long size) {
+    long totalSize = 0;
+    List<CloudBlobMetadata> cappedList = new ArrayList<>();
+    for (CloudBlobMetadata metadata : originalList) {
+      // Cap results at max size
+      if (totalSize + metadata.getSize() > size) {
+        if (cappedList.isEmpty()) {
+          // We must add at least one regardless of size
+          cappedList.add(metadata);
+        }
+        break;
+      }
+      cappedList.add(metadata);
+      totalSize += metadata.getSize();
+    }
+    return cappedList;
   }
 
   @Override
