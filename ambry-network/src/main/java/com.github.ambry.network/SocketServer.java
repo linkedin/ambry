@@ -156,7 +156,7 @@ public class SocketServer implements NetworkServer {
 
     requestResponseChannel.addResponseListener(new ResponseListener() {
       @Override
-      public void onResponse(int processorId){
+      public void onResponse(int processorId) {
         processors.get(processorId).wakeup();
       }
     });
@@ -393,6 +393,7 @@ class Processor extends AbstractServerThread {
   private final Selector selector;
   private final ServerNetworkMetrics metrics;
   private static final long pollTimeoutMs = 300;
+  private final NetworkConfig networkConfig;
 
   Processor(int id, int maxRequestSize, RequestResponseChannel channel, ServerNetworkMetrics metrics,
       SSLFactory sslFactory, NetworkConfig networkConfig) throws IOException {
@@ -401,6 +402,7 @@ class Processor extends AbstractServerThread {
     this.time = SystemTime.getInstance();
     selector = new Selector(metrics, time, sslFactory, networkConfig);
     this.metrics = metrics;
+    this.networkConfig = networkConfig;
   }
 
   public void run() {
@@ -419,7 +421,7 @@ class Processor extends AbstractServerThread {
           String connectionId = networkReceive.getConnectionId();
           Object buffer = networkReceive.getReceivedBytes().getAndRelease();
           SocketServerRequest req = new SocketServerRequest(id, connectionId, buffer,
-              Utils.createDataInputStreamFromBuffer(buffer));
+              Utils.createDataInputStreamFromBuffer(buffer, networkConfig.networkPutRequestShareMemory));
           channel.sendRequest(req);
         }
       }

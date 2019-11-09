@@ -60,6 +60,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -145,8 +146,9 @@ public class AmbryRequests implements RequestAPI {
 
   @Override
   public void handlePutRequest(Request request) throws IOException, InterruptedException {
-    PutRequest.ReceivedPutRequest receivedRequest =
-        PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    InputStream is = request.getInputStream();
+    DataInputStream dis = is instanceof DataInputStream ? (DataInputStream) is : new DataInputStream(is);
+    PutRequest.ReceivedPutRequest receivedRequest = PutRequest.readFrom(dis, clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);

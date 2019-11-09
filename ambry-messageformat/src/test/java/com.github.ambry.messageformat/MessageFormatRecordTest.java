@@ -19,24 +19,15 @@ import com.github.ambry.store.MockId;
 import com.github.ambry.store.MockIdFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Crc32;
-import com.github.ambry.utils.CrcInputStream;
-import com.github.ambry.utils.CrcOutputStream;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -661,132 +652,6 @@ public class MessageFormatRecordTest {
       fail("Failed to detect corruption of blob record");
     } catch (MessageFormatException e) {
       Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
-    }
-  }
-
-  @Test
-  public void testBlobDataShareMemoryWithByteBuffer() throws Exception {
-    int blobSize = 1000;
-    // The first 8 bytes are the size of blob, the next 1000 bytes are the blob content, the next 8 bytes are the crc
-    // value, and we do this twice.
-    int bufferSize = (Long.SIZE / Byte.SIZE + blobSize + Long.SIZE / Byte.SIZE) * 2;
-    byte[] firstRandomBytes = new byte[blobSize];
-    byte[] secondRandomBytes = new byte[blobSize];
-    new Random().nextBytes(firstRandomBytes);
-    new Random().nextBytes(secondRandomBytes);
-
-    ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
-    ByteBufferOutputStream bbos = new ByteBufferOutputStream(buffer);
-
-    // Fill the buffer
-    byte[] arrayToFill = firstRandomBytes;
-    while (arrayToFill != null) {
-      CrcOutputStream crcStream = new CrcOutputStream(bbos);
-      DataOutputStream dos = new DataOutputStream(crcStream);
-      dos.writeLong((long) blobSize);
-      dos.write(arrayToFill);
-      buffer.putLong(crcStream.getValue());
-      if (arrayToFill == firstRandomBytes) {
-        arrayToFill = secondRandomBytes;
-      } else {
-        arrayToFill = null;
-      }
-    }
-
-    buffer.flip();
-    byte[] expectedArray = firstRandomBytes;
-    while (expectedArray != null) {
-      CrcInputStream cis = new CrcInputStream(new ByteBufferDataInputStream(buffer));
-      DataInputStream dis = new DataInputStream(cis);
-      long dataSize = dis.readLong();
-      assertEquals((long) dataSize, blobSize);
-      ByteBufferInputStream obtained = getByteBufferInputStreamForBlobRecord(cis, (int) dataSize);
-      // Make sure these two ByteBuffers actually share the underlying memory.
-      assertEquals(getByteArrayFromByteBuffer(buffer), getByteArrayFromByteBuffer(obtained.getByteBuffer()));
-      byte[] obtainedArray = new byte[blobSize];
-      obtained.read(obtainedArray);
-      assertArrayEquals(obtainedArray, expectedArray);
-      long crcRead = buffer.getLong();
-      assertEquals(crcRead, cis.getValue());
-      if (expectedArray == firstRandomBytes) {
-        expectedArray = secondRandomBytes;
-      } else {
-        expectedArray = null;
-      }
-    }
-  }
-
-  /**
-   * Return the internal byte array of the given {@link ByteBuffer}. It only works when the {@link ByteBuffer} is not
-   * a direct {@link ByteBuffer}.
-   * @param buffer The {@link ByteBuffer}.
-   * @return The internal byte array.
-   * @throws Exception Any unexpected error.
-   */
-  private byte[] getByteArrayFromByteBuffer(ByteBuffer buffer) throws Exception {
-    assertFalse(buffer.isDirect());
-    if (buffer.hasArray()) {
-      return buffer.array();
-    }
-    Field arrayField = ByteBuffer.class.getDeclaredField("hb");
-    arrayField.setAccessible(true);
-    return (byte[]) arrayField.get(buffer);
-  }
-
-  @Test
-  public void testBlobDataShareMemoryWithNettyByteBuf() throws Exception {
-    int blobSize = 1000;
-    // The first 8 bytes are the size of blob, the next 1000 bytes are the blob content, the next 8 bytes are the crc
-    // value, and we do this twice.
-    int bufferSize = (Long.SIZE / Byte.SIZE + blobSize + Long.SIZE / Byte.SIZE) * 2;
-    byte[] firstRandomBytes = new byte[blobSize];
-    byte[] secondRandomBytes = new byte[blobSize];
-    new Random().nextBytes(firstRandomBytes);
-    new Random().nextBytes(secondRandomBytes);
-
-    ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
-    ByteBufferOutputStream bbos = new ByteBufferOutputStream(buffer);
-
-    // Fill the buffer
-    byte[] arrayToFill = firstRandomBytes;
-    while (arrayToFill != null) {
-      CrcOutputStream crcStream = new CrcOutputStream(bbos);
-      DataOutputStream dos = new DataOutputStream(crcStream);
-      dos.writeLong((long) blobSize);
-      dos.write(arrayToFill);
-      buffer.putLong(crcStream.getValue());
-      if (arrayToFill == firstRandomBytes) {
-        arrayToFill = secondRandomBytes;
-      } else {
-        arrayToFill = null;
-      }
-    }
-    buffer.flip();
-    ByteBuf byteBuf = ByteBufAllocator.DEFAULT.heapBuffer(buffer.remaining());
-    try {
-      byteBuf.writeBytes(buffer);
-
-      byte[] expectedArray = firstRandomBytes;
-      while (expectedArray != null) {
-        CrcInputStream cis = new CrcInputStream(new NettyByteBufDataInputStream(byteBuf));
-        DataInputStream dis = new DataInputStream(cis);
-        long dataSize = dis.readLong();
-        assertEquals((long) dataSize, blobSize);
-        ByteBufferInputStream obtained = getByteBufferInputStreamForBlobRecord(cis, (int) dataSize);
-        assertEquals(byteBuf.array(), getByteArrayFromByteBuffer(obtained.getByteBuffer()));
-        byte[] obtainedArray = new byte[blobSize];
-        obtained.read(obtainedArray);
-        assertArrayEquals(obtainedArray, expectedArray);
-        long crcRead = byteBuf.readLong();
-        assertEquals(crcRead, cis.getValue());
-        if (expectedArray == firstRandomBytes) {
-          expectedArray = secondRandomBytes;
-        } else {
-          expectedArray = null;
-        }
-      }
-    } finally {
-      byteBuf.release();
     }
   }
 

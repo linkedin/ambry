@@ -17,6 +17,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -27,7 +28,9 @@ import java.io.RandomAccessFile;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
@@ -65,7 +68,7 @@ public class Utils {
 
   /**
    * Constant to define "infinite" time.
-   * <p/>
+   * <p />
    * Currently used in lieu of either an epoch based ms expiration time or a seconds based TTL (relative to creation
    * time).
    */
@@ -210,6 +213,81 @@ public class Utils {
       throw new IllegalArgumentException("readShortBuffer the size of the input does not match the actual data size");
     }
     return buffer;
+  }
+
+  /**
+   * A helper function to return a {@link ByteBuffer} from given {@link ByteBufferDataInputStream} at the given size.
+   * The returned {@link ByteBuffer} will share the memory with the underlying {@link ByteBuffer} in {@link ByteBufferDataInputStream}.
+   * @param stream The {@link ByteBufferDataInputStream} to read {@link ByteBuffer} out.
+   * @param dataSize The size of {@link ByteBuffer}.
+   * @return The {@link ByteBuffer}
+   * @throws IOException Unexpected IO errors.
+   */
+  private static ByteBuffer getByteBufferFromByteBufferDataInputStream(ByteBufferDataInputStream stream, int dataSize)
+      throws IOException {
+    ByteBuffer byteBuffer = stream.getBuffer();
+    int startIndex = byteBuffer.position();
+    int oldLimit = byteBuffer.limit();
+
+    byteBuffer.limit(startIndex + dataSize);
+    ByteBuffer dataBuffer = byteBuffer.slice();
+    byteBuffer.limit(oldLimit);
+    // Change the byte buffer's position as if the data is fetched.
+    byteBuffer.position(startIndex + dataSize);
+    return dataBuffer;
+  }
+
+  /**
+   * Create a {@link ByteBufferInputStream} from the {@link CrcInputStream} by sharing the underlying memory if the
+   * crcStream is built upon a {@link ByteBufferDataInputStream}.
+   * @param crcStream The crcStream to read {@link ByteBuffer} out.
+   * @param dataSize The size of {@link ByteBuffer}.
+   * @return The {@link ByteBufferInputStream}
+   * @throws IOException Unexpected IO errors.
+   */
+  public static ByteBufferInputStream getByteBufferInputStreamFromCrcInputStream(CrcInputStream crcStream, int dataSize)
+      throws IOException {
+    ByteBuffer buffer = readByteBufferFromCrcInputStream(crcStream, dataSize);
+    return new ByteBufferInputStream(buffer);
+  }
+
+  /**
+   * Transfer {@code dataSize} bytes of data from the given crc stream to a newly create {@link ByteBuffer}. The method
+   * would also update the crc value in the crc stream.
+   * @param crcStream The crc stream.
+   * @param dataSize The number of bytes to transfer.
+   * @return the newly created {@link ByteBuffer} which contains the transferred data.
+   * @throws IOException Any I/O error.
+   */
+  public static ByteBuffer readByteBufferFromCrcInputStream(CrcInputStream crcStream, int dataSize) throws IOException {
+    ByteBuffer output;
+    InputStream inputStream = crcStream.getUnderlyingInputStream();
+    if (inputStream instanceof ByteBufferDataInputStream) {
+      output =
+          getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
+      crcStream.updateCrc(output.duplicate());
+    } else if (inputStream instanceof NettyByteBufDataInputStream) {
+      // getBuffer() doesn't increase the reference count on this ByteBuf.
+      ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
+      // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
+      int startIndex = nettyByteBuf.readerIndex();
+      output = nettyByteBuf.nioBuffer(startIndex, dataSize);
+      crcStream.updateCrc(output.duplicate());
+      nettyByteBuf.readerIndex(startIndex + dataSize);
+    } else {
+      output = ByteBuffer.allocate(dataSize);
+      int read = 0;
+      ReadableByteChannel readableByteChannel = Channels.newChannel(crcStream);
+      while (read < dataSize) {
+        int sizeRead = readableByteChannel.read(output);
+        if (sizeRead == 0 || sizeRead == -1) {
+          throw new IOException("Total size read " + read + " is less than the size to be read " + dataSize);
+        }
+        read += sizeRead;
+      }
+      output.flip();
+    }
+    return output;
   }
 
   /**
@@ -739,7 +817,7 @@ public class Utils {
 
   /**
    * Create a {@link DataInputStream} from the given buffer, which has to be either a {@link ByteBuffer} or a {@link ByteBuf}.
-   * This is equivalent to {@link #createDataInputStreamFromBuffer(Object, boolean)}, where the {@lcode shareMemory} is false.
+   * This is equivalent to {@link #createDataInputStreamFromBuffer(Object, boolean)}, where the {@code shareMemory} is false.
    * @param buffer The buffer where we are going to create a {@link DataInputStream} from.
    * @return {@link DataInputStream}.
    */
@@ -927,7 +1005,7 @@ public class Utils {
    * Set permissions for given files.
    * @param files a list of files that set specified permissions
    * @param permissions a set of {@link PosixFilePermission} associated with given files
-   * @throws IOException
+   * @throws IOException Any I/O error.
    */
   public static void setFilesPermission(List<File> files, Set<PosixFilePermission> permissions) throws IOException {
     for (File file : files) {
