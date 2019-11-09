@@ -255,7 +255,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         removeCloudReplica(partitionId.toPathString());
         addCloudReplica(partitionId.toPathString());
       } catch (ReplicationException rex) {
-        logger.error("Could not remove/add replica for partitionId {}", partitionId);
+        logger.error("Exception {} during remove/add replica for partitionId {}", rex, partitionId);
       }
     }
   }
@@ -266,7 +266,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private class InstanceConfigChangeListenerImpl implements InstanceConfigChangeListener {
     @Override
     public void onInstanceConfigChange(List<InstanceConfig> instanceConfigs, NotificationContext context) {
-      logger.debug("Instance config change notification received with instanceConfigs: {}", instanceConfigs);
+      logger.info("Instance config change notification received with instanceConfigs: {}", instanceConfigs);
       ConcurrentSkipListSet<CloudDataNode> newVcrNodes = new ConcurrentSkipListSet<>();
       ConcurrentHashMap<String, CloudDataNode> newInstanceNameToCloudDataNode = new ConcurrentHashMap<>();
 
@@ -295,7 +295,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private class LiveInstanceChangeListenerImpl implements LiveInstanceChangeListener {
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
-      logger.debug("Live instance change notification received. liveInstances: {}", liveInstances);
+      logger.info("Live instance change notification received. liveInstances: {}", liveInstances);
       ConcurrentSkipListSet<CloudDataNode> newVcrNodes = new ConcurrentSkipListSet<>();
       // react to change in liveness of vcr nodes if the instance was earlier reported by helix as part of
       // {@code onInstanceConfigChange} notification.
@@ -316,27 +316,27 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
     @Override
     public void onPartitionStateChangeToLeaderFromStandby(String partitionName) {
-      logger.debug("Partition state change notification from Standby to Leader received for partition {}",
+      logger.info("Partition state change notification from Standby to Leader received for partition {}",
           partitionName);
       synchronized (notificationLock) {
         try {
           addCloudReplica(partitionName);
         } catch (ReplicationException rex) {
-          logger.error("Could not add replication for paritition {}", partitionName);
+          logger.error("Exception {} while adding replication for partition {}", rex, partitionName);
         }
       }
     }
 
     @Override
     public void onPartitionStateChangeToStandbyFromLeader(String partitionName) {
-      logger.debug("Partition state change notification from Leader to Standby received for partition {}",
+      logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
       synchronized (notificationLock) {
         try {
           removeCloudReplica(partitionName);
         } catch (ReplicationException rex) {
           // Helix will run into error state if exception throws in Helix context.
-          logger.error("Exception on removing Partition {} from {}: ", partitionName, dataNodeId, rex);
+          logger.error("Exception {} on removing Partition {} from {}: ", rex, partitionName, dataNodeId);
         }
       }
     }
