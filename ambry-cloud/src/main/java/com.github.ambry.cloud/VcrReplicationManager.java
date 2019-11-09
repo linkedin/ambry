@@ -201,9 +201,8 @@ public class VcrReplicationManager extends ReplicationEngine {
   /**
    * Remove a replica of given {@link PartitionId} and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionId the {@link PartitionId} of the replica to removed.
-   * @throws ReplicationException if replicas initialization failed.
    */
-  void removeReplica(PartitionId partitionId) throws ReplicationException {
+  void removeReplica(PartitionId partitionId) {
     stopPartitionReplication(partitionId);
     Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
     if (cloudStore != null) {

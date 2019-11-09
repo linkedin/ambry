@@ -439,9 +439,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   /**
    * Stop replication for the specified {@link PartitionId}.
    * @param partitionId {@link PartitionId} for which replication should be removed.
-   * @throws ReplicationException
    */
-  protected void stopPartitionReplication(PartitionId partitionId) throws ReplicationException {
+  protected void stopPartitionReplication(PartitionId partitionId) {
     PartitionInfo partitionInfo = partitionToPartitionInfo.remove(partitionId);
     if (partitionInfo == null) {
       logger.warn("Partition {} not exist when remove from {}. ", partitionId, dataNodeId);
@@ -452,8 +451,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       try {
         persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
       } catch (IOException | ReplicationException e) {
-        throw new ReplicationException(
-            "Exception on token write when removing Partition " + partitionId + " from: " + dataNodeId);
+        logger.warn(
+            "Exception " + e + " on token write when removing Partition " + partitionId + " from: " + dataNodeId);
       }
     }
   }

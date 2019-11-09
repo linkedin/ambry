@@ -216,9 +216,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   /**
    * Remove a replica of given partition and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionName the partition of the replica to removed.
-   * @throws ReplicationException if replicas initialization failed.
    */
-  private void removeCloudReplica(String partitionName) throws ReplicationException {
+  private void removeCloudReplica(String partitionName) {
     if (!localPartitionNameToPartition.containsKey(partitionName)) {
       logger.warn("Got partition standby notification for partition {} that is not present on the node", partitionName);
       return;
@@ -249,12 +248,14 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     vcrNodes.set(newVcrNodes);
     List<PartitionId> partitionsOnRemovedNodes = getPartitionsOnNodes(removedNodes);
     for (PartitionId partitionId : partitionsOnRemovedNodes) {
+      boolean removed = false;
       try {
         // We first remove replica to stop replication from removed node, and then add replica so that it can pick a
         // new cloud node to start replicating from.
         removeCloudReplica(partitionId.toPathString());
         addCloudReplica(partitionId.toPathString());
       } catch (ReplicationException rex) {
+        replicationMetrics.addCloudPartitionErrorCount.inc();
         logger.error("Exception {} during remove/add replica for partitionId {}", rex, partitionId);
       }
     }
@@ -323,6 +324,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
           addCloudReplica(partitionName);
         } catch (ReplicationException rex) {
           logger.error("Exception {} while adding replication for partition {}", rex, partitionName);
+          replicationMetrics.addCloudPartitionErrorCount.inc();
         }
       }
     }
@@ -332,12 +334,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
       synchronized (notificationLock) {
-        try {
-          removeCloudReplica(partitionName);
-        } catch (ReplicationException rex) {
-          // Helix will run into error state if exception throws in Helix context.
-          logger.error("Exception {} on removing Partition {} from {}: ", rex, partitionName, dataNodeId);
-        }
+        removeCloudReplica(partitionName);
       }
     }
   }
