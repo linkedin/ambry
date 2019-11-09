@@ -87,8 +87,7 @@ class HelixClusterManager implements ClusterMap {
   private final ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> partitionToResourceNameByDc =
       new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, AtomicReference<RoutingTableSnapshot>> dcToRoutingTableSnapshotRef =
-      new ConcurrentHashMap<>();
+  private final Map<String, AtomicReference<RoutingTableSnapshot>> dcToRoutingTableSnapshotRef = new HashMap<>();
   private long clusterWideRawCapacityBytes;
   private long clusterWideAllocatedRawCapacityBytes;
   private long clusterWideAllocatedUsableCapacityBytes;
@@ -892,6 +891,7 @@ class HelixClusterManager implements ClusterMap {
 
     /**
      * {@inheritDoc}
+     * If dcName is null, then get replicas by given state from all datacenters.
      * If no routing table snapshot is found for dc name, or no resource name found for given partition, return empty list.
      */
     @Override
