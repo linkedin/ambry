@@ -313,6 +313,8 @@ public class BlobStore implements Store {
       throws StoreException {
     int existingIdenticalEntries = 0;
     for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
+      //TODO IndexValue
+      //Why not looking for TTLUpdates here?  just seems to be looking for if it exists
       if (index.findKey(info.getStoreKey(), fileSpan,
           EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE)) != null) {
         if (index.wasRecentlySeen(info)) {
@@ -481,6 +483,10 @@ public class BlobStore implements Store {
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           for (MessageInfo info : infoList) {
+            //TODO IndexValue can be Undelete
+            //Not sure what the point of this section is since
+            //we already checked the indexes in the previous for loop
+            //is it because it could have changed before grabbing the lock?
             IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
                 EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
             if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
@@ -572,6 +578,7 @@ public class BlobStore implements Store {
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           for (MessageInfo info : infoList) {
+            //TODO IndexValue findLatest
             IndexValue value =
                 index.findKey(info.getStoreKey(), fileSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
             if (value != null) {

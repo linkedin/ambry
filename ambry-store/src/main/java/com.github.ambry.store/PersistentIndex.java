@@ -313,17 +313,18 @@ class PersistentIndex {
         logger.trace("Index : {} recovering key {} offset {} size {}", dataDir, info.getStoreKey(), runningOffset,
             info.getSize());
         Offset infoEndOffset = new Offset(runningOffset.getName(), runningOffset.getOffset() + info.getSize());
+        //TODO IndexValue findLatest
         IndexValue value = findKey(info.getStoreKey());
         if (info.isDeleted()) {
-          markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
-              info.getOperationTimeMs());
+          markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info, info.getOperationTimeMs(),
+              info.getLifeVersion());
           logger.info("Index : {} updated message with key {} by inserting delete entry of size {} ttl {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
           // removes from the tracking structure if a delete was being expected for the key
           deleteExpectedKeys.remove(info.getStoreKey());
         } else if (info.isTtlUpdated()) {
           markAsPermanent(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
-              info.getOperationTimeMs());
+              info.getOperationTimeMs(), info.getLifeVersion());
           logger.info("Index : {} updated message with key {} by inserting TTL update entry of size {} ttl {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
           if (value == null) {
@@ -528,7 +529,7 @@ class PersistentIndex {
    * @throws StoreException
    */
   IndexValue findKey(StoreKey key) throws StoreException {
-    return findKey(key, null, EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE));
+    return findKey(key, null, EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE, IndexEntryType.UNDELETE));
   }
 
   /**
@@ -601,6 +602,9 @@ class PersistentIndex {
                 && !value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
               retCandidate = value;
               break;
+            } else if (types.contains(IndexEntryType.UNDELETE) && value.isFlagSet(IndexValue.Flags.Undelete_Index)) {
+              retCandidate = value;
+              break;
             }
             // note that it is not possible for a TTL update record to exist for a key but not have a PUT or DELETE
             // record.
@@ -648,7 +652,21 @@ class PersistentIndex {
    * @throws StoreException
    */
   IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, long deletionTimeMs) throws StoreException {
-    return markAsDeleted(id, fileSpan, null, deletionTimeMs);
+    return markAsDeleted(id, fileSpan, null, deletionTimeMs, (short) -1);
+  }
+
+  /**
+   * Marks the index entry represented by the key for delete
+   * @param id The id of the entry that needs to be deleted
+   * @param fileSpan The file span represented by this entry in the log
+   * @param deletionTimeMs deletion time of the entry in ms
+   * @param lifeVersion life version of the delete record
+   * @return the {@link IndexValue} of the delete record
+   * @throws StoreException
+   */
+  IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, long deletionTimeMs, short lifeVersion)
+      throws StoreException {
+    return markAsDeleted(id, fileSpan, null, deletionTimeMs, lifeVersion);
   }
 
   /**
@@ -661,30 +679,40 @@ class PersistentIndex {
    * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
-  private IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long deletionTimeMs)
+  IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long deletionTimeMs, short lifeVersion)
       throws StoreException {
+    boolean hasLifeVersion = lifeVersion > (short) -1;
     validateFileSpan(fileSpan, true);
+    //TODO IndexValue findLatest, can be either PUT, DELETE, or UNDELETE
     IndexValue value = findKey(id);
     if (value == null && info == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
-    } else if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-      throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+    } else if (value != null) {
+      if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+        throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+      } else if (hasLifeVersion && value.getLifeVersion() > lifeVersion) {
+        throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + value.getLifeVersion()
+            + " Delete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
+      }
     }
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
     IndexValue newValue;
     if (value == null) {
       // It is possible that the PUT has been cleaned by compaction
+      lifeVersion = lifeVersion < 0 ? 0 : lifeVersion;
       newValue =
-          new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs(), info.getOperationTimeMs(),
-              info.getAccountId(), info.getContainerId());
+          new IndexValue(size, fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(),
+              info.getOperationTimeMs(), info.getAccountId(), info.getContainerId(), lifeVersion);
       newValue.clearOriginalMessageOffset();
     } else {
+      lifeVersion = hasLifeVersion ? lifeVersion : value.getLifeVersion();
       newValue =
           new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), deletionTimeMs,
-              value.getAccountId(), value.getContainerId(), (short) 0);
+              value.getAccountId(), value.getContainerId(), lifeVersion);
       newValue.setNewOffset(fileSpan.getStartOffset());
       newValue.setNewSize(size);
     }
+    newValue.clearFlag(IndexValue.Flags.Undelete_Index);
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     addToIndex(new IndexEntry(id, newValue, null), fileSpan);
     return newValue;
@@ -699,7 +727,21 @@ class PersistentIndex {
    * @throws StoreException if there is any problem writing the index record
    */
   IndexValue markAsPermanent(StoreKey id, FileSpan fileSpan, long operationTimeMs) throws StoreException {
-    return markAsPermanent(id, fileSpan, null, operationTimeMs);
+    return markAsPermanent(id, fileSpan, null, operationTimeMs, (short) -1);
+  }
+
+  /**
+   * Marks a blob as permanent
+   * @param id the {@link StoreKey} of the blob
+   * @param fileSpan the file span represented by this entry in the log
+   * @param operationTimeMs the time of the update operation
+   * @param lifeVersion life version of the ttl update record
+   * @return the {@link IndexValue} of the ttl update record
+   * @throws StoreException if there is any problem writing the index record
+   */
+  IndexValue markAsPermanent(StoreKey id, FileSpan fileSpan, long operationTimeMs, short lifeVersion)
+      throws StoreException {
+    return markAsPermanent(id, fileSpan, null, operationTimeMs, lifeVersion);
   }
 
   /**
@@ -712,33 +754,114 @@ class PersistentIndex {
    * @return the {@link IndexValue} of the ttl update record
    * @throws StoreException if there is any problem writing the index record
    */
-  private IndexValue markAsPermanent(StoreKey id, FileSpan fileSpan, MessageInfo info, long operationTimeMs)
-      throws StoreException {
+  private IndexValue markAsPermanent(StoreKey id, FileSpan fileSpan, MessageInfo info, long operationTimeMs,
+      short lifeVersion) throws StoreException {
     validateFileSpan(fileSpan, true);
+    boolean hasLifeVersion = lifeVersion != -1;
+    //TODO IndexValue findLatest
     IndexValue value = findKey(id);
     if (value == null && info == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
-    } else if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+    }
+    short retrievedLifeVersion = value == null ? info.getLifeVersion() : value.getLifeVersion();
+    if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       throw new StoreException("Id " + id + " deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     } else if (value != null && value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
       throw new StoreException("TTL of " + id + " already updated in index" + dataDir, StoreErrorCodes.Already_Updated);
+    } else if (hasLifeVersion && retrievedLifeVersion > lifeVersion) {
+      throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + retrievedLifeVersion
+          + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
     }
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
     IndexValue newValue;
+
     if (value == null) {
+      lifeVersion = hasLifeVersion ? lifeVersion : info.getLifeVersion();
       // It is possible that the PUT has been cleaned by compaction
+      // but the TTL update is going to still be placed?
       newValue =
-          new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs(), info.getOperationTimeMs(),
-              info.getAccountId(), info.getContainerId());
+          new IndexValue(size, fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(),
+              info.getOperationTimeMs(), info.getAccountId(), info.getContainerId(), lifeVersion);
       newValue.clearOriginalMessageOffset();
     } else {
+      lifeVersion = hasLifeVersion ? lifeVersion : value.getLifeVersion();
       newValue =
           new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), Utils.Infinite_Time, operationTimeMs,
-              value.getAccountId(), value.getContainerId(), (short) 0);
+              value.getAccountId(), value.getContainerId(), lifeVersion);
       newValue.setNewOffset(fileSpan.getStartOffset());
       newValue.setNewSize(size);
     }
     newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
+    addToIndex(new IndexEntry(id, newValue, null), fileSpan);
+    return newValue;
+  }
+
+  /**
+   * Marks a blob as permanent
+   * @param id the {@link StoreKey} of the blob
+   * @param fileSpan the file span represented by this entry in the log
+   * @param operationTimeMs the time of the update operation
+   * @return the {@link IndexValue} of the ttl update record
+   * @throws StoreException if there is any problem writing the index record
+   */
+  IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, long operationTimeMs) throws StoreException {
+    return markAsUndeleted(id, fileSpan, null, operationTimeMs, (short) -1);
+  }
+
+  /**
+   * Marks a blob as permanent
+   * @param id the {@link StoreKey} of the blob
+   * @param fileSpan the file span represented by this entry in the log
+   * @param operationTimeMs the time of the update operation
+   * @param lifeVersion life version of the ttl update record
+   * @return the {@link IndexValue} of the ttl update record
+   * @throws StoreException if there is any problem writing the index record
+   */
+  IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, long operationTimeMs, short lifeVersion)
+      throws StoreException {
+    return markAsUndeleted(id, fileSpan, null, operationTimeMs, lifeVersion);
+  }
+
+  /**
+   * Marks a blob as undeleted
+   * @param id the {@link StoreKey} of the blob
+   * @param fileSpan the file span represented by this entry in the log
+   * @param operationTimeMs the time of the update operation
+   * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise. Used if the PUT
+   *             record could not be found
+   * @return the {@link IndexValue} of the undelete record
+   * @throws StoreException if there is any problem writing the index record
+   */
+  private IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long operationTimeMs,
+      short lifeVersion) throws StoreException {
+    boolean hasLifeVersion = lifeVersion > (short) -1;
+    validateFileSpan(fileSpan, true);
+    //TODO IndexValue findLatest, can be either PUT, DELETE, or UNDELETE
+    IndexValue value = findKey(id);
+    if (value == null) {
+      throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
+    } else if (value != null) {
+      if (hasLifeVersion) {
+        if (value.getLifeVersion() >= lifeVersion) {
+          throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + value.getLifeVersion()
+              + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
+        }
+      } else {
+        lifeVersion = (short) (value.getLifeVersion() + 1);
+        if (!value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+          throw new StoreException("Id " + id + " not deleted in index " + dataDir, StoreErrorCodes.ID_Not_Deleted);
+        }
+      }
+    }
+    long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
+    IndexValue newValue;
+    newValue =
+        new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), operationTimeMs,
+            value.getAccountId(), value.getContainerId(), lifeVersion);
+    newValue.setNewOffset(fileSpan.getStartOffset());
+    newValue.setNewSize(size);
+    newValue.setFlag(IndexValue.Flags.Undelete_Index);
+    newValue.clearFlag(IndexValue.Flags.Delete_Index);
     addToIndex(new IndexEntry(id, newValue, null), fileSpan);
     return newValue;
   }
@@ -853,6 +976,7 @@ class PersistentIndex {
   Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     Set<StoreKey> missingKeys = new HashSet<StoreKey>();
     for (StoreKey key : keys) {
+      //TODO IndexValue findLatest
       if (findKey(key) == null) {
         missingKeys.add(key);
       }
@@ -908,8 +1032,10 @@ class PersistentIndex {
                     EnumSet.allOf(IndexEntryType.class), indexSegments);
             messageEntries.add(
                 new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                    value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
-                    value.getContainerId(), value.getOperationTimeInMs()));
+                    value.isFlagSet(IndexValue.Flags.Ttl_Update_Index),
+                    value.isFlagSet(IndexValue.Flags.Undelete_Index), value.getExpiresAtMs(), null,
+                    value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs(),
+                    value.getLifeVersion()));
             currentTotalSizeOfEntries += value.getSize();
             offsetEnd = entry.getOffset();
             if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
@@ -1252,8 +1378,9 @@ class PersistentIndex {
               EnumSet.allOf(IndexEntryType.class), indexSegments);
           messageEntries.add(
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                  value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
-                  value.getContainerId(), value.getOperationTimeInMs()));
+                  value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.isFlagSet(IndexValue.Flags.Undelete_Index),
+                  value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(),
+                  value.getOperationTimeInMs(), value.getLifeVersion()));
           currentTotalSizeOfEntries.addAndGet(value.getSize());
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
               currentSegment.getLastModifiedTimeSecs())) {
@@ -1344,8 +1471,9 @@ class PersistentIndex {
       MessageInfo messageInfo = messageEntriesIterator.next();
       if (!messageInfo.isDeleted()) {
         // ok to use most recent ref
-        IndexValue indexValue =
-            findKey(messageInfo.getStoreKey(), null, EnumSet.of(IndexEntryType.TTL_UPDATE, IndexEntryType.DELETE));
+        //TODO IndexValue findLatestUpdate
+        IndexValue indexValue = findKey(messageInfo.getStoreKey(), null,
+            EnumSet.of(IndexEntryType.TTL_UPDATE, IndexEntryType.DELETE, IndexEntryType.UNDELETE));
         if (indexValue != null) {
           messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
               indexValue.isFlagSet(IndexValue.Flags.Delete_Index),
