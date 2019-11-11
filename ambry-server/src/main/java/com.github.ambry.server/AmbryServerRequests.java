@@ -74,11 +74,12 @@ public class AmbryServerRequests extends AmbryRequests {
   private final ConcurrentHashMap<PartitionId, ReplicaId> localPartitionToReplicaMap;
   // POST requests are allowed on stores states: { LEADER, STANDBY }
   static final Set<ReplicaState> PUT_ALLOWED_STORE_STATES = EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY);
-  // UPDATE requests (including DELETE, TTLUpdate) are allowed on stores states: { LEADER, STANDBY, INACTIVE, BOOTSTRAP }
+  // UPDATE requests (including DELETE, TTLUpdate, UNDELETE) are allowed on stores states: { LEADER, STANDBY, INACTIVE, BOOTSTRAP }
   static final Set<ReplicaState> UPDATE_ALLOWED_STORE_STATES =
       EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.INACTIVE, ReplicaState.BOOTSTRAP);
   static final Set<RequestOrResponseType> UPDATE_REQUEST_TYPES =
-      EnumSet.of(RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest);
+      EnumSet.of(RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest,
+          RequestOrResponseType.UndeleteResponse);
 
   private static final Logger logger = LoggerFactory.getLogger(AmbryServerRequests.class);
 
@@ -93,7 +94,7 @@ public class AmbryServerRequests extends AmbryRequests {
     this.statsManager = statsManager;
 
     for (RequestOrResponseType requestType : EnumSet.of(RequestOrResponseType.PutRequest,
-        RequestOrResponseType.GetRequest, RequestOrResponseType.DeleteRequest,
+        RequestOrResponseType.GetRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.UndeleteRequest,
         RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest)) {
       requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     }

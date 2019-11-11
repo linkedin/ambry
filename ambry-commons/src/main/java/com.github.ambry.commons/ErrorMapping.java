@@ -38,6 +38,10 @@ public class ErrorMapping {
     tempMap.put(StoreErrorCodes.Authorization_Failure, ServerErrorCode.Blob_Authorization_Failure);
     tempMap.put(StoreErrorCodes.Already_Updated, ServerErrorCode.Blob_Already_Updated);
     tempMap.put(StoreErrorCodes.Update_Not_Allowed, ServerErrorCode.Blob_Update_Not_Allowed);
+    tempMap.put(StoreErrorCodes.Life_Version_Conflict, ServerErrorCode.Blob_Life_Version_Conflict);
+    tempMap.put(StoreErrorCodes.ID_Not_Deleted, ServerErrorCode.Blob_Not_Deleted);
+    tempMap.put(StoreErrorCodes.ID_Undeleted, ServerErrorCode.Blob_Already_Undeleted);
+    tempMap.put(StoreErrorCodes.ID_Deleted_Permanently, ServerErrorCode.Blob_Deleted_Permanently);
     storeErrorMapping = Collections.unmodifiableMap(tempMap);
   }
 

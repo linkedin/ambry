@@ -135,6 +135,9 @@ public class AmbryRequests implements RequestAPI {
         case AdminRequest:
           handleAdminRequest(request);
           break;
+        case UndeleteRequest:
+          handleUndeleteRequest(request);
+          break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }
@@ -641,9 +644,78 @@ public class AmbryRequests implements RequestAPI {
             metrics.replicaMetadataSendTimeInMs, metrics.replicaMetadataTotalTimeInMs, null, null, totalTimeSpent));
   }
 
-  private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, NetworkRequest request,
-      Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
-      long blobSize, ServerMetrics metrics) throws InterruptedException {
+  @Override
+  public void handleUndeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
+    UndeleteRequest undeleteRequest =
+        UndeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    metrics.undeleteBlobRequestQueueTimeInMs.update(requestQueueTime);
+    metrics.undeleteBlobRequestRate.mark();
+    long startTime = SystemTime.getInstance().milliseconds();
+    UndeleteResponse response = null;
+    try {
+      StoreKey convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(undeleteRequest.getBlobId())).get(0);
+      ServerErrorCode error =
+          validateRequest(undeleteRequest.getBlobId().getPartition(), RequestOrResponseType.UndeleteRequest, false);
+      if (error != ServerErrorCode.No_Error) {
+        logger.error("Validating undelete request failed with error {} for request {}", error, undeleteRequest);
+        response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), error);
+      } else {
+        BlobId convertedBlobId = (BlobId) convertedStoreKey;
+        MessageInfo info =
+            new MessageInfo(convertedBlobId, 0, convertedBlobId.getAccountId(), convertedBlobId.getContainerId(),
+                undeleteRequest.getOperationTimeMs());
+        Store storeToDelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
+        short lifeVersion = storeToDelete.undelete(info);
+        response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), lifeVersion);
+        if (notification != null) {
+          notification.onBlobReplicaUndeleted(currentNode.getHostname(), currentNode.getPort(),
+              convertedStoreKey.getID(), BlobReplicaSourceType.PRIMARY);
+        }
+      }
+    } catch (StoreException e) {
+      boolean logInErrorLevel = false;
+      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+        metrics.idNotFoundError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+        metrics.ttlExpiredError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+        metrics.idDeletedError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+        metrics.deleteAuthorizationFailure.inc();
+      } else {
+        logInErrorLevel = true;
+        metrics.unExpectedStoreDeleteError.inc();
+      }
+      if (logInErrorLevel) {
+        logger.error("Store exception on a undelete with error code {} for request {}", e.getErrorCode(),
+            undeleteRequest, e);
+      } else {
+        logger.trace("Store exception on a undelete with error code {} for request {}", e.getErrorCode(),
+            undeleteRequest, e);
+      }
+      response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+    } catch (Exception e) {
+      logger.error("Unknown exception for undelete request " + undeleteRequest, e);
+      response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+          ServerErrorCode.Unknown_Error);
+      metrics.unExpectedStoreDeleteError.inc();
+    } finally {
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", undeleteRequest, response, processingTime);
+      metrics.undeleteBlobProcessingTimeInMs.update(processingTime);
+    }
+    requestResponseChannel.sendResponse(response, request,
+        new ServerNetworkResponseMetrics(metrics.undeleteBlobResponseQueueTimeInMs, metrics.undeleteBlobSendTimeInMs,
+            metrics.undeleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response,
+      NetworkRequest request, Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime,
+      long totalTimeSpent, long blobSize, ServerMetrics metrics) throws InterruptedException {
     if (response.getError() == ServerErrorCode.No_Error) {
       metrics.markPutBlobRequestRateBySize(blobSize);
       if (blobSize <= ServerMetrics.smallBlob) {
@@ -666,9 +738,9 @@ public class AmbryRequests implements RequestAPI {
     }
   }
 
-  private void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, NetworkRequest request,
-      Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
-      long blobSize, MessageFormatFlags flags, ServerMetrics metrics) throws InterruptedException {
+  private void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response,
+      NetworkRequest request, Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime,
+      long totalTimeSpent, long blobSize, MessageFormatFlags flags, ServerMetrics metrics) throws InterruptedException {
 
     if (blobSize <= ServerMetrics.smallBlob) {
       if (flags == MessageFormatFlags.Blob || flags == MessageFormatFlags.All) {

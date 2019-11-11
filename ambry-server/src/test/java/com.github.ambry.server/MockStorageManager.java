@@ -152,8 +152,8 @@ class MockStorageManager extends StorageManager {
             new UndeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
                 info.getOperationTimeMs(), (short) returnValueOfUndelete);
         // Update info to add stream size;
-        info = new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
-            info.getOperationTimeMs());
+        info = new MessageInfo(info.getStoreKey(), stream.getSize(), false, false, true, Utils.Infinite_Time, null,
+            info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(), returnValueOfUndelete);
         ArrayList<MessageInfo> infoList = new ArrayList<>();
         infoList.add(info);
         messageWriteSetReceived = new MessageFormatWriteSet(stream, infoList, false);

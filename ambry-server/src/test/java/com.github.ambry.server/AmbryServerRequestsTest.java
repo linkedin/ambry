@@ -67,6 +67,7 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.protocol.TtlUpdateRequest;
+import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.MockReplicationManager;
@@ -210,7 +211,8 @@ public class AmbryServerRequestsTest {
     }
 
     for (RequestOrResponseType request : EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.GetRequest,
-        RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest)) {
+        RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest,
+        RequestOrResponseType.UndeleteRequest)) {
       for (Map.Entry<ReplicaState, ReplicaId> entry : stateToReplica.entrySet()) {
         if (request == RequestOrResponseType.PutRequest) {
           // for PUT request, it is not allowed on OFFLINE,BOOTSTRAP and INACTIVE when validateRequestOnStoreState = true
@@ -223,7 +225,7 @@ public class AmbryServerRequestsTest {
                 ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
           }
         } else if (AmbryServerRequests.UPDATE_REQUEST_TYPES.contains(request)) {
-          // for DELETE/TTL Update request, they are not allowed on OFFLINE,BOOTSTRAP and INACTIVE when validateRequestOnStoreState = true
+          // for UNDELETE/DELETE/TTL Update request, they are not allowed on OFFLINE,BOOTSTRAP and INACTIVE when validateRequestOnStoreState = true
           if (AmbryServerRequests.UPDATE_ALLOWED_STORE_STATES.contains(entry.getKey())) {
             assertEquals("Error code is not expected for DELETE/TTL Update", ServerErrorCode.No_Error,
                 ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
@@ -313,7 +315,8 @@ public class AmbryServerRequestsTest {
   public void controlRequestSuccessTest() throws InterruptedException, IOException {
     RequestOrResponseType[] requestOrResponseTypes =
         {RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.GetRequest,
-            RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest};
+            RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest,
+            RequestOrResponseType.UndeleteRequest};
     for (RequestOrResponseType requestType : requestOrResponseTypes) {
       List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
       for (PartitionId id : partitionIds) {
@@ -776,6 +779,34 @@ public class AmbryServerRequestsTest {
     miscTtlUpdateFailuresTest();
   }
 
+  /**
+   * Tests for success and failure scenarios for UNDELETE
+   */
+  @Test
+  public void undeleteTest() throws Exception {
+    MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = UtilsTest.getRandomString(10);
+    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
+    long opTimeMs = SystemTime.getInstance().milliseconds();
+
+    // since we already test store key conversion in ttlupdate, we don't test it again in this method.
+    // storekey not valid for store
+    doUndelete(correlationId++, clientId, blobId, opTimeMs, ServerErrorCode.Blob_Not_Found);
+    // valid now
+    validKeysInStore.add(blobId);
+    doUndelete(correlationId++, clientId, blobId, opTimeMs, ServerErrorCode.No_Error);
+
+    // READ_ONLY is fine too
+    changePartitionState(id, true);
+    doUndelete(correlationId++, clientId, blobId, opTimeMs, ServerErrorCode.No_Error);
+    changePartitionState(id, false);
+
+    miscUndeleteFailuresTest();
+  }
+
   // helpers
 
   // general
@@ -1037,6 +1068,10 @@ public class AmbryServerRequestsTest {
         case DeleteRequest:
           request = new DeleteRequest(correlationId, clientId, originalBlobId, SystemTime.getInstance().milliseconds());
           break;
+        case UndeleteRequest:
+          request =
+              new UndeleteRequest(correlationId, clientId, originalBlobId, SystemTime.getInstance().milliseconds());
+          break;
         case GetRequest:
           PartitionRequestInfo pRequestInfo = new PartitionRequestInfo(id, Collections.singletonList(originalBlobId));
           request =
@@ -1236,6 +1271,25 @@ public class AmbryServerRequestsTest {
   }
 
   /**
+   * Does a UNDELETE and checks for success if {@code expectedErrorCode} is {@link ServerErrorCode#No_Error}. Else,
+   * checks for failure with the code {@code expectedErrorCode}.
+   * @param correlationId the correlation ID to use in the request
+   * @param clientId the client ID to use in the request
+   * @param blobId the blob ID to use in the request
+   * @param opTimeMs the operation time (ms) to use in the request
+   * @param expectedErrorCode the expected {@link ServerErrorCode}
+   * @throws Exception
+   */
+  private void doUndelete(int correlationId, String clientId, BlobId blobId, long opTimeMs,
+      ServerErrorCode expectedErrorCode) throws Exception {
+    UndeleteRequest request = new UndeleteRequest(correlationId, clientId, blobId, opTimeMs);
+    sendAndVerifyOperationRequest(request, expectedErrorCode, true);
+    if (expectedErrorCode == ServerErrorCode.No_Error) {
+      verifyUndelete(request.getBlobId(), opTimeMs, MockStorageManager.messageWriteSetReceived);
+    }
+  }
+
+  /**
    * Exercises various failure paths for TTL updates
    * @throws InterruptedException
    * @throws IOException
@@ -1272,6 +1326,41 @@ public class AmbryServerRequestsTest {
   }
 
   /**
+   * Exercises various failure paths for UNDELETEs
+   * @throws Exception
+   */
+  private void miscUndeleteFailuresTest() throws Exception {
+    PartitionId id = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    // store exceptions
+    for (StoreErrorCodes code : StoreErrorCodes.values()) {
+      MockStorageManager.storeException = new StoreException("expected", code);
+      ServerErrorCode expectedErrorCode = ErrorMapping.getStoreErrorMapping(code);
+      sendAndVerifyOperationRequest(RequestOrResponseType.UndeleteRequest, Collections.singletonList(id),
+          expectedErrorCode, true);
+      MockStorageManager.storeException = null;
+    }
+    // runtime exception
+    MockStorageManager.runtimeException = new RuntimeException("expected");
+    sendAndVerifyOperationRequest(RequestOrResponseType.UndeleteRequest, Collections.singletonList(id),
+        ServerErrorCode.Unknown_Error, true);
+    MockStorageManager.runtimeException = null;
+    // store is not started/is stopped/otherwise unavailable - Replica_Unavailable
+    storageManager.returnNullStore = true;
+    sendAndVerifyOperationRequest(RequestOrResponseType.UndeleteRequest, Collections.singletonList(id),
+        ServerErrorCode.Replica_Unavailable, false);
+    storageManager.returnNullStore = false;
+    // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
+
+    // disk down
+    ReplicaId replicaId = findReplica(id);
+    clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Error);
+    sendAndVerifyOperationRequest(RequestOrResponseType.UndeleteRequest, Collections.singletonList(id),
+        ServerErrorCode.Disk_Unavailable, false);
+    clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Ok);
+    // request disabled is checked in request control tests
+  }
+
+  /**
    * Verifies that the TTL update request was delivered to the {@link Store} correctly.
    * @param blobId the {@link BlobId} that was updated
    * @param expiresAtMs the new expire time (in ms)
@@ -1300,6 +1389,35 @@ public class AmbryServerRequestsTest {
     // since the record has been verified, the buffer size before verification is a good indicator of size
     MessageInfoTest.checkGetters(info, key, expectedSize, false, true, false, expiresAtMs, null, key.getAccountId(),
         key.getContainerId(), opTimeMs, (short) 0);
+  }
+
+  /**
+   * Verifies that the UNDELETE request was delivered to the {@link Store} correctly.
+   * @param blobId the {@link BlobId} that was updated
+   * @param opTimeMs the op time (in ms)
+   * @param messageWriteSet the {@link MessageWriteSet} received at the {@link Store}
+   * @throws IOException
+   * @throws MessageFormatException
+   * @throws StoreException
+   */
+  private void verifyUndelete(BlobId blobId, long opTimeMs, MessageWriteSet messageWriteSet) throws Exception {
+    BlobId key = (BlobId) conversionMap.getOrDefault(blobId, blobId);
+    assertEquals("There should be one message in the write set", 1, messageWriteSet.getMessageSetInfo().size());
+    MessageInfo info = messageWriteSet.getMessageSetInfo().get(0);
+
+    // verify stream
+    ByteBuffer record = getDataInWriteSet(messageWriteSet, (int) info.getSize());
+    int expectedSize = record.remaining();
+    InputStream stream = new ByteBufferInputStream(record);
+
+    // verify stream
+    MessageFormatInputStreamTest.checkUndeleteMessage(stream, null, key, key.getAccountId(), key.getContainerId(),
+        opTimeMs, storageManager.returnValueOfUndelete);
+
+    // verify MessageInfo
+    // since the record has been verified, the buffer size before verification is a good indicator of size
+    MessageInfoTest.checkGetters(info, key, expectedSize, false, false, true, Utils.Infinite_Time, null,
+        key.getAccountId(), key.getContainerId(), opTimeMs, storageManager.returnValueOfUndelete);
   }
 
   /**
