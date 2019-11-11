@@ -33,7 +33,7 @@ import org.junit.Assert;
 
 
 /**
- *
+ * Sender for put messages directly to server nodes.
  */
 class DirectSender implements Runnable {
 
@@ -45,6 +45,17 @@ class DirectSender implements Runnable {
   BlobProperties blobProperties;
   CountDownLatch endLatch;
 
+  /**
+   * Constructor for {@link DirectSender} object.
+   * @param cluster {@link MockCluster} object to obtain {@link MockClusterMap} from.
+   * @param channel {@link BlockingChannel} object to connect to destination.
+   * @param totalBlobsToPut number of blobs to put.
+   * @param data data to put in each blob.
+   * @param usermetadata user metadata to put in each blob.
+   * @param blobProperties {@link BlobProperties} object to add to each blob.
+   * @param encryptionKey encryption key to encrypt blobs.
+   * @param endLatch {@link CountDownLatch} object to signal all blobs have been uploaded.
+   */
   public DirectSender(MockCluster cluster, BlockingChannel channel, int totalBlobsToPut, byte[] data,
       byte[] usermetadata, BlobProperties blobProperties, byte[] encryptionKey, CountDownLatch endLatch) {
     MockClusterMap clusterMap = cluster.getClusterMap();
@@ -63,6 +74,27 @@ class DirectSender implements Runnable {
     this.blobProperties = blobProperties;
     this.encryptionKey = encryptionKey;
     this.endLatch = endLatch;
+  }
+
+  /**
+   * Constructor for {@link DirectSender} object.
+   * @param channel {@link BlockingChannel} object to connect to destination.
+   * @param blobIds {@link List} of {@link BlobId}s to send.
+   * @param data data data to put in each blob.
+   * @param usermetadata usermetadata user metadata to put in each blob.
+   * @param blobProperties {@link BlobProperties} object to add to each blob.
+   * @param encryptionKey encryption key to encrypt blobs.
+   * @param endLatch {@link CountDownLatch} object to signal all blobs have been uploaded.
+   */
+  public DirectSender(BlockingChannel channel, List<BlobId> blobIds, byte[] data, byte[] usermetadata,
+      BlobProperties blobProperties, byte[] encryptionKey, CountDownLatch endLatch) {
+    this.channel = channel;
+    this.data = data;
+    this.usermetadata = usermetadata;
+    this.blobProperties = blobProperties;
+    this.encryptionKey = encryptionKey;
+    this.endLatch = endLatch;
+    this.blobIds = blobIds;
   }
 
   @Override
@@ -86,8 +118,11 @@ class DirectSender implements Runnable {
     }
   }
 
+  /**
+   * Get {@link List} of {@link BlobId}s.
+   * @return {@link List} of {@link BlobId}s.
+   */
   List<BlobId> getBlobIds() {
     return blobIds;
   }
 }
-

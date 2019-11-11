@@ -19,8 +19,8 @@ import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.ClusterSpectator;
+import com.github.ambry.clustermap.ClusterSpectatorFactory;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.HelixClusterSpectatorFactory;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ServerMetrics;
@@ -86,6 +86,7 @@ public class AmbryServer {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
+  private final ClusterSpectatorFactory clusterSpectatorFactory;
   private ClusterMap clusterMap;
   private ClusterParticipant clusterParticipant;
   private ClusterSpectator vcrClusterSpectator;
@@ -96,15 +97,21 @@ public class AmbryServer {
   private ServerMetrics metrics = null;
   private Time time;
 
-  public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory, Time time)
-      throws IOException {
-    this(properties, clusterAgentsFactory, new LoggingNotificationSystem(), time);
+  public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
+      ClusterSpectatorFactory clusterSpectatorFactory, Time time) {
+    this(properties, clusterAgentsFactory, clusterSpectatorFactory, new LoggingNotificationSystem(), time);
   }
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       NotificationSystem notificationSystem, Time time) {
+    this(properties, clusterAgentsFactory, null, notificationSystem, time);
+  }
+
+  public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
+      ClusterSpectatorFactory clusterSpectatorFactory, NotificationSystem notificationSystem, Time time) {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
+    this.clusterSpectatorFactory = clusterSpectatorFactory;
     this.notificationSystem = notificationSystem;
     this.time = time;
   }
@@ -165,7 +172,7 @@ public class AmbryServer {
 
       if (replicationConfig.replicationEnabledWithVcrCluster) {
         logger.info("Creating Helix cluster spectator for cloud to store replication.");
-        vcrClusterSpectator = new HelixClusterSpectatorFactory().getClusterSpectator(cloudConfig, clusterMapConfig);
+        vcrClusterSpectator = clusterSpectatorFactory.getClusterSpectator(cloudConfig, clusterMapConfig);
         cloudToStoreReplicationManager =
             new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
                 storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem,
