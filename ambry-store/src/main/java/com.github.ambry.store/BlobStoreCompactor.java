@@ -767,6 +767,7 @@ class BlobStoreCompactor {
    */
   private IndexValue getPutValueFromSrc(StoreKey key, IndexValue updateValue, IndexSegment indexSegmentOfUpdateValue)
       throws StoreException {
+    //TODO IndexValue findKeyOfPutWithLatestInfo
     IndexValue putValue = srcIndex.findKey(key, new FileSpan(srcIndex.getStartOffset(), updateValue.getOffset()),
         EnumSet.of(PersistentIndex.IndexEntryType.PUT));
     // in a non multi valued segment, if putValue is not found directly from the index, check if the PUT and DELETE
@@ -816,6 +817,7 @@ class BlobStoreCompactor {
     //  A TTL update entry is "valid" if the corresponding PUT is still alive
     // The PUT entry, if it exists, must be "before" this TTL update entry.
     FileSpan srcSearchSpan = new FileSpan(srcIndex.getStartOffset(), indexSegmentStartOffset);
+    //TODO IndexValue findKeyOfPutWithLatestInfo (does not need Undelete)
     IndexValue srcValue = srcIndex.findKey(key, srcSearchSpan, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
     if (srcValue == null) {
       // PUT is not in the source - therefore can't be in target. This TTL update can be cleaned up
@@ -894,6 +896,7 @@ class BlobStoreCompactor {
   private boolean hasDeleteEntryInSpan(StoreKey key, Offset searchStartOffset, Offset searchEndOffset)
       throws StoreException {
     FileSpan deleteSearchSpan = new FileSpan(searchStartOffset, searchEndOffset);
+    //TODO IndexValue findDelete (need to change for Undelete)?
     return srcIndex.findKey(key, deleteSearchSpan, EnumSet.of(PersistentIndex.IndexEntryType.DELETE)) != null;
   }
 
@@ -908,6 +911,7 @@ class BlobStoreCompactor {
    */
   private boolean alreadyExists(PersistentIndex idx, FileSpan searchSpan, StoreKey key, IndexValue srcValue)
       throws StoreException {
+    //TODO IndexValue findLatest
     IndexValue value = idx.findKey(key, searchSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
     boolean exists = false;
     if (value != null) {
