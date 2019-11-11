@@ -55,6 +55,13 @@ public interface Store {
   void delete(MessageWriteSet messageSetToDelete) throws StoreException;
 
   /**
+   * Undelete the blob identified by {@code id}.
+   * @param info The {@link MessageInfo} that carries some basic information about this operation.
+   * @return the lifeVersion of the undeleted blob.
+   */
+  short undelete(MessageInfo info) throws StoreException;
+
+  /**
    * Updates the TTL of all the messages that are part of the message set
    * @param messageSetToUpdate The list of messages that need to be updated
    * @throws StoreException

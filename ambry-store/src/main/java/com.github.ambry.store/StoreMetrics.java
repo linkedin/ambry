@@ -33,6 +33,7 @@ public class StoreMetrics {
   public final Timer putResponse;
   public final Timer deleteResponse;
   public final Timer ttlUpdateResponse;
+  public final Timer undeleteResponse;
   public final Timer findEntriesSinceResponse;
   public final Timer findMissingKeysResponse;
   public final Timer isKeyDeletedResponse;
@@ -71,6 +72,7 @@ public class StoreMetrics {
   public final Counter getAuthorizationFailureCount;
   public final Counter deleteAuthorizationFailureCount;
   public final Counter ttlUpdateAuthorizationFailureCount;
+  public final Counter undeleteAuthorizationFailureCount;
   public final Counter keyInFindEntriesAbsent;
   public final Counter duplicateKeysInBatch;
   public final Counter storeIoErrorTriggeredShutdownCount;
@@ -107,6 +109,7 @@ public class StoreMetrics {
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StorePutResponse"));
     deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreDeleteResponse"));
     ttlUpdateResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreTtlUpdateResponse"));
+    undeleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreUndeleteResponse"));
     findEntriesSinceResponse =
         registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindEntriesSinceResponse"));
     findMissingKeysResponse =
@@ -163,6 +166,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStore.class, name + "DeleteAuthorizationFailureCount"));
     ttlUpdateAuthorizationFailureCount =
         registry.counter(MetricRegistry.name(BlobStore.class, name + "TtlUpdateAuthorizationFailureCount"));
+    undeleteAuthorizationFailureCount =
+        registry.counter(MetricRegistry.name(BlobStore.class, name + "UndeleteAuthorizationFailureCount"));
     keyInFindEntriesAbsent = registry.counter(MetricRegistry.name(BlobStore.class, name + "KeyInFindEntriesAbsent"));
     duplicateKeysInBatch = registry.counter(MetricRegistry.name(BlobStore.class, name + "DuplicateKeysInBatch"));
     storeIoErrorTriggeredShutdownCount =

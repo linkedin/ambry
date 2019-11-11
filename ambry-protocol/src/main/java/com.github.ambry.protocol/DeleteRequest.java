@@ -78,7 +78,7 @@ public class DeleteRequest extends RequestOrResponse {
     long written = 0;
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-      writeHeader();
+     writeHeader();
       bufferToSend.put(blobId.toBytes());
       if (versionId == DELETE_REQUEST_VERSION_2) {
         bufferToSend.putLong(deletionTimeInMs);

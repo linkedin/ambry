@@ -364,6 +364,11 @@ class CloudBlobStore implements Store {
     }
   }
 
+  @Override
+  public short undelete(MessageInfo info) throws StoreException {
+    throw new UnsupportedOperationException("Undelete not supported in cloud store");
+  }
+
   /**
    * {@inheritDoc}
    * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)

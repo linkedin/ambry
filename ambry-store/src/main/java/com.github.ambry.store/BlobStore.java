@@ -18,6 +18,9 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
@@ -606,6 +609,69 @@ public class BlobStore implements Store {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to update ttl of blobs from store " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
+    } finally {
+      context.stop();
+    }
+  }
+
+  @Override
+  public short undelete(MessageInfo info) throws StoreException {
+    checkStarted();
+    final Timer.Context context = metrics.undeleteResponse.time();
+    try {
+      StoreKey id = info.getStoreKey();
+      Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      List<IndexValue> values = index.findAllIndexValuesForKey(id, null);
+      index.validateSanityForUndelete(id, values, IndexValue.LIFE_VERSION_FROM_FRONTEND);
+      IndexValue lastValue = values.get(0);
+      short lifeVersion = (short) (lastValue.getLifeVersion() + 1);
+      MessageFormatInputStream stream =
+          new UndeleteMessageFormatInputStream(id, info.getAccountId(), info.getContainerId(),
+              info.getOperationTimeMs(), lifeVersion);
+      // Update info to add stream size;
+      info =
+          new MessageInfo(id, stream.getSize(), info.getAccountId(), info.getContainerId(), info.getOperationTimeMs());
+      ArrayList<MessageInfo> infoList = new ArrayList<>();
+      infoList.add(info);
+      MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
+      if (info.getStoreKey().isAccountContainerMatch(lastValue.getAccountId(), lastValue.getContainerId())) {
+        if (config.storeValidateAuthorization) {
+          throw new StoreException("UNDELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: "
+              + lastValue.getAccountId() + "Actually containerId: " + lastValue.getContainerId(),
+              StoreErrorCodes.Authorization_Failure);
+        } else {
+          logger.warn("UNDELETE authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",
+              info.getStoreKey(), lastValue.getAccountId(), lastValue.getContainerId());
+          metrics.undeleteAuthorizationFailureCount.inc();
+        }
+      }
+      synchronized (storeWriteLock) {
+        Offset currentIndexEndOffset = index.getCurrentEndOffset();
+        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
+          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+          IndexValue value =
+              index.findKey(info.getStoreKey(), fileSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
+          if (value != null) {
+            throw new StoreException("Cannot undelete id " + info.getStoreKey() + " since concurrent operation occurs",
+                StoreErrorCodes.Life_Version_Conflict);
+          }
+        }
+        Offset endOffsetOfLastMessage = log.getEndOffset();
+        writeSet.writeTo(log);
+        logger.trace("Store : {} undelete mark written to log", dataDir);
+        FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
+        index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
+      }
+      onSuccess();
+      return lifeVersion;
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
+      throw e;
+    } catch (Exception e) {
+      throw new StoreException("Unknown error while trying to undelete blobs from store " + dataDir, e,
           StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();

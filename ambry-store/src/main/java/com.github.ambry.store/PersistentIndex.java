@@ -31,7 +31,6 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -346,6 +345,17 @@ class PersistentIndex {
             // DELETE must have been present)
             deleteExpectedKeys.add(info.getStoreKey());
           }
+        } else if (info.isUndeleted()) {
+          markAsUndeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info.getOperationTimeMs(),
+              info.getLifeVersion());
+          logger.info(
+              "Index : {} updated message with key {} by inserting undelete update entry of size {} ttl {} lifeVersion {}",
+              dataDir, info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.getLifeVersion());
+          if (value == null) {
+            // Undelete record indicates that there might be a put and delete record before it.
+            throw new StoreException("Put record were expected but were not encountered for key: " + info.getStoreKey(),
+                StoreErrorCodes.Initialization_Error);
+          }
         } else if (value != null) {
           throw new StoreException("Illegal message state during recovery. Duplicate PUT record",
               StoreErrorCodes.Initialization_Error);
@@ -644,6 +654,10 @@ class PersistentIndex {
           retCandidate.getSize(), retCandidate.getExpiresAtMs());
     }
     return retCandidate;
+  }
+
+  List<IndexValue> findAllIndexValuesForKey(StoreKey key, FileSpan fileSpan) throws StoreException {
+    return findAllIndexValuesForKey(key, fileSpan, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
   }
 
   /**
