@@ -69,8 +69,8 @@ class CuratedLogIndexState {
   private static final long SEGMENT_CAPACITY = 3000;
   private static final long HARD_DELETE_START_OFFSET = 11;
   private static final long HARD_DELETE_LAST_PART_SIZE = 13;
-  private static final int DEFAULT_MAX_IN_MEM_ELEMENTS = 5;
 
+  static final int DEFAULT_MAX_IN_MEM_ELEMENTS = 5;
   static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
   static final long DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS = 10 * Time.MsPerSec;
   static final StoreKeyFactory STORE_KEY_FACTORY;
@@ -312,10 +312,9 @@ class CuratedLogIndexState {
    * Adds a delete entry in the index (real and reference) for {@code idToDelete}.
    * @param idToDelete the id to be deleted.
    * @return the {@link FileSpan} of the added entries.
-   * @throws IOException
    * @throws StoreException
    */
-  FileSpan addDeleteEntry(MockId idToDelete) throws IOException, StoreException {
+  FileSpan addDeleteEntry(MockId idToDelete) throws StoreException {
     return addDeleteEntry(idToDelete, null);
   }
 
@@ -1004,11 +1003,10 @@ class CuratedLogIndexState {
    * @param expectedLogSegmentCount the number of log segments that are expected to assist after the addition of the
    *                                first entry and at the end of the addition of all entries.
    * @param addTtlUpdates if {@code true}, adds entries that update TTL.
-   * @throws IOException
    * @throws StoreException
    */
   private void addCuratedIndexEntriesToLogSegment(long sizeToMakeIndexEntriesFor, int expectedLogSegmentCount,
-      boolean addTtlUpdates) throws IOException, StoreException {
+      boolean addTtlUpdates) throws StoreException {
     // First Index Segment
     // 1 PUT
     Offset firstJournalEntryAddedNow =

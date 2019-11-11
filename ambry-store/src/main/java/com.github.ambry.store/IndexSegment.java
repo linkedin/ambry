@@ -761,6 +761,41 @@ class IndexSegment {
   }
 
   /**
+   * @return index value of last PUT record in this index segment. Return {@code null} if no PUT is found
+   */
+  IndexValue getIndexValueOfLastPut() throws StoreException {
+    IndexValue indexValueOfLastPut = null;
+    if (sealed.get()) {
+      ByteBuffer readBuf = serEntries.duplicate();
+      int numOfIndexEntries = numberOfEntries(readBuf);
+      NavigableSet<IndexValue> values = new TreeSet<>();
+      for (int i = 0; i < numOfIndexEntries; i++) {
+        StoreKey key = getKeyAt(readBuf, i);
+        values.clear();
+        getAllValuesFromMmap(readBuf, key, i, numOfIndexEntries, values);
+        for (IndexValue indexValue : values) {
+          // FLAGS_DEFAULT_VALUE means PUT record
+          if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
+              || indexValue.compareTo(indexValueOfLastPut) > 0)) {
+            indexValueOfLastPut = indexValue;
+          }
+        }
+      }
+    } else {
+      for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : index.entrySet()) {
+        for (IndexValue indexValue : entry.getValue()) {
+          // FLAGS_DEFAULT_VALUE means PUT record
+          if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
+              || indexValue.compareTo(indexValueOfLastPut) > 0)) {
+            indexValueOfLastPut = indexValue;
+          }
+        }
+      }
+    }
+    return indexValueOfLastPut;
+  }
+
+  /**
    * Maps the segment of index either as a memory map or a in memory buffer depending on config.
    * @throws StoreException if there are problems with the index
    */

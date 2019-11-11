@@ -19,6 +19,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -385,11 +386,10 @@ public class IndexTest {
 
   /**
    * Tests that expired values are correctly handled.
-   * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void expirationTest() throws IOException, StoreException {
+  public void expirationTest() throws StoreException {
     // add a PUT entry that will expire if time advances
     // advance time so that time moves to whole second with no residual milliseconds
     state.time.sleep(Time.MsPerSec - state.time.milliseconds());
@@ -463,7 +463,6 @@ public class IndexTest {
 
   /**
    * Tests {@link PersistentIndex#changeIndexSegments(List, Set)} for good and bad cases.
-   * @throws IOException
    * @throws StoreException
    */
   @Test
@@ -528,6 +527,58 @@ public class IndexTest {
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
+  }
+
+  /**
+   * Test getting absolute end position of last PUT under different circumstances (i.e. last PUT is out of Journal)
+   * @throws Exception
+   */
+  @Test
+  public void getAbsoluteEndPositionOfLastPutTest() throws Exception {
+    File testDir = StoreTestUtils.createTempDirectory("indexDirTest-" + UtilsTest.getRandomString(10));
+    CuratedLogIndexState indexState = new CuratedLogIndexState(isLogSegmented, testDir, false, false, true);
+    assertEquals("There should be no PUT record since index is empty", -1,
+        indexState.index.getAbsoluteEndPositionOfLastPut());
+    MockTime time = new MockTime();
+    long expiresAtMs = time.milliseconds() + TimeUnit.HOURS.toMillis(1);
+    // DEFAULT_MAX_IN_MEM_ELEMENTS = 5, here we put 5 entries into the log
+    List<IndexEntry> indexEntries = indexState.addPutEntries(5, PUT_RECORD_SIZE, expiresAtMs);
+    assertEquals("Number of index segments should be 1", 1, indexState.index.getIndexSegments().size());
+    // update ttl for above 5 entries and the ttl entries fall in second index segment.
+    for (IndexEntry entry : indexEntries) {
+      indexState.makePermanent((MockId) entry.getKey(), false);
+    }
+    assertEquals("Number of index segments (after ttl update) should be 2", 2,
+        indexState.index.getIndexSegments().size());
+    // default journal size should be 2 * DEFAULT_MAX_IN_MEM_ELEMENTS = 10
+    assertEquals("Journal size not expected", 2 * DEFAULT_MAX_IN_MEM_ELEMENTS,
+        indexState.index.journal.getAllEntries().size());
+    // delete above 5 entries, these delete entries should fall in third index segment
+    for (IndexEntry entry : indexEntries) {
+      indexState.addDeleteEntry((MockId) entry.getKey());
+    }
+    assertEquals("Number of index segments (after deletion) should be 3", 3,
+        indexState.index.getIndexSegments().size());
+    // although there are now 15 entries in total, journal size is still 10 (old entries are removed from journal)
+    assertEquals("Journal size (after deletion) shouldn't change", 2 * DEFAULT_MAX_IN_MEM_ELEMENTS,
+        indexState.index.journal.getAllEntries().size());
+    // after deletion, the last PUT record falls in first segment (out of journal)
+    // for segmented log, there is a header size = 18
+    assertEquals("Absolute end position of last PUT record not expected",
+        5 * PUT_RECORD_SIZE + (isLogSegmented ? 18 : 0), indexState.index.getAbsoluteEndPositionOfLastPut());
+
+    // calculate current end position in log segment (note that there are 5 PUT, 5 TTL update and 5 DELETE entries)
+    long currentEndPosition =
+        5 * PUT_RECORD_SIZE + 5 * TTL_UPDATE_RECORD_SIZE + 5 * DELETE_RECORD_SIZE + (isLogSegmented ? 18 : 0);
+    // add one more PUT entry and delete it afterwards
+    indexEntries = indexState.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    indexState.addDeleteEntry((MockId) indexEntries.get(0).getKey());
+    assertEquals("Number of index segments after new PUT and delete should be 4", 4,
+        indexState.index.getIndexSegments().size());
+    // now, the latest PUT entry should be in the journal
+    assertEquals("Absolute end position of last PUT record not expected", currentEndPosition + PUT_RECORD_SIZE,
+        indexState.index.getAbsoluteEndPositionOfLastPut());
+    indexState.destroy();
   }
 
   /**

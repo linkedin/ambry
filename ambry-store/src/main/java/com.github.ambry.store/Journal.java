@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -39,6 +40,18 @@ class JournalEntry {
 
   StoreKey getKey() {
     return key;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    JournalEntry entry = (JournalEntry) o;
+    return this.offset == entry.offset && this.key == entry.key;
   }
 }
 
@@ -155,6 +168,23 @@ class Journal {
   }
 
   /**
+   * @return all journal entries at the time when this method is invoked. (Return empty list if journal is empty)
+   */
+  List<JournalEntry> getAllEntries() {
+    List<JournalEntry> result = new ArrayList<>();
+    // get current last Offset
+    Offset lastOffset = getLastOffset();
+    if (lastOffset != null) {
+      // get portion view of journal whose key is less than or equal to lastOffset
+      NavigableMap<Offset, StoreKey> journalView = journal.headMap(lastOffset, true);
+      for (Map.Entry<Offset, StoreKey> entry : journalView.entrySet()) {
+        result.add(new JournalEntry(entry.getKey(), entry.getValue()));
+      }
+    }
+    return result;
+  }
+
+  /**
    * @return the first/smallest offset in the journal or {@code null} if no such entry exists.
    */
   Offset getFirstOffset() {
@@ -200,6 +230,14 @@ class Journal {
    */
   void finishBootstrap() {
     inBootstrapMode = false;
+  }
+
+  boolean isInBootstrapMode(){
+    return inBootstrapMode;
+  }
+
+  int getMaxEntriesToJournal(){
+    return maxEntriesToJournal;
   }
 
   /**
