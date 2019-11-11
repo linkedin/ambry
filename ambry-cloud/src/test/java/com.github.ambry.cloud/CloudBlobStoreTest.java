@@ -228,11 +228,11 @@ public class CloudBlobStoreTest {
       long size = 10;
       addBlobToSet(messageWriteSet, size, Utils.Infinite_Time, refAccountId, refContainerId, true);
     }
-    store.delete(messageWriteSet);
+    store.delete(messageWriteSet.getMessageSetInfo());
     verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime));
 
     // Call second time.  If isVcr, should be cached causing deletions to be skipped.
-    store.delete(messageWriteSet);
+    store.delete(messageWriteSet.getMessageSetInfo());
     int expectedCount = isVcr ? count : count * 2;
     verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(operationTime));
   }
@@ -248,11 +248,11 @@ public class CloudBlobStoreTest {
       long expirationTime = Math.abs(random.nextLong());
       addBlobToSet(messageWriteSet, size, expirationTime, refAccountId, refContainerId, true);
     }
-    store.updateTtl(messageWriteSet);
+    store.updateTtl(messageWriteSet.getMessageSetInfo());
     verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong());
 
     // Call second time, If isVcr, should be cached causing updates to be skipped.
-    store.updateTtl(messageWriteSet);
+    store.updateTtl(messageWriteSet.getMessageSetInfo());
     int expectedCount = isVcr ? count : count * 2;
     verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong());
   }
@@ -363,7 +363,7 @@ public class CloudBlobStoreTest {
     for (int j = 0; j < 5; j++) {
       addBlobToSet(messageWriteSet, (BlobId) blobIdList.get(j), blobSize, Utils.Infinite_Time);
     }
-    store.updateTtl(messageWriteSet);
+    store.updateTtl(messageWriteSet.getMessageSetInfo());
 
     // put 5 more blobs
     for (int j = 10; j < 15; j++) {
@@ -393,7 +393,7 @@ public class CloudBlobStoreTest {
       assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
     try {
-      store.delete(messageWriteSet);
+      store.delete(messageWriteSet.getMessageSetInfo());
       fail("Store delete should have failed.");
     } catch (StoreException e) {
       assertEquals(StoreErrorCodes.Store_Not_Started, e.getErrorCode());
@@ -433,7 +433,7 @@ public class CloudBlobStoreTest {
       assertEquals(StoreErrorCodes.IOError, e.getErrorCode());
     }
     try {
-      exStore.delete(messageWriteSet);
+      exStore.delete(messageWriteSet.getMessageSetInfo());
       fail("Store delete should have failed.");
     } catch (StoreException e) {
       assertEquals(StoreErrorCodes.IOError, e.getErrorCode());
@@ -475,7 +475,7 @@ public class CloudBlobStoreTest {
 
     // Run all three operations, they should be retried and succeed second time.
     exStore.put(messageWriteSet);
-    exStore.delete(messageWriteSet);
+    exStore.delete(messageWriteSet.getMessageSetInfo());
     exStore.get(keys, EnumSet.noneOf(StoreGetOptions.class));
     exStore.downloadBlob(metadata, blobId, new ByteArrayOutputStream());
     assertEquals("Unexpected retry count", 4, vcrMetrics.retryCount.getCount());
@@ -762,7 +762,7 @@ public class CloudBlobStoreTest {
     MessageInfo deletedMessageInfo = messageWriteSet.getMessageSetInfo().get(0);
     MockMessageWriteSet deleteMockMessageWriteSet = new MockMessageWriteSet();
     deleteMockMessageWriteSet.add(deletedMessageInfo, null);
-    store.delete(deleteMockMessageWriteSet);
+    store.delete(deleteMockMessageWriteSet.getMessageSetInfo());
 
     //test get with a deleted blob in blob list to get, but {@code StoreGetOptions.Store_Include_Deleted} not set in get options
     testGetForDeletedBlobWithoutIncludeDeleteOption(blobIds);

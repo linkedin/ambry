@@ -15,10 +15,8 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -76,6 +74,14 @@ public class MessageFormatRecord {
       default:
         return false;
     }
+  }
+
+  /**
+   * Return the currently used message header version.
+   * @return currently used message header version
+   */
+  public static short getCurrentMessageHeaderVersion() {
+    return headerVersionToUse;
   }
 
   /**

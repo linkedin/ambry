@@ -18,8 +18,11 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.FileLock;
@@ -27,6 +30,8 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -378,7 +383,7 @@ public class BlobStore implements Store {
     if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
       throw new IllegalArgumentException("Message write set cannot be empty");
     }
-    checkDuplicates(messageSetToWrite);
+    checkDuplicates(messageSetToWrite.getMessageSetInfo());
     final Timer.Context context = metrics.putResponse.time();
     try {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
@@ -449,15 +454,15 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
+  public void delete(List<MessageInfo> infosToDelete) throws StoreException {
     checkStarted();
-    checkDuplicates(messageSetToDelete);
+    checkDuplicates(infosToDelete);
     final Timer.Context context = metrics.deleteResponse.time();
     try {
       List<IndexValue> indexValuesToDelete = new ArrayList<>();
-      List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
+      List<Short> lifeVersions = new ArrayList<>();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
-      for (MessageInfo info : infoList) {
+      for (MessageInfo info : infosToDelete) {
         IndexValue value = index.findKey(info.getStoreKey());
         if (value == null) {
           throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
@@ -472,32 +477,55 @@ public class BlobStore implements Store {
                 info.getStoreKey(), value.getAccountId(), value.getContainerId());
             metrics.deleteAuthorizationFailureCount.inc();
           }
-        } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+        } else if (value.isDelete()) {
           throw new StoreException(
               "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
               StoreErrorCodes.ID_Deleted);
         }
         indexValuesToDelete.add(value);
+        lifeVersions.add(value.getLifeVersion());
       }
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
-          for (MessageInfo info : infoList) {
+          for (MessageInfo info : infosToDelete) {
             IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
-                EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
-            if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+                EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE,
+                    PersistentIndex.IndexEntryType.UNDELETE));
+            if (value != null && value.isDelete()) {
               throw new StoreException(
                   "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
                   StoreErrorCodes.ID_Deleted);
             }
           }
         }
+        List<InputStream> inputStreams = new ArrayList<>(infosToDelete.size());
+        List<MessageInfo> updatedInfos = new ArrayList<>(infosToDelete.size());
+        int ind = 0;
+        for (MessageInfo info : infosToDelete) {
+          MessageFormatInputStream stream = null;
+          if (MessageFormatRecord.getCurrentMessageHeaderVersion() == MessageFormatRecord.Message_Header_Version_V3) {
+            stream = new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                info.getOperationTimeMs(), lifeVersions.get(ind));
+          } else {
+            stream = new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                info.getOperationTimeMs());
+          }
+          updatedInfos.add(
+              new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs()));
+          inputStreams.add(stream);
+          ind++;
+        }
         Offset endOffsetOfLastMessage = log.getEndOffset();
-        messageSetToDelete.writeTo(log);
+        MessageFormatWriteSet writeSet =
+            new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), updatedInfos,
+                false);
+        writeSet.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
         int correspondingPutIndex = 0;
-        for (MessageInfo info : infoList) {
+        for (MessageInfo info : updatedInfos) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
           IndexValue deleteIndexValue = index.markAsDeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
@@ -519,22 +547,16 @@ public class BlobStore implements Store {
     }
   }
 
-  /**
-   * {@inheritDoc}
-   * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)
-   * @param messageSetToUpdate The list of messages that need to be updated
-   * @throws StoreException if there is a problem persisting the operation in the store.
-   */
   @Override
-  public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
+  public void updateTtl(List<MessageInfo> infosToUpdate) throws StoreException {
     checkStarted();
-    checkDuplicates(messageSetToUpdate);
+    checkDuplicates(infosToUpdate);
     final Timer.Context context = metrics.ttlUpdateResponse.time();
     try {
       List<IndexValue> indexValuesToUpdate = new ArrayList<>();
-      List<MessageInfo> infoList = messageSetToUpdate.getMessageSetInfo();
+      List<Short> lifeVersions = new ArrayList<>();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
-      for (MessageInfo info : infoList) {
+      for (MessageInfo info : infosToUpdate) {
         if (info.getExpirationTimeInMs() != Utils.Infinite_Time) {
           throw new StoreException("BlobStore only supports removing the expiration time",
               StoreErrorCodes.Update_Not_Allowed);
@@ -554,11 +576,11 @@ public class BlobStore implements Store {
                 info.getStoreKey(), value.getAccountId(), value.getContainerId());
             metrics.ttlUpdateAuthorizationFailureCount.inc();
           }
-        } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+        } else if (value.isDelete()) {
           throw new StoreException(
               "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
               StoreErrorCodes.ID_Deleted);
-        } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        } else if (value.isTTLUpdate()) {
           throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
               StoreErrorCodes.Already_Updated);
         } else if (value.getExpiresAtMs() != Utils.Infinite_Time
@@ -569,31 +591,55 @@ public class BlobStore implements Store {
               StoreErrorCodes.Update_Not_Allowed);
         }
         indexValuesToUpdate.add(value);
+        lifeVersions.add(value.getLifeVersion());
       }
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
-          for (MessageInfo info : infoList) {
+          for (MessageInfo info : infosToUpdate) {
             IndexValue value =
                 index.findKey(info.getStoreKey(), fileSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
             if (value != null) {
-              if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              if (value.isDelete()) {
                 throw new StoreException(
                     "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
                     StoreErrorCodes.ID_Deleted);
-              } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+              } else if (value.isTTLUpdate()) {
                 throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
                     StoreErrorCodes.Already_Updated);
               }
             }
           }
         }
+        List<InputStream> inputStreams = new ArrayList<>(infosToUpdate.size());
+        List<MessageInfo> updatedInfos = new ArrayList<>(infosToUpdate.size());
+        int ind = 0;
+        for (MessageInfo info : infosToUpdate) {
+          MessageFormatInputStream stream = null;
+          if (MessageFormatRecord.getCurrentMessageHeaderVersion() == MessageFormatRecord.Message_Header_Version_V3) {
+            stream =
+                new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                    info.getExpirationTimeInMs(), info.getOperationTimeMs(), lifeVersions.get(ind));
+          } else {
+            stream =
+                new TtlUpdateMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                    info.getExpirationTimeInMs(), info.getOperationTimeMs());
+          }
+          updatedInfos.add(
+              new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs()));
+          inputStreams.add(stream);
+          ind++;
+        }
         Offset endOffsetOfLastMessage = log.getEndOffset();
-        messageSetToUpdate.writeTo(log);
+        MessageFormatWriteSet writeSet =
+            new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), updatedInfos,
+                false);
+        writeSet.writeTo(log);
         logger.trace("Store : {} ttl update mark written to log", dataDir);
         int correspondingPutIndex = 0;
-        for (MessageInfo info : infoList) {
+        for (MessageInfo info : updatedInfos) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
           IndexValue ttlUpdateValue = index.markAsPermanent(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
@@ -968,10 +1014,9 @@ public class BlobStore implements Store {
 
   /**
    * Detects duplicates in {@code writeSet}
-   * @param writeSet the {@link MessageWriteSet} to detect duplicates in
+   * @param infos the list of {@link MessageInfo} to detect duplicates in
    */
-  private void checkDuplicates(MessageWriteSet writeSet) {
-    List<MessageInfo> infos = writeSet.getMessageSetInfo();
+  private void checkDuplicates(List<MessageInfo> infos) {
     if (infos.size() > 1) {
       Set<StoreKey> seenKeys = new HashSet<>();
       for (MessageInfo info : infos) {

@@ -99,11 +99,10 @@ public class CompactionPolicyTest {
     }
 
     // if used capacity is <= 60%, compaction details will be null. If not, logSegmentsNotInJournal needs to be returned.
-    Long[] usedCapacities = new Long[]{
-        CAPACITY_IN_BYTES * 2 / 10, (CAPACITY_IN_BYTES * 4 / 10),
-        CAPACITY_IN_BYTES * 5 / 10,
-        CAPACITY_IN_BYTES * 51 / 100, (CAPACITY_IN_BYTES * 6 / 10),
-        CAPACITY_IN_BYTES * 7 / 10, CAPACITY_IN_BYTES * 9 / 10};
+    Long[] usedCapacities =
+        new Long[]{CAPACITY_IN_BYTES * 2 / 10, (CAPACITY_IN_BYTES * 4 / 10), CAPACITY_IN_BYTES * 5 / 10,
+            CAPACITY_IN_BYTES * 51 / 100, (CAPACITY_IN_BYTES * 6 / 10), CAPACITY_IN_BYTES * 7 / 10,
+            CAPACITY_IN_BYTES * 9 / 10};
     for (Long usedCapacity : usedCapacities) {
       blobStore.usedCapacity = usedCapacity;
       if (blobStore.usedCapacity < (config.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0

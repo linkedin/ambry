@@ -65,8 +65,6 @@ public class StoreCopierTest {
 
   private static final long STORE_CAPACITY = 1000;
   private static final int PUT_RECORD_SIZE = 53;
-  private static final int DELETE_RECORD_SIZE = 29;
-  private static final int TTL_UPDATE_RECORD_SIZE = 37;
 
   private final File srcDir;
   private final File tgtDir;
@@ -233,16 +231,16 @@ public class StoreCopierTest {
    */
   private byte[] addMessage(Store store, StoreKey key, long expiryTimeMs, boolean isDelete, boolean isTtlUpdate,
       short accountId, short containerId, long operationTimeMs) throws IOException, StoreException {
-    int size = isDelete ? DELETE_RECORD_SIZE : isTtlUpdate ? TTL_UPDATE_RECORD_SIZE : PUT_RECORD_SIZE;
+    int size = PUT_RECORD_SIZE;
     MessageInfo messageInfo =
         new MessageInfo(key, size, isDelete, isTtlUpdate, expiryTimeMs, accountId, containerId, operationTimeMs);
     byte[] data = TestUtils.getRandomBytes(size);
     MessageFormatWriteSet writeSet =
         new MessageFormatWriteSet(new ByteArrayInputStream(data), Collections.singletonList(messageInfo), false);
     if (isDelete) {
-      store.delete(writeSet);
+      store.delete(writeSet.getMessageSetInfo());
     } else if (isTtlUpdate) {
-      store.updateTtl(writeSet);
+      store.updateTtl(writeSet.getMessageSetInfo());
     } else {
       store.put(writeSet);
     }
