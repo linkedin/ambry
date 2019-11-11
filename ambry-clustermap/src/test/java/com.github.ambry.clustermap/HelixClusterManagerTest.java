@@ -310,7 +310,7 @@ public class HelixClusterManagerTest {
 
     Set<String> writableInClusterManager = new HashSet<>();
     for (PartitionId partition : clusterManagerWithEmptyRecord.getWritablePartitionIds(null)) {
-      String partitionStr = useComposite ? partition.toPathString() : partition.toPathString();
+      String partitionStr = partition.toPathString();
       writableInClusterManager.add(partitionStr);
     }
     Set<String> writableInCluster = helixCluster.getWritablePartitions();
@@ -1042,7 +1042,7 @@ public class HelixClusterManagerTest {
   private Pair<Set<String>, Set<String>> getWritablePartitions() {
     Set<String> writableInClusterManager = new HashSet<>();
     for (PartitionId partition : clusterManager.getWritablePartitionIds(null)) {
-      String partitionStr = useComposite ? partition.toPathString() : partition.toPathString();
+      String partitionStr = partition.toPathString();
       writableInClusterManager.add(partitionStr);
     }
     Set<String> writableInCluster = helixCluster.getWritablePartitions();
@@ -1059,7 +1059,7 @@ public class HelixClusterManagerTest {
   private void testAllPartitions() {
     Set<String> partitionsInClusterManager = new HashSet<>();
     for (PartitionId partition : clusterManager.getAllPartitionIds(null)) {
-      String partitionStr = useComposite ? partition.toPathString() : partition.toPathString();
+      String partitionStr = partition.toPathString();
       partitionsInClusterManager.add(partitionStr);
     }
     Set<String> allPartitions = helixCluster.getAllPartitions();
