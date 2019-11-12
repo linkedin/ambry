@@ -77,7 +77,7 @@ public class RestServer {
   private final NioServer nioServer;
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
-  private final NettyMetrics nettyMetrics = NettyMetrics.INSTANCE();
+  private final NettyMetrics nettyMetrics;
 
   /**
    * {@link RestServer} specific metrics tracking.
@@ -205,7 +205,7 @@ public class RestServer {
         || restRequestHandler == null || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
     }
-    nettyMetrics.metricRegistry(metricRegistry).nettyConfig(new NettyConfig(verifiableProperties));
+    nettyMetrics = new NettyMetrics(metricRegistry, new NettyConfig(verifiableProperties));
     logger.trace("Instantiated RestServer");
   }
 

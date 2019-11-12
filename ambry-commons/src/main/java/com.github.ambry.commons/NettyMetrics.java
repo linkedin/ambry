@@ -16,14 +16,12 @@ package com.github.ambry.commons;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NettyConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.PoolArenaMetric;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.PooledByteBufAllocatorMetric;
 import java.util.List;
 import java.util.Objects;
-import java.util.Properties;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -32,10 +30,10 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * A single class to register and collect netty-related metrics.
+ * A class to register and collect netty-related metrics.
  * To use this metric, please do
  * <p>
- *   NettyMetrics nettyMetrics = NettyMetrics.INSTANCE().metricRegistry(new MetricRegistry()).nettyConfig(nettyConfig);
+ *   NettyMetrics nettyMetrics = new NettyMetric(new MetricRegistry(), nettyConfig);
  *   nettyMetrics.start();
  * </p>
  *
@@ -43,23 +41,23 @@ import org.slf4j.LoggerFactory;
  *
  * To Stop collecting, please do
  * <p>
- *   neettyMetrics.stop();
+ *   nettyMetrics.stop();
  * </p>
  */
 public class NettyMetrics {
 
   private static final Logger logger = LoggerFactory.getLogger(NettyMetrics.class);
-  private static NettyMetrics singleton = new NettyMetrics();
 
   /**
-   * Return the singleton instance of this class.
-   * @return The {@link NettyMetrics} in singleton;
+   * Constructor to create a {@link NettyMetrics};
+   * @param registry Registry to registry the metrics.
+   * @param config {@link NettyConfig}.
    */
-  public static NettyMetrics INSTANCE() {
-    return singleton;
-  }
-
-  private NettyMetrics() {
+  public NettyMetrics(MetricRegistry registry, NettyConfig config) {
+    Objects.requireNonNull(registry, "Registry is null");
+    Objects.requireNonNull(config, "Netty config is null");
+    this.registry = registry;
+    this.config = config;
   }
 
   private volatile MetricRegistry registry;
@@ -123,66 +121,28 @@ public class NettyMetrics {
     return numDirectTotalActiveAllocations;
   }
 
-  /**
-   * Set the {@link MetricRegistry} for netty metrics. If not set, a new {@link MetricRegistry} would
-   * be created before collecting metrics.
-   * @param registry The {@link MetricRegistry}.
-   * @return This singleton NettyMetrics.
-   */
-  public NettyMetrics metricRegistry(MetricRegistry registry) {
-    Objects.requireNonNull(registry, "Registry is null");
-    this.registry = registry;
-    return this;
-  }
-
-  /**
-   * Set the {@link NettyConfig} for netty metrics. If not set, a new {@link NettyConfig} would
-   * be created before collecting metris.
-   * @param config  The {@link NettyConfig}
-   * @return This singleton NettyMetrics.
-   */
-  public NettyMetrics nettyConfig(NettyConfig config) {
-    Objects.requireNonNull(config, "NettyConfig is null");
-    this.config = config;
-    return this;
-  }
-
-  private void initializeConfig() {
-    NettyConfig thisConfig = this.config;
-    if (thisConfig == null) {
-      thisConfig = new NettyConfig(new VerifiableProperties(new Properties()));
-      this.config = thisConfig;
-    }
-  }
-
   private void register() {
-    MetricRegistry thisRegistry = this.registry;
-    if (thisRegistry == null) {
-      thisRegistry = new MetricRegistry();
-      this.registry = thisRegistry;
-    }
-
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectArenas"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectArenas"),
         (Gauge<Integer>) () -> getNumDirectArenas());
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapArenas"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapArenas"),
         (Gauge<Integer>) () -> getNumHeapArenas());
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "NumberThreadLocalCaches"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberThreadLocalCaches"),
         (Gauge<Integer>) () -> getNumThreadLocalCaches());
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "UsedHeapMemory"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "UsedHeapMemory"),
         (Gauge<Long>) () -> getUsedHeapMemory());
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "UsedDirectMemory"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "UsedDirectMemory"),
         (Gauge<Long>) () -> getUsedDirectMemory());
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalAlloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalAlloocations"),
         (Gauge<Long>) () -> getNumHeapTotalAllocations());
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalDealloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalDealloocations"),
         (Gauge<Long>) () -> getNumHeapTotalDeallocations());
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalActiveAlloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalActiveAlloocations"),
         (Gauge<Long>) () -> getNumHeapTotalActiveAllocations());
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalAlloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalAlloocations"),
         (Gauge<Long>) () -> getNumDirectTotalAllocations());
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalDealloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalDealloocations"),
         (Gauge<Long>) () -> getNumDirectTotalDeallocations());
-    thisRegistry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalActiveAlloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalActiveAlloocations"),
         (Gauge<Long>) () -> getNumDirectTotalActiveAllocations());
   }
 
@@ -191,7 +151,6 @@ public class NettyMetrics {
    */
   public void start() {
     if (started.compareAndSet(false, true)) {
-      initializeConfig();
       register();
       scheduler = Utils.newScheduler(1, false);
       scheduler.scheduleAtFixedRate(new NettyMetricCollector(), 0, config.nettyMetricsRefreshIntervalSeconds,
