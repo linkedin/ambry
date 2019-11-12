@@ -24,7 +24,7 @@ import io.netty.buffer.PooledByteBufAllocatorMetric;
 import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
@@ -59,13 +59,13 @@ public class NettyMetrics {
     return singleton;
   }
 
-  private NettyMetrics() {}
+  private NettyMetrics() {
+  }
 
   private volatile MetricRegistry registry;
   private volatile NettyConfig config;
-  private Thread collectorThread;
+  private ScheduledExecutorService scheduler = null;
   private AtomicBoolean started = new AtomicBoolean();
-  private CountDownLatch stopLatch = new CountDownLatch(1);
 
   private volatile int numDirectArenas;
   private volatile int numHeapArenas;
@@ -193,9 +193,10 @@ public class NettyMetrics {
     if (started.compareAndSet(false, true)) {
       initializeConfig();
       register();
-      collectorThread = Utils.newThread("netty-metrics", new NettyMetricCollector(), false);
-      collectorThread.start();
-      logger.trace("Thread is started to collect netty metrics");
+      scheduler = Utils.newScheduler(1, false);
+      scheduler.scheduleAtFixedRate(new NettyMetricCollector(), 0, config.nettyMetricsRefreshIntervalSeconds,
+          TimeUnit.SECONDS);
+      logger.trace("Schedule netty metric collector");
     }
   }
 
@@ -205,12 +206,9 @@ public class NettyMetrics {
    */
   public void stop() {
     if (started.compareAndSet(true, false)) {
-      collectorThread.interrupt();
-      try {
-        stopLatch.await(config.nettyMetricsStopWaitTimeoutSeconds, TimeUnit.SECONDS);
-        logger.trace("Thread is stopped for collecting netty metrics");
-      } catch (InterruptedException e) {
-        logger.error("Failed to stop collector thread", e);
+      if (scheduler != null) {
+        Utils.shutDownExecutorService(scheduler, config.nettyMetricsStopWaitTimeoutSeconds, TimeUnit.SECONDS);
+        logger.trace("De-scheduled for collecting netty metrics");
       }
     }
   }
@@ -219,31 +217,21 @@ public class NettyMetrics {
 
     @Override
     public void run() {
-      while (true) {
-        PooledByteBufAllocatorMetric metric = PooledByteBufAllocator.DEFAULT.metric();
-        numDirectArenas = metric.numDirectArenas();
-        numHeapArenas = metric.numHeapArenas();
-        numThreadLocalCaches = metric.numThreadLocalCaches();
-        usedHeapMemory = metric.usedHeapMemory();
-        usedDirectMemory = metric.usedDirectMemory();
-        List<PoolArenaMetric> heapArenaMetrics = metric.heapArenas();
-        List<PoolArenaMetric> directArenaMetrics = metric.directArenas();
-        numHeapTotalAllocations = heapArenaMetrics.stream().mapToLong(PoolArenaMetric::numAllocations).sum();
-        numHeapTotalDeallocations = heapArenaMetrics.stream().mapToLong(PoolArenaMetric::numDeallocations).sum();
-        numHeapTotalActiveAllocations =
-            heapArenaMetrics.stream().mapToLong(PoolArenaMetric::numActiveAllocations).sum();
-        numDirectTotalAllocations = directArenaMetrics.stream().mapToLong(PoolArenaMetric::numAllocations).sum();
-        numDirectTotalDeallocations = directArenaMetrics.stream().mapToLong(PoolArenaMetric::numDeallocations).sum();
-        numDirectTotalActiveAllocations =
-            directArenaMetrics.stream().mapToLong(PoolArenaMetric::numActiveAllocations).sum();
-
-        try {
-          Thread.sleep(config.nettyMetricsRefreshIntervalSeconds * 1000);
-        } catch (InterruptedException e) {
-          stopLatch.countDown();
-          return;
-        }
-      }
+      PooledByteBufAllocatorMetric metric = PooledByteBufAllocator.DEFAULT.metric();
+      numDirectArenas = metric.numDirectArenas();
+      numHeapArenas = metric.numHeapArenas();
+      numThreadLocalCaches = metric.numThreadLocalCaches();
+      usedHeapMemory = metric.usedHeapMemory();
+      usedDirectMemory = metric.usedDirectMemory();
+      List<PoolArenaMetric> heapArenaMetrics = metric.heapArenas();
+      List<PoolArenaMetric> directArenaMetrics = metric.directArenas();
+      numHeapTotalAllocations = heapArenaMetrics.stream().mapToLong(PoolArenaMetric::numAllocations).sum();
+      numHeapTotalDeallocations = heapArenaMetrics.stream().mapToLong(PoolArenaMetric::numDeallocations).sum();
+      numHeapTotalActiveAllocations = heapArenaMetrics.stream().mapToLong(PoolArenaMetric::numActiveAllocations).sum();
+      numDirectTotalAllocations = directArenaMetrics.stream().mapToLong(PoolArenaMetric::numAllocations).sum();
+      numDirectTotalDeallocations = directArenaMetrics.stream().mapToLong(PoolArenaMetric::numDeallocations).sum();
+      numDirectTotalActiveAllocations =
+          directArenaMetrics.stream().mapToLong(PoolArenaMetric::numActiveAllocations).sum();
     }
   }
 }
