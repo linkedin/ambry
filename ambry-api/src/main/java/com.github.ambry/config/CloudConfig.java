@@ -35,6 +35,7 @@ public class CloudConfig {
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
   public static final String VCR_PROXY_HOST = "vcr.proxy.host";
   public static final String VCR_PROXY_PORT = "vcr.proxy.port";
+  public static final String VCR_CLUSTER_SPECTATOR_FACTORY_CLASS = "vcr.cluster.spectator.factory.class";
 
   public static final String DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS =
       "com.github.ambry.cloud.StaticVcrClusterFactory";
@@ -52,6 +53,8 @@ public class CloudConfig {
   public static final int DEFAULT_COMPACTION_QUERY_LIMIT = 100000;
   public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 10000;
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
+  public static final String DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS =
+      "com.github.ambry.clustermap.HelixClusterSpectatorFactory";
 
   /**
    * The virtual replicator cluster factory class name.
@@ -180,6 +183,14 @@ public class CloudConfig {
   @Default("3128")
   public final int vcrProxyPort;
 
+  /**
+   *
+   * @param verifiableProperties
+   */
+  @Config(VCR_CLUSTER_SPECTATOR_FACTORY_CLASS)
+  @Default(DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS)
+  public final String vcrClusterSpectatorFactoryClass;
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
     virtualReplicatorClusterFactoryClass = verifiableProperties.getString(VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS,
@@ -209,5 +220,8 @@ public class CloudConfig {
     // Proxy settings
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);
     vcrProxyPort = verifiableProperties.getInt(VCR_PROXY_PORT, DEFAULT_VCR_PROXY_PORT);
+
+    vcrClusterSpectatorFactoryClass = verifiableProperties.getString(VCR_CLUSTER_SPECTATOR_FACTORY_CLASS,
+        DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS);
   }
 }

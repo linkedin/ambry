@@ -182,6 +182,15 @@ public class ClusterMapConfig {
   @Default("true")
   public final boolean clustermapListenCrossColo;
 
+  /**
+   * Name of the datacenter of vcr nodes. It is expected that all the vcr nodes will reside in the same datacenter.
+   */
+  @Config("clustermap.vcr.datacenter.name")
+  public final String clustermapVcrDatacenterName;
+
+  /**
+   * State model definition to register with helix cluster.
+   */
   @Config("clustermap.state.model.definition")
   @Default(DEFAULT_STATE_MODEL_DEF)
   public final String clustermapStateModelDefinition;
@@ -220,6 +229,8 @@ public class ClusterMapConfig {
     clustermapListenCrossColo = verifiableProperties.getBoolean("clustermap.listen.cross.colo", true);
     clustermapStateModelDefinition =
         verifiableProperties.getString("clustermap.state.model.definition", DEFAULT_STATE_MODEL_DEF);
+    clustermapVcrDatacenterName =
+        verifiableProperties.getString("clustermap.vcr.datacenter.name", null);
     if (!clustermapStateModelDefinition.equals(DEFAULT_STATE_MODEL_DEF) && !clustermapStateModelDefinition.equals(
         AMBRY_STATE_MODEL_DEF)) {
       throw new IllegalArgumentException("Unsupported state model definition: " + clustermapStateModelDefinition);

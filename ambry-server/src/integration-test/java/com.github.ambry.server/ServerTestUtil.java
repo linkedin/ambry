@@ -51,6 +51,7 @@ import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.SubRecord;
 import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.network.BlockingChannelConnectionPool;
@@ -63,8 +64,8 @@ import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
-import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.BlobStoreControlAction;
+import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOption;
@@ -87,6 +88,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
@@ -443,8 +445,7 @@ final class ServerTestUtil {
       // start the store via AdminRequest
       System.out.println("Begin to restart the BlobStore");
       adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionIds.get(0), 1, "clientid2");
-      controlRequest =
-          new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StartStore, adminRequest);
+      controlRequest = new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StartStore, adminRequest);
       channel.send(controlRequest);
       stream = channel.receive().getInputStream();
       adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
@@ -2240,5 +2241,44 @@ final class ServerTestUtil {
   static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties) throws Exception {
     boolean requiresSSL = new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
     return requiresSSL ? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;
+  }
+
+  /**
+   * Create {@link PutMessageFormatInputStream} for a blob with given {@link BlobId} and update {@code blobIdToSizeMap}.
+   * @param blobId {@link BlobId} object.
+   * @param blobSize size of blob.
+   * @param blobIdToSizeMap {@link Map} of {@link BlobId} to size of blob uploaded.
+   * @return {@link PutMessageFormatInputStream} object.
+   * @throws Exception
+   */
+  static PutMessageFormatInputStream getPutMessageInputStreamForBlob(BlobId blobId, int blobSize,
+      Map<BlobId, Integer> blobIdToSizeMap, short accountId, short containerId) throws Exception {
+    int userMetaDataSize = 100;
+    byte[] userMetadata = new byte[userMetaDataSize];
+    TestUtils.RANDOM.nextBytes(userMetadata);
+    byte[] data = new byte[blobSize];
+    BlobProperties blobProperties =
+        new BlobProperties(blobSize, "serviceid1", null, null, false, Utils.Infinite_Time, accountId, containerId,
+            false, null);
+    TestUtils.RANDOM.nextBytes(data);
+    blobIdToSizeMap.put(blobId, blobSize);
+    return new PutMessageFormatInputStream(blobId, null, blobProperties, ByteBuffer.wrap(userMetadata),
+        new ByteBufferInputStream(ByteBuffer.wrap(data)), blobSize);
+  }
+
+  /**
+   * Create {@code blobCount} number of {@link BlobId}s.
+   * @param blobCount number of {@link BlobId}s to create.
+   * @return list of {@link BlobId}s
+   */
+  static List<BlobId> createBlobIds(int blobCount, ClusterMap clusterMap, short accountId, short containerId,
+      PartitionId partitionId) {
+    List<BlobId> blobIds = new ArrayList<>(blobCount);
+    for (int i = 0; i < blobCount; i++) {
+      BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+          clusterMap.getLocalDatacenterId(), accountId, containerId, partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      blobIds.add(blobId);
+    }
+    return blobIds;
   }
 }

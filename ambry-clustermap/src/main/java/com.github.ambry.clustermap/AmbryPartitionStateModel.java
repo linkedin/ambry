@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import java.util.Objects;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.Message;
 import org.apache.helix.participant.statemachine.StateModel;
@@ -28,10 +29,13 @@ public class AmbryPartitionStateModel extends StateModel {
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final String resourceName;
   private final String partitionName;
+  private final PartitionStateChangeListener partitionStateChangeListener;
 
-  AmbryPartitionStateModel(String resourceName, String partitionName) {
+  AmbryPartitionStateModel(String resourceName, String partitionName,
+      PartitionStateChangeListener partitionStateChangeListener) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
+    this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(DefaultLeaderStandbyStateModel.class);
   }
@@ -52,12 +56,14 @@ public class AmbryPartitionStateModel extends StateModel {
   public void onBecomeLeaderFromStandby(Message message, NotificationContext context) {
     logger.info("Partition {} in resource {} is becoming LEADER from STANDBY", message.getPartitionName(),
         message.getResourceName());
+    partitionStateChangeListener.onPartitionStateChangeToLeaderFromStandby(message.getPartitionName());
   }
 
   @Transition(to = "STANDBY", from = "LEADER")
   public void onBecomeStandbyFromLeader(Message message, NotificationContext context) {
     logger.info("Partition {} in resource {} is becoming STANDBY from LEADER", message.getPartitionName(),
         message.getResourceName());
+    partitionStateChangeListener.onPartitionStateChangeToStandbyFromLeader(message.getPartitionName());
   }
 
   @Transition(to = "INACTIVE", from = "STANDBY")

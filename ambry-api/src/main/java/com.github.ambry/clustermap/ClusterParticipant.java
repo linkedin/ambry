@@ -60,6 +60,12 @@ public interface ClusterParticipant extends AutoCloseable {
   List<String> getStoppedReplicas();
 
   /**
+   * Register a listener for leadership changes in partitions of this node.
+   * @param partitionStateChangeListener listener to register.
+   */
+  void registerPartitionStateChangeListener(PartitionStateChangeListener partitionStateChangeListener);
+
+  /**
    * Terminate the participant.
    */
   @Override

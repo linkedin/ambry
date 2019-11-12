@@ -14,6 +14,7 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -23,7 +24,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -170,7 +170,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         break;
       }
     }
-    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(GetRequest.Cloud_Replica_Keyword)) {
+    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(CloudReplica.Cloud_Replica_Keyword)) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
@@ -399,5 +399,61 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         && dataNodeId.getPort() == tokenInfo.getPort() && remoteReplicaInfo.getReplicaId()
         .getReplicaPath()
         .equals(tokenInfo.getReplicaPath());
+  }
+
+  /**
+   * Reload replication token if exist for all remote replicas of {@code localReplicaId}.
+   * @param localReplicaId local {@link ReplicaId} for which to reload tokens.
+   * @param remoteReplicaInfos {@link List} of {@link RemoteReplicaInfo} of the {@code localReplicaId}.
+   * @return Number of remote replicas for which reload failed.
+   */
+  protected int reloadReplicationTokenIfExists(ReplicaId localReplicaId, List<RemoteReplicaInfo> remoteReplicaInfos)
+      throws ReplicationException {
+    int tokenReloadFailureCount = 0;
+    List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfos = persistor.retrieve(localReplicaId.getMountPath());
+    if (tokenInfos.size() != 0) {
+      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
+        boolean tokenReloaded = false;
+        for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfos) {
+          if (isTokenForRemoteReplicaInfo(remoteReplicaInfo, tokenInfo)) {
+            logger.info("Read token for partition {} remote host {} port {} token {}", localReplicaId.getPartitionId(),
+                tokenInfo.getHostname(), tokenInfo.getPort(), tokenInfo.getReplicaToken());
+            tokenReloaded = true;
+            remoteReplicaInfo.initializeTokens(tokenInfo.getReplicaToken());
+            remoteReplicaInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
+            break;
+          }
+        }
+        if (!tokenReloaded) {
+          // This may happen on clusterMap update: replica removed or added.
+          // Or error on token persist/retrieve.
+          logger.warn("Token not found or reload failed. remoteReplicaInfo: {} tokenInfos: {}", remoteReplicaInfo,
+              tokenInfos);
+          tokenReloadFailureCount++;
+        }
+      }
+    }
+    return tokenReloadFailureCount;
+  }
+
+  /**
+   * Stop replication for the specified {@link PartitionId}.
+   * @param partitionId {@link PartitionId} for which replication should be removed.
+   */
+  protected void stopPartitionReplication(PartitionId partitionId) {
+    PartitionInfo partitionInfo = partitionToPartitionInfo.remove(partitionId);
+    if (partitionInfo == null) {
+      logger.warn("Partition {} not exist when remove from {}. ", partitionId, dataNodeId);
+      return;
+    }
+    removeRemoteReplicaInfoFromReplicaThread(partitionInfo.getRemoteReplicaInfos());
+    if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove) {
+      try {
+        persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
+      } catch (IOException | ReplicationException e) {
+        logger.error(
+            "Exception " + e + " on token write when removing Partition " + partitionId + " from: " + dataNodeId);
+      }
+    }
   }
 }

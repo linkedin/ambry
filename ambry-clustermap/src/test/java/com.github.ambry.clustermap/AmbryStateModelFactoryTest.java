@@ -44,7 +44,17 @@ public class AmbryStateModelFactoryTest {
 
   @Test
   public void testDifferentStateModelDefs() {
-    AmbryStateModelFactory factory = new AmbryStateModelFactory(stateModelDef);
+    AmbryStateModelFactory factory = new AmbryStateModelFactory(stateModelDef, new PartitionStateChangeListener() {
+      @Override
+      public void onPartitionStateChangeToLeaderFromStandby(String partitionName) {
+        // no op
+      }
+
+      @Override
+      public void onPartitionStateChangeToStandbyFromLeader(String partitionName) {
+        //no op
+      }
+    });
     StateModel stateModel;
     switch (stateModelDef) {
       case ClusterMapConfig.DEFAULT_STATE_MODEL_DEF:

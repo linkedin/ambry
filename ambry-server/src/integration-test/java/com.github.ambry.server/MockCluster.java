@@ -17,9 +17,11 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterSpectatorFactory;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockClusterSpectatorFactory;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -60,6 +62,7 @@ import static org.junit.Assert.*;
 public class MockCluster {
   private static final Logger logger = LoggerFactory.getLogger(MockCluster.class);
   private final MockClusterAgentsFactory mockClusterAgentsFactory;
+  private MockClusterSpectatorFactory mockClusterSpectatorFactory;
   private final MockClusterMap clusterMap;
   private final List<AmbryServer> serverList;
   private boolean serverInitialized = false;
@@ -94,6 +97,21 @@ public class MockCluster {
     prefetchDataNodeIndex = clusterMap.getDataNodes().size() - 1;
   }
 
+  public MockCluster(MockClusterMap mockClusterMap, List<MockDataNodeId> cloudDataNodes, Properties sslProps) {
+    this.sslProps = sslProps;
+    this.enableHardDeletes = false;
+    this.time = SystemTime.getInstance();
+
+    sslEnabledDataCenterList = new ArrayList<>();
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(mockClusterMap, null);
+    clusterMap = mockClusterMap;
+    serverList = new ArrayList<>();
+    generalDataNodeIndex = 0;
+    prefetchDataNodeIndex = clusterMap.getDataNodes().size() - 1;
+
+    mockClusterSpectatorFactory = new MockClusterSpectatorFactory(cloudDataNodes);
+  }
+
   /**
    * Creates {@link MockCluster} object based on the {@code mockClusterMap} passed.
    * @param mockClusterMap {@link MockClusterMap} from which to create the cluster.
@@ -111,7 +129,7 @@ public class MockCluster {
     sslEnabledDataCenterList =
         sslEnabledDataCentersStr != null ? Utils.splitString(sslEnabledDataCentersStr, ",") : new ArrayList<>();
 
-    mockClusterAgentsFactory = new MockClusterAgentsFactory(mockClusterMap);
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(mockClusterMap, null);
     clusterMap = mockClusterMap;
 
     serverList = new ArrayList<>();
@@ -145,7 +163,7 @@ public class MockCluster {
         dataNodes.get(i).setSslEnabledDataCenters(sslEnabledDataCenterList);
       }
       initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i, notificationSystem,
-          time);
+          time, null);
     }
   }
 
@@ -166,7 +184,7 @@ public class MockCluster {
       }
       sslProps.putAll(props);
       initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i, notificationSystem,
-          time);
+          time, null);
     }
   }
 
@@ -202,8 +220,20 @@ public class MockCluster {
     return mockClusterAgentsFactory;
   }
 
-  private void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
-      boolean enableDataPrefetch, NotificationSystem notificationSystem, Time time) {
+  public ClusterSpectatorFactory getClusterSpectatorFactory() {
+    return mockClusterSpectatorFactory;
+  }
+
+  /**
+   * Create initialization {@link VerifiableProperties} for server.
+   * @param dataNodeId {@link DataNodeId} object of the server initialized.
+   * @param enableDataPrefetch {@code enableDataPrefetch} flag.
+   * @param enableHardDeletes {@code enableHardDeletes} flag.
+   * @param sslProperties {@link Properties} object.
+   * @return {@link VerifiableProperties} object.
+   */
+  private VerifiableProperties createInitProperties(DataNodeId dataNodeId, boolean enableDataPrefetch,
+      boolean enableHardDeletes, Properties sslProperties) {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
@@ -221,8 +251,31 @@ public class MockCluster {
     props.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "100");
     props.putAll(sslProperties);
-    VerifiableProperties propverify = new VerifiableProperties(props);
-    AmbryServer server = new AmbryServer(propverify, mockClusterAgentsFactory, notificationSystem, time);
+    return new VerifiableProperties(props);
+  }
+
+  /**
+   * Initialize {@link AmbryServer} node.
+   * @param dataNodeId {@link DataNodeId} object of the server initialized.
+   * @param sslProperties {@link Properties} object.
+   * @param enableHardDeletes {@code enableHardDeletes} flag.
+   * @param enableDataPrefetch {@code enableDataPrefetch} flag.
+   * @param notificationSystem {@link NotificationSystem} object.
+   * @param time {@link Time} object.
+   * @param mockClusterAgentsFactory {@link MockClusterAgentsFactory} object. If null, use the member {@code mockClusterAgentsFactory}.
+   * @return {@link VerifiableProperties} object.
+   */
+  public void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
+      boolean enableDataPrefetch, NotificationSystem notificationSystem, Time time,
+      MockClusterAgentsFactory mockClusterAgentsFactory) {
+    AmbryServer server;
+    if (mockClusterAgentsFactory != null) {
+      server = new AmbryServer(createInitProperties(dataNodeId, enableDataPrefetch, enableHardDeletes, sslProperties),
+          mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time);
+    } else {
+      server = new AmbryServer(createInitProperties(dataNodeId, enableDataPrefetch, enableHardDeletes, sslProperties),
+          this.mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time);
+    }
     serverList.add(server);
   }
 

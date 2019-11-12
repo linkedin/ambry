@@ -11,13 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.protocol.GetRequest;
 import java.io.File;
 import java.util.Properties;
 import org.junit.Test;
@@ -57,7 +55,7 @@ public class CloudReplicaTest {
     CloudReplica cloudReplica = new CloudReplica(new MockPartitionId(), cloudDataNode);
     assertEquals("Wrong mount path", mockPartitionId.toPathString(), cloudReplica.getMountPath());
     assertEquals("Wrong replica path",
-        GetRequest.Cloud_Replica_Keyword + File.separator + mockPartitionId.toPathString() + File.separator
+        CloudReplica.Cloud_Replica_Keyword + File.separator + mockPartitionId.toPathString() + File.separator
             + mockPartitionId.toPathString(), cloudReplica.getReplicaPath());
     assertEquals("Wrong dataNodeId", cloudDataNode, cloudReplica.getDataNodeId());
     assertEquals("Wrong partitionId", mockPartitionId, cloudReplica.getPartitionId());

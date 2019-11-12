@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -61,7 +60,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  *
  * @see <a href="http://helix.apache.org">http://helix.apache.org</a>
  */
-class HelixClusterManager implements ClusterMap {
+public class HelixClusterManager implements ClusterMap {
   private static final Logger logger = LoggerFactory.getLogger(HelixClusterManager.class);
   private final String clusterName;
   private final String selfInstanceName;
@@ -104,7 +103,7 @@ class HelixClusterManager implements ClusterMap {
    * @throws IOException if there is an error in parsing the clusterMapConfig or in connecting with the associated
    *                     remote Zookeeper services.
    */
-  HelixClusterManager(ClusterMapConfig clusterMapConfig, String instanceName, HelixFactory helixFactory,
+  public HelixClusterManager(ClusterMapConfig clusterMapConfig, String instanceName, HelixFactory helixFactory,
       MetricRegistry metricRegistry) throws IOException {
     this.clusterMapConfig = clusterMapConfig;
     currentXid = new AtomicLong(clusterMapConfig.clustermapCurrentXid);
@@ -701,7 +700,7 @@ class HelixClusterManager implements ClusterMap {
         ambryDataNodeToAmbryDisks.get(datanode).add(disk);
 
         if (!replicasStr.isEmpty()) {
-          List<String> replicaInfoList = Arrays.asList(replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR));
+          String[] replicaInfoList = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
           for (String replicaInfo : replicaInfoList) {
             String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
             // partition name and replica name are the same.
@@ -948,4 +947,3 @@ class HelixClusterManager implements ClusterMap {
     }
   }
 }
-

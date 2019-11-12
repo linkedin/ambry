@@ -66,7 +66,6 @@ public class ClusterMapUtils {
   static final String AVAILABLE_STR = "AVAILABLE";
   static final String READ_ONLY_STR = "RO";
   static final String READ_WRITE_STR = "RW";
-  static final String UNAVAILABLE_STR = "UNAVAILABLE";
   static final String ZKCONNECTSTR_STR = "zkConnectStr";
   static final String ZKINFO_STR = "zkInfo";
   static final String DATACENTER_STR = "datacenter";
@@ -132,7 +131,7 @@ public class ClusterMapUtils {
    * @return a map of dcName -> DcInfo.
    * @throws JSONException if there is an error parsing the JSON.
    */
-  static Map<String, DcZkInfo> parseDcJsonAndPopulateDcInfo(String dcInfoJsonString) throws JSONException {
+  public static Map<String, DcZkInfo> parseDcJsonAndPopulateDcInfo(String dcInfoJsonString) throws JSONException {
     Map<String, DcZkInfo> dataCenterToZkAddress = new HashMap<>();
     JSONObject root = new JSONObject(dcInfoJsonString);
     JSONArray all = root.getJSONArray(ZKINFO_STR);
@@ -192,7 +191,7 @@ public class ClusterMapUtils {
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the datacenter name associated with the given instance.
    */
-  static String getDcName(InstanceConfig instanceConfig) {
+  public static String getDcName(InstanceConfig instanceConfig) {
     return instanceConfig.getRecord().getSimpleField(DATACENTER_STR);
   }
 
@@ -201,7 +200,7 @@ public class ClusterMapUtils {
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the ssl port associated with the given instance.
    */
-  static Integer getSslPortStr(InstanceConfig instanceConfig) {
+  public static Integer getSslPortStr(InstanceConfig instanceConfig) {
     String sslPortStr = instanceConfig.getRecord().getSimpleField(SSLPORT_STR);
     return sslPortStr == null ? null : Integer.valueOf(sslPortStr);
   }
@@ -514,4 +513,3 @@ public class ClusterMapUtils {
     }
   }
 }
-

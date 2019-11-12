@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
@@ -63,9 +64,9 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
    * @param clusterMap The clusterMap to use.
    */
   public HelixVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
-    if (Utils.isNullOrEmpty(cloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING)) {
+    if (Utils.isNullOrEmpty(cloudConfig.vcrClusterZkConnectString)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING);
-    } else if (Utils.isNullOrEmpty(cloudConfig.VCR_CLUSTER_NAME)) {
+    } else if (Utils.isNullOrEmpty(cloudConfig.vcrClusterName)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_CLUSTER_NAME);
     }
     this.cloudConfig = cloudConfig;
@@ -167,4 +168,3 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     helixAdmin.close();
   }
 }
-

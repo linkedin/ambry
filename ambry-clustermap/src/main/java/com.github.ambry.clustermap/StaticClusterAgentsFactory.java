@@ -18,6 +18,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import org.json.JSONException;
@@ -75,9 +76,15 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
   public ClusterParticipant getClusterParticipant() throws IOException {
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
+        private final List<PartitionStateChangeListener> listeners = new LinkedList<>();
+
         @Override
         public void participate(List<AmbryHealthReport> ambryHealthReports) {
-
+          for (PartitionStateChangeListener listener : listeners) {
+            for (String partitionName : partitionLayout.getAllPartitionNames()) {
+              listener.onPartitionStateChangeToLeaderFromStandby(partitionName);
+            }
+          }
         }
 
         @Override
@@ -104,6 +111,11 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         public List<String> getStoppedReplicas() {
           return Collections.emptyList();
         }
+
+        @Override
+        public void registerPartitionStateChangeListener(PartitionStateChangeListener partitionStateChangeListener) {
+          listeners.add(partitionStateChangeListener);
+        }
       };
     }
     return clusterParticipant;
@@ -116,4 +128,3 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
     return metricRegistry;
   }
 }
-

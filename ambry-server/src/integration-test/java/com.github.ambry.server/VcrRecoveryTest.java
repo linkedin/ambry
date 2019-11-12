@@ -23,10 +23,8 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.network.BlockingChannel;
@@ -39,13 +37,11 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -126,7 +122,8 @@ public class VcrRecoveryTest {
 
     // Create blobs and data for upload to vcr.
     int blobCount = 10;
-    blobIds = createBlobIds(blobCount);
+    blobIds =
+        ServerTestUtil.createBlobIds(blobCount, recoveryCluster.getClusterMap(), accountId, containerId, partitionId);
 
     // Create cloud destination and start vcr server.
     latchBasedInMemoryCloudDestination = new LatchBasedInMemoryCloudDestination(blobIds);
@@ -152,22 +149,6 @@ public class VcrRecoveryTest {
     vcrServer.shutdown();
     helixControllerManager.syncStop();
     zkInfo.shutdown();
-  }
-
-  /**
-   * Create {@code blobCount} number of {@link BlobId}s.
-   * @param blobCount number of {@link BlobId}s to create.
-   * @return list of {@link BlobId}s
-   */
-  private List<BlobId> createBlobIds(int blobCount) {
-    List<BlobId> blobIds = new ArrayList<>(blobCount);
-    for (int i = 0; i < blobCount; i++) {
-      BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-          recoveryCluster.getClusterMap().getLocalDatacenterId(), accountId, containerId, partitionId, false,
-          BlobId.BlobDataType.DATACHUNK);
-      blobIds.add(blobId);
-    }
-    return blobIds;
   }
 
   /**
@@ -197,7 +178,7 @@ public class VcrRecoveryTest {
       assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,
           partitionResponseInfo.getErrorCode());
       for (MessageInfo messageInfo : partitionResponseInfo.getMessageInfoList()) {
-        assertEquals(blobIdToSizeMap.get((BlobId) messageInfo.getStoreKey()) + 270, messageInfo.getSize());
+        assertEquals(blobIdToSizeMap.get(messageInfo.getStoreKey()) + 270, messageInfo.getSize());
       }
     }
   }
@@ -216,15 +197,8 @@ public class VcrRecoveryTest {
     Map<BlobId, Integer> blobIdToSizeMap = new HashMap<>();
     for (BlobId blobId : blobIds) {
       int blobSize = Utils.getRandomShort(TestUtils.RANDOM);
-      byte[] data = new byte[blobSize];
-      BlobProperties blobProperties =
-          new BlobProperties(blobSize, "serviceid1", null, null, false, Utils.Infinite_Time, accountId, containerId,
-              false, null);
-      TestUtils.RANDOM.nextBytes(data);
-      blobIdToSizeMap.put(blobId, blobSize);
       PutMessageFormatInputStream putMessageFormatInputStream =
-          new PutMessageFormatInputStream(blobId, null, blobProperties, ByteBuffer.wrap(userMetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(data)), blobSize);
+          ServerTestUtil.getPutMessageInputStreamForBlob(blobId, blobSize, blobIdToSizeMap, accountId, containerId);
       long time = System.currentTimeMillis();
       CloudBlobMetadata cloudBlobMetadata =
           new CloudBlobMetadata(blobId, time, Utils.Infinite_Time, putMessageFormatInputStream.getSize(),
@@ -258,15 +232,8 @@ public class VcrRecoveryTest {
     Map<BlobId, Integer> blobIdToSizeMap = new HashMap<>();
     int blobSize = FOUR_MB_SZ; // Currently ambry supports max size of 4MB for blobs.
     for (BlobId blobId : blobIds) {
-      byte[] data = new byte[blobSize];
-      BlobProperties blobProperties =
-          new BlobProperties(blobSize, "serviceid1", null, null, false, Utils.Infinite_Time, accountId, containerId,
-              false, null);
-      TestUtils.RANDOM.nextBytes(data);
-      blobIdToSizeMap.put(blobId, blobSize);
       PutMessageFormatInputStream putMessageFormatInputStream =
-          new PutMessageFormatInputStream(blobId, null, blobProperties, ByteBuffer.wrap(userMetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(data)), blobSize);
+          ServerTestUtil.getPutMessageInputStreamForBlob(blobId, blobSize, blobIdToSizeMap, accountId, containerId);
       long time = System.currentTimeMillis();
       CloudBlobMetadata cloudBlobMetadata =
           new CloudBlobMetadata(blobId, time, Utils.Infinite_Time, putMessageFormatInputStream.getSize(),
