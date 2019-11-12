@@ -22,7 +22,9 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.account.HelixAccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.NettyMetrics;
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
@@ -75,6 +77,7 @@ public class RestServer {
   private final NioServer nioServer;
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
+  private final NettyMetrics nettyMetrics = NettyMetrics.INSTANCE();
 
   /**
    * {@link RestServer} specific metrics tracking.
@@ -172,10 +175,9 @@ public class RestServer {
             sslFactory, accountService);
     router = routerFactory.getRouter();
 
-
     // setup the router for the account service
     if (accountService instanceof HelixAccountService) {
-      ((HelixAccountService)accountService).setupRouter(router);
+      ((HelixAccountService) accountService).setupRouter(router);
     }
 
     RestResponseHandlerFactory restResponseHandlerFactory =
@@ -203,6 +205,7 @@ public class RestServer {
         || restRequestHandler == null || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
     }
+    nettyMetrics.metricRegistry(metricRegistry).nettyConfig(new NettyConfig(verifiableProperties));
     logger.trace("Instantiated RestServer");
   }
 
@@ -246,6 +249,9 @@ public class RestServer {
 
       restServerState.markServiceUp();
       logger.info("Service marked as up");
+
+      nettyMetrics.start();
+      logger.info("NettyMetric starts");
     } finally {
       long startupTime = System.currentTimeMillis() - startupBeginTime;
       logger.info("RestServer start took {} ms", startupTime);
@@ -305,6 +311,9 @@ public class RestServer {
       elapsedTime = System.currentTimeMillis() - accountServiceCloseTime;
       logger.info("JMX reporter shutdown took {} ms", elapsedTime);
       restServerMetrics.jmxReporterShutdownTimeInMs.update(elapsedTime);
+
+      nettyMetrics.stop();
+      logger.info("NettyMetrics stops");
     } catch (IOException e) {
       logger.error("Exception during shutdown", e);
     } finally {
