@@ -566,6 +566,11 @@ public class IndexTest {
     // for segmented log, there is a header size = 18
     assertEquals("Absolute end position of last PUT record not expected",
         5 * PUT_RECORD_SIZE + (isLogSegmented ? 18 : 0), indexState.index.getAbsoluteEndPositionOfLastPut());
+    // close the index to seal all index segments
+    indexState.index.close(false);
+    // get end position of last PUT again, it should return same result (this is to test getting last PUT in sealed index segment)
+    assertEquals("Absolute end position of last PUT record not expected",
+        5 * PUT_RECORD_SIZE + (isLogSegmented ? 18 : 0), indexState.index.getAbsoluteEndPositionOfLastPut());
 
     // calculate current end position in log segment (note that there are 5 PUT, 5 TTL update and 5 DELETE entries)
     long currentEndPosition =
