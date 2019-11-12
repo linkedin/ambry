@@ -45,7 +45,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -78,9 +78,9 @@ public class CloudAndStoreReplicationTest {
   private LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination;
   private List<BlobId> cloudBlobIds;
   private List<BlobId> serverBlobIds;
-  final private short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-  final private short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-  final private static int FOUR_MB_SZ = 4194304;
+  private final short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+  private final short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+  private final static int FOUR_MB_SZ = 4194304;
 
   /**
    * Create a cluster with one vcr node and two ambry server data nodes.
@@ -96,11 +96,7 @@ public class CloudAndStoreReplicationTest {
     recoveryProperties.setProperty("clustermap.vcr.datacenter.name", cloudDc);
 
     // create vcr node
-    List<Port> vcrPortList = new ArrayList<>(2);
-    Port vcrClusterMapPort = new Port(12310, PortType.PLAINTEXT);
-    Port vcrSslPort = new Port(12410, PortType.SSL);
-    vcrPortList.add(vcrClusterMapPort);
-    vcrPortList.add(vcrSslPort);
+    List<Port> vcrPortList = Arrays.asList(new Port(12310, PortType.PLAINTEXT), new Port(12410, PortType.SSL));
 
     MockDataNodeId vcrNode =
         new MockDataNodeId("localhost", vcrPortList, Collections.singletonList(vcrMountPath), cloudDc);
@@ -148,13 +144,9 @@ public class CloudAndStoreReplicationTest {
 
     // initialize and start ambry servers
     for (MockDataNodeId serverNode : allRecoveryNodes) {
-      if (serverNode.equals(partitionLeaderRecoveryNode)) {
-        recoveryCluster.initializeServer(serverNode, recoveryProperties, false, true, notificationSystem,
-            SystemTime.getInstance(), leaderMockClusterAgentsFactory);
-      } else {
-        recoveryCluster.initializeServer(serverNode, recoveryProperties, false, true, notificationSystem,
-            SystemTime.getInstance());
-      }
+      recoveryCluster.initializeServer(serverNode, recoveryProperties, false, true, notificationSystem,
+          SystemTime.getInstance(),
+          serverNode.equals(partitionLeaderRecoveryNode) ? leaderMockClusterAgentsFactory : null);
     }
 
     recoveryCluster.startServers();
@@ -170,6 +162,79 @@ public class CloudAndStoreReplicationTest {
     vcrServer.shutdown();
     helixControllerManager.syncStop();
     zkInfo.shutdown();
+  }
+
+  /**
+   * Test replication from vcr to server nodes, and from server to server nodes. Creates one vcr node and two server nodes.
+   * Uploads data to vcr node and verifies that they have been replicated.
+   * Uploads data to one of the server nodes and verifies that they have been replicated.
+   * @throws Exception If an exception happens.
+   */
+  @Test
+  public void basicCloudRecoveryTest() throws Exception {
+    // Create blobs and upload to cloud destination.
+    Map<BlobId, Integer> blobIdToSizeMap = new HashMap<>();
+    for (BlobId blobId : cloudBlobIds) {
+      int blobSize = Utils.getRandomShort(TestUtils.RANDOM);
+      PutMessageFormatInputStream putMessageFormatInputStream =
+          ServerTestUtil.getPutMessageInputStreamForBlob(blobId, blobSize, blobIdToSizeMap, accountId, containerId);
+      long time = System.currentTimeMillis();
+      CloudBlobMetadata cloudBlobMetadata =
+          new CloudBlobMetadata(blobId, time, Utils.Infinite_Time, putMessageFormatInputStream.getSize(),
+              CloudBlobMetadata.EncryptionOrigin.NONE);
+      latchBasedInMemoryCloudDestination.uploadBlob(blobId, putMessageFormatInputStream.getSize(), cloudBlobMetadata,
+          putMessageFormatInputStream);
+    }
+
+    // Create blobs and upload to one of the server nodes.
+    sendBlobToDataNode(partitionLeaderRecoveryNode, Utils.getRandomShort(TestUtils.RANDOM), blobIdToSizeMap);
+
+    // Waiting for download attempt
+    assertTrue("Did not recover all blobs in 1 minute",
+        latchBasedInMemoryCloudDestination.awaitDownload(1, TimeUnit.MINUTES));
+
+    // Waiting for replication to complete
+    Thread.sleep(10000);
+
+    // Test cloud to store and store to store replication by sending get request to server nodes.
+    testGetOnServerNodes(blobIdToSizeMap);
+  }
+
+  /**
+   * Test replication from vcr to server nodes, and from server to server nodes for large blobs.
+   * Creates one vcr node and two server nodes.
+   * Uploads data to vcr node and verifies that they have been replicated.
+   * Uploads data to one of the server nodes and verifies that they have been replicated.
+   * @throws Exception If an exception happens.
+   */
+  @Test
+  public void cloudRecoveryTestForLargeBlob() throws Exception {
+    // Create blobs and upload to cloud destination.
+    Map<BlobId, Integer> blobIdToSizeMap = new HashMap<>();
+    int blobSize = FOUR_MB_SZ; // Currently ambry supports max size of 4MB for blobs.
+    for (BlobId blobId : cloudBlobIds) {
+      PutMessageFormatInputStream putMessageFormatInputStream =
+          ServerTestUtil.getPutMessageInputStreamForBlob(blobId, blobSize, blobIdToSizeMap, accountId, containerId);
+      long time = System.currentTimeMillis();
+      CloudBlobMetadata cloudBlobMetadata =
+          new CloudBlobMetadata(blobId, time, Utils.Infinite_Time, putMessageFormatInputStream.getSize(),
+              CloudBlobMetadata.EncryptionOrigin.NONE);
+      latchBasedInMemoryCloudDestination.uploadBlob(blobId, putMessageFormatInputStream.getSize(), cloudBlobMetadata,
+          putMessageFormatInputStream);
+    }
+
+    // Create blobs and upload to one of the server nodes.
+    sendBlobToDataNode(partitionLeaderRecoveryNode, blobSize, blobIdToSizeMap);
+
+    // Waiting for download attempt
+    assertTrue("Did not recover all blobs in 1 minute",
+        latchBasedInMemoryCloudDestination.awaitDownload(1, TimeUnit.MINUTES));
+
+    // Waiting for replication to complete
+    Thread.sleep(10000);
+
+    // Test cloud to store and store to store replication by sending get request to server nodes.
+    testGetOnServerNodes(blobIdToSizeMap);
   }
 
   /**
@@ -248,78 +313,5 @@ public class CloudAndStoreReplicationTest {
     for (BlobId blobId : blobIds) {
       blobIdToSizeMap.put(blobId, blobSize);
     }
-  }
-
-  /**
-   * Test replication from vcr to server nodes, and from server to server nodes. Creates one vcr node and two server nodes.
-   * Uploads data to vcr node and verifies that they have been replicated.
-   * Uploads data to one of the server nodes and verifies that they have been replicated.
-   * @throws Exception If an exception happens.
-   */
-  @Test
-  public void basicCloudRecoveryTest() throws Exception {
-    // Create blobs and upload to cloud destination.
-    Map<BlobId, Integer> blobIdToSizeMap = new HashMap<>();
-    for (BlobId blobId : cloudBlobIds) {
-      int blobSize = Utils.getRandomShort(TestUtils.RANDOM);
-      PutMessageFormatInputStream putMessageFormatInputStream =
-          ServerTestUtil.getPutMessageInputStreamForBlob(blobId, blobSize, blobIdToSizeMap, accountId, containerId);
-      long time = System.currentTimeMillis();
-      CloudBlobMetadata cloudBlobMetadata =
-          new CloudBlobMetadata(blobId, time, Utils.Infinite_Time, putMessageFormatInputStream.getSize(),
-              CloudBlobMetadata.EncryptionOrigin.NONE);
-      latchBasedInMemoryCloudDestination.uploadBlob(blobId, putMessageFormatInputStream.getSize(), cloudBlobMetadata,
-          putMessageFormatInputStream);
-    }
-
-    // Create blobs and upload to one of the server nodes.
-    sendBlobToDataNode(partitionLeaderRecoveryNode, Utils.getRandomShort(TestUtils.RANDOM), blobIdToSizeMap);
-
-    // Waiting for download attempt
-    assertTrue("Did not recover all blobs in 1 minute",
-        latchBasedInMemoryCloudDestination.awaitDownload(1, TimeUnit.MINUTES));
-
-    // Waiting for replication to complete
-    Thread.sleep(10000);
-
-    // Test cloud to store and store to store replication by sending get request to server nodes.
-    testGetOnServerNodes(blobIdToSizeMap);
-  }
-
-  /**
-   * Test replication from vcr to server nodes, and from server to server nodes for large blobs.
-   * Creates one vcr node and two server nodes.
-   * Uploads data to vcr node and verifies that they have been replicated.
-   * Uploads data to one of the server nodes and verifies that they have been replicated.
-   * @throws Exception If an exception happens.
-   */
-  @Test
-  public void cloudRecoveryTestForLargeBlob() throws Exception {
-    // Create blobs and upload to cloud destination.
-    Map<BlobId, Integer> blobIdToSizeMap = new HashMap<>();
-    int blobSize = FOUR_MB_SZ; // Currently ambry supports max size of 4MB for blobs.
-    for (BlobId blobId : cloudBlobIds) {
-      PutMessageFormatInputStream putMessageFormatInputStream =
-          ServerTestUtil.getPutMessageInputStreamForBlob(blobId, blobSize, blobIdToSizeMap, accountId, containerId);
-      long time = System.currentTimeMillis();
-      CloudBlobMetadata cloudBlobMetadata =
-          new CloudBlobMetadata(blobId, time, Utils.Infinite_Time, putMessageFormatInputStream.getSize(),
-              CloudBlobMetadata.EncryptionOrigin.NONE);
-      latchBasedInMemoryCloudDestination.uploadBlob(blobId, putMessageFormatInputStream.getSize(), cloudBlobMetadata,
-          putMessageFormatInputStream);
-    }
-
-    // Create blobs and upload to one of the server nodes.
-    sendBlobToDataNode(partitionLeaderRecoveryNode, blobSize, blobIdToSizeMap);
-
-    // Waiting for download attempt
-    assertTrue("Did not recover all blobs in 1 minute",
-        latchBasedInMemoryCloudDestination.awaitDownload(1, TimeUnit.MINUTES));
-
-    // Waiting for replication to complete
-    Thread.sleep(10000);
-
-    // Test cloud to store and store to store replication by sending get request to server nodes.
-    testGetOnServerNodes(blobIdToSizeMap);
   }
 }

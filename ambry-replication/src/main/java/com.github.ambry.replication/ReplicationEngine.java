@@ -451,7 +451,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       try {
         persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
       } catch (IOException | ReplicationException e) {
-        logger.warn(
+        logger.error(
             "Exception " + e + " on token write when removing Partition " + partitionId + " from: " + dataNodeId);
       }
     }

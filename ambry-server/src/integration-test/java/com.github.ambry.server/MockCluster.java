@@ -262,33 +262,20 @@ public class MockCluster {
    * @param enableDataPrefetch {@code enableDataPrefetch} flag.
    * @param notificationSystem {@link NotificationSystem} object.
    * @param time {@link Time} object.
-   * @return {@link VerifiableProperties} object.
-   */
-  public void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
-      boolean enableDataPrefetch, NotificationSystem notificationSystem, Time time) {
-    AmbryServer server =
-        new AmbryServer(createInitProperties(dataNodeId, enableDataPrefetch, enableHardDeletes, sslProperties),
-            mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time);
-    serverList.add(server);
-  }
-
-  /**
-   * Initialize {@link AmbryServer} node.
-   * @param dataNodeId {@link DataNodeId} object of the server initialized.
-   * @param sslProperties {@link Properties} object.
-   * @param enableHardDeletes {@code enableHardDeletes} flag.
-   * @param enableDataPrefetch {@code enableDataPrefetch} flag.
-   * @param notificationSystem {@link NotificationSystem} object.
-   * @param time {@link Time} object.
-   * @param mockClusterAgentsFactory {@link MockClusterAgentsFactory} object.
+   * @param mockClusterAgentsFactory {@link MockClusterAgentsFactory} object. If null, use the member {@code mockClusterAgentsFactory}.
    * @return {@link VerifiableProperties} object.
    */
   public void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
       boolean enableDataPrefetch, NotificationSystem notificationSystem, Time time,
       MockClusterAgentsFactory mockClusterAgentsFactory) {
-    AmbryServer server =
-        new AmbryServer(createInitProperties(dataNodeId, enableDataPrefetch, enableHardDeletes, sslProperties),
-            mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time);
+    AmbryServer server;
+    if (mockClusterAgentsFactory != null) {
+      server = new AmbryServer(createInitProperties(dataNodeId, enableDataPrefetch, enableHardDeletes, sslProperties),
+          mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time);
+    } else {
+      server = new AmbryServer(createInitProperties(dataNodeId, enableDataPrefetch, enableHardDeletes, sslProperties),
+          this.mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time);
+    }
     serverList.add(server);
   }
 
