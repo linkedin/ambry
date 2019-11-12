@@ -47,6 +47,10 @@ import org.slf4j.LoggerFactory;
 public class NettyMetrics {
 
   private static final Logger logger = LoggerFactory.getLogger(NettyMetrics.class);
+  private volatile MetricRegistry registry;
+  private volatile NettyConfig config;
+  private ScheduledExecutorService scheduler = null;
+  private AtomicBoolean started = new AtomicBoolean();
 
   /**
    * Constructor to create a {@link NettyMetrics};
@@ -59,11 +63,6 @@ public class NettyMetrics {
     this.registry = registry;
     this.config = config;
   }
-
-  private volatile MetricRegistry registry;
-  private volatile NettyConfig config;
-  private ScheduledExecutorService scheduler = null;
-  private AtomicBoolean started = new AtomicBoolean();
 
   private volatile int numDirectArenas;
   private volatile int numHeapArenas;
@@ -132,17 +131,17 @@ public class NettyMetrics {
         (Gauge<Long>) () -> getUsedHeapMemory());
     registry.register(MetricRegistry.name(NettyMetrics.class, "UsedDirectMemory"),
         (Gauge<Long>) () -> getUsedDirectMemory());
-    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalAlloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalAllocations"),
         (Gauge<Long>) () -> getNumHeapTotalAllocations());
-    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalDealloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalDeallocations"),
         (Gauge<Long>) () -> getNumHeapTotalDeallocations());
-    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalActiveAlloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalActiveAllocations"),
         (Gauge<Long>) () -> getNumHeapTotalActiveAllocations());
-    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalAlloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalAllocations"),
         (Gauge<Long>) () -> getNumDirectTotalAllocations());
-    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalDealloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalDeallocations"),
         (Gauge<Long>) () -> getNumDirectTotalDeallocations());
-    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalActiveAlloocations"),
+    registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalActiveAllocations"),
         (Gauge<Long>) () -> getNumDirectTotalActiveAllocations());
   }
 
@@ -155,7 +154,7 @@ public class NettyMetrics {
       scheduler = Utils.newScheduler(1, false);
       scheduler.scheduleAtFixedRate(new NettyMetricCollector(), 0, config.nettyMetricsRefreshIntervalSeconds,
           TimeUnit.SECONDS);
-      logger.trace("Schedule netty metric collector");
+      logger.info("Schedule netty metric collector");
     }
   }
 
@@ -167,7 +166,7 @@ public class NettyMetrics {
     if (started.compareAndSet(true, false)) {
       if (scheduler != null) {
         Utils.shutDownExecutorService(scheduler, config.nettyMetricsStopWaitTimeoutSeconds, TimeUnit.SECONDS);
-        logger.trace("De-scheduled for collecting netty metrics");
+        logger.info("De-scheduled for collecting netty metrics");
       }
     }
   }

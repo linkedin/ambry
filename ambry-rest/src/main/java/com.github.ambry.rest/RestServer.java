@@ -247,11 +247,11 @@ public class RestServer {
       logger.info("NIO server start took {} ms", elapsedTime);
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
 
-      restServerState.markServiceUp();
-      logger.info("Service marked as up");
-
       nettyMetrics.start();
       logger.info("NettyMetric starts");
+
+      restServerState.markServiceUp();
+      logger.info("Service marked as up");
     } finally {
       long startupTime = System.currentTimeMillis() - startupBeginTime;
       logger.info("RestServer start took {} ms", startupTime);
@@ -271,6 +271,10 @@ public class RestServer {
       //ordering is important.
       restServerState.markServiceDown();
       logger.info("Service marked as down ");
+
+      nettyMetrics.stop();
+      logger.info("NettyMetrics stops");
+
       nioServer.shutdown();
       long nioServerShutdownTime = System.currentTimeMillis();
       long elapsedTime = nioServerShutdownTime - shutdownBeginTime;
@@ -311,9 +315,6 @@ public class RestServer {
       elapsedTime = System.currentTimeMillis() - accountServiceCloseTime;
       logger.info("JMX reporter shutdown took {} ms", elapsedTime);
       restServerMetrics.jmxReporterShutdownTimeInMs.update(elapsedTime);
-
-      nettyMetrics.stop();
-      logger.info("NettyMetrics stops");
     } catch (IOException e) {
       logger.error("Exception during shutdown", e);
     } finally {
