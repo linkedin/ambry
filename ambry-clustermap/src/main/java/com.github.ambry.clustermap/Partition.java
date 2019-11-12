@@ -17,9 +17,11 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -93,22 +95,19 @@ class Partition implements PartitionId {
 
   @Override
   public List<ReplicaId> getReplicaIds() {
-    List<Replica> replicas = getReplicas();
-    return new ArrayList<>(replicas);
+    return getReplicaIdsByState(ReplicaState.STANDBY, null);
   }
 
   @Override
   public List<ReplicaId> getReplicaIdsByState(ReplicaState state, String dcName) {
     // for static clustermap we assume all replicas are in StandBy state.
     List<ReplicaId> result = new ArrayList<>();
-    if (state.equals(ReplicaState.STANDBY.name())) {
-      for (ReplicaId replicaId : replicas) {
-        if (dcName == null || replicaId.getDataNodeId().getDatacenterName().equals(dcName)) {
-          result.add(replicaId);
-        }
-      }
+    if (state == ReplicaState.STANDBY) {
+      result = replicas.stream()
+          .filter(k -> dcName == null || k.getDataNodeId().getDatacenterName().equals(dcName))
+          .collect(Collectors.toList());
     }
-    return result;
+    return Collections.unmodifiableList(result);
   }
 
   @Override
