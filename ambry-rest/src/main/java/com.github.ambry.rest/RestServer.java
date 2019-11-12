@@ -25,6 +25,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.NettyMetrics;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
@@ -205,7 +206,12 @@ public class RestServer {
         || restRequestHandler == null || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
     }
-    nettyMetrics = new NettyMetrics(metricRegistry, new NettyConfig(verifiableProperties));
+    NetworkConfig networkConfig = new NetworkConfig(verifiableProperties);
+    if (networkConfig.networkUseNettyByteBuf) {
+      nettyMetrics = new NettyMetrics(metricRegistry, new NettyConfig(verifiableProperties));
+    } else {
+      nettyMetrics = null;
+    }
     logger.trace("Instantiated RestServer");
   }
 
@@ -247,8 +253,10 @@ public class RestServer {
       logger.info("NIO server start took {} ms", elapsedTime);
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
 
-      nettyMetrics.start();
-      logger.info("NettyMetric starts");
+      if (nettyMetrics != null) {
+        nettyMetrics.start();
+        logger.info("NettyMetric starts");
+      }
 
       restServerState.markServiceUp();
       logger.info("Service marked as up");
@@ -272,8 +280,10 @@ public class RestServer {
       restServerState.markServiceDown();
       logger.info("Service marked as down ");
 
-      nettyMetrics.stop();
-      logger.info("NettyMetrics stops");
+      if (nettyMetrics != null) {
+        nettyMetrics.stop();
+        logger.info("NettyMetrics stops");
+      }
 
       nioServer.shutdown();
       long nioServerShutdownTime = System.currentTimeMillis();
