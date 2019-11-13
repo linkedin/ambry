@@ -122,27 +122,26 @@ public class NettyMetrics {
 
   private void register() {
     registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectArenas"),
-        (Gauge<Integer>) () -> getNumDirectArenas());
+        (Gauge<Integer>) this::getNumDirectArenas);
     registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapArenas"),
-        (Gauge<Integer>) () -> getNumHeapArenas());
+        (Gauge<Integer>) this::getNumHeapArenas);
     registry.register(MetricRegistry.name(NettyMetrics.class, "NumberThreadLocalCaches"),
-        (Gauge<Integer>) () -> getNumThreadLocalCaches());
-    registry.register(MetricRegistry.name(NettyMetrics.class, "UsedHeapMemory"),
-        (Gauge<Long>) () -> getUsedHeapMemory());
+        (Gauge<Integer>) this::getNumThreadLocalCaches);
+    registry.register(MetricRegistry.name(NettyMetrics.class, "UsedHeapMemory"), (Gauge<Long>) this::getUsedHeapMemory);
     registry.register(MetricRegistry.name(NettyMetrics.class, "UsedDirectMemory"),
-        (Gauge<Long>) () -> getUsedDirectMemory());
+        (Gauge<Long>) this::getUsedDirectMemory);
     registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalAllocations"),
-        (Gauge<Long>) () -> getNumHeapTotalAllocations());
+        (Gauge<Long>) this::getNumHeapTotalAllocations);
     registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalDeallocations"),
-        (Gauge<Long>) () -> getNumHeapTotalDeallocations());
+        (Gauge<Long>) this::getNumHeapTotalDeallocations);
     registry.register(MetricRegistry.name(NettyMetrics.class, "NumberHeapTotalActiveAllocations"),
-        (Gauge<Long>) () -> getNumHeapTotalActiveAllocations());
+        (Gauge<Long>) this::getNumHeapTotalActiveAllocations);
     registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalAllocations"),
-        (Gauge<Long>) () -> getNumDirectTotalAllocations());
+        (Gauge<Long>) this::getNumDirectTotalAllocations);
     registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalDeallocations"),
-        (Gauge<Long>) () -> getNumDirectTotalDeallocations());
+        (Gauge<Long>) this::getNumDirectTotalDeallocations);
     registry.register(MetricRegistry.name(NettyMetrics.class, "NumberDirectTotalActiveAllocations"),
-        (Gauge<Long>) () -> getNumDirectTotalActiveAllocations());
+        (Gauge<Long>) this::getNumDirectTotalActiveAllocations);
   }
 
   /**
