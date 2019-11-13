@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -52,6 +53,11 @@ class JournalEntry {
     }
     JournalEntry entry = (JournalEntry) o;
     return this.offset == entry.offset && this.key == entry.key;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(offset, key);
   }
 }
 
@@ -174,6 +180,7 @@ class Journal {
     List<JournalEntry> result = new ArrayList<>();
     // get current last Offset
     Offset lastOffset = getLastOffset();
+    journal.entrySet();
     if (lastOffset != null) {
       // get portion view of journal whose key is less than or equal to lastOffset
       NavigableMap<Offset, StoreKey> journalView = journal.headMap(lastOffset, true);
@@ -232,11 +239,11 @@ class Journal {
     inBootstrapMode = false;
   }
 
-  boolean isInBootstrapMode(){
+  boolean isInBootstrapMode() {
     return inBootstrapMode;
   }
 
-  int getMaxEntriesToJournal(){
+  int getMaxEntriesToJournal() {
     return maxEntriesToJournal;
   }
 

@@ -1064,7 +1064,8 @@ class PersistentIndex {
   }
 
   /**
-   * @return absolute end position (in bytes) of latest PUT record when this method is invoked.
+   * @return absolute end position (in bytes) of latest PUT record when this method is invoked. If no PUT is found in
+   *         current store, -1 will be returned.
    * @throws StoreException
    */
   long getAbsoluteEndPositionOfLastPut() throws StoreException {
@@ -1072,7 +1073,7 @@ class PersistentIndex {
     // 1. go through keys in journal in reverse order to see if there is a PUT index entry associated with the key
     List<JournalEntry> journalEntries = journal.getAllEntries();
     ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
-    // check entry in reverse order (from the most recent one) to find first PUT record in index
+    // check entry in reverse order (from the most recent one) to find last PUT record in index
     for (int i = journalEntries.size() - 1; i >= 0; --i) {
       JournalEntry entry = journalEntries.get(i);
       indexValueOfLastPut = findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),

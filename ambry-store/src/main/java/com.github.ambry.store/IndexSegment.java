@@ -778,6 +778,10 @@ class IndexSegment {
           if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
               || indexValue.compareTo(indexValueOfLastPut) > 0)) {
             indexValueOfLastPut = indexValue;
+            // note that values set contains all entries associated with specific key, so there are at most 3 entries in
+            // this set (one PUT, one TTL Update and one DELETE). Due to nature of log, PUT always comes first. And if we
+            // already find PUT, we can jump out of the inner loop.
+            break;
           }
         }
       }
@@ -788,6 +792,7 @@ class IndexSegment {
           if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
               || indexValue.compareTo(indexValueOfLastPut) > 0)) {
             indexValueOfLastPut = indexValue;
+            break;
           }
         }
       }
