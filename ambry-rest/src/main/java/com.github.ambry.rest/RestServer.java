@@ -22,7 +22,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.account.HelixAccountService;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.commons.NettyMetrics;
+import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
@@ -78,7 +78,7 @@ public class RestServer {
   private final NioServer nioServer;
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
-  private final NettyMetrics nettyMetrics;
+  private final NettyInternalMetrics nettyInternalMetrics;
 
   /**
    * {@link RestServer} specific metrics tracking.
@@ -208,9 +208,9 @@ public class RestServer {
     }
     NetworkConfig networkConfig = new NetworkConfig(verifiableProperties);
     if (networkConfig.networkUseNettyByteBuf) {
-      nettyMetrics = new NettyMetrics(metricRegistry, new NettyConfig(verifiableProperties));
+      nettyInternalMetrics = new NettyInternalMetrics(metricRegistry, new NettyConfig(verifiableProperties));
     } else {
-      nettyMetrics = null;
+      nettyInternalMetrics = null;
     }
     logger.trace("Instantiated RestServer");
   }
@@ -253,9 +253,9 @@ public class RestServer {
       logger.info("NIO server start took {} ms", elapsedTime);
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
 
-      if (nettyMetrics != null) {
-        nettyMetrics.start();
-        logger.info("NettyMetric starts");
+      if (nettyInternalMetrics != null) {
+        nettyInternalMetrics.start();
+        logger.info("NettyInternalMetric starts");
       }
 
       restServerState.markServiceUp();
@@ -280,9 +280,9 @@ public class RestServer {
       restServerState.markServiceDown();
       logger.info("Service marked as down ");
 
-      if (nettyMetrics != null) {
-        nettyMetrics.stop();
-        logger.info("NettyMetrics stops");
+      if (nettyInternalMetrics != null) {
+        nettyInternalMetrics.stop();
+        logger.info("NettyInternalMetrics stops");
       }
 
       nioServer.shutdown();
