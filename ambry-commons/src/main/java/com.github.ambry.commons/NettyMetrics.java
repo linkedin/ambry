@@ -47,8 +47,8 @@ import org.slf4j.LoggerFactory;
 public class NettyMetrics {
 
   private static final Logger logger = LoggerFactory.getLogger(NettyMetrics.class);
-  private volatile MetricRegistry registry;
-  private volatile NettyConfig config;
+  private final MetricRegistry registry;
+  private final NettyConfig config;
   private ScheduledExecutorService scheduler = null;
   private AtomicBoolean started = new AtomicBoolean();
 
