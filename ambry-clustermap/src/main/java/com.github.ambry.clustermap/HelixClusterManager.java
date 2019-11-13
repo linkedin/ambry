@@ -159,7 +159,7 @@ class HelixClusterManager implements ClusterMap {
             logger.info("Creating routing table provider associated with Helix manager at {}", zkConnectStr);
             RoutingTableProvider routingTableProvider = new RoutingTableProvider(manager, PropertyType.CURRENTSTATES);
             logger.info("Routing table provider is created in {}", dcName);
-            DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler, routingTableProvider);
+            DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler);
             dcToDcZkInfo.put(dcName, dcInfo);
             dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcName);
             dcToRoutingTableSnapshotRef.put(dcName,
@@ -855,7 +855,6 @@ class HelixClusterManager implements ClusterMap {
     final DcZkInfo dcZkInfo;
     final HelixManager helixManager;
     final ClusterChangeHandler clusterChangeHandler;
-    final RoutingTableProvider routingTableProvider;
 
     /**
      * Construct a DcInfo object with the given parameters.
@@ -863,15 +862,12 @@ class HelixClusterManager implements ClusterMap {
      * @param dcZkInfo the {@link DcZkInfo} associated with the DC.
      * @param helixManager the associated {@link HelixManager} for this datacenter.
      * @param clusterChangeHandler the associated {@link ClusterChangeHandler} for this datacenter.
-     * @param routingTableProvider the associated {@link RoutingTableProvider} for this datacenter.
      */
-    DcInfo(String dcName, DcZkInfo dcZkInfo, HelixManager helixManager, ClusterChangeHandler clusterChangeHandler,
-        RoutingTableProvider routingTableProvider) {
+    DcInfo(String dcName, DcZkInfo dcZkInfo, HelixManager helixManager, ClusterChangeHandler clusterChangeHandler) {
       this.dcName = dcName;
       this.dcZkInfo = dcZkInfo;
       this.helixManager = helixManager;
       this.clusterChangeHandler = clusterChangeHandler;
-      this.routingTableProvider = routingTableProvider;
     }
   }
 
