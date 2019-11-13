@@ -99,6 +99,7 @@ class GetBlobOperation extends GetOperation {
   private ListIterator<CompositeBlobInfo.ChunkMetadata> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
   private Map<Integer, ByteBuffer> chunkIndexToBuffer;
+  private Map<Integer, ResponseInfo> chunkIndexToResponseInfo;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
   // the blob info that is populated on OperationType.BlobInfo or OperationType.All
@@ -336,6 +337,8 @@ class GetBlobOperation extends GetOperation {
         if (exception != null) {
           setOperationException(exception);
         }
+        chunkIndexToResponseInfo.get(numChunksWrittenOut).release();
+        chunkIndexToResponseInfo.remove(numChunksWrittenOut);
         numChunksWrittenOut++;
         routerCallback.onPollReady();
       }
@@ -377,6 +380,7 @@ class GetBlobOperation extends GetOperation {
     @Override
     public void close() throws IOException {
       if (isOpen.compareAndSet(true, false)) {
+        chunkIndexToResponseInfo.values().forEach(ResponseInfo::release);
         if (numChunksWrittenOut != numChunksTotal) {
           setOperationException(new RouterException(
               "The ReadableStreamChannel for blob data has been closed by the user before all chunks were written out.",
@@ -623,6 +627,10 @@ class GetBlobOperation extends GetOperation {
           logger.trace("Decrypt result successfully updated for data chunk {}", chunkBlobId);
           progressTracker.setCryptoJobSuccess();
         } else {
+          ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(chunkIndex);
+          if (responseInfo != null) {
+            responseInfo.release();
+          }
           decryptJobMetricsTracker.incrementOperationError();
           logger.trace("Setting operation exception as decryption callback invoked with exception {} for data chunk {}",
               decryptCallbackResultInfo.exception, chunkBlobId);
@@ -714,18 +722,21 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Handle the body of the response: Deserialize and add to the list of chunk buffers.
+     * @param responseInfo the response received for a request sent out on behalf of this chunk.
      * @param payload the body of the response.
      * @param messageMetadata the {@link MessageMetadata} associated with the message.
      * @param messageInfo the {@link MessageInfo} associated with the message.
      * @throws IOException if there is an IOException while deserializing the body.
      * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
      */
-    void handleBody(InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
+    void handleBody(ResponseInfo responseInfo, InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
         throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
         ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
         ByteBuffer chunkBuffer = blobData.getStream().getByteBuffer();
+        responseInfo.setDelayRelease();
+        chunkIndexToResponseInfo.put(chunkIndex, responseInfo);
 
         boolean launchedJob = maybeLaunchCryptoJob(chunkBuffer, null, encryptionKey, chunkBlobId);
         if (!launchedJob) {
@@ -792,7 +803,7 @@ class GetBlobOperation extends GetOperation {
             // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
             try {
-              processGetBlobResponse(getRequestInfo, getResponse);
+              processGetBlobResponse(responseInfo, getRequestInfo, getResponse);
             } catch (IOException | MessageFormatException e) {
               // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
               // detection.
@@ -857,12 +868,13 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Process the GetResponse extracted from a {@link ResponseInfo}
+     * @param responseInfo the response received for a request sent out on behalf of this chunk.
      * @param getRequestInfo the associated {@link RequestInfo} for which this response was received.
      * @param getResponse the {@link GetResponse} extracted from the {@link ResponseInfo}
      * @throws IOException if there is an error during deserialization of the GetResponse.
      * @throws MessageFormatException if there is an error during deserialization of the GetResponse.
      */
-    private void processGetBlobResponse(GetRequestInfo getRequestInfo, GetResponse getResponse)
+    private void processGetBlobResponse(ResponseInfo responseInfo, GetRequestInfo getRequestInfo, GetResponse getResponse)
         throws IOException, MessageFormatException {
       ServerErrorCode getError = getResponse.getError();
       if (getError == ServerErrorCode.No_Error) {
@@ -884,7 +896,7 @@ class GetBlobOperation extends GetOperation {
             } else {
               MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
               MessageInfo messageInfo = partitionResponseInfo.getMessageInfoList().get(0);
-              handleBody(getResponse.getInputStream(), messageMetadata, messageInfo);
+              handleBody(responseInfo, getResponse.getInputStream(), messageMetadata, messageInfo);
               chunkOperationTracker.onResponse(getRequestInfo.replicaId, TrackedRequestFinalState.SUCCESS);
               if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
                 logger.trace("Cross colo request successful for remote replica in {} ",
@@ -1089,6 +1101,10 @@ class GetBlobOperation extends GetOperation {
           decryptJobMetricsTracker.incrementOperationError();
           logger.trace("Decryption job callback invoked with exception for {} blob {} ", blobType, blobId,
               decryptCallbackResultInfo.exception);
+          ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(chunkIndex);
+          if (responseInfo != null) {
+            responseInfo.release();
+          }
           setOperationException(
               new RouterException("Exception thrown on decrypting content for " + blobType + " blob " + blobId,
                   decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
@@ -1132,7 +1148,7 @@ class GetBlobOperation extends GetOperation {
      * or the only chunk of the blob.
      */
     @Override
-    void handleBody(InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
+    void handleBody(ResponseInfo responseInfo, InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
         throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData;
@@ -1173,6 +1189,7 @@ class GetBlobOperation extends GetOperation {
         }
         blobType = blobData.getBlobType();
         chunkIndexToBuffer = new TreeMap<>();
+        chunkIndexToResponseInfo = new TreeMap<>();
         if (rawMode) {
           // Return the raw bytes from storage
           if (encryptionKey != null) {
@@ -1181,15 +1198,17 @@ class GetBlobOperation extends GetOperation {
             chunkIndex = 0;
             numChunksTotal = 1;
             chunkIndexToBuffer.put(0, rawPayloadBuffer);
+            responseInfo.setDelayRelease();
+            chunkIndexToResponseInfo.put(0, responseInfo);
             numChunksRetrieved = 1;
           } else {
             setOperationException(new IllegalStateException("Only encrypted blobs supported in raw mode"));
           }
         } else {
           if (blobType == BlobType.MetadataBlob) {
-            handleMetadataBlob(blobData, userMetadata, encryptionKey);
+            handleMetadataBlob(responseInfo, blobData, userMetadata, encryptionKey);
           } else {
-            handleSimpleBlob(blobData, userMetadata, encryptionKey);
+            handleSimpleBlob(responseInfo, blobData, userMetadata, encryptionKey);
           }
         }
         successfullyDeserialized = true;
@@ -1235,13 +1254,14 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Process a metadata blob to find the data chunks that need to be fetched.
+     * @param responseInfo the response received for a request sent out on behalf of this chunk.
      * @param blobData the metadata blob's data.
      * @param userMetadata userMetadata of the blob
      * @param encryptionKey blob encryption key. Could be null for un-encrypted blobs
      * @throws IOException
      * @throws MessageFormatException
      */
-    private void handleMetadataBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey)
+    private void handleMetadataBlob(ResponseInfo responseInfo, BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey)
         throws IOException, MessageFormatException {
       ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
       compositeBlobInfo =
@@ -1319,11 +1339,12 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Process a simple blob and extract the requested data from the blob.
+     * @param responseInfo the response received for a request sent out on behalf of this chunk.
      * @param blobData the simple blob's data
      * @param userMetadata userMetadata of the blob
      * @param encryptionKey encryption key for the blob. Could be null for non encrypted blob.
      */
-    private void handleSimpleBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
+    private void handleSimpleBlob(ResponseInfo responseInfo, BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
       boolean rangeResolutionFailure = false;
       if (encryptionKey == null) {
         totalSize = blobData.getSize();
@@ -1337,6 +1358,8 @@ class GetBlobOperation extends GetOperation {
         chunkIndex = 0;
         numChunksTotal = 1;
         ByteBuffer dataBuffer = blobData.getStream().getByteBuffer();
+        responseInfo.setDelayRelease();
+        chunkIndexToResponseInfo.put(0, responseInfo);
         boolean launchedJob = maybeLaunchCryptoJob(dataBuffer, userMetadata, encryptionKey, blobId);
         if (!launchedJob) {
           chunkIndexToBuffer.put(0, filterChunkToRange(dataBuffer));

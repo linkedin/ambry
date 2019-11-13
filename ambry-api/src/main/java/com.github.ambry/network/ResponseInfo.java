@@ -15,6 +15,7 @@ package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
 import io.netty.util.ReferenceCountUtil;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
@@ -28,6 +29,7 @@ public class ResponseInfo {
   private final NetworkClientErrorCode error;
   private final Object response;
   private final DataNodeId dataNode;
+  private AtomicBoolean delayRelease = new AtomicBoolean();
 
   /**
    * Constructs a ResponseInfo with the given parameters.
@@ -67,7 +69,16 @@ public class ResponseInfo {
     return response;
   }
 
+  public void setDelayRelease() {
+    delayRelease.getAndSet(true);
+  }
+
   public void release() {
+    // if set delay release, then when this method is invoked for the first time, don't do anything.
+    // when it's called second time, release it.
+    if (delayRelease.compareAndSet(true, false)) {
+      return;
+    }
     if (response != null) {
       ReferenceCountUtil.release(response);
     }
