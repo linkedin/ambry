@@ -24,6 +24,7 @@ import java.util.Set;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.ClusterConstraints;
 import org.apache.helix.model.ConstraintItem;
+import org.apache.helix.model.CurrentState;
 import org.apache.helix.model.ExternalView;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.IdealState;
@@ -45,6 +46,10 @@ public class MockHelixAdmin implements HelixAdmin {
   private final List<MockHelixManager> helixManagersForThisAdmin = new ArrayList<>();
   private Map<String, Set<String>> partitionToInstances = new HashMap<>();
   private Map<String, PartitionState> partitionToPartitionStates = new HashMap<>();
+  // A map of instanceName to state infos of all replicas on this instance
+  private Map<String, ReplicaStateInfos> instanceToReplicaStateInfos = new HashMap<>();
+  // A map of partitionId to instanceName associated with leader replica
+  private Map<String, String> partitionToLeaderReplica = new HashMap<>();
   private long totalDiskCapacity;
 
   /**
@@ -95,15 +100,26 @@ public class MockHelixAdmin implements HelixAdmin {
         partitionToInstances.put(partition, instanceSet);
         partitionToPartitionStates.put(partition, PartitionState.READ_WRITE);
       }
-      partitionToInstances.get(partition).addAll(idealstate.getInstanceSet(partition));
+      List<String> instances = new ArrayList<>(idealstate.getInstanceSet(partition));
+      partitionToInstances.get(partition).addAll(instances);
+      for (int i = 0; i < instances.size(); ++i) {
+        String instanceName = instances.get(i);
+        String stateStr;
+        if (i == 0) {
+          stateStr = ReplicaState.LEADER.name();
+          partitionToLeaderReplica.put(partition, instanceName);
+        } else {
+          stateStr = ReplicaState.STANDBY.name();
+        }
+        instanceToReplicaStateInfos.computeIfAbsent(instanceName, k -> new ReplicaStateInfos())
+            .setReplicaState(partition, stateStr);
+      }
     }
   }
 
   @Override
   public List<String> getResourcesInCluster(String clusterName) {
-    List<String> resources = new ArrayList<>();
-    resources.addAll(resourcesToIdealStates.keySet());
-    return resources;
+    return new ArrayList<>(resourcesToIdealStates.keySet());
   }
 
   @Override
@@ -113,9 +129,7 @@ public class MockHelixAdmin implements HelixAdmin {
 
   @Override
   public List<String> getInstancesInCluster(String clusterName) {
-    List<String> instances = new ArrayList<>();
-    instances.addAll(instanceNameToinstanceConfigs.keySet());
-    return instances;
+    return new ArrayList<>(instanceNameToinstanceConfigs.keySet());
   }
 
   List<InstanceConfig> getInstanceConfigs(String clusterName) {
@@ -131,6 +145,20 @@ public class MockHelixAdmin implements HelixAdmin {
   public boolean setInstanceConfig(String clusterName, String instanceName, InstanceConfig instanceConfig) {
     instanceNameToinstanceConfigs.put(instanceName, instanceConfig);
     return true;
+  }
+
+  /**
+   * Change leader replica of certain partition from current one to the replica on specified instance.
+   * @param partition the partition whose leader replica should be changed.
+   * @param newLeaderInstance the instance on which new leader replica resides.
+   */
+  void changeLeaderReplicaForPartition(String partition, String newLeaderInstance) {
+    String currentLeaderInstance = partitionToLeaderReplica.get(partition);
+    // set current leader replica to STANDBY state
+    instanceToReplicaStateInfos.get(currentLeaderInstance).setReplicaState(partition, ReplicaState.STANDBY.name());
+    // set previous standby replica to LEADER state
+    instanceToReplicaStateInfos.get(newLeaderInstance).setReplicaState(partition, ReplicaState.LEADER.name());
+    partitionToLeaderReplica.put(partition, newLeaderInstance);
   }
 
   /**
@@ -174,11 +202,31 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   /**
+   * Add new resource and its associated ideal state into cluster (Note that, each dc has its own HelixAdmin so resource
+   * is actually added into dc where current HelixAdmin sits). This would trigger ideal state change which should be captured
+   * by Helix Cluster Manager on each node.
+   * @param resourceName name of resource. (The resource may contain one or more partitions)
+   * @param idealstate ideal state associated with the resource. (it defines location of each replica from each partition)
+   * @throws Exception
+   */
+  void addNewResource(String resourceName, IdealState idealstate) throws Exception {
+    resourcesToIdealStates.put(resourceName, idealstate);
+    triggerIdealStateChangeNotification();
+  }
+
+  /**
    * Associate the given Helix manager with this admin.
    * @param helixManager the {@link MockHelixManager} to associate this admin with.
    */
   void addHelixManager(MockHelixManager helixManager) {
     helixManagersForThisAdmin.add(helixManager);
+  }
+
+  /**
+   * @return a list of {@link IdealState} via Helix admin.
+   */
+  List<IdealState> getIdealStates() {
+    return new ArrayList<>(new HashSet<>(resourcesToIdealStates.values()));
   }
 
   /**
@@ -254,6 +302,21 @@ public class MockHelixAdmin implements HelixAdmin {
     }
   }
 
+  void triggerIdealStateChangeNotification() throws Exception {
+    for (MockHelixManager helixManager : helixManagersForThisAdmin) {
+      helixManager.triggerIdealStateNotification(false);
+    }
+  }
+
+  /**
+   * Trigger a routing table change notification
+   */
+  void triggerRoutingTableNotification() {
+    for (MockHelixManager helixManager : helixManagersForThisAdmin) {
+      helixManager.triggerRoutingTableNotification();
+    }
+  }
+
   /**
    * @return a list of all partitions registered via this admin.
    */
@@ -297,6 +360,23 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   /**
+   * Get states of all partitions that reside on given instance.
+   * @param instanceName the name of instance where partitions reside
+   * @return a map representing states of partitions from given instance.
+   */
+  Map<String, Map<String, String>> getPartitionStateMapForInstance(String instanceName) {
+    ReplicaStateInfos replicaStateInfos = instanceToReplicaStateInfos.get(instanceName);
+    return replicaStateInfos != null ? replicaStateInfos.getReplicaStateMap() : new HashMap<>();
+  }
+
+  /**
+   * @return a map of partition to its leader replica in current dc.
+   */
+  Map<String, String> getPartitionToLeaderReplica() {
+    return Collections.unmodifiableMap(partitionToLeaderReplica);
+  }
+
+  /**
    * @return the count of disks registered via this admin.
    */
   long getTotalDiskCount() {
@@ -317,6 +397,27 @@ public class MockHelixAdmin implements HelixAdmin {
    */
   long getTotalDiskCapacity() {
     return totalDiskCapacity;
+  }
+
+  /**
+   * Private class that holds partition state infos from one data node.
+   */
+  class ReplicaStateInfos {
+    Map<String, Map<String, String>> replicaStateMap;
+
+    ReplicaStateInfos() {
+      replicaStateMap = new HashMap<>();
+    }
+
+    void setReplicaState(String partition, String state) {
+      Map<String, String> stateMap = new HashMap<>();
+      stateMap.put(CurrentState.CurrentStateProperty.CURRENT_STATE.name(), state);
+      replicaStateMap.put(partition, stateMap);
+    }
+
+    Map<String, Map<String, String>> getReplicaStateMap() {
+      return replicaStateMap;
+    }
   }
 
   // ***************************************

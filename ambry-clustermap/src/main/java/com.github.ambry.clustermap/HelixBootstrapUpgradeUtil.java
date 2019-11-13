@@ -539,7 +539,6 @@ class HelixBootstrapUpgradeUtil {
    *
    * @param startValidatingClusterManager whether validation should include staring up a {@link HelixClusterManager}
    */
-
   private void updateClusterMapInHelix(boolean startValidatingClusterManager) throws IOException {
     info("Initializing admins and possibly adding cluster in Helix (if non-existent)");
     maybeAddCluster();
@@ -1102,7 +1101,8 @@ class HelixBootstrapUpgradeUtil {
       }
     }
     if (expectMoreInHelixDuringValidate) {
-      ensureOrThrow(allPartitionsToInstancesInHelix.keySet().equals(partitionsNotForceRemovedByDc.get(dcName)),
+      ensureOrThrow(allPartitionsToInstancesInHelix.keySet()
+              .equals(partitionsNotForceRemovedByDc.getOrDefault(dcName, new HashSet<>())),
           "Additional partitions in Helix: " + allPartitionsToInstancesInHelix.keySet() + " not what is expected "
               + partitionsNotForceRemovedByDc.get(dcName));
       info("*** Helix may have more partitions or replicas than in the given clustermap as removals were not forced.");

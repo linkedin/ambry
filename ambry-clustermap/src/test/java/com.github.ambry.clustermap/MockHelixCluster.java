@@ -14,19 +14,25 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
+
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
  * Mocks a cluster in Helix, keeps all states internally.
  */
 public class MockHelixCluster {
+  private static final int MAX_PARTITIONS_IN_ONE_RESOURCE = 100;
   private final MockHelixAdminFactory helixAdminFactory;
+  private final Map<String, DcZkInfo> dataCenterToZkAddress;
   private final Map<String, MockHelixAdmin> helixAdmins;
   private final String clusterName;
   private final String hardwareLayoutPath;
@@ -48,8 +54,11 @@ public class MockHelixCluster {
     this.hardwareLayoutPath = hardwareLayoutPath;
     this.partitionLayoutPath = partitionLayoutPath;
     this.zkLayoutPath = zkLayoutPath;
+    String jsonString = Utils.readStringFromFile(zkLayoutPath);
+    dataCenterToZkAddress = parseDcJsonAndPopulateDcInfo(jsonString);
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        "all", 3, false, false, helixAdminFactory, false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+        "all", MAX_PARTITIONS_IN_ONE_RESOURCE, false, false, helixAdminFactory, false,
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
     this.clusterName = clusterName;
   }
 
@@ -60,7 +69,8 @@ public class MockHelixCluster {
    */
   void upgradeWithNewHardwareLayout(String hardwareLayoutPath) throws Exception {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        "all", 3, false, false, helixAdminFactory, false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+        "all", MAX_PARTITIONS_IN_ONE_RESOURCE, false, false, helixAdminFactory, false,
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
     triggerInstanceConfigChangeNotification();
   }
 
@@ -216,6 +226,23 @@ public class MockHelixCluster {
     }
   }
 
+  void addNewResource(String resourceName, IdealState idealState, String dcName) throws Exception {
+    MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStr());
+    helixAdmin.addNewResource(resourceName, idealState);
+  }
+
+  Map<String, String> getPartitionToLeaderReplica(String dcName) {
+    MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStr());
+    return helixAdmin.getPartitionToLeaderReplica();
+  }
+
+  /**
+   * @return {@link MockHelixAdmin} from specified dc
+   */
+  MockHelixAdmin getHelixAdminFromDc(String dcName) {
+    return helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStr());
+  }
+
   InstanceConfig getInstanceConfig(String instanceName) {
     InstanceConfig instanceConfig = null;
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
@@ -227,9 +254,15 @@ public class MockHelixCluster {
     return instanceConfig;
   }
 
-  List<InstanceConfig> getAllInstanceConfigs() {
+  /**
+   * Get instance configs from specified datacenters.
+   * @param dcNames array of dc names
+   * @return a list of InstanceConfigs that from required datacenters.
+   */
+  List<InstanceConfig> getInstanceConfigsFromDcs(String[] dcNames) {
     List<InstanceConfig> configs = new ArrayList<>();
-    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
+    for (String dcName : dcNames) {
+      MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStr());
       configs.addAll(helixAdmin.getInstanceConfigs(clusterName));
     }
     return configs;

@@ -35,6 +35,14 @@ public interface PartitionId extends Resource, Comparable<PartitionId> {
   List<? extends ReplicaId> getReplicaIds();
 
   /**
+   * Gets Replicas from specified datacenter that are in required state.
+   * @param state the {@link ReplicaState}
+   * @param dcName the name of datacenter from which the replica should come. If null, choose replicas from all datacenters.
+   * @return list of Replicas that satisfy requirement.
+   */
+  List<? extends ReplicaId> getReplicaIdsByState(ReplicaState state, String dcName);
+
+  /**
    * Gets the state of this PartitionId.
    *
    * @return state of this PartitionId.

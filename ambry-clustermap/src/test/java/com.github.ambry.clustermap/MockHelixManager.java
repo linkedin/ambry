@@ -50,6 +50,7 @@ import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.participant.StateMachineEngine;
+import org.apache.helix.spectator.RoutingTableProvider;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 
 
@@ -64,7 +65,10 @@ class MockHelixManager implements HelixManager {
   private LiveInstanceChangeListener liveInstanceChangeListener;
   private ExternalViewChangeListener externalViewChangeListener;
   private InstanceConfigChangeListener instanceConfigChangeListener;
+  private IdealStateChangeListener idealStateChangeListener;
+  private RoutingTableProvider routingTableProvider;
   private final MockHelixAdmin mockAdmin;
+  private final MockHelixDataAccessor dataAccessor;
   private final Exception beBadException;
   private final Map<String, ZNRecord> znRecordMap;
   private ZkHelixPropertyStore<ZNRecord> helixPropertyStore;
@@ -85,6 +89,7 @@ class MockHelixManager implements HelixManager {
     mockAdmin = helixCluster.getHelixAdminFactory().getHelixAdmin(zkAddr);
     mockAdmin.addHelixManager(this);
     clusterName = helixCluster.getClusterName();
+    dataAccessor = new MockHelixDataAccessor(clusterName, mockAdmin);
     this.beBadException = beBadException;
     this.znRecordMap = znRecordMap;
     Properties storeProps = new Properties();
@@ -190,6 +195,19 @@ class MockHelixManager implements HelixManager {
     instanceConfigChangeListener.onInstanceConfigChange(mockAdmin.getInstanceConfigs(clusterName), notificationContext);
   }
 
+  void triggerIdealStateNotification(boolean init) throws InterruptedException {
+    NotificationContext notificationContext = new NotificationContext(this);
+    if (init) {
+      notificationContext.setType(NotificationContext.Type.INIT);
+    }
+    idealStateChangeListener.onIdealStateChange(mockAdmin.getIdealStates(), notificationContext);
+  }
+
+  void triggerRoutingTableNotification() {
+    NotificationContext notificationContext = new NotificationContext(this);
+    routingTableProvider.onStateChange(instanceName, Collections.emptyList(), notificationContext);
+  }
+
   //****************************
   // Not implemented.
   //****************************
@@ -200,16 +218,17 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public void addIdealStateChangeListener(IdealStateChangeListener idealStateChangeListener) throws Exception {
-    throw new IllegalStateException("Not implemented");
+    if (beBadException != null) {
+      throw beBadException;
+    }
+    this.idealStateChangeListener = idealStateChangeListener;
+    triggerIdealStateNotification(true);
   }
 
   @Override
   public void addLiveInstanceChangeListener(LiveInstanceChangeListener liveInstanceChangeListener) throws Exception {
-    if (beBadException != null) {
-      throw beBadException;
-    }
     this.liveInstanceChangeListener = liveInstanceChangeListener;
-    triggerLiveInstanceNotification(true);
+    triggerLiveInstanceNotification(false);
   }
 
   @Override
@@ -227,9 +246,6 @@ class MockHelixManager implements HelixManager {
   @Override
   public void addInstanceConfigChangeListener(InstanceConfigChangeListener instanceConfigChangeListener)
       throws Exception {
-    if (beBadException != null) {
-      throw beBadException;
-    }
     this.instanceConfigChangeListener = instanceConfigChangeListener;
     triggerConfigChangeNotification(true);
   }
@@ -264,7 +280,8 @@ class MockHelixManager implements HelixManager {
   @Override
   public void addCurrentStateChangeListener(CurrentStateChangeListener currentStateChangeListener, String s, String s1)
       throws Exception {
-    throw new IllegalStateException("Not implemented");
+    // Note: routingTableProvider implements current state change listener
+    this.routingTableProvider = (RoutingTableProvider) currentStateChangeListener;
   }
 
   @Override
@@ -322,7 +339,7 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public HelixDataAccessor getHelixDataAccessor() {
-    throw new IllegalStateException("Not implemented");
+    return dataAccessor;
   }
 
   @Override

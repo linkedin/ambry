@@ -31,6 +31,15 @@ interface ClusterManagerCallback {
   List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition);
 
   /**
+   * Get replicas of given partition from specified datacenter that are in required state
+   * @param partition the {@link AmbryPartition} for which to get the list of replicas.
+   * @param state {@link ReplicaState} associated with replica
+   * @param dcName name of datacenter from which the replicas should come
+   * @return the list of {@link AmbryReplica}s satisfying requirements.
+   */
+  List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName);
+
+  /**
    * Get the counter for the sealed state change for partitions.
    * @return the counter for the sealed state change for partitions.
    */

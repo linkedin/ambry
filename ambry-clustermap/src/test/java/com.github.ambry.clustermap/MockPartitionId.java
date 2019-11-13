@@ -70,6 +70,11 @@ public class MockPartitionId implements PartitionId {
   }
 
   @Override
+  public List<ReplicaId> getReplicaIdsByState(ReplicaState state, String dcName) {
+    throw new UnsupportedOperationException("Temporarily Unsupported");
+  }
+
+  @Override
   public PartitionState getPartitionState() {
     return partitionState;
   }
