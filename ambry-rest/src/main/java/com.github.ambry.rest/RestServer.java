@@ -22,7 +22,10 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.account.HelixAccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.NettyMetrics;
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
@@ -75,6 +78,7 @@ public class RestServer {
   private final NioServer nioServer;
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
+  private final NettyMetrics nettyMetrics;
 
   /**
    * {@link RestServer} specific metrics tracking.
@@ -172,10 +176,9 @@ public class RestServer {
             sslFactory, accountService);
     router = routerFactory.getRouter();
 
-
     // setup the router for the account service
     if (accountService instanceof HelixAccountService) {
-      ((HelixAccountService)accountService).setupRouter(router);
+      ((HelixAccountService) accountService).setupRouter(router);
     }
 
     RestResponseHandlerFactory restResponseHandlerFactory =
@@ -202,6 +205,12 @@ public class RestServer {
     if (accountService == null || router == null || restResponseHandler == null || blobStorageService == null
         || restRequestHandler == null || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
+    }
+    NetworkConfig networkConfig = new NetworkConfig(verifiableProperties);
+    if (networkConfig.networkUseNettyByteBuf) {
+      nettyMetrics = new NettyMetrics(metricRegistry, new NettyConfig(verifiableProperties));
+    } else {
+      nettyMetrics = null;
     }
     logger.trace("Instantiated RestServer");
   }
@@ -244,6 +253,11 @@ public class RestServer {
       logger.info("NIO server start took {} ms", elapsedTime);
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
 
+      if (nettyMetrics != null) {
+        nettyMetrics.start();
+        logger.info("NettyMetric starts");
+      }
+
       restServerState.markServiceUp();
       logger.info("Service marked as up");
     } finally {
@@ -265,6 +279,12 @@ public class RestServer {
       //ordering is important.
       restServerState.markServiceDown();
       logger.info("Service marked as down ");
+
+      if (nettyMetrics != null) {
+        nettyMetrics.stop();
+        logger.info("NettyMetrics stops");
+      }
+
       nioServer.shutdown();
       long nioServerShutdownTime = System.currentTimeMillis();
       long elapsedTime = nioServerShutdownTime - shutdownBeginTime;
