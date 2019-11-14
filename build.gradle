@@ -85,6 +85,10 @@ subprojects {
         }
         maxHeapSize = "3g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
+        systemProperty 'io.netty.allocator.tinyCacheSize', '0'
+        systemProperty 'io.netty.allocator.smallCacheSize', '0'
+        systemProperty 'io.netty.allocator.normalCacheSize', '0'
+        systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
     }
 
     task intTest(type: Test) {
