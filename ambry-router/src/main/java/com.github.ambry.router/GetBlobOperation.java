@@ -625,6 +625,12 @@ class GetBlobOperation extends GetOperation {
       if (progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
         logger.trace("Processing decrypt callback stored result for data chunk {}", chunkBlobId);
         decryptJobMetricsTracker.onJobResultProcessingStart();
+        // Only when the blob is encrypted should we need to call this method. When finish decryption, we don't need
+        // response info anymore.
+        ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(chunkIndex);
+        if (responseInfo != null) {
+          responseInfo.release();
+        }
         if (decryptCallbackResultInfo.exception == null) {
           chunkIndexToBuffer.put(chunkIndex,
               filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
@@ -632,10 +638,6 @@ class GetBlobOperation extends GetOperation {
           logger.trace("Decrypt result successfully updated for data chunk {}", chunkBlobId);
           progressTracker.setCryptoJobSuccess();
         } else {
-          ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(chunkIndex);
-          if (responseInfo != null) {
-            responseInfo.release();
-          }
           decryptJobMetricsTracker.incrementOperationError();
           logger.trace("Setting operation exception as decryption callback invoked with exception {} for data chunk {}",
               decryptCallbackResultInfo.exception, chunkBlobId);
@@ -1101,15 +1103,15 @@ class GetBlobOperation extends GetOperation {
     @Override
     protected void maybeProcessCallbacks() {
       if (progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
+        ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(chunkIndex);
+        if (responseInfo != null) {
+          responseInfo.release();
+        }
         decryptJobMetricsTracker.onJobResultProcessingStart();
         if (decryptCallbackResultInfo.exception != null) {
           decryptJobMetricsTracker.incrementOperationError();
           logger.trace("Decryption job callback invoked with exception for {} blob {} ", blobType, blobId,
               decryptCallbackResultInfo.exception);
-          ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(chunkIndex);
-          if (responseInfo != null) {
-            responseInfo.release();
-          }
           setOperationException(
               new RouterException("Exception thrown on decrypting content for " + blobType + " blob " + blobId,
                   decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
