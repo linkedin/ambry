@@ -337,8 +337,10 @@ class GetBlobOperation extends GetOperation {
         if (exception != null) {
           setOperationException(exception);
         }
-        chunkIndexToResponseInfo.get(numChunksWrittenOut).release();
-        chunkIndexToResponseInfo.remove(numChunksWrittenOut);
+        ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(numChunksWrittenOut);
+        if (responseInfo != null) {
+          responseInfo.release();
+        }
         numChunksWrittenOut++;
         routerCallback.onPollReady();
       }
@@ -381,6 +383,7 @@ class GetBlobOperation extends GetOperation {
     public void close() throws IOException {
       if (isOpen.compareAndSet(true, false)) {
         chunkIndexToResponseInfo.values().forEach(ResponseInfo::release);
+        chunkIndexToResponseInfo.clear();
         if (numChunksWrittenOut != numChunksTotal) {
           setOperationException(new RouterException(
               "The ReadableStreamChannel for blob data has been closed by the user before all chunks were written out.",
@@ -426,6 +429,8 @@ class GetBlobOperation extends GetOperation {
      */
     void completeRead() {
       if (readIntoCallbackCalled.compareAndSet(false, true)) {
+        chunkIndexToResponseInfo.values().forEach(ResponseInfo::release);
+        chunkIndexToResponseInfo.clear();
         Exception e = operationException.get();
         readIntoFuture.done(bytesWritten.get(), e);
         if (readIntoCallback != null) {
@@ -729,13 +734,13 @@ class GetBlobOperation extends GetOperation {
      * @throws IOException if there is an IOException while deserializing the body.
      * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
      */
-    void handleBody(ResponseInfo responseInfo, InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
-        throws IOException, MessageFormatException {
+    void handleBody(ResponseInfo responseInfo, InputStream payload, MessageMetadata messageMetadata,
+        MessageInfo messageInfo) throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
         ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
         ByteBuffer chunkBuffer = blobData.getStream().getByteBuffer();
-        responseInfo.setDelayRelease();
+        responseInfo.retain();
         chunkIndexToResponseInfo.put(chunkIndex, responseInfo);
 
         boolean launchedJob = maybeLaunchCryptoJob(chunkBuffer, null, encryptionKey, chunkBlobId);
@@ -874,8 +879,8 @@ class GetBlobOperation extends GetOperation {
      * @throws IOException if there is an error during deserialization of the GetResponse.
      * @throws MessageFormatException if there is an error during deserialization of the GetResponse.
      */
-    private void processGetBlobResponse(ResponseInfo responseInfo, GetRequestInfo getRequestInfo, GetResponse getResponse)
-        throws IOException, MessageFormatException {
+    private void processGetBlobResponse(ResponseInfo responseInfo, GetRequestInfo getRequestInfo,
+        GetResponse getResponse) throws IOException, MessageFormatException {
       ServerErrorCode getError = getResponse.getError();
       if (getError == ServerErrorCode.No_Error) {
         int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
@@ -1148,8 +1153,8 @@ class GetBlobOperation extends GetOperation {
      * or the only chunk of the blob.
      */
     @Override
-    void handleBody(ResponseInfo responseInfo, InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
-        throws IOException, MessageFormatException {
+    void handleBody(ResponseInfo responseInfo, InputStream payload, MessageMetadata messageMetadata,
+        MessageInfo messageInfo) throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData;
         ByteBuffer encryptionKey;
@@ -1198,7 +1203,7 @@ class GetBlobOperation extends GetOperation {
             chunkIndex = 0;
             numChunksTotal = 1;
             chunkIndexToBuffer.put(0, rawPayloadBuffer);
-            responseInfo.setDelayRelease();
+            responseInfo.retain();
             chunkIndexToResponseInfo.put(0, responseInfo);
             numChunksRetrieved = 1;
           } else {
@@ -1261,8 +1266,8 @@ class GetBlobOperation extends GetOperation {
      * @throws IOException
      * @throws MessageFormatException
      */
-    private void handleMetadataBlob(ResponseInfo responseInfo, BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey)
-        throws IOException, MessageFormatException {
+    private void handleMetadataBlob(ResponseInfo responseInfo, BlobData blobData, byte[] userMetadata,
+        ByteBuffer encryptionKey) throws IOException, MessageFormatException {
       ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
       compositeBlobInfo =
           MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
@@ -1344,7 +1349,8 @@ class GetBlobOperation extends GetOperation {
      * @param userMetadata userMetadata of the blob
      * @param encryptionKey encryption key for the blob. Could be null for non encrypted blob.
      */
-    private void handleSimpleBlob(ResponseInfo responseInfo, BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
+    private void handleSimpleBlob(ResponseInfo responseInfo, BlobData blobData, byte[] userMetadata,
+        ByteBuffer encryptionKey) {
       boolean rangeResolutionFailure = false;
       if (encryptionKey == null) {
         totalSize = blobData.getSize();
@@ -1358,7 +1364,7 @@ class GetBlobOperation extends GetOperation {
         chunkIndex = 0;
         numChunksTotal = 1;
         ByteBuffer dataBuffer = blobData.getStream().getByteBuffer();
-        responseInfo.setDelayRelease();
+        responseInfo.retain();
         chunkIndexToResponseInfo.put(0, responseInfo);
         boolean launchedJob = maybeLaunchCryptoJob(dataBuffer, userMetadata, encryptionKey, blobId);
         if (!launchedJob) {
