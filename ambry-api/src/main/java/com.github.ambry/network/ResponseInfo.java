@@ -15,7 +15,6 @@ package com.github.ambry.network;
 
 import com.github.ambry.clustermap.DataNodeId;
 import io.netty.util.ReferenceCountUtil;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
