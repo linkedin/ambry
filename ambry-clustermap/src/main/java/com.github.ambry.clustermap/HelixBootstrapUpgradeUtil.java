@@ -575,7 +575,8 @@ class HelixBootstrapUpgradeUtil {
     HelixAdmin dcAdmin = adminForDc.get(dcName);
     info("Getting list of instances in {}", dcName);
     Set<String> instancesInHelix = new HashSet<>(dcAdmin.getInstancesInCluster(clusterName));
-    Set<String> instancesInStatic = new HashSet<>(dcToInstanceNameToDataNodeId.get(dcName).keySet());
+    Set<String> instancesInStatic = dcToInstanceNameToDataNodeId.get(dcName) == null ? new HashSet<>()
+        : new HashSet<>(dcToInstanceNameToDataNodeId.get(dcName).keySet());
     Set<String> instancesInBoth = new HashSet<>(instancesInHelix);
     // set instances in both correctly.
     instancesInBoth.retainAll(instancesInStatic);
@@ -868,7 +869,7 @@ class HelixBootstrapUpgradeUtil {
   private StateModelDefinition getStateModelDefinition(String stateModelDefName) {
     StateModelDefinition stateModelDefinition = null;
     switch (stateModelDefName) {
-      case ClusterMapConfig.DEFAULT_STATE_MODEL_DEF:
+      case ClusterMapConfig.OLD_STATE_MODEL_DEF:
         stateModelDefinition = LeaderStandbySMD.build();
         break;
       case ClusterMapConfig.AMBRY_STATE_MODEL_DEF:

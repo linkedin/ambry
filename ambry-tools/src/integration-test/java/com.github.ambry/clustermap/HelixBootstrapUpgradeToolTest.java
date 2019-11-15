@@ -184,7 +184,7 @@ public class HelixBootstrapUpgradeToolTest {
     // bootstrap a cluster
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), true,
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+        ClusterMapConfig.OLD_STATE_MODEL_DEF);
     // add new state model def
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
@@ -192,7 +192,7 @@ public class HelixBootstrapUpgradeToolTest {
     // add existing state model def should be no-op
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory(),
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+        ClusterMapConfig.OLD_STATE_MODEL_DEF);
     // ensure that active dcs have new state model def
     String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
     for (Datacenter dc : testHardwareLayout.getHardwareLayout().getDatacenters()) {

@@ -20,8 +20,9 @@ import org.apache.helix.model.LeaderStandbySMD;
  * The configs for resource state.
  */
 public class ClusterMapConfig {
-  public static final String DEFAULT_STATE_MODEL_DEF = LeaderStandbySMD.name;
   public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
+  public static final String OLD_STATE_MODEL_DEF = LeaderStandbySMD.name;
+  public static final String DEFAULT_STATE_MODEL_DEF = AMBRY_STATE_MODEL_DEF;
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
@@ -229,10 +230,9 @@ public class ClusterMapConfig {
     clustermapListenCrossColo = verifiableProperties.getBoolean("clustermap.listen.cross.colo", true);
     clustermapStateModelDefinition =
         verifiableProperties.getString("clustermap.state.model.definition", DEFAULT_STATE_MODEL_DEF);
-    clustermapVcrDatacenterName =
-        verifiableProperties.getString("clustermap.vcr.datacenter.name", null);
+    clustermapVcrDatacenterName = verifiableProperties.getString("clustermap.vcr.datacenter.name", null);
     if (!clustermapStateModelDefinition.equals(DEFAULT_STATE_MODEL_DEF) && !clustermapStateModelDefinition.equals(
-        AMBRY_STATE_MODEL_DEF)) {
+        OLD_STATE_MODEL_DEF)) {
       throw new IllegalArgumentException("Unsupported state model definition: " + clustermapStateModelDefinition);
     }
   }
