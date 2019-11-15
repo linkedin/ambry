@@ -54,6 +54,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -324,7 +325,7 @@ class GetBlobOperation extends GetOperation {
     // the number of bytes written out to the asyncWritableChannel. This would be the size of the blob eventually.
     private AtomicLong bytesWritten = new AtomicLong(0);
     // the number of chunks that have been written out to the asyncWritableChannel.
-    private volatile int numChunksWrittenOut = 0;
+    private AtomicInteger numChunksWrittenOut = new AtomicInteger(0);
     // the index of the next chunk that is to be written out to the asyncWritableChannel.
     private int indexOfNextChunkToWriteOut = 0;
     // whether this object has called the readIntoCallback yet.
@@ -337,11 +338,11 @@ class GetBlobOperation extends GetOperation {
         if (exception != null) {
           setOperationException(exception);
         }
-        ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(numChunksWrittenOut);
+        int currentNumChunk = numChunksWrittenOut.addAndGet(1);
+        ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(currentNumChunk);
         if (responseInfo != null) {
           responseInfo.release();
         }
-        numChunksWrittenOut++;
         routerCallback.onPollReady();
       }
     };
@@ -384,7 +385,7 @@ class GetBlobOperation extends GetOperation {
       if (isOpen.compareAndSet(true, false)) {
         chunkIndexToResponseInfo.values().forEach(ResponseInfo::release);
         chunkIndexToResponseInfo.clear();
-        if (numChunksWrittenOut != numChunksTotal) {
+        if (numChunksWrittenOut.get() != numChunksTotal) {
           setOperationException(new RouterException(
               "The ReadableStreamChannel for blob data has been closed by the user before all chunks were written out.",
               RouterErrorCode.ChannelClosed));
@@ -403,7 +404,7 @@ class GetBlobOperation extends GetOperation {
      * @return the number of chunks that have been written out to the {@link AsyncWritableChannel}
      */
     int getNumChunksWrittenOut() {
-      return numChunksWrittenOut;
+      return numChunksWrittenOut.get();
     }
 
     /**
@@ -418,7 +419,7 @@ class GetBlobOperation extends GetOperation {
           asyncWritableChannel.write(chunkBuf, chunkAsyncWriteCallback);
           indexOfNextChunkToWriteOut++;
         }
-        if (operationException.get() != null || numChunksWrittenOut == numChunksTotal) {
+        if (operationException.get() != null || numChunksWrittenOut.get() == numChunksTotal) {
           completeRead();
         }
       }

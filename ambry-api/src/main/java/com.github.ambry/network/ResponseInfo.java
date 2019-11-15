@@ -77,7 +77,7 @@ public class ResponseInfo {
   }
 
   /**
-   * Decrease the reference count of undelying response.
+   * Decrease the reference count of underlying response.
    */
   public void release() {
     if (response != null) {
