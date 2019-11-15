@@ -68,7 +68,7 @@ public class ResponseInfo {
   }
 
   /**
-   *  Increase the reference count of underlying response.
+   * Increase the reference count of underlying response.
    */
   public void retain() {
     if (response != null) {
