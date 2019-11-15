@@ -66,7 +66,7 @@ class MockNetworkClientFactory extends SocketNetworkClientFactory {
    */
   @Override
   public SocketNetworkClient getNetworkClient() throws IOException {
-    MockSelector selector = new MockSelector(serverLayout, state, time);
+    MockSelector selector = new MockSelector(serverLayout, state, time, networkConfig);
     return new SocketNetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), maxPortsPlainText,
         maxPortsSsl, checkoutTimeoutMs, time);
   }
@@ -77,7 +77,7 @@ class MockNetworkClientFactory extends SocketNetworkClientFactory {
    * @throws IOException if the selector could not be constructed.
    */
   public MockNetworkClient getMockNetworkClient() throws IOException {
-    MockSelector selector = new MockSelector(serverLayout, state, time);
+    MockSelector selector = new MockSelector(serverLayout, state, time, networkConfig);
     return new MockNetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), maxPortsPlainText,
         maxPortsSsl, checkoutTimeoutMs, time);
   }

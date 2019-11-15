@@ -42,6 +42,9 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.util.ReferenceCountUtil;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -100,8 +103,7 @@ class GetBlobOperation extends GetOperation {
   // a list iterator to the chunk ids that need to be fetched for this operation, if this is a composite blob.
   private ListIterator<CompositeBlobInfo.ChunkMetadata> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
-  private Map<Integer, ByteBuffer> chunkIndexToBuffer;
-  private Map<Integer, ResponseInfo> chunkIndexToResponseInfo;
+  private Map<Integer, ByteBuf> chunkIndexToBuf;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
   // the blob info that is populated on OperationType.BlobInfo or OperationType.All
@@ -142,6 +144,14 @@ class GetBlobOperation extends GetOperation {
     firstChunk = new FirstGetChunk();
   }
 
+  private void setOperationCompleted() {
+    operationCompleted = true;
+    if (chunkIndexToBuf != null) {
+      chunkIndexToBuf.values().forEach(ReferenceCountUtil::release);
+      chunkIndexToBuf.clear();
+    }
+  }
+
   /**
    * {@inheritDoc}
    * <br>
@@ -159,7 +169,7 @@ class GetBlobOperation extends GetOperation {
         blobDataChannel.completeRead();
       }
     }
-    operationCompleted = true;
+    setOperationCompleted();
   }
 
   /**
@@ -180,7 +190,7 @@ class GetBlobOperation extends GetOperation {
           // If this is an operation just to get the chunk ids, then these ids will be returned as part of the
           // result callback and no more chunks will be fetched, so mark the operation as complete to let the
           // GetManager remove this operation.
-          operationCompleted = true;
+          setOperationCompleted();
           List<StoreKey> chunkIds = e == null && compositeBlobInfo != null ? compositeBlobInfo.getKeys() : null;
           operationResult = new GetBlobResultInternal(null, chunkIds);
         } else {
@@ -216,7 +226,7 @@ class GetBlobOperation extends GetOperation {
             if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
               blobDataChannel = new BlobDataReadableStreamChannel();
             } else {
-              operationCompleted = true;
+              setOperationCompleted();
             }
             operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
           } else {
@@ -341,9 +351,9 @@ class GetBlobOperation extends GetOperation {
           setOperationException(exception);
         }
         int currentNumChunk = numChunksWrittenOut.get();
-        ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(currentNumChunk);
-        if (responseInfo != null) {
-          responseInfo.release();
+        ByteBuf byteBuf = chunkIndexToBuf.remove(currentNumChunk);
+        if (byteBuf != null) {
+          byteBuf.release();
         }
         numChunksWrittenOut.incrementAndGet();
         routerCallback.onPollReady();
@@ -416,9 +426,9 @@ class GetBlobOperation extends GetOperation {
     private void maybeWriteToChannel() {
       // if there are chunks available to be written out, do now.
       if (firstChunk.isComplete() && readCalled) {
-        while (operationException.get() == null && chunkIndexToBuffer.containsKey(indexOfNextChunkToWriteOut)) {
-          ByteBuffer chunkBuf = chunkIndexToBuffer.remove(indexOfNextChunkToWriteOut);
-          asyncWritableChannel.write(chunkBuf, chunkAsyncWriteCallback);
+        while (operationException.get() == null && chunkIndexToBuf.containsKey(indexOfNextChunkToWriteOut)) {
+          ByteBuf byteBuf = chunkIndexToBuf.get(indexOfNextChunkToWriteOut);
+          asyncWritableChannel.write(byteBuf.nioBuffer(), chunkAsyncWriteCallback);
           indexOfNextChunkToWriteOut++;
         }
         if (operationException.get() != null || numChunksWrittenOut.get() == numChunksTotal) {
@@ -450,18 +460,18 @@ class GetBlobOperation extends GetOperation {
         }
         releaseResource();
       }
-      operationCompleted = true;
+      setOperationCompleted();
     }
 
     /**
-     * Release all the {@link ResponseInfo} in the map. Use {@link ConcurrentHashMap#remove(Object)} method to avoid
+     * Release all the {@link ByteBuf} in the map. Use {@link ConcurrentHashMap#remove(Object)} method to avoid
      * conflict with the release call in the chunk async callback.
      */
     private void releaseResource() {
-      for (Integer key : chunkIndexToResponseInfo.keySet()) {
-        ResponseInfo response = chunkIndexToResponseInfo.remove(key);
-        if (response != null) {
-          response.release();
+      for (Integer key : chunkIndexToBuf.keySet()) {
+        ByteBuf byteBuf = chunkIndexToBuf.remove(key);
+        if (byteBuf != null) {
+          byteBuf.release();
         }
       }
     }
@@ -642,13 +652,9 @@ class GetBlobOperation extends GetOperation {
         decryptJobMetricsTracker.onJobResultProcessingStart();
         // Only when the blob is encrypted should we need to call this method. When finish decryption, we don't need
         // response info anymore.
-        ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(chunkIndex);
-        if (responseInfo != null) {
-          responseInfo.release();
-        }
         if (decryptCallbackResultInfo.exception == null) {
-          chunkIndexToBuffer.put(chunkIndex,
-              filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
+          chunkIndexToBuf.put(chunkIndex,
+              filterChunkToRange(Unpooled.wrappedBuffer(decryptCallbackResultInfo.result.getDecryptedBlobContent())));
           numChunksRetrieved++;
           logger.trace("Decrypt result successfully updated for data chunk {}", chunkBlobId);
           progressTracker.setCryptoJobSuccess();
@@ -744,29 +750,31 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Handle the body of the response: Deserialize and add to the list of chunk buffers.
-     * @param responseInfo the response received for a request sent out on behalf of this chunk.
      * @param payload the body of the response.
      * @param messageMetadata the {@link MessageMetadata} associated with the message.
      * @param messageInfo the {@link MessageInfo} associated with the message.
      * @throws IOException if there is an IOException while deserializing the body.
      * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
      */
-    void handleBody(ResponseInfo responseInfo, InputStream payload, MessageMetadata messageMetadata,
-        MessageInfo messageInfo) throws IOException, MessageFormatException {
+    void handleBody(InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
+        throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
         ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
-        ByteBuffer chunkBuffer = blobData.getStream().getByteBuffer();
-        responseInfo.retain();
-        chunkIndexToResponseInfo.put(chunkIndex, responseInfo);
+        ByteBuf chunkBuf = blobData.getAndRelease();
 
-        boolean launchedJob = maybeLaunchCryptoJob(chunkBuffer, null, encryptionKey, chunkBlobId);
-        if (!launchedJob) {
-          chunkIndexToBuffer.put(chunkIndex, filterChunkToRange(chunkBuffer));
-          numChunksRetrieved++;
+        try {
+          boolean launchedJob = maybeLaunchCryptoJob(chunkBuf, null, encryptionKey, chunkBlobId);
+          if (!launchedJob) {
+            chunkBuf = filterChunkToRange(chunkBuf);
+            chunkIndexToBuf.put(chunkIndex, chunkBuf.retainedDuplicate());
+            numChunksRetrieved++;
+          }
+
+          successfullyDeserialized = true;
+        } finally {
+          chunkBuf.release();
         }
-
-        successfullyDeserialized = true;
       } else {
         // If successTarget > 1, then content reconciliation may have to be done. For now, ignore subsequent responses.
       }
@@ -825,7 +833,7 @@ class GetBlobOperation extends GetOperation {
             // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
             try {
-              processGetBlobResponse(responseInfo, getRequestInfo, getResponse);
+              processGetBlobResponse(getRequestInfo, getResponse);
             } catch (IOException | MessageFormatException e) {
               // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
               // detection.
@@ -845,13 +853,13 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Launch a crypto job as needed.
-     * @param dataBuffer to buffer to encrypt or decrypt.
+     * @param dataBuf to buffer to encrypt or decrypt.
      * @param userMetadata userMetadata of the blob.
      * @param encryptionKey encryption key for the blob. Could be null for non encrypted blob.
      * @param targetBlobId the {@link BlobId} of the blob.
      * @return {@code true} if a crypto job was launched, otherwise {@code false}.
      */
-    protected boolean maybeLaunchCryptoJob(ByteBuffer dataBuffer, byte[] userMetadata, ByteBuffer encryptionKey,
+    protected boolean maybeLaunchCryptoJob(ByteBuf dataBuf, byte[] userMetadata, ByteBuffer encryptionKey,
         BlobId targetBlobId) {
       //
       // Three cases to handle:
@@ -870,7 +878,7 @@ class GetBlobOperation extends GetOperation {
         decryptCallbackResultInfo = new DecryptCallBackResultInfo();
         progressTracker.initializeCryptoJobTracker(CryptoJobType.DECRYPTION);
         decryptJobMetricsTracker.onJobSubmission();
-        cryptoJobHandler.submitJob(new DecryptJob(targetBlobId, encryptionKey, dataBuffer,
+        cryptoJobHandler.submitJob(new DecryptJob(targetBlobId, encryptionKey, dataBuf.retainedDuplicate(),
             userMetadata != null ? ByteBuffer.wrap(userMetadata) : null, cryptoService, kms, decryptJobMetricsTracker,
             (DecryptJob.DecryptJobResult result, Exception exception) -> {
               routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
@@ -890,14 +898,13 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Process the GetResponse extracted from a {@link ResponseInfo}
-     * @param responseInfo the response received for a request sent out on behalf of this chunk.
      * @param getRequestInfo the associated {@link RequestInfo} for which this response was received.
      * @param getResponse the {@link GetResponse} extracted from the {@link ResponseInfo}
      * @throws IOException if there is an error during deserialization of the GetResponse.
      * @throws MessageFormatException if there is an error during deserialization of the GetResponse.
      */
-    private void processGetBlobResponse(ResponseInfo responseInfo, GetRequestInfo getRequestInfo,
-        GetResponse getResponse) throws IOException, MessageFormatException {
+    private void processGetBlobResponse(GetRequestInfo getRequestInfo, GetResponse getResponse)
+        throws IOException, MessageFormatException {
       ServerErrorCode getError = getResponse.getError();
       if (getError == ServerErrorCode.No_Error) {
         int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
@@ -918,7 +925,7 @@ class GetBlobOperation extends GetOperation {
             } else {
               MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
               MessageInfo messageInfo = partitionResponseInfo.getMessageInfoList().get(0);
-              handleBody(responseInfo, getResponse.getInputStream(), messageMetadata, messageInfo);
+              handleBody(getResponse.getInputStream(), messageMetadata, messageInfo);
               chunkOperationTracker.onResponse(getRequestInfo.replicaId, TrackedRequestFinalState.SUCCESS);
               if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
                 logger.trace("Cross colo request successful for remote replica in {} ",
@@ -990,16 +997,15 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Slice this chunk's data to only include the bytes within the operation's specified byte range.
-     * @param buf the {@link ByteBuffer} representing the content of this chunk.
-     * @return A {@link ByteBuffer} that only includes bytes within the operation's specified byte range.
+     * @param buf the {@link ByteBuf} representing the content of this chunk.
+     * @return A {@link ByteBuf} that only includes bytes within the operation's specified byte range.
      */
-    protected ByteBuffer filterChunkToRange(ByteBuffer buf) {
+    protected ByteBuf filterChunkToRange(ByteBuf buf) {
       if (options.getBlobOptions.getRange() == null) {
         return buf;
       }
       if (resolvedByteRange.getRangeSize() == 0) {
-        buf.position(0);
-        buf.limit(0);
+        buf.clear();
       } else {
         long relativeOffset = offset;
         if (options.getBlobOptions.hasBlobSegmentIdx()) {
@@ -1008,10 +1014,10 @@ class GetBlobOperation extends GetOperation {
         long startOffsetInThisChunk = chunkIndex == 0 ? resolvedByteRange.getStartOffset() - relativeOffset : 0;
         long endOffsetInThisChunkExclusive =
             chunkIndex == (numChunksTotal - 1) ? resolvedByteRange.getEndOffset() - relativeOffset + 1 : chunkSize;
-        buf.position((int) startOffsetInThisChunk);
-        buf.limit((int) endOffsetInThisChunkExclusive);
+        buf.setIndex(buf.readerIndex() + (int) startOffsetInThisChunk,
+            buf.readerIndex() + (int) endOffsetInThisChunkExclusive);
       }
-      return buf.slice();
+      return buf;
     }
 
     /**
@@ -1118,10 +1124,6 @@ class GetBlobOperation extends GetOperation {
     @Override
     protected void maybeProcessCallbacks() {
       if (progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
-        ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(chunkIndex);
-        if (responseInfo != null) {
-          responseInfo.release();
-        }
         decryptJobMetricsTracker.onJobResultProcessingStart();
         if (decryptCallbackResultInfo.exception != null) {
           decryptJobMetricsTracker.incrementOperationError();
@@ -1150,7 +1152,8 @@ class GetBlobOperation extends GetOperation {
             }
             totalSize = decryptCallbackResultInfo.result.getDecryptedBlobContent().remaining();
             if (!resolveRange(totalSize)) {
-              chunkIndexToBuffer.put(0, filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
+              chunkIndexToBuf.put(0, filterChunkToRange(
+                  Unpooled.wrappedBuffer(decryptCallbackResultInfo.result.getDecryptedBlobContent())));
               numChunksRetrieved = 1;
               progressTracker.setCryptoJobSuccess();
               logger.trace("BlobContent available to process for simple blob {}", blobId);
@@ -1170,8 +1173,8 @@ class GetBlobOperation extends GetOperation {
      * or the only chunk of the blob.
      */
     @Override
-    void handleBody(ResponseInfo responseInfo, InputStream payload, MessageMetadata messageMetadata,
-        MessageInfo messageInfo) throws IOException, MessageFormatException {
+    void handleBody(InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
+        throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData;
         ByteBuffer encryptionKey;
@@ -1210,18 +1213,19 @@ class GetBlobOperation extends GetOperation {
           }
         }
         blobType = blobData.getBlobType();
-        chunkIndexToBuffer = new TreeMap<>();
-        chunkIndexToResponseInfo = new ConcurrentHashMap<>();
+        chunkIndexToBuf = new ConcurrentHashMap<>();
         if (rawMode) {
+          if (blobData != null) {
+            // RawMode, release blob data.
+            blobData.getAndRelease().release();
+          }
           // Return the raw bytes from storage
           if (encryptionKey != null) {
             chunkIdIterator = null;
             dataChunks = null;
             chunkIndex = 0;
             numChunksTotal = 1;
-            chunkIndexToBuffer.put(0, rawPayloadBuffer);
-            responseInfo.retain();
-            chunkIndexToResponseInfo.put(0, responseInfo);
+            chunkIndexToBuf.put(0, Unpooled.wrappedBuffer(rawPayloadBuffer));
             numChunksRetrieved = 1;
           } else {
             setOperationException(new IllegalStateException("Only encrypted blobs supported in raw mode"));
@@ -1230,7 +1234,7 @@ class GetBlobOperation extends GetOperation {
           if (blobType == BlobType.MetadataBlob) {
             handleMetadataBlob(blobData, userMetadata, encryptionKey);
           } else {
-            handleSimpleBlob(responseInfo, blobData, userMetadata, encryptionKey);
+            handleSimpleBlob(blobData, userMetadata, encryptionKey);
           }
         }
         successfullyDeserialized = true;
@@ -1284,56 +1288,60 @@ class GetBlobOperation extends GetOperation {
      */
     private void handleMetadataBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey)
         throws IOException, MessageFormatException {
-      ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
-      compositeBlobInfo =
-          MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
-      totalSize = compositeBlobInfo.getTotalSize();
-      chunkMetadataList = compositeBlobInfo.getChunkMetadataList();
-      boolean rangeResolutionFailure = false;
+      ByteBuf serializedMetadataContent = blobData.getAndRelease();
       try {
-        if (options.getBlobOptions.hasBlobSegmentIdx()) {
-          int requestedSegment = options.getBlobOptions.getBlobSegmentIdx();
-          if (requestedSegment < 0 || requestedSegment >= chunkMetadataList.size()) {
-            throw new IllegalArgumentException(
-                "Bad segment number: " + requestedSegment + ", num of keys: " + chunkMetadataList.size());
+        compositeBlobInfo =
+            MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent.nioBuffer(), blobIdFactory);
+        totalSize = compositeBlobInfo.getTotalSize();
+        chunkMetadataList = compositeBlobInfo.getChunkMetadataList();
+        boolean rangeResolutionFailure = false;
+        try {
+          if (options.getBlobOptions.hasBlobSegmentIdx()) {
+            int requestedSegment = options.getBlobOptions.getBlobSegmentIdx();
+            if (requestedSegment < 0 || requestedSegment >= chunkMetadataList.size()) {
+              throw new IllegalArgumentException(
+                  "Bad segment number: " + requestedSegment + ", num of keys: " + chunkMetadataList.size());
+            }
+            chunkMetadataList = chunkMetadataList.subList(requestedSegment, requestedSegment + 1);
           }
-          chunkMetadataList = chunkMetadataList.subList(requestedSegment, requestedSegment + 1);
+          if (options.getBlobOptions.getRange() != null) {
+            resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
+            // Get only the chunks within the range.
+            if (!options.getBlobOptions.hasBlobSegmentIdx()) {
+              chunkMetadataList = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
+                  resolvedByteRange.getEndOffset());
+            }
+          }
+        } catch (IllegalArgumentException e) {
+          onInvalidRange(e);
+          rangeResolutionFailure = true;
         }
-        if (options.getBlobOptions.getRange() != null) {
-          resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
-          // Get only the chunks within the range.
-          if (!options.getBlobOptions.hasBlobSegmentIdx()) {
-            chunkMetadataList = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
-                resolvedByteRange.getEndOffset());
+        if (!rangeResolutionFailure) {
+          if (options.getChunkIdsOnly || getOperationFlag() == MessageFormatFlags.Blob || encryptionKey == null) {
+            initializeDataChunks();
+          } else {
+            // if blob is encrypted, then decryption is required only in case of GetBlobInfo and GetBlobAll (since user-metadata
+            // is expected to be encrypted). Incase of GetBlob, Metadata blob does not need any decryption even if BlobProperties says so
+            decryptCallbackResultInfo = new DecryptCallBackResultInfo();
+            progressTracker.initializeCryptoJobTracker(CryptoJobType.DECRYPTION);
+            decryptJobMetricsTracker.onJobSubmission();
+            logger.trace("Submitting decrypt job for Metadata chunk {}", blobId);
+            long startTimeMs = System.currentTimeMillis();
+            cryptoJobHandler.submitJob(
+                new DecryptJob(blobId, encryptionKey, null, ByteBuffer.wrap(userMetadata), cryptoService, kms,
+                    decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
+                  routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                  decryptJobMetricsTracker.onJobCallbackProcessingStart();
+                  logger.trace("Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
+                      blobId);
+                  decryptCallbackResultInfo.setResultAndException(result, exception);
+                  routerCallback.onPollReady();
+                  decryptJobMetricsTracker.onJobCallbackProcessingComplete();
+                }));
           }
         }
-      } catch (IllegalArgumentException e) {
-        onInvalidRange(e);
-        rangeResolutionFailure = true;
-      }
-      if (!rangeResolutionFailure) {
-        if (options.getChunkIdsOnly || getOperationFlag() == MessageFormatFlags.Blob || encryptionKey == null) {
-          initializeDataChunks();
-        } else {
-          // if blob is encrypted, then decryption is required only in case of GetBlobInfo and GetBlobAll (since user-metadata
-          // is expected to be encrypted). Incase of GetBlob, Metadata blob does not need any decryption even if BlobProperties says so
-          decryptCallbackResultInfo = new DecryptCallBackResultInfo();
-          progressTracker.initializeCryptoJobTracker(CryptoJobType.DECRYPTION);
-          decryptJobMetricsTracker.onJobSubmission();
-          logger.trace("Submitting decrypt job for Metadata chunk {}", blobId);
-          long startTimeMs = System.currentTimeMillis();
-          cryptoJobHandler.submitJob(
-              new DecryptJob(blobId, encryptionKey, null, ByteBuffer.wrap(userMetadata), cryptoService, kms,
-                  decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
-                routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
-                decryptJobMetricsTracker.onJobCallbackProcessingStart();
-                logger.trace("Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
-                    blobId);
-                decryptCallbackResultInfo.setResultAndException(result, exception);
-                routerCallback.onPollReady();
-                decryptJobMetricsTracker.onJobCallbackProcessingComplete();
-              }));
-        }
+      } finally {
+        serializedMetadataContent.release();
       }
     }
 
@@ -1360,36 +1368,37 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Process a simple blob and extract the requested data from the blob.
-     * @param responseInfo the response received for a request sent out on behalf of this chunk.
      * @param blobData the simple blob's data
      * @param userMetadata userMetadata of the blob
      * @param encryptionKey encryption key for the blob. Could be null for non encrypted blob.
      */
-    private void handleSimpleBlob(ResponseInfo responseInfo, BlobData blobData, byte[] userMetadata,
-        ByteBuffer encryptionKey) {
-      boolean rangeResolutionFailure = false;
-      if (encryptionKey == null) {
-        totalSize = blobData.getSize();
-        rangeResolutionFailure = resolveRange(totalSize);
-      } else {
-        // for encrypted blobs, Blob data will not have the right size. Will have to wait until decryption is complete
-      }
-      if (!rangeResolutionFailure) {
-        chunkIdIterator = null;
-        numChunksTotal = 0;
-        dataChunks = null;
-        if (!options.getChunkIdsOnly) {
-          chunkIndex = 0;
-          numChunksTotal = 1;
-          ByteBuffer dataBuffer = blobData.getStream().getByteBuffer();
-          responseInfo.retain();
-          chunkIndexToResponseInfo.put(0, responseInfo);
-          boolean launchedJob = maybeLaunchCryptoJob(dataBuffer, userMetadata, encryptionKey, blobId);
-          if (!launchedJob) {
-            chunkIndexToBuffer.put(0, filterChunkToRange(dataBuffer));
-            numChunksRetrieved = 1;
+    private void handleSimpleBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
+      ByteBuf chunkBuf = blobData.getAndRelease();
+      try {
+        boolean rangeResolutionFailure = false;
+        if (encryptionKey == null) {
+          totalSize = blobData.getSize();
+          rangeResolutionFailure = resolveRange(totalSize);
+        } else {
+          // for encrypted blobs, Blob data will not have the right size. Will have to wait until decryption is complete
+        }
+        if (!rangeResolutionFailure) {
+          chunkIdIterator = null;
+          numChunksTotal = 0;
+          dataChunks = null;
+          if (!options.getChunkIdsOnly) {
+            chunkIndex = 0;
+            numChunksTotal = 1;
+            boolean launchedJob = maybeLaunchCryptoJob(chunkBuf, userMetadata, encryptionKey, blobId);
+            if (!launchedJob) {
+              chunkBuf = filterChunkToRange(chunkBuf);
+              chunkIndexToBuf.put(0, chunkBuf.retainedDuplicate());
+              numChunksRetrieved = 1;
+            }
           }
         }
+      } finally {
+        chunkBuf.release();
       }
     }
 

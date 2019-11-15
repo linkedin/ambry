@@ -48,6 +48,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -436,7 +437,12 @@ public class ServerHardDeleteTest {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
           Assert.assertEquals(properties.get(i).getBlobSize(), blobData.getSize());
           byte[] dataOutput = new byte[(int) blobData.getSize()];
-          blobData.getStream().read(dataOutput);
+          ByteBuf buffer = blobData.getAndRelease();
+          try {
+            buffer.readBytes(dataOutput);
+          } finally {
+            buffer.release();
+          }
           Assert.assertArrayEquals(dataOutput, data.get(i));
         }
       } else {

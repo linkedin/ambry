@@ -22,9 +22,12 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,12 +35,14 @@ import java.nio.ByteBuffer;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 
 public class MessageFormatInputStreamTest {
   private static short messageFormatHeaderVersionSaved;
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
@@ -47,6 +52,16 @@ public class MessageFormatInputStreamTest {
   @After
   public void resetMessageFormatHeaderVersionToUse() {
     MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
+  }
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
   }
 
   /**
@@ -240,7 +255,12 @@ public class MessageFormatInputStreamTest {
     } else {
       Assert.assertEquals(null, blobAll.getBlobEncryptionKey());
     }
-    Assert.assertEquals(ByteBuffer.wrap(data), blobAll.getBlobData().getStream().getByteBuffer());
+    ByteBuf byteBuf = blobAll.getBlobData().getAndRelease();
+    try {
+      Assert.assertEquals(Unpooled.wrappedBuffer(data), byteBuf);
+    } finally {
+      byteBuf.release();
+    }
   }
 
   /**

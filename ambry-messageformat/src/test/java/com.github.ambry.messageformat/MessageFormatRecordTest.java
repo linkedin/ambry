@@ -173,7 +173,7 @@ public class MessageFormatRecordTest {
     BlobData blobData = MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(sData));
     Assert.assertEquals(blobData.getSize(), 2000);
     byte[] verify = new byte[2000];
-    blobData.getStream().read(verify);
+    blobData.getAndRelease().readBytes(verify);
     Assert.assertArrayEquals(verify, data.array());
 
     // corrupt blob record V1
@@ -640,7 +640,7 @@ public class MessageFormatRecordTest {
     BlobData blobData = getBlobRecordV2(blobSize, blobType, blobContent, entireBlob);
     Assert.assertEquals("Blob size mismatch", blobSize, blobData.getSize());
     byte[] verify = new byte[blobSize];
-    blobData.getStream().read(verify);
+    blobData.getAndRelease().readBytes(verify);
     Assert.assertArrayEquals("BlobContent mismatch", blobContent.array(), verify);
 
     // corrupt blob record V2
@@ -694,7 +694,7 @@ public class MessageFormatRecordTest {
 
       Assert.assertEquals(metadataContentSize, blobData.getSize());
       byte[] verify = new byte[metadataContentSize];
-      blobData.getStream().read(verify);
+      blobData.getAndRelease().readBytes(verify);
       Assert.assertArrayEquals("Metadata content mismatch", metadataContent.array(), verify);
 
       // deserialize and check for metadata contents
@@ -728,7 +728,7 @@ public class MessageFormatRecordTest {
     BlobData blobData = getBlobRecordV2(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
     Assert.assertEquals(metadataContentSize, blobData.getSize());
     byte[] verify = new byte[metadataContentSize];
-    blobData.getStream().read(verify);
+    blobData.getAndRelease().readBytes(verify);
     Assert.assertArrayEquals("Metadata content mismatch", metadataContent.array(), verify);
 
     metadataContent.rewind();

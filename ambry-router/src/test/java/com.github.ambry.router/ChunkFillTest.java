@@ -28,6 +28,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -331,7 +332,7 @@ public class ChunkFillTest {
       for (int i = 0; i < numChunks; i++) {
         compositeBuffers[i].flip();
         DecryptJob decryptJob =
-            new DecryptJob(compositeBlobIds[i], compositeEncryptionKeys[i], compositeBuffers[i], null, cryptoService,
+            new DecryptJob(compositeBlobIds[i], compositeEncryptionKeys[i], Unpooled.wrappedBuffer(compositeBuffers[i]), null, cryptoService,
                 kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), (result, exception) -> {
               Assert.assertNull("Exception shouldn't have been thrown", exception);
               int chunkSize = result.getDecryptedBlobContent().remaining();

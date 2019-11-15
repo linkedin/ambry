@@ -468,7 +468,7 @@ public class MessageFormatSendTest {
       Assert.assertEquals(BlobType.DataBlob, deserializedBlob.getBlobData().getBlobType());
       Assert.assertEquals(blob[i].length, deserializedBlob.getBlobData().getSize());
       byte[] readBlob = new byte[blob[i].length];
-      deserializedBlob.getBlobData().getStream().read(readBlob);
+      deserializedBlob.getBlobData().getAndRelease().readBytes(readBlob);
       Assert.assertArrayEquals(blob[i], readBlob);
 
       if (headerVersions[i] == MessageFormatRecord.Message_Header_Version_V1) {

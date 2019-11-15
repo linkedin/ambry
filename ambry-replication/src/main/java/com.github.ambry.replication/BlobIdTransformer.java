@@ -32,6 +32,9 @@ import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -154,14 +157,14 @@ public class BlobIdTransformer implements Transformer {
       BlobProperties oldProperties = deserializeBlobProperties(inputStream);
       ByteBuffer userMetaData = deserializeUserMetadata(inputStream);
       BlobData blobData = deserializeBlob(inputStream);
-      ByteBufferInputStream blobDataBytes = blobData.getStream();
+      ByteBuf blobDataBytes = blobData.getAndRelease();
 
       long blobPropertiesSize = oldProperties.getBlobSize();
 
       //If the blob is a metadata blob its data chunk id list
       //will be rewritten with transformed IDs
       if (blobData.getBlobType().equals(BlobType.MetadataBlob)) {
-        ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
+        ByteBuffer serializedMetadataContent = blobDataBytes.nioBuffer();
         CompositeBlobInfo compositeBlobInfo =
             MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, storeKeyFactory);
         Map<StoreKey, StoreKey> convertedKeys = storeKeyConverter.convert(compositeBlobInfo.getKeys());
@@ -221,7 +224,7 @@ public class BlobIdTransformer implements Transformer {
         }
         blobPropertiesSize = compositeBlobInfo.getTotalSize();
         metadataContent.flip();
-        blobDataBytes = new ByteBufferInputStream(metadataContent);
+        blobDataBytes = Unpooled.wrappedBuffer(metadataContent);
         blobData = new BlobData(blobData.getBlobType(), metadataContent.remaining(), blobDataBytes);
       }
 
@@ -231,9 +234,12 @@ public class BlobIdTransformer implements Transformer {
               oldProperties.getCreationTimeInMs(), newBlobId.getAccountId(), newBlobId.getContainerId(),
               oldProperties.isEncrypted(), null);
 
+      // BlobIDTransformer only exists on ambry-server and we don't enable netty on ambry server yet. So And blobData.getAndRelease
+      // will return an Unpooled ByteBuf, it's not not to release it.
+      // @todo, when enabling netty in ambry-server, release this ByteBuf.
       PutMessageFormatInputStream putMessageFormatInputStream =
-          new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData, blobDataBytes,
-              blobData.getSize(), blobData.getBlobType());
+          new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData,
+              new ByteBufInputStream(blobDataBytes, true), blobData.getSize(), blobData.getBlobType());
       // Reuse the original CRC if present in the oldMessageInfo. This is important to ensure that messages that are
       // received via replication are sent to the store with proper CRCs (which the store needs to detect duplicate
       // messages). As an additional guard, here the original CRC is only reused if the key's ID in string form is the

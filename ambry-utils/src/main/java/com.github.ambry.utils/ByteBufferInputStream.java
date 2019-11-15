@@ -42,17 +42,7 @@ public class ByteBufferInputStream extends InputStream {
    * @throws IOException
    */
   public ByteBufferInputStream(InputStream stream, int size) throws IOException {
-    this.byteBuffer = ByteBuffer.allocate(size);
-    int read = 0;
-    ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
-    while (read < size) {
-      int sizeRead = readableByteChannel.read(byteBuffer);
-      if (sizeRead == 0 || sizeRead == -1) {
-        throw new IOException("Total size read " + read + " is less than the size to be read " + size);
-      }
-      read += sizeRead;
-    }
-    byteBuffer.flip();
+    this.byteBuffer = Utils.getByteBufferFromInputStream(stream, size);
     this.mark = -1;
     this.readLimit = -1;
   }

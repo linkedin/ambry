@@ -255,6 +255,28 @@ public class Utils {
   }
 
   /**
+   * A helper method to return {@link ByteBuffer} from given {@link InputStream} at the given size.
+   * @param stream The {@link InputStream} to read {@link ByteBuffer} out.
+   * @param dataSize The size of {@link ByteBuffer}.
+   * @return The {@link ByteBuffer}
+   * @throws IOException Unexpected IO errors.
+   */
+   public static ByteBuffer getByteBufferFromInputStream(InputStream stream, int dataSize) throws IOException {
+    ByteBuffer output = ByteBuffer.allocate(dataSize);
+    int read = 0;
+    ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
+    while (read < dataSize) {
+      int sizeRead = readableByteChannel.read(output);
+      if (sizeRead == 0 || sizeRead == -1) {
+        throw new IOException("Total size read " + read + " is less than the size to be read " + dataSize);
+      }
+      read += sizeRead;
+    }
+    output.flip();
+    return output;
+  }
+
+  /**
    * Transfer {@code dataSize} bytes of data from the given crc stream to a newly create {@link ByteBuffer}. The method
    * would also update the crc value in the crc stream.
    * @param crcStream The crc stream.
@@ -277,17 +299,36 @@ public class Utils {
       crcStream.updateCrc(output.duplicate());
       nettyByteBuf.readerIndex(startIndex + dataSize);
     } else {
-      output = ByteBuffer.allocate(dataSize);
-      int read = 0;
-      ReadableByteChannel readableByteChannel = Channels.newChannel(crcStream);
-      while (read < dataSize) {
-        int sizeRead = readableByteChannel.read(output);
-        if (sizeRead == 0 || sizeRead == -1) {
-          throw new IOException("Total size read " + read + " is less than the size to be read " + dataSize);
-        }
-        read += sizeRead;
-      }
-      output.flip();
+      output = getByteBufferFromInputStream(crcStream, dataSize);
+    }
+    return output;
+  }
+
+  /**
+   * Transfer {@code dataSize} bytes of data from the given crc stream to a newly create {@link ByteBuf}. The method
+   * would also update the crc value in the crc stream.
+   * @param crcStream The crc stream.
+   * @param dataSize The number of bytes to transfer.
+   * @return the newly created {@link ByteBuf} which contains the transferred data.
+   * @throws IOException Any I/O error.
+   */
+  public static ByteBuf readNettyByteBufFromCrcInputStream(CrcInputStream crcStream, int dataSize) throws IOException {
+    ByteBuf output;
+    InputStream inputStream = crcStream.getUnderlyingInputStream();
+    if (inputStream instanceof NettyByteBufDataInputStream) {
+      ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
+      // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
+      int startIndex = nettyByteBuf.readerIndex();
+      output = nettyByteBuf.retainedSlice(startIndex, dataSize);
+      crcStream.updateCrc(output.nioBuffer());
+      nettyByteBuf.readerIndex(startIndex + dataSize);
+    } else if (inputStream instanceof ByteBufferDataInputStream) {
+      ByteBuffer buffer = getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
+      crcStream.updateCrc(buffer.duplicate());
+      output = Unpooled.wrappedBuffer(buffer);
+    } else {
+      ByteBuffer buffer = getByteBufferFromInputStream(crcStream, dataSize);
+      output = Unpooled.wrappedBuffer(buffer);
     }
     return output;
   }
@@ -852,6 +893,21 @@ public class Utils {
       offset += sizeRead;
     }
     return data;
+  }
+
+  /**
+   * Read "size" length of bytes from a netty {@link ByteBuf} to a byte array starting at the given offset in the byte[]. If "size"
+   * length of bytes can't be read because the end of the buffer has been reached, IOException is thrown. This method
+   * blocks until input data is available, the end of the buffer is detected, or an exception is thrown.
+   * @param buffer from which data to be read from
+   * @param data byte[] into which the data has to be written
+   * @param offset starting offset in the byte[] at which the data has to be written to
+   * @param size length of bytes to be read from the stream
+   * @return byte[] which has the data that is read from the buffer. Same as @param data
+   * @throws IOException
+   */
+  public static byte[] readBytesFromByteBuf(ByteBuf buffer, byte[] data, int offset, int size) throws IOException {
+    return readBytesFromStream(new ByteBufInputStream(buffer), data, offset, size);
   }
 
   /**

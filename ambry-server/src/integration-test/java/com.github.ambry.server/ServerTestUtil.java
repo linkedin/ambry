@@ -94,6 +94,7 @@ import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -126,6 +127,17 @@ import static org.junit.Assert.*;
 
 
 final class ServerTestUtil {
+
+  static byte[] getBlobDataAndRelease(BlobData blobData) {
+    byte[] actualBlobData = new byte[(int) blobData.getSize()];
+    ByteBuf buffer = blobData.getAndRelease();
+    try {
+      buffer.readBytes(actualBlobData);
+    } finally {
+      buffer.release();
+    }
+    return actualBlobData;
+  }
 
   static void endToEndTest(Port targetPort, String routerDatacenter, MockCluster cluster, SSLConfig clientSSLConfig,
       SSLSocketFactory clientSSLSocketFactory, Properties routerProps, boolean testEncryption) {
@@ -351,8 +363,7 @@ final class ServerTestUtil {
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       responseStream = resp4.getInputStream();
       BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
-      byte[] actualBlobData = new byte[(int) blobAll.getBlobData().getSize()];
-      blobAll.getBlobData().getStream().getByteBuffer().get(actualBlobData);
+      byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
       // verify content
       Assert.assertArrayEquals("Content mismatch", data, actualBlobData);
       if (testEncryption) {
@@ -480,8 +491,7 @@ final class ServerTestUtil {
       resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       responseStream = resp1.getInputStream();
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
-      actualBlobData = new byte[(int) blobAll.getBlobData().getSize()];
-      blobAll.getBlobData().getStream().getByteBuffer().get(actualBlobData);
+      actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
       Assert.assertArrayEquals("Content mismatch", data, actualBlobData);
 
       // delete a blob on a restarted store , which should succeed
@@ -794,11 +804,7 @@ final class ServerTestUtil {
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
         try {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-          byte[] blobout = new byte[(int) blobData.getSize()];
-          int readsize = 0;
-          while (readsize < blobData.getSize()) {
-            readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
-          }
+          byte[] blobout = getBlobDataAndRelease(blobData);
           Assert.assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
@@ -827,13 +833,7 @@ final class ServerTestUtil {
               getExpiryTimeMs(blobAll.getBlobInfo().getBlobProperties()));
           assertEquals("Expiration time mismatch (MessageInfo)", expectedExpiryTimeMs,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
-          byte[] blobout = new byte[(int) blobAll.getBlobData().getSize()];
-          int readsize = 0;
-          while (readsize < blobAll.getBlobData().getSize()) {
-            readsize += blobAll.getBlobData()
-                .getStream()
-                .read(blobout, readsize, (int) blobAll.getBlobData().getSize() - readsize);
-          }
+          byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
           Assert.assertArrayEquals(data, blobout);
           if (testEncryption) {
             Assert.assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
@@ -1039,11 +1039,7 @@ final class ServerTestUtil {
       } else {
         try {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-          byte[] blobout = new byte[(int) blobData.getSize()];
-          int readsize = 0;
-          while (readsize < blobData.getSize()) {
-            readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
-          }
+          byte[] blobout = getBlobDataAndRelease(blobData);
           Assert.assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
@@ -1074,13 +1070,7 @@ final class ServerTestUtil {
       } else {
         try {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), blobIdFactory);
-          byte[] blobout = new byte[(int) blobAll.getBlobData().getSize()];
-          int readsize = 0;
-          while (readsize < blobAll.getBlobData().getSize()) {
-            readsize += blobAll.getBlobData()
-                .getStream()
-                .read(blobout, readsize, (int) blobAll.getBlobData().getSize() - readsize);
-          }
+          byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
           Assert.assertArrayEquals(data, blobout);
           if (testEncryption) {
             Assert.assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
@@ -1191,11 +1181,7 @@ final class ServerTestUtil {
       } else {
         try {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-          byte[] blobout = new byte[(int) blobData.getSize()];
-          int readsize = 0;
-          while (readsize < blobData.getSize()) {
-            readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
-          }
+          byte[] blobout = getBlobDataAndRelease(blobData);
           Assert.assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
@@ -1223,13 +1209,7 @@ final class ServerTestUtil {
       } else {
         try {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), blobIdFactory);
-          byte[] blobout = new byte[(int) blobAll.getBlobData().getSize()];
-          int readsize = 0;
-          while (readsize < blobAll.getBlobData().getSize()) {
-            readsize += blobAll.getBlobData()
-                .getStream()
-                .read(blobout, readsize, (int) blobAll.getBlobData().getSize() - readsize);
-          }
+          byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
           Assert.assertArrayEquals(data, blobout);
           if (testEncryption) {
             Assert.assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
@@ -1428,8 +1408,7 @@ final class ServerTestUtil {
     GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
     InputStream responseStream = resp2.getInputStream();
     BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
-    byte[] actualBlobData = new byte[(int) blobAll.getBlobData().getSize()];
-    blobAll.getBlobData().getStream().getByteBuffer().get(actualBlobData);
+    byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
     Assert.assertArrayEquals("Content mismatch", data, actualBlobData);
 
     // delete a blob on a restarted store , which should succeed
@@ -1637,11 +1616,7 @@ final class ServerTestUtil {
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
         BlobData blobData = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
-        byte[] blobout = new byte[(int) blobData.getSize()];
-        int readsize = 0;
-        while (readsize < blobData.getSize()) {
-          readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
-        }
+        byte[] blobout = getBlobDataAndRelease(blobData);
         Assert.assertArrayEquals(dataList.get(0), blobout);
         if (testEncryption) {
           assertNotNull("MessageMetadata should not have been null",
@@ -1666,13 +1641,7 @@ final class ServerTestUtil {
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
         BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp4.getInputStream(), blobIdFactory);
-        byte[] blobout = new byte[(int) blobAll.getBlobData().getSize()];
-        int readsize = 0;
-        while (readsize < blobAll.getBlobData().getSize()) {
-          readsize += blobAll.getBlobData()
-              .getStream()
-              .read(blobout, readsize, (int) blobAll.getBlobData().getSize() - readsize);
-        }
+        byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
         Assert.assertArrayEquals(dataList.get(0), blobout);
         if (testEncryption) {
           assertNotNull("MessageMetadata should not have been null", blobAll.getBlobEncryptionKey());
@@ -2088,11 +2057,7 @@ final class ServerTestUtil {
     GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
     assertEquals(ServerErrorCode.No_Error, resp.getError());
     BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-    byte[] blobout = new byte[(int) blobData.getSize()];
-    int readsize = 0;
-    while (readsize < blobData.getSize()) {
-      readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
-    }
+    byte[] blobout = getBlobDataAndRelease(blobData);
     Assert.assertArrayEquals(dataToCheck, blobout);
     if (encryptionKey != null) {
       Assert.assertNotNull("EncryptionKey should not have been null",
@@ -2194,8 +2159,7 @@ final class ServerTestUtil {
     response = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
     InputStream responseStream = response.getInputStream();
     BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, storeKeyFactory);
-    byte[] actualBlobData = new byte[(int) blobAll.getBlobData().getSize()];
-    blobAll.getBlobData().getStream().getByteBuffer().get(actualBlobData);
+    byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
     assertArrayEquals("Content mismatch", expectedBlobData, actualBlobData);
     messageInfo = response.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0);
     assertEquals("Blob ID not as expected", blobId, messageInfo.getStoreKey());

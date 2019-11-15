@@ -24,6 +24,7 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
@@ -54,6 +55,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -76,13 +78,13 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.PutManagerTest.*;
 import static com.github.ambry.router.RouterTestHelpers.*;
-import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
 
@@ -118,6 +120,7 @@ public class GetBlobOperationTest {
   private final RouterCallback routerCallback;
   private final String operationTrackerType;
   private final boolean testEncryption;
+  private final boolean networkUseNetty;
   private MockKeyManagementService kms = null;
   private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
@@ -133,6 +136,7 @@ public class GetBlobOperationTest {
   private BlobProperties blobProperties;
   private byte[] userMetadata;
   private byte[] putContent;
+  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   // Options which are passed into GetBlobOperations
   private GetBlobOptionsInternal options;
@@ -155,6 +159,11 @@ public class GetBlobOperationTest {
     }
   };
 
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
   @After
   public void after() {
     router.close();
@@ -162,6 +171,7 @@ public class GetBlobOperationTest {
     if (cryptoJobHandler != null) {
       cryptoJobHandler.close();
     }
+    nettyByteBufLeakHelper.afterTest();
   }
 
   /**
@@ -171,9 +181,10 @@ public class GetBlobOperationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false},
-        {AdaptiveOperationTracker.class.getSimpleName(), false},
-        {AdaptiveOperationTracker.class.getSimpleName(), true}});
+    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false, false},
+        {SimpleOperationTracker.class.getSimpleName(), false, true},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), true, false}});
   }
 
   /**
@@ -182,9 +193,11 @@ public class GetBlobOperationTest {
    * @param operationTrackerType the type of {@link OperationTracker} to use.
    * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
-  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption) throws Exception {
+  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption, boolean networkUseNetty)
+      throws Exception {
     this.operationTrackerType = operationTrackerType;
     this.testEncryption = testEncryption;
+    this.networkUseNetty = networkUseNetty;
     // Defaults. Tests may override these and do new puts as appropriate.
     maxChunkSize = random.nextInt(1024 * 1024) + 1;
     // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
@@ -394,11 +407,15 @@ public class GetBlobOperationTest {
         // extract chunk ids
         BlobAll blobAll =
             MessageFormatRecord.deserializeBlobAll(new ByteArrayInputStream(payload.array()), blobIdFactory);
-        ByteBuffer metadataBuffer = blobAll.getBlobData().getStream().getByteBuffer();
-        CompositeBlobInfo compositeBlobInfo =
-            MetadataContentSerDe.deserializeMetadataContentRecord(metadataBuffer, blobIdFactory);
-        Assert.assertEquals("Total size didn't match", blobSize, compositeBlobInfo.getTotalSize());
-        Assert.assertEquals("Chunk count didn't match", numChunks, compositeBlobInfo.getKeys().size());
+        ByteBuf metadataBuffer = blobAll.getBlobData().getAndRelease();
+        try {
+          CompositeBlobInfo compositeBlobInfo =
+              MetadataContentSerDe.deserializeMetadataContentRecord(metadataBuffer.nioBuffer(), blobIdFactory);
+          Assert.assertEquals("Total size didn't match", blobSize, compositeBlobInfo.getTotalSize());
+          Assert.assertEquals("Chunk count didn't match", numChunks, compositeBlobInfo.getKeys().size());
+        } finally {
+          metadataBuffer.release();
+        }
 
         // TODO; test raw get on each chunk (needs changes to test framework)
       } else {
@@ -1047,6 +1064,7 @@ public class GetBlobOperationTest {
   public void testEarlyReadableStreamChannelClose() throws Exception {
     for (int numChunksInBlob = 0; numChunksInBlob <= 4; numChunksInBlob++) {
       for (int numChunksToRead = 0; numChunksToRead < numChunksInBlob; numChunksToRead++) {
+        System.out.println("" + numChunksInBlob + " chunks but only read " + numChunksToRead);
         testEarlyReadableStreamChannelClose(numChunksInBlob, numChunksToRead);
       }
     }
@@ -1606,6 +1624,7 @@ public class GetBlobOperationTest {
     properties.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     properties.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "true");
     properties.setProperty("router.get.blob.operation.share.memory", "true");
+    properties.setProperty("network.use.netty.byte.buf", Boolean.toString(networkUseNetty));
     return properties;
   }
 }

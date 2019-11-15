@@ -44,6 +44,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -1117,7 +1118,7 @@ public class PutManagerTest {
         ByteBuffer userMetadata = request.getUsermetadata();
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
-        new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), ByteBuffer.wrap(content), userMetadata,
+        new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), Unpooled.wrappedBuffer(content), userMetadata,
             cryptoService, kms, new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
           assertNull("Exception should not be thrown", exception);
           assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
@@ -1158,7 +1159,7 @@ public class PutManagerTest {
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(dataBlobPutRequest.getBlobId(), dataBlobPutRequest.getBlobEncryptionKey().duplicate(),
-            ByteBuffer.wrap(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService, kms,
+            Unpooled.wrappedBuffer(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService, kms,
             new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
           Assert.assertNull("Exception should not be thrown", exception);
           assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());

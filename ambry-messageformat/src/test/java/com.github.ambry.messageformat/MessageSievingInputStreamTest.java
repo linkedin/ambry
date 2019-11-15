@@ -24,8 +24,12 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -40,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -67,6 +72,7 @@ public class MessageSievingInputStreamTest {
   private final EnumSet<TransformerOptions> options;
   private final StoreKeyFactory storeKeyFactory;
   private final RandomKeyConverter randomKeyConverter;
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
@@ -76,6 +82,16 @@ public class MessageSievingInputStreamTest {
   @After
   public void resetMessageFormatHeaderVersionToUse() {
     MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
+  }
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
   }
 
   public MessageSievingInputStreamTest(EnumSet<TransformerOptions> options) throws Exception {
@@ -960,8 +976,13 @@ public class MessageSievingInputStreamTest {
     Assert.assertEquals(accountId, propsFromStream.getAccountId());
     Assert.assertEquals(containerId, propsFromStream.getContainerId());
     Assert.assertEquals(ByteBuffer.wrap(usermetadata), userMetadataFromStream);
-    Assert.assertEquals(ByteBuffer.wrap(data), blobDataFromStream.getStream().getByteBuffer());
     Assert.assertEquals(blobType, blobDataFromStream.getBlobType());
+    ByteBuf byteBuf = blobDataFromStream.getAndRelease();
+    try {
+      Assert.assertEquals(Unpooled.wrappedBuffer(data), byteBuf);
+    } finally {
+      byteBuf.release();
+    }
   }
 }
 
@@ -1064,8 +1085,8 @@ class ValidatingKeyConvertingTransformer implements Transformer {
         } else {
           MessageInfo transformedMsgInfo;
           PutMessageFormatInputStream transformedStream =
-              new PutMessageFormatInputStream(newKey, encryptionKey, props, metadata, blobData.getStream(),
-                  blobData.getSize(), blobData.getBlobType());
+              new PutMessageFormatInputStream(newKey, encryptionKey, props, metadata,
+                  new ByteBufInputStream(blobData.getAndRelease(), true), blobData.getSize(), blobData.getBlobType());
           transformedMsgInfo =
               new MessageInfo(newKey, transformedStream.getSize(), msgInfo.isDeleted(), msgInfo.isTtlUpdated(),
                   msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(), msgInfo.getContainerId(),
