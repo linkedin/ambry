@@ -57,7 +57,7 @@ public class AmbryStateModelFactoryTest {
     });
     StateModel stateModel;
     switch (stateModelDef) {
-      case ClusterMapConfig.DEFAULT_STATE_MODEL_DEF:
+      case ClusterMapConfig.OLD_STATE_MODEL_DEF:
         stateModel = factory.createNewStateModel("0", "1");
         assertTrue("Unexpected state model def", stateModel instanceof DefaultLeaderStandbyStateModel);
         break;
