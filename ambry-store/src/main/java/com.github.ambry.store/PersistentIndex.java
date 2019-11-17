@@ -316,8 +316,8 @@ class PersistentIndex {
         //TODO IndexValue findLatest
         IndexValue value = findKey(info.getStoreKey());
         if (info.isDeleted()) {
-          markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
-              info.getOperationTimeMs(), info.getLifeVersion());
+          markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info, info.getOperationTimeMs(),
+              info.getLifeVersion());
           logger.info("Index : {} updated message with key {} by inserting delete entry of size {} ttl {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
           // removes from the tracking structure if a delete was being expected for the key
@@ -761,24 +761,26 @@ class PersistentIndex {
     IndexValue value = findKey(id);
     if (value == null && info == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
-    } else if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+    }
+    short retrievedLifeVersion = value == null ? info.getLifeVersion() : value.getLifeVersion();
+    if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       throw new StoreException("Id " + id + " deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     } else if (value != null && value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
       throw new StoreException("TTL of " + id + " already updated in index" + dataDir, StoreErrorCodes.Already_Updated);
-    } else if (hasLifeVersion && value.getLifeVersion() > lifeVersion) {
-      throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + value.getLifeVersion()
+    } else if (hasLifeVersion && retrievedLifeVersion > lifeVersion) {
+      throw new StoreException("LifeVersion conflict in index. Id " + id + " LifeVersion: " + retrievedLifeVersion
           + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
     }
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
     IndexValue newValue;
 
     if (value == null) {
-      lifeVersion = hasLifeVersion ? lifeVersion : 0;
+      lifeVersion = hasLifeVersion ? lifeVersion : info.getLifeVersion();
       // It is possible that the PUT has been cleaned by compaction
       // but the TTL update is going to still be placed?
       newValue =
-          new IndexValue(size, fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(), info.getOperationTimeMs(),
-              info.getAccountId(), info.getContainerId(), lifeVersion);
+          new IndexValue(size, fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, info.getExpirationTimeInMs(),
+              info.getOperationTimeMs(), info.getAccountId(), info.getContainerId(), lifeVersion);
       newValue.clearOriginalMessageOffset();
     } else {
       lifeVersion = hasLifeVersion ? lifeVersion : value.getLifeVersion();
