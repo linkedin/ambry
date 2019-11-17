@@ -30,8 +30,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -180,7 +180,7 @@ public class StorageManager implements StoreManager {
     if (getStore(partition) == null) {
       if (localReplica != null) {
         // check stores on the disk
-        if (!isDiskAvailable(localReplica.getDiskId())) {
+        if (!isDiskAvailableAtMountPath(localReplica.getMountPath())) {
           return ServerErrorCode.Disk_Unavailable;
         } else {
           return ServerErrorCode.Replica_Unavailable;
@@ -202,12 +202,14 @@ public class StorageManager implements StoreManager {
   }
 
   /**
-   * Check if a certain disk is available.
-   * @param disk the {@link DiskId} to check.
+   * Check if a certain disk is available at specific mount path
+   * @param mountPath the {@link DiskId}'s mount path.
    * @return {@code true} if the disk is available. {@code false} if not.
    */
-  public boolean isDiskAvailable(DiskId disk) {
-    DiskManager diskManager = diskToDiskManager.get(disk);
+  public boolean isDiskAvailableAtMountPath(String mountPath) {
+    Optional<Map.Entry<DiskId, DiskManager>> diskAndDiskManager =
+        diskToDiskManager.entrySet().stream().filter(e -> e.getKey().getMountPath().equals(mountPath)).findFirst();
+    DiskManager diskManager = diskAndDiskManager.map(Map.Entry::getValue).orElse(null);
     return diskManager != null && !diskManager.areAllStoresDown();
   }
 

@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
 
   private static final Logger logger = LoggerFactory.getLogger(DiskTokenPersistor.class);
   protected final Map<String, Set<PartitionInfo>> partitionGroupedByMountPath;
+  protected final Set<String> mountPathsToSkip = new HashSet<>();
   protected final ReplicationMetrics replicationMetrics;
   protected final ReplicaTokenSerde replicaTokenSerde;
 
@@ -60,7 +62,9 @@ public abstract class ReplicaTokenPersistor implements Runnable {
    */
   public final void write(boolean shuttingDown) throws IOException, ReplicationException {
     for (String mountPath : partitionGroupedByMountPath.keySet()) {
-      write(mountPath, shuttingDown);
+      if (!mountPathsToSkip.contains(mountPath)) {
+        write(mountPath, shuttingDown);
+      }
     }
   }
 
@@ -120,7 +124,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
     try {
       write(false);
     } catch (Exception e) {
-      logger.error("Error while persisting the replica tokens {}", e);
+      logger.error("Error while persisting the replica tokens ", e);
     }
   }
 

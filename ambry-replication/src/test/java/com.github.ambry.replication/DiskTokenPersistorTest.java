@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreFindTokenFactory;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.SystemTime;
@@ -39,6 +40,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.Mockito;
+
+import static org.mockito.ArgumentMatchers.*;
 
 
 /**
@@ -50,6 +54,7 @@ public class DiskTokenPersistorTest {
   private static ReplicaId replicaId;
   private static List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfos;
   private static FindTokenHelper findTokenHelper;
+  private static StorageManager mockStorageManager;
   private static String REPLICA_TOKEN_FILENAME = "replicaTokens";
 
   /**
@@ -83,6 +88,8 @@ public class DiskTokenPersistorTest {
     replicationProperties.setProperty("replication.cloud.token.factory", MockFindTokenFactory.class.getName());
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(replicationProperties));
     findTokenHelper = new FindTokenHelper(blobIdFactory, replicationConfig);
+    mockStorageManager = Mockito.mock(StorageManager.class);
+    Mockito.when(mockStorageManager.isDiskAvailableAtMountPath(anyString())).thenReturn(true);
   }
 
   /**
@@ -92,7 +99,8 @@ public class DiskTokenPersistorTest {
   @Test
   public void basicTest() throws Exception {
     DiskTokenPersistor diskTokenPersistor = new DiskTokenPersistor(REPLICA_TOKEN_FILENAME, mountPathToPartitionInfoList,
-        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper);
+        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper,
+        mockStorageManager);
 
     //Simple persist and retrieve should pass
     diskTokenPersistor.persist(replicaId.getMountPath(), replicaTokenInfos);
@@ -114,7 +122,8 @@ public class DiskTokenPersistorTest {
   @Test
   public void testForVersion0AndCurrentVersionRetrieve() throws Exception {
     DiskTokenPersistor diskTokenPersistor = new DiskTokenPersistor(REPLICA_TOKEN_FILENAME, mountPathToPartitionInfoList,
-        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper);
+        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper,
+        mockStorageManager);
 
     persistVersion0(replicaId.getMountPath(), replicaTokenInfos);
     List<RemoteReplicaInfo.ReplicaTokenInfo> retrievedReplicaTokenInfos =

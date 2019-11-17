@@ -23,7 +23,7 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -38,14 +38,14 @@ import java.util.concurrent.TimeUnit;
 
 
 /**
- * Set up replicas based on {@link ReplicationEngine} and do replication across all colos.
+ * Set up replicas based on {@link ReplicationEngine} and do replication across all data centers.
  */
 public class ReplicationManager extends ReplicationEngine {
-  private final StoreManager storageManager;
+  private final StorageManager storageManager;
   private final StoreConfig storeConfig;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
-      StoreConfig storeConfig, StoreManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
+      StoreConfig storeConfig, StorageManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
@@ -71,7 +71,7 @@ public class ReplicationManager extends ReplicationEngine {
       }
     }
     persistor = new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-        tokenHelper);
+        tokenHelper, storageManager);
   }
 
   @Override

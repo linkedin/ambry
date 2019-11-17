@@ -14,6 +14,7 @@
 package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.store.StorageManager;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -35,6 +36,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
 
   private static final Logger logger = LoggerFactory.getLogger(DiskTokenPersistor.class);
   private final String replicaTokenFileName;
+  private final StorageManager storageManager;
 
   /**
    * Constructor for {@link DiskTokenPersistor}.
@@ -43,11 +45,14 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
    * @param replicationMetrics metrics including token persist time.
    * @param clusterMap the {@link ClusterMap} to deserialize tokens.
    * @param tokenHelper the {@link FindTokenHelper} to deserialize tokens.
+   * @param storageManager the {@link StorageManager} that manages disks and stores.
    */
-  public DiskTokenPersistor(String replicaTokenFileName, Map<String, Set<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper tokenHelper) {
+  DiskTokenPersistor(String replicaTokenFileName, Map<String, Set<PartitionInfo>> partitionGroupedByMountPath,
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper tokenHelper,
+      StorageManager storageManager) {
     super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenHelper);
     this.replicaTokenFileName = replicaTokenFileName;
+    this.storageManager = storageManager;
   }
 
   @Override
@@ -62,6 +67,10 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
       logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
     } catch (IOException e) {
       logger.error("IO error while persisting tokens to disk {}", temp.getAbsoluteFile());
+      // check disk state in storageManager. If there is a hardware issue, persistor should skip this bad disk next time.
+      if (storageManager.isDiskAvailableAtMountPath(mountPath)) {
+        mountPathsToSkip.add(mountPath);
+      }
       throw e;
     }
   }
