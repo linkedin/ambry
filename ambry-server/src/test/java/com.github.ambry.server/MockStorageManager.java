@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
@@ -43,6 +44,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,44 +59,9 @@ import java.util.stream.Collectors;
  */
 class MockStorageManager extends StorageManager {
 
-  /**
-   * The operation received at the store.
-   */
-  static RequestOrResponseType operationReceived = null;
-  /**
-   * The {@link MessageWriteSet} received at the store (only for put, delete and ttl update)
-   */
-  static MessageWriteSet messageWriteSetReceived = null;
-  /**
-   * The IDs received at the store (only for get)
-   */
-  static List<? extends StoreKey> idsReceived = null;
-  /**
-   * The {@link StoreGetOptions} received at the store (only for get)
-   */
-  static EnumSet<StoreGetOptions> storeGetOptionsReceived;
-  /**
-   * The {@link FindToken} received at the store (only for findEntriesSince())
-   */
-  static FindToken tokenReceived = null;
-  /**
-   * The maxTotalSizeOfEntries received at the store (only for findEntriesSince())
-   */
-  static Long maxTotalSizeOfEntriesReceived = null;
-  /**
-   * StoreException to throw when an API is invoked
-   */
-  static StoreException storeException = null;
-  /**
-   * RuntimeException to throw when an API is invoked. Will be preferred over {@link #storeException}.
-   */
-  static RuntimeException runtimeException = null;
-
-  /**
-   * An empty {@link Store} implementation.
-   */
-  private Store store = new Store() {
+  private class TestStore implements Store {
     boolean started;
+    ReplicaState currentState = ReplicaState.STANDBY;
 
     @Override
     public void start() throws StoreException {
@@ -197,6 +164,16 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
+    public void setCurrentState(ReplicaState state) {
+      currentState = state;
+    }
+
+    @Override
+    public ReplicaState getCurrentState() {
+      return currentState;
+    }
+
+    @Override
     public boolean isStarted() {
       return started;
     }
@@ -231,7 +208,45 @@ class MockStorageManager extends StorageManager {
         }
       }
     }
-  };
+  }
+
+  /**
+   * The operation received at the store.
+   */
+  static RequestOrResponseType operationReceived = null;
+  /**
+   * The {@link MessageWriteSet} received at the store (only for put, delete and ttl update)
+   */
+  static MessageWriteSet messageWriteSetReceived = null;
+  /**
+   * The IDs received at the store (only for get)
+   */
+  static List<? extends StoreKey> idsReceived = null;
+  /**
+   * The {@link StoreGetOptions} received at the store (only for get)
+   */
+  static EnumSet<StoreGetOptions> storeGetOptionsReceived;
+  /**
+   * The {@link FindToken} received at the store (only for findEntriesSince())
+   */
+  static FindToken tokenReceived = null;
+  /**
+   * The maxTotalSizeOfEntries received at the store (only for findEntriesSince())
+   */
+  static Long maxTotalSizeOfEntriesReceived = null;
+  /**
+   * StoreException to throw when an API is invoked
+   */
+  static StoreException storeException = null;
+  /**
+   * RuntimeException to throw when an API is invoked. Will be preferred over {@link #storeException}.
+   */
+  static RuntimeException runtimeException = null;
+
+  /**
+   * An empty {@link Store} implementation.
+   */
+  private Store store = new TestStore();
 
   private static final VerifiableProperties VPROPS = new VerifiableProperties(new Properties());
   /**
@@ -310,7 +325,7 @@ class MockStorageManager extends StorageManager {
 
   private Set<StoreKey> validKeysInStore = new HashSet<>();
   private FindTokenHelper findTokenHelper = new FindTokenHelper();
-  private Map<PartitionId, Store> storeMap = null;
+  private Map<PartitionId, Store> storeMap = new HashMap<>();
 
   MockStorageManager(Set<StoreKey> validKeysInStore, List<? extends ReplicaId> replicas,
       FindTokenHelper findTokenHelper) throws StoreException {
@@ -318,6 +333,9 @@ class MockStorageManager extends StorageManager {
         replicas, null, null, null, null, new MockTime());
     this.validKeysInStore = validKeysInStore;
     this.findTokenHelper = findTokenHelper;
+    for (ReplicaId replica : replicas) {
+      storeMap.put(replica.getPartitionId(), new TestStore());
+    }
   }
 
   MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
@@ -337,15 +355,17 @@ class MockStorageManager extends StorageManager {
     }
     firstCall = false;
     Store storeToReturn;
-    if (storeMap != null) {
+    if (overrideStoreToReturn != null) {
+      storeToReturn = overrideStoreToReturn;
+    } else if (returnNullStore) {
+      storeToReturn = null;
+    } else if (!storeMap.isEmpty()) {
       storeToReturn = storeMap.get(id);
       if (storeToReturn == null) {
         unreachablePartitions.add(id);
       }
-    } else if (overrideStoreToReturn != null) {
-      storeToReturn = overrideStoreToReturn;
     } else {
-      storeToReturn = returnNullStore ? null : store;
+      storeToReturn = store;
     }
     return storeToReturn;
   }

@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
@@ -29,6 +30,7 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -110,6 +112,7 @@ import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.MockClusterMap.*;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
 
 
@@ -131,17 +134,20 @@ public class AmbryServerRequestsTest {
   private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
   private final MockStoreKeyConverterFactory storeKeyConverterFactory;
   private final ReplicationConfig replicationConfig;
+  private final ServerConfig serverConfig;
   private final ReplicaStatusDelegate mockDelegate = Mockito.mock(ReplicaStatusDelegate.class);
   private final boolean putRequestShareMemory;
+  private final boolean validateRequestOnStoreState;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
   }
 
-  public AmbryServerRequestsTest(boolean putRequestShareMemory)
+  public AmbryServerRequestsTest(boolean putRequestShareMemory, boolean validateRequestOnStoreState)
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
     this.putRequestShareMemory = putRequestShareMemory;
+    this.validateRequestOnStoreState = validateRequestOnStoreState;
     clusterMap = new MockClusterMap();
     Properties properties = new Properties();
     properties.setProperty("clustermap.cluster.name", "test");
@@ -150,8 +156,11 @@ public class AmbryServerRequestsTest {
     properties.setProperty("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
     properties.setProperty("replication.no.of.intra.dc.replica.threads", "1");
     properties.setProperty("replication.no.of.inter.dc.replica.threads", "1");
+    properties.setProperty("server.validate.request.based.on.store.state",
+        Boolean.toString(validateRequestOnStoreState));
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
+    serverConfig = new ServerConfig(verifiableProperties);
     StatsManagerConfig statsManagerConfig = new StatsManagerConfig(verifiableProperties);
     dataNodeId = clusterMap.getDataNodeIds().get(0);
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
@@ -168,7 +177,7 @@ public class AmbryServerRequestsTest {
     ServerMetrics serverMetrics =
         new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, false,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
         storeKeyConverterFactory, statsManager);
     storageManager.start();
     Mockito.when(mockDelegate.unseal(any())).thenReturn(true);
@@ -181,6 +190,61 @@ public class AmbryServerRequestsTest {
   @After
   public void after() throws InterruptedException {
     storageManager.shutdown();
+  }
+
+  /**
+   * Tests that requests are validated based on local store state.
+   */
+  @Test
+  public void validateRequestsTest() {
+    assumeTrue(validateRequestOnStoreState);
+    // choose several replicas and make them in different states (there are 10 replicas on current node)
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(dataNodeId);
+    Map<ReplicaState, ReplicaId> stateToReplica = new HashMap<>();
+    int cnt = 0;
+    for (ReplicaState state : EnumSet.complementOf(EnumSet.of(ReplicaState.ERROR))) {
+      stateToReplica.put(state, localReplicas.get(cnt++));
+    }
+    // set store state
+    for (Map.Entry<ReplicaState, ReplicaId> entry : stateToReplica.entrySet()) {
+      storageManager.getStore(entry.getValue().getPartitionId()).setCurrentState(entry.getKey());
+    }
+
+    for (RequestOrResponseType request : EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.GetRequest,
+        RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest)) {
+      for (Map.Entry<ReplicaState, ReplicaId> entry : stateToReplica.entrySet()) {
+        if (request == RequestOrResponseType.PutRequest) {
+          System.out.println("replica state = " + entry.getKey() + ", store state = " + storageManager.getStore(entry.getValue().getPartitionId()).getCurrentState());
+          // for PUT request, it is not allowed on OFFLINE,BOOTSTRAP and INACTIVE if validateRequestOnStoreState is enabled
+          if (AmbryServerRequests.POST_ALLOWED_STORE_STATES.contains(entry.getKey())) {
+            assertEquals("Error code is not expected for PUT request", ServerErrorCode.No_Error,
+                ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
+          } else {
+            assertEquals("Error code is not expected for PUT request",
+                validateRequestOnStoreState ? ServerErrorCode.Temporarily_Disabled : ServerErrorCode.No_Error,
+                ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
+          }
+        } else if (AmbryServerRequests.UPDATE_REQUEST_TYPES.contains(request)) {
+          // for DELETE/TTL Update request, they are not allowed on OFFLINE,BOOTSTRAP and INACTIVE if validateRequestOnStoreState is enabled
+          if (AmbryServerRequests.UPDATE_ALLOWED_STORE_STATES.contains(entry.getKey())) {
+            assertEquals("Error code is not expected for DELETE/TTL Update", ServerErrorCode.No_Error,
+                ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
+          } else {
+            assertEquals("Error code is not expected for DELETE/TTL Update",
+                validateRequestOnStoreState ? ServerErrorCode.Temporarily_Disabled : ServerErrorCode.No_Error,
+                ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
+          }
+        } else {
+          // for GET request, all states should be allowed
+          assertEquals("Error code is not expected for GET request", ServerErrorCode.No_Error,
+              ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
+        }
+      }
+    }
+    // reset all store state to STANDBY
+    for (Map.Entry<ReplicaState, ReplicaId> entry : stateToReplica.entrySet()) {
+      storageManager.getStore(entry.getValue().getPartitionId()).setCurrentState(ReplicaState.STANDBY);
+    }
   }
 
   /**

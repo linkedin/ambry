@@ -42,6 +42,7 @@ public class AmbryPartitionStateModel extends StateModel {
 
   @Transition(to = "BOOTSTRAP", from = "OFFLINE")
   public void onBecomeBootstrapFromOffline(Message message, NotificationContext context) {
+    // TODO to distinguish between regular start and dynamic replica addition, check 1. store dir, 2. if there is bootstrap log
     logger.info("Partition {} in resource {} is becoming BOOTSTRAP from OFFLINE", message.getPartitionName(),
         message.getResourceName());
   }

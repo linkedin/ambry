@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replication.FindToken;
@@ -76,6 +77,7 @@ public class BlobStore implements Store {
   private BlobStoreStats blobStoreStats;
   private boolean started;
   private FileLock fileLock;
+  private ReplicaState currentState;
   protected PersistentIndex index;
 
   /**
@@ -171,6 +173,7 @@ public class BlobStore implements Store {
     this.thresholdBytesLow = (long) (capacityInBytes * ((threshold - delta) / 100.0));
     ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     errorCount = new AtomicInteger(0);
+    currentState = ReplicaState.OFFLINE;
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
         config.storeReplicaStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
@@ -669,6 +672,16 @@ public class BlobStore implements Store {
   @Override
   public boolean isEmpty() {
     return index.isEmpty();
+  }
+
+  @Override
+  public void setCurrentState(ReplicaState state) {
+    currentState = state;
+  }
+
+  @Override
+  public ReplicaState getCurrentState() {
+    return currentState;
   }
 
   /**

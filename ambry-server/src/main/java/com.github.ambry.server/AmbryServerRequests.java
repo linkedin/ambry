@@ -21,8 +21,10 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.ServerMetrics;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
@@ -65,21 +67,30 @@ import org.slf4j.LoggerFactory;
  * handled by this class
  */
 public class AmbryServerRequests extends AmbryRequests {
-
-  private final ConcurrentHashMap<PartitionId, ReplicaId> localPartitionToReplicaMap;
+  private final ServerConfig serverConfig;
   private final StatsManager statsManager;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<PartitionId, ReplicaId> localPartitionToReplicaMap;
+  // POST requests are allowed on stores which are in LEADER or STANDBY state
+  static final Set<ReplicaState> POST_ALLOWED_STORE_STATES =
+      EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY);
+  // UPDATE requests (including DELETE, TTLUpdate) are allowed on stores that are LEADER/STANDBY/INACTIVE/BOOTSTRAP
+  static final Set<ReplicaState> UPDATE_ALLOWED_STORE_STATES =
+      EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.INACTIVE, ReplicaState.BOOTSTRAP);
+  static final Set<RequestOrResponseType> UPDATE_REQUEST_TYPES =
+      EnumSet.of(RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest);
 
   private static final Logger logger = LoggerFactory.getLogger(AmbryServerRequests.class);
 
-  public AmbryServerRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel,
-      ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics,
-      FindTokenHelper findTokenHelper, NotificationSystem operationNotification, ReplicationAPI replicationEngine,
-      StoreKeyFactory storeKeyFactory, boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory,
-      StatsManager statsManager) {
+  AmbryServerRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
+      DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
+      NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
+      ServerConfig serverConfig, StoreKeyConverterFactory storeKeyConverterFactory, StatsManager statsManager) {
     super(storeManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics, findTokenHelper,
-        operationNotification, replicationEngine, storeKeyFactory, enableDataPrefetch, storeKeyConverterFactory);
+        operationNotification, replicationEngine, storeKeyFactory, serverConfig.serverEnableStoreDataPrefetch,
+        storeKeyConverterFactory);
+    this.serverConfig = serverConfig;
     this.statsManager = statsManager;
 
     for (RequestOrResponseType requestType : EnumSet.of(RequestOrResponseType.PutRequest,
@@ -145,7 +156,27 @@ public class AmbryServerRequests extends AmbryRequests {
    */
   private boolean isRequestEnabled(RequestOrResponseType requestType, PartitionId id) {
     Set<PartitionId> requestDisableInfo = requestsDisableInfo.get(requestType);
-    return requestDisableInfo == null || !requestDisableInfo.contains(id);
+    // 1. check if request is disabled by admin request
+    if (requestDisableInfo != null && requestDisableInfo.contains(id)) {
+      return false;
+    }
+    if (serverConfig.serverValidateRequestBasedOnStoreState) {
+      // 2. check if request is disabled due to current state of store
+      Store store = storeManager.getStore(id);
+      if (requestType == RequestOrResponseType.PutRequest && !POST_ALLOWED_STORE_STATES.contains(
+          store.getCurrentState())) {
+        logger.error("{} is not allowed because current state of store {} is {}", requestType, id,
+            store.getCurrentState());
+        return false;
+      }
+      if (UPDATE_REQUEST_TYPES.contains(requestType) && !UPDATE_ALLOWED_STORE_STATES.contains(
+          store.getCurrentState())) {
+        logger.error("{} is not allowed because current state of store {} is {}", requestType, id,
+            store.getCurrentState());
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

@@ -16,6 +16,7 @@ package com.github.ambry.cloud;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
@@ -463,6 +464,16 @@ class CloudBlobStore implements Store {
   public boolean isEmpty() {
     // TODO: query destination stats in start method
     return false;
+  }
+
+  @Override
+  public void setCurrentState(ReplicaState state) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public ReplicaState getCurrentState() {
+    throw new UnsupportedOperationException("Method not supported");
   }
 
   @Override

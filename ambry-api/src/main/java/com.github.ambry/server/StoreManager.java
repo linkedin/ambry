@@ -70,7 +70,7 @@ public interface StoreManager {
   /**
    * Check if a certain partition is available locally.
    * @param partition the {@link PartitionId} to check.
-   * @param localReplica {@link ReplicaId} of localreplica of the partition {@code PartitionId}.
+   * @param localReplica {@link ReplicaId} of local replica of the partition {@code PartitionId}.
    * @return {@code true} if the partition is available. {@code false} if not.
    */
   ServerErrorCode checkLocalPartitionStatus(PartitionId partition, ReplicaId localReplica);
