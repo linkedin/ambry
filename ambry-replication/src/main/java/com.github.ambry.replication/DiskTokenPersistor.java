@@ -68,7 +68,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
     } catch (IOException e) {
       logger.error("IO error while persisting tokens to disk {}", temp.getAbsoluteFile());
       // check disk state in storageManager. If there is a hardware issue, persistor should skip this bad disk next time.
-      if (storageManager.isDiskAvailableAtMountPath(mountPath)) {
+      if (!storageManager.isDiskAvailableAtMountPath(mountPath)) {
         mountPathsToSkip.add(mountPath);
       }
       throw e;

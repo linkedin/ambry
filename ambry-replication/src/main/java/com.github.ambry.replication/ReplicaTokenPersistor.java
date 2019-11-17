@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -101,6 +102,10 @@ public abstract class ReplicaTokenPersistor implements Runnable {
         logger.info("Persisted token {}", replicaTokenInfo.getReplicaToken());
       }
     }
+  }
+
+  Set<String> getMountPathsToSkip() {
+    return Collections.unmodifiableSet(mountPathsToSkip);
   }
 
   /**

@@ -15,8 +15,8 @@ package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ReplicationConfig;
@@ -25,6 +25,7 @@ import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreFindTokenFactory;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -32,16 +33,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.*;
 
 
@@ -52,7 +54,7 @@ public class DiskTokenPersistorTest {
   private static Map<String, Set<PartitionInfo>> mountPathToPartitionInfoList;
   private static ClusterMap clusterMap;
   private static ReplicaId replicaId;
-  private static List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfos;
+  private static Map<String, List<RemoteReplicaInfo.ReplicaTokenInfo>> mountPathToReplicaTokenInfos;
   private static FindTokenHelper findTokenHelper;
   private static StorageManager mockStorageManager;
   private static String REPLICA_TOKEN_FILENAME = "replicaTokens";
@@ -65,25 +67,28 @@ public class DiskTokenPersistorTest {
   public static void setup() throws Exception {
     clusterMap = new MockClusterMap();
     mountPathToPartitionInfoList = new HashMap<>();
+    mountPathToReplicaTokenInfos = new HashMap<>();
     BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
     StoreFindTokenFactory factory = new StoreFindTokenFactory(blobIdFactory);
-    PartitionId partitionId = clusterMap.getAllPartitionIds(null).get(0);
+    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
+    List<? extends ReplicaId> localReplicas = clusterMap.getReplicaIds(dataNodeId);
 
-    replicaId = partitionId.getReplicaIds().get(0);
-    List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
-    List<RemoteReplicaInfo> remoteReplicas = new ArrayList<>();
-    replicaTokenInfos = new ArrayList<>();
-    for (ReplicaId remoteReplica : peerReplicas) {
-      RemoteReplicaInfo remoteReplicaInfo =
-          new RemoteReplicaInfo(remoteReplica, replicaId, null, factory.getNewFindToken(), 10, SystemTime.getInstance(),
-              remoteReplica.getDataNodeId().getPortToConnectTo());
-      remoteReplicas.add(remoteReplicaInfo);
-      replicaTokenInfos.add(new RemoteReplicaInfo.ReplicaTokenInfo(remoteReplicaInfo));
+    replicaId = localReplicas.get(0);
+    for (ReplicaId replicaId : localReplicas) {
+      List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
+      List<RemoteReplicaInfo> remoteReplicas = new ArrayList<>();
+      for (ReplicaId remoteReplica : peerReplicas) {
+        RemoteReplicaInfo remoteReplicaInfo =
+            new RemoteReplicaInfo(remoteReplica, replicaId, null, factory.getNewFindToken(), 10,
+                SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
+        remoteReplicas.add(remoteReplicaInfo);
+        mountPathToReplicaTokenInfos.computeIfAbsent(replicaId.getMountPath(), k -> new ArrayList<>())
+            .add(new RemoteReplicaInfo.ReplicaTokenInfo(remoteReplicaInfo));
+      }
+      PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, replicaId.getPartitionId(), null, replicaId);
+      mountPathToPartitionInfoList.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
+          .add(partitionInfo);
     }
-    PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, partitionId, null, replicaId);
-    mountPathToPartitionInfoList.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
-        .add(partitionInfo);
-
     Properties replicationProperties = new Properties();
     replicationProperties.setProperty("replication.cloud.token.factory", MockFindTokenFactory.class.getName());
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(replicationProperties));
@@ -103,14 +108,87 @@ public class DiskTokenPersistorTest {
         mockStorageManager);
 
     //Simple persist and retrieve should pass
-    diskTokenPersistor.persist(replicaId.getMountPath(), replicaTokenInfos);
+    List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList =
+        mountPathToReplicaTokenInfos.get(replicaId.getMountPath());
+    diskTokenPersistor.persist(replicaId.getMountPath(), replicaTokenInfoList);
     List<RemoteReplicaInfo.ReplicaTokenInfo> retrievedReplicaTokenInfos =
         diskTokenPersistor.retrieve(replicaId.getMountPath());
 
-    Assert.assertEquals("Number of tokens doesn't match.", replicaTokenInfos.size(), retrievedReplicaTokenInfos.size());
-    for (int i = 0; i < replicaTokenInfos.size(); i++) {
-      Assert.assertArrayEquals("Token is not correct.", replicaTokenInfos.get(i).getReplicaToken().toBytes(),
+    assertEquals("Number of tokens doesn't match.", replicaTokenInfoList.size(), retrievedReplicaTokenInfos.size());
+    for (int i = 0; i < replicaTokenInfoList.size(); i++) {
+      assertArrayEquals("Token is not correct.", replicaTokenInfoList.get(i).getReplicaToken().toBytes(),
           retrievedReplicaTokenInfos.get(i).getReplicaToken().toBytes());
+    }
+  }
+
+  /**
+   * Test that replica token persistor is able to skip the bad disk if all stores on that disk are down.
+   * @throws Exception
+   */
+  @Test
+  public void skipBadDiskTest() throws Exception {
+    // clean up
+    for (String mountPath : mountPathToReplicaTokenInfos.keySet()) {
+      File[] files = (new File(mountPath)).listFiles();
+      if (files != null) {
+        for (File file : files) {
+          Utils.deleteFileOrDirectory(file);
+        }
+      }
+    }
+    DiskTokenPersistor diskTokenPersistor = new DiskTokenPersistor(REPLICA_TOKEN_FILENAME, mountPathToPartitionInfoList,
+        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper,
+        mockStorageManager);
+    // mock I/O exception for 1st mount path and all stores are down on that disk
+    Iterator<String> pathItor = mountPathToReplicaTokenInfos.keySet().iterator();
+    String pathWithException1 = pathItor.next();
+    File mountPathDir1 = new File(pathWithException1);
+    assertTrue("Can't make dir unwritable", mountPathDir1.setWritable(false));
+    Mockito.when(mockStorageManager.isDiskAvailableAtMountPath(anyString())).thenReturn(false);
+    try {
+      List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList =
+          mountPathToReplicaTokenInfos.get(pathWithException1);
+      diskTokenPersistor.persist(pathWithException1, replicaTokenInfoList);
+      fail("should fail due to I/O exception");
+    } catch (IOException e) {
+      // expected
+    } finally {
+      assertTrue("Can't make dir writable", mountPathDir1.setWritable(true));
+    }
+    // mock I/O exception for 2nd mount path but disk is still available (at least one store is up)
+    String pathWithException2 = pathItor.next();
+    Mockito.when(mockStorageManager.isDiskAvailableAtMountPath(anyString())).thenReturn(true);
+    File mountPathDir2 = new File(pathWithException2);
+    assertTrue("Can't make dir unwritable", mountPathDir2.setWritable(false));
+    try {
+      List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList =
+          mountPathToReplicaTokenInfos.get(pathWithException2);
+      diskTokenPersistor.persist(pathWithException2, replicaTokenInfoList);
+      fail("should fail due to I/O exception");
+    } catch (IOException e) {
+      // expected
+    } finally {
+      assertTrue("Can't make dir writable", mountPathDir2.setWritable(true));
+    }
+    // now verify the paths-to-skip set only contains 1st mount path
+    Set<String> pathsToSkip = diskTokenPersistor.getMountPathsToSkip();
+    assertTrue("mountPathsToSkip should only contain 1st mount path",
+        pathsToSkip.size() == 1 && pathsToSkip.contains(pathWithException1));
+    // verify the bad disk (at 1st mount path) is skipped
+    diskTokenPersistor.write(false);
+    // retrieve token from all paths
+    for (String mountPath : mountPathToReplicaTokenInfos.keySet()) {
+      List<RemoteReplicaInfo.ReplicaTokenInfo> retrievedReplicaTokenInfos = diskTokenPersistor.retrieve(mountPath);
+      if (mountPath.equals(pathWithException1)) {
+        assertTrue("The token info should be empty", retrievedReplicaTokenInfos.isEmpty());
+      } else {
+        List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList = mountPathToReplicaTokenInfos.get(mountPath);
+        assertEquals("Number of tokens doesn't match.", replicaTokenInfoList.size(), retrievedReplicaTokenInfos.size());
+        for (int i = 0; i < replicaTokenInfoList.size(); i++) {
+          assertArrayEquals("Token is not correct.", replicaTokenInfoList.get(i).getReplicaToken().toBytes(),
+              retrievedReplicaTokenInfos.get(i).getReplicaToken().toBytes());
+        }
+      }
     }
   }
 
@@ -120,17 +198,18 @@ public class DiskTokenPersistorTest {
    * @throws Exception if an exception happens
    */
   @Test
-  public void testForVersion0AndCurrentVersionRetrieve() throws Exception {
+  public void version0AndCurrentVersionRetrieveTest() throws Exception {
     DiskTokenPersistor diskTokenPersistor = new DiskTokenPersistor(REPLICA_TOKEN_FILENAME, mountPathToPartitionInfoList,
         new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper,
         mockStorageManager);
-
-    persistVersion0(replicaId.getMountPath(), replicaTokenInfos);
+    List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList =
+        mountPathToReplicaTokenInfos.get(replicaId.getMountPath());
+    persistVersion0(replicaId.getMountPath(), replicaTokenInfoList);
     List<RemoteReplicaInfo.ReplicaTokenInfo> retrievedReplicaTokenInfos =
         diskTokenPersistor.retrieve(replicaId.getMountPath());
-    Assert.assertEquals("Number of tokens doesn't match.", replicaTokenInfos.size(), retrievedReplicaTokenInfos.size());
-    for (int i = 0; i < replicaTokenInfos.size(); i++) {
-      Assert.assertArrayEquals("Token is not correct.", replicaTokenInfos.get(i).getReplicaToken().toBytes(),
+    assertEquals("Number of tokens doesn't match.", replicaTokenInfoList.size(), retrievedReplicaTokenInfos.size());
+    for (int i = 0; i < replicaTokenInfoList.size(); i++) {
+      assertArrayEquals("Token is not correct.", replicaTokenInfoList.get(i).getReplicaToken().toBytes(),
           retrievedReplicaTokenInfos.get(i).getReplicaToken().toBytes());
     }
   }
