@@ -19,8 +19,8 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.utils.MockClock;
 import com.github.ambry.utils.RejectThrottler;
-import com.github.ambry.utils.RejectThrottlerTest;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -44,7 +44,7 @@ public class QuotaManagerTest {
     props.setProperty(FrontendConfig.REST_REQUEST_QUOTA_STRING,
         "{\"PUT\": \"20\",\"GET\": \"20\",\"POST\": \"20\",\"HEAD\": \"20\",\"OPTIONS\": \"20\",\"DELETE\": \"20\"}");
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(props));
-    RejectThrottlerTest.MockClock clock = new RejectThrottlerTest.MockClock();
+    MockClock clock = new MockClock();
     QuotaManager quotaManager = new QuotaManager(createQuotaMock(frontendConfig, clock));
     // Issue new requests. Since MockClock tick doesn't change, rate is 0.
     for (int i = 0; i < 100; i++) {

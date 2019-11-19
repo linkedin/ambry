@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.Resource;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.utils.CachedHistogram;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.HashMap;
@@ -43,15 +44,14 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   private final RouterConfig routerConfig;
   private final NonBlockingRouterMetrics routerMetrics;
   private final Time time;
-  private final double quantile;
-  private final Histogram localDcHistogram;
-  private final Histogram crossDcHistogram;
+  private final CachedHistogram localDcHistogram;
+  private final CachedHistogram crossDcHistogram;
   private final Counter pastDueCounter;
   private final OpTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaIterator;
 
-  private Map<Resource, Histogram> localDcResourceToHistogram;
-  private Map<Resource, Histogram> crossDcResourceToHistogram;
+  private Map<Resource, CachedHistogram> localDcResourceToHistogram;
+  private Map<Resource, CachedHistogram> crossDcResourceToHistogram;
 
   // The value contains a pair - the boolean indicates whether the request to the corresponding replicaId has been
   // determined as expired (but not yet removed). The long is the time at which the request was sent.
@@ -78,7 +78,6 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     this.localDcHistogram = getWholeDcTracker(routerOperation, true);
     this.crossDcHistogram = getWholeDcTracker(routerOperation, false);
     this.pastDueCounter = getWholeDcPastDueCounter(routerOperation);
-    this.quantile = routerConfig.routerLatencyToleranceQuantile;
     this.otIterator = new OpTrackerIterator();
     if (routerConfig.routerOperationTrackerMetricScope != OperationTrackerScope.Datacenter) {
       localDcResourceToHistogram = getResourceToLatencyMap(routerOperation, true);
@@ -123,9 +122,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * @param replicaId the {@link ReplicaId} whose request latency is going to be tracked.
    * @return the {@link Histogram} associated with this replica.
    */
-  Histogram getLatencyHistogram(ReplicaId replicaId) {
+  CachedHistogram getLatencyHistogram(ReplicaId replicaId) {
     boolean isLocalReplica = replicaId.getDataNodeId().getDatacenterName().equals(datacenterName);
-    Histogram histogramToReturn;
+    CachedHistogram histogramToReturn;
     switch (routerConfig.routerOperationTrackerMetricScope) {
       case Datacenter:
         histogramToReturn = isLocalReplica ? localDcHistogram : crossDcHistogram;
@@ -157,8 +156,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * @param isLocal {@code true} if local DC latency histogram should be returned. {@code false} otherwise.
    * @return whole DC latency histogram.
    */
-  private Histogram getWholeDcTracker(RouterOperation routerOperation, boolean isLocal) {
-    Histogram trackerToReturn;
+  private CachedHistogram getWholeDcTracker(RouterOperation routerOperation, boolean isLocal) {
+    CachedHistogram trackerToReturn;
     switch (routerOperation) {
       case GetBlobInfoOperation:
         trackerToReturn =
@@ -199,8 +198,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * @param isLocal {@code true} if local resource-level histograms should be returned. {@code false} otherwise.
    * @return resource-to-histogram map.
    */
-  Map<Resource, Histogram> getResourceToLatencyMap(RouterOperation routerOperation, boolean isLocal) {
-    Map<Resource, Histogram> resourceToHistogramMap;
+  Map<Resource, CachedHistogram> getResourceToLatencyMap(RouterOperation routerOperation, boolean isLocal) {
+    Map<Resource, CachedHistogram> resourceToHistogramMap;
     switch (routerOperation) {
       case GetBlobInfoOperation:
         resourceToHistogramMap = isLocal ? routerMetrics.getBlobInfoLocalDcResourceToLatency
@@ -266,10 +265,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       if (unexpiredRequestSendTimes.size() > 0) {
         Map.Entry<ReplicaId, Pair<Boolean, Long>> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
         if (!oldestEntry.getValue().getFirst()) {
-          Histogram latencyTracker = getLatencyHistogram(oldestEntry.getKey());
+          CachedHistogram latencyTracker = getLatencyHistogram(oldestEntry.getKey());
           isPastDue = (latencyTracker.getCount() >= routerConfig.routerOperationTrackerMinDataPointsRequired) && (
-              time.milliseconds() - oldestEntry.getValue().getSecond() >= latencyTracker.getSnapshot()
-                  .getValue(quantile));
+              time.milliseconds() - oldestEntry.getValue().getSecond() >= latencyTracker.getCachedValue());
           if (isPastDue) {
             // indicate that the request has been processed and declared expired.
             oldestEntry.setValue(new Pair<>(true, oldestEntry.getValue().getSecond()));
