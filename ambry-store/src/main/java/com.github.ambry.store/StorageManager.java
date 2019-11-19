@@ -31,7 +31,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -206,7 +205,7 @@ public class StorageManager implements StoreManager {
    * @param disk the {@link DiskId} to check.
    * @return {@code true} if the disk is available. {@code false} if not.
    */
-  public boolean isDiskAvailable(DiskId disk) {
+  boolean isDiskAvailable(DiskId disk) {
     DiskManager diskManager = diskToDiskManager.get(disk);
     return diskManager != null && !diskManager.areAllStoresDown();
   }

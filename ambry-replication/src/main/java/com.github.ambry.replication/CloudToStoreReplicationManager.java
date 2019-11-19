@@ -76,7 +76,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   /**
    * Constructor for {@link CloudToStoreReplicationManager}
    * @param replicationConfig {@link ReplicationConfig} object.
-   * @param clusterMapConfig {@link ClusterMapConfig} objeect.
+   * @param clusterMapConfig {@link ClusterMapConfig} object.
    * @param storeConfig {@link StoreConfig} object.
    * @param storeManager {@link StoreManager} object to get stores for replicas.
    * @param storeKeyFactory {@link StoreKeyFactory} object.
@@ -110,7 +110,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     this.vcrNodes = new AtomicReference<>(new ConcurrentSkipListSet<>());
     this.persistor =
         new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-            tokenHelper);
+            tokenHelper, storeManager);
     this.localPartitionNameToPartition = mapPartitionNameToPartition(clusterMap, currentNode);
   }
 

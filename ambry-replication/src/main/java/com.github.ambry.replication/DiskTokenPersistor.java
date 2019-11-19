@@ -14,6 +14,8 @@
 package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.server.StoreManager;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -35,6 +37,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
 
   private static final Logger logger = LoggerFactory.getLogger(DiskTokenPersistor.class);
   private final String replicaTokenFileName;
+  private final StoreManager storeManager;
 
   /**
    * Constructor for {@link DiskTokenPersistor}.
@@ -43,11 +46,14 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
    * @param replicationMetrics metrics including token persist time.
    * @param clusterMap the {@link ClusterMap} to deserialize tokens.
    * @param tokenHelper the {@link FindTokenHelper} to deserialize tokens.
+   * @param storeManager the {@link StoreManager} that manages disks and stores.
    */
-  public DiskTokenPersistor(String replicaTokenFileName, Map<String, Set<PartitionInfo>> partitionGroupedByMountPath,
-      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper tokenHelper) {
+  DiskTokenPersistor(String replicaTokenFileName, Map<String, Set<PartitionInfo>> partitionGroupedByMountPath,
+      ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper tokenHelper,
+      StoreManager storeManager) {
     super(partitionGroupedByMountPath, replicationMetrics, clusterMap, tokenHelper);
     this.replicaTokenFileName = replicaTokenFileName;
+    this.storeManager = storeManager;
   }
 
   @Override
@@ -62,6 +68,13 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
       logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
     } catch (IOException e) {
       logger.error("IO error while persisting tokens to disk {}", temp.getAbsoluteFile());
+      PartitionInfo partitionInfo = partitionGroupedByMountPath.get(mountPath).iterator().next();
+      // check disk state in storeManager. If checkLocalPartitionStatus returns Disk_Unavailable, it means all stores on
+      // this disk are unreachable due to hardware issues. In this case, persistor should skip the bad disk next time.
+      if (storeManager.checkLocalPartitionStatus(partitionInfo.getPartitionId(), partitionInfo.getLocalReplicaId())
+          == ServerErrorCode.Disk_Unavailable) {
+        mountPathsToSkip.add(mountPath);
+      }
       throw e;
     }
   }
