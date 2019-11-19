@@ -104,6 +104,9 @@ public abstract class ReplicaTokenPersistor implements Runnable {
     }
   }
 
+  /**
+   * @return a set of mount paths that should be skipped when persisting replica tokens.
+   */
   Set<String> getMountPathsToSkip() {
     return Collections.unmodifiableSet(mountPathsToSkip);
   }
