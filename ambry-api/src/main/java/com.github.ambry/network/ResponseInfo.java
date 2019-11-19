@@ -67,6 +67,18 @@ public class ResponseInfo {
     return response;
   }
 
+  /**
+   * Increase the reference count of underlying response.
+   */
+  public void retain() {
+    if (response != null) {
+      ReferenceCountUtil.retain(response);
+    }
+  }
+
+  /**
+   * Decrease the reference count of underlying response.
+   */
   public void release() {
     if (response != null) {
       ReferenceCountUtil.release(response);
