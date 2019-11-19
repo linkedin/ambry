@@ -30,7 +30,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -202,14 +201,11 @@ public class StorageManager implements StoreManager {
   }
 
   /**
-   * Check if a certain disk is available at specific mount path
+   * Check if a certain disk is available.
    * @param disk the {@link DiskId} to check.
    * @return {@code true} if the disk is available. {@code false} if not.
    */
-  public boolean isDiskAvailable(DiskId disk) {
-//    Optional<Map.Entry<DiskId, DiskManager>> diskAndDiskManager =
-//        diskToDiskManager.entrySet().stream().filter(e -> e.getKey().getMountPath().equals(disk)).findFirst();
-    //DiskManager diskManager = diskAndDiskManager.map(Map.Entry::getValue).orElse(null);
+  boolean isDiskAvailable(DiskId disk) {
     DiskManager diskManager = diskToDiskManager.get(disk);
     return diskManager != null && !diskManager.areAllStoresDown();
   }

@@ -559,8 +559,7 @@ public class HelixClusterManagerTest {
 
     // randomly choose a partition and change the leader replica of it in cluster
     List<? extends PartitionId> defaultPartitionIds = helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS);
-    PartitionId partitionToChange =
-        defaultPartitionIds.get(0);//get((new Random()).nextInt(defaultPartitionIds.size()));
+    PartitionId partitionToChange = defaultPartitionIds.get((new Random()).nextInt(defaultPartitionIds.size()));
     MockHelixAdmin mockHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
     String currentLeaderInstance = mockHelixAdmin.getPartitionToLeaderReplica().get(partitionToChange.toPathString());
     String newLeaderInstance = mockHelixAdmin.getInstancesForPartition(partitionToChange.toPathString())
