@@ -1214,7 +1214,7 @@ class GetBlobOperation extends GetOperation {
           }
         } else {
           if (blobType == BlobType.MetadataBlob) {
-            handleMetadataBlob(responseInfo, blobData, userMetadata, encryptionKey);
+            handleMetadataBlob(blobData, userMetadata, encryptionKey);
           } else {
             handleSimpleBlob(responseInfo, blobData, userMetadata, encryptionKey);
           }
@@ -1262,15 +1262,14 @@ class GetBlobOperation extends GetOperation {
 
     /**
      * Process a metadata blob to find the data chunks that need to be fetched.
-     * @param responseInfo the response received for a request sent out on behalf of this chunk.
      * @param blobData the metadata blob's data.
      * @param userMetadata userMetadata of the blob
      * @param encryptionKey blob encryption key. Could be null for un-encrypted blobs
      * @throws IOException
      * @throws MessageFormatException
      */
-    private void handleMetadataBlob(ResponseInfo responseInfo, BlobData blobData, byte[] userMetadata,
-        ByteBuffer encryptionKey) throws IOException, MessageFormatException {
+    private void handleMetadataBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey)
+        throws IOException, MessageFormatException {
       ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
       compositeBlobInfo =
           MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
