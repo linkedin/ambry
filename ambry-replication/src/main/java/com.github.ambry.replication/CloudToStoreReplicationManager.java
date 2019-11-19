@@ -31,7 +31,6 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.StoreManager;
-import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -65,7 +64,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 public class CloudToStoreReplicationManager extends ReplicationEngine {
   private final ClusterMapConfig clusterMapConfig;
   private final StoreConfig storeConfig;
-  private final StoreManager storageManager;
+  private final StoreManager storeManager;
   private final ClusterSpectator vcrClusterSpectator;
   private final ClusterParticipant clusterParticipant;
   private static final String cloudReplicaTokenFileName = "cloudReplicaTokens";
@@ -79,7 +78,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * @param replicationConfig {@link ReplicationConfig} object.
    * @param clusterMapConfig {@link ClusterMapConfig} object.
    * @param storeConfig {@link StoreConfig} object.
-   * @param storageManager {@link StorageManager} object to get stores for replicas.
+   * @param storeManager {@link StoreManager} object to get stores for replicas.
    * @param storeKeyFactory {@link StoreKeyFactory} object.
    * @param clusterMap {@link ClusterMap} object to get the ambry datanode cluster map.
    * @param scheduler {@link ScheduledExecutorService} object for scheduling token persistence.
@@ -94,7 +93,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * @throws ReplicationException
    */
   public CloudToStoreReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
-      StoreConfig storeConfig, StorageManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
+      StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId currentNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
@@ -104,14 +103,14 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         transformerClassName);
     this.clusterMapConfig = clusterMapConfig;
     this.storeConfig = storeConfig;
-    this.storageManager = storageManager;
+    this.storeManager = storeManager;
     this.vcrClusterSpectator = vcrClusterSpectator;
     this.clusterParticipant = clusterParticipant;
     this.instanceNameToCloudDataNode = new AtomicReference<>(new ConcurrentHashMap<>());
     this.vcrNodes = new AtomicReference<>(new ConcurrentSkipListSet<>());
     this.persistor =
         new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-            tokenHelper, storageManager);
+            tokenHelper, storeManager);
     this.localPartitionNameToPartition = mapPartitionNameToPartition(clusterMap, currentNode);
   }
 
@@ -178,7 +177,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
       return;
     }
     PartitionId partitionId = localPartitionNameToPartition.get(partitionName);
-    Store store = storageManager.getStore(partitionId);
+    Store store = storeManager.getStore(partitionId);
     if (store == null) {
       logger.warn("Unable to add cloud replica for partition {} as store for the partition doesn't exist.",
           partitionName);

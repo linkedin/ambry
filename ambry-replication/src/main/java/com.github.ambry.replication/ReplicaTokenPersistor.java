@@ -43,7 +43,7 @@ import static com.github.ambry.replication.RemoteReplicaInfo.*;
  */
 public abstract class ReplicaTokenPersistor implements Runnable {
 
-  private static final Logger logger = LoggerFactory.getLogger(DiskTokenPersistor.class);
+  private static final Logger logger = LoggerFactory.getLogger(ReplicaTokenPersistor.class);
   protected final Map<String, Set<PartitionInfo>> partitionGroupedByMountPath;
   protected final Set<String> mountPathsToSkip = new HashSet<>();
   protected final ReplicationMetrics replicationMetrics;

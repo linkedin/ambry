@@ -23,7 +23,7 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.store.StorageManager;
+import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -41,24 +41,24 @@ import java.util.concurrent.TimeUnit;
  * Set up replicas based on {@link ReplicationEngine} and do replication across all data centers.
  */
 public class ReplicationManager extends ReplicationEngine {
-  private final StorageManager storageManager;
+  private final StoreManager storeManager;
   private final StoreConfig storeConfig;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
-      StoreConfig storeConfig, StorageManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
+      StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName);
-    this.storageManager = storageManager;
+    this.storeManager = storeManager;
     this.storeConfig = storeConfig;
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
     // initialize all partitions
     for (ReplicaId replicaId : replicaIds) {
       PartitionId partition = replicaId.getPartitionId();
-      Store store = storageManager.getStore(partition);
+      Store store = storeManager.getStore(partition);
       if (store != null) {
         List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
         if (peerReplicas != null) {
@@ -71,7 +71,7 @@ public class ReplicationManager extends ReplicationEngine {
       }
     }
     persistor = new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-        tokenHelper, storageManager);
+        tokenHelper, storeManager);
   }
 
   @Override
@@ -168,7 +168,7 @@ public class ReplicationManager extends ReplicationEngine {
       ReplicaId replicaId) {
     List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
     PartitionId partition = replicaId.getPartitionId();
-    Store store = storageManager.getStore(partition);
+    Store store = storeManager.getStore(partition);
     for (ReplicaId remoteReplica : peerReplicas) {
       // We need to ensure that a replica token gets persisted only after the corresponding data in the
       // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
@@ -196,7 +196,7 @@ public class ReplicationManager extends ReplicationEngine {
   private void updatePartitionInfoMaps(List<RemoteReplicaInfo> remoteReplicaInfos, ReplicaId replicaId) {
     PartitionId partition = replicaId.getPartitionId();
     PartitionInfo partitionInfo =
-        new PartitionInfo(remoteReplicaInfos, partition, storageManager.getStore(partition), replicaId);
+        new PartitionInfo(remoteReplicaInfos, partition, storeManager.getStore(partition), replicaId);
     partitionToPartitionInfo.put(partition, partitionInfo);
     mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
         .add(partitionInfo);

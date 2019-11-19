@@ -180,7 +180,7 @@ public class StorageManager implements StoreManager {
     if (getStore(partition) == null) {
       if (localReplica != null) {
         // check stores on the disk
-        if (!isDiskAvailableAtMountPath(localReplica.getMountPath())) {
+        if (!isDiskAvailable(localReplica.getDiskId())) {
           return ServerErrorCode.Disk_Unavailable;
         } else {
           return ServerErrorCode.Replica_Unavailable;
@@ -203,13 +203,14 @@ public class StorageManager implements StoreManager {
 
   /**
    * Check if a certain disk is available at specific mount path
-   * @param mountPath the {@link DiskId}'s mount path.
+   * @param disk the {@link DiskId} to check.
    * @return {@code true} if the disk is available. {@code false} if not.
    */
-  public boolean isDiskAvailableAtMountPath(String mountPath) {
-    Optional<Map.Entry<DiskId, DiskManager>> diskAndDiskManager =
-        diskToDiskManager.entrySet().stream().filter(e -> e.getKey().getMountPath().equals(mountPath)).findFirst();
-    DiskManager diskManager = diskAndDiskManager.map(Map.Entry::getValue).orElse(null);
+  public boolean isDiskAvailable(DiskId disk) {
+//    Optional<Map.Entry<DiskId, DiskManager>> diskAndDiskManager =
+//        diskToDiskManager.entrySet().stream().filter(e -> e.getKey().getMountPath().equals(disk)).findFirst();
+    //DiskManager diskManager = diskAndDiskManager.map(Map.Entry::getValue).orElse(null);
+    DiskManager diskManager = diskToDiskManager.get(disk);
     return diskManager != null && !diskManager.areAllStoresDown();
   }
 

@@ -21,7 +21,8 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.store.StorageManager;
+import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.StoreFindTokenFactory;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.SystemTime;
@@ -56,7 +57,7 @@ public class DiskTokenPersistorTest {
   private static ReplicaId replicaId;
   private static Map<String, List<RemoteReplicaInfo.ReplicaTokenInfo>> mountPathToReplicaTokenInfos;
   private static FindTokenHelper findTokenHelper;
-  private static StorageManager mockStorageManager;
+  private static StoreManager mockStoreManager;
   private static String REPLICA_TOKEN_FILENAME = "replicaTokens";
 
   /**
@@ -93,8 +94,8 @@ public class DiskTokenPersistorTest {
     replicationProperties.setProperty("replication.cloud.token.factory", MockFindTokenFactory.class.getName());
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(replicationProperties));
     findTokenHelper = new FindTokenHelper(blobIdFactory, replicationConfig);
-    mockStorageManager = Mockito.mock(StorageManager.class);
-    Mockito.when(mockStorageManager.isDiskAvailableAtMountPath(anyString())).thenReturn(true);
+    mockStoreManager = Mockito.mock(StoreManager.class);
+    Mockito.when(mockStoreManager.checkLocalPartitionStatus(any(), any())).thenReturn(ServerErrorCode.No_Error);
   }
 
   /**
@@ -105,7 +106,7 @@ public class DiskTokenPersistorTest {
   public void basicTest() throws Exception {
     DiskTokenPersistor diskTokenPersistor = new DiskTokenPersistor(REPLICA_TOKEN_FILENAME, mountPathToPartitionInfoList,
         new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper,
-        mockStorageManager);
+        mockStoreManager);
 
     //Simple persist and retrieve should pass
     List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList =
@@ -138,13 +139,13 @@ public class DiskTokenPersistorTest {
     }
     DiskTokenPersistor diskTokenPersistor = new DiskTokenPersistor(REPLICA_TOKEN_FILENAME, mountPathToPartitionInfoList,
         new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper,
-        mockStorageManager);
-    // mock I/O exception for 1st mount path and all stores are down on that disk
+        mockStoreManager);
+    // mock I/O exception for 1st mount path and all stores are down on that disk (Disk_Unavailable)
     Iterator<String> pathItor = mountPathToReplicaTokenInfos.keySet().iterator();
     String pathWithException1 = pathItor.next();
     File mountPathDir1 = new File(pathWithException1);
     assertTrue("Can't make dir unwritable", mountPathDir1.setWritable(false));
-    Mockito.when(mockStorageManager.isDiskAvailableAtMountPath(anyString())).thenReturn(false);
+    Mockito.when(mockStoreManager.checkLocalPartitionStatus(any(), any())).thenReturn(ServerErrorCode.Disk_Unavailable);
     try {
       List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList =
           mountPathToReplicaTokenInfos.get(pathWithException1);
@@ -157,7 +158,8 @@ public class DiskTokenPersistorTest {
     }
     // mock I/O exception for 2nd mount path but disk is still available (at least one store is up)
     String pathWithException2 = pathItor.next();
-    Mockito.when(mockStorageManager.isDiskAvailableAtMountPath(anyString())).thenReturn(true);
+    Mockito.when(mockStoreManager.checkLocalPartitionStatus(any(), any()))
+        .thenReturn(ServerErrorCode.Replica_Unavailable);
     File mountPathDir2 = new File(pathWithException2);
     assertTrue("Can't make dir unwritable", mountPathDir2.setWritable(false));
     try {
@@ -201,7 +203,7 @@ public class DiskTokenPersistorTest {
   public void version0AndCurrentVersionRetrieveTest() throws Exception {
     DiskTokenPersistor diskTokenPersistor = new DiskTokenPersistor(REPLICA_TOKEN_FILENAME, mountPathToPartitionInfoList,
         new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper,
-        mockStorageManager);
+        mockStoreManager);
     List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList =
         mountPathToReplicaTokenInfos.get(replicaId.getMountPath());
     persistVersion0(replicaId.getMountPath(), replicaTokenInfoList);

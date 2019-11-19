@@ -485,8 +485,7 @@ public class StorageManagerTest {
     }
     // verify all disks are still available because at least one store on them is up
     for (List<ReplicaId> replicasOnDisk : diskToReplicas.values()) {
-      assertTrue("Disk should be available",
-          storageManager.isDiskAvailableAtMountPath(replicasOnDisk.get(0).getMountPath()));
+      assertTrue("Disk should be available", storageManager.isDiskAvailable(replicasOnDisk.get(0).getDiskId()));
       assertEquals("Disk state be available", HardwareState.AVAILABLE, replicasOnDisk.get(0).getDiskId().getState());
     }
 
@@ -496,8 +495,7 @@ public class StorageManagerTest {
     }
     // verify all disks are unavailable because all stores are down
     for (List<ReplicaId> replicasOnDisk : diskToReplicas.values()) {
-      assertFalse("Disk should be unavailable",
-          storageManager.isDiskAvailableAtMountPath(replicasOnDisk.get(0).getMountPath()));
+      assertFalse("Disk should be unavailable", storageManager.isDiskAvailable(replicasOnDisk.get(0).getDiskId()));
     }
 
     // then, start the one store on each disk to test if disk is up again
@@ -506,8 +504,7 @@ public class StorageManagerTest {
     }
     // verify all disks are available again because one store is started
     for (List<ReplicaId> replicasOnDisk : diskToReplicas.values()) {
-      assertTrue("Disk should be available",
-          storageManager.isDiskAvailableAtMountPath(replicasOnDisk.get(0).getMountPath()));
+      assertTrue("Disk should be available", storageManager.isDiskAvailable(replicasOnDisk.get(0).getDiskId()));
       assertEquals("Disk state be available", HardwareState.AVAILABLE, replicasOnDisk.get(0).getDiskId().getState());
     }
 
