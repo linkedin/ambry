@@ -52,6 +52,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -338,7 +339,7 @@ class GetBlobOperation extends GetOperation {
         if (exception != null) {
           setOperationException(exception);
         }
-        int currentNumChunk = numChunksWrittenOut.addAndGet(1);
+        int currentNumChunk = numChunksWrittenOut.getAndIncrement();
         ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(currentNumChunk);
         if (responseInfo != null) {
           responseInfo.release();
@@ -1197,7 +1198,7 @@ class GetBlobOperation extends GetOperation {
         }
         blobType = blobData.getBlobType();
         chunkIndexToBuffer = new TreeMap<>();
-        chunkIndexToResponseInfo = new TreeMap<>();
+        chunkIndexToResponseInfo = new ConcurrentHashMap<>();
         if (rawMode) {
           // Return the raw bytes from storage
           if (encryptionKey != null) {
