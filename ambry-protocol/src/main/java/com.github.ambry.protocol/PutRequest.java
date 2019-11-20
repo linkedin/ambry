@@ -41,6 +41,8 @@ public class PutRequest extends RequestOrResponse {
   protected final BlobType blobType;
   protected final ByteBuffer blobEncryptionKey;
   protected final ByteBuffer blob;
+  protected final InputStream blobStream;
+  protected final Long crcValue;
   // crc will cover all the fields associated with the blob, namely:
   // blob type
   // BlobId
@@ -87,9 +89,41 @@ public class PutRequest extends RequestOrResponse {
     this.blob = materializedBlob;
     this.crc = new Crc32();
     this.crcBuf = ByteBuffer.allocate(CRC_SIZE_IN_BYTES);
+    this.blobStream = null;
+    this.crcValue = null;
   }
 
-  public static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
+  /**
+   * Construct a PutRequest while deserializing it from stream or bytes.
+   * @param correlationId the correlation id associated with the request.
+   * @param clientId the clientId associated with the request.
+   * @param blobId the {@link BlobId} of the blob that is being put as part of this request.
+   * @param blobProperties the {@link BlobProperties} associated with the request.
+   * @param userMetadata the user metadata associated with the request.
+   * @param blobSize the size of the blob data.
+   * @param blobType the type of the blob data.
+   * @param blobEncryptionKey the encryption key for the blob.
+   * @param blobStream the {@link InputStream} containing the data associated with the blob.
+   * @param crc the crc associated with this request.
+   */
+  private PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties blobProperties,
+      ByteBuffer userMetadata, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey, InputStream blobStream,
+      Long crc) throws IOException {
+    super(RequestOrResponseType.PutRequest, currentVersion, correlationId, clientId);
+    this.blobId = blobId;
+    this.properties = blobProperties;
+    this.usermetadata = userMetadata;
+    this.blobSize = blobSize;
+    this.blobType = blobType;
+    this.blobEncryptionKey = blobEncryptionKey;
+    this.blob = null;
+    this.crc = null;
+    this.crcBuf = null;
+    this.blobStream = blobStream;
+    this.crcValue = crc;
+  }
+
+  public static PutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     short versionId = stream.readShort();
     switch (versionId) {
       case PUT_REQUEST_VERSION_V3:
@@ -198,10 +232,66 @@ public class PutRequest extends RequestOrResponse {
   }
 
   /**
+   * @return the {@link BlobId} associated with the blob in this request.
+   */
+  public BlobId getBlobId() {
+    return blobId;
+  }
+
+  /**
+   * @return the {@link BlobProperties} associated with the blob in this request.
+   */
+  public BlobProperties getBlobProperties() {
+    return properties;
+  }
+
+  /**
+   * @return the userMetadata associated with the blob in this request.
+   */
+  public ByteBuffer getUsermetadata() {
+    return usermetadata;
+  }
+
+  /**
+   * @return the size of the blob content.
+   */
+  public long getBlobSize() {
+    return blobSize;
+  }
+
+  /**
+   * @return the {@link BlobType} of the blob in this request.
+   */
+  public BlobType getBlobType() {
+    return blobType;
+  }
+
+  /**
+   * @return the encryption key of the blob in this request.
+   */
+  public ByteBuffer getBlobEncryptionKey() {
+    return blobEncryptionKey;
+  }
+
+  /**
+   * @return the {@link InputStream} from which to stream in the data associated with the blob.
+   */
+  public InputStream getBlobStream() {
+    return blobStream;
+  }
+
+  /**
+   * @return the crc associated with the request.
+   */
+  public Long getCrc() {
+    return crcValue;
+  }
+
+  /**
    * Class to read protocol version 3 PutRequest from the stream.
    */
   private static class PutRequest_V3 {
-    static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
+    static PutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
       int correlationId = stream.readInt();
       String clientId = Utils.readIntString(stream);
       CrcInputStream crcInputStream = new CrcInputStream(stream);
@@ -219,8 +309,8 @@ public class PutRequest extends RequestOrResponse {
       if (computedCrc != receivedCrc) {
         throw new IOException("CRC mismatch, data in PutRequest is unreliable");
       }
-      return new ReceivedPutRequest(correlationId, clientId, id, properties, metadata, blobSize, blobType, null,
-          blobStream, receivedCrc);
+      return new PutRequest(correlationId, clientId, id, properties, metadata, blobSize, blobType, null, blobStream,
+          receivedCrc);
     }
   }
 
@@ -228,7 +318,7 @@ public class PutRequest extends RequestOrResponse {
    * Class to read protocol version 4 PutRequest from the stream.
    */
   private static class PutRequest_V4 {
-    static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
+    static PutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
       int correlationId = stream.readInt();
       String clientId = Utils.readIntString(stream);
       CrcInputStream crcInputStream = new CrcInputStream(stream);
@@ -247,148 +337,8 @@ public class PutRequest extends RequestOrResponse {
       if (computedCrc != receivedCrc) {
         throw new IOException("CRC mismatch, data in PutRequest is unreliable");
       }
-      return new ReceivedPutRequest(correlationId, clientId, id, properties, metadata, blobSize, blobType,
+      return new PutRequest(correlationId, clientId, id, properties, metadata, blobSize, blobType,
           blobEncryptionKey.remaining() == 0 ? null : blobEncryptionKey, blobStream, receivedCrc);
-    }
-  }
-
-  /**
-   * Class that represents a PutRequest that was received and cannot be sent out.
-   */
-  public static class ReceivedPutRequest {
-    private final int correlationId;
-    private final String clientId;
-    private final BlobId blobId;
-    private final BlobProperties blobProperties;
-    private final ByteBuffer userMetadata;
-    private final long blobSize;
-    private final BlobType blobType;
-    private final ByteBuffer blobEncryptionKey;
-    private final InputStream blobStream;
-    private final Long receivedCrc;
-
-    /**
-     * Construct a ReceivedPutRequest with the given parameters.
-     * @param correlationId the correlation id in the request.
-     * @param clientId the clientId in the request.
-     * @param blobId the {@link BlobId} of the blob being put.
-     * @param blobProperties the {@link BlobProperties} associated with the blob being put.
-     * @param userMetadata the userMetadata associated with the blob being put.
-     * @param blobSize the size of the blob data.
-     * @param blobType the type of the blob being put.
-     * @param blobEncryptionKey the encryption key of the blob.
-     * @param blobStream the {@link InputStream} containing the data associated with the blob.
-     * @param crc the crc associated with this request.
-     */
-    ReceivedPutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties blobProperties,
-        ByteBuffer userMetadata, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey, InputStream blobStream,
-        Long crc) throws IOException {
-      this.correlationId = correlationId;
-      this.clientId = clientId;
-      this.blobId = blobId;
-      this.blobProperties = blobProperties;
-      this.userMetadata = userMetadata;
-      this.blobSize = blobSize;
-      this.blobType = blobType;
-      this.blobEncryptionKey = blobEncryptionKey;
-      this.blobStream = blobStream;
-      this.receivedCrc = crc;
-    }
-
-    /**
-     * @return the correlation id.
-     */
-    public int getCorrelationId() {
-      return correlationId;
-    }
-
-    /**
-     * @return the client id.
-     */
-    public String getClientId() {
-      return clientId;
-    }
-
-    /**
-     * @return the {@link BlobId} associated with the blob in this request.
-     */
-    public BlobId getBlobId() {
-      return blobId;
-    }
-
-    /**
-     * @return the {@link BlobProperties} associated with the blob in this request.
-     */
-    public BlobProperties getBlobProperties() {
-      return blobProperties;
-    }
-
-    /**
-     * @return the userMetadata associated with the blob in this request.
-     */
-    public ByteBuffer getUsermetadata() {
-      return userMetadata;
-    }
-
-    /**
-     * @return the size of the blob content.
-     */
-    public long getBlobSize() {
-      return blobSize;
-    }
-
-    /**
-     * @return the {@link BlobType} of the blob in this request.
-     */
-    public BlobType getBlobType() {
-      return blobType;
-    }
-
-    /**
-     * @return the encryption key of the blob in this request.
-     */
-    public ByteBuffer getBlobEncryptionKey() {
-      return blobEncryptionKey;
-    }
-
-    /**
-     * @return the {@link InputStream} from which to stream in the data associated with the blob.
-     */
-    public InputStream getBlobStream() {
-      return blobStream;
-    }
-
-    /**
-     * @return the crc associated with the request.
-     */
-    public Long getCrc() {
-      return receivedCrc;
-    }
-
-    @Override
-    public String toString() {
-      StringBuilder sb = new StringBuilder();
-      sb.append("ReceivedPutRequest[");
-      sb.append("BlobID=").append(blobId.getID());
-      sb.append(", ").append("PartitionId=").append(blobId.getPartition());
-      sb.append(", ").append("ClientId=").append(clientId);
-      sb.append(", ").append("CorrelationId=").append(correlationId);
-      if (blobProperties != null) {
-        sb.append(", ").append(blobProperties);
-      } else {
-        sb.append(", ").append("Properties=Null");
-      }
-      if (userMetadata != null) {
-        sb.append(", ").append("UserMetaDataSize=").append(userMetadata.capacity());
-      } else {
-        sb.append(", ").append("UserMetaDataSize=0");
-      }
-      sb.append(", ").append("blobType=").append(blobType);
-      sb.append(", ").append("blobSize=").append(blobSize);
-      sb.append(", ").append("crc=").append(receivedCrc);
-      sb.append(", ").append("BlobKeyAvailable=").append(blobEncryptionKey != null);
-      sb.append("]");
-      return sb.toString();
     }
   }
 }

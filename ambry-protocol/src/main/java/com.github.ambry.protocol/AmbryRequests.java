@@ -148,7 +148,7 @@ public class AmbryRequests implements RequestAPI {
   public void handlePutRequest(Request request) throws IOException, InterruptedException {
     InputStream is = request.getInputStream();
     DataInputStream dis = is instanceof DataInputStream ? (DataInputStream) is : new DataInputStream(is);
-    PutRequest.ReceivedPutRequest receivedRequest = PutRequest.readFrom(dis, clusterMap);
+    PutRequest receivedRequest = PutRequest.readFrom(dis, clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);

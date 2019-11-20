@@ -197,7 +197,7 @@ class MockServer {
         buf.getLong();
         // read off the type.
         buf.getShort();
-        PutRequest.ReceivedPutRequest originalBlobPutReq =
+        PutRequest originalBlobPutReq =
             PutRequest.readFrom(new DataInputStream(new ByteBufferInputStream(buf)), clusterMap);
         switch (getRequest.getMessageFormatFlag()) {
           case BlobInfo:
@@ -575,7 +575,7 @@ class StoredBlob {
     receivedStream.readLong();
     // read of the RequestResponse type.
     receivedStream.readShort();
-    PutRequest.ReceivedPutRequest receivedPutRequest = PutRequest.readFrom(receivedStream, clusterMap);
+    PutRequest receivedPutRequest = PutRequest.readFrom(receivedStream, clusterMap);
     id = receivedPutRequest.getBlobId().getID();
     type = receivedPutRequest.getBlobType();
     properties = receivedPutRequest.getBlobProperties();

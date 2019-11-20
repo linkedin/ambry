@@ -1041,7 +1041,7 @@ public class PutManagerTest {
       throws Exception {
     String blobId = requestAndResult.result.result();
     ByteBuffer serializedRequest = serializedRequests.get(blobId);
-    PutRequest.ReceivedPutRequest request = deserializePutRequest(serializedRequest);
+    PutRequest request = deserializePutRequest(serializedRequest);
     NotificationBlobType notificationBlobType;
     BlobId origBlobId = new BlobId(blobId, mockClusterMap);
     boolean stitchOperation = requestAndResult.chunksToStitch != null;
@@ -1134,18 +1134,17 @@ public class PutManagerTest {
    * @param originalPutContent original out content
    * @param originalUserMetadata original user-metadata
    * @param dataBlobIds {@link List} of {@link StoreKey}s of the composite blob in context
-   * @param request {@link com.github.ambry.protocol.PutRequest.ReceivedPutRequest} to fetch info from
+   * @param request {@link com.github.ambry.protocol.PutRequest} to fetch info from
    * @param serializedRequests the mapping from blob ids to their corresponding serialized {@link PutRequest}.
    * @throws Exception
    */
   private void verifyCompositeBlob(BlobProperties properties, byte[] originalPutContent, byte[] originalUserMetadata,
-      List<StoreKey> dataBlobIds, PutRequest.ReceivedPutRequest request, HashMap<String, ByteBuffer> serializedRequests)
-      throws Exception {
+      List<StoreKey> dataBlobIds, PutRequest request, HashMap<String, ByteBuffer> serializedRequests) throws Exception {
     StoreKey lastKey = dataBlobIds.get(dataBlobIds.size() - 1);
     byte[] content = new byte[(int) request.getBlobProperties().getBlobSize()];
     AtomicInteger offset = new AtomicInteger(0);
     for (StoreKey key : dataBlobIds) {
-      PutRequest.ReceivedPutRequest dataBlobPutRequest = deserializePutRequest(serializedRequests.get(key.getID()));
+      PutRequest dataBlobPutRequest = deserializePutRequest(serializedRequests.get(key.getID()));
       AtomicInteger dataBlobLength = new AtomicInteger((int) dataBlobPutRequest.getBlobSize());
       InputStream dataBlobStream = dataBlobPutRequest.getBlobStream();
       if (!properties.isEncrypted()) {
@@ -1186,7 +1185,7 @@ public class PutManagerTest {
    * @param serialized the serialized ByteBuffer.
    * @return returns the deserialized output.
    */
-  private PutRequest.ReceivedPutRequest deserializePutRequest(ByteBuffer serialized) throws IOException {
+  private PutRequest deserializePutRequest(ByteBuffer serialized) throws IOException {
     serialized.getLong();
     serialized.getShort();
     return PutRequest.readFrom(new DataInputStream(new ByteBufferInputStream(serialized)), mockClusterMap);
