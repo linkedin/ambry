@@ -230,6 +230,9 @@ public class BlobStore implements Store {
         logger.trace("The store {} is successfully started", storeId);
         onSuccess();
         started = true;
+        // This is to be compatible with static clustermap. If static cluster manager is adopted, all replicas are supposed to be STANDBY
+        // and router relies on failure detector to track liveness of replicas(stores).
+        currentState = ReplicaState.STANDBY;
         if (replicaId != null) {
           replicaId.markDiskUp();
         }
