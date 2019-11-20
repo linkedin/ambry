@@ -112,7 +112,6 @@ import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.MockClusterMap.*;
 import static org.junit.Assert.*;
-import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
 
 
@@ -197,7 +196,6 @@ public class AmbryServerRequestsTest {
    */
   @Test
   public void validateRequestsTest() {
-    assumeTrue(validateRequestOnStoreState);
     // choose several replicas and make them in different states (there are 10 replicas on current node)
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(dataNodeId);
     Map<ReplicaState, ReplicaId> stateToReplica = new HashMap<>();
@@ -214,8 +212,9 @@ public class AmbryServerRequestsTest {
         RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest)) {
       for (Map.Entry<ReplicaState, ReplicaId> entry : stateToReplica.entrySet()) {
         if (request == RequestOrResponseType.PutRequest) {
-          System.out.println("replica state = " + entry.getKey() + ", store state = " + storageManager.getStore(entry.getValue().getPartitionId()).getCurrentState());
-          // for PUT request, it is not allowed on OFFLINE,BOOTSTRAP and INACTIVE if validateRequestOnStoreState is enabled
+          System.out.println("replica state = " + entry.getKey() + ", store state = " + storageManager.getStore(
+              entry.getValue().getPartitionId()).getCurrentState());
+          // for PUT request, it is not allowed on OFFLINE,BOOTSTRAP and INACTIVE when validateRequestOnStoreState = true
           if (AmbryServerRequests.POST_ALLOWED_STORE_STATES.contains(entry.getKey())) {
             assertEquals("Error code is not expected for PUT request", ServerErrorCode.No_Error,
                 ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
@@ -225,7 +224,7 @@ public class AmbryServerRequestsTest {
                 ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
           }
         } else if (AmbryServerRequests.UPDATE_REQUEST_TYPES.contains(request)) {
-          // for DELETE/TTL Update request, they are not allowed on OFFLINE,BOOTSTRAP and INACTIVE if validateRequestOnStoreState is enabled
+          // for DELETE/TTL Update request, they are not allowed on OFFLINE,BOOTSTRAP and INACTIVE when validateRequestOnStoreState = true
           if (AmbryServerRequests.UPDATE_ALLOWED_STORE_STATES.contains(entry.getKey())) {
             assertEquals("Error code is not expected for DELETE/TTL Update", ServerErrorCode.No_Error,
                 ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
@@ -241,7 +240,7 @@ public class AmbryServerRequestsTest {
         }
       }
     }
-    // reset all store state to STANDBY
+    // reset all stores state to STANDBY
     for (Map.Entry<ReplicaState, ReplicaId> entry : stateToReplica.entrySet()) {
       storageManager.getStore(entry.getValue().getPartitionId()).setCurrentState(ReplicaState.STANDBY);
     }

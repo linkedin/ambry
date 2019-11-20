@@ -72,10 +72,9 @@ public class AmbryServerRequests extends AmbryRequests {
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<PartitionId, ReplicaId> localPartitionToReplicaMap;
-  // POST requests are allowed on stores which are in LEADER or STANDBY state
-  static final Set<ReplicaState> POST_ALLOWED_STORE_STATES =
-      EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY);
-  // UPDATE requests (including DELETE, TTLUpdate) are allowed on stores that are LEADER/STANDBY/INACTIVE/BOOTSTRAP
+  // POST requests are allowed on stores states: { LEADER, STANDBY }
+  static final Set<ReplicaState> POST_ALLOWED_STORE_STATES = EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY);
+  // UPDATE requests (including DELETE, TTLUpdate) are allowed on stores states: { LEADER, STANDBY, INACTIVE, BOOTSTRAP }
   static final Set<ReplicaState> UPDATE_ALLOWED_STORE_STATES =
       EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.INACTIVE, ReplicaState.BOOTSTRAP);
   static final Set<RequestOrResponseType> UPDATE_REQUEST_TYPES =

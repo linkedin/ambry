@@ -86,6 +86,9 @@ public class ServerConfig {
   @Default("")
   public final List<String> serverStatsReportsToPublish;
 
+  /**
+   * The option to enable or disable validating request based on store state.
+   */
   @Config("server.validate.request.based.on.store.state")
   @Default("false")
   public final boolean serverValidateRequestBasedOnStoreState;

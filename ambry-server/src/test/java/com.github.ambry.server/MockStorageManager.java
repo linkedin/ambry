@@ -59,6 +59,9 @@ import java.util.stream.Collectors;
  */
 class MockStorageManager extends StorageManager {
 
+  /**
+   * Mocked {@link Store} that is intended to perform predefined behavior.
+   */
   private class TestStore implements Store {
     boolean started;
     ReplicaState currentState = ReplicaState.STANDBY;
