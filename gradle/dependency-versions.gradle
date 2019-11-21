@@ -18,7 +18,7 @@ ext {
     bouncycastleVersion = "1.52"
     javaxVersion = "3.0.1"
     nettyVersion = "4.1.42.Final"
-    nettyTcnativeVersion = "2.0.7.Final"
+    nettyTcnativeVersion = "2.0.27.Final"
     helixVersion = "0.8.4"
     jacksonVersion = "1.8.5"
     jaydioVersion = "0.1"
