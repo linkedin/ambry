@@ -40,19 +40,26 @@ public class PutRequest extends RequestOrResponse {
   protected final BlobProperties properties;
   protected final BlobType blobType;
   protected final ByteBuffer blobEncryptionKey;
+
+  // Used to carry blob content in ambry-frontend when creating this PutRequest.
   protected final ByteBuffer blob;
-  protected final InputStream blobStream;
-  protected final Long crcValue;
   // crc will cover all the fields associated with the blob, namely:
   // blob type
   // BlobId
   // BlobProperties
   // UserMetadata
   // BlobData
+
+  // Used to calculate crc value in ambry-frontend.
   private final Crc32 crc;
   private final ByteBuffer crcBuf;
   private boolean okayToWriteCrc = false;
   private int sizeExcludingBlobAndCrc = -1;
+
+  // Used to carry blob content in ambry-server when receiving this PutRequest.
+  protected final InputStream blobStream;
+  // Crc value received from network.
+  protected final Long crcValue;
 
   private static final int USERMETADATA_SIZE_IN_BYTES = Integer.BYTES;
   private static final int BLOB_SIZE_IN_BYTES = Long.BYTES;
@@ -281,6 +288,7 @@ public class PutRequest extends RequestOrResponse {
   }
 
   /**
+   * This method should only be used in the ambry-server after receiving a PutRequest.
    * @return the {@link InputStream} from which to stream in the data associated with the blob.
    */
   public InputStream getBlobStream() {
@@ -288,6 +296,7 @@ public class PutRequest extends RequestOrResponse {
   }
 
   /**
+   * This method should only be used in the ambry-server after receiving a PutRequest.
    * @return the crc associated with the request.
    */
   public Long getCrc() {
