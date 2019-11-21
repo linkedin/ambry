@@ -280,7 +280,7 @@ public class NettyMultipartRequestTest {
       request.prepare();
       fail("Prepare should have failed because there was more than one " + RestUtils.MultipartPost.BLOB_PART);
     } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.MalformedRequest, e.getErrorCode());
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest, e.getErrorCode());
     } finally {
       closeRequestAndValidate(request);
     }
@@ -294,7 +294,7 @@ public class NettyMultipartRequestTest {
       request.prepare();
       fail("Prepare should have failed because there was more than one part named Part-1");
     } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.MalformedRequest, e.getErrorCode());
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest, e.getErrorCode());
     } finally {
       closeRequestAndValidate(request);
     }
