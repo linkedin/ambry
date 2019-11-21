@@ -123,6 +123,13 @@ public class PutRequest extends RequestOrResponse {
     this.crcValue = crc;
   }
 
+  /**
+   * Deserialize {@link PutRequest} from a given {@link DataInputStream}.
+   * @param stream The stream that contains the serialized bytes.
+   * @param map The {@link ClusterMap} to help build {@link BlobId}.
+   * @return A deserialized {@link PutRequest}.
+   * @throws IOException Any I/O Errors.
+   */
   public static PutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     short versionId = stream.readShort();
     switch (versionId) {
