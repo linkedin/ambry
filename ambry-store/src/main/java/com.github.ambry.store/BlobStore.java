@@ -77,7 +77,7 @@ public class BlobStore implements Store {
   private BlobStoreStats blobStoreStats;
   private boolean started;
   private FileLock fileLock;
-  private ReplicaState currentState;
+  private volatile ReplicaState currentState;
   protected PersistentIndex index;
 
   /**

@@ -73,7 +73,7 @@ public class AmbryServerRequests extends AmbryRequests {
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<PartitionId, ReplicaId> localPartitionToReplicaMap;
   // POST requests are allowed on stores states: { LEADER, STANDBY }
-  static final Set<ReplicaState> POST_ALLOWED_STORE_STATES = EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY);
+  static final Set<ReplicaState> PUT_ALLOWED_STORE_STATES = EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY);
   // UPDATE requests (including DELETE, TTLUpdate) are allowed on stores states: { LEADER, STANDBY, INACTIVE, BOOTSTRAP }
   static final Set<ReplicaState> UPDATE_ALLOWED_STORE_STATES =
       EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.INACTIVE, ReplicaState.BOOTSTRAP);
@@ -162,15 +162,15 @@ public class AmbryServerRequests extends AmbryRequests {
     if (serverConfig.serverValidateRequestBasedOnStoreState) {
       // 2. check if request is disabled due to current state of store
       Store store = storeManager.getStore(id);
-      if (requestType == RequestOrResponseType.PutRequest && !POST_ALLOWED_STORE_STATES.contains(
+      if (requestType == RequestOrResponseType.PutRequest && !PUT_ALLOWED_STORE_STATES.contains(
           store.getCurrentState())) {
-        logger.error("{} is not allowed because current state of store {} is {}", requestType, id,
+        logger.warn("{} is not allowed because current state of store {} is {}", requestType, id,
             store.getCurrentState());
         return false;
       }
       if (UPDATE_REQUEST_TYPES.contains(requestType) && !UPDATE_ALLOWED_STORE_STATES.contains(
           store.getCurrentState())) {
-        logger.error("{} is not allowed because current state of store {} is {}", requestType, id,
+        logger.warn("{} is not allowed because current state of store {} is {}", requestType, id,
             store.getCurrentState());
         return false;
       }

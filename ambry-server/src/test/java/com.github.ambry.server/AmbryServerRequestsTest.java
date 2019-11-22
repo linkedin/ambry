@@ -201,7 +201,8 @@ public class AmbryServerRequestsTest {
     Map<ReplicaState, ReplicaId> stateToReplica = new HashMap<>();
     int cnt = 0;
     for (ReplicaState state : EnumSet.complementOf(EnumSet.of(ReplicaState.ERROR))) {
-      stateToReplica.put(state, localReplicas.get(cnt++));
+      stateToReplica.put(state, localReplicas.get(cnt));
+      cnt++;
     }
     // set store state
     for (Map.Entry<ReplicaState, ReplicaId> entry : stateToReplica.entrySet()) {
@@ -212,10 +213,8 @@ public class AmbryServerRequestsTest {
         RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest)) {
       for (Map.Entry<ReplicaState, ReplicaId> entry : stateToReplica.entrySet()) {
         if (request == RequestOrResponseType.PutRequest) {
-          System.out.println("replica state = " + entry.getKey() + ", store state = " + storageManager.getStore(
-              entry.getValue().getPartitionId()).getCurrentState());
           // for PUT request, it is not allowed on OFFLINE,BOOTSTRAP and INACTIVE when validateRequestOnStoreState = true
-          if (AmbryServerRequests.POST_ALLOWED_STORE_STATES.contains(entry.getKey())) {
+          if (AmbryServerRequests.PUT_ALLOWED_STORE_STATES.contains(entry.getKey())) {
             assertEquals("Error code is not expected for PUT request", ServerErrorCode.No_Error,
                 ambryRequests.validateRequest(entry.getValue().getPartitionId(), request, false));
           } else {
