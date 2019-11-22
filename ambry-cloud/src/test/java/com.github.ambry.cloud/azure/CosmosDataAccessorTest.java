@@ -20,23 +20,22 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.documentdb.Document;
-import com.microsoft.azure.documentdb.DocumentClient;
-import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.Error;
-import com.microsoft.azure.documentdb.FeedOptions;
-import com.microsoft.azure.documentdb.FeedResponse;
-import com.microsoft.azure.documentdb.QueryIterable;
-import com.microsoft.azure.documentdb.RequestOptions;
-import com.microsoft.azure.documentdb.ResourceResponse;
-import com.microsoft.azure.documentdb.SqlQuerySpec;
-import com.microsoft.azure.documentdb.internal.HttpConstants;
+import com.microsoft.azure.cosmosdb.Document;
+import com.microsoft.azure.cosmosdb.FeedOptions;
+import com.microsoft.azure.cosmosdb.FeedResponse;
+import com.microsoft.azure.cosmosdb.RequestOptions;
+import com.microsoft.azure.cosmosdb.ResourceResponse;
+import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
+import rx.Observable;
+import rx.observables.BlockingObservable;
 
 import static com.github.ambry.commons.BlobId.*;
 import static org.junit.Assert.*;
@@ -50,9 +49,8 @@ public class CosmosDataAccessorTest {
 
   private final ObjectMapper objectMapper = new ObjectMapper();
   private CosmosDataAccessor cosmosAccessor;
-  private DocumentClient mockumentClient;
+  private AsyncDocumentClient mockumentClient;
   private ResourceResponse<Document> mockResponse;
-  private DocumentClientException retryException;
   private AzureMetrics azureMetrics;
   private BlobId blobId;
   private int blobSize = 1024;
@@ -61,10 +59,8 @@ public class CosmosDataAccessorTest {
 
   @Before
   public void setup() throws Exception {
-    mockumentClient = mock(DocumentClient.class);
+    mockumentClient = mock(AsyncDocumentClient.class);
     mockResponse = mock(ResourceResponse.class);
-    retryException = new DocumentClientException(HttpConstants.StatusCodes.TOO_MANY_REQUESTS, new Error(),
-        Collections.singletonMap(HttpConstants.HttpHeaders.RETRY_AFTER_IN_MILLISECONDS, "1"));
 
     byte dataCenterId = 66;
     short accountId = 101;
@@ -75,7 +71,7 @@ public class CosmosDataAccessorTest {
     blobMetadata = new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
         CloudBlobMetadata.EncryptionOrigin.NONE);
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    cosmosAccessor = new CosmosDataAccessor(mockumentClient, "ambry/metadata", maxRetries, azureMetrics);
+    cosmosAccessor = new CosmosDataAccessor(mockumentClient, "ambry/metadata", azureMetrics);
   }
 
   /**
@@ -84,7 +80,11 @@ public class CosmosDataAccessorTest {
    */
   @Test
   public void testUpsertNormal() throws Exception {
-    // Request succeeds first time
+    Observable<ResourceResponse<Document>> mockResponse = mock(Observable.class);
+    BlockingObservable<ResourceResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
+    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
+    ResourceResponse<Document> mockResourceResponse = mock(ResourceResponse.class);
+    when(mockBlockingObservable.single()).thenReturn(mockResourceResponse);
     when(mockumentClient.upsertDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenReturn(
         mockResponse);
     cosmosAccessor.upsertMetadata(blobMetadata);
@@ -93,44 +93,14 @@ public class CosmosDataAccessorTest {
     assertEquals(0, azureMetrics.retryWaitTime.getCount());
   }
 
-  /**
-   * Test upsert with one retry.
-   * @throws Exception
-   */
-  @Test
-  public void testUpsertRetry() throws Exception {
-    // Request gets 420 on first try, succeeds on retry
-    when(mockumentClient.upsertDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenThrow(
-        retryException).thenReturn(mockResponse);
-    cosmosAccessor.upsertMetadata(blobMetadata);
-    assertEquals(1, azureMetrics.documentCreateTime.getCount());
-    assertEquals(1, azureMetrics.retryCount.getCount());
-    assertEquals(1, azureMetrics.retryWaitTime.getCount());
-  }
-
-  /**
-   * Test upsert exhausts retries.
-   * @throws Exception
-   */
-  @Test
-  public void testUpsertExhaustRetries() throws Exception {
-    // Request keeps getting 420 until we give up
-    when(mockumentClient.upsertDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenThrow(
-        retryException);
-    try {
-      cosmosAccessor.upsertMetadata(blobMetadata);
-      fail("Expected operation to fail after too many retries");
-    } catch (RuntimeException expected) {
-    }
-    assertEquals(0, azureMetrics.documentCreateTime.getCount());
-    assertEquals(maxRetries, azureMetrics.retryCount.getCount());
-    assertEquals(maxRetries, azureMetrics.retryWaitTime.getCount());
-  }
-
   /** Test read. */
   @Test
   public void testReadNormal() throws Exception {
-    // Request succeeds first time
+    Observable<ResourceResponse<Document>> mockResponse = mock(Observable.class);
+    BlockingObservable<ResourceResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
+    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
+    ResourceResponse<Document> mockResourceResponse = mock(ResourceResponse.class);
+    when(mockBlockingObservable.single()).thenReturn(mockResourceResponse);
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
     cosmosAccessor.readMetadata(blobId);
     assertEquals(1, azureMetrics.documentReadTime.getCount());
@@ -138,45 +108,12 @@ public class CosmosDataAccessorTest {
     assertEquals(0, azureMetrics.retryWaitTime.getCount());
   }
 
-  /**
-   * Test read with one retry.
-   * @throws Exception
-   */
-  @Test
-  public void testReadRetry() throws Exception {
-    // Request gets 420 on first try, succeeds on retry
-    when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenThrow(retryException)
-        .thenReturn(mockResponse);
-    cosmosAccessor.readMetadata(blobId);
-    assertEquals(1, azureMetrics.documentReadTime.getCount());
-    assertEquals(1, azureMetrics.retryCount.getCount());
-    assertEquals(1, azureMetrics.retryWaitTime.getCount());
-  }
-
-  /**
-   * Test read exhausts retries.
-   * @throws Exception
-   */
-  @Test
-  public void testReadExhaustRetries() throws Exception {
-    // Request keeps getting 420 until we give up
-    when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenThrow(retryException);
-    try {
-      cosmosAccessor.readMetadata(blobId);
-      fail("Expected operation to fail after too many retries");
-    } catch (RuntimeException expected) {
-    }
-    assertEquals(0, azureMetrics.documentReadTime.getCount());
-    assertEquals(maxRetries, azureMetrics.retryCount.getCount());
-    assertEquals(maxRetries, azureMetrics.retryWaitTime.getCount());
-  }
-
   /** Test query metadata. */
   @Test
   public void testQueryNormal() throws Exception {
-    FeedResponse<Document> feedResponse = getFeedResponse();
+    Observable<FeedResponse<Document>> feedResponseObservable = getFeedResponseObservable();
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        feedResponse);
+        feedResponseObservable);
     List<CloudBlobMetadata> metadataList = doQueryMetadata();
     assertEquals("Expected single entry", 1, metadataList.size());
     CloudBlobMetadata outputMetadata = metadataList.get(0);
@@ -187,33 +124,23 @@ public class CosmosDataAccessorTest {
     assertEquals(0, azureMetrics.retryWaitTime.getCount());
   }
 
-  /** Test query one retry. */
-  @Test
-  public void testQueryRetry() throws Exception {
-    FeedResponse<Document> feedResponse = getFeedResponse();
-    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenThrow(
-        new IllegalStateException(retryException)).thenReturn(feedResponse);
-    List<CloudBlobMetadata> metadataList = doQueryMetadata();
-    assertEquals("Expected single entry", 1, metadataList.size());
-    CloudBlobMetadata outputMetadata = metadataList.get(0);
-    assertEquals("Returned metadata does not match original", blobMetadata, outputMetadata);
-    assertEquals(1, azureMetrics.documentQueryCount.getCount());
-    assertEquals(1, azureMetrics.missingKeysQueryTime.getCount());
-    assertEquals(1, azureMetrics.retryCount.getCount());
-    assertEquals(1, azureMetrics.retryWaitTime.getCount());
-  }
-
   /**
    * @return a FeedResponse with a single document.
    */
-  private FeedResponse<Document> getFeedResponse() throws Exception {
-    QueryIterable<Document> mockIterable = mock(QueryIterable.class);
+  private Observable<FeedResponse<Document>> getFeedResponseObservable() throws Exception {
+    FeedResponse<Document> feedResponse = mock(FeedResponse.class);
+    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
+    BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
+    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
+    Iterator<FeedResponse<Document>> mockIterator = mock(Iterator.class);
+    when(mockBlockingObservable.getIterator()).thenReturn(mockIterator);
     List<Document> docList =
         Collections.singletonList(AzureTestUtils.createDocumentFromCloudBlobMetadata(blobMetadata, objectMapper));
-    when(mockIterable.iterator()).thenReturn(docList.iterator());
-    FeedResponse<Document> feedResponse = mock(FeedResponse.class);
-    when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
-    return feedResponse;
+    when(mockIterator.hasNext()).thenReturn(true).thenReturn(false);
+    when(mockIterator.next()).thenReturn(feedResponse);
+    when(feedResponse.getResults()).thenReturn(docList);
+
+    return mockResponse;
   }
 
   /** Utility method to run metadata query with default parameters. */

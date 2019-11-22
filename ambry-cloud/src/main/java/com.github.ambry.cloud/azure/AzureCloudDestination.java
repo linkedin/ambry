@@ -20,16 +20,16 @@ import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
-import com.microsoft.azure.documentdb.ConnectionMode;
-import com.microsoft.azure.documentdb.ConnectionPolicy;
-import com.microsoft.azure.documentdb.ConsistencyLevel;
-import com.microsoft.azure.documentdb.Document;
-import com.microsoft.azure.documentdb.DocumentClient;
-import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.ResourceResponse;
-import com.microsoft.azure.documentdb.SqlParameter;
-import com.microsoft.azure.documentdb.SqlParameterCollection;
-import com.microsoft.azure.documentdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.ConnectionMode;
+import com.microsoft.azure.cosmosdb.ConnectionPolicy;
+import com.microsoft.azure.cosmosdb.ConsistencyLevel;
+import com.microsoft.azure.cosmosdb.Document;
+import com.microsoft.azure.cosmosdb.DocumentClientException;
+import com.microsoft.azure.cosmosdb.ResourceResponse;
+import com.microsoft.azure.cosmosdb.SqlParameter;
+import com.microsoft.azure.cosmosdb.SqlParameterCollection;
+import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import com.microsoft.azure.storage.AccessCondition;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.OperationContext;
@@ -51,7 +51,6 @@ import java.security.InvalidKeyException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -61,7 +60,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.apache.http.HttpHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,7 +90,7 @@ class AzureCloudDestination implements CloudDestination {
   private static final int findSinceQueryLimit = 1000;
   private final CloudStorageAccount azureAccount;
   private final CloudBlobClient azureBlobClient;
-  private final DocumentClient documentClient;
+  private final AsyncDocumentClient asyncDocumentClient;
   private final CosmosDataAccessor cosmosDataAccessor;
   private final OperationContext blobOpContext = new OperationContext();
   private final AzureMetrics azureMetrics;
@@ -127,16 +125,20 @@ class AzureCloudDestination implements CloudDestination {
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
     if (azureCloudConfig.cosmosDirectHttps) {
       logger.info("Using CosmosDB DirectHttps connection mode");
-      connectionPolicy.setConnectionMode(ConnectionMode.DirectHttps);
+      connectionPolicy.setConnectionMode(ConnectionMode.Direct);
     }
     if (cloudConfig.vcrProxyHost != null) {
-      connectionPolicy.setProxy(new HttpHost(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
-      connectionPolicy.setHandleServiceUnavailableFromProxy(true);
+      connectionPolicy.setProxy(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
+      //ANKUR TODO
+      //connectionPolicy.setHandleServiceUnavailableFromProxy(true);
     }
     // TODO: test option to set connectionPolicy.setEnableEndpointDiscovery(false);
-    documentClient = new DocumentClient(azureCloudConfig.cosmosEndpoint, azureCloudConfig.cosmosKey, connectionPolicy,
-        ConsistencyLevel.Session);
-    cosmosDataAccessor = new CosmosDataAccessor(documentClient, azureCloudConfig, azureMetrics);
+    asyncDocumentClient = new AsyncDocumentClient.Builder().withServiceEndpoint(azureCloudConfig.cosmosEndpoint)
+        .withMasterKeyOrResourceToken(azureCloudConfig.cosmosKey)
+        .withConnectionPolicy(connectionPolicy)
+        .withConsistencyLevel(ConsistencyLevel.Session)
+        .build();
+    cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, azureCloudConfig, azureMetrics);
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(cloudConfig.cloudDeletedBlobRetentionDays);
     this.deadBlobsQueryLimit = cloudConfig.cloudBlobCompactionQueryLimit;
     logger.info("Created Azure destination");
@@ -145,16 +147,16 @@ class AzureCloudDestination implements CloudDestination {
   /**
    * Test constructor.
    * @param azureAccount the {@link CloudStorageAccount} to use.
-   * @param documentClient the {@link DocumentClient} to use.
+   * @param asyncDocumentClient the {@link AsyncDocumentClient} to use.
    * @param cosmosCollectionLink the CosmosDB collection link to use.
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @throws CloudStorageException if the destination could not be created.
    */
-  AzureCloudDestination(CloudStorageAccount azureAccount, DocumentClient documentClient, String cosmosCollectionLink,
-      String clusterName, AzureMetrics azureMetrics) {
+  AzureCloudDestination(CloudStorageAccount azureAccount, AsyncDocumentClient asyncDocumentClient,
+      String cosmosCollectionLink, String clusterName, AzureMetrics azureMetrics) {
     this.azureAccount = azureAccount;
-    this.documentClient = documentClient;
+    this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
@@ -162,9 +164,7 @@ class AzureCloudDestination implements CloudDestination {
 
     // Create a blob client to interact with Blob storage
     azureBlobClient = azureAccount.createCloudBlobClient();
-    cosmosDataAccessor =
-        new CosmosDataAccessor(documentClient, cosmosCollectionLink, AzureCloudConfig.DEFAULT_COSMOS_MAX_RETRIES,
-            azureMetrics);
+    cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
   }
 
   /**
@@ -374,9 +374,9 @@ class AzureCloudDestination implements CloudDestination {
       long lastUpdateTime) {
     ListIterator<CloudBlobMetadata> iterator = cloudBlobMetadataList.listIterator();
     int numRemovedBlobs = 0;
-    while(iterator.hasNext()) {
+    while (iterator.hasNext()) {
       CloudBlobMetadata cloudBlobMetadata = iterator.next();
-      if(numRemovedBlobs == lastReadBlobIds.size() || cloudBlobMetadata.getLastUpdateTime() > lastUpdateTime) {
+      if (numRemovedBlobs == lastReadBlobIds.size() || cloudBlobMetadata.getLastUpdateTime() > lastUpdateTime) {
         break;
       }
       if (lastReadBlobIds.contains(cloudBlobMetadata.getId())) {
@@ -616,8 +616,8 @@ class AzureCloudDestination implements CloudDestination {
    * Visible for test.
    * @return the CosmosDB DocumentClient
    */
-  DocumentClient getDocumentClient() {
-    return documentClient;
+  AsyncDocumentClient getDocumentClient() {
+    return asyncDocumentClient;
   }
 
   /**

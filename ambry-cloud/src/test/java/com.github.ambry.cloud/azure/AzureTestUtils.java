@@ -16,7 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.microsoft.azure.documentdb.Document;
+import com.microsoft.azure.cosmosdb.Document;
 import java.io.IOException;
 
 

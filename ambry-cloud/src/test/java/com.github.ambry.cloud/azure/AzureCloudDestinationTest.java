@@ -27,15 +27,14 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.documentdb.Document;
-import com.microsoft.azure.documentdb.DocumentClient;
-import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.FeedOptions;
-import com.microsoft.azure.documentdb.FeedResponse;
-import com.microsoft.azure.documentdb.QueryIterable;
-import com.microsoft.azure.documentdb.RequestOptions;
-import com.microsoft.azure.documentdb.ResourceResponse;
-import com.microsoft.azure.documentdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.Document;
+import com.microsoft.azure.cosmosdb.DocumentClientException;
+import com.microsoft.azure.cosmosdb.FeedOptions;
+import com.microsoft.azure.cosmosdb.FeedResponse;
+import com.microsoft.azure.cosmosdb.RequestOptions;
+import com.microsoft.azure.cosmosdb.ResourceResponse;
+import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.OperationContext;
 import com.microsoft.azure.storage.StorageException;
@@ -46,10 +45,12 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -57,18 +58,19 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.apache.commons.codec.binary.Base64;
-import org.apache.http.HttpHost;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnitRunner;
+import rx.Observable;
+import rx.observables.BlockingObservable;
 
 import static com.github.ambry.commons.BlobId.*;
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.BDDMockito.*;
 
 
 /** Test cases for {@link AzureCloudDestination} */
@@ -86,7 +88,7 @@ public class AzureCloudDestinationTest {
   private CloudBlobClient mockAzureClient;
   private CloudBlobContainer mockAzureContainer;
   private CloudBlockBlob mockBlob;
-  private DocumentClient mockumentClient;
+  private AsyncDocumentClient mockumentClient;
   private AzureMetrics azureMetrics;
   private int blobSize = 1024;
   byte dataCenterId = 66;
@@ -114,11 +116,19 @@ public class AzureCloudDestinationTest {
     Mockito.doNothing().when(mockBlob).upload(any(), anyLong(), any(), any(), any());
     Mockito.doNothing().when(mockBlob).download(any());
 
-    mockumentClient = mock(DocumentClient.class);
-    ResourceResponse<Document> mockResponse = mock(ResourceResponse.class);
+    mockumentClient = mock(AsyncDocumentClient.class);
+    Observable<ResourceResponse<Document>> mockResponse = mock(Observable.class);
+    BlockingObservable<ResourceResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
     Document metadataDoc = new Document();
-    when(mockResponse.getResource()).thenReturn(metadataDoc);
+    ResourceResponse<Document> mockResourceResponse = mock(ResourceResponse.class);
+    when(mockBlockingObservable.single()).thenReturn(mockResourceResponse);
+    when(mockResourceResponse.getResource()).thenReturn(metadataDoc);
+    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
     when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
+    when(mockumentClient.upsertDocument(anyString(), any(Object.class), any(RequestOptions.class),
+        anyBoolean())).thenReturn(mockResponse);
+    when(mockumentClient.replaceDocument(any(Document.class), any(RequestOptions.class))).thenReturn(mockResponse);
+    when(mockumentClient.deleteDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
 
     PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
@@ -206,7 +216,7 @@ public class AzureCloudDestinationTest {
     // Unsuccessful case
     when(mockBlob.deleteIfExists(any(), any(), any(), any())).thenReturn(false);
     when(mockumentClient.deleteDocument(anyString(), any(RequestOptions.class))).thenThrow(
-        new DocumentClientException(404));
+        new RuntimeException("Dcoument not Found", new DocumentClientException(404)));
     CloudBlobMetadata cloudBlobMetadata =
         new CloudBlobMetadata(blobId, System.currentTimeMillis(), Utils.Infinite_Time, blobSize,
             CloudBlobMetadata.EncryptionOrigin.NONE);
@@ -283,7 +293,6 @@ public class AzureCloudDestinationTest {
     // Reset metrics
     azureMetrics = new AzureMetrics(new MetricRegistry());
     azureDest = new AzureCloudDestination(mockAzureAccount, mockumentClient, "foo", clusterName, azureMetrics);
-    QueryIterable<Document> mockIterable = mock(QueryIterable.class);
     List<BlobId> blobIdList = new ArrayList<>();
     List<Document> docList = new ArrayList<>();
     for (int j = 0; j < numBlobs; j++) {
@@ -293,13 +302,22 @@ public class AzureCloudDestinationTest {
           CloudBlobMetadata.EncryptionOrigin.NONE);
       docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, objectMapper));
     }
-    when(mockIterable.iterator()).thenReturn(docList.iterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
-    when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
+
+    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
+    BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
+    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
+    Iterator<FeedResponse<Document>> iterator = mock(Iterator.class);
+    when(mockBlockingObservable.getIterator()).thenReturn(iterator);
+    when(iterator.hasNext()).thenReturn(true).thenReturn(false);
+    when(iterator.next()).thenReturn(feedResponse);
+    when(feedResponse.getResults()).thenReturn(docList);
+
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        feedResponse);
+        mockResponse);
+    Set<BlobId> blobIdSet = new HashSet<>(blobIdList);
+    assertEquals(blobIdList.size(), blobIdSet.size());
     Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(blobIdList);
-    assertEquals("Wrong map size", blobIdList.size(), metadataMap.size());
     for (BlobId blobId : blobIdList) {
       assertEquals("Unexpected id in metadata", blobId.getID(), metadataMap.get(blobId.getID()).getId());
     }
@@ -310,12 +328,16 @@ public class AzureCloudDestinationTest {
   /** Test getDeadBlobs */
   @Test
   public void testGetDeadBlobs() throws Exception {
-    QueryIterable<Document> mockIterable = mock(QueryIterable.class);
-    when(mockIterable.iterator()).thenReturn(Collections.emptyIterator());
+    List<Document> mockList = Collections.emptyList();
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
-    when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
+    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
+    BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
+    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
+    when(mockBlockingObservable.getIterator()).thenReturn(Collections.emptyIterator());
+    when(feedResponse.getResults()).thenReturn(mockList);
+
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        feedResponse);
+        mockResponse);
     List<CloudBlobMetadata> metadataList = azureDest.getDeadBlobs(blobId.getPartition().toPathString());
     assertEquals("Expected no dead blobs", 0, metadataList.size());
     assertEquals(1, azureMetrics.documentQueryCount.getCount());
@@ -350,12 +372,19 @@ public class AzureCloudDestinationTest {
       inputMetadata.setUploadTime(startTime + j);
       docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + j, objectMapper));
     }
-    QueryIterable<Document> mockIterable = mock(QueryIterable.class);
-    when(mockIterable.iterator()).thenReturn(docList.iterator());
+
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
-    when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
+    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
+    BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
+    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
+    Iterator<FeedResponse<Document>> iterator = mock(Iterator.class);
+    when(mockBlockingObservable.getIterator()).thenReturn(iterator);
+    when(iterator.hasNext()).thenReturn(true).thenReturn(false);
+    when(iterator.next()).thenReturn(feedResponse);
+    when(feedResponse.getResults()).thenReturn(docList);
+
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        feedResponse);
+        mockResponse);
     CloudFindToken findToken = new CloudFindToken();
     // Run the query
     List<CloudBlobMetadata> firstResult =
@@ -363,20 +392,22 @@ public class AzureCloudDestinationTest {
     assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
 
     docList = docList.subList(firstResult.size(), docList.size());
-    when(mockIterable.iterator()).thenReturn(docList.iterator());
     findToken = CloudFindToken.getUpdatedToken(findToken, firstResult);
     assertEquals("Find token has wrong last update time", findToken.getLastUpdateTime(),
         firstResult.get(firstResult.size() - 1).getLastUpdateTime());
     assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", findToken.getLastUpdateTimeReadBlobIds(),
         new HashSet<>(Collections.singletonList(firstResult.get(firstResult.size() - 1).getId())));
 
+    when(feedResponse.getResults()).thenReturn(docList);
+    when(iterator.hasNext()).thenReturn(true).thenReturn(false);
     List<CloudBlobMetadata> secondResult =
         azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
     assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
     assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
 
+    when(feedResponse.getResults()).thenReturn(docList);
+    when(iterator.hasNext()).thenReturn(true).thenReturn(false);
     // Rerun with max size below blob size, and make sure it returns one result
-    when(mockIterable.iterator()).thenReturn(docList.iterator());
     assertEquals("Expected one result", 1,
         azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2).size());
   }
@@ -407,19 +438,23 @@ public class AzureCloudDestinationTest {
         CloudBlobMetadata.EncryptionOrigin.NONE);
     docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + 1, objectMapper));
 
-    QueryIterable<Document> mockIterable = mock(QueryIterable.class);
-    when(mockIterable.iterator()).thenReturn(docList.iterator());
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
-    when(feedResponse.getQueryIterable()).thenReturn(mockIterable);
+    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
+    BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
+    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
+    Iterator<FeedResponse<Document>> iterator = mock(Iterator.class);
+    when(mockBlockingObservable.getIterator()).thenReturn(iterator);
+    when(iterator.hasNext()).thenReturn(true).thenReturn(false);
+    when(iterator.next()).thenReturn(feedResponse);
+    when(feedResponse.getResults()).thenReturn(docList);
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        feedResponse);
+        mockResponse);
     CloudFindToken findToken = new CloudFindToken();
     // Run the query
     List<CloudBlobMetadata> firstResult =
         azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
     assertEquals("Did not get expected doc count", maxTotalSize / chunkSize, firstResult.size());
 
-    when(mockIterable.iterator()).thenReturn(docList.iterator());
     findToken = CloudFindToken.getUpdatedToken(findToken, firstResult);
     assertEquals("Find token has wrong last update time", findToken.getLastUpdateTime(),
         firstResult.get(firstResult.size() - 1).getLastUpdateTime());
@@ -427,6 +462,7 @@ public class AzureCloudDestinationTest {
     assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", findToken.getLastUpdateTimeReadBlobIds(),
         resultBlobIdSet);
 
+    when(iterator.hasNext()).thenReturn(true).thenReturn(false);
     List<CloudBlobMetadata> secondResult =
         azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
     assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
@@ -439,13 +475,13 @@ public class AzureCloudDestinationTest {
     assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", secondFindToken.getLastUpdateTimeReadBlobIds(),
         resultBlobIdSet);
 
+    when(iterator.hasNext()).thenReturn(true).thenReturn(false);
     // Rerun with max size below blob size, and make sure it returns one result
-    when(mockIterable.iterator()).thenReturn(docList.iterator());
     assertEquals("Expected one result", 1,
         azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2).size());
 
+    when(iterator.hasNext()).thenReturn(true).thenReturn(false);
     // Rerun final time, and make sure that it returns all the remaining blobs
-    when(mockIterable.iterator()).thenReturn(docList.iterator());
     List<CloudBlobMetadata> thirdResult =
         azureDest.findEntriesSince(blobId.getPartition().toPathString(), secondFindToken, maxTotalSize);
     assertEquals("Unexpected doc count", totalBlobs - (firstResult.size() + secondResult.size()), thirdResult.size());
@@ -522,7 +558,7 @@ public class AzureCloudDestinationTest {
     cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics);
     assertNotNull("Expected proxy in blob op context", OperationContext.getDefaultProxy());
-    HttpHost policyProxy = dest.getDocumentClient().getConnectionPolicy().getProxy();
+    InetSocketAddress policyProxy = dest.getDocumentClient().getConnectionPolicy().getProxy();
     assertNotNull("Expected proxy in doc client", policyProxy);
     assertEquals("Wrong host", proxyHost, policyProxy.getHostName());
     assertEquals("Wrong port", proxyPort, policyProxy.getPort());
@@ -556,7 +592,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testUploadDocClientException() throws Exception {
     when(mockumentClient.upsertDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenThrow(
-        DocumentClientException.class);
+        new RuntimeException("Dcoument not Found", new DocumentClientException(404)));
     expectCloudStorageException(() -> uploadDefaultBlob(), DocumentClientException.class);
     verifyUploadErrorMetrics(true);
   }
@@ -590,7 +626,11 @@ public class AzureCloudDestinationTest {
   @Test
   public void testUpdateDocClientException() throws Exception {
     mockBlobExistence(true);
-    when(mockumentClient.readDocument(anyString(), any())).thenThrow(DocumentClientException.class);
+    given(mockumentClient.readDocument(anyString(), any())).willAnswer(invocation -> {
+      throw new RuntimeException("document client exception", new DocumentClientException(404));
+    });
+    //when(mockumentClient.readDocument(anyString(), any())).thenThrow(new RuntimeException("document client exception"),
+    //    new DocumentClientException(404));
     expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime), DocumentClientException.class);
     expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime),
         DocumentClientException.class);
