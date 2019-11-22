@@ -42,7 +42,7 @@ public class NettyByteBufLeakHelper {
    * Constructor to create a {@link NettyByteBufLeakHelper}.
    */
   public NettyByteBufLeakHelper() {
-    cachedEnabled = Integer.parseInt(System.getProperty("io.netty.alllocator.maxCachedBufferCapacity", "0")) != 0;
+    cachedEnabled = Integer.parseInt(System.getProperty("io.netty.allocator.maxCachedBufferCapacity", "0")) != 0;
   }
 
   /**
