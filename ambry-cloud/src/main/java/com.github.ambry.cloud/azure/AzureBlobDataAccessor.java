@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.azure.core.http.rest.Response;
 import com.azure.core.util.Configuration;
 import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobContainerClient;
@@ -23,7 +22,6 @@ import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
-import com.azure.storage.blob.models.BlockBlobItem;
 import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.codahale.metrics.Timer;
@@ -123,9 +121,8 @@ public class AzureBlobDataAccessor {
       BlockBlobClient blobClient = getAzureBlobReference(blobId, true);
       cloudBlobMetadata.setCloudBlobName(getAzureBlobName(blobId));
       Map<String, String> metadata = getMetadataMap(cloudBlobMetadata);
-      Response<BlockBlobItem> response =
-          blobClient.uploadWithResponse(blobInputStream, inputLength, null, metadata, null, null, blobRequestConditions,
-              null, Context.NONE);
+      blobClient.uploadWithResponse(blobInputStream, inputLength, null, metadata, null, null, blobRequestConditions,
+          null, Context.NONE);
       logger.debug("Uploaded blob {} to ABS", blobId);
       azureMetrics.blobUploadSuccessCount.inc();
       return true;
@@ -201,7 +198,7 @@ public class AzureBlobDataAccessor {
           metadata.put(fieldName, textValue);
           // Set condition to ensure we don't clobber another update
           BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(etag);
-          Response response = blobClient.setMetadataWithResponse(metadata, blobRequestConditions, null, Context.NONE);
+          blobClient.setMetadataWithResponse(metadata, blobRequestConditions, null, Context.NONE);
         }
         return true;
       } finally {
@@ -271,7 +268,7 @@ public class AzureBlobDataAccessor {
    * @return the name of the Azure storage container where blobs in the specified partition are stored.
    * @param partitionPath the lexical path of the Ambry partition.
    */
-  String getAzureContainerName(String partitionPath) {
+  private String getAzureContainerName(String partitionPath) {
     // Include Ambry cluster name in case the same storage account is used to backup multiple clusters.
     // Azure requires container names to be all lower case
     String rawContainerName = clusterName + SEPARATOR + partitionPath;
@@ -283,7 +280,7 @@ public class AzureBlobDataAccessor {
    * @param blobId The {@link BlobId} to store.
    * @return An Azure-friendly blob name.
    */
-  String getAzureBlobName(BlobId blobId) {
+  private String getAzureBlobName(BlobId blobId) {
     // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
     String blobIdStr = blobId.getID();
     return blobIdStr.substring(blobIdStr.length() - 4) + SEPARATOR + blobIdStr;
