@@ -36,7 +36,6 @@ import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import com.microsoft.azure.storage.CloudStorageAccount;
-import com.microsoft.azure.storage.OperationContext;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
@@ -45,7 +44,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -135,7 +133,7 @@ public class AzureCloudDestinationTest {
         BlobDataType.DATACHUNK);
 
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
-    configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");
+    configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com:443");
     configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
     configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
     configProps.setProperty("clustermap.cluster.name", "main");
@@ -328,13 +326,12 @@ public class AzureCloudDestinationTest {
   /** Test getDeadBlobs */
   @Test
   public void testGetDeadBlobs() throws Exception {
-    List<Document> mockList = Collections.emptyList();
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
     BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
     when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
     when(mockBlockingObservable.getIterator()).thenReturn(Collections.emptyIterator());
-    when(feedResponse.getResults()).thenReturn(mockList);
+    //when(feedResponse.getResults()).thenReturn(Collections.emptyList());
 
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
         mockResponse);
@@ -536,32 +533,6 @@ public class AzureCloudDestinationTest {
       fail("Expected exception");
     } catch (IllegalStateException expected) {
     }
-  }
-
-  /** Test initializing AzureCloudDestination with a proxy */
-  @Test
-  public void testProxy() throws Exception {
-
-    // Test without proxy
-    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics);
-    // check operation context proxy
-    assertNull("Expected null proxy in blob op context", OperationContext.getDefaultProxy());
-    assertNull("Expected null proxy in doc client", dest.getDocumentClient().getConnectionPolicy().getProxy());
-
-    // Test with proxy
-    String proxyHost = "azure-proxy.randomcompany.com";
-    int proxyPort = 80;
-    configProps.setProperty(CloudConfig.VCR_PROXY_HOST, proxyHost);
-    configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
-    cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
-    dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics);
-    assertNotNull("Expected proxy in blob op context", OperationContext.getDefaultProxy());
-    InetSocketAddress policyProxy = dest.getDocumentClient().getConnectionPolicy().getProxy();
-    assertNotNull("Expected proxy in doc client", policyProxy);
-    assertEquals("Wrong host", proxyHost, policyProxy.getHostName());
-    assertEquals("Wrong port", proxyPort, policyProxy.getPort());
   }
 
   /** Test upload when client throws exception. */
