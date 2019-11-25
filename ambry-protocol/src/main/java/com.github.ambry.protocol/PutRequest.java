@@ -225,8 +225,14 @@ public class PutRequest extends RequestOrResponse {
             ByteBuffer byteBuffer = nioBuffersFromBlob[bufferIndex];
             currentWritten = channel.write(byteBuffer);
             totalWrittenBytesForBlob += currentWritten;
-            if (!byteBuffer.hasRemaining()) {
+            while (!byteBuffer.hasRemaining()) {
+              // some bytebuffers are zero length, ignore those bytebuffers.
               bufferIndex++;
+              if (bufferIndex < nioBuffersFromBlob.length) {
+                byteBuffer = nioBuffersFromBlob[bufferIndex];
+              } else {
+                break;
+              }
             }
           }
           blob.skipBytes(totalWrittenBytesForBlob);
@@ -251,6 +257,14 @@ public class PutRequest extends RequestOrResponse {
       }
     }
     return written;
+  }
+
+  @Override
+  public void release() {
+    if (blob != null) {
+      blob.release();
+      blob = null;
+    }
   }
 
   @Override

@@ -130,7 +130,8 @@ public class NonBlockingRouterTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
+    return Arrays.asList(new Object[][]{
+        {false, MessageFormatRecord.Metadata_Content_Version_V2},
         {false, MessageFormatRecord.Metadata_Content_Version_V3},
         {true, MessageFormatRecord.Metadata_Content_Version_V2},
         {true, MessageFormatRecord.Metadata_Content_Version_V3}});
@@ -164,6 +165,7 @@ public class NonBlockingRouterTest {
   public void after() {
     Assert.assertEquals("Current operations count should be 0", 0, NonBlockingRouter.currentOperationsCount.get());
     nettyByteBufLeakHelper.afterTest();
+    nettyByteBufLeakHelper.setDisabled(false);
   }
 
   /**
@@ -411,6 +413,7 @@ public class NonBlockingRouterTest {
    */
   @Test
   public void testRequestResponseHandlerThreadExitFlow() throws Exception {
+    nettyByteBufLeakHelper.setDisabled(true);
     Properties props = getNonBlockingRouterProperties("DC1");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     RouterConfig routerConfig = new RouterConfig(verifiableProperties);
@@ -1010,6 +1013,7 @@ public class NonBlockingRouterTest {
       ResponseInfo responseInfo;
       if (replicaIdToFail != null && replicaIdToFail.equals(requestInfo.getReplicaId())) {
         responseInfo = new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null);
+        requestInfo.getRequest().release();
       } else {
         List<RequestInfo> requestInfoListToSend = new ArrayList<>();
         requestInfoListToSend.add(requestInfo);
@@ -1085,6 +1089,7 @@ public class NonBlockingRouterTest {
         .map(requestInfo -> requestInfo.getRequest().getCorrelationId())
         .collect(Collectors.toSet());
     Assert.assertEquals("Timed out requests should be dropped", allCorrelationIds, new HashSet<>(allDropped));
+    allRequests.forEach(r -> r.getRequest().release());
   }
 
   /**

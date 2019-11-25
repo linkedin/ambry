@@ -167,7 +167,7 @@ public class ByteBufferAsyncWritableChannelTest {
     // null input.
     ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     try {
-      channel.write((ByteBuffer) null, null);
+      channel.write((ByteBuf) null, null);
       fail("Write should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.

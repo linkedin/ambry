@@ -38,6 +38,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -68,6 +69,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.LongStream;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -104,6 +106,7 @@ public class PutManagerTest {
   private int successTarget;
   private boolean instantiateNewRouterForPuts;
   private final Random random = new Random();
+  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
@@ -119,10 +122,12 @@ public class PutManagerTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
+    return Arrays.asList(new Object[][]{
+        {false, MessageFormatRecord.Metadata_Content_Version_V2},
         {false, MessageFormatRecord.Metadata_Content_Version_V3},
         {true, MessageFormatRecord.Metadata_Content_Version_V2},
-        {true, MessageFormatRecord.Metadata_Content_Version_V3}});
+        {true, MessageFormatRecord.Metadata_Content_Version_V3}
+    });
   }
 
   /**
@@ -145,6 +150,11 @@ public class PutManagerTest {
     accountService = new InMemAccountService(false, true);
   }
 
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
   /**
    * Every test in this class should leave the router closed in the end. Some tests do additional checks after
    * closing the router. This is just a guard to ensure that the tests are not broken (which helped when developing
@@ -154,13 +164,10 @@ public class PutManagerTest {
   public void postCheck() {
     if (router != null) {
       if (router.isOpen()) {
-        try {
-//          Assert.fail("Router should be closed at the end of each test");
-        } finally {
-          router.close();
-        }
+        router.close();
       }
     }
+    nettyByteBufLeakHelper.afterTest();
   }
 
   /**
@@ -772,18 +779,18 @@ public class PutManagerTest {
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     // There will be two chunks written to the underlying writable channel, and so two events will be fired.
     int writeSize = blobSize / 2;
-    ByteBuffer buf = ByteBuffer.allocate(writeSize);
-    src.get(buf.array());
-    putChannel.write(buf);
+    ByteBuffer buf1 = ByteBuffer.allocate(writeSize);
+    src.get(buf1.array());
+    putChannel.write(buf1);
     // The first write will wake up (or will have woken up) the ChunkFiller thread and it will not go to WAITING until
     // the operation is complete as an attempt to fill chunks will be done by the ChunkFiller in every iteration
     // until the operation is complete.
     Assert.assertTrue(
         "ChunkFillerThread should have gone to RUNNABLE state as there is an active operation that is not yet complete",
         waitForThreadState(chunkFillerThread, Thread.State.RUNNABLE));
-    buf.rewind();
-    src.get(buf.array());
-    putChannel.write(buf);
+    ByteBuffer buf2 = ByteBuffer.allocate(writeSize);
+    src.get(buf2.array());
+    putChannel.write(buf2);
     // At this time all writes have finished, so the ChunkFiller thread will eventually go (or will have already gone)
     // to WAITING due to this write.
     Assert.assertTrue(
@@ -1429,7 +1436,9 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
     if (beBad) {
       Exception exception = new Exception("Channel encountered an error");
       returnedFuture.done(null, exception);
-      callback.onCompletion(null, exception);
+      if (callback != null) {
+        callback.onCompletion(null, exception);
+      }
       return;
     }
     writableChannel.write(buf, null).get();

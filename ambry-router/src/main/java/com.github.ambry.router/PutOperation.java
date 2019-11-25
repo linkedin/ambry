@@ -40,6 +40,8 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -122,8 +124,8 @@ class PutOperation {
   private PutChunk chunkToFill;
   // counter for tracking the chunks being filled.
   private int chunkCounter;
-  // the current ByteBuffer/position in the chunkFillerChannel.
-  private ByteBuffer channelReadBuffer;
+  // the current ByteBuf/position in the chunkFillerChannel.
+  private ByteBuf channelReadBuf;
   // indicates whether chunk filling is complete and successful.
   private volatile boolean chunkFillingCompletedSuccessfully = false;
   // the metadata chunk for this operation. There will always be a metadata chunk that tracks the data chunks.
@@ -317,6 +319,9 @@ class PutOperation {
    * Start reading from the channel containing the data for this operation.
    */
   private void startReadingFromChannel() {
+    // The callback will be passed to NettyRequest and will be invoked in the ByteBufferAsyncWritableChannel's
+    // resolveOldestChunk method, when it's the last http content chunk. Therefore, when this callback is invoked,
+    // the chunk filling process for this PutOperation is finished.
     channel.readInto(chunkFillerChannel, (result, exception) -> {
       if (exception != null) {
         setOperationExceptionAndComplete(exception);
@@ -426,6 +431,24 @@ class PutOperation {
   }
 
   /**
+   * release all the chunk {@link ByteBuf} resource when the operation is done.
+   */
+  private void releaseResource() {
+    for (PutChunk chunk : putChunks) {
+      // Only release the chunk in ready or complete mode. Filler thread will release the chunk in building mode
+      // and the encryption thread will release the chunk in encrypting mode.
+      if (chunk.isReady() || chunk.isComplete()) {
+        chunk.clear();
+      }
+    }
+  }
+
+  private void setOperationCompleted() {
+    operationCompleted = true;
+    releaseResource();
+  }
+
+  /**
    * For this operation, create and populate put requests for chunks (in the form of {@link RequestInfo}) to
    * send out.
    * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request that gets
@@ -484,7 +507,7 @@ class PutOperation {
         logger.error("Operation on chunk failed, but no exception was set");
       }
       logger.error("Failed putting chunk at index: " + chunk.getChunkIndex() + ", failing the entire operation");
-      operationCompleted = true;
+      setOperationCompleted();
     } else if (chunk != metadataPutChunk) {
       // a data chunk has succeeded.
       logger.trace("Successfully put data chunk with blob id : {}", chunk.getChunkBlobId());
@@ -498,7 +521,7 @@ class PutOperation {
       } else {
         logger.trace("Successfully put chunk: {} ", chunk.getChunkBlobId());
       }
-      operationCompleted = true;
+      setOperationCompleted();
     }
     long operationLatencyMs = time.milliseconds() - chunk.chunkFillCompleteAtMs;
     if (chunk.chunkBlobProperties.isEncrypted()) {
@@ -528,10 +551,12 @@ class PutOperation {
       PutChunk chunkToFill;
       while (!isChunkFillingDone()) {
         // Attempt to fill a chunk
-        if (channelReadBuffer == null) {
-          channelReadBuffer = chunkFillerChannel.getNextChunk(0);
+        if (channelReadBuf == null) {
+          channelReadBuf = chunkFillerChannel.getNextByteBuf(0);
+          if (channelReadBuf != null) {
+          }
         }
-        if (channelReadBuffer != null) {
+        if (channelReadBuf != null) {
           maybeStopTrackingWaitForChannelDataTime();
           chunkToFill = getChunkToFill();
           if (chunkToFill == null) {
@@ -541,15 +566,15 @@ class PutOperation {
           } else {
             // channel has data, and there is a chunk that can be filled.
             maybeStopTrackingWaitForChunkTime();
-            bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
+            bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuf);
             enforceMaxUploadSize();
 
             if (chunkToFill.isReady() && !chunkToFill.chunkBlobProperties.isEncrypted()) {
               routerCallback.onPollReady();
             }
-            if (!channelReadBuffer.hasRemaining()) {
+            if (!channelReadBuf.isReadable()) {
               chunkFillerChannel.resolveOldestChunk(null);
-              channelReadBuffer = null;
+              channelReadBuf = null;
             }
           }
         } else {
@@ -562,9 +587,11 @@ class PutOperation {
         }
       }
       if (chunkFillingCompletedSuccessfully) {
+        // If the blob size if less then 4MB or the last chunk size is less than 4MB, than this lastChunk will be
+        // the chunk above.
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
-          if (chunkCounter != 0 && lastChunk.buf.position() == 0) {
+          if (chunkCounter != 0 && lastChunk.buf.readableBytes() == 0) {
             logger.trace("The last buffer(s) received from chunkFillerChannel have no data, discarding them.");
           } else {
             lastChunk.onFillComplete(true);
@@ -575,10 +602,21 @@ class PutOperation {
           }
         }
       }
+      if (operationCompleted) {
+        logger.info("Clear unfinished chunk since operation is completed");
+        PutChunk lastChunk = getBuildingChunk();
+        if (lastChunk != null) {
+          lastChunk.clear();
+        }
+      }
     } catch (Exception e) {
       RouterException routerException = e instanceof RouterException ? (RouterException) e
           : new RouterException("PutOperation fillChunks encountered unexpected error", e,
               RouterErrorCode.UnexpectedInternalError);
+      PutChunk lastChunk = getBuildingChunk();
+      if (lastChunk != null) {
+        lastChunk.clear();
+      }
       routerMetrics.chunkFillerUnexpectedErrorCount.inc();
       setOperationExceptionAndComplete(routerException);
       routerCallback.onPollReady();
@@ -676,7 +714,7 @@ class PutOperation {
           throw new RouterException("Blob is too large", RouterErrorCode.BlobTooLarge);
         }
         chunkCounter++;
-        chunkToFill.prepareForBuilding(chunkCounter, routerConfig.routerMaxPutChunkSizeBytes);
+        chunkToFill.prepareForBuilding(chunkCounter);
       }
     }
     return chunkToFill;
@@ -858,7 +896,7 @@ class PutOperation {
     } else {
       operationException.set(exception);
     }
-    operationCompleted = true;
+    setOperationCompleted();
   }
 
   /**
@@ -914,7 +952,7 @@ class PutOperation {
     // the state of the current chunk.
     protected volatile ChunkState state;
     // the ByteBuffer that has the data for the current chunk.
-    protected ByteBuffer buf;
+    protected volatile ByteBuf buf;
     // the ByteBuffer that has the encryptedPerBlobKey (encrypted using containerKey). Could be null if encryption is not required.
     protected ByteBuffer encryptedPerBlobKey;
     // the OperationTracker used to track the status of requests for the current chunk.
@@ -929,10 +967,8 @@ class PutOperation {
     // the list of partitions already attempted for this chunk.
     private List<PartitionId> attemptedPartitionIds = new ArrayList<PartitionId>();
     // map of correlation id to the request metadata for every request issued for the current chunk.
-    private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo =
-        new TreeMap<Integer, ChunkPutRequestInfo>();
+    private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
     // list of buffers that were once associated with this chunk and are not yet freed.
-    private final List<DefunctBufferInfo> defunctBufferInfos = new ArrayList<>();
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
 
     /**
@@ -943,9 +979,10 @@ class PutOperation {
     }
 
     /**
-     * Clear the state to make way for a new data chunk.
+     * Clear the state to make way for a new data chunk
      */
     void clear() {
+      releaseBlobContent();
       chunkIndex = -1;
       chunkBlobSize = -1;
       chunkBlobId = null;
@@ -953,7 +990,6 @@ class PutOperation {
       failedAttempts = 0;
       partitionId = null;
       attemptedPartitionIds.clear();
-      maybeUpdateDefunctBufferInfos();
       correlationIdToChunkPutRequestInfo.clear();
       chunkUserMetadata = userMetadata;
       encryptedPerBlobKey = null;
@@ -964,47 +1000,12 @@ class PutOperation {
     }
 
     /**
-     * Go through the list of requests for which responses were not received, and if there are any that are not yet
-     * sent out completely, add the associated buffer to the defunct list for freeing in the future.
+     * This method might be called in main thread, encryption job thread or chunk filler thread, so it has to be protected.
      */
-    private void maybeUpdateDefunctBufferInfos() {
-      ArrayList<PutRequest> requestsAwaitingSendCompletion = null;
-      for (Map.Entry<Integer, ChunkPutRequestInfo> entry : correlationIdToChunkPutRequestInfo.entrySet()) {
-        if (!entry.getValue().putRequest.isSendComplete()) {
-          if (requestsAwaitingSendCompletion == null) {
-            requestsAwaitingSendCompletion = new ArrayList<>();
-          }
-          requestsAwaitingSendCompletion.add(entry.getValue().putRequest);
-        }
-      }
-
-      if (requestsAwaitingSendCompletion != null) {
-        // This means that the buffer associated with this PutChunk could get read by the NetworkClient in the
-        // future and assigning this PutChunk to a subsequent chunk of the overall blob could lead to this buffer
-        // getting read and written concurrently, or other undefined behavior. There are multiple ways to handle this,
-        // and the simplest way is to set the buf to null so that it gets allocated afresh if/when this PutChunk gets
-        // assigned for a subsequent chunk of the overall blob. Every time this chunk gets polled, an attempt to clear
-        // out the list will be made.
-        defunctBufferInfos.add(new DefunctBufferInfo(buf, requestsAwaitingSendCompletion));
+    synchronized void releaseBlobContent() {
+      if (buf != null) {
+        buf.release();
         buf = null;
-      }
-    }
-
-    /**
-     * Iterate defunctBufferInfos and possibly free up entries from it.
-     */
-    private void maybeFreeDefunctBuffers() {
-      for (Iterator<DefunctBufferInfo> iter = defunctBufferInfos.iterator(); iter.hasNext(); ) {
-        boolean canBeFreed = true;
-        for (PutRequest putRequest : iter.next().putRequests) {
-          if (!putRequest.isSendComplete()) {
-            canBeFreed = false;
-          }
-        }
-        if (canBeFreed) {
-          // this is where the buffer will be freed if the buffer pool is used. For now, simply remove the reference.
-          iter.remove();
-        }
       }
     }
 
@@ -1082,16 +1083,9 @@ class PutOperation {
     /**
      * Prepare this chunk for building, that is, for being filled with data from the channel.
      * @param chunkIndex the position in the overall blob that this chunk is going to  be in.
-     * @param size size to allocate memory for the buffer that will hold the data for this chunk.
      */
-    private void prepareForBuilding(int chunkIndex, int size) {
+    private void prepareForBuilding(int chunkIndex) {
       this.chunkIndex = chunkIndex;
-      if (buf == null) {
-        buf = ByteBuffer.allocate(size);
-      } else {
-        buf.clear();
-        buf.limit(size);
-      }
       state = ChunkState.Building;
     }
 
@@ -1144,6 +1138,7 @@ class PutOperation {
      * Submits encrypt job for the given {@link PutChunk} and processes the callback for the same
      */
     private void encryptChunk() {
+      ByteBuf toEncrypt = buf.retain();
       try {
         logger.trace("Chunk at index {} moves to {} state", chunkIndex, ChunkState.Encrypting);
         state = ChunkState.Encrypting;
@@ -1152,42 +1147,62 @@ class PutOperation {
         logger.trace("Submitting encrypt job for chunk at index {}", chunkIndex);
         cryptoJobHandler.submitJob(
             new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
-                isMetadataChunk() ? null : buf, ByteBuffer.wrap(chunkUserMetadata), kms.getRandomKey(), cryptoService,
-                kms, encryptJobMetricsTracker, (EncryptJob.EncryptJobResult result, Exception exception) -> {
-              logger.trace("Processing encrypt job callback for chunk at index {}", chunkIndex);
-              encryptJobMetricsTracker.onJobResultProcessingStart();
-              if (exception == null && !isOperationComplete()) {
-                if (!isMetadataChunk()) {
-                  buf = result.getEncryptedBlobContent();
-                }
-                encryptedPerBlobKey = result.getEncryptedKey();
-                chunkUserMetadata = result.getEncryptedUserMetadata().array();
-                logger.trace("Completing encrypt job result for chunk at index {}", chunkIndex);
-                prepareForSending();
-                chunkReadyAtMs = time.milliseconds();
-              } else {
-                encryptJobMetricsTracker.incrementOperationError();
-                if (!isOperationComplete()) {
-                  logger.trace("Setting exception from encrypt of chunk at index {} ", chunkIndex, exception);
-                  setOperationExceptionAndComplete(
-                      new RouterException("Exception thrown on encrypting the content for chunk at index " + chunkIndex,
-                          exception, RouterErrorCode.UnexpectedInternalError));
-                } else {
-                  logger.trace(
-                      "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
-                      chunkIndex, getOperationException(), exception);
-                }
-              }
-              routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
-              encryptJobMetricsTracker.onJobResultProcessingComplete();
-              routerCallback.onPollReady();
-            }));
+                isMetadataChunk() ? null : toEncrypt.retainedDuplicate(), ByteBuffer.wrap(chunkUserMetadata),
+                kms.getRandomKey(), cryptoService, kms, encryptJobMetricsTracker,
+                (EncryptJob.EncryptJobResult result, Exception exception) -> {
+                  logger.trace("Processing encrypt job callback for chunk at index {}", chunkIndex);
+                  if (!isMetadataChunk()) {
+                    releaseBlobContent();
+                  }
+                  encryptJobMetricsTracker.onJobResultProcessingStart();
+                  if (exception == null && !isOperationComplete()) {
+                    if (!isMetadataChunk()) {
+                      buf = result.getEncryptedBlobContent();
+                    }
+                    encryptedPerBlobKey = result.getEncryptedKey();
+                    chunkUserMetadata = result.getEncryptedUserMetadata().array();
+                    logger.trace("Completing encrypt job result for chunk at index {}", chunkIndex);
+                    prepareForSending();
+                    chunkReadyAtMs = time.milliseconds();
+                  } else {
+                    encryptJobMetricsTracker.incrementOperationError();
+                    if (!isOperationComplete()) {
+                      logger.trace("Setting exception from encrypt of chunk at index {} ", chunkIndex, exception);
+                      // If we are here, then the result is null. no need to release it.
+                      setOperationExceptionAndComplete(new RouterException(
+                          "Exception thrown on encrypting the content for chunk at index " + chunkIndex, exception,
+                          RouterErrorCode.UnexpectedInternalError));
+                    } else {
+                      logger.trace(
+                          "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
+                          chunkIndex, getOperationException(), exception);
+                      // If we are here, then the operation is completed and the exception could be null, in this case,
+                      // we have to release the content in the result.
+                      if (result != null) {
+                        result.release();
+                      }
+                    }
+                  }
+                  routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
+                  encryptJobMetricsTracker.onJobResultProcessingComplete();
+                  routerCallback.onPollReady();
+                  // double check if the operation is not completed. If so, we have to release the buf here, since in
+                  // main thread, chunk might already be released.
+                  if (isOperationComplete()) {
+                    logger.info("Clear put chunk in encryption callback since operation is completed");
+                    clear();
+                  }
+                }));
       } catch (GeneralSecurityException e) {
         encryptJobMetricsTracker.incrementOperationError();
         logger.trace("Exception thrown while generating random key for chunk at index {}", chunkIndex, e);
         setOperationExceptionAndComplete(new RouterException(
             "GeneralSecurityException thrown while generating random key for chunk at index " + chunkIndex, e,
             RouterErrorCode.UnexpectedInternalError));
+      } finally {
+        if (toEncrypt != null) {
+          toEncrypt.release();
+        }
       }
     }
 
@@ -1196,8 +1211,7 @@ class PutOperation {
      * @param updateMetric whether chunk fill completion metrics should be updated.
      */
     void onFillComplete(boolean updateMetric) {
-      buf.flip();
-      chunkBlobSize = buf.remaining();
+      chunkBlobSize = buf.readableBytes();
       chunkFillCompleteAtMs = time.milliseconds();
       if (updateMetric) {
         routerMetrics.chunkFillTimeMs.update(time.milliseconds() - chunkFreeAtMs);
@@ -1211,22 +1225,43 @@ class PutOperation {
     }
 
     /**
-     * Fill the buffer of the current chunk with the data from the given {@link ByteBuffer}.
-     * @param channelReadBuffer the {@link ByteBuffer} from which to read data.
+     * Fill the buffer of the current chunk with the data from the given {@link ByteBuf}.
+     * @param channelReadBuf the {@link ByteBuf} from which to read data.
      * @return the number of bytes transferred in this operation.
      */
-    int fillFrom(ByteBuffer channelReadBuffer) {
-      int toWrite = Math.min(channelReadBuffer.remaining(), buf.remaining());
-      if (channelReadBuffer.remaining() > buf.remaining()) {
-        // Manipulate limit of the source buffer in order to read only enough to fill the chunk
-        int savedLimit = channelReadBuffer.limit();
-        channelReadBuffer.limit(channelReadBuffer.position() + buf.remaining());
-        buf.put(channelReadBuffer);
-        channelReadBuffer.limit(savedLimit);
+    int fillFrom(ByteBuf channelReadBuf) {
+      int toWrite = 0;
+      if (buf == null) {
+        if (channelReadBuf.readableBytes() > routerConfig.routerMaxPutChunkSizeBytes) {
+          toWrite = routerConfig.routerMaxPutChunkSizeBytes;
+          buf = channelReadBuf.readRetainedSlice(routerConfig.routerMaxPutChunkSizeBytes);
+        } else {
+          toWrite = channelReadBuf.readableBytes();
+          buf = channelReadBuf.readRetainedSlice(toWrite);
+        }
       } else {
-        buf.put(channelReadBuffer);
+        int remainingSize = routerConfig.routerMaxPutChunkSizeBytes - buf.readableBytes();
+        ByteBuf remainingSlice = null;
+        if (channelReadBuf.readableBytes() > remainingSize) {
+          toWrite = remainingSize;
+          remainingSlice = channelReadBuf.readRetainedSlice(remainingSize);
+        } else {
+          toWrite = channelReadBuf.readableBytes();
+          remainingSlice = channelReadBuf.readRetainedSlice(toWrite);
+        }
+        int size = buf.readableBytes();
+        // buf already has some bytes
+        if (buf instanceof CompositeByteBuf) {
+          // Buf is already a CompositeByteBuf, then just add the slice from
+          ((CompositeByteBuf) buf).addComponent(true, remainingSlice);
+        } else {
+          CompositeByteBuf composite =
+              new CompositeByteBuf(buf.alloc(), buf.isDirect(), routerConfig.routerMaxPutChunkSizeBytes);
+          composite.addComponents(true, buf, remainingSlice);
+          buf = composite;
+        }
       }
-      if (!buf.hasRemaining()) {
+      if (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes) {
         onFillComplete(true);
         updateChunkFillerWaitTimeMetrics();
       }
@@ -1274,7 +1309,6 @@ class PutOperation {
      *                                    created as part of this poll operation.
      */
     void poll(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
-      maybeFreeDefunctBuffers();
       cleanupExpiredInFlightRequests(requestRegistrationCallback);
       checkAndMaybeComplete();
       if (!isComplete()) {
@@ -1300,8 +1334,8 @@ class PutOperation {
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
           // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
           // response and the response handler will be notified accordingly.
-          chunkException =
-              RouterUtils.buildTimeoutException(correlationId, info.replicaId.getDataNodeId(), chunkBlobId);
+          setChunkException(
+              RouterUtils.buildTimeoutException(correlationId, info.replicaId.getDataNodeId(), chunkBlobId));
           requestRegistrationCallback.registerRequestToDrop(correlationId);
           inFlightRequestsIterator.remove();
         } else {
@@ -1347,8 +1381,8 @@ class PutOperation {
      */
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), Unpooled.wrappedBuffer(buf.duplicate()),
-          buf.remaining(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
+          chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
+          buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
     }
 
     /**
@@ -1431,7 +1465,7 @@ class PutOperation {
           } else {
             ServerErrorCode putError = putResponse.getError();
             if (putError == ServerErrorCode.No_Error) {
-              logger.trace("The putRequest was successful");
+              logger.trace("The putRequest was successful for chunk " + chunkIndex);
               isSuccessful = true;
             } else {
               // chunkException will be set within processServerError.
@@ -1513,28 +1547,6 @@ class PutOperation {
         this.replicaId = replicaId;
         this.putRequest = putRequest;
         this.startTimeMs = startTimeMs;
-      }
-    }
-
-    /**
-     * Class that holds the buffer of a chunk that will no longer be used and is kept around only because the
-     * associated requests are not yet completely sent out.
-     */
-    private class DefunctBufferInfo {
-      // the buffer that is now defunct, but not yet freed.
-      final ByteBuffer buf;
-      // Requests that are reading from this buffer.
-      final List<PutRequest> putRequests;
-
-      /**
-       * Construct a DefunctBufferInfo
-       * @param buf the buffer that is now defunct and waiting to be freed.
-       * @param putRequests the requests associated with this buffer whose send completion blocks the freeing of this
-       *                    buffer.
-       */
-      DefunctBufferInfo(ByteBuffer buf, List<PutRequest> putRequests) {
-        this.buf = buf;
-        this.putRequests = putRequests;
       }
     }
   }
@@ -1648,23 +1660,26 @@ class PutOperation {
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag());
       if (isStitchOperation() || getNumDataChunks() > 1) {
+        ByteBuffer serialized = null;
         // values returned are in the right order as TreeMap returns them in key-order.
         if (routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2) {
-          buf = MetadataContentSerDe.serializeMetadataContentV2(intermediateChunkSize, getBlobSize(),
+          serialized = MetadataContentSerDe.serializeMetadataContentV2(intermediateChunkSize, getBlobSize(),
               getSuccessfullyPutChunkIds());
         } else if (routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V3) {
           List<Pair<StoreKey, Long>> orderedChunkIdList = new ArrayList<>(indexToChunkIdsAndChunkSizes.values());
-          buf = MetadataContentSerDe.serializeMetadataContentV3(getBlobSize(), orderedChunkIdList);
+          serialized = MetadataContentSerDe.serializeMetadataContentV3(getBlobSize(), orderedChunkIdList);
         } else {
           throw new IllegalStateException(
               "Unexpected metadata content version: " + routerConfig.routerMetadataContentVersion);
         }
+        serialized.flip();
+        buf = Unpooled.wrappedBuffer(serialized);
         onFillComplete(false);
       } else {
         // if there is only one chunk
         blobId = (BlobId) indexToChunkIdsAndChunkSizes.get(0).getFirst();
         state = ChunkState.Complete;
-        operationCompleted = true;
+        setOperationCompleted();
       }
     }
 
@@ -1684,8 +1699,9 @@ class PutOperation {
     @Override
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, finalBlobProperties, ByteBuffer.wrap(chunkUserMetadata), Unpooled.wrappedBuffer(buf.duplicate()),
-          buf.remaining(), BlobType.MetadataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
+          chunkBlobId, finalBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
+          buf.readableBytes(), BlobType.MetadataBlob,
+          encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
     }
   }
 

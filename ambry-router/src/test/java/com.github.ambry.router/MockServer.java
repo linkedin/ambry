@@ -132,6 +132,9 @@ class MockServer {
   PutResponse makePutResponse(PutRequest putRequest, ServerErrorCode putError) throws IOException {
     if (putError == ServerErrorCode.No_Error) {
       updateBlobMap(putRequest);
+    } else {
+      // we have to read the put request out so that the blob in put request can be released.
+      new StoredBlob(putRequest, clusterMap);
     }
     return new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), putError);
   }

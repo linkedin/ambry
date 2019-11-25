@@ -28,7 +28,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import io.netty.buffer.Unpooled;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -55,7 +55,7 @@ import org.junit.runners.Parameterized;
 @RunWith(Parameterized.class)
 public class ChunkFillTest {
   private final boolean testEncryption;
-  private ByteBuffer[] compositeBuffers;
+  private ByteBuf[] compositeBuffers;
   private ByteBuffer[] compositeEncryptionKeys;
   private BlobId[] compositeBlobIds;
   private int totalSizeWritten = 0;
@@ -198,14 +198,14 @@ public class ChunkFillTest {
           Assert.assertTrue("Chunk should be Building or Ready.", putChunk.getState() == PutOperation.ChunkState.Ready
               || putChunk.getState() == PutOperation.ChunkState.Building);
           if (putChunk.getState() == PutOperation.ChunkState.Ready) {
-            Assert.assertEquals("Chunk size should be the last chunk size", lastChunkSize, putChunk.buf.remaining());
+            Assert.assertEquals("Chunk size should be the last chunk size", lastChunkSize, putChunk.buf.readableBytes());
             Assert.assertTrue("Chunk Filling should be complete at this time", op.isChunkFillingDone());
             fillingComplete = true;
           }
         } else {
           // if not last chunk, then the chunk should be full and Ready.
           Assert.assertEquals("Chunk should be ready.", PutOperation.ChunkState.Ready, putChunk.getState());
-          Assert.assertEquals("Chunk size should be maxChunkSize", chunkSize, putChunk.buf.remaining());
+          Assert.assertEquals("Chunk size should be maxChunkSize", chunkSize, putChunk.buf.readableBytes());
           chunkIndex++;
           putChunk.clear();
         }
@@ -266,7 +266,7 @@ public class ChunkFillTest {
             MockClusterMap.DEFAULT_PARTITION_CLASS);
     op.startOperation();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
-    compositeBuffers = new ByteBuffer[numChunks];
+    compositeBuffers = new ByteBuf[numChunks];
     compositeEncryptionKeys = new ByteBuffer[numChunks];
     compositeBlobIds = new BlobId[numChunks];
     final AtomicReference<Exception> operationException = new AtomicReference<Exception>(null);
@@ -290,9 +290,9 @@ public class ChunkFillTest {
           continue;
         }
         Assert.assertEquals("Chunk should be ready.", PutOperation.ChunkState.Ready, putChunk.getState());
-        ByteBuffer buf = putChunk.buf;
-        totalSizeWritten += buf.remaining();
-        compositeBuffers[putChunk.getChunkIndex()] = ByteBuffer.allocate(buf.remaining()).put(buf);
+        ByteBuf buf = putChunk.buf.retainedDuplicate();
+        totalSizeWritten += buf.readableBytes();
+        compositeBuffers[putChunk.getChunkIndex()] = buf;
         if (testEncryption) {
           compositeEncryptionKeys[putChunk.getChunkIndex()] = putChunk.encryptedPerBlobKey.duplicate();
           compositeBlobIds[putChunk.getChunkIndex()] = putChunk.chunkBlobId;
@@ -319,10 +319,11 @@ public class ChunkFillTest {
   private void assertDataIdentity(ClusterMap clusterMap) throws IOException {
     if (!testEncryption) {
       ByteBuffer dest = ByteBuffer.allocate(totalSizeWritten);
-      for (ByteBuffer buf : compositeBuffers) {
+      for (ByteBuf buf : compositeBuffers) {
         Assert.assertNotNull("All chunks should have come in", buf);
-        buf.flip();
-        dest.put(buf);
+        for (ByteBuffer buffer: buf.nioBuffers()) {
+          dest.put(buffer);
+        }
       }
       Assert.assertTrue("Filled chunk contents must exactly match the input buffer ",
           Arrays.equals(putContent, dest.array()));
@@ -330,9 +331,8 @@ public class ChunkFillTest {
       byte[] content = new byte[blobSize];
       AtomicInteger offset = new AtomicInteger(0);
       for (int i = 0; i < numChunks; i++) {
-        compositeBuffers[i].flip();
         DecryptJob decryptJob =
-            new DecryptJob(compositeBlobIds[i], compositeEncryptionKeys[i], Unpooled.wrappedBuffer(compositeBuffers[i]), null, cryptoService,
+            new DecryptJob(compositeBlobIds[i], compositeEncryptionKeys[i], compositeBuffers[i], null, cryptoService,
                 kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), (result, exception) -> {
               Assert.assertNull("Exception shouldn't have been thrown", exception);
               int chunkSize = result.getDecryptedBlobContent().remaining();
