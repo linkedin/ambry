@@ -28,7 +28,6 @@ import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
@@ -37,6 +36,7 @@ import org.mockito.junit.MockitoJUnitRunner;
 import rx.Observable;
 import rx.observables.BlockingObservable;
 
+import static com.github.ambry.cloud.azure.AzureTestUtils.*;
 import static com.github.ambry.commons.BlobId.*;
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -111,9 +111,12 @@ public class CosmosDataAccessorTest {
   /** Test query metadata. */
   @Test
   public void testQueryNormal() throws Exception {
-    Observable<FeedResponse<Document>> feedResponseObservable = getFeedResponseObservable();
+    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
+    List<Document> docList =
+        Collections.singletonList(AzureTestUtils.createDocumentFromCloudBlobMetadata(blobMetadata, objectMapper));
+    mockObservableForQuery(docList, mockResponse);
     when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        feedResponseObservable);
+        mockResponse);
     List<CloudBlobMetadata> metadataList = doQueryMetadata();
     assertEquals("Expected single entry", 1, metadataList.size());
     CloudBlobMetadata outputMetadata = metadataList.get(0);
@@ -122,25 +125,6 @@ public class CosmosDataAccessorTest {
     assertEquals(1, azureMetrics.missingKeysQueryTime.getCount());
     assertEquals(0, azureMetrics.retryCount.getCount());
     assertEquals(0, azureMetrics.retryWaitTime.getCount());
-  }
-
-  /**
-   * @return a FeedResponse with a single document.
-   */
-  private Observable<FeedResponse<Document>> getFeedResponseObservable() throws Exception {
-    FeedResponse<Document> feedResponse = mock(FeedResponse.class);
-    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
-    BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
-    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
-    Iterator<FeedResponse<Document>> mockIterator = mock(Iterator.class);
-    when(mockBlockingObservable.getIterator()).thenReturn(mockIterator);
-    List<Document> docList =
-        Collections.singletonList(AzureTestUtils.createDocumentFromCloudBlobMetadata(blobMetadata, objectMapper));
-    when(mockIterator.hasNext()).thenReturn(true).thenReturn(false);
-    when(mockIterator.next()).thenReturn(feedResponse);
-    when(feedResponse.getResults()).thenReturn(docList);
-
-    return mockResponse;
   }
 
   /** Utility method to run metadata query with default parameters. */

@@ -134,6 +134,7 @@ public class CosmosDataAccessor {
     azureMetrics.documentQueryCount.inc();
     FeedOptions feedOptions = new FeedOptions();
     feedOptions.setPartitionKey(new PartitionKey(partitionPath));
+    FeedResponse<Document> query;
     // TODO: consolidate error count here
     try {
       Timer.Context operationTimer = timer.time();
