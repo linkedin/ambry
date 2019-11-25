@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.replication.FindToken;
 import java.util.EnumSet;
 import java.util.List;
@@ -108,6 +109,17 @@ public interface Store {
    * @return true if the store is started
    */
   boolean isStarted();
+
+  /**
+   * Set current state of the store.
+   * @param state {@link ReplicaState} associated with local store
+   */
+  void setCurrentState(ReplicaState state);
+
+  /**
+   * @return current {@link ReplicaState} of the store
+   */
+  ReplicaState getCurrentState();
 
   /**
    * Shuts down the store

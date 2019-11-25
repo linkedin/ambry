@@ -86,6 +86,13 @@ public class ServerConfig {
   @Default("")
   public final List<String> serverStatsReportsToPublish;
 
+  /**
+   * The option to enable or disable validating request based on store state.
+   */
+  @Config("server.validate.request.based.on.store.state")
+  @Default("false")
+  public final boolean serverValidateRequestBasedOnStoreState;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
@@ -101,5 +108,7 @@ public class ServerConfig {
         "com.github.ambry.messageformat.ValidatingTransformer");
     serverStatsReportsToPublish =
         Utils.splitString(verifiableProperties.getString("server.stats.reports.to.publish", ""), ",");
+    serverValidateRequestBasedOnStoreState =
+        verifiableProperties.getBoolean("server.validate.request.based.on.store.state", false);
   }
 }

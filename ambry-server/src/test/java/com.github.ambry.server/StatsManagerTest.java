@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
@@ -587,6 +588,16 @@ public class StatsManagerTest {
 
     @Override
     public boolean isEmpty() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void setCurrentState(ReplicaState state) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public ReplicaState getCurrentState() {
       throw new IllegalStateException("Not implemented");
     }
 

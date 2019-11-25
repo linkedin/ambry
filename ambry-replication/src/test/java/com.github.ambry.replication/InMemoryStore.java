@@ -14,6 +14,7 @@
 package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
@@ -307,6 +308,16 @@ class InMemoryStore implements Store {
   @Override
   public boolean isEmpty() {
     return log.blobs.isEmpty();
+  }
+
+  @Override
+  public void setCurrentState(ReplicaState state) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
+  public ReplicaState getCurrentState() {
+    throw new UnsupportedOperationException("Method not supported");
   }
 
   @Override

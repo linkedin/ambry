@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -1816,6 +1817,7 @@ public class BlobStoreTest {
     }
     assertFalse("Store should be shutdown", store.isStarted());
     store = createBlobStore(replicaId, config, delegate);
+    assertEquals("Store should be in OFFLINE state after creation", ReplicaState.OFFLINE, store.getCurrentState());
     assertFalse("Store should not be started", store.isStarted());
     store.start();
     assertTrue("Store should be started", store.isStarted());
@@ -1831,6 +1833,8 @@ public class BlobStoreTest {
   private void verifyStartupSuccess(BlobStore blobStore) throws StoreException {
     blobStore.start();
     assertTrue("Store has not been started", blobStore.isStarted());
+    assertEquals("Store current state should be STANDBY after it is successfully started", ReplicaState.STANDBY,
+        blobStore.getCurrentState());
     blobStore.shutdown();
   }
 

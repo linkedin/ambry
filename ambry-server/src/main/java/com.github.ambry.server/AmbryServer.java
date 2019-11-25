@@ -197,7 +197,7 @@ public class AmbryServer {
       ServerMetrics serverMetrics = new ServerMetrics(registry, AmbryRequests.class, AmbryServer.class);
       requests = new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId,
           registry, serverMetrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory,
-          serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory, statsManager);
+          serverConfig, storeKeyConverterFactory, statsManager);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
