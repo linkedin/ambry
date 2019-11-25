@@ -43,7 +43,7 @@ public class CosmosDataAccessor {
   private final AzureMetrics azureMetrics;
 
   /** Production constructor */
-  public CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, AzureCloudConfig azureCloudConfig,
+  CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, AzureCloudConfig azureCloudConfig,
       AzureMetrics azureMetrics) {
     this(asyncDocumentClient, azureCloudConfig.cosmosCollectionLink, azureMetrics);
   }
@@ -74,7 +74,7 @@ public class CosmosDataAccessor {
    * @return the {@link ResourceResponse} returned by the operation, if successful.
    * @throws DocumentClientException if the operation failed.
    */
-  public ResourceResponse<Document> upsertMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
+  ResourceResponse<Document> upsertMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
     RequestOptions options = getRequestOptions(blobMetadata.getPartitionId());
     return executeCosmosAction(
         () -> asyncDocumentClient.upsertDocument(cosmosCollectionLink, blobMetadata, options, true)
@@ -88,7 +88,7 @@ public class CosmosDataAccessor {
    * @return the {@link ResourceResponse} returned by the operation, if successful.
    * @throws DocumentClientException if the operation failed.
    */
-  public ResourceResponse<Document> deleteMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
+  ResourceResponse<Document> deleteMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
     String docLink = getDocumentLink(blobMetadata.getId());
     RequestOptions options = getRequestOptions(blobMetadata.getPartitionId());
     options.setPartitionKey(new PartitionKey(blobMetadata.getPartitionId()));
@@ -102,7 +102,7 @@ public class CosmosDataAccessor {
    * @return the {@link ResourceResponse} containing the metadata document.
    * @throws DocumentClientException if the operation failed.
    */
-  public ResourceResponse<Document> readMetadata(BlobId blobId) throws DocumentClientException {
+  ResourceResponse<Document> readMetadata(BlobId blobId) throws DocumentClientException {
     String docLink = getDocumentLink(blobId.getID());
     RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
     return executeCosmosAction(() -> asyncDocumentClient.readDocument(docLink, options).toBlocking().single(),
@@ -116,7 +116,7 @@ public class CosmosDataAccessor {
    * @return the {@link ResourceResponse} returned by the operation, if successful.
    * @throws DocumentClientException if the operation failed.
    */
-  public ResourceResponse<Document> replaceMetadata(BlobId blobId, Document doc) throws DocumentClientException {
+  ResourceResponse<Document> replaceMetadata(BlobId blobId, Document doc) throws DocumentClientException {
     RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
     return executeCosmosAction(() -> asyncDocumentClient.replaceDocument(doc, options).toBlocking().single(),
         azureMetrics.documentUpdateTime);
@@ -134,7 +134,6 @@ public class CosmosDataAccessor {
     azureMetrics.documentQueryCount.inc();
     FeedOptions feedOptions = new FeedOptions();
     feedOptions.setPartitionKey(new PartitionKey(partitionPath));
-    FeedResponse<Document> query;
     // TODO: consolidate error count here
     try {
       Timer.Context operationTimer = timer.time();
@@ -162,7 +161,7 @@ public class CosmosDataAccessor {
    * @param document {@link Document} object from which {@link CloudBlobMetadata} object will be created.
    * @return {@link CloudBlobMetadata} object.
    */
-  CloudBlobMetadata createMetadataFromDocument(Document document) {
+  private CloudBlobMetadata createMetadataFromDocument(Document document) {
     CloudBlobMetadata cloudBlobMetadata = document.toObject(CloudBlobMetadata.class);
     cloudBlobMetadata.setLastUpdateTime(document.getLong(COSMOS_LAST_UPDATED_COLUMN));
     return cloudBlobMetadata;
@@ -172,7 +171,7 @@ public class CosmosDataAccessor {
    * Utility method to call a Cosmos method and extract any nested DocumentClientException.
    * @param action the action to call.
    * @return the result of the action.
-   * @throws Exception
+   * @throws DocumentClientException
    */
   private ResourceResponse<Document> executeCosmosAction(Callable<? extends Object> action, Timer timer)
       throws DocumentClientException {

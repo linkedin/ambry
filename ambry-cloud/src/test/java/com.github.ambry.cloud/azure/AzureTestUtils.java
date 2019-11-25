@@ -33,15 +33,15 @@ import static org.mockito.Mockito.*;
 /**
  * Class to define utilities for azure tests.
  */
-public class AzureTestUtils {
+class AzureTestUtils {
 
   /**
    * Create {@link Document} object from {@link CloudBlobMetadata} object.
    * @param cloudBlobMetadata {@link CloudBlobMetadata} object.
    * @return {@link Document} object.
    */
-  public static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata,
-      ObjectMapper objectMapper) throws IOException {
+  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, ObjectMapper objectMapper)
+      throws IOException {
     Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
     document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, System.currentTimeMillis());
     return document;
@@ -53,7 +53,7 @@ public class AzureTestUtils {
    * @param uploadTime specified upload time.
    * @return {@link Document} object.
    */
-  public static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, long uploadTime,
+  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, long uploadTime,
       ObjectMapper objectMapper) throws JsonProcessingException {
     Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
     document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, uploadTime);
@@ -64,7 +64,7 @@ public class AzureTestUtils {
    * Utility to mock the call chain to get mocked {@link Observable} for single resource from {@link AsyncDocumentClient}.
    * @return {@link Observable< ResourceResponse <Document>>} object.
    */
-  public static Observable<ResourceResponse<Document>> getMockedObservableForSingleResource() {
+  static Observable<ResourceResponse<Document>> getMockedObservableForSingleResource() {
     Observable<ResourceResponse<Document>> mockResponse = mock(Observable.class);
     BlockingObservable<ResourceResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
     when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
@@ -78,10 +78,9 @@ public class AzureTestUtils {
   /**
    * Utility to mock the query call chain of {@link AsyncDocumentClient} such that query returns {@code documentList}.
    * @param documentList {@link List <Document>} of documents to return from mocked call.
-   * @param mockResponse {@link Observable< FeedResponse <Document>>} mocked response.
+   * @param mockResponse {@link Observable} mocked response.
    */
-  public static void mockObservableForQuery(List<Document> documentList,
-      Observable<FeedResponse<Document>> mockResponse) {
+  static void mockObservableForQuery(List<Document> documentList, Observable<FeedResponse<Document>> mockResponse) {
     FeedResponse<Document> feedResponse = mock(FeedResponse.class);
     BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
     when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
@@ -95,7 +94,7 @@ public class AzureTestUtils {
   /**
    * Utility to mock the query call chain of {@link AsyncDocumentClient} such that query returns empty list.
    */
-  public static Observable<FeedResponse<Document>> getMockedObservableForQueryWithNoResults() {
+  static Observable<FeedResponse<Document>> getMockedObservableForQueryWithNoResults() {
     Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
     BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
     when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);

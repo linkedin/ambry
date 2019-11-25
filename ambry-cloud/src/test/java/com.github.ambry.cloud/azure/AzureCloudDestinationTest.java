@@ -88,10 +88,9 @@ public class AzureCloudDestinationTest {
   private AsyncDocumentClient mockumentClient;
   private AzureMetrics azureMetrics;
   private int blobSize = 1024;
-  byte dataCenterId = 66;
-  short accountId = 101;
-  short containerId = 5;
-  long partition = 666;
+  private byte dataCenterId = 66;
+  private short accountId = 101;
+  private short containerId = 5;
   private BlobId blobId;
   private long creationTime = System.currentTimeMillis();
   private long deletionTime = creationTime + 10000;
@@ -121,6 +120,7 @@ public class AzureCloudDestinationTest {
     when(mockumentClient.replaceDocument(any(Document.class), any(RequestOptions.class))).thenReturn(mockResponse);
     when(mockumentClient.deleteDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
 
+    long partition = 666;
     PartitionId partitionId = new MockPartitionId(partition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
@@ -421,7 +421,7 @@ public class AzureCloudDestinationTest {
     findToken = CloudFindToken.getUpdatedToken(findToken, firstResult);
     assertEquals("Find token has wrong last update time", findToken.getLastUpdateTime(),
         firstResult.get(firstResult.size() - 1).getLastUpdateTime());
-    Set<String> resultBlobIdSet = firstResult.stream().map(d -> d.getId()).collect(Collectors.toSet());
+    Set<String> resultBlobIdSet = firstResult.stream().map(CloudBlobMetadata::getId).collect(Collectors.toSet());
     assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", findToken.getLastUpdateTimeReadBlobIds(),
         resultBlobIdSet);
 
@@ -434,7 +434,7 @@ public class AzureCloudDestinationTest {
     CloudFindToken secondFindToken = CloudFindToken.getUpdatedToken(findToken, secondResult);
     assertEquals("Find token has wrong last update time", secondFindToken.getLastUpdateTime(),
         firstResult.get(firstResult.size() - 1).getLastUpdateTime());
-    resultBlobIdSet.addAll(secondResult.stream().map(d -> d.getId()).collect(Collectors.toSet()));
+    resultBlobIdSet.addAll(secondResult.stream().map(CloudBlobMetadata::getId).collect(Collectors.toSet()));
     assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", secondFindToken.getLastUpdateTimeReadBlobIds(),
         resultBlobIdSet);
 
@@ -473,7 +473,7 @@ public class AzureCloudDestinationTest {
 
   /** Test constructor with invalid connection string. */
   @Test
-  public void testInitClientException() throws Exception {
+  public void testInitClientException() {
     CloudDestinationFactory factory =
         new AzureCloudDestinationFactory(new VerifiableProperties(configProps), new MetricRegistry());
     try {
@@ -505,7 +505,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testUploadContainerReferenceException() throws Exception {
     when(mockAzureClient.getContainerReference(anyString())).thenThrow(StorageException.class);
-    expectCloudStorageException(() -> uploadDefaultBlob(), StorageException.class);
+    expectCloudStorageException(this::uploadDefaultBlob, StorageException.class);
     verifyUploadErrorMetrics(false);
   }
 
@@ -513,7 +513,7 @@ public class AzureCloudDestinationTest {
   @Test
   public void testUploadContainerException() throws Exception {
     when(mockAzureContainer.getBlockBlobReference(anyString())).thenThrow(StorageException.class);
-    expectCloudStorageException(() -> uploadDefaultBlob(), StorageException.class);
+    expectCloudStorageException(this::uploadDefaultBlob, StorageException.class);
     verifyUploadErrorMetrics(false);
   }
 
@@ -521,16 +521,16 @@ public class AzureCloudDestinationTest {
   @Test
   public void testUploadBlobException() throws Exception {
     Mockito.doThrow(StorageException.class).when(mockBlob).upload(any(), anyLong(), any(), any(), any());
-    expectCloudStorageException(() -> uploadDefaultBlob(), StorageException.class);
+    expectCloudStorageException(this::uploadDefaultBlob, StorageException.class);
     verifyUploadErrorMetrics(false);
   }
 
   /** Test upload when doc client throws exception. */
   @Test
-  public void testUploadDocClientException() throws Exception {
+  public void testUploadDocClientException() {
     when(mockumentClient.upsertDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenThrow(
         new RuntimeException("Dcoument not Found", new DocumentClientException(404)));
-    expectCloudStorageException(() -> uploadDefaultBlob(), DocumentClientException.class);
+    expectCloudStorageException(this::uploadDefaultBlob, DocumentClientException.class);
     verifyUploadErrorMetrics(true);
   }
 

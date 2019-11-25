@@ -75,7 +75,7 @@ class AzureCloudDestination implements CloudDestination {
   private static final String TIME_SINCE_PARAM = "@timesince";
   private static final String BATCH_ID_QUERY_TEMPLATE = "SELECT * FROM c WHERE c.id IN (%s)";
   static final int ID_QUERY_BATCH_SIZE = 1000;
-  static final String DEAD_BLOBS_QUERY_TEMPLATE =
+  private static final String DEAD_BLOBS_QUERY_TEMPLATE =
       "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE (c." + CloudBlobMetadata.FIELD_DELETION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " OR (c." + CloudBlobMetadata.FIELD_EXPIRATION_TIME + " BETWEEN 1 AND "
           + THRESHOLD_PARAM + ")" + " ORDER BY c." + CloudBlobMetadata.FIELD_UPLOAD_TIME + " ASC";
@@ -83,7 +83,7 @@ class AzureCloudDestination implements CloudDestination {
   // It is unlikely (but not impossible) for two blobs in same partition to have the same uploadTime (would have to
   // be multiple VCR's uploading same partition).  We track the lastBlobId in the CloudFindToken and skip it if
   // is returned in successive queries.
-  static final String ENTRIES_SINCE_QUERY_TEMPLATE =
+  private static final String ENTRIES_SINCE_QUERY_TEMPLATE =
       "SELECT TOP " + LIMIT_PARAM + " * FROM c WHERE c." + CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN + " >= "
           + TIME_SINCE_PARAM + " ORDER BY c." + CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN + " ASC";
   private static final String SEPARATOR = "-";
@@ -129,8 +129,6 @@ class AzureCloudDestination implements CloudDestination {
     }
     if (cloudConfig.vcrProxyHost != null) {
       connectionPolicy.setProxy(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
-      //ANKUR TODO
-      //connectionPolicy.setHandleServiceUnavailableFromProxy(true);
     }
     // TODO: test option to set connectionPolicy.setEnableEndpointDiscovery(false);
     asyncDocumentClient = new AsyncDocumentClient.Builder().withServiceEndpoint(azureCloudConfig.cosmosEndpoint)
@@ -151,7 +149,6 @@ class AzureCloudDestination implements CloudDestination {
    * @param cosmosCollectionLink the CosmosDB collection link to use.
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
-   * @throws CloudStorageException if the destination could not be created.
    */
   AzureCloudDestination(CloudStorageAccount azureAccount, AsyncDocumentClient asyncDocumentClient,
       String cosmosCollectionLink, String clusterName, AzureMetrics azureMetrics) {
@@ -309,15 +306,14 @@ class AzureCloudDestination implements CloudDestination {
       metadataList = getBlobMetadataChunked(blobIds);
     }
 
-    return metadataList.stream().collect(Collectors.toMap(m -> m.getId(), Function.identity()));
+    return metadataList.stream().collect(Collectors.toMap(CloudBlobMetadata::getId, Function.identity()));
   }
 
   private List<CloudBlobMetadata> getBlobMetadataChunked(List<BlobId> blobIds) throws CloudStorageException {
     if (blobIds.isEmpty() || blobIds.size() > ID_QUERY_BATCH_SIZE) {
       throw new IllegalArgumentException("Invalid input list size: " + blobIds.size());
     }
-    String quotedBlobIds =
-        String.join(",", blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.toList()));
+    String quotedBlobIds = blobIds.stream().map(s -> '"' + s.getID() + '"').collect(Collectors.joining(","));
     String query = String.format(BATCH_ID_QUERY_TEMPLATE, quotedBlobIds);
     String partitionPath = blobIds.get(0).getPartition().toPathString();
     try {
@@ -392,7 +388,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param fieldName The metadata field to modify.
    * @param value The new value.
    * @return {@code true} if the udpate succeeded, {@code false} if the metadata record was not found.
-   * @throws DocumentClientException
+   * @throws CloudStorageException
    */
   private boolean updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws CloudStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
@@ -424,7 +420,6 @@ class AzureCloudDestination implements CloudDestination {
       }
 
       ResourceResponse<Document> response = cosmosDataAccessor.readMetadata(blobId);
-      //CloudBlobMetadata blobMetadata = response.getResource().toObject(CloudBlobMetadata.class);
       Document doc = response.getResource();
       if (doc == null) {
         logger.warn("Blob metadata record not found: {}", blobId.getID());
@@ -510,7 +505,8 @@ class AzureCloudDestination implements CloudDestination {
    * @param blobId the {@link BlobId} that needs a container.
    * @param autoCreate flag indicating whether to create the container if it does not exist.
    * @return the created {@link CloudBlobContainer}.
-   * @throws Exception
+   * @throws URISyntaxException
+   * @throws StorageException
    */
   private CloudBlobContainer getContainer(BlobId blobId, boolean autoCreate)
       throws URISyntaxException, StorageException {
@@ -594,7 +590,7 @@ class AzureCloudDestination implements CloudDestination {
    * @return the name of the Azure storage container where blobs in the specified partition are stored.
    * @param partitionPath the lexical path of the Ambry partition.
    */
-  String getAzureContainerName(String partitionPath) {
+  private String getAzureContainerName(String partitionPath) {
     // Include Ambry cluster name in case the same storage account is used to backup multiple clusters.
     // Azure requires container names to be all lower case
     String rawContainerName = clusterName + SEPARATOR + partitionPath;
@@ -614,26 +610,10 @@ class AzureCloudDestination implements CloudDestination {
 
   /**
    * Visible for test.
-   * @return the CosmosDB DocumentClient
-   */
-  AsyncDocumentClient getDocumentClient() {
-    return asyncDocumentClient;
-  }
-
-  /**
-   * Visible for test.
    * @return the {@link CosmosDataAccessor}
    */
   CosmosDataAccessor getCosmosDataAccessor() {
     return cosmosDataAccessor;
-  }
-
-  /**
-   * Visible for test.
-   * @return the blob storage operation context.
-   */
-  OperationContext getBlobOpContext() {
-    return blobOpContext;
   }
 
   /**

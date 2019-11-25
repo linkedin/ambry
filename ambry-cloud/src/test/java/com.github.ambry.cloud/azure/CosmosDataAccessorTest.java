@@ -50,18 +50,14 @@ public class CosmosDataAccessorTest {
   private final ObjectMapper objectMapper = new ObjectMapper();
   private CosmosDataAccessor cosmosAccessor;
   private AsyncDocumentClient mockumentClient;
-  private ResourceResponse<Document> mockResponse;
   private AzureMetrics azureMetrics;
   private BlobId blobId;
   private int blobSize = 1024;
   private CloudBlobMetadata blobMetadata;
-  int maxRetries = 3;
 
   @Before
-  public void setup() throws Exception {
+  public void setup() {
     mockumentClient = mock(AsyncDocumentClient.class);
-    mockResponse = mock(ResourceResponse.class);
-
     byte dataCenterId = 66;
     short accountId = 101;
     short containerId = 5;
