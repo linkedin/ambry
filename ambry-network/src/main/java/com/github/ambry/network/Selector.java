@@ -788,6 +788,7 @@ public class Selector implements Selectable {
     } catch (IOException e) {
       // We have key information if we log IOException here.
       handleReadWriteIOException(e, key);
+      transmission.networkSend.getPayload().release();
       return null;
     } finally {
       long writeTime = time.milliseconds() - startTimeToWriteInMs;

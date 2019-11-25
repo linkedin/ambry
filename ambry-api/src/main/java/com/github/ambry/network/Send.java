@@ -50,4 +50,9 @@ public interface Send {
    * @return The size of the data in bytes to be written
    */
   long sizeInBytes();
+
+  /**
+   * Release all the resource this object holds.
+   */
+  default void release() {}
 }

@@ -21,8 +21,10 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
-import io.netty.buffer.Unpooled;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -34,6 +36,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.router.CryptoTestUtils.*;
@@ -60,6 +63,18 @@ public class CryptoJobHandlerTest {
   private final VerifiableProperties verifiableProperties;
   private final NonBlockingRouterMetrics routerMetrics;
   private CryptoJobHandler cryptoJobHandler;
+  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+    nettyByteBufLeakHelper.setDisabled(false);
+  }
 
   public CryptoJobHandlerTest() throws IOException, GeneralSecurityException {
     defaultKey = TestUtils.getRandomKey(DEFAULT_KEY_SIZE);
@@ -169,6 +184,7 @@ public class CryptoJobHandlerTest {
    */
   @Test
   public void testPendingEncryptJobs() throws InterruptedException, GeneralSecurityException {
+    nettyByteBufLeakHelper.setDisabled(true);
     int testDataCount = 10;
     int closeOnCount = 4;
     CountDownLatch encryptCallBackCount = new CountDownLatch(testDataCount);
@@ -186,6 +202,7 @@ public class CryptoJobHandlerTest {
                   assertNotNull("Encrypted content should not be null", result.getEncryptedBlobContent());
                   assertNotNull("Encrypted user-metadata should not be null", result.getEncryptedUserMetadata());
                   assertNotNull("Encrypted key should not be null", result.getEncryptedKey());
+                  result.getEncryptedBlobContent().release();
                 }));
       } else {
         encryptJobs.add(
@@ -198,6 +215,7 @@ public class CryptoJobHandlerTest {
                     assertNotNull("Encrypted content should not be null", result.getEncryptedBlobContent());
                     assertNotNull("Encrypted user-metadata should not be null", result.getEncryptedUserMetadata());
                     assertNotNull("Encrypted key should not be null", result.getEncryptedKey());
+                    result.getEncryptedBlobContent().release();
                   } else {
                     assertTrue("Exception cause should have been GeneralSecurityException",
                         exception instanceof GeneralSecurityException);
@@ -213,6 +231,7 @@ public class CryptoJobHandlerTest {
             probeData.userMetadata, perBlobKey, cryptoService, kms,
             new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
             (EncryptJob.EncryptJobResult result, Exception exception) -> {
+              result.getEncryptedBlobContent().release();
               for (EncryptJob encryptJob : encryptJobs) {
                 cryptoJobHandler.submitJob(encryptJob);
               }
@@ -229,6 +248,7 @@ public class CryptoJobHandlerTest {
    */
   @Test
   public void testPendingDecryptJobs() throws InterruptedException, GeneralSecurityException {
+    nettyByteBufLeakHelper.setDisabled(true);
     int testDataCount = 10;
     CountDownLatch encryptCallBackCount = new CountDownLatch(testDataCount);
     CountDownLatch decryptCallBackCount = new CountDownLatch(testDataCount);
@@ -237,16 +257,15 @@ public class CryptoJobHandlerTest {
     for (int i = 0; i < testDataCount; i++) {
       TestBlobData testData = getRandomBlob(referenceClusterMap);
       cryptoJobHandler.submitJob(
-          new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
+          new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent.retainedDuplicate(),
               testData.userMetadata, perBlobKey, cryptoService, kms,
               new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
               (EncryptJob.EncryptJobResult encryptJobResult, Exception exception) -> {
                 assertNotNull("Encrypted content should not be null", encryptJobResult.getEncryptedBlobContent());
                 assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
                 decryptJobs.add(new DecryptJob(testData.blobId, encryptJobResult.getEncryptedKey(),
-                    Unpooled.wrappedBuffer(encryptJobResult.getEncryptedBlobContent()),
-                    encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms,
-                    new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
+                    encryptJobResult.getEncryptedBlobContent(), encryptJobResult.getEncryptedUserMetadata(),
+                    cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
                     (DecryptJob.DecryptJobResult decryptJobResult, Exception e) -> {
                       if (e == null) {
                         assertEquals("BlobId mismatch ", testData.blobId, decryptJobResult.getBlobId());
@@ -254,8 +273,10 @@ public class CryptoJobHandlerTest {
                             exception);
                         assertNotNull("Decrypted contents should not be null",
                             decryptJobResult.getDecryptedBlobContent());
+                        byte[] blobContent = new byte[testData.blobContent.readableBytes()];
+                        testData.blobContent.readBytes(blobContent);
                         assertArrayEquals("Decrypted content and plain bytes should match",
-                            testData.blobContent.array(), decryptJobResult.getDecryptedBlobContent().array());
+                            blobContent, decryptJobResult.getDecryptedBlobContent().array());
                         assertArrayEquals("Decrypted userMetadata and plain bytes should match",
                             testData.userMetadata.array(), decryptJobResult.getDecryptedUserMetadata().array());
                       } else {
@@ -281,6 +302,7 @@ public class CryptoJobHandlerTest {
             probeData.userMetadata, perBlobKey, cryptoService, kms,
             new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
             (EncryptJob.EncryptJobResult result, Exception exception) -> {
+              result.getEncryptedBlobContent().release();
               for (DecryptJob decryptJob : decryptJobs) {
                 cryptoJobHandler.submitJob(decryptJob);
               }
@@ -308,11 +330,12 @@ public class CryptoJobHandlerTest {
             }));
 
     cryptoJobHandler.submitJob(
-        new DecryptJob(randomData.blobId, randomData.blobContent, Unpooled.wrappedBuffer(randomData.blobContent),
+        new DecryptJob(randomData.blobId, randomData.blobContent.nioBuffer(), randomData.blobContent,
             randomData.userMetadata, cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
             (DecryptJob.DecryptJobResult result, Exception exception) -> {
               fail("Callback should not have been called since CryptoWorker is closed");
             }));
+    randomData.blobContent.release();
   }
 
   /**
@@ -341,14 +364,15 @@ public class CryptoJobHandlerTest {
   private void testEncryptDecryptFlow(SecretKeySpec perBlobKey, CountDownLatch encryptCallBackCount,
       CountDownLatch decryptCallBackCount, Mode mode) {
     TestBlobData randomData = getRandomBlob(referenceClusterMap);
-    ByteBuffer content = mode != Mode.UserMetadata ? randomData.blobContent : null;
+    ByteBuf content = mode != Mode.UserMetadata ? randomData.blobContent.retainedDuplicate() : null;
     ByteBuffer userMetadata = mode != Mode.Data ? randomData.userMetadata : null;
     cryptoJobHandler.submitJob(
         new EncryptJob(randomData.blobId.getAccountId(), randomData.blobId.getContainerId(), content, userMetadata,
             perBlobKey, cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
             new EncryptCallbackVerifier(randomData.blobId, false, encryptCallBackCount,
-                new DecryptCallbackVerifier(randomData.blobId, content, userMetadata, false, decryptCallBackCount),
-                mode)));
+                new DecryptCallbackVerifier(randomData.blobId, content != null?content.nioBuffer():null, userMetadata, false,
+                    decryptCallBackCount), mode)));
+    randomData.blobContent.release();
   }
 
   /**
@@ -382,7 +406,7 @@ public class CryptoJobHandlerTest {
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
     CountDownLatch decryptCallBackCount = new CountDownLatch(1);
     cryptoJobHandler.submitJob(
-        new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
+        new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent.retainedDuplicate(),
             testData.userMetadata, perBlobKey, cryptoService, kms,
             new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
             (EncryptJob.EncryptJobResult encryptJobResult, Exception exception) -> {
@@ -398,9 +422,8 @@ public class CryptoJobHandlerTest {
                     new GeneralSecurityException("Exception to test", new IllegalStateException()));
               }
               cryptoJobHandler.submitJob(new DecryptJob(testData.blobId, encryptJobResult.getEncryptedKey(),
-                  Unpooled.wrappedBuffer(encryptJobResult.getEncryptedBlobContent()),
-                  encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms,
-                  new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
+                  encryptJobResult.getEncryptedBlobContent(), encryptJobResult.getEncryptedUserMetadata(),
+                  cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
                   (DecryptJob.DecryptJobResult result, Exception e) -> {
                     decryptCallBackCount.countDown();
                     assertNotNull("Exception should have been thrown to decrypt contents for " + testData.blobId, e);
@@ -410,6 +433,7 @@ public class CryptoJobHandlerTest {
                   }));
             }));
     awaitCountDownLatch(decryptCallBackCount, DECRYPT_JOB_TYPE);
+    testData.blobContent.release();
   }
 
   /**
@@ -446,11 +470,12 @@ public class CryptoJobHandlerTest {
           assertNotNull("Encrypted userMetadata should not be null", encryptJobResult.getEncryptedUserMetadata());
         }
         assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
-        ByteBuffer encryptedBlobContent = encryptJobResult.getEncryptedBlobContent();
-        cryptoJobHandler.submitJob(new DecryptJob(blobId, encryptJobResult.getEncryptedKey(),
-            encryptedBlobContent == null ? null : Unpooled.wrappedBuffer(encryptedBlobContent),
-            encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms,
-            new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), decryptCallBackVerifier));
+        cryptoJobHandler.submitJob(
+            new DecryptJob(blobId, encryptJobResult.getEncryptedKey(), encryptJobResult.getEncryptedBlobContent(),
+                encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms,
+                new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), (result, e) -> {
+              decryptCallBackVerifier.onCompletion(result, e);
+            }));
       } else {
         assertNotNull("Exception should have been thrown to encrypt contents for " + blobId, exception);
         assertTrue("Exception cause should have been GeneralSecurityException",
@@ -529,10 +554,12 @@ public class CryptoJobHandlerTest {
     int size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE_IN_BYTES);
     byte[] data = new byte[size];
     TestUtils.RANDOM.nextBytes(data);
+    ByteBuf blob = ByteBufAllocator.DEFAULT.heapBuffer(size);
+    blob.writeBytes(data);
     size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE_IN_BYTES);
     byte[] userMetadata = new byte[size];
     TestUtils.RANDOM.nextBytes(userMetadata);
-    return new TestBlobData(blobId, ByteBuffer.wrap(data), ByteBuffer.wrap(userMetadata));
+    return new TestBlobData(blobId, ByteBuffer.wrap(userMetadata), blob);
   }
 
   /**
@@ -564,9 +591,9 @@ public class CryptoJobHandlerTest {
   static class TestBlobData {
     BlobId blobId;
     ByteBuffer userMetadata;
-    ByteBuffer blobContent;
+    ByteBuf blobContent;
 
-    TestBlobData(BlobId blobId, ByteBuffer userMetadata, ByteBuffer blobContent) {
+    TestBlobData(BlobId blobId, ByteBuffer userMetadata, ByteBuf blobContent) {
       this.blobId = blobId;
       this.userMetadata = userMetadata;
       this.blobContent = blobContent;

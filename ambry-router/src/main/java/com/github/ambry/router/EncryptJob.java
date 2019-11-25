@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 
@@ -23,7 +24,7 @@ import java.security.GeneralSecurityException;
 public class EncryptJob implements CryptoJob {
   private final short accountId;
   private final short containerId;
-  private final ByteBuffer blobContentToEncrypt;
+  private ByteBuf blobContentToEncrypt;
   private final ByteBuffer userMetadataToEncrypt;
   private final Object perBlobKey;
   private final Callback<EncryptJobResult> callback;
@@ -35,13 +36,13 @@ public class EncryptJob implements CryptoJob {
    * Instantiates {@link EncryptJob} for an upload.
    * @param accountId the accountId of the blob that needs to be encrypted
    * @param containerId the containerId of the blob that needs to be encrypted
-   * @param blobContentToEncrypt {@link ByteBuffer} to be encrypted. Could be {@code null} for a metadata chunk.
+   * @param blobContentToEncrypt {@link ByteBuf} to be encrypted. Could be {@code null} for a metadata chunk.
    * @param userMetadataToEncrypt user metadata to be encrypted. Could be {@code null} for data chunks.
    * @param perBlobKey per blob key to use to encrypt the blob content
    * @param encryptJobMetricsTracker metrics tracker to track the encryption job
    * @param callback {@link Callback} to be invoked on completion
    */
-  EncryptJob(short accountId, short containerId, ByteBuffer blobContentToEncrypt, ByteBuffer userMetadataToEncrypt,
+  EncryptJob(short accountId, short containerId, ByteBuf blobContentToEncrypt, ByteBuffer userMetadataToEncrypt,
       Object perBlobKey, CryptoService cryptoService, KeyManagementService kms,
       CryptoJobMetricsTracker encryptJobMetricsTracker, Callback<EncryptJobResult> callback) {
     this.accountId = accountId;
@@ -66,9 +67,9 @@ public class EncryptJob implements CryptoJob {
   @Override
   public void run() {
     encryptJobMetricsTracker.onJobProcessingStart();
-    ByteBuffer encryptedBlobContent = null;
     ByteBuffer encryptedUserMetadata = null;
     ByteBuffer encryptedKey = null;
+    ByteBuf encryptedBlobContent = null;
     Exception exception = null;
     try {
       if (blobContentToEncrypt != null) {
@@ -81,10 +82,18 @@ public class EncryptJob implements CryptoJob {
       encryptedKey = cryptoService.encryptKey(perBlobKey, containerKey);
     } catch (Exception e) {
       exception = e;
+      if (encryptedBlobContent != null) {
+        encryptedBlobContent.release();
+        encryptedBlobContent = null;
+      }
     } finally {
+      if (blobContentToEncrypt != null) {
+        blobContentToEncrypt.release();
+        blobContentToEncrypt = null;
+      }
       encryptJobMetricsTracker.onJobProcessingComplete();
       callback.onCompletion(
-          exception == null ? new EncryptJobResult(encryptedKey, encryptedBlobContent, encryptedUserMetadata) : null,
+          exception == null ? new EncryptJobResult(encryptedKey, encryptedUserMetadata, encryptedBlobContent) : null,
           exception);
     }
   }
@@ -103,25 +112,31 @@ public class EncryptJob implements CryptoJob {
    */
   class EncryptJobResult {
     private final ByteBuffer encryptedKey;
-    private final ByteBuffer encryptedBlobContent;
     private final ByteBuffer encryptedUserMetadata;
+    private final ByteBuf encryptedBlobContent;
 
-    EncryptJobResult(ByteBuffer encryptedKey, ByteBuffer encryptedBlobContent, ByteBuffer encryptedUserMetadata) {
+    EncryptJobResult(ByteBuffer encryptedKey, ByteBuffer encryptedUserMetadata, ByteBuf encryptedBlobContent) {
       this.encryptedKey = encryptedKey;
-      this.encryptedBlobContent = encryptedBlobContent;
       this.encryptedUserMetadata = encryptedUserMetadata;
+      this.encryptedBlobContent = encryptedBlobContent;
     }
 
     ByteBuffer getEncryptedKey() {
       return encryptedKey;
     }
 
-    ByteBuffer getEncryptedBlobContent() {
+    ByteBuf getEncryptedBlobContent() {
       return encryptedBlobContent;
     }
 
     ByteBuffer getEncryptedUserMetadata() {
       return encryptedUserMetadata;
+    }
+
+    void release() {
+      if (encryptedBlobContent != null) {
+        encryptedBlobContent.release();
+      }
     }
   }
 }
