@@ -145,6 +145,14 @@ public class ReplicationConfig {
   @Default("false")
   public final boolean replicationEnabledWithVcrCluster;
 
+  /**
+   * Comma separated list of partitions to recover.
+   * This config will ignore the partition leadership information for recovering partitions.
+   */
+  @Config("vcr.recovery.partitions")
+  @Default("")
+  public final String vcrRecoveryPartitions;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationStoreTokenFactory =
@@ -181,5 +189,6 @@ public class ReplicationConfig {
     replicaMetadataRequestVersion =
         verifiableProperties.getShortInRange("replication.metadata.request.version", (short) 1, (short) 1, (short) 2);
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
+    vcrRecoveryPartitions = verifiableProperties.getString("vcr.recovery.partitions", "");
   }
 }
