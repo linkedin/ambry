@@ -368,6 +368,10 @@ public class RouterConfig {
   @Default("false")
   public final boolean routerGetBlobOperationShareMemory;
 
+  @Config("router.get.eligible.replicas.by.state.enabled")
+  @Default("false")
+  public final boolean routerGetEligibleReplicasByStateEnabled;
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -462,5 +466,7 @@ public class RouterConfig {
         Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
     routerGetBlobOperationShareMemory =
         verifiableProperties.getBoolean("router.get.blob.operation.share.memory", false);
+    routerGetEligibleReplicasByStateEnabled =
+        verifiableProperties.getBoolean("router.get.eligible.replicas.by.state.enabled", false);
   }
 }
