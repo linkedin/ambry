@@ -364,10 +364,16 @@ public class RouterConfig {
   @Default("4")
   public final int routerMaxInMemGetChunks;
 
+  /**
+   * If {@code true}, the blob data shares memory with networking buffer in GetBlobOperation
+   */
   @Config("router.get.blob.operation.share.memory")
   @Default("false")
   public final boolean routerGetBlobOperationShareMemory;
 
+  /**
+   * if {@code true}, operation tracker will get replicas in required states based on the type of operation.
+   */
   @Config("router.get.eligible.replicas.by.state.enabled")
   @Default("false")
   public final boolean routerGetEligibleReplicasByStateEnabled;

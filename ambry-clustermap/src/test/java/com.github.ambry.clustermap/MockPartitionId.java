@@ -51,6 +51,7 @@ public class MockPartitionId implements PartitionId {
     this.partition = partition;
     this.partitionClass = partitionClass;
     this.replicaIds = new ArrayList<>(dataNodes.size());
+    replicaAndState = new HashMap<>();
     for (MockDataNodeId dataNode : dataNodes) {
       MockReplicaId replicaId = new MockReplicaId(dataNode.getPort(), this, dataNode, mountPathIndexToUse);
       replicaIds.add(replicaId);

@@ -159,6 +159,16 @@ public class OperationTrackerTest {
     assertTrue("Operation should be done", ot.isDone());
   }
 
+  /**
+   * Test put operation in local dc when replicasStateEnabled is enabled/disabled.
+   * Test steps:
+   * Case1: Only 2 STANDBY replicas in local dc;
+   *        Make 1 succeed and the other fail (both current and replicaState enabled tracker should fail)
+   * Case2: 2 STANDBY, 1 INACTIVE replicas in local dc
+   *        Make 1 fail and 2 succeed (replicaState enabled operation tracker should fail)
+   * Case3: 1 LEADER, 4 STANDBY and 1 INACTIVE in local dc
+   *        Make 3 succeed and 2 fail (replicaState enabled operation tracker should fail)
+   */
   @Test
   public void localPutWithReplicaStateTest() {
     assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
@@ -222,6 +232,15 @@ public class OperationTrackerTest {
     }
   }
 
+  /**
+   * Test delete/ttlUpdate operation when replicasStateEnabled is enabled/disabled.
+   * local dc: 2 STANDBY and 1 INACTIVE; remote dc: 2 STANDBY and 1 INACTIVE
+   * 1. Issue 3 requests in parallel
+   * 2. Make 2 requests fail
+   * 3. Issue 1 requests (replicaState enabled tracker only has 4 eligible replicas)
+   * 4. Make 1 succeed and 1 fail (replicaState enabled tracker should fail)
+   * 5. Make remaining requests succeed, this only applies for tracker with replicaState disabled and operation should succeed.
+   */
   @Test
   public void deleteTtlUpdateWithReplica() {
     assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));

@@ -89,6 +89,26 @@ class SimpleOperationTracker implements OperationTracker {
    * @param partitionId The partition on which the operation is performed.
    * @param originatingDcName The original DC where blob was put.
    * @param shuffleReplicas Indicates if the replicas need to be shuffled.
+   * Following are different types of operation and their eligible replica states:
+   *  ---------------------------------------------------------
+   * |  Operation Type  |        Eligible Replica State        |
+   *  ---------------------------------------------------------
+   * |     POST         | STANDBY, LEADER                      |
+   * |     GET          | STANDBY, LEADER, BOOTSTRAP, INACTIVE |
+   * |    DELETE        | STANDBY, LEADER, BOOTSTRAP           |
+   * |   TTLUpdate      | STANDBY, LEADER, BOOTSTRAP           |
+   *  ---------------------------------------------------------
+   * Following are dynamic configs when replica state is taken into consideration: (N is number of eligible replicas)
+   *  -----------------------------------------------------------------------
+   * |  Operation Type  |        Parallelism              |  Success Target  |
+   *  -----------------------------------------------------------------------
+   * |     POST         | 1~2 decided by adaptive tracker |         1        |
+   * |     GET          |           N                     |       N - 1      |
+   * |    DELETE        |          3~N                    |         2        |
+   * |   TTLUpdate      |          3~N                    |         2        |
+   *  -----------------------------------------------------------------------
+   *  Note: for now, we still use 3 as parallelism for DELETE/TTLUpdate even though there are N eligible replicas, this
+   *        can be adjusted to any number between 3 and N (inclusive)
    */
   SimpleOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
       String originatingDcName, boolean shuffleReplicas) {
@@ -275,11 +295,12 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   /**
-   * Get eligible replicas
-   * @param partitionId
-   * @param dcName
-   * @param states
-   * @return
+   * Get eligible replicas by states for given partition from specified data center. If dcName is null, it gets all eligible
+   * replicas from all data centers.
+   * @param partitionId the {@link PartitionId} that replicas belong to.
+   * @param dcName the name of data center from which the replicas should come from. This can be {@code null}.
+   * @param states a set of {@link ReplicaState}(s) that replicas should match.
+   * @return a list of eligible replicas that are in specified states.
    */
   private List<ReplicaId> getEligibleReplicas(PartitionId partitionId, String dcName, EnumSet<ReplicaState> states) {
     List<ReplicaId> eligibleReplicas = new ArrayList<>();
