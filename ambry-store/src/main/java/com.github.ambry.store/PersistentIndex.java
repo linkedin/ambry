@@ -679,7 +679,7 @@ class PersistentIndex {
    * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
-  private IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long deletionTimeMs,
+   IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long deletionTimeMs,
       short lifeVersion) throws StoreException {
     boolean hasLifeVersion = lifeVersion > (short) -1;
     validateFileSpan(fileSpan, true);

@@ -327,6 +327,51 @@ public class IndexTest {
   }
 
   /**
+   * Tests error cases for {@link PersistentIndex#markAsUndeleted(StoreKey, FileSpan, long)}.
+   * Cases
+   * 1. FileSpan end offset < currentIndexEndOffset
+   * 2. FileSpan is across segments
+   * 3. ID does not exist
+   * @throws StoreException
+   */
+  @Test
+  public void markAsUndeletedBadInputTest() throws StoreException {
+    // FileSpan end offset < currentIndexEndOffset
+    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
+    try {
+      state.index.markAsUndeleted(state.deletedKeys.iterator().next(), fileSpan, state.time.milliseconds());
+      fail("Should have failed because filespan provided < currentIndexEndOffset");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    if (isLogSegmented) {
+      // FileSpan spans across segments
+      Offset startOffset = state.index.getCurrentEndOffset();
+      String nextLogSegmentName = LogSegmentNameHelper.getNextPositionName(startOffset.getName());
+      Offset endOffset = new Offset(nextLogSegmentName, 0);
+      fileSpan = new FileSpan(startOffset, endOffset);
+      try {
+        state.index.markAsUndeleted(state.deletedKeys.iterator().next(), fileSpan, state.time.milliseconds());
+        fail("Should have failed because fileSpan provided spanned across segments");
+      } catch (IllegalArgumentException e) {
+        // expected. Nothing to do.
+      }
+    }
+
+    state.appendToLog(5);
+    fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), 5);
+    // ID does not exist
+    try {
+      state.index.markAsUndeleted(state.getUniqueId(), fileSpan, state.time.milliseconds());
+      fail("Should have failed because ID provided for delete does not exist");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Not_Found, e.getErrorCode());
+    }
+
+  }
+
+  /**
    * Tests that hard delete is kicked off by the index.
    * @throws StoreException
    */
