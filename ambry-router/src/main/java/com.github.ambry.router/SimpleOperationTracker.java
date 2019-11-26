@@ -90,8 +90,8 @@ class SimpleOperationTracker implements OperationTracker {
    *  ---------------------------------------------------------
    * |  Operation Type  |        Eligible Replica State        |
    *  ---------------------------------------------------------
-   * |     POST         | STANDBY, LEADER                      |
-   * |     GET          | STANDBY, LEADER, BOOTSTRAP, INACTIVE |
+   * |      PUT         | STANDBY, LEADER                      |
+   * |      GET         | STANDBY, LEADER, BOOTSTRAP, INACTIVE |
    * |    DELETE        | STANDBY, LEADER, BOOTSTRAP           |
    * |   TTLUpdate      | STANDBY, LEADER, BOOTSTRAP           |
    *  ---------------------------------------------------------
