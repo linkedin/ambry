@@ -83,12 +83,9 @@ class SimpleOperationTracker implements OperationTracker {
   private static final Logger logger = LoggerFactory.getLogger(SimpleOperationTracker.class);
 
   /**
-   * Constructor for an {@code SimpleOperationTracker}.
-   * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
-   * @param routerOperation The {@link RouterOperation} which {@link SimpleOperationTracker} is associated with.
-   * @param partitionId The partition on which the operation is performed.
-   * @param originatingDcName The original DC where blob was put.
-   * @param shuffleReplicas Indicates if the replicas need to be shuffled.
+   * Constructor for an {@code SimpleOperationTracker}. In constructor, there is a config allowing operation tracker to
+   * use eligible replicas to populate replica pool. ("eligible" replicas are those in required states for specific
+   * operation)
    * Following are different types of operation and their eligible replica states:
    *  ---------------------------------------------------------
    * |  Operation Type  |        Eligible Replica State        |
@@ -102,13 +99,18 @@ class SimpleOperationTracker implements OperationTracker {
    *  -----------------------------------------------------------------------
    * |  Operation Type  |        Parallelism              |  Success Target  |
    *  -----------------------------------------------------------------------
-   * |     POST         | 1~2 decided by adaptive tracker |         1        |
-   * |     GET          |           N                     |       N - 1      |
+   * |     GET          | 1~2 decided by adaptive tracker |         1        |
+   * |     PUT          |           N                     |       N - 1      |
    * |    DELETE        |          3~N                    |         2        |
    * |   TTLUpdate      |          3~N                    |         2        |
    *  -----------------------------------------------------------------------
    *  Note: for now, we still use 3 as parallelism for DELETE/TTLUpdate even though there are N eligible replicas, this
    *        can be adjusted to any number between 3 and N (inclusive)
+   * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
+   * @param routerOperation The {@link RouterOperation} which {@link SimpleOperationTracker} is associated with.
+   * @param partitionId The partition on which the operation is performed.
+   * @param originatingDcName The original DC where blob was put.
+   * @param shuffleReplicas Indicates if the replicas need to be shuffled.
    */
   SimpleOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
       String originatingDcName, boolean shuffleReplicas) {

@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -77,13 +78,11 @@ public class MockPartitionId implements PartitionId {
 
   @Override
   public List<ReplicaId> getReplicaIdsByState(ReplicaState state, String dcName) {
-    List<ReplicaId> replicas = new ArrayList<>();
-    replicaIds.forEach(r -> {
-      if (replicaAndState.get(r) == state && (dcName == null || r.getDataNodeId().getDatacenterName().equals(dcName))) {
-        replicas.add(r);
-      }
-    });
-    return replicas;
+    return replicaIds.stream()
+        .filter(r -> replicaAndState.get(r) == state && (dcName == null || r.getDataNodeId()
+            .getDatacenterName()
+            .equals(dcName)))
+        .collect(Collectors.toList());
   }
 
   @Override
