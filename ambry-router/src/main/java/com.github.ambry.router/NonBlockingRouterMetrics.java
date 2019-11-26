@@ -546,11 +546,24 @@ public class NonBlockingRouterMetrics {
    * @return a configured {@link CachedHistogram}.
    */
   private static CachedHistogram createHistogram(RouterConfig routerConfig, boolean useDefaultReservoirParams) {
-    Reservoir reservoir = useDefaultReservoirParams ? new ExponentiallyDecayingReservoir()
-        : new ExponentiallyDecayingReservoir(routerConfig.routerOperationTrackerReservoirSize,
+    Reservoir reservoir;
+    long cacheTimeoutMs;
+    double quantile;
+    if (routerConfig != null) {
+      if (useDefaultReservoirParams) {
+        reservoir = new ExponentiallyDecayingReservoir();
+      } else {
+        reservoir = new ExponentiallyDecayingReservoir(routerConfig.routerOperationTrackerReservoirSize,
             routerConfig.routerOperationTrackerReservoirDecayFactor);
-    return new CachedHistogram(reservoir, routerConfig.routerOperationTrackerHistogramCacheTimeoutMs,
-        routerConfig.routerLatencyToleranceQuantile);
+      }
+      cacheTimeoutMs = routerConfig.routerOperationTrackerHistogramCacheTimeoutMs;
+      quantile = routerConfig.routerLatencyToleranceQuantile;
+    } else {
+      reservoir = new ExponentiallyDecayingReservoir();
+      cacheTimeoutMs = RouterConfig.DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT;
+      quantile = RouterConfig.DEFAULT_LATENCY_TOLERANCE_QUANTILE;
+    }
+    return new CachedHistogram(reservoir, cacheTimeoutMs, quantile);
   }
 
   /**

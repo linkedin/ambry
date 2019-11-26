@@ -30,6 +30,8 @@ public class RouterConfig {
 
   public static final String DEFAULT_KMS_FACTORY = "com.github.ambry.router.SingleKeyManagementServiceFactory";
   public static final String DEFAULT_CRYPTO_SERVICE_FACTORY = "com.github.ambry.router.GCMCryptoServiceFactory";
+  public static final double DEFAULT_LATENCY_TOLERANCE_QUANTILE = 0.9;
+  public static final long DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT = 1000L;
 
   // config keys
   public static final String ROUTER_SCALING_UNIT_COUNT = "router.scaling.unit.count";
@@ -495,7 +497,8 @@ public class RouterConfig {
     routerGetOperationTrackerType =
         verifiableProperties.getString(ROUTER_GET_OPERATION_TRACKER_TYPE, "SimpleOperationTracker");
     routerLatencyToleranceQuantile =
-        verifiableProperties.getDoubleInRange(ROUTER_LATENCY_TOLERANCE_QUANTILE, 0.9, 0.0, 1.0);
+        verifiableProperties.getDoubleInRange(ROUTER_LATENCY_TOLERANCE_QUANTILE, DEFAULT_LATENCY_TOLERANCE_QUANTILE,
+            0.0, 1.0);
     routerBlobidCurrentVersion =
         verifiableProperties.getShortFromAllowedValues(ROUTER_BLOBID_CURRENT_VERSION, (short) 6,
             new Short[]{1, 2, 3, 4, 5, 6});
@@ -534,7 +537,8 @@ public class RouterConfig {
     routerOperationTrackerHistogramDumpPeriod =
         verifiableProperties.getLongInRange(ROUTER_OPERATION_TRACKER_HISTOGRAM_DUMP_PERIOD, 600L, 1L, Long.MAX_VALUE);
     routerOperationTrackerHistogramCacheTimeoutMs =
-        verifiableProperties.getLong(ROUTER_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT_MS, 1000L);
+        verifiableProperties.getLong(ROUTER_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT_MS,
+            DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT);
     if (routerGetRequestParallelism > routerOperationTrackerMaxInflightRequests) {
       throw new IllegalArgumentException(
           "Operation tracker parallelism is larger than operation tracker max inflight number");
