@@ -1064,6 +1064,48 @@ class PersistentIndex {
   }
 
   /**
+   * @return absolute end position (in bytes) of latest PUT record when this method is invoked. If no PUT is found in
+   *         current store, -1 will be returned.
+   * @throws StoreException
+   */
+  long getAbsoluteEndPositionOfLastPut() throws StoreException {
+    IndexValue indexValueOfLastPut = null;
+    // 1. go through keys in journal in reverse order to see if there is a PUT index entry associated with the key
+    List<JournalEntry> journalEntries = journal.getAllEntries();
+    ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
+    // check entry in reverse order (from the most recent one) to find last PUT record in index
+    for (int i = journalEntries.size() - 1; i >= 0; --i) {
+      JournalEntry entry = journalEntries.get(i);
+      indexValueOfLastPut = findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
+          EnumSet.of(IndexEntryType.PUT), indexSegments);
+      if (indexValueOfLastPut != null) {
+        break;
+      }
+    }
+    if (!journalEntries.isEmpty() && indexValueOfLastPut == null) {
+      // 2. if not find in the journal, check index segments starting from most recent one (until latest PUT is found)
+      JournalEntry firstJournalEntry = journalEntries.get(0);
+      // generate a segment map in reverse order
+      ConcurrentNavigableMap<Offset, IndexSegment> segmentsMapToSearch =
+          indexSegments.subMap(indexSegments.firstKey(), true, indexSegments.lowerKey(firstJournalEntry.getOffset()),
+              true).descendingMap();
+      for (Map.Entry<Offset, IndexSegment> entry : segmentsMapToSearch.entrySet()) {
+        indexValueOfLastPut = entry.getValue().getIndexValueOfLastPut();
+        if (indexValueOfLastPut != null) {
+          break;
+        }
+      }
+    }
+    if (indexValueOfLastPut == null) {
+      // if no PUT record is found in this store, return -1. This is possible when current store is a brand new store.
+      logger.info("No PUT record is found for store {}", dataDir);
+      return -1;
+    }
+    return getAbsolutePositionInLogForOffset(indexValueOfLastPut.getOffset(), indexSegments)
+        + indexValueOfLastPut.getSize();
+  }
+
+  /**
    * @return the number of valid log segments starting from the first segment.
    */
   long getLogSegmentCount() {

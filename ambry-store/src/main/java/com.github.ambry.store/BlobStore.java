@@ -735,6 +735,14 @@ public class BlobStore implements Store {
   }
 
   /**
+   * @return return absolute end position of last PUT in current store when this method is invoked.
+   * @throws StoreException
+   */
+  public long getEndPositionOfLastPut() throws StoreException {
+    return index.getAbsoluteEndPositionOfLastPut();
+  }
+
+  /**
    * @return {@link ReplicaStatusDelegate} associated with this store
    */
   public ReplicaStatusDelegate getReplicaStatusDelegate() {
