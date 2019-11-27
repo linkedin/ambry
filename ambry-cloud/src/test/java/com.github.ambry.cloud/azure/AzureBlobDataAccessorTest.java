@@ -198,11 +198,12 @@ public class AzureBlobDataAccessorTest {
   /** Test update of nonexistent blob. */
   @Test
   public void testUpdateNotExists() throws Exception {
-    mockBlobExistence(false);
+    BlobStorageException ex = mock(BlobStorageException.class);
+    when(ex.getErrorCode()).thenReturn(BlobErrorCode.BLOB_NOT_FOUND);
+    when(mockBlockBlobClient.setMetadataWithResponse(any(), any(), any(), any())).thenThrow(ex);
     assertFalse("Update of nonexistent blob should return false",
         dataAccessor.updateBlobMetadata(blobId, "expirationTime", expirationTime));
     assertEquals(0, azureMetrics.blobUpdateErrorCount.getCount());
-    assertEquals(0, azureMetrics.blobUpdateTime.getCount());
   }
 
   private void mockBlobExistence(boolean exists) throws Exception {
