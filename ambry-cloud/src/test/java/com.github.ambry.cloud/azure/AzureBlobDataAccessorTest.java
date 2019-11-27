@@ -60,11 +60,7 @@ public class AzureBlobDataAccessorTest {
   private final String clusterName = "main";
   private Properties configProps = new Properties();
   private AzureBlobDataAccessor dataAccessor;
-  private BlobServiceClient mockServiceClient;
-  private BlobContainerClient mockContainerClient;
-  private BlobClient mockBlobClient;
   private BlockBlobClient mockBlockBlobClient;
-  private BlobProperties mockBlobProperties;
   private AzureMetrics azureMetrics;
   private int blobSize = 1024;
   byte dataCenterId = 66;
@@ -79,18 +75,8 @@ public class AzureBlobDataAccessorTest {
   @Before
   public void setup() throws Exception {
 
-    mockServiceClient = mock(BlobServiceClient.class);
-    mockContainerClient = mock(BlobContainerClient.class);
-    mockBlobClient = mock(BlobClient.class);
-    mockBlockBlobClient = mock(BlockBlobClient.class);
-    mockBlobProperties = mock(BlobProperties.class);
-    when(mockServiceClient.getBlobContainerClient(anyString())).thenReturn(mockContainerClient);
-    when(mockContainerClient.getBlobClient(anyString())).thenReturn(mockBlobClient);
-    when(mockContainerClient.exists()).thenReturn(false);
-    when(mockBlobClient.getBlockBlobClient()).thenReturn(mockBlockBlobClient);
-    when(mockBlockBlobClient.getProperties()).thenReturn(mockBlobProperties);
-    Map<String, String> metadataMap = new HashMap<>();
-    when(mockBlobProperties.getMetadata()).thenReturn(metadataMap);
+    BlobServiceClient mockServiceClient = mock(BlobServiceClient.class);
+    mockBlockBlobClient = setupMockBlobClient(mockServiceClient);
 
     mockBlobExistence(false);
 
@@ -108,6 +94,21 @@ public class AzureBlobDataAccessorTest {
     configProps.setProperty("clustermap.host.name", "localhost");
     azureMetrics = new AzureMetrics(new MetricRegistry());
     dataAccessor = new AzureBlobDataAccessor(mockServiceClient, clusterName, azureMetrics);
+  }
+
+  static BlockBlobClient setupMockBlobClient(BlobServiceClient mockServiceClient) {
+    BlobContainerClient mockContainerClient = mock(BlobContainerClient.class);
+    BlobClient mockBlobClient = mock(BlobClient.class);
+    BlockBlobClient mockBlockBlobClient = mock(BlockBlobClient.class);
+    BlobProperties mockBlobProperties = mock(BlobProperties.class);
+    when(mockServiceClient.getBlobContainerClient(anyString())).thenReturn(mockContainerClient);
+    when(mockContainerClient.getBlobClient(anyString())).thenReturn(mockBlobClient);
+    when(mockContainerClient.exists()).thenReturn(false);
+    when(mockBlobClient.getBlockBlobClient()).thenReturn(mockBlockBlobClient);
+    when(mockBlockBlobClient.getProperties()).thenReturn(mockBlobProperties);
+    Map<String, String> metadataMap = new HashMap<>();
+    when(mockBlobProperties.getMetadata()).thenReturn(metadataMap);
+    return mockBlockBlobClient;
   }
 
   /**

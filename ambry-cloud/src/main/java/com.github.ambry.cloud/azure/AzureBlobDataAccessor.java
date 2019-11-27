@@ -13,6 +13,9 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.core.http.HttpClient;
+import com.azure.core.http.ProxyOptions;
+import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
 import com.azure.core.util.Configuration;
 import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobContainerClient;
@@ -32,8 +35,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,10 +55,12 @@ public class AzureBlobDataAccessor {
   private static final Logger logger = LoggerFactory.getLogger(AzureBlobDataAccessor.class);
   private static final String SEPARATOR = "-";
   private final BlobServiceClient storageClient;
+  private final Configuration storageConfiguration;
   private final AzureMetrics azureMetrics;
   private final String clusterName;
   // Containers known to exist in the storage account
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
+  private ProxyOptions proxyOptions;
 
   /**
    * Production constructor
@@ -68,23 +73,19 @@ public class AzureBlobDataAccessor {
       AzureMetrics azureMetrics) {
     this.clusterName = clusterName;
     this.azureMetrics = azureMetrics;
-    Configuration storageConfiguration = new Configuration();
-    // Check for proxy
-    if (cloudConfig.vcrProxyHost != null) {
+    this.storageConfiguration = new Configuration();
+    // Check for network proxy
+    proxyOptions = (cloudConfig.vcrProxyHost == null) ? null : new ProxyOptions(ProxyOptions.Type.HTTP,
+        new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
+    if (proxyOptions != null) {
       logger.info("Using proxy: {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
-      try {
-        // TODO: could add vcrProxyScheme to CloudConfig
-        URL proxyUrl = new URL("http", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort, "/");
-        storageConfiguration.put(Configuration.PROPERTY_HTTPS_PROXY, proxyUrl.toString());
-        storageConfiguration.put(Configuration.PROPERTY_HTTP_PROXY, proxyUrl.toString());
-      } catch (MalformedURLException e) {
-        throw new IllegalArgumentException("Bad proxy info");
-      }
     }
+    HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
 
-    // TODO: set retry options depending on whether we are serving live data or replicating
+    // TODO: may want to set different retry options depending on live serving or replication mode
     RequestRetryOptions requestRetryOptions = new RequestRetryOptions();
     storageClient = new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
+        .httpClient(client)
         .retryOptions(requestRetryOptions)
         .configuration(storageConfiguration)
         .buildClient();
@@ -98,8 +99,25 @@ public class AzureBlobDataAccessor {
    */
   AzureBlobDataAccessor(BlobServiceClient storageClient, String clusterName, AzureMetrics azureMetrics) {
     this.storageClient = storageClient;
+    this.storageConfiguration = new Configuration();
     this.clusterName = clusterName;
     this.azureMetrics = azureMetrics;
+  }
+
+  /**
+   * Test utility.
+   * @return the underlying {@link BlobServiceClient}.
+   */
+  BlobServiceClient getStorageClient() {
+    return storageClient;
+  }
+
+  /**
+   * Test utility.
+   * @return the network {@link ProxyOptions} used to connect to ABS.
+   */
+  ProxyOptions getProxyOptions() {
+    return proxyOptions;
   }
 
   /**
@@ -143,6 +161,93 @@ public class AzureBlobDataAccessor {
   }
 
   /**
+   * Upload a file to blob storage.
+   * @param containerName name of the container where blob is stored.
+   * @param fileName the blob filename.
+   * @param inputStream the input stream to use for upload.
+   * @throws BlobStorageException for any error on ABS side.
+   * @throws IOException for any error with supplied data stream.
+   */
+  public void uploadFile(String containerName, String fileName, InputStream inputStream)
+      throws BlobStorageException, IOException {
+    try {
+      BlobContainerClient containerClient = storageClient.getBlobContainerClient(containerName);
+      BlockBlobClient blobClient = containerClient.getBlobClient(fileName).getBlockBlobClient();
+      blobClient.uploadWithResponse(inputStream, inputStream.available(), null, null, null, null, null, null, Context.NONE);
+    } catch (UncheckedIOException e) {
+      // error processing input stream
+      throw e.getCause();
+    }
+  }
+
+  /**
+   * Delete a file from blob storage.
+   * @param containerName name of the container containing blob to delete.
+   * @param fileName name of the blob.
+   * @return {@code true} if the deletion was successful, {@code false} if the blob was not found.
+   * @throws BlobStorageException for any error on ABS side.
+   */
+  public boolean deleteFile(String containerName, String fileName) throws BlobStorageException {
+    try {
+      BlobContainerClient containerClient = storageClient.getBlobContainerClient(containerName);
+      BlockBlobClient blobClient = containerClient.getBlobClient(fileName).getBlockBlobClient();
+      blobClient.delete();
+      return true;
+    } catch (BlobStorageException e) {
+      if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        return false;
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  /**
+   * Download a file from blob storage.
+   * @param containerName name of the container containing blob to download.
+   * @param fileName name of the blob.
+   * @param outputStream the output stream to use for download.
+   * @return {@code true} if the download was successful, {@code false} if the blob was not found.
+   * @throws BlobStorageException for any error on ABS side.
+   * @throws IOException for any error with supplied data stream.
+   */
+  public boolean downloadFile(String containerName, String fileName, OutputStream outputStream)
+      throws BlobStorageException, IOException {
+    try {
+      BlobContainerClient containerClient = storageClient.getBlobContainerClient(containerName);
+      BlockBlobClient blobClient = containerClient.getBlobClient(fileName).getBlockBlobClient();
+      if (!blobClient.exists()) {
+        // TODO: probably throws exception for not found
+        return false;
+      }
+      blobClient.download(outputStream);
+      return true;
+    } catch (UncheckedIOException e) {
+      // error processing input stream
+      throw e.getCause();
+    } catch (BlobStorageException e) {
+      if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        return false;
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  /**
+   * Perform basic connectivity test.
+   */
+  void testConnectivity() {
+    try {
+      // TODO: Turn on verbose logging during this call (how to do in v12?)
+      storageClient.getBlobContainerClient("partition-0").existsWithResponse(Duration.ofSeconds(1), Context.NONE);
+      logger.info("Blob storage connection test succeeded.");
+    } catch (BlobStorageException ex) {
+      throw new IllegalStateException("Blob storage connection test failed", ex);
+    }
+  }
+
+  /**
    * Download the blob from Azure storage.
    * @param blobId id of the Ambry blob to be downloaded
    * @param outputStream outputstream to populate the downloaded data with
@@ -160,6 +265,9 @@ public class AzureBlobDataAccessor {
       // error processing input stream
       azureMetrics.blobDownloadErrorCount.inc();
       throw e.getCause();
+    } catch (BlobStorageException e) {
+      azureMetrics.blobDownloadErrorCount.inc();
+      throw e;
     } finally {
       storageTimer.stop();
     }
@@ -179,10 +287,6 @@ public class AzureBlobDataAccessor {
 
     try {
       BlockBlobClient blobClient = getAzureBlobReference(blobId, false);
-      if (!blobClient.exists()) {
-        logger.debug("Blob {} not found.", blobId);
-        return false;
-      }
       Timer.Context storageTimer = azureMetrics.blobUpdateTime.time();
       try {
         BlobProperties blobProperties = blobClient.getProperties();
@@ -205,6 +309,9 @@ public class AzureBlobDataAccessor {
         storageTimer.stop();
       }
     } catch (BlobStorageException e) {
+      if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        return false;
+      }
       if (e.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
         // TODO: blob was updated (race condition), retry the update
       }

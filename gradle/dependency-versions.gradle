@@ -22,7 +22,7 @@ ext {
     helixVersion = "0.8.4"
     jacksonVersion = "1.8.5"
     jaydioVersion = "0.1"
-    azureStorageVersion = "5.0.0"
+    azureStorageVersion = "12.0.0"
     azureDocumentDbVersion = "2.1.1"
     conscryptVersion = "2.2.1"
 }
