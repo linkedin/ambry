@@ -171,7 +171,7 @@ public class AzureBlobDataAccessor {
   public void uploadFile(String containerName, String fileName, InputStream inputStream)
       throws BlobStorageException, IOException {
     try {
-      BlobContainerClient containerClient = storageClient.getBlobContainerClient(containerName);
+      BlobContainerClient containerClient = getContainer(containerName, true);
       BlockBlobClient blobClient = containerClient.getBlobClient(fileName).getBlockBlobClient();
       blobClient.uploadWithResponse(inputStream, inputStream.available(), null, null, null, null, null, null, Context.NONE);
     } catch (UncheckedIOException e) {
@@ -338,19 +338,19 @@ public class AzureBlobDataAccessor {
    * @return {@code BlockBlobClient} reference.
    */
   private BlockBlobClient getAzureBlobReference(BlobId blobId, boolean autoCreateContainer) {
-    BlobContainerClient containerClient = getContainer(blobId, autoCreateContainer);
+    String containerName = getAzureContainerName(blobId.getPartition().toPathString());
+    BlobContainerClient containerClient = getContainer(containerName, autoCreateContainer);
     String azureBlobName = getAzureBlobName(blobId);
     return containerClient.getBlobClient(azureBlobName).getBlockBlobClient();
   }
 
   /**
-   * Get an Azure container to place the specified {@link BlobId}.
-   * @param blobId the {@link BlobId} that needs a container.
+   * Get a reference to an Azure container, creating it if necessary.
+   * @param containerName the container name.
    * @param autoCreate flag indicating whether to create the container if it does not exist.
    * @return the created {@link BlobContainerClient}.
    */
-  private BlobContainerClient getContainer(BlobId blobId, boolean autoCreate) {
-    String containerName = getAzureContainerName(blobId.getPartition().toPathString());
+  private BlobContainerClient getContainer(String containerName, boolean autoCreate) {
     BlobContainerClient containerClient = storageClient.getBlobContainerClient(containerName);
     if (autoCreate) {
       if (!knownContainers.contains(containerName)) {
