@@ -214,7 +214,9 @@ project(':ambry-server') {
                 project(':ambry-commons'),
                 project(':ambry-store'),
                 project(':ambry-utils'),
-                project(':ambry-replication')
+                project(':ambry-replication'),
+                project(':ambry-rest')
+        compile "io.netty:netty-buffer:$nettyVersion"
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-router')
         testCompile project(':ambry-cloud')

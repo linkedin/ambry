@@ -39,13 +39,13 @@ import org.slf4j.LoggerFactory;
 public class LocalRequestResponseChannel implements RequestResponseChannel {
 
   private static final Logger logger = LoggerFactory.getLogger(LocalRequestResponseChannel.class);
-  private BlockingQueue<Request> requestQueue = new LinkedBlockingQueue<>();
+  private BlockingQueue<NetworkRequest> requestQueue = new LinkedBlockingQueue<>();
   private Map<Integer, BlockingQueue<ResponseInfo>> responseMap = new ConcurrentHashMap<>();
   // buffer to hold size header that we strip off payloads
   private static final byte[] sizeByteArray = new byte[Long.BYTES];
 
   @Override
-  public void sendRequest(Request request) {
+  public void sendRequest(NetworkRequest request) {
     requestQueue.offer(request);
     if (request instanceof LocalChannelRequest) {
       LocalChannelRequest localRequest = (LocalChannelRequest) request;
@@ -54,8 +54,8 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   }
 
   @Override
-  public Request receiveRequest() throws InterruptedException {
-    Request request = requestQueue.take();
+  public NetworkRequest receiveRequest() throws InterruptedException {
+    NetworkRequest request = requestQueue.take();
     if (request instanceof LocalChannelRequest) {
       LocalChannelRequest localRequest = (LocalChannelRequest) request;
       logger.debug("Removed request for {}, queue size now {}", localRequest.processorId, requestQueue.size());
@@ -64,7 +64,7 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   }
 
   @Override
-  public void sendResponse(Send payloadToSend, Request originalRequest, ServerNetworkResponseMetrics metrics) {
+  public void sendResponse(Send payloadToSend, NetworkRequest originalRequest, ServerNetworkResponseMetrics metrics) {
     try {
       LocalChannelRequest localRequest = (LocalChannelRequest) originalRequest;
       ResponseInfo responseInfo =
@@ -110,7 +110,7 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   }
 
   @Override
-  public void closeConnection(Request request) throws InterruptedException {
+  public void closeConnection(NetworkRequest request) throws InterruptedException {
   }
 
   @Override
@@ -133,9 +133,9 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   }
 
   /**
-   * A {@link Request} implementation that works with {@link LocalRequestResponseChannel}.
+   * A {@link NetworkRequest} implementation that works with {@link LocalRequestResponseChannel}.
    */
-  static class LocalChannelRequest implements Request {
+  static class LocalChannelRequest implements NetworkRequest {
     private RequestInfo requestInfo;
     private InputStream input;
     private long startTimeInMs;

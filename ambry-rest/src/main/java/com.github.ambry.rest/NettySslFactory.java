@@ -19,9 +19,13 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.handler.codec.http2.Http2SecurityUtil;
+import io.netty.handler.ssl.ApplicationProtocolConfig;
+import io.netty.handler.ssl.ApplicationProtocolNames;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -96,6 +100,17 @@ public class NettySslFactory implements SSLFactory {
         .ciphers(getCipherSuites(config))
         .protocols(getEnabledProtocols(config))
         .clientAuth(getClientAuth(config))
+        /* NOTE: the cipher filter may not include all ciphers required by the HTTP/2 specification.
+         * Please refer to the HTTP/2 specification for cipher requirements. */
+        .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
+        .applicationProtocolConfig(new ApplicationProtocolConfig(
+            ApplicationProtocolConfig.Protocol.ALPN,
+            // NO_ADVERTISE is currently the only mode supported by both OpenSsl and JDK providers.
+            ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
+            // ACCEPT is currently the only mode supported by both OpenSsl and JDK providers.
+            ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+            ApplicationProtocolNames.HTTP_2
+        ))
         .build();
   }
 

@@ -22,7 +22,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.Request;
+import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.protocol.AmbryRequests;
@@ -46,7 +46,7 @@ import org.junit.Test;
  */
 public class VcrRequestsTest {
   private final VcrRequests vcrRequests;
-  private final Request request;
+  private final NetworkRequest request;
   private final PartitionId availablePartitionId;
   private final Store store;
 
@@ -83,7 +83,7 @@ public class VcrRequestsTest {
             findTokenHelper, null, null, null, false, storeKeyConverterFactory);
     store = new CloudBlobStore(verifiableProperties, availablePartitionId, cloudDestination, clusterMap,
         new VcrMetrics(new MetricRegistry()));
-    request = new Request() {
+    request = new NetworkRequest() {
       @Override
       public InputStream getInputStream() {
         return null;

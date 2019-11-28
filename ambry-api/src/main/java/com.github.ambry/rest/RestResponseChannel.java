@@ -106,7 +106,7 @@ public interface RestResponseChannel extends AsyncWritableChannel {
    * @param headerValue the value of the header with name {@code headerName}.
    * @throws RestServiceException if there is an error setting the header.
    */
-  public void setHeader(String headerName, Object headerValue) throws RestServiceException;
+  public void setHeader(String headerName, Object headerValue);
 
   /**
    * Gets the current value of the header with {@code headerName}.

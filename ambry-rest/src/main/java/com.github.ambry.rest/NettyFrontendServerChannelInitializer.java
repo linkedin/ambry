@@ -31,7 +31,7 @@ import java.net.InetSocketAddress;
  * A {@link ChannelInitializer} to be used with {@link NettyServer}. Calling {@link #initChannel(SocketChannel)} adds
  * the necessary handlers to a channel's pipeline so that it may handle requests.
  */
-public class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
+public class NettyFrontendServerChannelInitializer extends ChannelInitializer<SocketChannel> {
   private final NettyConfig nettyConfig;
   private final PerformanceConfig performanceConfig;
   private final NettyMetrics nettyMetrics;
@@ -42,7 +42,7 @@ public class NettyServerChannelInitializer extends ChannelInitializer<SocketChan
   private final SSLFactory sslFactory;
 
   /**
-   * Construct a {@link NettyServerChannelInitializer}.
+   * Construct a {@link NettyFrontendServerChannelInitializer}.
    * @param nettyConfig the config to use when instantiating certain handlers on this pipeline.
    * @param performanceConfig the config to use when evaluating ambry service level objectives that include latency.
    * @param nettyMetrics the {@link NettyMetrics} object to use.
@@ -53,7 +53,7 @@ public class NettyServerChannelInitializer extends ChannelInitializer<SocketChan
    * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
    */
-  public NettyServerChannelInitializer(NettyConfig nettyConfig, PerformanceConfig performanceConfig, NettyMetrics nettyMetrics,
+  public NettyFrontendServerChannelInitializer(NettyConfig nettyConfig, PerformanceConfig performanceConfig, NettyMetrics nettyMetrics,
       ConnectionStatsHandler connectionStatsHandler, RestRequestHandler requestHandler,
       PublicAccessLogger publicAccessLogger, RestServerState restServerState, SSLFactory sslFactory) {
     this.nettyConfig = nettyConfig;

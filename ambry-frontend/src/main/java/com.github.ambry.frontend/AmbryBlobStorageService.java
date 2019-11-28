@@ -238,11 +238,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         ttlUpdateHandler.handle(restRequest, restResponseChannel, (r, e) -> {
           if (e instanceof RouterException
               && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobUpdateNotAllowed) {
-            try {
-              restResponseChannel.setHeader(Headers.ALLOW, TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE);
-            } catch (RestServiceException exc) {
-              logger.error("Exception while setting {}", Headers.ALLOW, exc);
-            }
+            restResponseChannel.setHeader(Headers.ALLOW, TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE);
           }
           submitResponse(restRequest, restResponseChannel, null, e);
         });

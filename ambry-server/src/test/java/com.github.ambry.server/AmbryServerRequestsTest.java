@@ -38,7 +38,7 @@ import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStreamTest;
-import com.github.ambry.network.Request;
+import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.Send;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
 import com.github.ambry.network.SocketRequestResponseChannel;
@@ -781,8 +781,8 @@ public class AmbryServerRequestsTest {
   // general
 
   /**
-   * Calls {@link AmbryRequests#handleRequests(Request)} with {@code request} and returns the {@link Response} received.
-   * @param request the {@link Request} to process
+   * Calls {@link AmbryRequests#handleRequests(NetworkRequest)} with {@code request} and returns the {@link Response} received.
+   * @param request the {@link NetworkRequest} to process
    * @param expectedServerErrorCode the expected {@link ServerErrorCode} in the server response.
    * @return the {@link Response} received.
    * @throws InterruptedException
@@ -790,7 +790,7 @@ public class AmbryServerRequestsTest {
    */
   private Response sendRequestGetResponse(RequestOrResponse request, ServerErrorCode expectedServerErrorCode)
       throws InterruptedException, IOException {
-    Request mockRequest = MockRequest.fromRequest(request, this.putRequestShareMemory);
+    NetworkRequest mockRequest = MockRequest.fromRequest(request, this.putRequestShareMemory);
     ambryRequests.handleRequests(mockRequest);
     assertEquals("Request accompanying response does not match original request", mockRequest,
         requestResponseChannel.lastOriginalRequest);
@@ -807,7 +807,7 @@ public class AmbryServerRequestsTest {
 
   /**
    * Sends and verifies that an operation specific request works correctly.
-   * @param request the {@link Request} to send to {@link AmbryRequests}
+   * @param request the {@link NetworkRequest} to send to {@link AmbryRequests}
    * @param expectedErrorCode the {@link ServerErrorCode} expected in the response. For some requests this is the
    *                          response in the constituents rather than the actual response ({@link GetResponse} and
    *                          {@link ReplicaMetadataResponse}).
@@ -861,7 +861,7 @@ public class AmbryServerRequestsTest {
     BlobStoreControlAdminRequest blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, storeControlRequestType, adminRequest);
     Response response = sendRequestGetResponse(blobStoreControlAdminRequest, expectedServerErrorCode);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    assertTrue("NetworkResponse not of type AdminResponse", response instanceof AdminResponse);
   }
 
   /**
@@ -1303,9 +1303,9 @@ public class AmbryServerRequestsTest {
   }
 
   /**
-   * Implementation of {@link Request} to help with tests.
+   * Implementation of {@link NetworkRequest} to help with tests.
    */
-  private static class MockRequest implements Request {
+  private static class MockRequest implements NetworkRequest {
 
     private final InputStream stream;
 
@@ -1348,12 +1348,12 @@ public class AmbryServerRequestsTest {
    */
   private static class MockRequestResponseChannel extends SocketRequestResponseChannel {
     /**
-     * {@link Request} provided in the last call to {@link #sendResponse(Send, Request, ServerNetworkResponseMetrics).
+     * {@link NetworkRequest} provided in the last call to {@link #sendResponse(Send, NetworkRequest, ServerNetworkResponseMetrics).
      */
-    Request lastOriginalRequest = null;
+    NetworkRequest lastOriginalRequest = null;
 
     /**
-     * The {@link Send} provided in the last call to {@link #sendResponse(Send, Request, ServerNetworkResponseMetrics).
+     * The {@link Send} provided in the last call to {@link #sendResponse(Send, NetworkRequest, ServerNetworkResponseMetrics).
      */
     Send lastResponse = null;
 
@@ -1362,7 +1362,7 @@ public class AmbryServerRequestsTest {
     }
 
     @Override
-    public void sendResponse(Send payloadToSend, Request originalRequest, ServerNetworkResponseMetrics metrics) {
+    public void sendResponse(Send payloadToSend, NetworkRequest originalRequest, ServerNetworkResponseMetrics metrics) {
       lastResponse = payloadToSend;
       lastOriginalRequest = originalRequest;
     }
