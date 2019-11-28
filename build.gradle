@@ -218,6 +218,7 @@ project(':ambry-server') {
                 project(':ambry-replication')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
+        compile "io.netty:netty-buffer:$nettyVersion"
         testCompile project(':ambry-router')
         testCompile project(':ambry-cloud')
         testCompile project(':ambry-cloud').sourceSets.test.output

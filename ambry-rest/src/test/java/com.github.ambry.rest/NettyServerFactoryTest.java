@@ -29,7 +29,7 @@ import static org.junit.Assert.*;
 
 
 /**
- * Tests functionality of {@link NettyServerFactory}.
+ * Tests functionality of {@link NettyFrontendServerFactory}.
  */
 public class NettyServerFactoryTest {
   // dud properties. server should pick up defaults
@@ -65,8 +65,8 @@ public class NettyServerFactoryTest {
   private void doGetNettyServerTest(Properties properties, SSLFactory defaultSslFactory) throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
-    NettyServerFactory nettyServerFactory =
-        new NettyServerFactory(verifiableProperties, new MetricRegistry(), REST_REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER,
+    NettyFrontendServerFactory nettyServerFactory =
+        new NettyFrontendServerFactory(verifiableProperties, new MetricRegistry(), REST_REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER,
             REST_SERVER_STATE, defaultSslFactory);
     NioServer nioServer = nettyServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
@@ -83,7 +83,7 @@ public class NettyServerFactoryTest {
   }
 
   /**
-   * Tests instantiation of {@link NettyServerFactory} with bad input.
+   * Tests instantiation of {@link NettyFrontendServerFactory} with bad input.
    */
   @Test
   public void getNettyServerFactoryWithBadInputTest() throws Exception {
@@ -106,7 +106,7 @@ public class NettyServerFactoryTest {
   }
 
   /**
-   * Test that {@link NettyServerFactory} construction fails with the given constructor inputs.
+   * Test that {@link NettyFrontendServerFactory} construction fails with the given constructor inputs.
    * @param verifiableProperties the {@link VerifiableProperties} to use.
    * @param metricRegistry the {@link MetricRegistry} to use.
    * @param restRequestHandler the {@link RestRequestHandler} to use.
@@ -118,7 +118,7 @@ public class NettyServerFactoryTest {
       RestRequestHandler restRequestHandler, PublicAccessLogger publicAccessLogger, RestServerState restServerState,
       SSLFactory sslFactory) throws Exception {
     try {
-      new NettyServerFactory(verifiableProperties, metricRegistry, restRequestHandler, publicAccessLogger,
+      new NettyFrontendServerFactory(verifiableProperties, metricRegistry, restRequestHandler, publicAccessLogger,
           restServerState, sslFactory);
       fail("Instantiation should have failed");
     } catch (IllegalArgumentException e) {

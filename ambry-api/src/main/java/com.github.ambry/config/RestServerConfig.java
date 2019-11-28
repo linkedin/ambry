@@ -29,7 +29,7 @@ public class RestServerConfig {
    * bootstrapping the NioServer
    */
   @Config("rest.server.nio.server.factory")
-  @Default("com.github.ambry.rest.NettyServerFactory")
+  @Default("com.github.ambry.rest.NettyStorageServerFactory")
   public final String restServerNioServerFactory;
 
   /**
@@ -99,9 +99,9 @@ public class RestServerConfig {
   public final String restServerHealthCheckUri;
 
   public RestServerConfig(VerifiableProperties verifiableProperties) {
-    restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
+    restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory", "com.github.ambry.server.ServerBlobStorageService");
     restServerNioServerFactory =
-        verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.NettyServerFactory");
+        verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.NettyStorageServerFactory");
     restServerRequestHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.request.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
     restServerRequestHandlerFactory = verifiableProperties.getString("rest.server.request.handler.factory",

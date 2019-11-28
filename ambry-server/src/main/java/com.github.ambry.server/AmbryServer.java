@@ -22,13 +22,17 @@ import com.github.ambry.clustermap.ClusterSpectator;
 import com.github.ambry.clustermap.ClusterSpectatorFactory;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.PerformanceConfig;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StatsManagerConfig;
@@ -38,6 +42,7 @@ import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NettyServerRequestResponseChannel;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
@@ -48,6 +53,13 @@ import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.rest.BlobStorageService;
+import com.github.ambry.rest.NioServer;
+import com.github.ambry.rest.NioServerFactory;
+import com.github.ambry.rest.PublicAccessLogger;
+import com.github.ambry.rest.RestRequestHandler;
+import com.github.ambry.rest.RestRequestHandlerFactory;
+import com.github.ambry.rest.RestServerState;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -118,6 +130,7 @@ public class AmbryServer {
   public void startup() throws InstantiationException {
     try {
       logger.info("starting");
+
       clusterMap = clusterAgentsFactory.getClusterMap();
       logger.info("Initialized clusterMap");
       clusterParticipant = clusterAgentsFactory.getClusterParticipant();
@@ -130,6 +143,8 @@ public class AmbryServer {
 
       logger.info("creating configs");
       NetworkConfig networkConfig = new NetworkConfig(properties);
+      NettyConfig nettyConfig = new NettyConfig(properties);
+      PerformanceConfig performanceConfig = new PerformanceConfig(properties);
       StoreConfig storeConfig = new StoreConfig(properties);
       DiskManagerConfig diskManagerConfig = new DiskManagerConfig(properties);
       ServerConfig serverConfig = new ServerConfig(properties);
@@ -168,6 +183,7 @@ public class AmbryServer {
               serverConfig.serverMessageTransformer, clusterParticipant);
       replicationManager.start();
 
+
       if (replicationConfig.replicationEnabledWithVcrCluster) {
         logger.info("Creating Helix cluster spectator for cloud to store replication.");
         vcrClusterSpectator = clusterSpectatorFactory.getClusterSpectator(cloudConfig, clusterMapConfig);
@@ -201,6 +217,37 @@ public class AmbryServer {
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
+      // start netty server
+      RestServerConfig restServerConfig = new RestServerConfig(properties);
+      SSLFactory sslFactory = SSLFactory.getNewInstance(sslConfig);
+      RestServerState restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
+      NettyServerRequestResponseChannel requestResponseChannel = new NettyServerRequestResponseChannel();
+      BlobStorageService blobStorageService = new ServerBlobStorageService(requestResponseChannel);
+
+      AmbryServerRequests ambryServerRequests2 =
+          new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics,
+              findTokenHelper, notificationSystem, replicationManager, storeKeyFactory,
+              serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory, statsManager);
+      RequestHandlerPool requestHandlerPool2 =
+          new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, requestResponseChannel,
+              ambryServerRequests2);
+
+      RestRequestHandlerFactory restRequestHandlerFactory =
+          Utils.getObj(restServerConfig.restServerRequestHandlerFactory,
+              restServerConfig.restServerRequestHandlerScalingUnitCount, registry, blobStorageService);
+      RestRequestHandler restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
+      restRequestHandler.start();
+      PublicAccessLogger publicAccessLogger =
+          new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
+              restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
+
+      NioServerFactory nioServerFactory =
+          Utils.getObj(restServerConfig.restServerNioServerFactory, properties, registry, restRequestHandler,
+              publicAccessLogger, restServerState, sslFactory);
+      NioServer nioServer = nioServerFactory.getNioServer();
+      nioServer.start();
+
+      // other code
       List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
       Set<String> validStatsTypes = new HashSet<>();
       for (StatsReportType type : StatsReportType.values()) {

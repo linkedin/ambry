@@ -250,7 +250,7 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public void setHeader(String headerName, Object headerValue) throws RestServiceException {
+  public void setHeader(String headerName, Object headerValue) {
     if (headerName != null && headerValue != null) {
       long startTime = System.currentTimeMillis();
       responseMetadata.headers().set(headerName, headerValue);
@@ -400,7 +400,7 @@ class NettyResponseChannel implements RestResponseChannel {
         fullHttpResponse.headers().set(responseMetadata.headers());
         responseMetadata = fullHttpResponse;
       }
-      logger.trace("Sending response with status {} on channel {}", responseMetadata.status(), ctx.channel());
+      logger.info("Sending response with status {} on channel {}", responseMetadata.status(), ctx.channel());
       finalResponseMetadata = responseMetadata;
       ChannelPromise writePromise = ctx.newPromise().addListener(listener);
       ctx.writeAndFlush(responseMetadata, writePromise);

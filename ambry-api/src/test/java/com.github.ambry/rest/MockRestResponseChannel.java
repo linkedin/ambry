@@ -190,7 +190,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public synchronized void setHeader(String headerName, Object headerValue) throws RestServiceException {
+  public synchronized void setHeader(String headerName, Object headerValue) {
     setHeader(headerName, headerValue, Event.SetHeader);
   }
 
@@ -228,12 +228,11 @@ public class MockRestResponseChannel implements RestResponseChannel {
    * @param eventToFire the event to fire once header is set successfully.
    * @throws IllegalArgumentException if either of {@code headerName} or {@code headerValue} is null.
    * @throws IllegalStateException if the response metadata has already been finalized.
-   * @throws RestServiceException if there is an error building or setting the header in the response.
    */
-  private void setHeader(String headerName, Object headerValue, Event eventToFire) throws RestServiceException {
+  private void setHeader(String headerName, Object headerValue, Event eventToFire) {
     if (headerName != null && headerValue != null) {
       if (isOpen() && !responseMetadataFinalized.get()) {
-        try {
+//        try {
           if (!responseMetadata.has(RESPONSE_HEADERS_KEY)) {
             responseMetadata.put(RESPONSE_HEADERS_KEY, new JSONObject());
           }
@@ -244,10 +243,10 @@ public class MockRestResponseChannel implements RestResponseChannel {
           }
           responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).put(headerName, headerValue);
           onEventComplete(eventToFire);
-        } catch (JSONException e) {
-          throw new RestServiceException("Unable to set " + headerName + " to " + headerValue,
-              RestServiceErrorCode.InternalServerError);
-        }
+//        } catch (JSONException e) {
+//          throw new RestServiceException("Unable to set " + headerName + " to " + headerValue,
+//              RestServiceErrorCode.InternalServerError);
+//        }
       } else {
         throw new IllegalStateException("Cannot change response metadata after it has been finalized");
       }

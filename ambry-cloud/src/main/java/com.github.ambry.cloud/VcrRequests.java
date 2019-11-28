@@ -18,7 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.ServerMetrics;
-import com.github.ambry.network.Request;
+import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
@@ -52,17 +52,17 @@ public class VcrRequests extends AmbryRequests {
   }
 
   @Override
-  public void handlePutRequest(Request request) throws IOException, InterruptedException {
+  public void handlePutRequest(NetworkRequest request) throws IOException, InterruptedException {
     throw new UnsupportedOperationException("Request type not supported");
   }
 
   @Override
-  public void handleDeleteRequest(Request request) throws IOException, InterruptedException {
+  public void handleDeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
     throw new UnsupportedOperationException("Request type not supported");
   }
 
   @Override
-  public void handleTtlUpdateRequest(Request request) throws IOException, InterruptedException {
+  public void handleTtlUpdateRequest(NetworkRequest request) throws IOException, InterruptedException {
     throw new UnsupportedOperationException("Request type not supported");
   }
 
