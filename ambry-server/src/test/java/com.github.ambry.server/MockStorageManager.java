@@ -14,6 +14,9 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
@@ -330,20 +333,20 @@ class MockStorageManager extends StorageManager {
   private FindTokenHelper findTokenHelper = new FindTokenHelper();
   private Map<PartitionId, Store> storeMap = new HashMap<>();
 
-  MockStorageManager(Set<StoreKey> validKeysInStore, List<? extends ReplicaId> replicas,
+  MockStorageManager(Set<StoreKey> validKeysInStore, ClusterMap clusterMap, DataNodeId dataNodeId,
       FindTokenHelper findTokenHelper) throws StoreException {
     super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
-        replicas, null, null, null, null, new MockTime());
+        null, clusterMap, dataNodeId, null, null, new MockTime(), null);
     this.validKeysInStore = validKeysInStore;
     this.findTokenHelper = findTokenHelper;
-    for (ReplicaId replica : replicas) {
+    for (ReplicaId replica : clusterMap.getReplicaIds(dataNodeId)) {
       storeMap.put(replica.getPartitionId(), new TestStore());
     }
   }
 
-  MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
-    super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), null, new MetricRegistry(), new ArrayList<>(), null,
-        null, null, null, SystemTime.getInstance());
+  MockStorageManager(Map<PartitionId, Store> map, DataNodeId dataNodeId) throws Exception {
+    super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), null, new MetricRegistry(), null,
+        new MockClusterMap(), dataNodeId, null, null, SystemTime.getInstance(), null);
     storeMap = map;
   }
 

@@ -15,6 +15,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.server.StateModelListenerType;
 import java.io.IOException;
 import java.util.List;
 
@@ -61,9 +62,11 @@ public interface ClusterParticipant extends AutoCloseable {
 
   /**
    * Register a listener for leadership changes in partitions of this node.
+   * @param listenerType the type of listener, which is defined in {@link StateModelListenerType}
    * @param partitionStateChangeListener listener to register.
    */
-  void registerPartitionStateChangeListener(PartitionStateChangeListener partitionStateChangeListener);
+  void registerPartitionStateChangeListener(StateModelListenerType listenerType,
+      PartitionStateChangeListener partitionStateChangeListener);
 
   /**
    * Terminate the participant.

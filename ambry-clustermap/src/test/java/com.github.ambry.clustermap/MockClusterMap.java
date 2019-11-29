@@ -507,10 +507,12 @@ public class MockClusterMap implements ClusterMap {
   public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
     ReplicaId newReplica = null;
     PartitionId partition = partitions.get(Long.valueOf(partitionIdStr));
-    for (ReplicaId replicaId : partition.getReplicaIds()) {
-      if (replicaId.getDataNodeId().compareTo(dataNodeId) == 0) {
-        newReplica = replicaId;
-        break;
+    if (partition != null) {
+      for (ReplicaId replicaId : partition.getReplicaIds()) {
+        if (replicaId.getDataNodeId().compareTo(dataNodeId) == 0) {
+          newReplica = replicaId;
+          break;
+        }
       }
     }
     return newReplica;

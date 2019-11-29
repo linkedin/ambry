@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.statemachine.StateModel;
 import org.apache.helix.participant.statemachine.StateModelFactory;
@@ -22,11 +23,11 @@ import org.apache.helix.participant.statemachine.StateModelFactory;
  * A factory for creating {@link StateModel}.
  */
 class AmbryStateModelFactory extends StateModelFactory<StateModel> {
-  private final String ambryStateModelDef;
+  private final ClusterMapConfig clustermapConfig;
   private final PartitionStateChangeListener partitionStateChangeListener;
 
-  AmbryStateModelFactory(String stateModelDef, PartitionStateChangeListener partitionStateChangeListener) {
-    ambryStateModelDef = stateModelDef;
+  AmbryStateModelFactory(ClusterMapConfig clusterMapConfig, PartitionStateChangeListener partitionStateChangeListener) {
+    this.clustermapConfig = clusterMapConfig;
     this.partitionStateChangeListener = partitionStateChangeListener;
   }
 
@@ -39,15 +40,19 @@ class AmbryStateModelFactory extends StateModelFactory<StateModel> {
   @Override
   public StateModel createNewStateModel(String resourceName, String partitionName) {
     StateModel stateModelToReturn;
-    switch (ambryStateModelDef) {
+    switch (clustermapConfig.clustermapStateModelDefinition) {
       case AmbryStateModelDefinition.AMBRY_LEADER_STANDBY_MODEL:
-        stateModelToReturn = new AmbryPartitionStateModel(resourceName, partitionName, partitionStateChangeListener);
+        stateModelToReturn =
+            new AmbryPartitionStateModel(resourceName, partitionName, partitionStateChangeListener, clustermapConfig);
         break;
       case LeaderStandbySMD.name:
         stateModelToReturn = new DefaultLeaderStandbyStateModel();
         break;
       default:
-        throw new IllegalArgumentException("Unsupported state model definition: " + ambryStateModelDef);
+        // Code won't get here because state model def is already validated in ClusterMapConfig. We keep exception here
+        // in case the validation logic is changed in ClusterMapConfig.
+        throw new IllegalArgumentException(
+            "Unsupported state model definition: " + clustermapConfig.clustermapStateModelDefinition);
     }
     return stateModelToReturn;
   }

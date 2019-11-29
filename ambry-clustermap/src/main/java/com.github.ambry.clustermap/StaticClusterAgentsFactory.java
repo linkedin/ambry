@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.server.StateModelListenerType;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -82,7 +83,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         public void participate(List<AmbryHealthReport> ambryHealthReports) {
           for (PartitionStateChangeListener listener : listeners) {
             for (String partitionName : partitionLayout.getAllPartitionNames()) {
-              listener.onPartitionStateChangeToLeaderFromStandby(partitionName);
+              listener.onPartitionBecomeLeaderFromStandby(partitionName);
             }
           }
         }
@@ -113,7 +114,8 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public void registerPartitionStateChangeListener(PartitionStateChangeListener partitionStateChangeListener) {
+        public void registerPartitionStateChangeListener(StateModelListenerType listenerType,
+            PartitionStateChangeListener partitionStateChangeListener) {
           listeners.add(partitionStateChangeListener);
         }
       };

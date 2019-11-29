@@ -46,6 +46,7 @@ import org.slf4j.LoggerFactory;
  */
 public class BlobStore implements Store {
   static final String SEPARATOR = "_";
+  static final String BOOTSTRAP_FILE_NAME = "bootstrap_in_progress";
   private final static String LockFile = ".lock";
 
   private final String storeId;
@@ -740,6 +741,11 @@ public class BlobStore implements Store {
    */
   public long getEndPositionOfLastPut() throws StoreException {
     return index.getAbsoluteEndPositionOfLastPut();
+  }
+
+  boolean isBootstrapInProgress() {
+    File bootstrapFile = new File(dataDir, BOOTSTRAP_FILE_NAME);
+    return bootstrapFile.exists();
   }
 
   /**

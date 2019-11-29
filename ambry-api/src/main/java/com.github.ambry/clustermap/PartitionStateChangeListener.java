@@ -19,14 +19,26 @@ package com.github.ambry.clustermap;
 public interface PartitionStateChangeListener {
 
   /**
+   *
+   * @param partitionName
+   */
+  void onPartitionBecomeBootstrapFromOffline(String partitionName);
+
+  /**
+   *
+   * @param partitionName
+   */
+  void onPartitionBecomeStandbyFromBootstrap(String partitionName);
+
+  /**
    * Action to take on becoming leader of a partition.
    * @param partitionName of the partition.
    */
-  void onPartitionStateChangeToLeaderFromStandby(String partitionName);
+  void onPartitionBecomeLeaderFromStandby(String partitionName);
 
   /**
    * Action to take on being removed as leader of a partition.
    * @param partitionName of the partition.
    */
-  void onPartitionStateChangeToStandbyFromLeader(String partitionName);
+  void onPartitionBecomeStandbyFromLeader(String partitionName);
 }

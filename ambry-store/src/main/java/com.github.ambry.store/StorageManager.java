@@ -15,14 +15,22 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.server.StateModelListenerType;
+import com.github.ambry.server.StateTransitionException;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.server.TransitionErrorCode;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -44,6 +52,7 @@ import org.slf4j.LoggerFactory;
 public class StorageManager implements StoreManager {
   private final ConcurrentHashMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, ReplicaId> partitionNameToReplicaId = new ConcurrentHashMap<>();
   private final StorageManagerMetrics metrics;
   private final Time time;
   private final StoreConfig storeConfig;
@@ -52,10 +61,13 @@ public class StorageManager implements StoreManager {
   private final StoreMetrics storeMainMetrics;
   private final StoreMetrics storeUnderCompactionMetrics;
   private final StoreKeyFactory keyFactory;
+  private final ClusterMap clusterMap;
+  private final DataNodeId currentNode;
   private final MessageStoreRecovery recovery;
   private final MessageStoreHardDelete hardDelete;
   private final ReplicaStatusDelegate replicaStatusDelegate;
   private final List<String> stoppedReplicas;
+  private final ClusterParticipant clusterParticipant;
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
 
   /**
@@ -64,16 +76,19 @@ public class StorageManager implements StoreManager {
    * @param diskManagerConfig the settings for disk manager configuration
    * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
    * @param registry the {@link MetricRegistry} used for store-related metrics.
-   * @param replicas all the replicas on this disk.
    * @param keyFactory the {@link StoreKeyFactory} for parsing store keys.
-   * @param recovery the {@link MessageStoreRecovery} instance to use.
+   * @param clusterMap the {@link ClusterMap} instance to use.
+   * @param dataNodeId the {@link DataNodeId} of current node.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
+   * @param clusterParticipant the {@link ClusterParticipant} that allows storage manager to interact with cluster
+   *                           manager (i.e Helix)
    * @param time the {@link Time} instance to use.
+   * @param recovery the {@link MessageStoreRecovery} instance to use.
    */
   public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
-      ScheduledExecutorService scheduler, MetricRegistry registry, List<? extends ReplicaId> replicas,
-      StoreKeyFactory keyFactory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      ReplicaStatusDelegate replicaStatusDelegate, Time time) throws StoreException {
+      ScheduledExecutorService scheduler, MetricRegistry registry, StoreKeyFactory keyFactory, ClusterMap clusterMap,
+      DataNodeId dataNodeId, MessageStoreHardDelete hardDelete, ClusterParticipant clusterParticipant, Time time,
+      MessageStoreRecovery recovery) throws StoreException {
     verifyConfigs(storeConfig, diskManagerConfig);
     this.storeConfig = storeConfig;
     this.diskManagerConfig = diskManagerConfig;
@@ -82,16 +97,20 @@ public class StorageManager implements StoreManager {
     this.keyFactory = keyFactory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;
-    this.replicaStatusDelegate = replicaStatusDelegate;
+    this.clusterMap = clusterMap;
+    this.clusterParticipant = clusterParticipant;
+    currentNode = dataNodeId;
+    replicaStatusDelegate = clusterParticipant == null ? null : new ReplicaStatusDelegate(clusterParticipant);
     metrics = new StorageManagerMetrics(registry);
     storeMainMetrics = new StoreMetrics(registry);
     storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
     stoppedReplicas =
         replicaStatusDelegate == null ? Collections.emptyList() : replicaStatusDelegate.getStoppedReplicas();
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
-    for (ReplicaId replica : replicas) {
+    for (ReplicaId replica : clusterMap.getReplicaIds(dataNodeId)) {
       DiskId disk = replica.getDiskId();
       diskToReplicaMap.computeIfAbsent(disk, key -> new ArrayList<>()).add(replica);
+      partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
     }
     for (Map.Entry<DiskId, List<ReplicaId>> entry : diskToReplicaMap.entrySet()) {
       DiskId disk = entry.getKey();
@@ -152,6 +171,10 @@ public class StorageManager implements StoreManager {
         startupThread.join();
       }
       metrics.initializeCompactionThreadsTracker(this, diskToDiskManager.size());
+      if (clusterParticipant != null) {
+        clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener,
+            new PartitionStateChangeListenerImpl());
+      }
       logger.info("Starting storage manager complete");
     } finally {
       metrics.storageManagerStartTimeMs.update(time.milliseconds() - startTimeMs);
@@ -278,6 +301,7 @@ public class StorageManager implements StoreManager {
       return false;
     }
     partitionToDiskManager.put(replica.getPartitionId(), diskManager);
+    partitionNameToReplicaId.put(replica.getPartitionId().toPathString(), replica);
     logger.info("New store is successfully added into StorageManager");
     return true;
   }
@@ -341,5 +365,78 @@ public class StorageManager implements StoreManager {
       }
     }
     return count;
+  }
+
+  /**
+   * Implementation of {@link PartitionStateChangeListener} to capture state changes and take actions accordingly.
+   */
+  private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+    @Override
+    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      // check if partition exists on current node
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+      if (replica == null) {
+        // there can be two scenarios:
+        // 1. this is the first time to add new replica onto current node;
+        // 2. last replica addition failed at some point before updating InstanceConfig in Helix
+        // In either case, we should add replica to current node by calling "addBlobStore(ReplicaId replica)"
+        ReplicaId replicaToAdd = clusterMap.getBootstrapReplica(partitionName, currentNode);
+        if (replicaToAdd == null) {
+          logger.error("No new replica found for partition {} in cluster map", partitionName);
+          throw new StateTransitionException(
+              "New replica " + partitionName + " is not found in clustermap for " + currentNode,
+              TransitionErrorCode.ReplicaNotFound);
+        }
+        // Attempt to add store into storage manager. If store already exists, fail adding store request.
+        if (!addBlobStore(replicaToAdd)) {
+          logger.error("Failed to add store {} into storage manager", partitionName);
+          throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
+              TransitionErrorCode.StoreOperationFailure);
+        }
+        // TODO, update InstanceConfig in Helix
+        // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be
+        // able to get new replica from storageManager without querying Helix
+      } else {
+        // if the replica is already on current node, there are 3 cases need to discuss:
+        // 1. replica was initially present in clustermap;
+        // 2. replica was dynamically added to this node but may fail during BOOTSTRAP -> STANDBY transition
+        // 3. replica is on current node but its disk is offline. The replica is not able to start.
+        // For case 1 and 2, OFFLINE -> BOOTSTRAP is complete, we leave remaining actions (if there any) to other transition.
+        // For case 3, we should throw exception to make replica stay in ERROR state (thus, frontends won't pick this replica)
+        if (getStore(replica.getPartitionId(), false) == null) {
+          throw new StateTransitionException(
+              "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
+              TransitionErrorCode.StoreNotStarted);
+        }
+      }
+    }
+
+    @Override
+    public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+      BlobStore store = (BlobStore) getStore(partitionNameToReplicaId.get(partitionName).getPartitionId(), false);
+      if (store == null) {
+        throw new StateTransitionException("Store " + partitionName + " is not started",
+            TransitionErrorCode.StoreNotStarted);
+      }
+      store.setCurrentState(ReplicaState.BOOTSTRAP);
+      // TODO add replication lag check for new added replica (if there is boostrap file in store dir)
+      /* an exmaple:
+      if (store.isBootstrapInProgress()) {
+          // wait for replication to complete
+      }
+      // remove bootstrap file once new replica has caught up peer nodes.
+      */
+      store.setCurrentState(ReplicaState.STANDBY);
+    }
+
+    @Override
+    public void onPartitionBecomeLeaderFromStandby(String partitionName) {
+      // no op
+    }
+
+    @Override
+    public void onPartitionBecomeStandbyFromLeader(String partitionName) {
+      // no op
+    }
   }
 }

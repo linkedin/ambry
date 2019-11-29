@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.server.StateModelListenerType;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,7 +77,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         public void participate(List<AmbryHealthReport> ambryHealthReports) {
           for (String partitionName : partitionLeadershipList) {
             for (PartitionStateChangeListener partitionStateChangeListener : registeredPartitionStateChangeListeners) {
-              partitionStateChangeListener.onPartitionStateChangeToLeaderFromStandby(partitionName);
+              partitionStateChangeListener.onPartitionBecomeLeaderFromStandby(partitionName);
             }
           }
         }
@@ -119,7 +120,8 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public void registerPartitionStateChangeListener(PartitionStateChangeListener partitionStateChangeListener) {
+        public void registerPartitionStateChangeListener(StateModelListenerType listenerType,
+            PartitionStateChangeListener partitionStateChangeListener) {
           registeredPartitionStateChangeListeners.add(partitionStateChangeListener);
         }
       };

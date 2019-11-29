@@ -30,6 +30,7 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.server.StateModelListenerType;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
@@ -136,7 +137,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     vcrClusterSpectator.registerLiveInstanceChangeListener(new LiveInstanceChangeListenerImpl());
 
     // Add listener for new coming assigned partition
-    clusterParticipant.registerPartitionStateChangeListener(new PartitionStateChangeListenerImpl());
+    clusterParticipant.registerPartitionStateChangeListener(
+        StateModelListenerType.CloudToStoreReplicationManagerListener, new PartitionStateChangeListenerImpl());
 
     // start background persistent thread
     // start scheduler thread to persist index in the background
@@ -315,8 +317,21 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * {@link PartitionStateChangeListener} to capture changes in partition state.
    */
   private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+
     @Override
-    public void onPartitionStateChangeToLeaderFromStandby(String partitionName) {
+    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      logger.info("Partition state change notification from Offline to Bootstrap received for partition {}",
+          partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+      logger.info("Partition state change notification from Bootstrap to Standby received for partition {}",
+          partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeLeaderFromStandby(String partitionName) {
       logger.info("Partition state change notification from Standby to Leader received for partition {}",
           partitionName);
       synchronized (notificationLock) {
@@ -330,7 +345,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     }
 
     @Override
-    public void onPartitionStateChangeToStandbyFromLeader(String partitionName) {
+    public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
       synchronized (notificationLock) {

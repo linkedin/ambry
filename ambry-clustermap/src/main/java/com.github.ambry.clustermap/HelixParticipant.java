@@ -15,12 +15,13 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.server.StateModelListenerType;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,17 +44,18 @@ import org.slf4j.LoggerFactory;
 /**
  * An implementation of {@link ClusterParticipant} that registers as a participant to a Helix cluster.
  */
-class HelixParticipant implements ClusterParticipant, PartitionStateChangeListener {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+public class HelixParticipant implements ClusterParticipant, PartitionStateChangeListener {
   private final String clusterName;
   private final String zkConnectStr;
   private final HelixFactory helixFactory;
   private final Object helixAdministrationLock = new Object();
   private final ClusterMapConfig clusterMapConfig;
+  private final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
-  private List<PartitionStateChangeListener> partitionStateChangeListeners;
+
+  private static final Logger logger = LoggerFactory.getLogger(HelixParticipant.class);
 
   /**
    * Instantiate a HelixParticipant.
@@ -61,7 +63,7 @@ class HelixParticipant implements ClusterParticipant, PartitionStateChangeListen
    * @param helixFactory the {@link HelixFactory} to use to get the {@link HelixManager}.
    * @throws IOException if there is an error in parsing the JSON serialized ZK connect string config.
    */
-  HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) throws IOException {
+  public HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) throws IOException {
     this.clusterMapConfig = clusterMapConfig;
     clusterName = clusterMapConfig.clusterMapClusterName;
     instanceName =
@@ -81,7 +83,7 @@ class HelixParticipant implements ClusterParticipant, PartitionStateChangeListen
       throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
     }
     manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
-    partitionStateChangeListeners = new LinkedList<>();
+    partitionStateChangeListeners = new HashMap<>();
   }
 
   /**
@@ -96,7 +98,7 @@ class HelixParticipant implements ClusterParticipant, PartitionStateChangeListen
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig.clustermapStateModelDefinition, this));
+        new AmbryStateModelFactory(clusterMapConfig, this));
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
       synchronized (helixAdministrationLock) {
@@ -117,8 +119,9 @@ class HelixParticipant implements ClusterParticipant, PartitionStateChangeListen
   }
 
   @Override
-  public void registerPartitionStateChangeListener(PartitionStateChangeListener partitionStateChangeListener) {
-    partitionStateChangeListeners.add(partitionStateChangeListener);
+  public void registerPartitionStateChangeListener(StateModelListenerType listenerType,
+      PartitionStateChangeListener partitionStateChangeListener) {
+    partitionStateChangeListeners.put(listenerType, partitionStateChangeListener);
   }
 
   @Override
@@ -212,6 +215,10 @@ class HelixParticipant implements ClusterParticipant, PartitionStateChangeListen
     return ClusterMapUtils.getStoppedReplicas(instanceConfig);
   }
 
+  public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
+    return Collections.unmodifiableMap(partitionStateChangeListeners);
+  }
+
   /**
    * Register {@link HelixHealthReportAggregatorTask}s for appropriate {@link AmbryHealthReport}s.
    * @param engine the {@link StateMachineEngine} to register the task state model.
@@ -275,16 +282,38 @@ class HelixParticipant implements ClusterParticipant, PartitionStateChangeListen
   }
 
   @Override
-  public void onPartitionStateChangeToLeaderFromStandby(String partitionName) {
-    for (PartitionStateChangeListener partitionStateChangeListener : partitionStateChangeListeners) {
-      partitionStateChangeListener.onPartitionStateChangeToLeaderFromStandby(partitionName);
+  public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
     }
   }
 
   @Override
-  public void onPartitionStateChangeToStandbyFromLeader(String partitionName) {
-    for (PartitionStateChangeListener partitionStateChangeListener : partitionStateChangeListeners) {
-      partitionStateChangeListener.onPartitionStateChangeToStandbyFromLeader(partitionName);
+  public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
+    }
+  }
+
+  @Override
+  public void onPartitionBecomeLeaderFromStandby(String partitionName) {
+    PartitionStateChangeListener cloudToStoreReplicationListener =
+        partitionStateChangeListeners.get(StateModelListenerType.CloudToStoreReplicationManagerListener);
+    if (cloudToStoreReplicationListener != null) {
+      cloudToStoreReplicationListener.onPartitionBecomeLeaderFromStandby(partitionName);
+    }
+  }
+
+  @Override
+  public void onPartitionBecomeStandbyFromLeader(String partitionName) {
+    PartitionStateChangeListener cloudToStoreReplicationListener =
+        partitionStateChangeListeners.get(StateModelListenerType.CloudToStoreReplicationManagerListener);
+    if (cloudToStoreReplicationListener != null) {
+      cloudToStoreReplicationListener.onPartitionBecomeStandbyFromLeader(partitionName);
     }
   }
 }

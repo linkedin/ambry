@@ -98,7 +98,7 @@ public class StatsManagerTest {
     }
   }
 
-  public StatsManagerTest() throws IOException, StoreException {
+  public StatsManagerTest() throws Exception {
     tempDir = Files.createTempDirectory("nodeStatsDir-" + UtilsTest.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     outputFileString = (new File(tempDir.getAbsolutePath(), "stats_output.json")).getAbsolutePath();
@@ -108,10 +108,9 @@ public class StatsManagerTest {
     Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
     replicas = new ArrayList<>();
     PartitionId partitionId;
-    DataNodeId dataNodeId;
+    DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
+        Collections.singletonList("/tmp"), "DC1");
     for (int i = 0; i < 2; i++) {
-      dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
-          Collections.singletonList("/tmp"), "DC1");
       partitionId = new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS,
           Collections.singletonList((MockDataNodeId) dataNodeId), 0);
       baseSliceAndNewSlice = decomposeSnapshot(baseSliceAndNewSlice.getFirst());
@@ -127,7 +126,7 @@ public class StatsManagerTest {
     partitionId = new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS);
     storeMap.put(partitionId, new MockStore(new MockStoreStats(snapshotsByType, false)));
     partitionToSnapshot.put(partitionId, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
-    StorageManager storageManager = new MockStorageManager(storeMap);
+    StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
     Properties properties = new Properties();
     properties.put("stats.output.file.path", outputFileString);
     config = new StatsManagerConfig(new VerifiableProperties(properties));
@@ -163,10 +162,10 @@ public class StatsManagerTest {
 
   /**
    * Test to verify the behavior when dealing with {@link Store} that is null and when {@link StoreException} is thrown.
-   * @throws StoreException
+   * @throws Exception
    */
   @Test
-  public void testStatsManagerWithProblematicStores() throws IOException, StoreException {
+  public void testStatsManagerWithProblematicStores() throws Exception {
     DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
         Collections.singletonList("/tmp"), "DC1");
     Map<PartitionId, Store> problematicStoreMap = new HashMap<>();
@@ -179,7 +178,7 @@ public class StatsManagerTest {
     snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, new StatsSnapshot(0L, null));
     Store exceptionStore = new MockStore(new MockStoreStats(snapshotsByType, true));
     problematicStoreMap.put(partitionId2, exceptionStore);
-    StatsManager testStatsManager = new StatsManager(new MockStorageManager(problematicStoreMap),
+    StatsManager testStatsManager = new StatsManager(new MockStorageManager(problematicStoreMap, dataNodeId),
         Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)), new MetricRegistry(),
         config, new MockTime());
     List<PartitionId> unreachablePartitions = new ArrayList<>();
@@ -203,7 +202,7 @@ public class StatsManagerTest {
         Collections.singletonList((MockDataNodeId) dataNodeId), 0);
     mixedStoreMap.put(partitionId3, null);
     mixedStoreMap.put(partitionId4, exceptionStore);
-    testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap),
+    testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap, dataNodeId),
         Arrays.asList(partitionId3.getReplicaIds().get(0), partitionId4.getReplicaIds().get(0)), new MetricRegistry(),
         config, new MockTime());
     actualSnapshot = new StatsSnapshot(0L, null);
@@ -229,11 +228,10 @@ public class StatsManagerTest {
 
   /**
    * Test to verify the {@link StatsManager} behaves correctly when dynamically adding/removing {@link ReplicaId}.
-   * @throws StoreException
-   * @throws IOException
+   * @throws Exception
    */
   @Test
-  public void testAddAndRemoveReplica() throws StoreException, IOException {
+  public void testAddAndRemoveReplica() throws Exception {
     // setup testing environment
     Map<PartitionId, Store> testStoreMap = new HashMap<>();
     List<ReplicaId> testReplicas = new ArrayList<>();
@@ -247,7 +245,7 @@ public class StatsManagerTest {
       testStoreMap.put(partitionId, new MockStore(new MockStoreStats(snapshotsByType, false)));
       testReplicas.add(partitionId.getReplicaIds().get(0));
     }
-    StorageManager mockStorageManager = new MockStorageManager(testStoreMap);
+    StorageManager mockStorageManager = new MockStorageManager(testStoreMap, dataNodeId);
     StatsManager testStatsManager =
         new StatsManager(mockStorageManager, testReplicas, new MetricRegistry(), config, new MockTime());
 
@@ -364,21 +362,19 @@ public class StatsManagerTest {
   /**
    * Test that the {@link StatsManager} can correctly collect and aggregate all type of stats on the node. This
    * test is using randomly generated account snapshot and partitionClass snapshot in mock {@link StoreStats}.
-   * @throws StoreException
-   * @throws IOException
+   * @throws Exception
    */
   @Test
-  public void testGetNodeStatsInJSON() throws IOException, StoreException {
+  public void testGetNodeStatsInJSON() throws Exception {
     // initialize StatsManager and create all types of snapshots for testing
     List<ReplicaId> replicaIds = new ArrayList<>();
     PartitionId partitionId;
-    DataNodeId dataNodeId;
+    DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
+        Collections.singletonList("/tmp"), "DC1");
     Map<PartitionId, Store> storeMap = new HashMap<>();
     List<StatsSnapshot> partitionClassSnapshots = new ArrayList<>();
     List<StatsSnapshot> accountSnapshots = new ArrayList<>();
     for (int i = 0; i < 2; i++) {
-      dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
-          Collections.singletonList("/tmp"), "DC1");
       partitionId = new MockPartitionId(i,
           (i % 2 == 0) ? MockClusterMap.DEFAULT_PARTITION_CLASS : MockClusterMap.SPECIAL_PARTITION_CLASS,
           Collections.singletonList((MockDataNodeId) dataNodeId), 0);
@@ -388,7 +384,7 @@ public class StatsManagerTest {
       storeMap.put(partitionId, new MockStore(new MockStoreStats(allSnapshots, false)));
       replicaIds.add(partitionId.getReplicaIds().get(0));
     }
-    StorageManager storageManager = new MockStorageManager(storeMap);
+    StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
     StatsManager statsManager =
         new StatsManager(storageManager, replicaIds, new MetricRegistry(), config, new MockTime());
 
