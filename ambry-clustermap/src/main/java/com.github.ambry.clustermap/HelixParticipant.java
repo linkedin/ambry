@@ -215,6 +215,9 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return ClusterMapUtils.getStoppedReplicas(instanceConfig);
   }
 
+  /**
+   * @return a snapshot of registered state change listeners.
+   */
   public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
     return Collections.unmodifiableMap(partitionStateChangeListeners);
   }

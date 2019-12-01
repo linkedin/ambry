@@ -22,7 +22,6 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
@@ -413,20 +412,16 @@ public class StorageManager implements StoreManager {
 
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-      BlobStore store = (BlobStore) getStore(partitionNameToReplicaId.get(partitionName).getPartitionId(), false);
-      if (store == null) {
-        throw new StateTransitionException("Store " + partitionName + " is not started",
-            TransitionErrorCode.StoreNotStarted);
-      }
-      store.setCurrentState(ReplicaState.BOOTSTRAP);
-      // TODO add replication lag check for new added replica (if there is boostrap file in store dir)
+      // BOOTSTRAP -> STANDBY primarily happens in ReplicationManager listener (if there is bootstrap file in store dir)
       /* an exmaple:
-      if (store.isBootstrapInProgress()) {
+         // check if store is started
+         store.setCurrentState(ReplicaState.BOOTSTRAP);
+         if (store.isBootstrapInProgress()) {
           // wait for replication to complete
-      }
-      // remove bootstrap file once new replica has caught up peer nodes.
+         }
+         // remove bootstrap file once new replica has caught up peer nodes.
+         store.setCurrentState(ReplicaState.STANDBY);
       */
-      store.setCurrentState(ReplicaState.STANDBY);
     }
 
     @Override

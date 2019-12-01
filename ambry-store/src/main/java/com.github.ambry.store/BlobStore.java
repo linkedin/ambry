@@ -743,6 +743,9 @@ public class BlobStore implements Store {
     return index.getAbsoluteEndPositionOfLastPut();
   }
 
+  /**
+   * @return {@code true} if new added store has initiated bootstrap process and bootstrap is still in progress.
+   */
   boolean isBootstrapInProgress() {
     File bootstrapFile = new File(dataDir, BOOTSTRAP_FILE_NAME);
     return bootstrapFile.exists();

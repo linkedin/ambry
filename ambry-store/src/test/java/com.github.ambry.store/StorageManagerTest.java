@@ -28,7 +28,6 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
@@ -231,6 +230,10 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager2, localReplicas);
   }
 
+  /**
+   * test that both success and failure in storage manager when replica becomes BOOTSTRAP from OFFLINE.
+   * @throws Exception
+   */
   @Test
   public void replicaFromOfflineToBootstrapTest() throws Exception {
     generateConfigs(true);
@@ -292,31 +295,6 @@ public class StorageManagerTest {
 
     // 6. test that existing replica state transition should succeed
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());
-    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
-  }
-
-  @Test
-  public void replicaFromBootstrapToStandbyTest() throws Exception {
-    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
-    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
-    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
-    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
-    storageManager.start();
-    // shutdown one store to trigger exception during BOOTSTRAP -> STANDBY transition
-    ReplicaId testReplica = localReplicas.get(0);
-    Store testStore = storageManager.getStore(testReplica.getPartitionId());
-    testStore.shutdown();
-    try {
-      mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(testReplica.getPartitionId().toPathString());
-    } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", TransitionErrorCode.StoreNotStarted, e.getErrorCode());
-    }
-    // restart same store to test success case
-    testStore.start();
-    mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(testReplica.getPartitionId().toPathString());
-    assertEquals("Store current state doesn't match", ReplicaState.STANDBY, testStore.getCurrentState());
-
-    // TODO add replication catchup test cases
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
@@ -992,6 +970,9 @@ public class StorageManagerTest {
     return new Pair<>(createdFiles, createdDirs);
   }
 
+  /**
+   * An extension of {@link HelixParticipant} to help with tests.
+   */
   private class MockClusterParticipant extends HelixParticipant {
     Set<ReplicaId> sealedReplicas = new HashSet<>();
     Set<ReplicaId> stoppedReplicas = new HashSet<>();

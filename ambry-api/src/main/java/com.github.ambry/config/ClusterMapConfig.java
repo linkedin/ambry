@@ -196,6 +196,9 @@ public class ClusterMapConfig {
   @Default(DEFAULT_STATE_MODEL_DEF)
   public final String clustermapStateModelDefinition;
 
+  /**
+   * Whether to enable state model listeners to take actions when state transition occurs.
+   */
   @Config("clustermap.enable.state.model.listener")
   @Default("false")
   public final boolean clustermapEnableStateModelListener;
