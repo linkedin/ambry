@@ -50,7 +50,7 @@ public class FindTokenHelper {
     findTokenFactoryMap = new HashMap<>();
     findTokenFactoryMap.put(ReplicaType.DISK_BACKED,
         Utils.getObj(replicationConfig.replicationStoreTokenFactory, storeKeyFactory));
-//    findTokenFactoryMap.put(ReplicaType.CLOUD_BACKED, Utils.getObj(replicationConfig.replicationCloudTokenFactory));
+    findTokenFactoryMap.put(ReplicaType.CLOUD_BACKED, Utils.getObj(replicationConfig.replicationCloudTokenFactory));
   }
 
   /**

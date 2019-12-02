@@ -1817,8 +1817,7 @@ public class MessageFormatRecord {
      * @param stream The stream to read the serialized record from.
      * @param storeKeyFactory The factory to use for parsing keys in the serialized metadata content record.
      * @return A {@link CompositeBlobInfo} object with the chunk size and list of keys from the record.
-     * @throws IOException
-     * @throws MessageFormatException
+     * @throws IOException if stream data is not in correct format.
      */
     public static CompositeBlobInfo deserializeMetadataContentRecord(DataInputStream stream,
         StoreKeyFactory storeKeyFactory) throws IOException {

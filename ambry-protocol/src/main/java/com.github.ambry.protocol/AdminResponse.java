@@ -13,8 +13,6 @@
  */
 package com.github.ambry.protocol;
 
-import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.router.Callback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -68,21 +66,6 @@ public class AdminResponse extends Response {
       bufferToSend.flip();
     }
     return bufferToSend.hasRemaining() ? channel.write(bufferToSend) : 0;
-  }
-
-  @Override
-  public void writeTo(AsyncWritableChannel channel, Callback<Long> callback) throws IOException {
-    if (bufferToSend == null) {
-      serializeIntoBuffer();
-      bufferToSend.flip();
-    }
-    channel.write(bufferToSend, new Callback<Long>() {
-      @Override
-      public void onCompletion(Long result, Exception exception) {
-        System.out.println("buffer send complete!");
-      }
-    });
-    return;
   }
 
   @Override

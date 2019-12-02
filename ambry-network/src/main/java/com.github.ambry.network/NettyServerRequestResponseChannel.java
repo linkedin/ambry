@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,35 +16,24 @@ package com.github.ambry.network;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
 import java.io.IOException;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.ArrayBlockingQueue;
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 
 /**
- * RequestResponse channel for netty based server
+ * RequestResponseChannel for Netty based server
  */
 public class NettyServerRequestResponseChannel implements RequestResponseChannel {
-  private final ConcurrentLinkedQueue<NetworkRequest> requestQueue;
-  final Lock lock = new ReentrantLock();
-  final Condition queueIsEmpty = lock.newCondition();
+  private final ArrayBlockingQueue<NetworkRequest> requestQueue;
 
-  public NettyServerRequestResponseChannel() {
-    requestQueue = new ConcurrentLinkedQueue<>();
+  public NettyServerRequestResponseChannel(int queueSize) {
+    requestQueue = new ArrayBlockingQueue<>(queueSize);
   }
 
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
-  public void sendRequest(NetworkRequest request) {
-    lock.lock();
-    try {
-      requestQueue.add(request);
-      queueIsEmpty.signal();
-    } finally {
-      lock.unlock();
-    }
+  public void sendRequest(NetworkRequest request) throws InterruptedException {
+    requestQueue.put(request);
   }
 
   /** Send a response back to the socket server to be sent over the network */
@@ -53,13 +42,12 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
       throws InterruptedException {
 
     if (!(originalRequest instanceof NettyServerRequest)) {
-      throw new IllegalArgumentException("NetworkRequest is not NettyRequest");
+      throw new IllegalArgumentException("NetworkRequest should be NettyRequest");
     }
 
     RestResponseChannel restResponseChannel = ((NettyServerRequest) originalRequest).getRestResponseChannel();
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, payloadToSend.sizeInBytes());
     try {
-      System.out.println("send.writeTo(AsyncWriteble Channel)");
       payloadToSend.writeTo(restResponseChannel, null); // an extra copy
     } catch (IOException e) {
       throw new InterruptedException(e.toString());
@@ -77,16 +65,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   /** Get the next request or block until there is one */
   @Override
   public NetworkRequest receiveRequest() throws InterruptedException {
-
-    lock.lock();
-    try {
-      while (requestQueue.size() == 0) {
-        queueIsEmpty.await();
-      }
-      return requestQueue.poll();
-    } finally {
-      lock.unlock();
-    }
+    return requestQueue.take();
   }
 
   /**

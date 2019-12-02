@@ -102,38 +102,35 @@ public class AmbryServerRequests extends AmbryRequests {
 
   @Override
   public void handleRequests(NetworkRequest request) throws InterruptedException {
-    requestResponseChannel.sendResponse(new AdminResponse(123, "456", ServerErrorCode.No_Error), request, null);
-    return;
-
-//    try {
-//      DataInputStream stream = new DataInputStream(request.getInputStream());
-//      RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
-//      switch (type) {
-//        case PutRequest:
-//          handlePutRequest(request);
-//          break;
-//        case GetRequest:
-//          handleGetRequest(request);
-//          break;
-//        case DeleteRequest:
-//          handleDeleteRequest(request);
-//          break;
-//        case ReplicaMetadataRequest:
-//          handleReplicaMetadataRequest(request);
-//          break;
-//        case AdminRequest:
-//          handleAdminRequest(request);
-//          break;
-//        case TtlUpdateRequest:
-//          handleTtlUpdateRequest(request);
-//          break;
-//        default:
-//          throw new UnsupportedOperationException("NetworkRequest type not supported");
-//      }
-//    } catch (Exception e) {
-//      logger.error("Error while handling request " + request + " closing connection", e);
-//      requestResponseChannel.closeConnection(request);
-//    }
+    try {
+      DataInputStream stream = new DataInputStream(request.getInputStream());
+      RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
+      switch (type) {
+        case PutRequest:
+          handlePutRequest(request);
+          break;
+        case GetRequest:
+          handleGetRequest(request);
+          break;
+        case DeleteRequest:
+          handleDeleteRequest(request);
+          break;
+        case ReplicaMetadataRequest:
+          handleReplicaMetadataRequest(request);
+          break;
+        case AdminRequest:
+          handleAdminRequest(request);
+          break;
+        case TtlUpdateRequest:
+          handleTtlUpdateRequest(request);
+          break;
+        default:
+          throw new UnsupportedOperationException("Request type not supported");
+      }
+    } catch (Exception e) {
+      logger.error("Error while handling request " + request + " closing connection", e);
+      requestResponseChannel.closeConnection(request);
+    }
   }
 
   /**

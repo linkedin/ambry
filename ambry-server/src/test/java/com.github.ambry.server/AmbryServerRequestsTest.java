@@ -861,7 +861,7 @@ public class AmbryServerRequestsTest {
     BlobStoreControlAdminRequest blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, storeControlRequestType, adminRequest);
     Response response = sendRequestGetResponse(blobStoreControlAdminRequest, expectedServerErrorCode);
-    assertTrue("NetworkResponse not of type AdminResponse", response instanceof AdminResponse);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
   }
 
   /**
