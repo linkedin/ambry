@@ -228,25 +228,21 @@ public class MockRestResponseChannel implements RestResponseChannel {
    * @param eventToFire the event to fire once header is set successfully.
    * @throws IllegalArgumentException if either of {@code headerName} or {@code headerValue} is null.
    * @throws IllegalStateException if the response metadata has already been finalized.
+   * @throws JSONException if RESPONSE_HEADERS_KEY not in responaeMetadata or its value is not a {@link JSONObject}
    */
   private void setHeader(String headerName, Object headerValue, Event eventToFire) {
     if (headerName != null && headerValue != null) {
       if (isOpen() && !responseMetadataFinalized.get()) {
-//        try {
-          if (!responseMetadata.has(RESPONSE_HEADERS_KEY)) {
-            responseMetadata.put(RESPONSE_HEADERS_KEY, new JSONObject());
-          }
-          if (headerValue instanceof Date) {
-            SimpleDateFormat dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.US);
-            dateFormatter.setTimeZone(TimeZone.getTimeZone("GMT"));
-            headerValue = dateFormatter.format((Date) headerValue);
-          }
-          responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).put(headerName, headerValue);
-          onEventComplete(eventToFire);
-//        } catch (JSONException e) {
-//          throw new RestServiceException("Unable to set " + headerName + " to " + headerValue,
-//              RestServiceErrorCode.InternalServerError);
-//        }
+        if (!responseMetadata.has(RESPONSE_HEADERS_KEY)) {
+          responseMetadata.put(RESPONSE_HEADERS_KEY, new JSONObject());
+        }
+        if (headerValue instanceof Date) {
+          SimpleDateFormat dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.US);
+          dateFormatter.setTimeZone(TimeZone.getTimeZone("GMT"));
+          headerValue = dateFormatter.format((Date) headerValue);
+        }
+        responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).put(headerName, headerValue);
+        onEventComplete(eventToFire);
       } else {
         throw new IllegalStateException("Cannot change response metadata after it has been finalized");
       }

@@ -33,7 +33,7 @@ public interface Send {
   long writeTo(WritableByteChannel channel) throws IOException;
 
   /**
-   * Placeholder to support AsyncWritableChannel
+   * Placeholder to support {@link AsyncWritableChannel}
    */
   default void writeTo(AsyncWritableChannel channel, Callback<Long> callback) throws IOException {
     return;

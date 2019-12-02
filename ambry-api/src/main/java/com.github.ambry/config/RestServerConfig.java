@@ -25,11 +25,11 @@ public class RestServerConfig {
   public final String restServerBlobStorageServiceFactory;
 
   /**
-   * The NioServerFactory that needs to be used by the RestServer for
-   * bootstrapping the NioServer
+   * The NioServerFactory that needs to be used by the RestServer or AmbryServer for
+   * bootstrapping the Frontend NioServer or Storage Node HTTP2 Server.
    */
   @Config("rest.server.nio.server.factory")
-  @Default("com.github.ambry.rest.NettyStorageServerFactory")
+  @Default("com.github.ambry.rest.NettyFrontendServerFactory")
   public final String restServerNioServerFactory;
 
   /**
@@ -99,9 +99,9 @@ public class RestServerConfig {
   public final String restServerHealthCheckUri;
 
   public RestServerConfig(VerifiableProperties verifiableProperties) {
-    restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory", "com.github.ambry.server.ServerBlobStorageService");
-    restServerNioServerFactory =
-        verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.NettyStorageServerFactory");
+    restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
+    restServerNioServerFactory = verifiableProperties.getString("rest.server.nio.server.factory",
+        "com.github.ambry.rest.NettyFrontendServerFactory");
     restServerRequestHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.request.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
     restServerRequestHandlerFactory = verifiableProperties.getString("rest.server.request.handler.factory",

@@ -62,7 +62,6 @@ import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import static org.mockito.Mockito.*;
 
@@ -903,7 +902,6 @@ public class AmbrySecurityServiceTest {
 
     @Override
     public void setHeader(String headerName, Object headerValue) {
-      throw new NotImplementedException();
     }
 
     @Override
