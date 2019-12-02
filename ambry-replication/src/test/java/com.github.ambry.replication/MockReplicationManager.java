@@ -14,8 +14,10 @@
 package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -39,6 +41,7 @@ public class MockReplicationManager extends ReplicationManager {
   public RuntimeException exceptionToThrow = null;
   // Variables for controlling and examining the values provided to controlReplicationForPartitions()
   public Boolean controlReplicationReturnVal;
+  public Boolean addReplicaReturnVal = null;
   public Collection<PartitionId> idsVal;
   public List<String> originsVal;
   public Boolean enableVal;
@@ -63,12 +66,13 @@ public class MockReplicationManager extends ReplicationManager {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     StoreConfig storeConfig = new StoreConfig(verifiableProperties);
     return new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-        dataNodeId, storeKeyConverterFactory);
+        dataNodeId, storeKeyConverterFactory, null);
   }
 
   MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
-      StoreKeyConverterFactory storeKeyConverterFactory) throws ReplicationException {
+      StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant)
+      throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storageManager, new StoreKeyFactory() {
           @Override
           public StoreKey getStoreKey(DataInputStream stream) {
@@ -80,7 +84,7 @@ public class MockReplicationManager extends ReplicationManager {
             return null;
           }
         }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
-        BlobIdTransformer.class.getName());
+        BlobIdTransformer.class.getName(), clusterParticipant);
     reset();
   }
 
@@ -107,6 +111,11 @@ public class MockReplicationManager extends ReplicationManager {
       lag = lagOverrides.get(key);
     }
     return lag;
+  }
+
+  @Override
+  public boolean addReplica(ReplicaId replicaId) {
+    return addReplicaReturnVal == null ? super.addReplica(replicaId) : addReplicaReturnVal;
   }
 
   /**

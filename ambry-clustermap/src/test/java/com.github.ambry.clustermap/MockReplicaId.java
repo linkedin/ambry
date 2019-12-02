@@ -22,7 +22,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
 
 public class MockReplicaId implements ReplicaId {
-
+  public static final long MOCK_REPLICA_CAPACITY = 100000000;
   private String mountPath;
   private String replicaPath;
   private List<ReplicaId> peerReplicas;
@@ -91,7 +91,7 @@ public class MockReplicaId implements ReplicaId {
 
   @Override
   public long getCapacityInBytes() {
-    return 100000000;
+    return MOCK_REPLICA_CAPACITY;
   }
 
   @Override

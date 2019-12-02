@@ -15,7 +15,9 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.store.StorageManager;
@@ -57,12 +59,12 @@ class StatsManager {
   private final File statsOutputFile;
   private final long publishPeriodInSecs;
   private final int initialDelayInSecs;
-  private final ConcurrentMap<PartitionId, ReplicaId> partitionToReplicaMap;
   private final StatsManagerMetrics metrics;
   private final Time time;
   private final ObjectMapper mapper = new ObjectMapper();
   private ScheduledExecutorService scheduler = null;
   private StatsAggregator statsAggregator = null;
+  final ConcurrentMap<PartitionId, ReplicaId> partitionToReplicaMap;
 
   /**
    * Constructs a {@link StatsManager}.
@@ -71,9 +73,10 @@ class StatsManager {
    * @param registry the {@link MetricRegistry} to be used for {@link StatsManagerMetrics}
    * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period
    * @param time the {@link Time} instance to be used for reporting
+   * @param clusterParticipant the {@link ClusterParticipant} to register state change listener.
    */
   StatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry registry,
-      StatsManagerConfig config, Time time) {
+      StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant) {
     this.storageManager = storageManager;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
@@ -82,6 +85,10 @@ class StatsManager {
     partitionToReplicaMap =
         replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
+    if (clusterParticipant != null) {
+      clusterParticipant.registerPartitionStateChangeListener(new PartitionStateChangeListenerImpl());
+      logger.info("Stats Manager's state change listener registered!");
+    }
   }
 
   /**
@@ -355,5 +362,42 @@ class StatsManager {
       }
     }
     return unreachableStores;
+  }
+
+  /**
+   * {@link PartitionStateChangeListener} to capture changes in partition state.
+   */
+  private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+
+    @Override
+    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      // check if partition exists
+      ReplicaId replica = storageManager.getReplica(partitionName);
+      if (replica == null) {
+        // no matter this is an existing replica or new added one, it should be present in storage manager because new
+        // replica is added into storage manager first.
+        throw new IllegalStateException("Partition " + partitionName + " is not found on current node");
+      }
+      if (!partitionToReplicaMap.containsKey(replica.getPartitionId())) {
+        // if replica is not present in partitionToReplicaMap, it means this new replica was just added into storage
+        // manager. Here we add it into stats manager accordingly.
+        logger.info("Didn't find replica {} in stats manager, starting to add it.", partitionName);
+        if (!addReplica(replica)) {
+          throw new IllegalStateException("Failed to add new replica into stats manager");
+        }
+      }
+    }
+
+    @Override
+    public void onPartitionBecomeLeaderFromStandby(String partitionName) {
+      logger.info("Partition state change notification from Standby to Leader received for partition {}",
+          partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeStandbyFromLeader(String partitionName) {
+      logger.info("Partition state change notification from Leader to Standby received for partition {}",
+          partitionName);
+    }
   }
 }

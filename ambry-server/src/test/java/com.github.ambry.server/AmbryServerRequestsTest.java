@@ -172,7 +172,7 @@ public class AmbryServerRequestsTest {
             storeKeyConverterFactory);
     statsManager =
         new MockStatsManager(storageManager, clusterMap.getReplicaIds(dataNodeId), clusterMap.getMetricRegistry(),
-            statsManagerConfig);
+            statsManagerConfig, null);
     ServerMetrics serverMetrics =
         new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,

@@ -196,6 +196,11 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
+  public ReplicaId getReplica(String partitionName) {
+    return partitionNameToReplicaId.get(partitionName);
+  }
+
+  @Override
   public ServerErrorCode checkLocalPartitionStatus(PartitionId partition, ReplicaId localReplica) {
     if (getStore(partition) == null) {
       if (localReplica != null) {
