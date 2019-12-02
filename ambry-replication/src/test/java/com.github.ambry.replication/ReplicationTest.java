@@ -273,22 +273,21 @@ public class ReplicationTest {
     storageManager.shutdown();
   }
 
+  /**
+   * Test that state transition in replication manager from OFFLINE to BOOTSTRAP
+   * @throws Exception
+   */
   @Test
   public void replicaFromOfflineToBootstrapTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
-    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
-    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
-    storeKeyConverterFactory.setConversionMap(new HashMap<>());
-    StorageManager storageManager =
-        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), clusterMap.getReplicaIds(dataNodeId), null, null, null, null, new MockTime());
-    storageManager.start();
     MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
-    MockReplicationManager replicationManager =
-        new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-            dataNodeId, storeKeyConverterFactory, mockHelixParticipant);
+    DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+
     assertFalse("State change listener in cluster participant should not be empty",
         mockHelixParticipant.getPartitionStateChangeListeners().isEmpty());
     // 1. test partition not found case (should throw exception)
@@ -302,7 +301,7 @@ public class ReplicationTest {
     PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
     ReplicaId replicaToAdd = newPartition.getReplicaIds()
         .stream()
-        .filter(r -> ((ReplicaId) r).getDataNodeId() == dataNodeId)
+        .filter(r -> ((ReplicaId) r).getDataNodeId() == currentNode)
         .findFirst()
         .get();
     assertTrue("Adding new replica to Storage Manager should succeed", storageManager.addBlobStore(replicaToAdd));
@@ -322,10 +321,48 @@ public class ReplicationTest {
     }
     replicationManager.addReplicaReturnVal = null;
     // 4. test OFFLINE -> BOOTSTRAP on existing replica (should be no-op)
-    ReplicaId existingReplica = clusterMap.getReplicaIds(dataNodeId).get(0);
+    ReplicaId existingReplica = clusterMap.getReplicaIds(currentNode).get(0);
     assertTrue("partitionToPartitionInfo should contain existing partition",
         replicationManager.partitionToPartitionInfo.containsKey(existingReplica.getPartitionId()));
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(existingReplica.getPartitionId().toPathString());
+    storageManager.shutdown();
+  }
+
+  /**
+   * Test state transition in replication manager from STANDBY to LEADER (right now it is no-op in prod code, but we
+   * keep test here for future use)
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromStandbyToLeaderTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    mockHelixParticipant.onPartitionBecomeLeaderFromStandby(existingPartition.toPathString());
+    storageManager.shutdown();
+  }
+
+  /**
+   * Test state transition in replication manager from LEADER to STANDBY (right now it is no-op in prod code, but we
+   * keep test here for future use)
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromLeaderToStandbyTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    mockHelixParticipant.onPartitionBecomeStandbyFromLeader(existingPartition.toPathString());
     storageManager.shutdown();
   }
 
@@ -1491,6 +1528,32 @@ public class ReplicationTest {
     assertEquals(token4, remoteReplicaInfo.getToken());
     assertEquals(token4, remoteReplicaInfo.getTokenToPersist());
     remoteReplicaInfo.onTokenPersisted();
+  }
+
+  // helpers
+
+  /**
+   * Helper method to create storage manager and replication manager
+   * @param clusterMap {@link ClusterMap} to use
+   * @param clusterMapConfig {@link ClusterMapConfig} to use
+   * @param clusterParticipant {@link com.github.ambry.clustermap.ClusterParticipant} for listener registration.
+   * @return a pair of storage manager and replication manager
+   * @throws Exception
+   */
+  private Pair<StorageManager, ReplicationManager> createStorageManagerAndReplicationManager(ClusterMap clusterMap,
+      ClusterMapConfig clusterMapConfig, MockHelixParticipant clusterParticipant) throws Exception {
+    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
+    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    StorageManager storageManager =
+        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
+            new MetricRegistry(), clusterMap.getReplicaIds(dataNodeId), null, null, null, null, new MockTime());
+    storageManager.start();
+    MockReplicationManager replicationManager =
+        new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
+            dataNodeId, storeKeyConverterFactory, clusterParticipant);
+    return new Pair<>(storageManager, replicationManager);
   }
 
   /**

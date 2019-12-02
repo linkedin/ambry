@@ -71,6 +71,9 @@ public class MockHelixParticipant extends HelixParticipant {
     // no op
   }
 
+  /**
+   * @return a snapshot of current state change listeners.
+   */
   public List<PartitionStateChangeListener> getPartitionStateChangeListeners() {
     return Collections.unmodifiableList(partitionStateChangeListeners);
   }

@@ -377,6 +377,9 @@ public class StatsManagerTest {
         statsWrapper.getSnapshot().getSubMap().containsKey(partitionId4.toPathString()));
   }
 
+  /**
+   * Test state transition in stats manager from OFFLINE to BOOTSTRAP
+   */
   @Test
   public void testReplicaFromOfflineToBootstrap() {
     MockStatsManager mockStatsManager =
@@ -411,6 +414,28 @@ public class StatsManagerTest {
         mockStatsManager.partitionToReplicaMap.containsKey(newPartition));
     // 5. state transition on existing replica should be no-op
     clusterParticipant.onPartitionBecomeBootstrapFromOffline(replicas.get(0).getPartitionId().toPathString());
+  }
+
+  /**
+   * Test state transition in stats manager from STANDBY to LEADER
+   */
+  @Test
+  public void testReplicaFromStandbyToLeader() {
+    MockStatsManager mockStatsManager =
+        new MockStatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, clusterParticipant);
+    // state transition on existing replica should be no-op
+    clusterParticipant.onPartitionBecomeLeaderFromStandby(replicas.get(0).getPartitionId().toPathString());
+  }
+
+  /**
+   * Test state transition in stats manager from LEADER to STANDBY
+   */
+  @Test
+  public void testReplicaFromLeaderToStandby() {
+    MockStatsManager mockStatsManager =
+        new MockStatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, clusterParticipant);
+    // state transition on existing replica should be no-op
+    clusterParticipant.onPartitionBecomeStandbyFromLeader(replicas.get(0).getPartitionId().toPathString());
   }
 
   /**
