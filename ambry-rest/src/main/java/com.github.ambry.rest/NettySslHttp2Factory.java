@@ -45,13 +45,8 @@ import org.slf4j.LoggerFactory;
  * instead of JDK's SSL implementation when the netty-tcnative library is loaded. OpenSSL shows
  * significant performance enhancements over the JDK implementation.
  */
-public class NettySslHttp2Factory implements SSLFactory {
+public class NettySslHttp2Factory extends NettySslFactory {
   private static final Logger logger = LoggerFactory.getLogger(NettySslHttp2Factory.class);
-  private final SslContext nettyServerSslContext;
-  private final SslContext nettyClientSslContext;
-  private final SSLContext jdkSslContext;
-  private final String endpointIdentification;
-
   /**
    * Instantiate a {@link NettySslHttp2Factory} from a config.
    * @param sslConfig the {@link SSLConfig} to use.
@@ -59,40 +54,10 @@ public class NettySslHttp2Factory implements SSLFactory {
    * @throws IOException
    */
   public NettySslHttp2Factory(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
-    nettyServerSslContext = getServerSslContext(sslConfig);
-    nettyClientSslContext = getClientSslContext(sslConfig);
-    // Netty's OpenSsl based implementation does not use the JDK SSLContext so we have to fall back to the JDK based
-    // factory to support this method.
-    jdkSslContext = new JdkSslFactory(sslConfig).getSSLContext();
-
-    this.endpointIdentification =
-        sslConfig.sslEndpointIdentificationAlgorithm.isEmpty() ? null : sslConfig.sslEndpointIdentificationAlgorithm;
+   super(sslConfig);
   }
 
   @Override
-  public SSLEngine createSSLEngine(String peerHost, int peerPort, Mode mode) {
-    SslContext context = mode == Mode.CLIENT ? nettyClientSslContext : nettyServerSslContext;
-    SSLEngine sslEngine = context.newEngine(ByteBufAllocator.DEFAULT, peerHost, peerPort);
-
-    if (mode == Mode.CLIENT) {
-      SSLParameters sslParams = sslEngine.getSSLParameters();
-      sslParams.setEndpointIdentificationAlgorithm(endpointIdentification);
-      sslEngine.setSSLParameters(sslParams);
-    }
-    return sslEngine;
-  }
-
-  @Override
-  public SSLContext getSSLContext() {
-    return jdkSslContext;
-  }
-
-  /**
-   * @param config the {@link SSLConfig}
-   * @return a configured {@link SslContext} object for a client.
-   * @throws GeneralSecurityException
-   * @throws IOException
-   */
   private static SslContext getServerSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
     logger.info("Using {} provider for server SslContext", SslContext.defaultServerProvider());
     return SslContextBuilder.forServer(getKeyManagerFactory(config))

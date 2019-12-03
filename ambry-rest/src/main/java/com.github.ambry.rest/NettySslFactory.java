@@ -89,7 +89,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private static SslContext getServerSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
+  protected static SslContext getServerSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
     logger.info("Using {} provider for server SslContext", SslContext.defaultServerProvider());
     return SslContextBuilder.forServer(getKeyManagerFactory(config))
         .trustManager(getTrustManagerFactory(config))
@@ -105,7 +105,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private static SslContext getClientSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
+  protected static SslContext getClientSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
     logger.info("Using {} provider for client SslContext", SslContext.defaultClientProvider());
     return SslContextBuilder.forClient()
         .keyManager(getKeyManagerFactory(config))
@@ -124,7 +124,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private static KeyStore loadKeyStore(String storePath, String storeType, String storePassword)
+  protected static KeyStore loadKeyStore(String storePath, String storeType, String storePassword)
       throws GeneralSecurityException, IOException {
     try (FileInputStream in = new FileInputStream(storePath)) {
       KeyStore ks = KeyStore.getInstance(storeType);
@@ -139,7 +139,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private static KeyManagerFactory getKeyManagerFactory(SSLConfig config) throws GeneralSecurityException, IOException {
+  protected static KeyManagerFactory getKeyManagerFactory(SSLConfig config) throws GeneralSecurityException, IOException {
     KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
     KeyStore ks = loadKeyStore(config.sslKeystorePath, config.sslKeystoreType, config.sslKeystorePassword);
     String keyPassword = config.sslKeyPassword.isEmpty() ? config.sslKeystorePassword : config.sslKeyPassword;
@@ -153,7 +153,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private static TrustManagerFactory getTrustManagerFactory(SSLConfig config)
+  protected static TrustManagerFactory getTrustManagerFactory(SSLConfig config)
       throws GeneralSecurityException, IOException {
     TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
     KeyStore ks = loadKeyStore(config.sslTruststorePath, config.sslTruststoreType, config.sslTruststorePassword);
@@ -165,7 +165,7 @@ public class NettySslFactory implements SSLFactory {
    * @param config the {@link SSLConfig}.
    * @return the list of supported cipher suites, or {@code null} if the configs did not specify any
    */
-  private static Iterable<String> getCipherSuites(SSLConfig config) {
+  protected static Iterable<String> getCipherSuites(SSLConfig config) {
     List<String> cipherSuitesList = Utils.splitString(config.sslCipherSuites, ",");
     return cipherSuitesList.size() > 0 ? cipherSuitesList : null;
   }
@@ -174,7 +174,7 @@ public class NettySslFactory implements SSLFactory {
    * @param config the {@link SSLConfig}.
    * @return the list of supported cipher suites, or {@code null} if the configs did not specify any
    */
-  private static String[] getEnabledProtocols(SSLConfig config) {
+  protected static String[] getEnabledProtocols(SSLConfig config) {
     List<String> enabledProtocols = Utils.splitString(config.sslEnabledProtocols, ",");
     return !enabledProtocols.isEmpty() ? enabledProtocols.toArray(new String[0]) : null;
   }
@@ -183,7 +183,7 @@ public class NettySslFactory implements SSLFactory {
    * @param config the {@link SSLConfig}.
    * @return the {@link ClientAuth} setting.
    */
-  private static ClientAuth getClientAuth(SSLConfig config) {
+  protected static ClientAuth getClientAuth(SSLConfig config) {
     switch (config.sslClientAuthentication) {
       case "required":
         return ClientAuth.REQUIRE;
