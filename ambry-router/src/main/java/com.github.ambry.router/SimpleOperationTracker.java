@@ -15,13 +15,17 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.RouterConfig;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -76,9 +80,32 @@ class SimpleOperationTracker implements OperationTracker {
 
   private final OpTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaIterator;
+  private static final Logger logger = LoggerFactory.getLogger(SimpleOperationTracker.class);
 
   /**
-   * Constructor for an {@code SimpleOperationTracker}.
+   * Constructor for an {@code SimpleOperationTracker}. In constructor, there is a config allowing operation tracker to
+   * use eligible replicas to populate replica pool. ("eligible" replicas are those in required states for specific
+   * operation)
+   * Following are different types of operation and their eligible replica states:
+   *  ---------------------------------------------------------
+   * |  Operation Type  |        Eligible Replica State        |
+   *  ---------------------------------------------------------
+   * |      PUT         | STANDBY, LEADER                      |
+   * |      GET         | STANDBY, LEADER, BOOTSTRAP, INACTIVE |
+   * |    DELETE        | STANDBY, LEADER, BOOTSTRAP           |
+   * |   TTLUpdate      | STANDBY, LEADER, BOOTSTRAP           |
+   *  ---------------------------------------------------------
+   * Following are dynamic configs when replica state is taken into consideration: (N is number of eligible replicas)
+   *  -----------------------------------------------------------------------
+   * |  Operation Type  |        Parallelism              |  Success Target  |
+   *  -----------------------------------------------------------------------
+   * |     GET          | 1~2 decided by adaptive tracker |         1        |
+   * |     PUT          |           N                     |       N - 1      |
+   * |    DELETE        |          3~N                    |         2        |
+   * |   TTLUpdate      |          3~N                    |         2        |
+   *  -----------------------------------------------------------------------
+   *  Note: for now, we still use 3 as parallelism for DELETE/TTLUpdate even though there are N eligible replicas, this
+   *        can be adjusted to any number between 3 and N (inclusive)
    * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
    * @param routerOperation The {@link RouterOperation} which {@link SimpleOperationTracker} is associated with.
    * @param partitionId The partition on which the operation is performed.
@@ -91,6 +118,8 @@ class SimpleOperationTracker implements OperationTracker {
     boolean crossColoEnabled = false;
     boolean includeNonOriginatingDcReplicas = true;
     int numOfReplicasRequired = Integer.MAX_VALUE;
+    datacenterName = routerConfig.routerDatacenterName;
+    List<ReplicaId> eligibleReplicas;
     switch (routerOperation) {
       case GetBlobOperation:
       case GetBlobInfoOperation:
@@ -99,20 +128,30 @@ class SimpleOperationTracker implements OperationTracker {
         crossColoEnabled = routerConfig.routerGetCrossDcEnabled;
         includeNonOriginatingDcReplicas = routerConfig.routerGetIncludeNonOriginatingDcReplicas;
         numOfReplicasRequired = routerConfig.routerGetReplicasRequired;
+        eligibleReplicas = getEligibleReplicas(partitionId, null,
+            EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.INACTIVE, ReplicaState.BOOTSTRAP));
         break;
       case PutOperation:
-        successTarget = routerConfig.routerPutSuccessTarget;
-        parallelism = routerConfig.routerPutRequestParallelism;
+        eligibleReplicas =
+            getEligibleReplicas(partitionId, datacenterName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
+        successTarget = routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.max(eligibleReplicas.size() - 1,
+            routerConfig.routerPutSuccessTarget) : routerConfig.routerPutSuccessTarget;
+        parallelism = routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas.size()
+            : routerConfig.routerPutRequestParallelism;
         break;
       case DeleteOperation:
         successTarget = routerConfig.routerDeleteSuccessTarget;
         parallelism = routerConfig.routerDeleteRequestParallelism;
         crossColoEnabled = true;
+        eligibleReplicas = getEligibleReplicas(partitionId, null,
+            EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.BOOTSTRAP));
         break;
       case TtlUpdateOperation:
         successTarget = routerConfig.routerTtlUpdateSuccessTarget;
         parallelism = routerConfig.routerTtlUpdateRequestParallelism;
         crossColoEnabled = true;
+        eligibleReplicas = getEligibleReplicas(partitionId, null,
+            EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.BOOTSTRAP));
         break;
       default:
         throw new IllegalArgumentException("Unsupported operation: " + routerOperation);
@@ -120,12 +159,12 @@ class SimpleOperationTracker implements OperationTracker {
     if (parallelism < 1) {
       throw new IllegalArgumentException("Parallelism has to be > 0. Configured to be " + parallelism);
     }
-    datacenterName = routerConfig.routerDatacenterName;
     this.originatingDcName = originatingDcName;
 
     // Order the replicas so that local healthy replicas are ordered and returned first,
     // then the remote healthy ones, and finally the possibly down ones.
-    List<? extends ReplicaId> replicas = partitionId.getReplicaIds();
+    List<? extends ReplicaId> replicas =
+        routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas : partitionId.getReplicaIds();
     LinkedList<ReplicaId> backupReplicas = new LinkedList<>();
     LinkedList<ReplicaId> downReplicas = new LinkedList<>();
     if (shuffleReplicas) {
@@ -187,10 +226,14 @@ class SimpleOperationTracker implements OperationTracker {
           generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck));
     }
     if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled && numReplicasInOriginatingDc > 0) {
-      this.originatingDcNotFoundFailureThreshold =
-          Math.max(numReplicasInOriginatingDc - routerConfig.routerPutSuccessTarget + 1, 0);
+      // we relax this condition to account for intermediate state of moving replicas (there could be 6 replicas in
+      // originating dc temporarily)
+      this.originatingDcNotFoundFailureThreshold = Math.max(numReplicasInOriginatingDc - 1, 0);
     }
     this.otIterator = new OpTrackerIterator();
+    logger.debug(
+        "Router operation type: {}, successTarget = {}, parallelism = {}, originatingDcNotFoundFailureThreshold = {}",
+        routerOperation, successTarget, parallelism, originatingDcNotFoundFailureThreshold);
   }
 
   @Override
@@ -216,8 +259,8 @@ class SimpleOperationTracker implements OperationTracker {
       succeededCount++;
     } else {
       failedCount++;
-      // NOT_FOUND is a special error. When tracker sees more than 2 NOT_FOUND from the originating DC, we can
-      // be sure the operation will end up with a NOT_FOUND error.
+      // NOT_FOUND is a special error. When tracker sees >= numReplicasInOriginatingDc - 1 "NOT_FOUND" from the
+      // originating DC, we can be sure the operation will end up with a NOT_FOUND error.
       if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND && replicaId.getDataNodeId()
           .getDatacenterName()
           .equals(originatingDcName)) {
@@ -251,6 +294,20 @@ class SimpleOperationTracker implements OperationTracker {
       }
       return replicaIterator.next();
     }
+  }
+
+  /**
+   * Get eligible replicas by states for given partition from specified data center. If dcName is null, it gets all eligible
+   * replicas from all data centers.
+   * @param partitionId the {@link PartitionId} that replicas belong to.
+   * @param dcName the name of data center from which the replicas should come from. This can be {@code null}.
+   * @param states a set of {@link ReplicaState}(s) that replicas should match.
+   * @return a list of eligible replicas that are in specified states.
+   */
+  private List<ReplicaId> getEligibleReplicas(PartitionId partitionId, String dcName, EnumSet<ReplicaState> states) {
+    List<ReplicaId> eligibleReplicas = new ArrayList<>();
+    states.forEach(state -> eligibleReplicas.addAll(partitionId.getReplicaIdsByState(state, dcName)));
+    return eligibleReplicas;
   }
 
   private boolean hasFailed() {

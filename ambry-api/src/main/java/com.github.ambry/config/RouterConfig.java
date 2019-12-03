@@ -364,9 +364,20 @@ public class RouterConfig {
   @Default("4")
   public final int routerMaxInMemGetChunks;
 
+  /**
+   * If {@code true}, the blob data shares memory with networking buffer in GetBlobOperation
+   */
   @Config("router.get.blob.operation.share.memory")
   @Default("false")
   public final boolean routerGetBlobOperationShareMemory;
+
+  /**
+   * if {@code true}, operation tracker will get replicas in required states based on the type of operation. This helps
+   * dynamically manage replicas in cluster (i.e. add/remove/move replicas) without restarting frontends.
+   */
+  @Config("router.get.eligible.replicas.by.state.enabled")
+  @Default("false")
+  public final boolean routerGetEligibleReplicasByStateEnabled;
 
   /**
    * Create a RouterConfig instance.
@@ -462,5 +473,7 @@ public class RouterConfig {
         Integer.MAX_VALUE / routerMaxPutChunkSizeBytes);
     routerGetBlobOperationShareMemory =
         verifiableProperties.getBoolean("router.get.blob.operation.share.memory", false);
+    routerGetEligibleReplicasByStateEnabled =
+        verifiableProperties.getBoolean("router.get.eligible.replicas.by.state.enabled", false);
   }
 }
