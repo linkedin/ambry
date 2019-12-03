@@ -55,12 +55,10 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.tools.util.ToolUtils;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import io.netty.buffer.ByteBufInputStream;
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.File;
@@ -274,8 +272,7 @@ public class ServerAdminTool implements Closeable {
     ClusterMap clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
-    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(
-        new SSLConfig(verifiableProperties)) : null;
+    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;
     ServerAdminTool serverAdminTool = new ServerAdminTool(clusterMap, sslFactory, verifiableProperties);
     File file = new File(config.dataOutputFilePath);
     if (!file.exists() && !file.createNewFile()) {

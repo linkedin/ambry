@@ -145,6 +145,13 @@ public class SSLConfig {
   @Default("com.github.ambry.commons.JdkSslFactory")
   public final String sslFactory;
 
+  /**
+   * The implementation of {@link com.github.ambry.commons.SSLFactory} to use.
+   */
+  @Config("ssl.http2.factory")
+  @Default("com.github.ambry.rest.NettySslHttp2Factory")
+  public final String sslHttp2Factory;
+
   public SSLConfig(VerifiableProperties verifiableProperties) {
     sslContextProtocol = verifiableProperties.getString("ssl.context.protocol", "TLS");
     sslContextProvider = verifiableProperties.getString("ssl.context.provider", "");
@@ -163,5 +170,6 @@ public class SSLConfig {
     sslTruststorePassword = verifiableProperties.getString("ssl.truststore.password", "");
     sslCipherSuites = verifiableProperties.getString("ssl.cipher.suites", "");
     sslFactory = verifiableProperties.getString("ssl.factory", "com.github.ambry.commons.JdkSslFactory");
+    sslHttp2Factory = verifiableProperties.getString("ssl.http2.factory", "com.github.ambry.rest.NettySslHttp2Factory");
   }
 }

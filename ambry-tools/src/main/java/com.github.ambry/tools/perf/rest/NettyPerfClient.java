@@ -353,8 +353,7 @@ public class NettyPerfClient {
       this.totalSize = 0;
       chunk = null;
     }
-    sslFactory = sslPropsFilePath != null ? SSLFactory.getNewInstance(
-        new SSLConfig(new VerifiableProperties(Utils.loadProps(sslPropsFilePath)))) : null;
+    sslFactory = sslPropsFilePath != null ? SSLFactory.getNewInstance(new SSLConfig(new VerifiableProperties(Utils.loadProps(sslPropsFilePath)))) : null;
     this.serviceId = serviceId;
     this.targetAccountName = targetAccountName;
     this.targetContainerName = targetContainerName;

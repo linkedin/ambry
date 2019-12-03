@@ -43,10 +43,12 @@ public class ServerBlobStorageService implements BlobStorageService {
 
   @Override
   public void handleGet(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    System.out.println("get");
   }
 
   @Override
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    System.out.println("post");
     CopyingAsyncWritableChannel asyncWritableChannel = new CopyingAsyncWritableChannel();
     restRequest.readInto(asyncWritableChannel, (result, exception) -> {
       try {
@@ -60,6 +62,7 @@ public class ServerBlobStorageService implements BlobStorageService {
 
   @Override
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    System.out.println("put");
   }
 
   @Override

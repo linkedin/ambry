@@ -188,8 +188,7 @@ public class BlobValidator implements Closeable {
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
     List<BlobId> blobIds = getBlobIds(config, clusterMap);
-    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(
-        new SSLConfig(verifiableProperties)) : null;
+    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;
     StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
     BlobValidator validator =
         new BlobValidator(clusterMap, config.replicasToContactPerSec, sslFactory, verifiableProperties);
