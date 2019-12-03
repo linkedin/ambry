@@ -15,7 +15,6 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
-import com.github.ambry.server.StateModelListenerType;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;

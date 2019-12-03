@@ -23,13 +23,12 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.server.ServerErrorCode;
-import com.github.ambry.server.StateModelListenerType;
-import com.github.ambry.server.StateTransitionException;
 import com.github.ambry.server.StoreManager;
-import com.github.ambry.server.TransitionErrorCode;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -384,13 +383,13 @@ public class StorageManager implements StoreManager {
           logger.error("No new replica found for partition {} in cluster map", partitionName);
           throw new StateTransitionException(
               "New replica " + partitionName + " is not found in clustermap for " + currentNode,
-              TransitionErrorCode.ReplicaNotFound);
+              StateTransitionException.TransitionErrorCode.ReplicaNotFound);
         }
         // Attempt to add store into storage manager. If store already exists, fail adding store request.
         if (!addBlobStore(replicaToAdd)) {
           logger.error("Failed to add store {} into storage manager", partitionName);
           throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
-              TransitionErrorCode.StoreOperationFailure);
+              StateTransitionException.TransitionErrorCode.StoreOperationFailure);
         }
         // TODO, update InstanceConfig in Helix
         // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be
@@ -405,7 +404,7 @@ public class StorageManager implements StoreManager {
         if (getStore(replica.getPartitionId(), false) == null) {
           throw new StateTransitionException(
               "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
-              TransitionErrorCode.StoreNotStarted);
+              StateTransitionException.TransitionErrorCode.StoreNotStarted);
         }
       }
     }

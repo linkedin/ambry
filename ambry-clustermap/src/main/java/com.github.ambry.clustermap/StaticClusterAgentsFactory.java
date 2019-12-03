@@ -16,7 +16,6 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
-import com.github.ambry.server.StateModelListenerType;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedList;

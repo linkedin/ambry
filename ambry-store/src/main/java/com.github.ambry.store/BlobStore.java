@@ -747,8 +747,7 @@ public class BlobStore implements Store {
    * @return {@code true} if new added store has initiated bootstrap process and bootstrap is still in progress.
    */
   boolean isBootstrapInProgress() {
-    File bootstrapFile = new File(dataDir, BOOTSTRAP_FILE_NAME);
-    return bootstrapFile.exists();
+    return (new File(dataDir, BOOTSTRAP_FILE_NAME)).exists();
   }
 
   /**

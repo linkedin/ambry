@@ -28,14 +28,13 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryHealthReport;
-import com.github.ambry.server.StateModelListenerType;
-import com.github.ambry.server.StateTransitionException;
-import com.github.ambry.server.TransitionErrorCode;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -253,7 +252,8 @@ public class StorageManagerTest {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(String.valueOf(partitionIds.size() + 1));
       fail("should fail due to bootstrap replica not found");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", TransitionErrorCode.ReplicaNotFound, e.getErrorCode());
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
     }
 
     // 3. test regular store didn't start up (which triggers StoreNotStarted exception)
@@ -264,7 +264,8 @@ public class StorageManagerTest {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(replicaId.getPartitionId().toPathString());
       fail("should fail due to store not started");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", TransitionErrorCode.StoreNotStarted, e.getErrorCode());
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
+          e.getErrorCode());
     }
     localStore.start();
 
@@ -281,7 +282,8 @@ public class StorageManagerTest {
     try {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", TransitionErrorCode.StoreOperationFailure, e.getErrorCode());
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreOperationFailure,
+          e.getErrorCode());
     }
     // restart disk manager to test case where new replica(store) is successfully added into StorageManager
     storageManager.getDiskManager(replicaOnSameDisk.getPartitionId()).start();
