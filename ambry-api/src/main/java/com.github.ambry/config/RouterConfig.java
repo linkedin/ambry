@@ -372,7 +372,8 @@ public class RouterConfig {
   public final boolean routerGetBlobOperationShareMemory;
 
   /**
-   * if {@code true}, operation tracker will get replicas in required states based on the type of operation.
+   * if {@code true}, operation tracker will get replicas in required states based on the type of operation. This helps
+   * dynamically manage replicas in cluster (i.e. add/remove/move replicas) without restarting frontends.
    */
   @Config("router.get.eligible.replicas.by.state.enabled")
   @Default("false")
