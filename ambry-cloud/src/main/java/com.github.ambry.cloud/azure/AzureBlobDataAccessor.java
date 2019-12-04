@@ -136,7 +136,7 @@ public class AzureBlobDataAccessor {
     azureMetrics.blobUploadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
     try {
-      BlockBlobClient blobClient = getAzureBlobReference(blobId, true);
+      BlockBlobClient blobClient = getBlockBlobClient(blobId, true);
       cloudBlobMetadata.setCloudBlobName(getAzureBlobName(blobId));
       Map<String, String> metadata = getMetadataMap(cloudBlobMetadata);
       blobClient.uploadWithResponse(blobInputStream, inputLength, null, metadata, null, null, blobRequestConditions,
@@ -173,7 +173,8 @@ public class AzureBlobDataAccessor {
     try {
       BlobContainerClient containerClient = getContainer(containerName, true);
       BlockBlobClient blobClient = containerClient.getBlobClient(fileName).getBlockBlobClient();
-      blobClient.uploadWithResponse(inputStream, inputStream.available(), null, null, null, null, null, null, Context.NONE);
+      blobClient.uploadWithResponse(inputStream, inputStream.available(), null, null, null, null, null, null,
+          Context.NONE);
     } catch (UncheckedIOException e) {
       // error processing input stream
       throw e.getCause();
@@ -207,26 +208,19 @@ public class AzureBlobDataAccessor {
    * @param containerName name of the container containing blob to download.
    * @param fileName name of the blob.
    * @param outputStream the output stream to use for download.
+   * @param errorOnNotFound If {@code true}, throw BlobStorageException on blob not found, otherwise return false.
    * @return {@code true} if the download was successful, {@code false} if the blob was not found.
    * @throws BlobStorageException for any error on ABS side.
-   * @throws IOException for any error with supplied data stream.
+   * @throws UncheckedIOException for any error with supplied data stream.
    */
-  public boolean downloadFile(String containerName, String fileName, OutputStream outputStream)
-      throws BlobStorageException, IOException {
+  public boolean downloadFile(String containerName, String fileName, OutputStream outputStream, boolean errorOnNotFound)
+      throws BlobStorageException {
     try {
-      BlobContainerClient containerClient = storageClient.getBlobContainerClient(containerName);
-      BlockBlobClient blobClient = containerClient.getBlobClient(fileName).getBlockBlobClient();
-      if (!blobClient.exists()) {
-        // TODO: probably throws exception for not found
-        return false;
-      }
+      BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, false);
       blobClient.download(outputStream);
       return true;
-    } catch (UncheckedIOException e) {
-      // error processing input stream
-      throw e.getCause();
     } catch (BlobStorageException e) {
-      if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+      if (!errorOnNotFound && e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
         return false;
       } else {
         throw e;
@@ -252,20 +246,17 @@ public class AzureBlobDataAccessor {
    * @param blobId id of the Ambry blob to be downloaded
    * @param outputStream outputstream to populate the downloaded data with
    * @throws BlobStorageException on Azure side error.
-   * @throws IOException on error writing to the output stream.
+   * @throws UncheckedIOException on error writing to the output stream.
    */
-  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws BlobStorageException, IOException {
+  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws BlobStorageException {
     azureMetrics.blobDownloadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
     try {
-      BlockBlobClient blobClient = getAzureBlobReference(blobId, false);
-      blobClient.download(outputStream);
+      String containerName = getAzureContainerName(blobId.getPartition().toPathString());
+      String blobName = getAzureBlobName(blobId);
+      downloadFile(containerName, blobName, outputStream, true);
       azureMetrics.blobDownloadSuccessCount.inc();
-    } catch (UncheckedIOException e) {
-      // error processing input stream
-      azureMetrics.blobDownloadErrorCount.inc();
-      throw e.getCause();
-    } catch (BlobStorageException e) {
+    } catch (Exception e) {
       azureMetrics.blobDownloadErrorCount.inc();
       throw e;
     } finally {
@@ -286,7 +277,7 @@ public class AzureBlobDataAccessor {
     Objects.requireNonNull(fieldName, "Field name cannot be null");
 
     try {
-      BlockBlobClient blobClient = getAzureBlobReference(blobId, false);
+      BlockBlobClient blobClient = getBlockBlobClient(blobId, false);
       Timer.Context storageTimer = azureMetrics.blobUpdateTime.time();
       try {
         BlobProperties blobProperties = blobClient.getProperties();
@@ -332,16 +323,27 @@ public class AzureBlobDataAccessor {
   }
 
   /**
-   * Get the azure blob reference for blobid.
-   * @param blobId id of the blob for which {@code CloudBlockBlob} reference is asked for.
+   * Get the block blob client for the supplied blobid.
+   * @param blobId id of the blob for which {@code BlockBlobClient} is needed.
    * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
    * @return {@code BlockBlobClient} reference.
    */
-  private BlockBlobClient getAzureBlobReference(BlobId blobId, boolean autoCreateContainer) {
+  private BlockBlobClient getBlockBlobClient(BlobId blobId, boolean autoCreateContainer) {
     String containerName = getAzureContainerName(blobId.getPartition().toPathString());
+    String blobName = getAzureBlobName(blobId);
+    return getBlockBlobClient(containerName, blobName, autoCreateContainer);
+  }
+
+  /**
+   * Get the block blob client for the supplied Azure container and blob name.
+   * @param containerName name of the Azure container where the blob lives.
+   * @param blobName name of the blob.
+   * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
+   * @return {@code BlockBlobClient} reference.
+   */
+  private BlockBlobClient getBlockBlobClient(String containerName, String blobName, boolean autoCreateContainer) {
     BlobContainerClient containerClient = getContainer(containerName, autoCreateContainer);
-    String azureBlobName = getAzureBlobName(blobId);
-    return containerClient.getBlobClient(azureBlobName).getBlockBlobClient();
+    return containerClient.getBlobClient(blobName).getBlockBlobClient();
   }
 
   /**

@@ -140,6 +140,7 @@ public class AzureCloudDestinationTest {
    */
   @Test
   public void testDownload() throws Exception {
+    mockBlobExistence(true);
     downloadBlob(blobId);
     assertEquals(1, azureMetrics.blobDownloadRequestCount.getCount());
     assertEquals(1, azureMetrics.blobDownloadSuccessCount.getCount());
@@ -507,6 +508,13 @@ public class AzureCloudDestinationTest {
 
   private void mockBlobExistence(boolean exists) {
     when(mockBlockBlobClient.exists()).thenReturn(exists);
+    if (exists) {
+      doNothing().when(mockBlockBlobClient).download(any());
+    } else {
+      BlobStorageException ex = mock(BlobStorageException.class);
+      when(ex.getErrorCode()).thenReturn(BlobErrorCode.BLOB_NOT_FOUND);
+      doThrow(ex).when(mockBlockBlobClient).download(any());
+    }
   }
 
   /** Test constructor with invalid connection string. */

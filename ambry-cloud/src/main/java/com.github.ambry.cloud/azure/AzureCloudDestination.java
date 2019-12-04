@@ -178,7 +178,7 @@ class AzureCloudDestination implements CloudDestination {
   public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
     try {
       azureBlobDataAccessor.downloadBlob(blobId, outputStream);
-    } catch (IOException | BlobStorageException e) {
+    } catch (BlobStorageException e) {
       updateErrorMetrics(e);
       throw new CloudStorageException("Error downloading blob " + blobId, e);
     }
@@ -350,7 +350,6 @@ class AzureCloudDestination implements CloudDestination {
     try {
       // delete blob from storage
       boolean deletionDone = azureBlobDataAccessor.deleteFile(containerName, blobFileName);
-      //boolean deletionDone = azureBlob.deleteIfExists(DeleteSnapshotsOption.NONE, null, null, blobOpContext);
 
       // Delete the document too
       try {
@@ -406,8 +405,8 @@ class AzureCloudDestination implements CloudDestination {
       throws CloudStorageException {
     try {
       String containerName = getAzureContainerName(partitionPath);
-      return azureBlobDataAccessor.downloadFile(containerName, tokenFileName, outputStream);
-    } catch (IOException | BlobStorageException e) {
+      return azureBlobDataAccessor.downloadFile(containerName, tokenFileName, outputStream, false);
+    } catch (BlobStorageException e) {
       throw new CloudStorageException("Could not retrieve token: " + partitionPath, e);
     }
   }
