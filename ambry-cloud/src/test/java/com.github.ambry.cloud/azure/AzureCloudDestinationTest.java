@@ -36,6 +36,7 @@ import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import com.microsoft.azure.storage.CloudStorageAccount;
+import com.microsoft.azure.storage.OperationContext;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
@@ -44,6 +45,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -499,6 +501,36 @@ public class AzureCloudDestinationTest {
       fail("Expected exception");
     } catch (IllegalStateException expected) {
     }
+  }
+
+  /** Test initializing AzureCloudDestination with a proxy. This is currently ignored because there is no good way to
+   * instantiate a {@link AsyncDocumentClient} without it attempting to contact the proxy.
+   * @throws Exception
+   */
+  @Ignore
+  @Test
+  public void testProxy() throws Exception {
+
+    // Test without proxy
+    CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
+    AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
+    AzureCloudDestination dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics);
+    // check operation context proxy
+    assertNull("Expected null proxy in blob op context", OperationContext.getDefaultProxy());
+    assertNull("Expected null proxy in doc client", dest.getAsyncDocumentClient().getConnectionPolicy().getProxy());
+
+    // Test with proxy
+    String proxyHost = "azure-proxy.randomcompany.com";
+    int proxyPort = 80;
+    configProps.setProperty(CloudConfig.VCR_PROXY_HOST, proxyHost);
+    configProps.setProperty(CloudConfig.VCR_PROXY_PORT, String.valueOf(proxyPort));
+    cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
+    dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, azureMetrics);
+    assertNotNull("Expected proxy in blob op context", OperationContext.getDefaultProxy());
+    InetSocketAddress proxy = dest.getAsyncDocumentClient().getConnectionPolicy().getProxy();
+    assertNotNull("Expected proxy in doc client", proxy);
+    assertEquals("Wrong host", proxyHost, proxy.getHostName());
+    assertEquals("Wrong port", proxyPort, proxy.getPort());
   }
 
   /** Test upload when client throws exception. */

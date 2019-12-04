@@ -26,6 +26,7 @@ import com.microsoft.azure.cosmosdb.ConsistencyLevel;
 import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
+import com.microsoft.azure.cosmosdb.RetryOptions;
 import com.microsoft.azure.cosmosdb.SqlParameter;
 import com.microsoft.azure.cosmosdb.SqlParameterCollection;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
@@ -121,8 +122,11 @@ class AzureCloudDestination implements CloudDestination {
       OperationContext.setDefaultProxy(
           new Proxy(Proxy.Type.HTTP, new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort)));
     }
-    // Set up CosmosDB connection, including any proxy setting
+    // Set up CosmosDB connection, including retry options and any proxy setting
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
+    RetryOptions retryOptions = new RetryOptions();
+    retryOptions.setMaxRetryAttemptsOnThrottledRequests(azureCloudConfig.cosmosMaxRetries);
+    connectionPolicy.setRetryOptions(retryOptions);
     if (azureCloudConfig.cosmosDirectHttps) {
       logger.info("Using CosmosDB DirectHttps connection mode");
       connectionPolicy.setConnectionMode(ConnectionMode.Direct);
@@ -360,6 +364,14 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   /**
+   * Getter for {@link AsyncDocumentClient} object.
+   * @return {@link AsyncDocumentClient} object.
+   */
+  public AsyncDocumentClient getAsyncDocumentClient() {
+    return asyncDocumentClient;
+  }
+
+  /**
    * Filter out {@link CloudBlobMetadata} objects from lastUpdateTime ordered {@code cloudBlobMetadataList} whose
    * lastUpdateTime is {@code lastUpdateTime} and id is in {@code lastReadBlobIds}.
    * @param cloudBlobMetadataList list of {@link CloudBlobMetadata} objects to filter out from.
@@ -388,7 +400,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param fieldName The metadata field to modify.
    * @param value The new value.
    * @return {@code true} if the udpate succeeded, {@code false} if the metadata record was not found.
-   * @throws CloudStorageException
+   * @throws CloudStorageException if the update fails.
    */
   private boolean updateBlobMetadata(BlobId blobId, String fieldName, Object value) throws CloudStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
