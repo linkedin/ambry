@@ -86,15 +86,7 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
     if (src == null) {
       throw new IllegalArgumentException("Source buffer cannot be null");
     }
-    ChunkData chunkData = new ChunkData(Unpooled.wrappedBuffer(src), callback);
-    chunks.add(chunkData);
-    if (channelEventListener != null) {
-      channelEventListener.onEvent(EventType.Write);
-    }
-    if (!isOpen()) {
-      resolveAllRemainingChunks(new ClosedChannelException());
-    }
-    return chunkData.future;
+    return write(Unpooled.wrappedBuffer(src), callback);
   }
 
   /**
@@ -149,11 +141,11 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    * @throws InterruptedException if the wait for a chunk is interrupted.
    */
   public ByteBuffer getNextChunk() throws InterruptedException {
-    if (isOpen()) {
-      ByteBuf chunkBuf = getChunkBuf(chunks.take());
-      return convertToByteBuffer(chunkBuf);
+    ByteBuf chunkBuf = getNextByteBuf();
+    if (chunkBuf == null) {
+      return null;
     }
-    return null;
+    return convertToByteBuffer(chunkBuf);
   }
 
   /**
@@ -168,11 +160,11 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    * @throws InterruptedException if the wait for a chunk is interrupted.
    */
   public ByteBuffer getNextChunk(long timeoutInMs) throws InterruptedException {
-    if (isOpen()) {
-      ByteBuf chunkBuf = getChunkBuf(chunks.poll(timeoutInMs, TimeUnit.MILLISECONDS));
-      return convertToByteBuffer(chunkBuf);
+    ByteBuf chunkBuf = getNextByteBuf(timeoutInMs);
+    if (chunkBuf == null) {
+      return null;
     }
-    return null;
+    return convertToByteBuffer(chunkBuf);
   }
 
   /**

@@ -17,6 +17,7 @@ import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channel;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -60,39 +61,35 @@ public interface AsyncWritableChannel extends Channel {
    *         written).
    */
   default Future<Long> write(ByteBuf src, Callback<Long> callback) {
+    if (src == null) {
+      throw new IllegalArgumentException("Source ByteBuf cannot be null");
+    }
     int numBuffers = src.nioBufferCount();
     if (numBuffers == 1) {
       return write(src.nioBuffer(), (result, exception) -> {
         if (result != 0) {
           src.readerIndex(src.readerIndex() + (int) result.longValue());
         }
-        callback.onCompletion(result, exception);
+        if (callback != null) {
+          callback.onCompletion(result, exception);
+        }
       });
     } else {
       ByteBuffer[] buffers = src.nioBuffers();
       AtomicLong size = new AtomicLong(0);
       AtomicInteger index = new AtomicInteger(0);
-      FutureResult<Long> futureResult = new FutureResult<Long>();
-      Callback<Long> cb = new Callback<Long>() {
-        @Override
-        public void onCompletion(Long result, Exception exception) {
-          index.addAndGet(1);
-          size.addAndGet(result);
-          if (result != 0) {
-            src.readerIndex(src.readerIndex() + (int) result.longValue());
-          }
-          if (exception != null) {
-            futureResult.done(size.get(), exception);
-            if (callback != null) {
-              callback.onCompletion(size.get(), exception);
-            }
-          } else {
-            if (index.get() == buffers.length) {
-              futureResult.done(size.get(), exception);
-              if (callback != null) {
-                callback.onCompletion(size.get(), exception);
-              }
-            }
+      AtomicBoolean callbackInvoked = new AtomicBoolean(false);
+      FutureResult<Long> futureResult = new FutureResult<>();
+      Callback<Long> cb = (result, exception) -> {
+        index.addAndGet(1);
+        size.addAndGet(result);
+        if (result != 0) {
+          src.readerIndex(src.readerIndex() + (int) result.longValue());
+        }
+        if ((exception != null || index.get() == buffers.length) && callbackInvoked.compareAndSet(false, true)) {
+          futureResult.done(size.get(), exception);
+          if (callback != null) {
+            callback.onCompletion(size.get(), exception);
           }
         }
       };
