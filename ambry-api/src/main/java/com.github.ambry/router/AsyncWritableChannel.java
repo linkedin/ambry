@@ -65,15 +65,20 @@ public interface AsyncWritableChannel extends Channel {
       throw new IllegalArgumentException("Source ByteBuf cannot be null");
     }
     int numBuffers = src.nioBufferCount();
-    if (numBuffers == 1) {
-      return write(src.nioBuffer(), (result, exception) -> {
-        if (result != 0) {
-          src.readerIndex(src.readerIndex() + (int) result.longValue());
-        }
-        if (callback != null) {
-          callback.onCompletion(result, exception);
-        }
-      });
+    Callback<Long> singleBufferCallback = (result, exception) -> {
+      if (result != 0) {
+        src.readerIndex(src.readerIndex() + (int) result.longValue());
+      }
+      if (callback != null) {
+        callback.onCompletion(result, exception);
+      }
+    };
+    if (numBuffers < 1) {
+      ByteBuffer byteBuffer = ByteBuffer.allocate(src.readableBytes());
+      src.getBytes(src.readerIndex(), byteBuffer);
+      return write(byteBuffer, singleBufferCallback);
+    } else if (numBuffers == 1) {
+      return write(src.nioBuffer(), singleBufferCallback);
     } else {
       ByteBuffer[] buffers = src.nioBuffers();
       AtomicLong size = new AtomicLong(0);
