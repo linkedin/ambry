@@ -120,7 +120,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * Gets the {@link Histogram} that tracks request latencies to the class of replicas (intra or inter DC) that
    * {@code replicaId} belongs to.
    * @param replicaId the {@link ReplicaId} whose request latency is going to be tracked.
-   * @return the {@link Histogram} associated with this replica.
+   * @return the {@link CachedHistogram} associated with this replica.
    */
   CachedHistogram getLatencyHistogram(ReplicaId replicaId) {
     boolean isLocalReplica = replicaId.getDataNodeId().getDatacenterName().equals(datacenterName);
