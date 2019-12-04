@@ -490,8 +490,6 @@ public class NonBlockingRouterMetrics {
    * @param routerConfig the {@link RouterConfig} that specifies histogram parameters.
    */
   private void initializeResourceToHistogramMap(ClusterMap clusterMap, RouterConfig routerConfig) {
-    int reservoirSize = routerConfig.routerOperationTrackerReservoirSize;
-    double decayFactor = routerConfig.routerOperationTrackerReservoirDecayFactor;
     String localDatacenterName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
     switch (routerConfig.routerOperationTrackerMetricScope) {
       case Partition:
@@ -560,7 +558,7 @@ public class NonBlockingRouterMetrics {
       quantile = routerConfig.routerLatencyToleranceQuantile;
     } else {
       reservoir = new ExponentiallyDecayingReservoir();
-      cacheTimeoutMs = RouterConfig.DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT;
+      cacheTimeoutMs = RouterConfig.DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT_MS;
       quantile = RouterConfig.DEFAULT_LATENCY_TOLERANCE_QUANTILE;
     }
     return new CachedHistogram(reservoir, cacheTimeoutMs, quantile);
@@ -953,30 +951,30 @@ public class NonBlockingRouterMetrics {
 
     @Override
     public void run() {
-      double quantile = routerConfig.routerLatencyToleranceQuantile;
+      double percentile = routerConfig.routerLatencyToleranceQuantile * 100;
       for (Map.Entry<Resource, CachedHistogram> resourceToHistogram : getBlobLocalDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
-        Histogram histogram = resourceToHistogram.getValue();
+        CachedHistogram histogram = resourceToHistogram.getValue();
         logger.debug("{} GetBlob local DC latency histogram {}th percentile in ms: {}", resource.toString(),
-            quantile * 100, histogram.getSnapshot().getValue(quantile));
+            percentile, histogram.getCachedValue());
       }
       for (Map.Entry<Resource, CachedHistogram> resourceToHistogram : getBlobCrossDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
-        Histogram histogram = resourceToHistogram.getValue();
+        CachedHistogram histogram = resourceToHistogram.getValue();
         logger.trace("{} GetBlob cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
-            quantile * 100, histogram.getSnapshot().getValue(quantile));
+            percentile, histogram.getCachedValue());
       }
       for (Map.Entry<Resource, CachedHistogram> resourceToHistogram : getBlobInfoLocalDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
-        Histogram histogram = resourceToHistogram.getValue();
+        CachedHistogram histogram = resourceToHistogram.getValue();
         logger.debug("{} GetBlobInfo local DC latency histogram {}th percentile in ms: {}", resource.toString(),
-            quantile * 100, histogram.getSnapshot().getValue(quantile));
+            percentile, histogram.getCachedValue());
       }
       for (Map.Entry<Resource, CachedHistogram> resourceToHistogram : getBlobInfoCrossDcResourceToLatency.entrySet()) {
         Resource resource = resourceToHistogram.getKey();
-        Histogram histogram = resourceToHistogram.getValue();
+        CachedHistogram histogram = resourceToHistogram.getValue();
         logger.trace("{} GetBlobInfo cross DC latency histogram {}th percentile in ms: {}", resource.toString(),
-            quantile * 100, histogram.getSnapshot().getValue(quantile));
+            percentile, histogram.getCachedValue());
       }
     }
   }

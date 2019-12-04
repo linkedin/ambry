@@ -31,7 +31,7 @@ public class RouterConfig {
   public static final String DEFAULT_KMS_FACTORY = "com.github.ambry.router.SingleKeyManagementServiceFactory";
   public static final String DEFAULT_CRYPTO_SERVICE_FACTORY = "com.github.ambry.router.GCMCryptoServiceFactory";
   public static final double DEFAULT_LATENCY_TOLERANCE_QUANTILE = 0.9;
-  public static final long DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT = 1000L;
+  public static final long DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT_MS = 1000L;
 
   // config keys
   public static final String ROUTER_SCALING_UNIT_COUNT = "router.scaling.unit.count";
@@ -538,7 +538,7 @@ public class RouterConfig {
         verifiableProperties.getLongInRange(ROUTER_OPERATION_TRACKER_HISTOGRAM_DUMP_PERIOD, 600L, 1L, Long.MAX_VALUE);
     routerOperationTrackerHistogramCacheTimeoutMs =
         verifiableProperties.getLong(ROUTER_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT_MS,
-            DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT);
+            DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT_MS);
     if (routerGetRequestParallelism > routerOperationTrackerMaxInflightRequests) {
       throw new IllegalArgumentException(
           "Operation tracker parallelism is larger than operation tracker max inflight number");
