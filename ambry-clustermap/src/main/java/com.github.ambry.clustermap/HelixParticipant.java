@@ -46,7 +46,6 @@ import org.slf4j.LoggerFactory;
 public class HelixParticipant implements ClusterParticipant, PartitionStateChangeListener {
   private final String clusterName;
   private final String zkConnectStr;
-  private final HelixFactory helixFactory;
   private final Object helixAdministrationLock = new Object();
   private final ClusterMapConfig clusterMapConfig;
   private final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
@@ -67,7 +66,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     clusterName = clusterMapConfig.clusterMapClusterName;
     instanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
-    this.helixFactory = helixFactory;
     if (clusterName.isEmpty()) {
       throw new IllegalStateException("Clustername is empty in clusterMapConfig");
     }
