@@ -60,7 +60,8 @@ public interface StoreManager {
   Store getStore(PartitionId id);
 
   /**
-   * Get replicaId by partition name.
+   * Get replicaId on current node by partition name. (There should be at most one replica belonging to specific
+   * partition on single node)
    * @param partitionName name of {@link PartitionId}
    * @return {@link ReplicaId} associated with given partition name. {@code null} if replica is not found in storage manager.
    */
