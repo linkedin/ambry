@@ -37,6 +37,7 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -73,6 +74,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private AtomicReference<ConcurrentSkipListSet<CloudDataNode>> vcrNodes;
   private final ConcurrentHashMap<String, PartitionId> localPartitionNameToPartition;
   private final Object notificationLock = new Object();
+  private final Set<String> partitionsToReplicate;
 
   /**
    * Constructor for {@link CloudToStoreReplicationManager}
@@ -113,6 +115,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, storeManager);
     this.localPartitionNameToPartition = mapPartitionNameToPartition(clusterMap, currentNode);
+    this.partitionsToReplicate = replicationConfig.vcrRecoveryPartitions.isEmpty() ? new HashSet<>()
+        : Arrays.stream(replicationConfig.vcrRecoveryPartitions.split(",")).collect(Collectors.toSet());
   }
 
   /**
@@ -334,6 +338,10 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeLeaderFromStandby(String partitionName) {
       logger.info("Partition state change notification from Standby to Leader received for partition {}",
           partitionName);
+      if (!partitionsToReplicate.isEmpty() && !partitionsToReplicate.contains(partitionName)) {
+        logger.info("Ignoring state change of partition {} as it is not in recovery partition config", partitionName);
+        return;
+      }
       synchronized (notificationLock) {
         try {
           addCloudReplica(partitionName);

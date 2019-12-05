@@ -27,9 +27,10 @@ public interface ClusterParticipant extends AutoCloseable {
   /**
    * Initiate the participation of cluster participant.
    * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
+   * @param currentNode {@link DataNodeId} object representing the current node.
    * @throws IOException
    */
-  void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException;
+  void participate(List<AmbryHealthReport> ambryHealthReports, DataNodeId currentNode) throws IOException;
 
   /**
    * Set or reset the sealed state of the given replica.

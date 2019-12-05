@@ -90,7 +90,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
+  public void participate(List<AmbryHealthReport> ambryHealthReports, DataNodeId currentNode) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();

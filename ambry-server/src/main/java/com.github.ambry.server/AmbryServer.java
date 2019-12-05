@@ -219,7 +219,7 @@ public class AmbryServer {
       if (vcrClusterSpectator != null) {
         vcrClusterSpectator.spectate();
       }
-      clusterParticipant.participate(ambryHealthReports);
+      clusterParticipant.participate(ambryHealthReports, nodeId);
 
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
