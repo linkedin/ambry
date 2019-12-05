@@ -20,6 +20,8 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -75,7 +77,8 @@ public class ReplicationManager extends ReplicationEngine {
     }
     // register replication manager's state change listener if clusterParticipant is not null
     if (clusterParticipant != null) {
-      clusterParticipant.registerPartitionStateChangeListener(new PartitionStateChangeListenerImpl());
+      clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
+          new PartitionStateChangeListenerImpl());
       logger.info("Replication manager's state change listener registered!");
     }
     persistor = new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
@@ -221,7 +224,8 @@ public class ReplicationManager extends ReplicationEngine {
       if (replica == null) {
         // no matter this is an existing replica or new added one, it should be present in storage manager because new
         // replica is added into storage manager first.
-        throw new IllegalStateException("Partition " + partitionName + " is not found on current node");
+        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
+            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
       }
 
       if (!partitionToPartitionInfo.containsKey(replica.getPartitionId())) {
@@ -229,9 +233,17 @@ public class ReplicationManager extends ReplicationEngine {
         // manager and next step is to add it into replication manager
         logger.info("Didn't find replica {} in replication manager, starting to add it.", partitionName);
         if (!addReplica(replica)) {
-          throw new IllegalStateException("Failed to add new replica into replication manager");
+          throw new StateTransitionException("Failed to add new replica " + partitionName + " into replication manager",
+              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
         }
       }
+    }
+
+    @Override
+    public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+      logger.info("Partition state change notification from Bootstrap to Standby received for partition {}",
+          partitionName);
+      // TODO implement replication catchup logic if this is a new replica
     }
 
     @Override

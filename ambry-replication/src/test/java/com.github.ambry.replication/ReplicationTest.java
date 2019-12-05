@@ -22,6 +22,8 @@ import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.CommonTestUtils;
@@ -287,15 +289,16 @@ public class ReplicationTest {
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
     StorageManager storageManager = managers.getFirst();
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
-
-    assertFalse("State change listener in cluster participant should not be empty",
-        mockHelixParticipant.getPartitionStateChangeListeners().isEmpty());
+    assertTrue("State change listener in cluster participant should contain replication manager listener",
+        mockHelixParticipant.getPartitionStateChangeListeners()
+            .containsKey(StateModelListenerType.ReplicationManagerListener));
     // 1. test partition not found case (should throw exception)
     try {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline("invalidPartition");
       fail("should fail because replica is not found");
-    } catch (IllegalStateException e) {
-      // expected
+    } catch (StateTransitionException e) {
+      assertEquals("Transition error doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
     }
     // 2. create a new partition and test replica addition success case
     PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
@@ -316,8 +319,9 @@ public class ReplicationTest {
     try {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(replicaToAdd.getPartitionId().toPathString());
       fail("should fail due to replica addition failure");
-    } catch (IllegalStateException e) {
-      // expected
+    } catch (StateTransitionException e) {
+      assertEquals("Transition error doesn't match",
+          StateTransitionException.TransitionErrorCode.ReplicaOperationFailure, e.getErrorCode());
     }
     replicationManager.addReplicaReturnVal = null;
     // 4. test OFFLINE -> BOOTSTRAP on existing replica (should be no-op)
@@ -1548,7 +1552,7 @@ public class ReplicationTest {
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), clusterMap.getReplicaIds(dataNodeId), null, null, null, null, new MockTime());
+            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null);
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,

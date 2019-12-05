@@ -394,7 +394,7 @@ public class StorageManager implements StoreManager {
         if (!addBlobStore(replicaToAdd)) {
           logger.error("Failed to add store {} into storage manager", partitionName);
           throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
-              StateTransitionException.TransitionErrorCode.StoreOperationFailure);
+              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
         }
         // TODO, update InstanceConfig in Helix
         // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be

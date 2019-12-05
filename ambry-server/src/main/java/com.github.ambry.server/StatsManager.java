@@ -19,6 +19,8 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
@@ -86,7 +88,8 @@ class StatsManager {
         replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
     if (clusterParticipant != null) {
-      clusterParticipant.registerPartitionStateChangeListener(new PartitionStateChangeListenerImpl());
+      clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener,
+          new PartitionStateChangeListenerImpl());
       logger.info("Stats Manager's state change listener registered!");
     }
   }
@@ -376,16 +379,24 @@ class StatsManager {
       if (replica == null) {
         // no matter this is an existing replica or new added one, it should be present in storage manager because new
         // replica is added into storage manager first.
-        throw new IllegalStateException("Partition " + partitionName + " is not found on current node");
+        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
+            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
       }
       if (!partitionToReplicaMap.containsKey(replica.getPartitionId())) {
         // if replica is not present in partitionToReplicaMap, it means this new replica was just added into storage
         // manager. Here we add it into stats manager accordingly.
         logger.info("Didn't find replica {} in stats manager, starting to add it.", partitionName);
         if (!addReplica(replica)) {
-          throw new IllegalStateException("Failed to add new replica into stats manager");
+          throw new StateTransitionException("Failed to add new replica into stats manager",
+              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
         }
       }
+    }
+
+    @Override
+    public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+      logger.info("Partition state change notification from Bootstrap to Standby received for partition {}",
+          partitionName);
     }
 
     @Override

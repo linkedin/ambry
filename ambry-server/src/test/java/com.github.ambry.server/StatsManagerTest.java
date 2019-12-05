@@ -23,6 +23,8 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -385,14 +387,15 @@ public class StatsManagerTest {
     MockStatsManager mockStatsManager =
         new MockStatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, clusterParticipant);
     // 1. verify stats manager's listener is registered
-    assertFalse("No listener is found in cluster participant",
-        clusterParticipant.getPartitionStateChangeListeners().isEmpty());
+    assertTrue("Stats manager listener is found in cluster participant",
+        clusterParticipant.getPartitionStateChangeListeners().containsKey(StateModelListenerType.StatsManagerListener));
     // 2. test partition not found
     try {
       clusterParticipant.onPartitionBecomeBootstrapFromOffline("InvalidPartition");
       fail("should fail because partition is not found");
-    } catch (IllegalStateException e) {
-      // expected
+    } catch (StateTransitionException e) {
+      assertEquals("Transition error doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
     }
     // 3. create a new partition and test replica addition failure
     PartitionId newPartition = new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS,
@@ -401,9 +404,10 @@ public class StatsManagerTest {
     mockStatsManager.returnValOfAddReplica = false;
     try {
       clusterParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
-      fail();
-    } catch (IllegalStateException e) {
-      // expected
+      fail("should fail because adding replica to stats manager failed");
+    } catch (StateTransitionException e) {
+      assertEquals("Transition error code doesn't match",
+          StateTransitionException.TransitionErrorCode.ReplicaOperationFailure, e.getErrorCode());
     }
     // 4. test replica addition success during Offline-To-Bootstrap transition
     assertFalse("Before adding new replica, in-mem data structure should not contain new partition",

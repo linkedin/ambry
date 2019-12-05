@@ -282,7 +282,7 @@ public class StorageManagerTest {
     try {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreOperationFailure,
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaOperationFailure,
           e.getErrorCode());
     }
     // restart disk manager to test case where new replica(store) is successfully added into StorageManager

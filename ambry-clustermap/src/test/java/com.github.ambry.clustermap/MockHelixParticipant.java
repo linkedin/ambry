@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -74,7 +75,7 @@ public class MockHelixParticipant extends HelixParticipant {
   /**
    * @return a snapshot of current state change listeners.
    */
-  public List<PartitionStateChangeListener> getPartitionStateChangeListeners() {
-    return Collections.unmodifiableList(partitionStateChangeListeners);
+  public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
+    return Collections.unmodifiableMap(partitionStateChangeListeners);
   }
 }
