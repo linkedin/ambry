@@ -15,9 +15,11 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.store.StoreException;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.utils.MockTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -35,11 +37,12 @@ public class AmbryStatsReportTest {
   private static final long AGGREGATE_INTERVAL_MINS = 60;
 
   @Test
-  public void testAmbryStatsReport() throws StoreException {
+  public void testAmbryStatsReport() throws Exception {
     StatsManagerConfig config = new StatsManagerConfig(new VerifiableProperties(new Properties()));
-    StatsManager testStatsManager =
-        new StatsManager(new MockStorageManager(Collections.emptyMap()), Collections.emptyList(), new MetricRegistry(),
-            config, new MockTime());
+    StatsManager testStatsManager = new StatsManager(new MockStorageManager(Collections.emptyMap(),
+        new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
+            Collections.singletonList("/tmp"), "DC1")), Collections.emptyList(), new MetricRegistry(), config,
+        new MockTime());
     // test account stats report
     AmbryStatsReport ambryStatsReport =
         new AmbryStatsReport(testStatsManager, AGGREGATE_INTERVAL_MINS, StatsReportType.ACCOUNT_REPORT);

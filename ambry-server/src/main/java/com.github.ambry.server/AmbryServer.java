@@ -21,7 +21,6 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.ClusterSpectator;
 import com.github.ambry.clustermap.ClusterSpectatorFactory;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
@@ -153,9 +152,8 @@ public class AmbryServer {
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       storageManager =
-          new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId),
-              storeKeyFactory, new BlobStoreRecovery(), new BlobStoreHardDelete(),
-              new ReplicaStatusDelegate(clusterParticipant), time);
+          new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
+              new BlobStoreHardDelete(), clusterParticipant, time, new BlobStoreRecovery());
       storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);

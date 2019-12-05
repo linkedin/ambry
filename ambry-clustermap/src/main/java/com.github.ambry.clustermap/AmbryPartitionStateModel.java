@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import java.util.Objects;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.Message;
@@ -30,41 +31,48 @@ public class AmbryPartitionStateModel extends StateModel {
   private final String resourceName;
   private final String partitionName;
   private final PartitionStateChangeListener partitionStateChangeListener;
+  private final ClusterMapConfig clusterMapConfig;
 
   AmbryPartitionStateModel(String resourceName, String partitionName,
-      PartitionStateChangeListener partitionStateChangeListener) {
+      PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
     this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
+    this.clusterMapConfig = Objects.requireNonNull(clusterMapConfig);
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
   }
 
   @Transition(to = "BOOTSTRAP", from = "OFFLINE")
   public void onBecomeBootstrapFromOffline(Message message, NotificationContext context) {
-    // TODO to distinguish between regular start and dynamic replica addition, check 1. store dir, 2. if there is bootstrap log
     logger.info("Partition {} in resource {} is becoming BOOTSTRAP from OFFLINE", message.getPartitionName(),
         message.getResourceName());
+    if (clusterMapConfig.clustermapEnableStateModelListener) {
+      partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(message.getPartitionName());
+    }
   }
 
   @Transition(to = "STANDBY", from = "BOOTSTRAP")
   public void onBecomeStandbyFromBootstrap(Message message, NotificationContext context) {
     logger.info("Partition {} in resource {} is becoming STANDBY from BOOTSTRAP", message.getPartitionName(),
         message.getResourceName());
+    if (clusterMapConfig.clustermapEnableStateModelListener) {
+      partitionStateChangeListener.onPartitionBecomeStandbyFromBootstrap(message.getPartitionName());
+    }
   }
 
   @Transition(to = "LEADER", from = "STANDBY")
   public void onBecomeLeaderFromStandby(Message message, NotificationContext context) {
     logger.info("Partition {} in resource {} is becoming LEADER from STANDBY", message.getPartitionName(),
         message.getResourceName());
-    partitionStateChangeListener.onPartitionStateChangeToLeaderFromStandby(message.getPartitionName());
+    partitionStateChangeListener.onPartitionBecomeLeaderFromStandby(message.getPartitionName());
   }
 
   @Transition(to = "STANDBY", from = "LEADER")
   public void onBecomeStandbyFromLeader(Message message, NotificationContext context) {
     logger.info("Partition {} in resource {} is becoming STANDBY from LEADER", message.getPartitionName(),
         message.getResourceName());
-    partitionStateChangeListener.onPartitionStateChangeToStandbyFromLeader(message.getPartitionName());
+    partitionStateChangeListener.onPartitionBecomeStandbyFromLeader(message.getPartitionName());
   }
 
   @Transition(to = "INACTIVE", from = "STANDBY")

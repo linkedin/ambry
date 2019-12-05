@@ -17,17 +17,24 @@ package com.github.ambry.store;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.HardwareState;
+import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockHelixManagerFactory;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.ReplicaStatusDelegate;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -44,11 +51,14 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -60,6 +70,7 @@ public class StorageManagerTest {
   private static final Random RANDOM = new Random();
 
   private DiskManagerConfig diskManagerConfig;
+  private ClusterMapConfig clusterMapConfig;
   private StoreConfig storeConfig;
   private MockClusterMap clusterMap;
   private MetricRegistry metricRegistry;
@@ -103,7 +114,7 @@ public class StorageManagerTest {
       }
     }
     Utils.deleteFileOrDirectory(new File(mountPathToDelete));
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     Map<String, Counter> counters = metricRegistry.getCounters();
@@ -136,7 +147,7 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition =
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     assertEquals("There should be 1 unexpected partition reported", 1, getNumUnrecognizedPartitionsReported());
     // add invalid replica id
@@ -185,7 +196,7 @@ public class StorageManagerTest {
     localNode.addMountPaths(Collections.singletonList(mountFile.getAbsolutePath()));
     PartitionId newPartition1 =
         new MockPartitionId(10L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), newMountPathIndex);
-    StorageManager storageManager = createStorageManager(localReplicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, null);
     storageManager.start();
     // test add store that already exists, which should fail
     assertFalse("Add store which is already existing should fail", storageManager.addBlobStore(localReplicas.get(0)));
@@ -207,7 +218,7 @@ public class StorageManagerTest {
     String diskToFail = mountPaths.get(0);
     File reservePoolDir = new File(diskToFail, diskManagerConfig.diskManagerReserveFileDirName);
     File storeReserveDir = new File(reservePoolDir, DiskSpaceAllocator.STORE_DIR_PREFIX + newPartition2.toString());
-    StorageManager storageManager2 = createStorageManager(localReplicas, new MetricRegistry(), null);
+    StorageManager storageManager2 = createStorageManager(localNode, new MetricRegistry(), null);
     storageManager2.start();
     Utils.deleteFileOrDirectory(storeReserveDir);
     assertTrue("File creation should succeed", storeReserveDir.createNewFile());
@@ -216,6 +227,77 @@ public class StorageManagerTest {
         storageManager2.addBlobStore(newPartition2.getReplicaIds().get(0)));
     assertNull("New store shouldn't be in in-memory data structure", storageManager2.getStore(newPartition2, false));
     shutdownAndAssertStoresInaccessible(storageManager2, localReplicas);
+  }
+
+  /**
+   * test that both success and failure in storage manager when replica becomes BOOTSTRAP from OFFLINE.
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromOfflineToBootstrapTest() throws Exception {
+    generateConfigs(true);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    storageManager.start();
+    // 1. get listeners from Helix participant and verify there is a storageManager listener.
+    Map<StateModelListenerType, PartitionStateChangeListener> listeners =
+        mockHelixParticipant.getPartitionStateChangeListeners();
+    assertTrue("Should contain storage manager listener",
+        listeners.containsKey(StateModelListenerType.StorageManagerListener));
+    // 2. if new bootstrap replica is not found, there should be an exception
+    try {
+      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(String.valueOf(partitionIds.size() + 1));
+      fail("should fail due to bootstrap replica not found");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
+    }
+
+    // 3. test regular store didn't start up (which triggers StoreNotStarted exception)
+    ReplicaId replicaId = localReplicas.get(0);
+    Store localStore = storageManager.getStore(replicaId.getPartitionId(), true);
+    localStore.shutdown();
+    try {
+      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(replicaId.getPartitionId().toPathString());
+      fail("should fail due to store not started");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
+          e.getErrorCode());
+    }
+    localStore.start();
+
+    // 4. test both failure and success cases regarding new replica addition
+    PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
+    assertNull("There should not be any store associated with new partition",
+        storageManager.getStore(newPartition, true));
+    // find an existing replica that shares disk with new replica
+    ReplicaId newReplica = newPartition.getReplicaIds().get(0);
+    ReplicaId replicaOnSameDisk =
+        localReplicas.stream().filter(r -> r.getDiskId().equals(newReplica.getDiskId())).findFirst().get();
+    // test add new store failure by shutting down target diskManager
+    storageManager.getDiskManager(replicaOnSameDisk.getPartitionId()).shutdown();
+    try {
+      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreOperationFailure,
+          e.getErrorCode());
+    }
+    // restart disk manager to test case where new replica(store) is successfully added into StorageManager
+    storageManager.getDiskManager(replicaOnSameDisk.getPartitionId()).start();
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+    BlobStore newAddedStore = (BlobStore) storageManager.getStore(newPartition, false);
+    assertNotNull("There should be a started store associated with new partition", newAddedStore);
+
+    // 5. verify that new added store has bootstrap file
+    assertTrue("There should be a bootstrap file indicating store is in BOOTSTRAP state",
+        newAddedStore.isBootstrapInProgress());
+
+    // 6. test that existing replica state transition should succeed
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
   /**
@@ -230,7 +312,7 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition =
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     PartitionId id = null;
     storageManager.start();
     assertEquals("There should be 1 unexpected partition reported", 1, getNumUnrecognizedPartitionsReported());
@@ -269,7 +351,7 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition =
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     PartitionId id = null;
     storageManager.start();
     assertEquals("There should be 1 unexpected partition reported", 1, getNumUnrecognizedPartitionsReported());
@@ -296,7 +378,7 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition =
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     assertEquals("There should be 1 unexpected partition reported", 1, getNumUnrecognizedPartitionsReported());
     for (int i = 1; i < replicas.size() - 1; i++) {
@@ -335,7 +417,7 @@ public class StorageManagerTest {
     dataNodes.add(dataNode);
     MockPartitionId invalidPartition =
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     // shut down replica[1] ~ replica[size - 2]. The replica[0] will be used to test removing store that disk is not running
     // Replica[1] will be used to test removing a started store. Replica[2] will be used to test a store with compaction enabled
@@ -368,8 +450,8 @@ public class StorageManagerTest {
     VerifiableProperties vProps = new VerifiableProperties(new Properties());
     storageManager =
         new StorageManager(new StoreConfig(vProps), diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
-            replicas, new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), null,
-            SystemTime.getInstance());
+            new MockIdFactory(), clusterMap, dataNode, new DummyMessageStoreHardDelete(), null,
+            SystemTime.getInstance(), new DummyMessageStoreRecovery());
     storageManager.start();
     for (ReplicaId replica : replicas) {
       id = replica.getPartitionId();
@@ -393,7 +475,7 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition =
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     assertEquals("There should be 1 unexpected partition reported", 1, getNumUnrecognizedPartitionsReported());
     // test set the state of store whose replicaStatusDelegate is null
@@ -420,10 +502,10 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<PartitionId> partitionIds = new ArrayList<>();
     Map<DiskId, List<ReplicaId>> diskToReplicas = new HashMap<>();
-    // test set the state of store with instantiated replicaStatusDelegate
-    ReplicaStatusDelegate replicaStatusDelegate = new MockReplicaStatusDelegate();
-    ReplicaStatusDelegate replicaStatusDelegateSpy = Mockito.spy(replicaStatusDelegate);
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, replicaStatusDelegateSpy);
+    // test setting the state of store via instantiated MockClusterParticipant
+    ClusterParticipant participant = new MockClusterParticipant();
+    ClusterParticipant participantSpy = Mockito.spy(participant);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, participantSpy);
     storageManager.start();
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     for (ReplicaId replica : replicas) {
@@ -438,14 +520,14 @@ public class StorageManagerTest {
     assertTrue("Add stores to stopped list should succeed, failToUpdateList should be empty",
         failToUpdateList.isEmpty());
     // make sure the stopped list contains all the added stores
-    Set<String> stoppedReplicasCopy = new HashSet<>(replicaStatusDelegateSpy.getStoppedReplicas());
+    Set<String> stoppedReplicasCopy = new HashSet<>(participantSpy.getStoppedReplicas());
     for (ReplicaId replica : replicas) {
       assertTrue("The stopped list should contain the replica: " + replica.getPartitionId().toPathString(),
           stoppedReplicasCopy.contains(replica.getPartitionId().toPathString()));
     }
     // make sure replicaStatusDelegate is invoked 3 times and each time the input replica list conforms with stores on particular disk
     for (List<ReplicaId> replicasPerDisk : diskToReplicas.values()) {
-      verify(replicaStatusDelegateSpy, times(1)).markStopped(replicasPerDisk);
+      verify(participantSpy, times(1)).setReplicaStoppedState(replicasPerDisk, true);
     }
 
     // remove a list of stores from STOPPED list. Note that the stores are residing on 3 disks.
@@ -455,10 +537,10 @@ public class StorageManagerTest {
         failToUpdateList.isEmpty());
     // make sure the stopped list is empty because all the stores are successfully removed.
     assertTrue("The stopped list should be empty after removing all stores",
-        replicaStatusDelegateSpy.getStoppedReplicas().isEmpty());
+        participantSpy.getStoppedReplicas().isEmpty());
     // make sure replicaStatusDelegate is invoked 3 times and each time the input replica list conforms with stores on particular disk
     for (List<ReplicaId> replicasPerDisk : diskToReplicas.values()) {
-      verify(replicaStatusDelegateSpy, times(1)).unmarkStopped(replicasPerDisk);
+      verify(participantSpy, times(1)).setReplicaStoppedState(replicasPerDisk, false);
     }
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
@@ -471,7 +553,7 @@ public class StorageManagerTest {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     Map<DiskId, List<ReplicaId>> diskToReplicas = new HashMap<>();
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     for (ReplicaId replica : replicas) {
@@ -524,7 +606,7 @@ public class StorageManagerTest {
     for (Integer badReplicaIndex : badReplicaIndexes) {
       new File(replicas.get(badReplicaIndex).getReplicaPath()).setReadable(false);
     }
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     Map<String, Counter> counters = metricRegistry.getCounters();
@@ -570,7 +652,7 @@ public class StorageManagerTest {
         downReplicaCount++;
       }
     }
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     Map<String, Counter> counters = metricRegistry.getCounters();
@@ -605,7 +687,7 @@ public class StorageManagerTest {
     // Startup/shutdown one more time to verify the restart scenario.
     for (int i = 0; i < 2; i++) {
       metricRegistry = new MetricRegistry();
-      StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+      StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
       storageManager.start();
       assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
       checkStoreAccessibility(replicas, null, storageManager);
@@ -647,7 +729,7 @@ public class StorageManagerTest {
     File fileSizeDir =
         new File(storeReserveDir, DiskSpaceAllocator.generateFileSizeDirName(storeConfig.storeSegmentSizeInBytes));
     Utils.deleteFileOrDirectory(fileSizeDir);
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     assertTrue("File creation should have succeeded", fileSizeDir.createNewFile());
     storageManager.start();
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
@@ -666,7 +748,7 @@ public class StorageManagerTest {
   public void successfulStartupShutdownTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     checkStoreAccessibility(replicas, null, storageManager);
@@ -694,9 +776,9 @@ public class StorageManagerTest {
   public void skipStoppedStoresTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
-    MockReplicaStatusDelegate replicaStatusDelegate = new MockReplicaStatusDelegate();
-    replicaStatusDelegate.stoppedReplicas.add(replicas.get(0).getPartitionId().toPathString());
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, replicaStatusDelegate);
+    ClusterParticipant mockParticipant = new MockClusterParticipant();
+    mockParticipant.setReplicaStoppedState(Collections.singletonList(replicas.get(0)), true);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, mockParticipant);
     storageManager.start();
     assertEquals("There should be no unexpected partitions reported", 0, getNumUnrecognizedPartitionsReported());
     for (int i = 0; i < replicas.size(); ++i) {
@@ -732,7 +814,7 @@ public class StorageManagerTest {
         extraDirsCount += count;
       }
     }
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     assertEquals("There should be some unexpected partitions reported", extraDirsCount,
         getNumUnrecognizedPartitionsReported());
@@ -744,16 +826,17 @@ public class StorageManagerTest {
 
   /**
    * Construct a {@link StorageManager} for the passed in set of replicas.
-   * @param replicas the list of replicas for the {@link StorageManager} to use.
+   * @param currentNode the list of replicas for the {@link StorageManager} to use.
    * @param metricRegistry the {@link MetricRegistry} instance to use to instantiate {@link StorageManager}
+   * @param clusterParticipant
    * @return a started {@link StorageManager}
    * @throws StoreException
    */
-  private StorageManager createStorageManager(List<ReplicaId> replicas, MetricRegistry metricRegistry,
-      ReplicaStatusDelegate replicaStatusDelegate) throws StoreException {
-    return new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, replicas,
-        new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), replicaStatusDelegate,
-        SystemTime.getInstance());
+  private StorageManager createStorageManager(DataNodeId currentNode, MetricRegistry metricRegistry,
+      ClusterParticipant clusterParticipant) throws StoreException {
+    return new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+        new MockIdFactory(), clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant,
+        SystemTime.getInstance(), new DummyMessageStoreRecovery());
   }
 
   /**
@@ -835,11 +918,19 @@ public class StorageManagerTest {
    * Generates {@link StoreConfig} and {@link DiskManagerConfig} for use in tests.
    * @param segmentedLog {@code true} to set a segment capacity lower than total store capacity
    */
-  private void generateConfigs(boolean segmentedLog) {
+  private void generateConfigs(boolean segmentedLog) throws IOException {
+    List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
+    zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
+    JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     Properties properties = new Properties();
     properties.put("disk.manager.enable.segment.pooling", "true");
     properties.put("store.compaction.triggers", "Periodic,Admin");
     properties.put("store.replica.status.delegate.enable", "true");
+    properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("clustermap.port", "2200");
+    properties.setProperty("clustermap.cluster.name", "AmbryTestCluster");
+    properties.setProperty("clustermap.datacenter.name", "DC0");
+    properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     if (segmentedLog) {
       long replicaCapacity = clusterMap.getAllPartitionIds(null).get(0).getReplicaIds().get(0).getCapacityInBytes();
       properties.put("store.segment.size.in.bytes", Long.toString(replicaCapacity / 2L));
@@ -847,6 +938,7 @@ public class StorageManagerTest {
     VerifiableProperties vProps = new VerifiableProperties(properties);
     diskManagerConfig = new DiskManagerConfig(vProps);
     storeConfig = new StoreConfig(vProps);
+    clusterMapConfig = new ClusterMapConfig(vProps);
   }
 
   // unrecognizedDirsOnDiskTest() helpers
@@ -881,30 +973,54 @@ public class StorageManagerTest {
   }
 
   /**
-   * An extension of {@link ReplicaStatusDelegate} to help with tests.
+   * An extension of {@link HelixParticipant} to help with tests.
    */
-  private static class MockReplicaStatusDelegate extends ReplicaStatusDelegate {
-    Set<String> stoppedReplicas = new HashSet<>();
+  private class MockClusterParticipant extends HelixParticipant {
+    Set<ReplicaId> sealedReplicas = new HashSet<>();
+    Set<ReplicaId> stoppedReplicas = new HashSet<>();
 
-    MockReplicaStatusDelegate() {
-      super(mock(ClusterParticipant.class));
+    MockClusterParticipant() throws IOException {
+      super(clusterMapConfig, new MockHelixManagerFactory());
     }
 
     @Override
-    public boolean markStopped(List<ReplicaId> replicaIds) {
-      replicaIds.forEach(replicaId -> stoppedReplicas.add(replicaId.getPartitionId().toPathString()));
+    public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
+      // no op
+    }
+
+    @Override
+    public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+      if (isSealed) {
+        sealedReplicas.add(replicaId);
+      } else {
+        sealedReplicas.remove(replicaId);
+      }
       return true;
     }
 
     @Override
-    public boolean unmarkStopped(List<ReplicaId> replicaIds) {
-      replicaIds.forEach(replicaId -> stoppedReplicas.remove(replicaId.getPartitionId().toPathString()));
+    public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean markStop) {
+      if (markStop) {
+        stoppedReplicas.addAll(replicaIds);
+      } else {
+        stoppedReplicas.removeAll(replicaIds);
+      }
       return true;
+    }
+
+    @Override
+    public List<String> getSealedReplicas() {
+      return sealedReplicas.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList());
     }
 
     @Override
     public List<String> getStoppedReplicas() {
-      return new ArrayList<>(stoppedReplicas);
+      return stoppedReplicas.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList());
+    }
+
+    @Override
+    public void close() {
+      // no op
     }
   }
 }

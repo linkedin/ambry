@@ -196,6 +196,13 @@ public class ClusterMapConfig {
   @Default(DEFAULT_STATE_MODEL_DEF)
   public final String clustermapStateModelDefinition;
 
+  /**
+   * Whether to enable state model listeners to take actions when state transition occurs.
+   */
+  @Config("clustermap.enable.state.model.listener")
+  @Default("false")
+  public final boolean clustermapEnableStateModelListener;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -235,5 +242,7 @@ public class ClusterMapConfig {
         OLD_STATE_MODEL_DEF)) {
       throw new IllegalArgumentException("Unsupported state model definition: " + clustermapStateModelDefinition);
     }
+    clustermapEnableStateModelListener =
+        verifiableProperties.getBoolean("clustermap.enable.state.model.listener", false);
   }
 }
