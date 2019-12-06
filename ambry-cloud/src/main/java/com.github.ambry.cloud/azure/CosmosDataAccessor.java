@@ -16,102 +16,95 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
-import com.microsoft.azure.documentdb.Document;
-import com.microsoft.azure.documentdb.DocumentClient;
-import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.DocumentCollection;
-import com.microsoft.azure.documentdb.FeedOptions;
-import com.microsoft.azure.documentdb.FeedResponse;
-import com.microsoft.azure.documentdb.PartitionKey;
-import com.microsoft.azure.documentdb.RequestOptions;
-import com.microsoft.azure.documentdb.ResourceResponse;
-import com.microsoft.azure.documentdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.Document;
+import com.microsoft.azure.cosmosdb.DocumentClientException;
+import com.microsoft.azure.cosmosdb.DocumentCollection;
+import com.microsoft.azure.cosmosdb.FeedOptions;
+import com.microsoft.azure.cosmosdb.FeedResponse;
+import com.microsoft.azure.cosmosdb.PartitionKey;
+import com.microsoft.azure.cosmosdb.RequestOptions;
+import com.microsoft.azure.cosmosdb.ResourceResponse;
+import com.microsoft.azure.cosmosdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 public class CosmosDataAccessor {
   private static final Logger logger = LoggerFactory.getLogger(CosmosDataAccessor.class);
-  private static final int HTTP_TOO_MANY_REQUESTS = 429;
   private static final String DOCS = "/docs/";
   public static final String COSMOS_LAST_UPDATED_COLUMN = "_ts";
-  private final DocumentClient documentClient;
+  private final AsyncDocumentClient asyncDocumentClient;
   private final String cosmosCollectionLink;
   private final AzureMetrics azureMetrics;
-  private final int maxRetries;
 
   /** Production constructor */
-  public CosmosDataAccessor(DocumentClient documentClient, AzureCloudConfig azureCloudConfig,
+  CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, AzureCloudConfig azureCloudConfig,
       AzureMetrics azureMetrics) {
-    this(documentClient, azureCloudConfig.cosmosCollectionLink, azureCloudConfig.cosmosMaxRetries, azureMetrics);
+    this(asyncDocumentClient, azureCloudConfig.cosmosCollectionLink, azureMetrics);
   }
 
   /** Test constructor */
-  public CosmosDataAccessor(DocumentClient documentClient, String cosmosCollectionLink, int maxRetries,
-      AzureMetrics azureMetrics) {
-    this.documentClient = documentClient;
+  CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, AzureMetrics azureMetrics) {
+    this.asyncDocumentClient = asyncDocumentClient;
     this.cosmosCollectionLink = cosmosCollectionLink;
     this.azureMetrics = azureMetrics;
-    this.maxRetries = maxRetries;
   }
 
   /**
    * Test connectivity to Azure CosmosDB
    */
   void testConnectivity() {
-    try {
-      ResourceResponse<DocumentCollection> response =
-          documentClient.readCollection(cosmosCollectionLink, new RequestOptions());
-      if (response.getResource() == null) {
-        throw new IllegalStateException("CosmosDB collection not found: " + cosmosCollectionLink);
-      }
-      logger.info("CosmosDB connection test succeeded.");
-    } catch (DocumentClientException ex) {
-      throw new IllegalStateException("CosmosDB connection test failed", ex);
+    ResourceResponse<DocumentCollection> response =
+        asyncDocumentClient.readCollection(cosmosCollectionLink, new RequestOptions()).toBlocking().single();
+    if (response.getResource() == null) {
+      throw new IllegalStateException("CosmosDB collection not found: " + cosmosCollectionLink);
     }
+    logger.info("CosmosDB connection test succeeded.");
   }
 
   /**
-   * Upsert the blob metadata document in the CosmosDB collection, retrying as necessary.
+   * Upsert the blob metadata document in the CosmosDB collection.
    * @param blobMetadata the blob metadata document.
    * @return the {@link ResourceResponse} returned by the operation, if successful.
-   * @throws DocumentClientException if the operation failed, or retry limit is exhausted.
+   * @throws DocumentClientException if the operation failed.
    */
-  public ResourceResponse<Document> upsertMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
+  ResourceResponse<Document> upsertMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
     RequestOptions options = getRequestOptions(blobMetadata.getPartitionId());
-    return retryOperationWithThrottling(
-        () -> documentClient.upsertDocument(cosmosCollectionLink, blobMetadata, options, true),
-        azureMetrics.documentCreateTime);
+    return executeCosmosAction(
+        () -> asyncDocumentClient.upsertDocument(cosmosCollectionLink, blobMetadata, options, true)
+            .toBlocking()
+            .single(), azureMetrics.documentCreateTime);
   }
 
   /**
-   * Delete the blob metadata document in the CosmosDB collection, retrying as necessary.
+   * Delete the blob metadata document in the CosmosDB collection.
    * @param blobMetadata the blob metadata document.
    * @return the {@link ResourceResponse} returned by the operation, if successful.
-   * @throws DocumentClientException if the operation failed, or retry limit is exhausted.
+   * @throws DocumentClientException if the operation failed.
    */
-  public ResourceResponse<Document> deleteMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
+  ResourceResponse<Document> deleteMetadata(CloudBlobMetadata blobMetadata) throws DocumentClientException {
     String docLink = getDocumentLink(blobMetadata.getId());
     RequestOptions options = getRequestOptions(blobMetadata.getPartitionId());
     options.setPartitionKey(new PartitionKey(blobMetadata.getPartitionId()));
-    return retryOperationWithThrottling(() -> documentClient.deleteDocument(docLink, options),
+    return executeCosmosAction(() -> asyncDocumentClient.deleteDocument(docLink, options).toBlocking().single(),
         azureMetrics.documentDeleteTime);
   }
 
   /**
-   * Read the blob metadata document in the CosmosDB collection, retrying as necessary.
+   * Read the blob metadata document in the CosmosDB collection.
    * @param blobId the {@link BlobId} for which metadata is requested.
    * @return the {@link ResourceResponse} containing the metadata document.
-   * @throws DocumentClientException if the operation failed, or retry limit is exhausted.
+   * @throws DocumentClientException if the operation failed.
    */
-  public ResourceResponse<Document> readMetadata(BlobId blobId) throws DocumentClientException {
+  ResourceResponse<Document> readMetadata(BlobId blobId) throws DocumentClientException {
     String docLink = getDocumentLink(blobId.getID());
     RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
-    return retryOperationWithThrottling(() -> documentClient.readDocument(docLink, options),
+    return executeCosmosAction(() -> asyncDocumentClient.readDocument(docLink, options).toBlocking().single(),
         azureMetrics.documentReadTime);
   }
 
@@ -120,11 +113,11 @@ public class CosmosDataAccessor {
    * @param blobId the {@link BlobId} for which metadata is replaced.
    * @param doc the blob metadata document.
    * @return the {@link ResourceResponse} returned by the operation, if successful.
-   * @throws DocumentClientException if the operation failed, or retry limit is exhausted.
+   * @throws DocumentClientException if the operation failed.
    */
-  public ResourceResponse<Document> replaceMetadata(BlobId blobId, Document doc) throws DocumentClientException {
+  ResourceResponse<Document> replaceMetadata(BlobId blobId, Document doc) throws DocumentClientException {
     RequestOptions options = getRequestOptions(blobId.getPartition().toPathString());
-    return retryOperationWithThrottling(() -> documentClient.replaceDocument(doc, options),
+    return executeCosmosAction(() -> asyncDocumentClient.replaceDocument(doc, options).toBlocking().single(),
         azureMetrics.documentUpdateTime);
   }
 
@@ -134,7 +127,6 @@ public class CosmosDataAccessor {
    * @param querySpec the DocumentDB query to execute.
    * @param timer the {@link Timer} to use to record query time (excluding waiting).
    * @return a List of {@link CloudBlobMetadata} referencing the matching blobs.
-   * @throws DocumentClientException
    */
   List<CloudBlobMetadata> queryMetadata(String partitionPath, SqlQuerySpec querySpec, Timer timer)
       throws DocumentClientException {
@@ -142,22 +134,24 @@ public class CosmosDataAccessor {
     FeedOptions feedOptions = new FeedOptions();
     feedOptions.setPartitionKey(new PartitionKey(partitionPath));
     // TODO: consolidate error count here
-    FeedResponse<Document> response =
-        retryQueryWithThrottling(() -> documentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions),
-            timer);
     try {
-      // Note: internal query iterator wraps DocumentClientException in IllegalStateException!
+      Timer.Context operationTimer = timer.time();
+      Iterator<FeedResponse<Document>> iterator =
+          asyncDocumentClient.queryDocuments(cosmosCollectionLink, querySpec, feedOptions).toBlocking().getIterator();
+      operationTimer.stop();
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
-      // TODO: this iteration can also get TOO_MANY_REQUESTS so should be inside retry loop
-      response.getQueryIterable().iterator().forEachRemaining(doc -> metadataList.add(createMetadataFromDocument(doc)));
+      while (iterator.hasNext()) {
+        iterator.next()
+            .getResults()
+            .iterator()
+            .forEachRemaining(doc -> metadataList.add(createMetadataFromDocument(doc)));
+      }
       return metadataList;
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
-        azureMetrics.documentErrorCount.inc();
         throw (DocumentClientException) rex.getCause();
-      } else {
-        throw rex;
       }
+      throw rex;
     }
   }
 
@@ -166,96 +160,38 @@ public class CosmosDataAccessor {
    * @param document {@link Document} object from which {@link CloudBlobMetadata} object will be created.
    * @return {@link CloudBlobMetadata} object.
    */
-  CloudBlobMetadata createMetadataFromDocument(Document document) {
+  private CloudBlobMetadata createMetadataFromDocument(Document document) {
     CloudBlobMetadata cloudBlobMetadata = document.toObject(CloudBlobMetadata.class);
     cloudBlobMetadata.setLastUpdateTime(document.getLong(COSMOS_LAST_UPDATED_COLUMN));
     return cloudBlobMetadata;
   }
 
   /**
-   * Run the supplied DocumentClient action. If CosmosDB returns status 429 (TOO_MANY_REQUESTS),
-   * retry after the requested wait period, up to the configured retry limit.
-   * @param operation the DocumentClient resource operation to execute, wrapped in a {@link Callable}.
-   * @param timer the {@link Timer} to use to record execution time (excluding waiting).
-   * @return the {@link ResourceResponse} returned by the operation, if successful.
-   * @throws DocumentClientException if Cosmos returns a different error status, or if the retry limit is reached.
-   */
-  private ResourceResponse<Document> retryOperationWithThrottling(Callable<ResourceResponse<Document>> operation,
-      Timer timer) throws DocumentClientException {
-    return (ResourceResponse<Document>) retryWithThrottling(operation, timer);
-  }
-
-  /**
-   * Run the supplied DocumentClient query. If CosmosDB returns status 429 (TOO_MANY_REQUESTS),
-   * retry after the requested wait period, up to the configured retry limit.
-   * @param query the DocumentClient query to execute, wrapped in a {@link Callable}.
-   * @param timer the {@link Timer} to use to record execution time (excluding waiting).
-   * @return the {@link FeedResponse} returned by the query, if successful.
-   * @throws DocumentClientException if Cosmos returns a different error status, or if the retry limit is reached.
-   */
-  private FeedResponse<Document> retryQueryWithThrottling(Callable<FeedResponse<Document>> query, Timer timer)
-      throws DocumentClientException {
-    return (FeedResponse<Document>) retryWithThrottling(query, timer);
-  }
-
-  /**
-   * Run the supplied DocumentClient action. If CosmosDB returns status 429 (TOO_MANY_REQUESTS),
-   * retry after the requested wait period, up to the configured retry limit.
-   * @param action the DocumentClient action to execute, wrapped in a {@link Callable}.
-   * @param timer the {@link Timer} to use to record execution time (excluding waiting).
-   * @return the {@link Object} returned by the action, if successful.
-   * @throws DocumentClientException if Cosmos returns a different error status, or if the retry limit is reached.
-   */
-  private Object retryWithThrottling(Callable<? extends Object> action, Timer timer) throws DocumentClientException {
-    int count = 0;
-    long waitTime = 0;
-    do {
-      try {
-        waitForMs(waitTime);
-        Timer.Context docTimer = timer.time();
-        Object response = executeCosmosAction(action);
-        docTimer.stop();
-        return response;
-      } catch (DocumentClientException dex) {
-        // Azure tells us how long to wait before retrying.
-        if (dex.getStatusCode() == HTTP_TOO_MANY_REQUESTS) {
-          waitTime = dex.getRetryAfterInMilliseconds();
-          azureMetrics.retryCount.inc();
-          logger.debug("Got {} from Cosmos, will wait {} ms before retrying.", HTTP_TOO_MANY_REQUESTS, waitTime);
-        } else {
-          // Something else, not retryable.
-          throw dex;
-        }
-      } catch (Exception e) {
-        azureMetrics.documentErrorCount.inc();
-        throw new RuntimeException("Exception calling action " + action, e);
-      }
-      count++;
-    } while (count <= maxRetries);
-    azureMetrics.retryCount.dec(); // number of retries, not total tries
-    azureMetrics.documentErrorCount.inc();
-    String message = "Max number of retries reached while retrying with action " + action;
-    throw new RuntimeException(message);
-  }
-
-  /**
    * Utility method to call a Cosmos method and extract any nested DocumentClientException.
    * @param action the action to call.
    * @return the result of the action.
-   * @throws Exception
+   * @throws DocumentClientException
    */
-  private Object executeCosmosAction(Callable<? extends Object> action) throws Exception {
+  private ResourceResponse<Document> executeCosmosAction(Callable<? extends ResourceResponse<Document>> action,
+      Timer timer) throws DocumentClientException {
+    ResourceResponse<Document> resourceResponse;
+    Timer.Context operationTimer = null;
     try {
-      return action.call();
-    } catch (DocumentClientException dex) {
-      throw dex;
-    } catch (IllegalStateException ex) {
-      if (ex.getCause() instanceof DocumentClientException) {
-        throw (DocumentClientException) ex.getCause();
-      } else {
-        throw ex;
+      operationTimer = timer.time();
+      resourceResponse = action.call();
+    } catch (RuntimeException rex) {
+      if (rex.getCause() instanceof DocumentClientException) {
+        throw (DocumentClientException) rex.getCause();
+      }
+      throw rex;
+    } catch (Exception ex) {
+      throw new RuntimeException("Exception calling action " + action, ex);
+    } finally {
+      if (operationTimer != null) {
+        operationTimer.stop();
       }
     }
+    return resourceResponse;
   }
 
   private String getDocumentLink(String documentId) {
@@ -266,21 +202,5 @@ public class CosmosDataAccessor {
     RequestOptions options = new RequestOptions();
     options.setPartitionKey(new PartitionKey(partitionPath));
     return options;
-  }
-
-  /**
-   * Wait for the specified time, or until interrupted.
-   * @param waitTimeInMillis the time to wait.
-   */
-  void waitForMs(long waitTimeInMillis) {
-    if (waitTimeInMillis > 0) {
-      Timer.Context waitTimer = azureMetrics.retryWaitTime.time();
-      try {
-        TimeUnit.MILLISECONDS.sleep(waitTimeInMillis);
-      } catch (InterruptedException e) {
-        logger.warn("Interrupted while waiting for retry");
-      }
-      waitTimer.stop();
-    }
   }
 }
