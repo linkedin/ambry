@@ -48,10 +48,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final String zkConnectStr;
   private final Object helixAdministrationLock = new Object();
   private final ClusterMapConfig clusterMapConfig;
-  private final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
+  final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
 
   private static final Logger logger = LoggerFactory.getLogger(HelixParticipant.class);
 
@@ -283,10 +283,23 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+    // 1. take actions in storage manager (add new replica if necessary)
     PartitionStateChangeListener storageManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
     if (storageManagerListener != null) {
       storageManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+    }
+    // 2. take actions in replication manager (add new replica if necessary)
+    PartitionStateChangeListener replicationManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+    if (replicationManagerListener != null) {
+      replicationManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
+    }
+    // 3. take actions in stats manager (add new replica if necessary)
+    PartitionStateChangeListener statsManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
+    if (statsManagerListener != null) {
+      statsManagerListener.onPartitionBecomeBootstrapFromOffline(partitionName);
     }
   }
 

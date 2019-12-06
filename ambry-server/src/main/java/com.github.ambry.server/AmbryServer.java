@@ -165,7 +165,7 @@ public class AmbryServer {
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
-              serverConfig.serverMessageTransformer);
+              serverConfig.serverMessageTransformer, clusterParticipant);
       replicationManager.start();
 
       if (replicationConfig.replicationEnabledWithVcrCluster) {
@@ -180,7 +180,8 @@ public class AmbryServer {
       }
 
       logger.info("Creating StatsManager to publish stats");
-      statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time);
+      statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
+          clusterParticipant);
       if (serverConfig.serverStatsPublishLocalEnabled) {
         statsManager.start();
       }

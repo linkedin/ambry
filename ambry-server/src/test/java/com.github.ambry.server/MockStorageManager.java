@@ -325,6 +325,7 @@ class MockStorageManager extends StorageManager {
    */
   PartitionId startedPartitionId = null;
   PartitionId addedPartitionId = null;
+  ReplicaId getReplicaReturnVal = null;
   CountDownLatch waitOperationCountdown = new CountDownLatch(0);
   boolean firstCall = true;
   List<PartitionId> unreachablePartitions = new ArrayList<>();
@@ -374,6 +375,11 @@ class MockStorageManager extends StorageManager {
       storeToReturn = store;
     }
     return storeToReturn;
+  }
+
+  @Override
+  public ReplicaId getReplica(String partitionName) {
+    return getReplicaReturnVal;
   }
 
   @Override

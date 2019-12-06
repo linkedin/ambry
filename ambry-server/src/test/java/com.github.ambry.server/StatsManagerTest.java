@@ -18,10 +18,14 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
@@ -58,9 +62,11 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
 
+import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -73,6 +79,8 @@ public class StatsManagerTest {
   private static final int MAX_CONTAINER_COUNT = 6;
   private static final int MIN_CONTAINER_COUNT = 3;
   private final StatsManager statsManager;
+  private final StorageManager storageManager;
+  private final MockHelixParticipant clusterParticipant;
   private final String outputFileString;
   private final File tempDir;
   private final StatsSnapshot preAggregatedSnapshot;
@@ -81,7 +89,8 @@ public class StatsManagerTest {
   private final List<ReplicaId> replicas;
   private final Random random = new Random();
   private final ObjectMapper mapper = new ObjectMapper();
-  private final StatsManagerConfig config;
+  private final StatsManagerConfig statsManagerConfig;
+  private DataNodeId dataNodeId;
 
   /**
    * Deletes the temporary directory.
@@ -102,13 +111,24 @@ public class StatsManagerTest {
     tempDir = Files.createTempDirectory("nodeStatsDir-" + UtilsTest.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     outputFileString = (new File(tempDir.getAbsolutePath(), "stats_output.json")).getAbsolutePath();
+    List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
+    zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
+    JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
+    Properties properties = new Properties();
+    properties.put("stats.output.file.path", outputFileString);
+    properties.setProperty("clustermap.cluster.name", "test");
+    properties.setProperty("clustermap.datacenter.name", "DC1");
+    properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    statsManagerConfig = new StatsManagerConfig(new VerifiableProperties(properties));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     storeMap = new HashMap<>();
     partitionToSnapshot = new HashMap<>();
     preAggregatedSnapshot = generateRandomSnapshot().get(StatsReportType.ACCOUNT_REPORT);
     Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
     replicas = new ArrayList<>();
     PartitionId partitionId;
-    DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
+    dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
         Collections.singletonList("/tmp"), "DC1");
     for (int i = 0; i < 2; i++) {
       partitionId = new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS,
@@ -126,11 +146,10 @@ public class StatsManagerTest {
     partitionId = new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS);
     storeMap.put(partitionId, new MockStore(new MockStoreStats(snapshotsByType, false)));
     partitionToSnapshot.put(partitionId, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
-    StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
-    Properties properties = new Properties();
-    properties.put("stats.output.file.path", outputFileString);
-    config = new StatsManagerConfig(new VerifiableProperties(properties));
-    statsManager = new StatsManager(storageManager, replicas, new MetricRegistry(), config, new MockTime());
+    storageManager = new MockStorageManager(storeMap, dataNodeId);
+    clusterParticipant = new MockHelixParticipant(clusterMapConfig);
+    statsManager =
+        new StatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, new MockTime(), null);
   }
 
   /**
@@ -180,7 +199,7 @@ public class StatsManagerTest {
     problematicStoreMap.put(partitionId2, exceptionStore);
     StatsManager testStatsManager = new StatsManager(new MockStorageManager(problematicStoreMap, dataNodeId),
         Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)), new MetricRegistry(),
-        config, new MockTime());
+        statsManagerConfig, new MockTime(), null);
     List<PartitionId> unreachablePartitions = new ArrayList<>();
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
@@ -204,7 +223,7 @@ public class StatsManagerTest {
     mixedStoreMap.put(partitionId4, exceptionStore);
     testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap, dataNodeId),
         Arrays.asList(partitionId3.getReplicaIds().get(0), partitionId4.getReplicaIds().get(0)), new MetricRegistry(),
-        config, new MockTime());
+        statsManagerConfig, new MockTime(), null);
     actualSnapshot = new StatsSnapshot(0L, null);
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
@@ -247,7 +266,8 @@ public class StatsManagerTest {
     }
     StorageManager mockStorageManager = new MockStorageManager(testStoreMap, dataNodeId);
     StatsManager testStatsManager =
-        new StatsManager(mockStorageManager, testReplicas, new MetricRegistry(), config, new MockTime());
+        new StatsManager(mockStorageManager, testReplicas, new MetricRegistry(), statsManagerConfig, new MockTime(),
+            null);
 
     // verify that adding an existing store to StatsManager should fail
     assertFalse("Adding a store which already exists should fail", testStatsManager.addReplica(testReplicas.get(0)));
@@ -360,6 +380,69 @@ public class StatsManagerTest {
   }
 
   /**
+   * Test state transition in stats manager from OFFLINE to BOOTSTRAP
+   */
+  @Test
+  public void testReplicaFromOfflineToBootstrap() {
+    MockStatsManager mockStatsManager =
+        new MockStatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, clusterParticipant);
+    // 1. verify stats manager's listener is registered
+    assertTrue("Stats manager listener is found in cluster participant",
+        clusterParticipant.getPartitionStateChangeListeners().containsKey(StateModelListenerType.StatsManagerListener));
+    // 2. test partition not found
+    try {
+      clusterParticipant.onPartitionBecomeBootstrapFromOffline("InvalidPartition");
+      fail("should fail because partition is not found");
+    } catch (StateTransitionException e) {
+      assertEquals("Transition error doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
+    }
+    // 3. create a new partition and test replica addition failure
+    PartitionId newPartition = new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        Collections.singletonList((MockDataNodeId) dataNodeId), 0);
+    ((MockStorageManager) storageManager).getReplicaReturnVal = newPartition.getReplicaIds().get(0);
+    mockStatsManager.returnValOfAddReplica = false;
+    try {
+      clusterParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+      fail("should fail because adding replica to stats manager failed");
+    } catch (StateTransitionException e) {
+      assertEquals("Transition error code doesn't match",
+          StateTransitionException.TransitionErrorCode.ReplicaOperationFailure, e.getErrorCode());
+    }
+    // 4. test replica addition success during Offline-To-Bootstrap transition
+    assertFalse("Before adding new replica, in-mem data structure should not contain new partition",
+        mockStatsManager.partitionToReplicaMap.containsKey(newPartition));
+    mockStatsManager.returnValOfAddReplica = null;
+    clusterParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+    assertTrue("After adding new replica, in-mem data structure should contain new partition",
+        mockStatsManager.partitionToReplicaMap.containsKey(newPartition));
+    // 5. state transition on existing replica should be no-op
+    clusterParticipant.onPartitionBecomeBootstrapFromOffline(replicas.get(0).getPartitionId().toPathString());
+  }
+
+  /**
+   * Test state transition in stats manager from STANDBY to LEADER
+   */
+  @Test
+  public void testReplicaFromStandbyToLeader() {
+    MockStatsManager mockStatsManager =
+        new MockStatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, clusterParticipant);
+    // state transition on existing replica should be no-op
+    clusterParticipant.onPartitionBecomeLeaderFromStandby(replicas.get(0).getPartitionId().toPathString());
+  }
+
+  /**
+   * Test state transition in stats manager from LEADER to STANDBY
+   */
+  @Test
+  public void testReplicaFromLeaderToStandby() {
+    MockStatsManager mockStatsManager =
+        new MockStatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, clusterParticipant);
+    // state transition on existing replica should be no-op
+    clusterParticipant.onPartitionBecomeStandbyFromLeader(replicas.get(0).getPartitionId().toPathString());
+  }
+
+  /**
    * Test that the {@link StatsManager} can correctly collect and aggregate all type of stats on the node. This
    * test is using randomly generated account snapshot and partitionClass snapshot in mock {@link StoreStats}.
    * @throws Exception
@@ -386,7 +469,7 @@ public class StatsManagerTest {
     }
     StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
     StatsManager statsManager =
-        new StatsManager(storageManager, replicaIds, new MetricRegistry(), config, new MockTime());
+        new StatsManager(storageManager, replicaIds, new MetricRegistry(), statsManagerConfig, new MockTime(), null);
 
     StatsSnapshot expectAccountSnapshot = new StatsSnapshot(0L, new HashMap<>());
     StatsSnapshot expectPartitionClassSnapshot = new StatsSnapshot(0L, new HashMap<>());

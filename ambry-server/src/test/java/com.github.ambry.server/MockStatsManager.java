@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.store.StorageManager;
@@ -25,15 +26,15 @@ import java.util.List;
  * An extension of {@link StatsManager} to help with tests.
  */
 class MockStatsManager extends StatsManager {
-  boolean returnValOfAddReplica = true;
+  Boolean returnValOfAddReplica = null;
 
   MockStatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry metricRegistry,
-      StatsManagerConfig statsManagerConfig) {
-    super(storageManager, replicaIds, metricRegistry, statsManagerConfig, new MockTime());
+      StatsManagerConfig statsManagerConfig, ClusterParticipant clusterParticipant) {
+    super(storageManager, replicaIds, metricRegistry, statsManagerConfig, new MockTime(), clusterParticipant);
   }
 
   @Override
   boolean addReplica(ReplicaId id) {
-    return returnValOfAddReplica;
+    return returnValOfAddReplica == null ? super.addReplica(id) : returnValOfAddReplica;
   }
 }

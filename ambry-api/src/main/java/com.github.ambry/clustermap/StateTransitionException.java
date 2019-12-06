@@ -32,9 +32,9 @@ public class StateTransitionException extends RuntimeException {
      */
     ReplicaNotFound,
     /**
-     * If failure occurs during store operation (i.e. store addition/removal in StoreManager).
+     * If failure occurs during replica operation (i.e. replica addition/removal in StoreManager, ReplicationManager).
      */
-    StoreOperationFailure,
+    ReplicaOperationFailure,
     /**
      * If store is not started and unavailable for specific operations.
      */

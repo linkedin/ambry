@@ -60,6 +60,14 @@ public interface StoreManager {
   Store getStore(PartitionId id);
 
   /**
+   * Get replicaId on current node by partition name. (There should be at most one replica belonging to specific
+   * partition on single node)
+   * @param partitionName name of {@link PartitionId}
+   * @return {@link ReplicaId} associated with given partition name. {@code null} if replica is not found in storage manager.
+   */
+  ReplicaId getReplica(String partitionName);
+
+  /**
    * Set BlobStore Stopped state with given {@link PartitionId} {@code id}.
    * @param partitionIds a list {@link PartitionId} of the {@link Store} whose stopped state should be set.
    * @param markStop whether to mark BlobStore as stopped ({@code true}) or started.
