@@ -327,6 +327,91 @@ public class IndexTest {
   }
 
   /**
+   * Tests and verifies an undelete with an expected life version
+   * @param targetKey
+   * @param expectedLifeVersion
+   * @throws StoreException
+   */
+  private void undeleteKeyAndVerify(StoreKey targetKey, short expectedLifeVersion) throws StoreException {
+    assertTrue("targetKey is not deleted", state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Delete_Index));
+    assertTrue("targetKey is undeleted early", !state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Undelete_Index));
+    short actualLifeVersion = state.index.findKey(targetKey).getLifeVersion();
+    assertEquals("Life version isn't " +(expectedLifeVersion - 1) +" but "+actualLifeVersion, expectedLifeVersion-1, actualLifeVersion);
+    state.appendToLog(UNDELETE_RECORD_SIZE);
+    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), UNDELETE_RECORD_SIZE);
+    state.index.markAsUndeleted(targetKey, fileSpan, System.currentTimeMillis());
+    assertTrue("targetKey is not undeleted", state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Undelete_Index));
+    assertTrue("targetKey has delete flag", !state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Delete_Index));
+    actualLifeVersion = state.index.findKey(targetKey).getLifeVersion();
+    assertEquals("Life version isn't " +expectedLifeVersion  +" but "+actualLifeVersion, expectedLifeVersion, actualLifeVersion);
+  }
+
+  /**
+   * Tests and verifies a delete with an expected life version
+   * @param key
+   * @param expectedLifeVersion
+   * @throws StoreException
+   */
+  private void deleteKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
+    assertTrue("targetKey is already deleted", !state.index.findKey(key).isFlagSet(IndexValue.Flags.Delete_Index));
+    short actualLifeVersion = state.index.findKey(key).getLifeVersion();
+    assertEquals("Life version isn't " +expectedLifeVersion +" but "+actualLifeVersion, expectedLifeVersion, actualLifeVersion);
+    state.appendToLog(DELETE_RECORD_SIZE);
+    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), DELETE_RECORD_SIZE);
+    state.index.markAsDeleted(key, fileSpan, System.currentTimeMillis());
+    assertTrue("targetKey is undeleted", !state.index.findKey(key).isFlagSet(IndexValue.Flags.Undelete_Index));
+    assertTrue("targetKey is not deleted", state.index.findKey(key).isFlagSet(IndexValue.Flags.Delete_Index));
+    actualLifeVersion = state.index.findKey(key).getLifeVersion();
+    assertEquals("Life version isn't " +expectedLifeVersion +" but "+actualLifeVersion, expectedLifeVersion, actualLifeVersion);
+  }
+
+  /**
+   * Tests and verifies a ttlUpdate with an expected life version
+   * @param key
+   * @param expectedLifeVersion
+   * @throws StoreException
+   */
+  private void ttlUpdateKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
+    assertTrue("targetKey is already ttlUpdated", !state.index.findKey(key).isFlagSet(IndexValue.Flags.Ttl_Update_Index));
+    short actualLifeVersion = state.index.findKey(key).getLifeVersion();
+    assertEquals("Life version isn't " +expectedLifeVersion +" but "+actualLifeVersion, expectedLifeVersion, actualLifeVersion);
+    state.appendToLog(TTL_UPDATE_RECORD_SIZE);
+    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), TTL_UPDATE_RECORD_SIZE);
+    state.index.markAsPermanent(key, fileSpan, System.currentTimeMillis());
+    assertTrue("targetKey is not ttlUpdated", state.index.findKey(key).isFlagSet(IndexValue.Flags.Ttl_Update_Index));
+    actualLifeVersion = state.index.findKey(key).getLifeVersion();
+    assertEquals("Life version isn't " +expectedLifeVersion +" but "+actualLifeVersion, expectedLifeVersion, actualLifeVersion);
+  }
+
+  /**
+   * Tests Undelete basic operation
+   * @throws StoreException
+   */
+  @Test
+  public void undeleteBasicTest() throws StoreException {
+    //Get deleted key that hasn't been TTLUpdated
+    StoreKey targetKey = state.deletedKeys.iterator().next();
+    while(state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+      targetKey = state.deletedKeys.iterator().next();
+    }
+    //Undelete deleted key
+    short expectedLifeVersion = 1;
+    undeleteKeyAndVerify(targetKey, expectedLifeVersion);
+    //Delete Key
+    deleteKeyAndVerify(targetKey, expectedLifeVersion);
+    //Undelete key again
+    expectedLifeVersion++;
+    undeleteKeyAndVerify(targetKey, expectedLifeVersion);
+    //TTL Update Key
+    ttlUpdateKeyAndVerify(targetKey, expectedLifeVersion);
+    //Delete Key again
+    deleteKeyAndVerify(targetKey, expectedLifeVersion);
+    //Undelete Key again
+    expectedLifeVersion++;
+    undeleteKeyAndVerify(targetKey, expectedLifeVersion);
+  }
+
+  /**
    * Tests error cases for {@link PersistentIndex#markAsUndeleted(StoreKey, FileSpan, long)}.
    * Cases
    * 1. FileSpan end offset < currentIndexEndOffset

@@ -712,6 +712,7 @@ class PersistentIndex {
       newValue.setNewOffset(fileSpan.getStartOffset());
       newValue.setNewSize(size);
     }
+    newValue.clearFlag(IndexValue.Flags.Undelete_Index);
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     addToIndex(new IndexEntry(id, newValue, null), fileSpan);
     return newValue;
@@ -804,7 +805,7 @@ class PersistentIndex {
    * @throws StoreException if there is any problem writing the index record
    */
   IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, long operationTimeMs) throws StoreException {
-    return markAsPermanent(id, fileSpan, null, operationTimeMs, (short) -1);
+    return markAsUndeleted(id, fileSpan, null, operationTimeMs, (short) -1);
   }
 
   /**
@@ -818,7 +819,7 @@ class PersistentIndex {
    */
   IndexValue markAsUndeleted(StoreKey id, FileSpan fileSpan, long operationTimeMs, short lifeVersion)
       throws StoreException {
-    return markAsPermanent(id, fileSpan, null, operationTimeMs, lifeVersion);
+    return markAsUndeleted(id, fileSpan, null, operationTimeMs, lifeVersion);
   }
 
   /**
@@ -860,6 +861,7 @@ class PersistentIndex {
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(size);
     newValue.setFlag(IndexValue.Flags.Undelete_Index);
+    newValue.clearFlag(IndexValue.Flags.Delete_Index);
     addToIndex(new IndexEntry(id, newValue, null), fileSpan);
     return newValue;
   }
