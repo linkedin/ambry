@@ -49,8 +49,7 @@ public class CosmosDataAccessor {
   }
 
   /** Test constructor */
-  public CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink,
-      AzureMetrics azureMetrics) {
+  CosmosDataAccessor(AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, AzureMetrics azureMetrics) {
     this.asyncDocumentClient = asyncDocumentClient;
     this.cosmosCollectionLink = cosmosCollectionLink;
     this.azureMetrics = azureMetrics;
@@ -173,20 +172,24 @@ public class CosmosDataAccessor {
    * @return the result of the action.
    * @throws DocumentClientException
    */
-  private ResourceResponse<Document> executeCosmosAction(Callable<? extends Object> action, Timer timer)
-      throws DocumentClientException {
+  private ResourceResponse<Document> executeCosmosAction(Callable<? extends ResourceResponse<Document>> action,
+      Timer timer) throws DocumentClientException {
     ResourceResponse<Document> resourceResponse;
+    Timer.Context operationTimer = null;
     try {
-      Timer.Context operationTimer = timer.time();
-      resourceResponse = (ResourceResponse<Document>) action.call();
-      operationTimer.stop();
+      operationTimer = timer.time();
+      resourceResponse = action.call();
     } catch (RuntimeException rex) {
       if (rex.getCause() instanceof DocumentClientException) {
         throw (DocumentClientException) rex.getCause();
       }
-      throw (RuntimeException) rex.getCause();
+      throw rex;
     } catch (Exception ex) {
       throw new RuntimeException("Exception calling action " + action, ex);
+    } finally {
+      if (operationTimer != null) {
+        operationTimer.stop();
+      }
     }
     return resourceResponse;
   }

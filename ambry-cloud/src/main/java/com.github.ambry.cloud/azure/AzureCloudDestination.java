@@ -367,7 +367,7 @@ class AzureCloudDestination implements CloudDestination {
    * Getter for {@link AsyncDocumentClient} object.
    * @return {@link AsyncDocumentClient} object.
    */
-  public AsyncDocumentClient getAsyncDocumentClient() {
+  AsyncDocumentClient getAsyncDocumentClient() {
     return asyncDocumentClient;
   }
 
