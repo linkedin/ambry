@@ -20,10 +20,12 @@ import com.github.ambry.config.RouterConfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -129,7 +131,7 @@ class SimpleOperationTracker implements OperationTracker {
         includeNonOriginatingDcReplicas = routerConfig.routerGetIncludeNonOriginatingDcReplicas;
         numOfReplicasRequired = routerConfig.routerGetReplicasRequired;
         eligibleReplicas = getEligibleReplicas(partitionId, null,
-            EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.INACTIVE, ReplicaState.BOOTSTRAP));
+            EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE));
         break;
       case PutOperation:
         eligibleReplicas =
@@ -144,14 +146,14 @@ class SimpleOperationTracker implements OperationTracker {
         parallelism = routerConfig.routerDeleteRequestParallelism;
         crossColoEnabled = true;
         eligibleReplicas = getEligibleReplicas(partitionId, null,
-            EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.BOOTSTRAP));
+            EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         break;
       case TtlUpdateOperation:
         successTarget = routerConfig.routerTtlUpdateSuccessTarget;
         parallelism = routerConfig.routerTtlUpdateRequestParallelism;
         crossColoEnabled = true;
         eligibleReplicas = getEligibleReplicas(partitionId, null,
-            EnumSet.of(ReplicaState.LEADER, ReplicaState.STANDBY, ReplicaState.BOOTSTRAP));
+            EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         break;
       default:
         throw new IllegalArgumentException("Unsupported operation: " + routerOperation);
@@ -305,9 +307,9 @@ class SimpleOperationTracker implements OperationTracker {
    * @return a list of eligible replicas that are in specified states.
    */
   private List<ReplicaId> getEligibleReplicas(PartitionId partitionId, String dcName, EnumSet<ReplicaState> states) {
-    List<ReplicaId> eligibleReplicas = new ArrayList<>();
+    Set<ReplicaId> eligibleReplicas = new HashSet<>();
     states.forEach(state -> eligibleReplicas.addAll(partitionId.getReplicaIdsByState(state, dcName)));
-    return eligibleReplicas;
+    return new ArrayList<>(eligibleReplicas);
   }
 
   private boolean hasFailed() {
