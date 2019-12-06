@@ -106,14 +106,6 @@ public class AzureBlobDataAccessor {
 
   /**
    * Test utility.
-   * @return the underlying {@link BlobServiceClient}.
-   */
-  BlobServiceClient getStorageClient() {
-    return storageClient;
-  }
-
-  /**
-   * Test utility.
    * @return the network {@link ProxyOptions} used to connect to ABS.
    */
   ProxyOptions getProxyOptions() {
@@ -171,8 +163,7 @@ public class AzureBlobDataAccessor {
   public void uploadFile(String containerName, String fileName, InputStream inputStream)
       throws BlobStorageException, IOException {
     try {
-      BlobContainerClient containerClient = getContainer(containerName, true);
-      BlockBlobClient blobClient = containerClient.getBlobClient(fileName).getBlockBlobClient();
+      BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, true);
       blobClient.uploadWithResponse(inputStream, inputStream.available(), null, null, null, null, null, null,
           Context.NONE);
     } catch (UncheckedIOException e) {
@@ -190,8 +181,7 @@ public class AzureBlobDataAccessor {
    */
   public boolean deleteFile(String containerName, String fileName) throws BlobStorageException {
     try {
-      BlobContainerClient containerClient = storageClient.getBlobContainerClient(containerName);
-      BlockBlobClient blobClient = containerClient.getBlobClient(fileName).getBlockBlobClient();
+      BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, false);
       blobClient.delete();
       return true;
     } catch (BlobStorageException e) {
