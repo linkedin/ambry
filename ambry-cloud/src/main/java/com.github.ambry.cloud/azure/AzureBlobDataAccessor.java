@@ -185,7 +185,7 @@ public class AzureBlobDataAccessor {
       blobClient.delete();
       return true;
     } catch (BlobStorageException e) {
-      if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+      if (isNotFoundError(e.getErrorCode())) {
         return false;
       } else {
         throw e;
@@ -210,7 +210,7 @@ public class AzureBlobDataAccessor {
       blobClient.download(outputStream);
       return true;
     } catch (BlobStorageException e) {
-      if (!errorOnNotFound && e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+      if (!errorOnNotFound && isNotFoundError(e.getErrorCode())) {
         return false;
       } else {
         throw e;
@@ -290,7 +290,7 @@ public class AzureBlobDataAccessor {
         storageTimer.stop();
       }
     } catch (BlobStorageException e) {
-      if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+      if (isNotFoundError(e.getErrorCode())) {
         return false;
       }
       if (e.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
@@ -383,6 +383,15 @@ public class AzureBlobDataAccessor {
     // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
     String blobIdStr = blobId.getID();
     return blobIdStr.substring(blobIdStr.length() - 4) + SEPARATOR + blobIdStr;
+  }
+
+  /**
+   * Utility to check if an error code corresponds to a not-found condition.
+   * @param errorCode the {@link BlobErrorCode} to check.
+   * @return {@code true} for a not-found error, otherwise {@code false}.
+   */
+  private static boolean isNotFoundError(BlobErrorCode errorCode) {
+    return (errorCode == BlobErrorCode.BLOB_NOT_FOUND || errorCode == BlobErrorCode.CONTAINER_NOT_FOUND);
   }
 
   /**
