@@ -219,6 +219,39 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     }
   }
 
+  @Override
+  protected int reloadReplicationTokenIfExists(ReplicaId localReplicaId, List<RemoteReplicaInfo> remoteReplicaInfos)
+      throws ReplicationException {
+    int tokenReloadFailureCount = 0;
+    List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfos = persistor.retrieve(localReplicaId.getMountPath());
+    if (tokenInfos.size() != 0) {
+      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
+        boolean tokenReloaded = false;
+        for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfos) {
+          // Note that in case of cloudReplicaTokens, the actual remote data node might not match as the node is chosen at
+          // random during initialization. So its enough to just match the partitionId in the token so that replication
+          // can start from cloud from where it left off.
+          if (tokenInfo.getReplicaInfo().getReplicaId().getPartitionId().equals(remoteReplicaInfo.getReplicaId().getPartitionId())) {
+            logger.info("Read token for partition {} remote host {} port {} token {}", localReplicaId.getPartitionId(),
+                tokenInfo.getHostname(), tokenInfo.getPort(), tokenInfo.getReplicaToken());
+            tokenReloaded = true;
+            remoteReplicaInfo.initializeTokens(tokenInfo.getReplicaToken());
+            remoteReplicaInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
+            break;
+          }
+        }
+        if (!tokenReloaded) {
+          // This may happen on clusterMap update: replica removed or added.
+          // Or error on token persist/retrieve.
+          logger.warn("Token not found or reload failed. remoteReplicaInfo: {} tokenInfos: {}", remoteReplicaInfo,
+              tokenInfos);
+          tokenReloadFailureCount++;
+        }
+      }
+    }
+    return tokenReloadFailureCount;
+  }
+
   /**
    * Remove a replica of given partition and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionName the partition of the replica to removed.
