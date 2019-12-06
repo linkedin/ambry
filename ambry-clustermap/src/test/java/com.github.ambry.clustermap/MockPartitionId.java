@@ -15,7 +15,10 @@ package com.github.ambry.clustermap;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -29,6 +32,7 @@ public class MockPartitionId implements PartitionId {
 
   final Long partition;
   public List<ReplicaId> replicaIds;
+  public Map<ReplicaId, ReplicaState> replicaAndState;
   private PartitionState partitionState = PartitionState.READ_WRITE;
   private final String partitionClass;
 
@@ -40,16 +44,19 @@ public class MockPartitionId implements PartitionId {
     this.partition = partition;
     this.partitionClass = partitionClass;
     replicaIds = new ArrayList<>(0);
+    replicaAndState = new HashMap<>();
   }
 
   public MockPartitionId(long partition, String partitionClass, List<MockDataNodeId> dataNodes,
       int mountPathIndexToUse) {
     this.partition = partition;
     this.partitionClass = partitionClass;
-    this.replicaIds = new ArrayList<ReplicaId>(dataNodes.size());
+    this.replicaIds = new ArrayList<>(dataNodes.size());
+    replicaAndState = new HashMap<>();
     for (MockDataNodeId dataNode : dataNodes) {
       MockReplicaId replicaId = new MockReplicaId(dataNode.getPort(), this, dataNode, mountPathIndexToUse);
       replicaIds.add(replicaId);
+      replicaAndState.put(replicaId, ReplicaState.STANDBY);
     }
     for (ReplicaId replicaId : replicaIds) {
       ((MockReplicaId) replicaId).setPeerReplicas(replicaIds);
@@ -71,7 +78,11 @@ public class MockPartitionId implements PartitionId {
 
   @Override
   public List<ReplicaId> getReplicaIdsByState(ReplicaState state, String dcName) {
-    throw new UnsupportedOperationException("Temporarily Unsupported");
+    return replicaIds.stream()
+        .filter(r -> replicaAndState.get(r) == state && (dcName == null || r.getDataNodeId()
+            .getDatacenterName()
+            .equals(dcName)))
+        .collect(Collectors.toList());
   }
 
   @Override
@@ -82,7 +93,7 @@ public class MockPartitionId implements PartitionId {
   @Override
   public int compareTo(PartitionId o) {
     MockPartitionId mockPartition = (MockPartitionId) o;
-    return (partition < mockPartition.partition) ? -1 : ((partition == mockPartition.partition) ? 0 : 1);
+    return Long.compare(partition, mockPartition.partition);
   }
 
   @Override

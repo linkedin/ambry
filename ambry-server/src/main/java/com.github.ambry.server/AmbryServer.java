@@ -13,15 +13,14 @@
  */
 package com.github.ambry.server;
 
-import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.jmx.JmxReporter;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.ClusterSpectator;
 import com.github.ambry.clustermap.ClusterSpectatorFactory;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
@@ -153,9 +152,8 @@ public class AmbryServer {
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       storageManager =
-          new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId),
-              storeKeyFactory, new BlobStoreRecovery(), new BlobStoreHardDelete(),
-              new ReplicaStatusDelegate(clusterParticipant), time);
+          new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
+              new BlobStoreHardDelete(), clusterParticipant, time, new BlobStoreRecovery());
       storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
@@ -167,7 +165,7 @@ public class AmbryServer {
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
-              serverConfig.serverMessageTransformer);
+              serverConfig.serverMessageTransformer, clusterParticipant);
       replicationManager.start();
 
       if (replicationConfig.replicationEnabledWithVcrCluster) {
@@ -182,7 +180,8 @@ public class AmbryServer {
       }
 
       logger.info("Creating StatsManager to publish stats");
-      statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time);
+      statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
+          clusterParticipant);
       if (serverConfig.serverStatsPublishLocalEnabled) {
         statsManager.start();
       }

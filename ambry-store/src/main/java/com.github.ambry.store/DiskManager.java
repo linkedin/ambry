@@ -325,6 +325,14 @@ class DiskManager {
         // add new created store into in-memory data structures.
         stores.put(replica.getPartitionId(), store);
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
+        // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
+        // BOOTSTRAP -> STANDBY transition)
+        File bootstrapFile = new File(replica.getReplicaPath(), BlobStore.BOOTSTRAP_FILE_NAME);
+        if (!bootstrapFile.exists()) {
+          // if not present, create one. (it's possible the bootstrap file exists because node may crash immediately
+          // after the file was created last time)
+          bootstrapFile.createNewFile();
+        }
         logger.info("New store is successfully added into DiskManager.");
         succeed = true;
       }

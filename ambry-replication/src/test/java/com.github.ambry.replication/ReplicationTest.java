@@ -18,9 +18,12 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.CommonTestUtils;
@@ -79,12 +82,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -123,7 +128,10 @@ public class ReplicationTest {
   /**
    * Constructor to set the configs
    */
-  public ReplicationTest(short requestVersion, short responseVersion) {
+  public ReplicationTest(short requestVersion, short responseVersion) throws Exception {
+    List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
+    zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
+    JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     Properties properties = new Properties();
     properties.setProperty("replication.metadata.request.version", Short.toString(requestVersion));
     properties.setProperty("replication.metadataresponse.version", Short.toString(responseVersion));
@@ -131,10 +139,12 @@ public class ReplicationTest {
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     properties.setProperty("replication.synced.replica.backoff.duration.ms", "3000");
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "200");
     properties.setProperty("replication.replica.thread.idle.sleep.duration.ms", "1000");
+    properties.put("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 2L));
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
   }
@@ -201,11 +211,11 @@ public class ReplicationTest {
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), clusterMap.getReplicaIds(dataNodeId), null, null, null, null, new MockTime());
+            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null);
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-            dataNodeId, storeKeyConverterFactory);
+            dataNodeId, storeKeyConverterFactory, null);
     ReplicaId replicaToTest = clusterMap.getReplicaIds(dataNodeId).get(0);
     // Attempting to add replica that already exists should fail
     assertFalse("Adding an existing replica should fail", replicationManager.addReplica(replicaToTest));
@@ -262,6 +272,101 @@ public class ReplicationTest {
     ReplicationManager mockManager = Mockito.spy(replicationManager);
     assertFalse("Remove non-existent replica should return false", replicationManager.removeReplica(replicaToTest));
     verify(mockManager, never()).removeRemoteReplicaInfoFromReplicaThread(anyList());
+    storageManager.shutdown();
+  }
+
+  /**
+   * Test that state transition in replication manager from OFFLINE to BOOTSTRAP
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromOfflineToBootstrapTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    assertTrue("State change listener in cluster participant should contain replication manager listener",
+        mockHelixParticipant.getPartitionStateChangeListeners()
+            .containsKey(StateModelListenerType.ReplicationManagerListener));
+    // 1. test partition not found case (should throw exception)
+    try {
+      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline("invalidPartition");
+      fail("should fail because replica is not found");
+    } catch (StateTransitionException e) {
+      assertEquals("Transition error doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
+    }
+    // 2. create a new partition and test replica addition success case
+    PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
+    ReplicaId replicaToAdd = newPartition.getReplicaIds()
+        .stream()
+        .filter(r -> ((ReplicaId) r).getDataNodeId() == currentNode)
+        .findFirst()
+        .get();
+    assertTrue("Adding new replica to Storage Manager should succeed", storageManager.addBlobStore(replicaToAdd));
+    assertFalse("partitionToPartitionInfo should not contain new partition",
+        replicationManager.partitionToPartitionInfo.containsKey(newPartition));
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(replicaToAdd.getPartitionId().toPathString());
+    assertTrue("partitionToPartitionInfo should contain new partition",
+        replicationManager.partitionToPartitionInfo.containsKey(newPartition));
+    // 3. test replica addition failure case
+    replicationManager.partitionToPartitionInfo.remove(newPartition);
+    replicationManager.addReplicaReturnVal = false;
+    try {
+      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(replicaToAdd.getPartitionId().toPathString());
+      fail("should fail due to replica addition failure");
+    } catch (StateTransitionException e) {
+      assertEquals("Transition error doesn't match",
+          StateTransitionException.TransitionErrorCode.ReplicaOperationFailure, e.getErrorCode());
+    }
+    replicationManager.addReplicaReturnVal = null;
+    // 4. test OFFLINE -> BOOTSTRAP on existing replica (should be no-op)
+    ReplicaId existingReplica = clusterMap.getReplicaIds(currentNode).get(0);
+    assertTrue("partitionToPartitionInfo should contain existing partition",
+        replicationManager.partitionToPartitionInfo.containsKey(existingReplica.getPartitionId()));
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(existingReplica.getPartitionId().toPathString());
+    storageManager.shutdown();
+  }
+
+  /**
+   * Test state transition in replication manager from STANDBY to LEADER (right now it is no-op in prod code, but we
+   * keep test here for future use)
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromStandbyToLeaderTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    mockHelixParticipant.onPartitionBecomeLeaderFromStandby(existingPartition.toPathString());
+    storageManager.shutdown();
+  }
+
+  /**
+   * Test state transition in replication manager from LEADER to STANDBY (right now it is no-op in prod code, but we
+   * keep test here for future use)
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromLeaderToStandbyTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    mockHelixParticipant.onPartitionBecomeStandbyFromLeader(existingPartition.toPathString());
     storageManager.shutdown();
   }
 
@@ -1429,6 +1534,32 @@ public class ReplicationTest {
     remoteReplicaInfo.onTokenPersisted();
   }
 
+  // helpers
+
+  /**
+   * Helper method to create storage manager and replication manager
+   * @param clusterMap {@link ClusterMap} to use
+   * @param clusterMapConfig {@link ClusterMapConfig} to use
+   * @param clusterParticipant {@link com.github.ambry.clustermap.ClusterParticipant} for listener registration.
+   * @return a pair of storage manager and replication manager
+   * @throws Exception
+   */
+  private Pair<StorageManager, ReplicationManager> createStorageManagerAndReplicationManager(ClusterMap clusterMap,
+      ClusterMapConfig clusterMapConfig, MockHelixParticipant clusterParticipant) throws Exception {
+    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
+    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    StorageManager storageManager =
+        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
+            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null);
+    storageManager.start();
+    MockReplicationManager replicationManager =
+        new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
+            dataNodeId, storeKeyConverterFactory, clusterParticipant);
+    return new Pair<>(storageManager, replicationManager);
+  }
+
   /**
    * Creates and gets the remote replicas that the local host will deal with and the {@link ReplicaThread} to perform
    * replication with.
@@ -2043,7 +2174,7 @@ public class ReplicationTest {
    * A class holds the results generated by {@link ReplicationTest#createPutMessage(StoreKey, short, short, boolean)}.
    */
   public static class PutMsgInfoAndBuffer {
-    public ByteBuffer byteBuffer;
+    ByteBuffer byteBuffer;
     MessageInfo messageInfo;
 
     PutMsgInfoAndBuffer(ByteBuffer bytebuffer, MessageInfo messageInfo) {

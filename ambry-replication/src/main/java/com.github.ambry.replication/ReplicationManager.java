@@ -15,9 +15,13 @@ package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -48,7 +52,8 @@ public class ReplicationManager extends ReplicationEngine {
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
-      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName) throws ReplicationException {
+      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
+      ClusterParticipant clusterParticipant) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName);
@@ -69,6 +74,12 @@ public class ReplicationManager extends ReplicationEngine {
       } else {
         logger.error("Not replicating to partition " + partition + " because an initialized store could not be found");
       }
+    }
+    // register replication manager's state change listener if clusterParticipant is not null
+    if (clusterParticipant != null) {
+      clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
+          new PartitionStateChangeListenerImpl());
+      logger.info("Replication manager's state change listener registered!");
     }
     persistor = new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
         tokenHelper, storeManager);
@@ -98,7 +109,6 @@ public class ReplicationManager extends ReplicationEngine {
         }
       }
 
-      // start background persistent thread
       // start scheduler thread to persist replica token in the background
       if (persistor != null) {
         this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
@@ -200,5 +210,52 @@ public class ReplicationManager extends ReplicationEngine {
     partitionToPartitionInfo.put(partition, partitionInfo);
     mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
         .add(partitionInfo);
+  }
+
+  /**
+   * {@link PartitionStateChangeListener} to capture changes in partition state.
+   */
+  private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+
+    @Override
+    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
+      // check if partition exists
+      ReplicaId replica = storeManager.getReplica(partitionName);
+      if (replica == null) {
+        // no matter this is an existing replica or new added one, it should be present in storage manager because new
+        // replica is added into storage manager first.
+        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
+            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+      }
+
+      if (!partitionToPartitionInfo.containsKey(replica.getPartitionId())) {
+        // if partition is not present in partitionToPartitionInfo map, it means this partition was just added in storage
+        // manager and next step is to add it into replication manager
+        logger.info("Didn't find replica {} in replication manager, starting to add it.", partitionName);
+        if (!addReplica(replica)) {
+          throw new StateTransitionException("Failed to add new replica " + partitionName + " into replication manager",
+              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+        }
+      }
+    }
+
+    @Override
+    public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+      logger.info("Partition state change notification from Bootstrap to Standby received for partition {}",
+          partitionName);
+      // TODO implement replication catchup logic if this is a new replica
+    }
+
+    @Override
+    public void onPartitionBecomeLeaderFromStandby(String partitionName) {
+      logger.info("Partition state change notification from Standby to Leader received for partition {}",
+          partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeStandbyFromLeader(String partitionName) {
+      logger.info("Partition state change notification from Leader to Standby received for partition {}",
+          partitionName);
+    }
   }
 }

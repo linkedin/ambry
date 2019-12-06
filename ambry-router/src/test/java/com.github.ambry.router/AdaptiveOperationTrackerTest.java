@@ -30,6 +30,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.utils.CachedHistogram;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
@@ -230,8 +231,8 @@ public class AdaptiveOperationTrackerTest {
     NonBlockingRouterMetrics originalMetrics = routerMetrics;
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     Counter pastDueCount = routerMetrics.getBlobPastDueCount;
-    Map<Resource, Histogram> localColoMap = routerMetrics.getBlobLocalDcResourceToLatency;
-    Map<Resource, Histogram> crossColoMap = routerMetrics.getBlobCrossDcResourceToLatency;
+    Map<Resource, CachedHistogram> localColoMap = routerMetrics.getBlobLocalDcResourceToLatency;
+    Map<Resource, CachedHistogram> crossColoMap = routerMetrics.getBlobCrossDcResourceToLatency;
     // mock different distribution of Histogram for two partitions
     Histogram localHistogram1 = localColoMap.get(mockPartition1);
     Histogram localHistogram2 = localColoMap.get(mockPartition2);
@@ -330,8 +331,8 @@ public class AdaptiveOperationTrackerTest {
     NonBlockingRouterMetrics originalMetrics = routerMetrics;
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     Counter pastDueCount = routerMetrics.getBlobPastDueCount;
-    Map<Resource, Histogram> localColoMap = routerMetrics.getBlobLocalDcResourceToLatency;
-    Map<Resource, Histogram> crossColoMap = routerMetrics.getBlobCrossDcResourceToLatency;
+    Map<Resource, CachedHistogram> localColoMap = routerMetrics.getBlobLocalDcResourceToLatency;
+    Map<Resource, CachedHistogram> crossColoMap = routerMetrics.getBlobCrossDcResourceToLatency;
     // mock different latency distribution of local hosts and remote host
     Histogram localHistogram1 = localColoMap.get(localHost1);
     Histogram localHistogram2 = localColoMap.get(localHost2);
@@ -422,8 +423,8 @@ public class AdaptiveOperationTrackerTest {
     NonBlockingRouterMetrics originalMetrics = routerMetrics;
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     Counter pastDueCount = routerMetrics.getBlobPastDueCount;
-    Map<Resource, Histogram> localColoMap = routerMetrics.getBlobLocalDcResourceToLatency;
-    Map<Resource, Histogram> crossColoMap = routerMetrics.getBlobCrossDcResourceToLatency;
+    Map<Resource, CachedHistogram> localColoMap = routerMetrics.getBlobLocalDcResourceToLatency;
+    Map<Resource, CachedHistogram> crossColoMap = routerMetrics.getBlobCrossDcResourceToLatency;
     // mock different latency distribution of different disks
     Histogram localHostDisk0Histogram = localColoMap.get(partition1Replica1.getDiskId());
     Histogram localHostDisk1Histogram = localColoMap.get(partition2Replica1.getDiskId());

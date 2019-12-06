@@ -339,11 +339,12 @@ class GetBlobOperation extends GetOperation {
         if (exception != null) {
           setOperationException(exception);
         }
-        int currentNumChunk = numChunksWrittenOut.getAndIncrement();
+        int currentNumChunk = numChunksWrittenOut.get();
         ResponseInfo responseInfo = chunkIndexToResponseInfo.remove(currentNumChunk);
         if (responseInfo != null) {
           responseInfo.release();
         }
+        numChunksWrittenOut.incrementAndGet();
         routerCallback.onPollReady();
       }
     };

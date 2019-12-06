@@ -113,6 +113,11 @@ public class CloudStorageManager implements StoreManager {
   }
 
   @Override
+  public ReplicaId getReplica(String partitionName) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public boolean removeBlobStore(PartitionId id) {
     try {
       lock.writeLock().lock();

@@ -13,9 +13,7 @@
  */
 package com.github.ambry.utils;
 
-import com.codahale.metrics.Clock;
 import com.codahale.metrics.Meter;
-import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -62,19 +60,5 @@ public class RejectThrottlerTest {
     mockClock.tick(5);
     Assert.assertTrue("Rate should greater than or equal to 20", testMeter.getOneMinuteRate() >= 20);
     Assert.assertTrue("No more requests.", rejectThrottler.shouldThrottle(1));
-  }
-
-  public static class MockClock extends Clock {
-    private long tick = 0;
-
-    @Override
-    public long getTick() {
-      return tick;
-    }
-
-    public void tick(int seconds) {
-      // Meter's TICK_INTERVAL = TimeUnit.SECONDS.toNanos(5)
-      tick += TimeUnit.SECONDS.toNanos(seconds) + 1;
-    }
   }
 }

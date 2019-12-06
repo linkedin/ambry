@@ -14,8 +14,10 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 import org.apache.helix.participant.statemachine.StateModel;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -29,34 +31,48 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class AmbryStateModelFactoryTest {
-  private final String stateModelDef;
+  private final ClusterMapConfig config;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{ClusterMapConfig.DEFAULT_STATE_MODEL_DEF}, {ClusterMapConfig.AMBRY_STATE_MODEL_DEF},
-            {"INVALID_STATE_MODEL_DEF"}});
+        new Object[][]{{ClusterMapConfig.OLD_STATE_MODEL_DEF}, {ClusterMapConfig.AMBRY_STATE_MODEL_DEF}});
   }
 
   public AmbryStateModelFactoryTest(String stateModelDef) {
-    this.stateModelDef = stateModelDef;
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.cluster.name", "AmbryTest");
+    props.setProperty("clustermap.datacenter.name", "DC0");
+    props.setProperty("clustermap.state.model.definition", stateModelDef);
+    config = new ClusterMapConfig(new VerifiableProperties(props));
   }
 
   @Test
   public void testDifferentStateModelDefs() {
-    AmbryStateModelFactory factory = new AmbryStateModelFactory(stateModelDef, new PartitionStateChangeListener() {
+    AmbryStateModelFactory factory = new AmbryStateModelFactory(config, new PartitionStateChangeListener() {
       @Override
-      public void onPartitionStateChangeToLeaderFromStandby(String partitionName) {
+      public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
         // no op
       }
 
       @Override
-      public void onPartitionStateChangeToStandbyFromLeader(String partitionName) {
+      public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+        // no op
+      }
+
+      @Override
+      public void onPartitionBecomeLeaderFromStandby(String partitionName) {
+        // no op
+      }
+
+      @Override
+      public void onPartitionBecomeStandbyFromLeader(String partitionName) {
         //no op
       }
     });
     StateModel stateModel;
-    switch (stateModelDef) {
+    switch (config.clustermapStateModelDefinition) {
       case ClusterMapConfig.OLD_STATE_MODEL_DEF:
         stateModel = factory.createNewStateModel("0", "1");
         assertTrue("Unexpected state model def", stateModel instanceof DefaultLeaderStandbyStateModel);
@@ -66,12 +82,7 @@ public class AmbryStateModelFactoryTest {
         assertTrue("Unexpected state model def", stateModel instanceof AmbryPartitionStateModel);
         break;
       default:
-        try {
-          factory.createNewStateModel("0", "1");
-          fail("should fail due to invalid state model def");
-        } catch (IllegalArgumentException e) {
-          // expected
-        }
+        // state model is already validated in clusterMapConfig, no need to test invalid state model here.
     }
   }
 }

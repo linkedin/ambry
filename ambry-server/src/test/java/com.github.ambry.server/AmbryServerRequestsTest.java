@@ -164,7 +164,7 @@ public class AmbryServerRequestsTest {
     dataNodeId = clusterMap.getDataNodeIds().get(0);
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
     findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
-    storageManager = new MockStorageManager(validKeysInStore, clusterMap.getReplicaIds(dataNodeId), findTokenHelper);
+    storageManager = new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper);
     storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(conversionMap);
     replicationManager =
@@ -172,7 +172,7 @@ public class AmbryServerRequestsTest {
             storeKeyConverterFactory);
     statsManager =
         new MockStatsManager(storageManager, clusterMap.getReplicaIds(dataNodeId), clusterMap.getMetricRegistry(),
-            statsManagerConfig);
+            statsManagerConfig, null);
     ServerMetrics serverMetrics =
         new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,

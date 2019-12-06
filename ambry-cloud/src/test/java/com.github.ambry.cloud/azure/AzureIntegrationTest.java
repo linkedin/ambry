@@ -26,7 +26,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.documentdb.SqlQuerySpec;
+import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -74,7 +74,7 @@ public class AzureIntegrationTest {
   private String tokenFileName = "replicaTokens";
 
   @Before
-  public void setup() throws Exception {
+  public void setup() {
     Properties props = new Properties();
     try (InputStream input = this.getClass().getClassLoader().getResourceAsStream(propFileName)) {
       if (input == null) {
@@ -342,7 +342,7 @@ public class AzureIntegrationTest {
     azureDest.persistTokens(partitionPath, tokenFileName, tokenStream);
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream(tokensLength);
     assertTrue("Retrieve tokens returned false", azureDest.retrieveTokens(partitionPath, tokenFileName, outputStream));
-    assertTrue("Retrieved token did not match sent", Arrays.equals(outputStream.toByteArray(), tokenBytes));
+    assertArrayEquals("Retrieved token did not match sent", outputStream.toByteArray(), tokenBytes);
     // Try for nonexistent partition
     outputStream.reset();
     assertFalse("Expected retrieve to return false for nonexistent path",
@@ -355,11 +355,10 @@ public class AzureIntegrationTest {
    * @param uploadedData data uploaded to the blob
    * @throws CloudStorageException
    */
-  private void verifyDownloadMatches(BlobId blobId, byte[] uploadedData) throws CloudStorageException, IOException {
+  private void verifyDownloadMatches(BlobId blobId, byte[] uploadedData) throws CloudStorageException {
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream(blobSize);
     azureDest.downloadBlob(blobId, outputStream);
-    assertTrue("Downloaded data should match the uploaded data",
-        Arrays.equals(uploadedData, outputStream.toByteArray()));
+    assertArrayEquals("Downloaded data should match the uploaded data", uploadedData, outputStream.toByteArray());
   }
 
   /**
