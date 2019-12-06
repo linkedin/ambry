@@ -131,7 +131,6 @@ public class CloudAndStoreReplicationTest {
     MockClusterMap serverClusterMap = new MockClusterMap(false, 2, 1, 1, true);
     recoveryCluster = new MockCluster(serverClusterMap, Collections.singletonList(vcrNode), recoveryProperties);
     partitionId = recoveryCluster.getClusterMap().getWritablePartitionIds(null).get(0);
-    allRecoveryNodes = serverClusterMap.getDataNodes();
 
     // record ambry server node which will get partition leadership notification.
     partitionLeaderRecoveryNode = allRecoveryNodes.get(0);

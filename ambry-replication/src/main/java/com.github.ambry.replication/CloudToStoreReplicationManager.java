@@ -231,7 +231,10 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
           // Note that in case of cloudReplicaTokens, the actual remote data node might not match as the node is chosen at
           // random during initialization. So its enough to just match the partitionId in the token so that replication
           // can start from cloud from where it left off.
-          if (tokenInfo.getReplicaInfo().getReplicaId().getPartitionId().equals(remoteReplicaInfo.getReplicaId().getPartitionId())) {
+          if (tokenInfo.getReplicaInfo()
+              .getReplicaId()
+              .getPartitionId()
+              .equals(remoteReplicaInfo.getReplicaId().getPartitionId())) {
             logger.info("Read token for partition {} remote host {} port {} token {}", localReplicaId.getPartitionId(),
                 tokenInfo.getHostname(), tokenInfo.getPort(), tokenInfo.getReplicaToken());
             tokenReloaded = true;
@@ -389,6 +392,10 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
+      if (!partitionsToReplicate.isEmpty() && !partitionsToReplicate.contains(partitionName)) {
+        logger.info("Ignoring state change of partition {} as it is not in recovery partition config", partitionName);
+        return;
+      }
       synchronized (notificationLock) {
         removeCloudReplica(partitionName);
       }
