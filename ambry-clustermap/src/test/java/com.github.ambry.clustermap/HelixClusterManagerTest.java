@@ -165,6 +165,10 @@ public class HelixClusterManagerTest {
         new PartitionRangeCheckParams(defaultRo.rangeEnd + 1, 5, SPECIAL_PARTITION_CLASS, PartitionState.READ_ONLY);
     testPartitionLayout.addNewPartitions(specialRo.count, SPECIAL_PARTITION_CLASS, PartitionState.READ_ONLY, localDc);
 
+//    List<PartitionId> specialPartitions = testPartitionLayout.getPartitionLayout().getPartitions(SPECIAL_PARTITION_CLASS);
+//    for(PartitionId specialPartition : specialPartitions){
+//      System.out.println("Partition " + specialPartition.toPathString() + ", replica size = " + specialPartition.getReplicaIds().size());
+//    }
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
@@ -532,7 +536,8 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void routingTableProviderChangeTest() throws Exception {
-    assumeTrue(!useComposite && !overrideEnabled);
+    assumeTrue(!useComposite && !overrideEnabled && listenCrossColo);
+    clusterManager.close();
     metricRegistry = new MetricRegistry();
     // Mock metricRegistry here to introduce a latch based counter for testing purpose
     MetricRegistry mockMetricRegistry = Mockito.spy(metricRegistry);
@@ -554,6 +559,8 @@ public class HelixClusterManagerTest {
     Set<InstanceConfig> instanceConfigsInCluster =
         new HashSet<>(helixCluster.getInstanceConfigsFromDcs(new String[]{localDc}));
     assertEquals("Mismatch in instance configs", instanceConfigsInCluster, instanceConfigsInSnapshot);
+    assertTrue("Not all of routing table changes (during initialization) came within 1 second",
+        routingTableChangeLatch.get().await(1, TimeUnit.SECONDS));
     // verify leader replica of each partition is correct
     verifyLeaderReplicasInDc(helixClusterManager, localDc);
 
@@ -1154,13 +1161,11 @@ public class HelixClusterManagerTest {
     Map<String, String> leaderReplicasInCluster = helixCluster.getPartitionToLeaderReplica(dcName);
     for (PartitionId partitionId : helixClusterManager.getAllPartitionIds(null)) {
       List<? extends ReplicaId> leadReplicas = partitionId.getReplicaIdsByState(ReplicaState.LEADER, dcName);
-      assertTrue("There should not be more than one lead replica", leadReplicas.size() <= 1);
-      // some special partition class has replicas in one dc only
-      if (leadReplicas.size() == 1) {
-        DataNodeId dataNodeId = leadReplicas.get(0).getDataNodeId();
-        leaderReplicasInSnapshot.put(partitionId.toPathString(),
-            getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort()));
-      }
+      assertEquals("There should be exactly one lead replica for partition: " + partitionId.toPathString(), 1,
+          leadReplicas.size());
+      DataNodeId dataNodeId = leadReplicas.get(0).getDataNodeId();
+      leaderReplicasInSnapshot.put(partitionId.toPathString(),
+          getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort()));
     }
     assertEquals("Mismatch in leader replicas", leaderReplicasInCluster, leaderReplicasInSnapshot);
   }
