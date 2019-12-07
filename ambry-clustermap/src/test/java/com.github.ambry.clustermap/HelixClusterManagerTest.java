@@ -165,10 +165,6 @@ public class HelixClusterManagerTest {
         new PartitionRangeCheckParams(defaultRo.rangeEnd + 1, 5, SPECIAL_PARTITION_CLASS, PartitionState.READ_ONLY);
     testPartitionLayout.addNewPartitions(specialRo.count, SPECIAL_PARTITION_CLASS, PartitionState.READ_ONLY, localDc);
 
-//    List<PartitionId> specialPartitions = testPartitionLayout.getPartitionLayout().getPartitions(SPECIAL_PARTITION_CLASS);
-//    for(PartitionId specialPartition : specialPartitions){
-//      System.out.println("Partition " + specialPartition.toPathString() + ", replica size = " + specialPartition.getReplicaIds().size());
-//    }
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
