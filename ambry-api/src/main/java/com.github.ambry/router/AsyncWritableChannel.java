@@ -65,10 +65,12 @@ public interface AsyncWritableChannel extends Channel {
       throw new IllegalArgumentException("Source ByteBuf cannot be null");
     }
     int numBuffers = src.nioBufferCount();
+    FutureResult<Long> futureResult = new FutureResult<>();
     Callback<Long> singleBufferCallback = (result, exception) -> {
       if (result != 0) {
         src.readerIndex(src.readerIndex() + (int) result.longValue());
       }
+      futureResult.done(result.longValue(), exception);
       if (callback != null) {
         callback.onCompletion(result, exception);
       }
@@ -76,15 +78,14 @@ public interface AsyncWritableChannel extends Channel {
     if (numBuffers < 1) {
       ByteBuffer byteBuffer = ByteBuffer.allocate(src.readableBytes());
       src.getBytes(src.readerIndex(), byteBuffer);
-      return write(byteBuffer, singleBufferCallback);
+      write(byteBuffer, singleBufferCallback);
     } else if (numBuffers == 1) {
-      return write(src.nioBuffer(), singleBufferCallback);
+      write(src.nioBuffer(), singleBufferCallback);
     } else {
       ByteBuffer[] buffers = src.nioBuffers();
       AtomicLong size = new AtomicLong(0);
       AtomicInteger index = new AtomicInteger(0);
       AtomicBoolean callbackInvoked = new AtomicBoolean(false);
-      FutureResult<Long> futureResult = new FutureResult<>();
       Callback<Long> cb = (result, exception) -> {
         index.addAndGet(1);
         size.addAndGet(result);
@@ -101,7 +102,7 @@ public interface AsyncWritableChannel extends Channel {
       for (int i = 0; i < buffers.length; i++) {
         write(buffers[i], cb);
       }
-      return futureResult;
     }
+    return futureResult;
   }
 }
