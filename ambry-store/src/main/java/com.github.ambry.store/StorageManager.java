@@ -416,16 +416,7 @@ public class StorageManager implements StoreManager {
 
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-      // BOOTSTRAP -> STANDBY primarily happens in ReplicationManager listener (if there is bootstrap file in store dir)
-      /* an exmaple:
-         // check if store is started
-         store.setCurrentState(ReplicaState.BOOTSTRAP);
-         if (store.isBootstrapInProgress()) {
-          // wait for replication to complete
-         }
-         // remove bootstrap file once new replica has caught up peer nodes.
-         store.setCurrentState(ReplicaState.STANDBY);
-      */
+      // no op
     }
 
     @Override

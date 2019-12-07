@@ -32,13 +32,16 @@ public class AmbryPartitionStateModel extends StateModel {
   private final String partitionName;
   private final PartitionStateChangeListener partitionStateChangeListener;
   private final ClusterMapConfig clusterMapConfig;
+  private final ReplicaSyncUpService replicaSyncUpService;
 
   AmbryPartitionStateModel(String resourceName, String partitionName,
-      PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig) {
+      PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig,
+      ReplicaSyncUpService replicaSyncUpService) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
     this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
     this.clusterMapConfig = Objects.requireNonNull(clusterMapConfig);
+    this.replicaSyncUpService = Objects.requireNonNull(replicaSyncUpService);
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
   }
@@ -54,10 +57,17 @@ public class AmbryPartitionStateModel extends StateModel {
 
   @Transition(to = "STANDBY", from = "BOOTSTRAP")
   public void onBecomeStandbyFromBootstrap(Message message, NotificationContext context) {
-    logger.info("Partition {} in resource {} is becoming STANDBY from BOOTSTRAP", message.getPartitionName(),
+    String partitionName = message.getPartitionName();
+    logger.info("Partition {} in resource {} is becoming STANDBY from BOOTSTRAP", partitionName,
         message.getResourceName());
     if (clusterMapConfig.clustermapEnableStateModelListener) {
-      partitionStateChangeListener.onPartitionBecomeStandbyFromBootstrap(message.getPartitionName());
+      partitionStateChangeListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
+    }
+    try {
+      replicaSyncUpService.waitBootstrapCompleted(partitionName);
+    } catch (InterruptedException | IllegalStateException e) {
+      throw new StateTransitionException("Bootstrap failed or was interrupted",
+          StateTransitionException.TransitionErrorCode.BootstrapFailure);
     }
   }
 

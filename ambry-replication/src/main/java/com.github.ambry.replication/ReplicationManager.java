@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
@@ -56,7 +57,7 @@ public class ReplicationManager extends ReplicationEngine {
       ClusterParticipant clusterParticipant) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
-        storeKeyConverterFactory, transformerClassName);
+        storeKeyConverterFactory, transformerClassName, clusterParticipant);
     this.storeManager = storeManager;
     this.storeConfig = storeConfig;
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
@@ -241,9 +242,24 @@ public class ReplicationManager extends ReplicationEngine {
 
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-      logger.info("Partition state change notification from Bootstrap to Standby received for partition {}",
-          partitionName);
-      // TODO implement replication catchup logic if this is a new replica
+      // if code arrives here, it means local replica has completed OFFLINE -> BOOTSTRAP transition. We don't have to
+      // check if local replica exists or not.
+      ReplicaId localReplica = storeManager.getReplica(partitionName);
+      Store store = storeManager.getStore(localReplica.getPartitionId());
+      // 1. check if store is started
+      if (!store.isStarted()) {
+        throw new StateTransitionException("Store " + partitionName + " is not started",
+            StateTransitionException.TransitionErrorCode.StoreNotStarted);
+      }
+      store.setCurrentState(ReplicaState.BOOTSTRAP);
+      // 2. check if store is new added and needs to catch up with peer replicas.
+      if (store.isBootstrapInProgress()) {
+        // store state will updated to STANDBY in ReplicaThread when bootstrap is complete
+        replicaSyncUpService.initiateBootstrap(localReplica);
+      } else {
+        // if this is existing replica, then directly set state to STANDBY
+        store.setCurrentState(ReplicaState.STANDBY);
+      }
     }
 
     @Override

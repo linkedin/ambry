@@ -311,6 +311,11 @@ class InMemoryStore implements Store {
   }
 
   @Override
+  public boolean isBootstrapInProgress() {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public void setCurrentState(ReplicaState state) {
     throw new UnsupportedOperationException("Method not supported");
   }

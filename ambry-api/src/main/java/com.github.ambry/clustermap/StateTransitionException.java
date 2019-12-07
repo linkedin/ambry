@@ -38,6 +38,10 @@ public class StateTransitionException extends RuntimeException {
     /**
      * If store is not started and unavailable for specific operations.
      */
-    StoreNotStarted
+    StoreNotStarted,
+    /**
+     * If bootstrap process fails at some point for specific replica.
+     */
+    BootstrapFailure
   }
 }

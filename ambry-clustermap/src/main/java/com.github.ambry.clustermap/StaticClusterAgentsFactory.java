@@ -117,6 +117,11 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
             PartitionStateChangeListener partitionStateChangeListener) {
           listeners.add(partitionStateChangeListener);
         }
+
+        @Override
+        public ReplicaSyncUpService getReplicaSyncUpService() {
+          return null;
+        }
       };
     }
     return clusterParticipant;

@@ -170,6 +170,11 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
+    public boolean isBootstrapInProgress() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void setCurrentState(ReplicaState state) {
       currentState = state;
     }

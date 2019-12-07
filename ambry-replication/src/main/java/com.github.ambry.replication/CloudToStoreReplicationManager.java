@@ -101,7 +101,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
       ClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
         Collections.emptyList(), connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory,
-        transformerClassName);
+        transformerClassName, clusterParticipant);
     this.clusterMapConfig = clusterMapConfig;
     this.storeConfig = storeConfig;
     this.storeManager = storeManager;

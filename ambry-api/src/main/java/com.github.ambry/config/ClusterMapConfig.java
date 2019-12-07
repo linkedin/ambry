@@ -203,6 +203,12 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapEnableStateModelListener;
 
+  /**
+   * The maximum replication lag in bytes that is acceptable to consider replica has caught up.
+   */
+  @Config("clustermap.replica.catchup.acceptable.lag.bytes")
+  public final long clustermapReplicaCatchupAcceptableLagBytes;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -244,5 +250,7 @@ public class ClusterMapConfig {
     }
     clustermapEnableStateModelListener =
         verifiableProperties.getBoolean("clustermap.enable.state.model.listener", false);
+    clustermapReplicaCatchupAcceptableLagBytes =
+        verifiableProperties.getLongInRange("clustermap.replica.catchup.acceptable.lag.bytes", 0L, 0L, Long.MAX_VALUE);
   }
 }
