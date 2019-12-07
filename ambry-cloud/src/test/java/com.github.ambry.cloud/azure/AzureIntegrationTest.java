@@ -115,7 +115,7 @@ public class AzureIntegrationTest {
 
     // Try to upload same blob again
     assertFalse("Expected duplicate upload to return false",
-        azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+        azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, new ByteArrayInputStream(uploadData)));
     long expirationTime = Utils.Infinite_Time;
     assertTrue("Expected update to return true", azureDest.updateBlobExpiration(blobId, expirationTime));
     CloudBlobMetadata metadata = azureDest.getBlobMetadata(Collections.singletonList(blobId)).get(blobId.getID());
@@ -297,7 +297,7 @@ public class AzureIntegrationTest {
           CloudBlobMetadata.EncryptionOrigin.VCR, vcrKmsContext, cryptoAgentFactory, chunkSize);
       cloudBlobMetadata.setUploadTime(startTime + j * 1000);
       assertTrue("Expected upload to return true",
-          azureDest.uploadBlob(blobId, blobSize, cloudBlobMetadata, inputStream));
+          azureDest.uploadBlob(blobId, chunkSize, cloudBlobMetadata, inputStream));
     }
 
     CloudFindToken findToken = new CloudFindToken();

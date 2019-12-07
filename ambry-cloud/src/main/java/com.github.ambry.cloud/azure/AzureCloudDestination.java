@@ -13,6 +13,8 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestination;
@@ -31,33 +33,19 @@ import com.microsoft.azure.cosmosdb.SqlParameter;
 import com.microsoft.azure.cosmosdb.SqlParameterCollection;
 import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
-import com.microsoft.azure.storage.AccessCondition;
-import com.microsoft.azure.storage.CloudStorageAccount;
-import com.microsoft.azure.storage.OperationContext;
-import com.microsoft.azure.storage.StorageException;
-import com.microsoft.azure.storage.blob.BlobContainerPublicAccessType;
-import com.microsoft.azure.storage.blob.BlobRequestOptions;
-import com.microsoft.azure.storage.blob.CloudBlobClient;
-import com.microsoft.azure.storage.blob.CloudBlobContainer;
-import com.microsoft.azure.storage.blob.CloudBlockBlob;
-import com.microsoft.azure.storage.blob.DeleteSnapshotsOption;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -89,17 +77,13 @@ class AzureCloudDestination implements CloudDestination {
           + TIME_SINCE_PARAM + " ORDER BY c." + CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN + " ASC";
   private static final String SEPARATOR = "-";
   private static final int findSinceQueryLimit = 1000;
-  private final CloudStorageAccount azureAccount;
-  private final CloudBlobClient azureBlobClient;
+  private final AzureBlobDataAccessor azureBlobDataAccessor;
   private final AsyncDocumentClient asyncDocumentClient;
   private final CosmosDataAccessor cosmosDataAccessor;
-  private final OperationContext blobOpContext = new OperationContext();
   private final AzureMetrics azureMetrics;
   private final String clusterName;
   private final long retentionPeriodMs;
   private final int deadBlobsQueryLimit;
-  // Containers known to exist in the storage account
-  private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
 
   /**
    * Construct an Azure cloud destination from config properties.
@@ -113,15 +97,8 @@ class AzureCloudDestination implements CloudDestination {
   AzureCloudDestination(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, String clusterName,
       AzureMetrics azureMetrics) throws URISyntaxException, InvalidKeyException {
     this.azureMetrics = azureMetrics;
-    azureAccount = CloudStorageAccount.parse(azureCloudConfig.azureStorageConnectionString);
-    azureBlobClient = azureAccount.createCloudBlobClient();
+    this.azureBlobDataAccessor = new AzureBlobDataAccessor(cloudConfig, azureCloudConfig, clusterName, azureMetrics);
     this.clusterName = clusterName;
-    // Check for proxy
-    if (cloudConfig.vcrProxyHost != null) {
-      logger.info("Using proxy: {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
-      OperationContext.setDefaultProxy(
-          new Proxy(Proxy.Type.HTTP, new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort)));
-    }
     // Set up CosmosDB connection, including retry options and any proxy setting
     ConnectionPolicy connectionPolicy = new ConnectionPolicy();
     RetryOptions retryOptions = new RetryOptions();
@@ -148,23 +125,20 @@ class AzureCloudDestination implements CloudDestination {
 
   /**
    * Test constructor.
-   * @param azureAccount the {@link CloudStorageAccount} to use.
+   * @param storageClient the {@link BlobServiceClient} to use.
    * @param asyncDocumentClient the {@link AsyncDocumentClient} to use.
    * @param cosmosCollectionLink the CosmosDB collection link to use.
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    */
-  AzureCloudDestination(CloudStorageAccount azureAccount, AsyncDocumentClient asyncDocumentClient,
+  AzureCloudDestination(BlobServiceClient storageClient, AsyncDocumentClient asyncDocumentClient,
       String cosmosCollectionLink, String clusterName, AzureMetrics azureMetrics) {
-    this.azureAccount = azureAccount;
+    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, clusterName, azureMetrics);
     this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
     this.retentionPeriodMs = TimeUnit.DAYS.toMillis(CloudConfig.DEFAULT_RETENTION_DAYS);
     this.deadBlobsQueryLimit = CloudConfig.DEFAULT_COMPACTION_QUERY_LIMIT;
-
-    // Create a blob client to interact with Blob storage
-    azureBlobClient = azureAccount.createCloudBlobClient();
     cosmosDataAccessor = new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, azureMetrics);
   }
 
@@ -172,27 +146,8 @@ class AzureCloudDestination implements CloudDestination {
    * Test connectivity to Azure endpoints
    */
   void testAzureConnectivity() {
-    testStorageConnectivity();
+    azureBlobDataAccessor.testConnectivity();
     cosmosDataAccessor.testConnectivity();
-  }
-
-  /**
-   * Test connectivity to Azure Blob Storage
-   */
-  void testStorageConnectivity() {
-    try {
-      // Turn on verbose logging just for this call
-      blobOpContext.setLoggingEnabled(true);
-      blobOpContext.setLogger(logger);
-      azureBlobClient.getContainerReference("partition-0").exists(null, null, blobOpContext);
-      logger.info("Blob storage connection test succeeded.");
-    } catch (StorageException | URISyntaxException ex) {
-      throw new IllegalStateException("Blob storage connection test failed", ex);
-    } finally {
-      // Disable logging for future requests
-      blobOpContext.setLoggingEnabled(false);
-      blobOpContext.setLogger(null);
-    }
   }
 
   @Override
@@ -203,7 +158,8 @@ class AzureCloudDestination implements CloudDestination {
     Objects.requireNonNull(blobInputStream, "Input stream cannot be null");
     try {
       Timer.Context backupTimer = azureMetrics.backupSuccessLatency.time();
-      boolean uploaded = uploadIfNotExists(blobId, inputLength, cloudBlobMetadata, blobInputStream);
+      boolean uploaded =
+          azureBlobDataAccessor.uploadIfNotExists(blobId, inputLength, cloudBlobMetadata, blobInputStream);
       // Note: if uploaded is false, still attempt to insert the metadata document
       // since it is possible that a previous attempt failed.
 
@@ -213,65 +169,20 @@ class AzureCloudDestination implements CloudDestination {
         azureMetrics.backupSuccessByteRate.mark(inputLength);
       }
       return uploaded;
-    } catch (URISyntaxException | StorageException | DocumentClientException | IOException e) {
+    } catch (BlobStorageException | DocumentClientException | IOException e) {
       azureMetrics.backupErrorCount.inc();
       updateErrorMetrics(e);
       throw new CloudStorageException("Error uploading blob " + blobId, e);
     }
   }
 
-  /**
-   * Upload the blob to Azure storage if it does not already exist in the designated container.
-   * @param blobId the blobId to upload
-   * @param inputLength the input stream length, if known (-1 if not)
-   * @param cloudBlobMetadata the blob metadata
-   * @param blobInputStream the input stream
-   * @return {@code true} if the upload was successful, {@code false} if the blob already exists.
-   * @throws StorageException
-   * @throws URISyntaxException
-   * @throws IOException
-   */
-  private boolean uploadIfNotExists(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
-      InputStream blobInputStream) throws StorageException, URISyntaxException, IOException {
-    BlobRequestOptions options = null; // may want to set BlobEncryptionPolicy here
-    AccessCondition condition = AccessCondition.generateIfNoneMatchCondition("*");
-    azureMetrics.blobUploadRequestCount.inc();
-    Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
-    try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId, true);
-      cloudBlobMetadata.setCloudBlobName(getAzureBlobName(blobId));
-      azureBlob.setMetadata(getMetadataMap(cloudBlobMetadata));
-      azureBlob.upload(blobInputStream, inputLength, condition, options, blobOpContext);
-      logger.debug("Uploaded blob {} to Azure container {}.", blobId, getContainer(blobId, true).getName());
-      azureMetrics.blobUploadSuccessCount.inc();
-      return true;
-    } catch (StorageException sex) {
-      if (sex.getHttpStatusCode() == HttpURLConnection.HTTP_CONFLICT) {
-        // The blob already exists
-        logger.debug("Skipped upload of existing blob {}.", blobId);
-        azureMetrics.blobUploadConflictCount.inc();
-        return false;
-      } else {
-        throw sex;
-      }
-    } finally {
-      storageTimer.stop();
-    }
-  }
-
   @Override
   public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
-    azureMetrics.blobDownloadRequestCount.inc();
-    Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
     try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId, false);
-      azureBlob.download(outputStream);
-      azureMetrics.blobDownloadSuccessCount.inc();
-    } catch (URISyntaxException | StorageException e) {
-      azureMetrics.blobDownloadErrorCount.inc();
+      azureBlobDataAccessor.downloadBlob(blobId, outputStream);
+    } catch (BlobStorageException e) {
+      updateErrorMetrics(e);
       throw new CloudStorageException("Error downloading blob " + blobId, e);
-    } finally {
-      storageTimer.stop();
     }
   }
 
@@ -411,24 +322,8 @@ class AzureCloudDestination implements CloudDestination {
     // 2) the blob storage entry metadata (to enable rebuilding the database)
 
     try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId, false);
-
-      if (!azureBlob.exists(null, null, blobOpContext)) {
-        logger.debug("Blob {} not found in Azure container {}.", blobId, getContainer(blobId, false).getName());
+      if (!azureBlobDataAccessor.updateBlobMetadata(blobId, fieldName, value)) {
         return false;
-      }
-
-      Timer.Context storageTimer = azureMetrics.blobUpdateTime.time();
-      try {
-        azureBlob.downloadAttributes(null, null, blobOpContext); // Makes sure we have latest
-        // Update only if value has changed
-        String textValue = String.valueOf(value);
-        if (!textValue.equals(azureBlob.getMetadata().get(fieldName))) {
-          azureBlob.getMetadata().put(fieldName, textValue);
-          azureBlob.uploadMetadata(null, null, blobOpContext);
-        }
-      } finally {
-        storageTimer.stop();
       }
 
       ResourceResponse<Document> response = cosmosDataAccessor.readMetadata(blobId);
@@ -445,7 +340,7 @@ class AzureCloudDestination implements CloudDestination {
       logger.debug("Updated blob {} metadata set {} to {}.", blobId, fieldName, value);
       azureMetrics.blobUpdatedCount.inc();
       return true;
-    } catch (URISyntaxException | StorageException | DocumentClientException e) {
+    } catch (BlobStorageException | DocumentClientException e) {
       azureMetrics.blobUpdateErrorCount.inc();
       updateErrorMetrics(e);
       throw new CloudStorageException("Error updating blob metadata: " + blobId, e);
@@ -462,9 +357,7 @@ class AzureCloudDestination implements CloudDestination {
     Timer.Context deleteTimer = azureMetrics.blobDeletionTime.time();
     try {
       // delete blob from storage
-      CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
-      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(blobFileName);
-      boolean deletionDone = azureBlob.deleteIfExists(DeleteSnapshotsOption.NONE, null, null, blobOpContext);
+      boolean deletionDone = azureBlobDataAccessor.deleteFile(containerName, blobFileName);
 
       // Delete the document too
       try {
@@ -503,65 +396,14 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean doesBlobExist(BlobId blobId) throws CloudStorageException {
-    try {
-      CloudBlockBlob azureBlob = getAzureBlobReference(blobId, false);
-      return azureBlob.exists(null, null, blobOpContext);
-    } catch (URISyntaxException | StorageException e) {
-      throw new CloudStorageException("Could not check existence of blob: " + blobId, e);
-    }
-  }
-
-  /**
-   * Get an Azure container to place the specified {@link BlobId}.
-   * @param blobId the {@link BlobId} that needs a container.
-   * @param autoCreate flag indicating whether to create the container if it does not exist.
-   * @return the created {@link CloudBlobContainer}.
-   * @throws URISyntaxException
-   * @throws StorageException
-   */
-  private CloudBlobContainer getContainer(BlobId blobId, boolean autoCreate)
-      throws URISyntaxException, StorageException {
-    String containerName = getAzureContainerName(blobId.getPartition().toPathString());
-    CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
-    if (autoCreate) {
-      ensureCreated(azureContainer);
-    }
-    return azureContainer;
-  }
-
-  /**
-   * Utility method to ensure that the requested container exists in the storage account.
-   * @param azureContainer the container that must exist.
-   * @throws StorageException if the operation fails.
-   */
-  private void ensureCreated(CloudBlobContainer azureContainer) throws StorageException {
-    String containerName = azureContainer.getName();
-    if (!knownContainers.contains(containerName)) {
-      try {
-        if (azureContainer.createIfNotExists(BlobContainerPublicAccessType.CONTAINER, new BlobRequestOptions(),
-            blobOpContext)) {
-          logger.info("Created container {}", containerName);
-        }
-      } catch (StorageException ex) {
-        logger.error("Failed to create container {}", containerName);
-        throw ex;
-      }
-      knownContainers.add(containerName);
-    }
-  }
-
-  @Override
   public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream)
       throws CloudStorageException {
     // Path is partitionId path string
     // Write to container partitionPath, blob filename "replicaTokens"
     try {
       String containerName = getAzureContainerName(partitionPath);
-      CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
-      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(tokenFileName);
-      azureBlob.upload(inputStream, -1, null, null, blobOpContext);
-    } catch (IOException | URISyntaxException | StorageException e) {
+      azureBlobDataAccessor.uploadFile(containerName, tokenFileName, inputStream);
+    } catch (IOException | BlobStorageException e) {
       throw new CloudStorageException("Could not persist token: " + partitionPath, e);
     }
   }
@@ -571,31 +413,10 @@ class AzureCloudDestination implements CloudDestination {
       throws CloudStorageException {
     try {
       String containerName = getAzureContainerName(partitionPath);
-      CloudBlobContainer azureContainer = azureBlobClient.getContainerReference(containerName);
-      CloudBlockBlob azureBlob = azureContainer.getBlockBlobReference(tokenFileName);
-      if (!azureBlob.exists(null, null, blobOpContext)) {
-        return false;
-      }
-      azureBlob.download(outputStream, null, null, blobOpContext);
-      return true;
-    } catch (URISyntaxException | StorageException e) {
+      return azureBlobDataAccessor.downloadFile(containerName, tokenFileName, outputStream, false);
+    } catch (BlobStorageException e) {
       throw new CloudStorageException("Could not retrieve token: " + partitionPath, e);
     }
-  }
-
-  /**
-   * Get the azure blob reference for blobid.
-   * @param blobId id of the blob for which {@code CloudBlockBlob} reference is asked for.
-   * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
-   * @return {@code CloudBlockBlob} reference.
-   * @throws StorageException if storage service error occured.
-   * @throws URISyntaxException if resource name or uri is invalid.
-   */
-  private CloudBlockBlob getAzureBlobReference(BlobId blobId, boolean autoCreateContainer)
-      throws StorageException, URISyntaxException {
-    CloudBlobContainer azureContainer = getContainer(blobId, autoCreateContainer);
-    String azureBlobName = getAzureBlobName(blobId);
-    return azureContainer.getBlockBlobReference(azureBlobName);
   }
 
   /**
@@ -629,6 +450,14 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   /**
+   * Visible for test.
+   * @return the {@link AzureBlobDataAccessor}
+   */
+  AzureBlobDataAccessor getAzureBlobDataAccessor() {
+    return azureBlobDataAccessor;
+  }
+
+  /**
    * Update the appropriate error metrics corresponding to the thrown exception.
    * @param e the exception thrown.
    */
@@ -638,24 +467,5 @@ class AzureCloudDestination implements CloudDestination {
     } else {
       azureMetrics.storageErrorCount.inc();
     }
-  }
-
-  /**
-   * @param cloudBlobMetadata the {@link CloudBlobMetadata}.
-   * @return a {@link HashMap} of metadata key-value pairs.
-   */
-  private static HashMap<String, String> getMetadataMap(CloudBlobMetadata cloudBlobMetadata) {
-    HashMap<String, String> map = new HashMap<>();
-    map.put(CloudBlobMetadata.FIELD_CREATION_TIME, String.valueOf(cloudBlobMetadata.getCreationTime()));
-    map.put(CloudBlobMetadata.FIELD_UPLOAD_TIME, String.valueOf(cloudBlobMetadata.getUploadTime()));
-    map.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, String.valueOf(cloudBlobMetadata.getExpirationTime()));
-    map.put(CloudBlobMetadata.FIELD_ACCOUNT_ID, String.valueOf(cloudBlobMetadata.getAccountId()));
-    map.put(CloudBlobMetadata.FIELD_CONTAINER_ID, String.valueOf(cloudBlobMetadata.getContainerId()));
-    map.put(CloudBlobMetadata.FIELD_ENCRYPTION_ORIGIN, cloudBlobMetadata.getEncryptionOrigin().name());
-    map.put(CloudBlobMetadata.FIELD_VCR_KMS_CONTEXT, String.valueOf(cloudBlobMetadata.getVcrKmsContext()));
-    map.put(CloudBlobMetadata.FIELD_CRYPTO_AGENT_FACTORY, String.valueOf(cloudBlobMetadata.getCryptoAgentFactory()));
-    map.put(CloudBlobMetadata.FIELD_CLOUD_BLOB_NAME, String.valueOf(cloudBlobMetadata.getCloudBlobName()));
-    map.put(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, String.valueOf(cloudBlobMetadata.getLastUpdateTime()));
-    return map;
   }
 }

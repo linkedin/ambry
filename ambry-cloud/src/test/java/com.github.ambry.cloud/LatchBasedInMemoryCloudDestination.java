@@ -169,7 +169,6 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     return 0;
   }
 
-  @Override
   public boolean doesBlobExist(BlobId blobId) {
     return map.containsKey(blobId);
   }

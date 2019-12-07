@@ -109,14 +109,6 @@ public interface CloudDestination {
   int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws CloudStorageException;
 
   /**
-   * Checks whether the blob exists in the cloud destination.
-   * @param blobId id of the Ambry blob to check.
-   * @return {@code true} if the blob exists, otherwise {@code false}.
-   * @throws CloudStorageException if the existence check encounters an error.
-   */
-  boolean doesBlobExist(BlobId blobId) throws CloudStorageException;
-
-  /**
    * Upload and persist the replica tokens for the specified Ambry partition in cloud storage.
    * @param partitionPath the string form of the partitionId
    * @param tokenFileName the name of the token file to store in the cloud.
