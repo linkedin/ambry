@@ -579,8 +579,8 @@ public class HelixClusterManagerTest {
         .findFirst()
         .get();
     // ensure previous latch has counted down to zero
-    assertTrue("Not all of routing table changes (during initialization) came within 1 second",
-        routingTableChangeLatch.get().await(1, TimeUnit.SECONDS));
+    assertTrue("Not all of routing table changes (during initialization) came within 5 second",
+        routingTableChangeLatch.get().await(5, TimeUnit.SECONDS));
     routingTableChangeLatch.set(new CountDownLatch(1));
     mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
     mockHelixAdmin.triggerRoutingTableNotification();
