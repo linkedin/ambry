@@ -579,8 +579,8 @@ public class HelixClusterManagerTest {
         .findFirst()
         .get();
     // ensure previous latch has counted down to zero, otherwise the delayed routing table change may falsely count down
-    // new latch and verification is performed based on old view.
-    if (routingTableChangeLatch.get().await(5, TimeUnit.SECONDS)) {
+    // new latch and verification is performed based on old view. (if condition is not met, skip rest test)
+    if (routingTableChangeLatch.get().await(1, TimeUnit.SECONDS)) {
       routingTableChangeLatch.set(new CountDownLatch(1));
       mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
       mockHelixAdmin.triggerRoutingTableNotification();
