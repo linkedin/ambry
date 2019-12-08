@@ -534,7 +534,7 @@ public class HelixClusterManagerTest {
   public void routingTableProviderChangeTest() throws Exception {
     assumeTrue(!useComposite && !overrideEnabled && listenCrossColo);
     clusterManager.close();
-    // Change zk connect strings to ensure HelixClusterManager only sees local DC
+    // Change zk connect strings to ensure HelixClusterManager sees local DC only
     JSONObject zkJson = constructZkLayoutJSON(Collections.singletonList(dcsToZkInfo.get(localDc)));
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
@@ -565,8 +565,6 @@ public class HelixClusterManagerTest {
     Set<InstanceConfig> instanceConfigsInCluster =
         new HashSet<>(helixCluster.getInstanceConfigsFromDcs(new String[]{localDc}));
     assertEquals("Mismatch in instance configs", instanceConfigsInCluster, instanceConfigsInSnapshot);
-    assertTrue("Not all of routing table changes (during initialization) came within 1 second",
-        routingTableChangeLatch.get().await(1, TimeUnit.SECONDS));
     // verify leader replica of each partition is correct
     verifyLeaderReplicasInDc(helixClusterManager, localDc);
 
@@ -580,6 +578,9 @@ public class HelixClusterManagerTest {
         .filter(k -> !k.equals(currentLeaderInstance))
         .findFirst()
         .get();
+    // ensure previous latch has counted down to zero
+    assertTrue("Not all of routing table changes (during initialization) came within 1 second",
+        routingTableChangeLatch.get().await(1, TimeUnit.SECONDS));
     routingTableChangeLatch.set(new CountDownLatch(1));
     mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
     mockHelixAdmin.triggerRoutingTableNotification();
