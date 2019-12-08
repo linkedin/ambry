@@ -534,12 +534,22 @@ public class HelixClusterManagerTest {
   public void routingTableProviderChangeTest() throws Exception {
     assumeTrue(!useComposite && !overrideEnabled && listenCrossColo);
     clusterManager.close();
-    metricRegistry = new MetricRegistry();
+    // Change zk connect strings to ensure HelixClusterManager only sees local DC
+    JSONObject zkJson = constructZkLayoutJSON(Collections.singletonList(dcsToZkInfo.get(localDc)));
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", hostname);
+    props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
+    props.setProperty("clustermap.datacenter.name", localDc);
+    props.setProperty("clustermap.port", Integer.toString(portNum));
+    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     // Mock metricRegistry here to introduce a latch based counter for testing purpose
+    metricRegistry = new MetricRegistry();
     MetricRegistry mockMetricRegistry = Mockito.spy(metricRegistry);
     Counter mockCounter = Mockito.mock(Counter.class);
     AtomicReference<CountDownLatch> routingTableChangeLatch = new AtomicReference<>();
-    routingTableChangeLatch.set(new CountDownLatch(4));
+    routingTableChangeLatch.set(new CountDownLatch(2));
     doAnswer(invocation -> {
       routingTableChangeLatch.get().countDown();
       return null;
