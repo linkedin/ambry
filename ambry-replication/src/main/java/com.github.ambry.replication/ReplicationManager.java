@@ -247,7 +247,7 @@ public class ReplicationManager extends ReplicationEngine {
       ReplicaId localReplica = storeManager.getReplica(partitionName);
       Store store = storeManager.getStore(localReplica.getPartitionId());
       // 1. check if store is started
-      if (!store.isStarted()) {
+      if (store == null) {
         throw new StateTransitionException("Store " + partitionName + " is not started",
             StateTransitionException.TransitionErrorCode.StoreNotStarted);
       }

@@ -51,11 +51,12 @@ public class AmbryReplicaSyncUpService implements ReplicaSyncUpService {
       logger.info("Skipping bootstrap for existing partition {}", partitionName);
     } else {
       logger.info("Waiting for new partition {} to complete bootstrap", partitionName);
-      latch.wait();
+      latch.await();
       partitionToBootstrapLatch.remove(partitionName);
       if (!partitionToBootstrapSuccess.remove(partitionName)) {
         throw new IllegalStateException("Partition " + partitionName + " failed on bootstrap.");
       }
+      logger.info("Bootstrap is complete on partition {}", partitionName);
     }
   }
 
@@ -119,6 +120,7 @@ public class AmbryReplicaSyncUpService implements ReplicaSyncUpService {
     RemoteReplicaLagInfos(ReplicaId localReplica, long acceptableThreshold) {
       this.acceptableThreshold = acceptableThreshold;
       Set<ReplicaId> peerReplicas = new HashSet<>();
+      // new replica only needs to catch up with STANDBY or LEADER replicas
       for (ReplicaState state : EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)) {
         peerReplicas.addAll(localReplica.getPartitionId().getReplicaIdsByState(state, null));
       }

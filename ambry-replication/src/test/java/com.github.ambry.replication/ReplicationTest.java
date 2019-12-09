@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.commons.BlobId;
@@ -301,23 +302,19 @@ public class ReplicationTest {
           e.getErrorCode());
     }
     // 2. create a new partition and test replica addition success case
-    PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
-    ReplicaId replicaToAdd = newPartition.getReplicaIds()
-        .stream()
-        .filter(r -> ((ReplicaId) r).getDataNodeId() == currentNode)
-        .findFirst()
-        .get();
-    assertTrue("Adding new replica to Storage Manager should succeed", storageManager.addBlobStore(replicaToAdd));
+    ReplicaId newReplicaToAdd = getNewReplicaToAdd(clusterMap);
+    PartitionId newPartition = newReplicaToAdd.getPartitionId();
+    assertTrue("Adding new replica to Storage Manager should succeed", storageManager.addBlobStore(newReplicaToAdd));
     assertFalse("partitionToPartitionInfo should not contain new partition",
         replicationManager.partitionToPartitionInfo.containsKey(newPartition));
-    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(replicaToAdd.getPartitionId().toPathString());
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
     assertTrue("partitionToPartitionInfo should contain new partition",
         replicationManager.partitionToPartitionInfo.containsKey(newPartition));
     // 3. test replica addition failure case
     replicationManager.partitionToPartitionInfo.remove(newPartition);
     replicationManager.addReplicaReturnVal = false;
     try {
-      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(replicaToAdd.getPartitionId().toPathString());
+      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
       fail("should fail due to replica addition failure");
     } catch (StateTransitionException e) {
       assertEquals("Transition error doesn't match",
@@ -329,6 +326,39 @@ public class ReplicationTest {
     assertTrue("partitionToPartitionInfo should contain existing partition",
         replicationManager.partitionToPartitionInfo.containsKey(existingReplica.getPartitionId()));
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(existingReplica.getPartitionId().toPathString());
+    storageManager.shutdown();
+  }
+
+  @Test
+  public void replicaFromBootstrapToStandbyTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    // 1. test existing partition trough Bootstrap-To-Standby transition, should be no op.
+    PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(existingPartition.toPathString());
+    assertEquals("Store state doesn't match", ReplicaState.STANDBY,
+        storageManager.getStore(existingPartition).getCurrentState());
+    // 2. test transition failure due to store not started
+    storageManager.shutdownBlobStore(existingPartition);
+    try {
+      mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(existingPartition.toPathString());
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
+          e.getErrorCode());
+    }
+
+    // 3. create new replica and add it into storage manager, test replica that needs to initiate bootstrap
+    ReplicaId newReplicaToAdd = getNewReplicaToAdd(clusterMap);
+    assertTrue("Adding new replica to Storage Manager should succeed", storageManager.addBlobStore(newReplicaToAdd));
+    mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(newReplicaToAdd.getPartitionId().toPathString());
+    assertEquals("Replica should be in BOOTSTRAP state before catchup is complete", ReplicaState.BOOTSTRAP,
+        storageManager.getStore(newReplicaToAdd.getPartitionId()).getCurrentState());
+
     storageManager.shutdown();
   }
 
@@ -1535,6 +1565,16 @@ public class ReplicationTest {
   }
 
   // helpers
+
+  private ReplicaId getNewReplicaToAdd(MockClusterMap clusterMap) {
+    DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
+    PartitionId newPartition = clusterMap.createNewPartition(clusterMap.getDataNodes());
+    return newPartition.getReplicaIds()
+        .stream()
+        .filter(r -> ((ReplicaId) r).getDataNodeId() == currentNode)
+        .findFirst()
+        .get();
+  }
 
   /**
    * Helper method to create storage manager and replication manager
