@@ -31,7 +31,7 @@ import static org.junit.Assert.*;
 /**
  * Tests functionality of {@link FrontendNettyFactory}.
  */
-public class NettyFrontendServerFactoryTest {
+public class FrontendNettyFactoryTest {
   // dud properties. server should pick up defaults
   private static final RestRequestHandler REST_REQUEST_HANDLER = new MockRestRequestResponseHandler();
   private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});

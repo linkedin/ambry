@@ -29,7 +29,7 @@ public class RestServerConfig {
    * bootstrapping the Frontend NioServer or Storage Node HTTP2 Server.
    */
   @Config("rest.server.nio.server.factory")
-  @Default("com.github.ambry.rest.NettyFrontendServerFactory")
+  @Default("com.github.ambry.rest.FrontendNettyFactory")
   public final String restServerNioServerFactory;
 
   /**
@@ -101,7 +101,7 @@ public class RestServerConfig {
   public RestServerConfig(VerifiableProperties verifiableProperties) {
     restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
     restServerNioServerFactory = verifiableProperties.getString("rest.server.nio.server.factory",
-        "com.github.ambry.rest.NettyFrontendServerFactory");
+        "com.github.ambry.rest.FrontendNettyFactory");
     restServerRequestHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.request.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
     restServerRequestHandlerFactory = verifiableProperties.getString("rest.server.request.handler.factory",
