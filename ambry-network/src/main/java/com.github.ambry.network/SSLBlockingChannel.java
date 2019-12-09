@@ -15,6 +15,7 @@ package com.github.ambry.network;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -34,8 +35,9 @@ public class SSLBlockingChannel extends BlockingChannel {
   public final Counter sslClientHandshakeCount;
 
   public SSLBlockingChannel(String host, int port, MetricRegistry registry, int readBufferSize, int writeBufferSize,
-      int readTimeoutMs, int connectTimeoutMs, SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
-    super(host, port, readBufferSize, writeBufferSize, readTimeoutMs, connectTimeoutMs);
+      int readTimeoutMs, int connectTimeoutMs, boolean enableTcpNoDelay, SSLSocketFactory sslSocketFactory,
+      SSLConfig sslConfig) {
+    super(host, port, readBufferSize, writeBufferSize, readTimeoutMs, connectTimeoutMs, enableTcpNoDelay);
     if (sslSocketFactory == null) {
       throw new IllegalArgumentException("sslSocketFactory is null when creating SSLBlockingChannel");
     }
@@ -45,6 +47,19 @@ public class SSLBlockingChannel extends BlockingChannel {
         registry.counter(MetricRegistry.name(SSLBlockingChannel.class, "SslClientHandshakeErrorCount"));
     sslClientHandshakeCount =
         registry.counter(MetricRegistry.name(SSLBlockingChannel.class, "SslClientHandshakeCount"));
+  }
+
+  public SSLBlockingChannel(String host, int port, MetricRegistry registry, int readBufferSize, int writeBufferSize,
+      int readTimeoutMs, int connectTimeoutMs, SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
+    this(host, port, registry, readBufferSize, writeBufferSize, readTimeoutMs, connectTimeoutMs, true, sslSocketFactory,
+        sslConfig);
+  }
+
+  public SSLBlockingChannel(String host, int port, MetricRegistry registry, ConnectionPoolConfig config,
+      SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
+    this(host, port, registry, config.connectionPoolReadBufferSizeBytes, config.connectionPoolWriteBufferSizeBytes,
+        config.connectionPoolReadTimeoutMs, config.connectionPoolConnectTimeoutMs,
+        config.connectionPoolSocketEnableTcpNoDelay, sslSocketFactory, sslConfig);
   }
 
   /**

@@ -166,13 +166,9 @@ class BlockingChannelInfo {
   private BlockingChannel getBlockingChannelBasedOnPortType(String host, int port) {
     BlockingChannel channel = null;
     if (this.port.getPortType() == PortType.PLAINTEXT) {
-      channel = new BlockingChannel(host, port, config.connectionPoolReadBufferSizeBytes,
-          config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
-          config.connectionPoolConnectTimeoutMs);
+      channel = new BlockingChannel(host, port, config);
     } else if (this.port.getPortType() == PortType.SSL) {
-      channel = new SSLBlockingChannel(host, port, registry, config.connectionPoolReadBufferSizeBytes,
-          config.connectionPoolWriteBufferSizeBytes, config.connectionPoolReadTimeoutMs,
-          config.connectionPoolConnectTimeoutMs, sslSocketFactory, sslConfig);
+      channel = new SSLBlockingChannel(host, port, registry, config, sslSocketFactory, sslConfig);
     }
     return channel;
   }
