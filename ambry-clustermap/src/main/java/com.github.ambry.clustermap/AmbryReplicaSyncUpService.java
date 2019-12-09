@@ -25,9 +25,9 @@ import org.slf4j.LoggerFactory;
 
 
 public class AmbryReplicaSyncUpService implements ReplicaSyncUpService {
-  private ConcurrentHashMap<String, CountDownLatch> partitionToBootstrapLatch = new ConcurrentHashMap<>();
-  private ConcurrentHashMap<String, Boolean> partitionToBootstrapSuccess = new ConcurrentHashMap<>();
-  private ConcurrentHashMap<ReplicaId, RemoteReplicaLagInfos> replicaToLagInfos = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, CountDownLatch> partitionToBootstrapLatch = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Boolean> partitionToBootstrapSuccess = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<ReplicaId, RemoteReplicaLagInfos> replicaToLagInfos = new ConcurrentHashMap<>();
   private final ClusterMapConfig clusterMapConfig;
 
   private static final Logger logger = LoggerFactory.getLogger(AmbryReplicaSyncUpService.class);
@@ -90,6 +90,15 @@ public class AmbryReplicaSyncUpService implements ReplicaSyncUpService {
   @Override
   public void onBootstrapError(String partitionName) {
     countDownLatch(partitionName);
+  }
+
+  /**
+   * clean up in-mem maps
+   */
+  void reset() {
+    partitionToBootstrapLatch.clear();
+    partitionToBootstrapSuccess.clear();
+    replicaToLagInfos.clear();
   }
 
   /**

@@ -112,15 +112,28 @@ public class AmbryReplicaSyncUpServiceTest {
     // make current replica catch up with second peer replica in local DC and one more remote DC replica
     replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer2, 10L);
     replicaSyncUpService.updateLagBetweenReplicas(currentReplica, remotePeer2, 10L);
+    // make current replica fall behind first peer replica in local DC again (update lag to 150 > 100)
+    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer1, 150L);
+    // at this time, current replica has caught up with two replicas only, so SyncUp is not complete
+    assertFalse("Catchup shouldn't complete on current replica because only one peer replica is caught up",
+        replicaSyncUpService.isSyncUpComplete(currentReplica));
+    // make current replica catch up with first peer remote dc replica
+    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, remotePeer1, 10L);
     assertTrue("Catch up should be complete on current replica because it has caught up at least 3 peer replicas",
         replicaSyncUpService.isSyncUpComplete(currentReplica));
     replicaSyncUpService.onBootstrapComplete(currentReplica.getPartitionId().toPathString());
     assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec.",
         stateModelLatch.await(1, TimeUnit.SECONDS));
+    // reset ReplicaSyncUpService
+    replicaSyncUpService.reset();
   }
 
+  /**
+   * Test several failure cases where replica is not present in ReplicaSyncUpService.
+   * @throws Exception
+   */
   @Test
-  public void failureCasesTest() {
+  public void replicaNotFoundFailureTest() throws Exception {
     // get another partition that is not present in ReplicaSyncUpService
     PartitionId partition = clusterMap.getAllPartitionIds(null).get(1);
     ReplicaId replicaToTest = partition.getReplicaIds().get(0);
@@ -139,6 +152,32 @@ public class AmbryReplicaSyncUpServiceTest {
     } catch (IllegalStateException e) {
       // expected
     }
+    // wait for bootstrap to complete should be no op
+    replicaSyncUpService.waitBootstrapCompleted(partition.toPathString());
+    replicaSyncUpService.reset();
+  }
+
+  /**
+   * Test BOOTSTRAP -> STANDBY transition failure
+   */
+  @Test
+  public void bootstrapFailureTest() throws Exception {
+    CountDownLatch stateModelLatch = new CountDownLatch(1);
+    listenerLatch = new CountDownLatch(1);
+    // create a new thread and trigger BOOTSTRAP -> STANDBY transition
+    Utils.newThread(() -> {
+      try {
+        stateModel.onBecomeStandbyFromBootstrap(mockMessage, null);
+      } catch (StateTransitionException e) {
+        assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.BootstrapFailure,
+            e.getErrorCode());
+        stateModelLatch.countDown();
+      }
+    }, false).start();
+    assertTrue("State change listener didn't get invoked within 1 sec.", listenerLatch.await(1, TimeUnit.SECONDS));
+    replicaSyncUpService.onBootstrapError(currentReplica.getPartitionId().toPathString());
+    assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec.",
+        stateModelLatch.await(1, TimeUnit.SECONDS));
   }
 
   /**
