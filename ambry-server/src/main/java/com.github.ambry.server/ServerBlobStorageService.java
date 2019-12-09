@@ -22,9 +22,12 @@ import com.github.ambry.rest.RestResponseChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+/**
+ * This is an Ambry storage server specific implementation of {@link BlobStorageService}.
+ * All the operations that need to be performed by the Ambry storage server are supported here.
+ */
 public class ServerBlobStorageService implements BlobStorageService {
-  private final Logger logger = LoggerFactory.getLogger(ServerBlobStorageService.class);
+  private static final Logger logger = LoggerFactory.getLogger(ServerBlobStorageService.class);
   NettyServerRequestResponseChannel requestResponseChannel;
 
   public ServerBlobStorageService(NettyServerRequestResponseChannel requestResponseChannel) {

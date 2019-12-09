@@ -55,7 +55,6 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 /**
  * This is an Ambry frontend specific implementation of {@link BlobStorageService}.
- * <p/>
  * All the operations that need to be performed by the Ambry frontend are supported here.
  */
 class AmbryBlobStorageService implements BlobStorageService {

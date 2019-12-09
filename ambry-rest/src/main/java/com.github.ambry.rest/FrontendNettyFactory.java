@@ -35,8 +35,8 @@ import org.slf4j.LoggerFactory;
  * Sets up all the supporting cast required for the operation of {@link NettyServer} and returns a new instance on
  * {@link #getNioServer()}.
  */
-public class NettyFrontendServerFactory implements NioServerFactory {
-  private static final Logger LOGGER = LoggerFactory.getLogger(NettyFrontendServerFactory.class);
+public class FrontendNettyFactory implements NioServerFactory {
+  private static final Logger LOGGER = LoggerFactory.getLogger(FrontendNettyFactory.class);
 
   private final NettyConfig nettyConfig;
   private final PerformanceConfig performanceConfig;
@@ -44,7 +44,7 @@ public class NettyFrontendServerFactory implements NioServerFactory {
   final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
 
   /**
-   * Creates a new instance of NettyFrontendServerFactory.
+   * Creates a new instance of FrontendNettyFactory.
    * @param verifiableProperties the in-memory {@link VerifiableProperties} to use.
    * @param metricRegistry the {@link MetricRegistry} to use.
    * @param requestHandler the {@link RestRequestHandler} to hand off the requests to.
@@ -57,12 +57,12 @@ public class NettyFrontendServerFactory implements NioServerFactory {
    * @throws IllegalArgumentException if any of the arguments are null.
    * @throws ReflectiveOperationException if a netty-specific {@link SSLFactory} cannot be instantiated via reflection.
    */
-  public NettyFrontendServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+  public FrontendNettyFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       final RestRequestHandler requestHandler, final PublicAccessLogger publicAccessLogger,
       final RestServerState restServerState, SSLFactory defaultSslFactory) throws ReflectiveOperationException {
     if (verifiableProperties == null || metricRegistry == null || requestHandler == null || publicAccessLogger == null
         || restServerState == null) {
-      throw new IllegalArgumentException("Null arg(s) received during instantiation of NettyFrontendServerFactory");
+      throw new IllegalArgumentException("Null arg(s) received during instantiation of FrontendNettyFactory");
     }
     nettyConfig = new NettyConfig(verifiableProperties);
     performanceConfig = new PerformanceConfig(verifiableProperties);
@@ -71,7 +71,7 @@ public class NettyFrontendServerFactory implements NioServerFactory {
 
     Map<Integer, ChannelInitializer<SocketChannel>> initializers = new HashMap<>();
     initializers.put(nettyConfig.nettyServerPort,
-        new NettyFrontendServerChannelInitializer(nettyConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
+        new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
             requestHandler, publicAccessLogger, restServerState, null));
     if (nettyConfig.nettyServerEnableSSL) {
       SSLFactory sslFactoryToUse;
@@ -85,7 +85,7 @@ public class NettyFrontendServerFactory implements NioServerFactory {
         throw new IllegalArgumentException("NettyServer requires SSL, but sslFactory is null");
       }
       initializers.put(nettyConfig.nettyServerSSLPort,
-          new NettyFrontendServerChannelInitializer(nettyConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
+          new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, nettyMetrics, connectionStatsHandler,
               requestHandler, publicAccessLogger, restServerState, sslFactoryToUse));
     }
     channelInitializers = Collections.unmodifiableMap(initializers);

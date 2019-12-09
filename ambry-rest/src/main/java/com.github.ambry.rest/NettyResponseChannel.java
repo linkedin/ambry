@@ -400,7 +400,7 @@ class NettyResponseChannel implements RestResponseChannel {
         fullHttpResponse.headers().set(responseMetadata.headers());
         responseMetadata = fullHttpResponse;
       }
-      logger.info("Sending response with status {} on channel {}", responseMetadata.status(), ctx.channel());
+      logger.trace("Sending response with status {} on channel {}", responseMetadata.status(), ctx.channel());
       finalResponseMetadata = responseMetadata;
       ChannelPromise writePromise = ctx.newPromise().addListener(listener);
       ctx.writeAndFlush(responseMetadata, writePromise);
