@@ -14,6 +14,7 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.AmbryReplicaSyncUpService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
@@ -23,6 +24,7 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.clustermap.ReplicaSyncUpService;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.commons.BlobId;
@@ -141,6 +143,7 @@ public class ReplicationTest {
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    properties.setProperty("clustermap.replica.catchup.acceptable.lag.bytes", Long.toString(100L));
     properties.setProperty("replication.synced.replica.backoff.duration.ms", "3000");
     properties.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     properties.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "200");
@@ -442,7 +445,7 @@ public class ReplicationTest {
               } catch (Exception e) {
                 exception.set(e);
               }
-            });
+            }, null);
     ReplicaThread replicaThread = replicasAndThread.getSecond();
     Thread thread = Utils.newThread(replicaThread, false);
     thread.start();
@@ -515,7 +518,7 @@ public class ReplicationTest {
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
         getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
-            null);
+            null, null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
@@ -616,7 +619,7 @@ public class ReplicationTest {
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
         getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
-            null);
+            null, null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
@@ -847,7 +850,7 @@ public class ReplicationTest {
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
         getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
-            null);
+            null, null);
     List<RemoteReplicaInfo> remoteReplicaInfos = replicasAndThread.getFirst().get(remoteHost.dataNodeId);
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
@@ -1285,7 +1288,7 @@ public class ReplicationTest {
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
         getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
-            null);
+            null, null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
@@ -1373,7 +1376,7 @@ public class ReplicationTest {
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
         getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
-            null);
+            null, null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
@@ -1444,7 +1447,7 @@ public class ReplicationTest {
     replicationConfig = new ReplicationConfig(new VerifiableProperties(properties));
     replicasAndThread =
         getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
-            null);
+            null, null);
     replicaThread = replicasAndThread.getSecond();
     currentTimeMs = time.milliseconds();
     replicaThread.replicate();
@@ -1457,11 +1460,16 @@ public class ReplicationTest {
    * @throws Exception
    */
   @Test
-  public void replicationLagMetricTest() throws Exception {
+  public void replicationLagMetricAndSyncUpTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    AmbryReplicaSyncUpService replicaSyncUpService = new AmbryReplicaSyncUpService(clusterMapConfig);
     Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
     MockHost localHost = localAndRemoteHosts.getFirst();
-    MockHost remoteHost = localAndRemoteHosts.getSecond();
+    MockHost remoteHost1 = localAndRemoteHosts.getSecond();
+    // create another remote host that shares spacial partition with localHost and remoteHost
+    PartitionId specialPartitionId = clusterMap.getWritablePartitionIds(MockClusterMap.SPECIAL_PARTITION_CLASS).get(0);
+    MockHost remoteHost2 = new MockHost(specialPartitionId.getReplicaIds().get(2).getDataNodeId(), clusterMap);
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     storeKeyConverterFactory.setReturnInputIfAbsent(true);
@@ -1472,39 +1480,64 @@ public class ReplicationTest {
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
     for (int i = 0; i < partitionIds.size(); i++) {
       PartitionId partitionId = partitionIds.get(i);
-      // add batchSize + 1 messages to the remote host so that two round of replication is needed.
-      addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), batchSize + 1);
+      // add batchSize + 1 messages to the remoteHost1 so that two round of replication is needed.
+      addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost1), batchSize + 1);
+    }
+    // add batchSize - 1 messages to the remoteHost2 with which localHost can catch up during one cycle of replication
+    for (ReplicaId replicaId : clusterMap.getReplicaIds(remoteHost2.dataNodeId)) {
+      addPutMessagesToReplicasOfPartition(replicaId.getPartitionId(), Collections.singletonList(remoteHost2),
+          batchSize - 1);
     }
 
     StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
     Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
-    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
-        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, transformer,
-            null);
-    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = replicasAndThread.getFirst();
-    ReplicaThread replicaThread = replicasAndThread.getSecond();
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread1 =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost1, storeKeyConverter, transformer,
+            null, replicaSyncUpService);
+    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate1 = replicasAndThread1.getFirst();
+    ReplicaThread replicaThread1 = replicasAndThread1.getSecond();
+    clusterMap.getReplicaIds(localHost.dataNodeId).forEach(replicaSyncUpService::initiateBootstrap);
 
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-            replicasToReplicate.get(remoteHost.dataNodeId));
-    replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-        replicasToReplicate.get(remoteHost.dataNodeId), response);
+        replicaThread1.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost1, batchSize),
+            replicasToReplicate1.get(remoteHost1.dataNodeId));
+    replicaThread1.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost1, batchSize),
+        replicasToReplicate1.get(remoteHost1.dataNodeId), response);
     for (PartitionId partitionId : partitionIds) {
       List<MessageInfo> allMessageInfos = localAndRemoteHosts.getSecond().infosByPartition.get(partitionId);
       long expectedLag =
           allMessageInfos.subList(batchSize, allMessageInfos.size()).stream().mapToLong(i -> i.getSize()).sum();
       assertEquals("Replication lag doesn't match expected value", expectedLag,
-          replicaThread.getReplicationMetrics().getMaxLagForPartition(partitionId));
+          replicaThread1.getReplicationMetrics().getMaxLagForPartition(partitionId));
     }
 
-    response = replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-        replicasToReplicate.get(remoteHost.dataNodeId));
-    replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-        replicasToReplicate.get(remoteHost.dataNodeId), response);
+    response = replicaThread1.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost1, batchSize),
+        replicasToReplicate1.get(remoteHost1.dataNodeId));
+    replicaThread1.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost1, batchSize),
+        replicasToReplicate1.get(remoteHost1.dataNodeId), response);
     for (PartitionId partitionId : partitionIds) {
       assertEquals("Replication lag should equal to 0", 0,
-          replicaThread.getReplicationMetrics().getMaxLagForPartition(partitionId));
+          replicaThread1.getReplicationMetrics().getMaxLagForPartition(partitionId));
     }
+
+    // replicate with remoteHost2 to ensure special replica has caught up with enough peers
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread2 =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost2, storeKeyConverter, transformer,
+            null, replicaSyncUpService);
+    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate2 = replicasAndThread2.getFirst();
+    ReplicaThread replicaThread2 = replicasAndThread2.getSecond();
+    response = replicaThread2.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
+        replicasToReplicate2.get(remoteHost2.dataNodeId));
+    replicaThread2.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost2, batchSize),
+        replicasToReplicate2.get(remoteHost2.dataNodeId), response);
+    // verify replica of special partition has completed bootstrap and becomes standby
+    RemoteReplicaInfo specialReplicaInfo = replicasToReplicate2.get(remoteHost2.dataNodeId)
+        .stream()
+        .filter(info -> info.getReplicaId().getPartitionId() == specialPartitionId)
+        .findFirst()
+        .get();
+    assertEquals("Store state is not expected", ReplicaState.STANDBY,
+        specialReplicaInfo.getLocalStore().getCurrentState());
   }
 
   /**
@@ -1610,11 +1643,13 @@ public class ReplicationTest {
    * @param storeKeyConverter the {@link StoreKeyConverter} to be used in {@link ReplicaThread}
    * @param transformer the {@link Transformer} to be used in {@link ReplicaThread}
    * @param listener the {@link StoreEventListener} to use.
+   * @param replicaSyncUpService the {@link ReplicaSyncUpService} to help create replica thread
    * @return a pair whose first element is the set of remote replicas and the second element is the {@link ReplicaThread}
    */
   private Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> getRemoteReplicasAndReplicaThread(int batchSize,
       ClusterMap clusterMap, MockHost localHost, MockHost remoteHost, StoreKeyConverter storeKeyConverter,
-      Transformer transformer, StoreEventListener listener) throws ReflectiveOperationException {
+      Transformer transformer, StoreEventListener listener, ReplicaSyncUpService replicaSyncUpService)
+      throws ReflectiveOperationException {
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
@@ -1629,7 +1664,7 @@ public class ReplicationTest {
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null);
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, replicaSyncUpService);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }
@@ -2204,7 +2239,7 @@ public class ReplicationTest {
 
       Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
           getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter,
-              transformer, null);
+              transformer, null, null);
       replicasToReplicate = replicasAndThread.getFirst();
       replicaThread = replicasAndThread.getSecond();
     }

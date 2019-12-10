@@ -44,6 +44,7 @@ import static com.github.ambry.replication.ReplicationTest.*;
  * A mock implementation of {@link Store} that store all details in memory.
  */
 class InMemoryStore implements Store {
+  ReplicaState currentState = ReplicaState.OFFLINE;
 
   class MockMessageReadSet implements MessageReadSet {
 
@@ -317,12 +318,12 @@ class InMemoryStore implements Store {
 
   @Override
   public void setCurrentState(ReplicaState state) {
-    throw new UnsupportedOperationException("Method not supported");
+    currentState = state;
   }
 
   @Override
   public ReplicaState getCurrentState() {
-    throw new UnsupportedOperationException("Method not supported");
+    return currentState;
   }
 
   @Override

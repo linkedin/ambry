@@ -32,7 +32,7 @@ public class AmbryReplicaSyncUpService implements ReplicaSyncUpService {
 
   private static final Logger logger = LoggerFactory.getLogger(AmbryReplicaSyncUpService.class);
 
-  AmbryReplicaSyncUpService(ClusterMapConfig clusterMapConfig) {
+  public AmbryReplicaSyncUpService(ClusterMapConfig clusterMapConfig) {
     this.clusterMapConfig = clusterMapConfig;
   }
 
