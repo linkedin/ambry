@@ -13,9 +13,13 @@
  */
 package com.github.ambry.router;
 
+import io.netty.buffer.ByteBuf;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channel;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -44,5 +48,61 @@ public interface AsyncWritableChannel extends Channel {
    * @return a {@link Future} that will eventually contain the result of the write operation (the number of bytes
    *         written).
    */
-  public Future<Long> write(ByteBuffer src, Callback<Long> callback);
+  Future<Long> write(ByteBuffer src, Callback<Long> callback);
+
+  /**
+   * Write data in {@code src} to the channel and the {@code callback} will be invoked once the write succeeds or fails.
+   * This method is the counterpart for {@link ByteBuf}. It shares the same guarantee as the {@link #write(ByteBuffer, Callback)}.
+   * Whoever implements this interface, shouldn't release the {@code src}. If releasing is expected after finishing writing
+   * to channel, please releas this {@link ByteBuf} in the callback method.
+   * @param src The data taht needs to be written to the channel.
+   * @param callback The {@link Callback} that will be invoked once the write succeeds/fails. This can be null.
+   * @return a {@link Future} that will eventually contain the result of the write operation (the number of bytes
+   *         written).
+   */
+  default Future<Long> write(ByteBuf src, Callback<Long> callback) {
+    if (src == null) {
+      throw new IllegalArgumentException("Source ByteBuf cannot be null");
+    }
+    int numBuffers = src.nioBufferCount();
+    FutureResult<Long> futureResult = new FutureResult<>();
+    Callback<Long> singleBufferCallback = (result, exception) -> {
+      if (result != 0) {
+        src.readerIndex(src.readerIndex() + (int) result.longValue());
+      }
+      futureResult.done(result.longValue(), exception);
+      if (callback != null) {
+        callback.onCompletion(result, exception);
+      }
+    };
+    if (numBuffers < 1) {
+      ByteBuffer byteBuffer = ByteBuffer.allocate(src.readableBytes());
+      src.getBytes(src.readerIndex(), byteBuffer);
+      write(byteBuffer, singleBufferCallback);
+    } else if (numBuffers == 1) {
+      write(src.nioBuffer(), singleBufferCallback);
+    } else {
+      ByteBuffer[] buffers = src.nioBuffers();
+      AtomicLong size = new AtomicLong(0);
+      AtomicInteger index = new AtomicInteger(0);
+      AtomicBoolean callbackInvoked = new AtomicBoolean(false);
+      Callback<Long> cb = (result, exception) -> {
+        index.addAndGet(1);
+        size.addAndGet(result);
+        if (result != 0) {
+          src.readerIndex(src.readerIndex() + (int) result.longValue());
+        }
+        if ((exception != null || index.get() == buffers.length) && callbackInvoked.compareAndSet(false, true)) {
+          futureResult.done(size.get(), exception);
+          if (callback != null) {
+            callback.onCompletion(size.get(), exception);
+          }
+        }
+      };
+      for (int i = 0; i < buffers.length; i++) {
+        write(buffers[i], cb);
+      }
+    }
+    return futureResult;
+  }
 }
