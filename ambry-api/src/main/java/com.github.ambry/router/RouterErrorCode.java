@@ -108,5 +108,10 @@ public enum RouterErrorCode {
   /**
    * ContainerId or AccountId from blobId doesn't match these in store server.
    */
-  BlobAuthorizationFailure
+  BlobAuthorizationFailure,
+
+  /**
+   * Operation is disabled on specific replica that is either being decommissioned or under admin control.
+   */
+  OperationDisabled
 }

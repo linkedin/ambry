@@ -74,6 +74,7 @@ class SimpleOperationTracker implements OperationTracker {
   protected int inflightCount = 0;
   protected int succeededCount = 0;
   protected int failedCount = 0;
+  protected int disabledCount = 0;
 
   // How many NotFound responses from originating dc will terminate the operation.
   // It's decided by the success target of each mutation operations, including put, delete, update ttl etc.
@@ -81,6 +82,8 @@ class SimpleOperationTracker implements OperationTracker {
   protected int originatingDcNotFoundCount = 0;
 
   private final OpTrackerIterator otIterator;
+  private final RouterOperation routerOperation;
+  private final RouterConfig routerConfig;
   private Iterator<ReplicaId> replicaIterator;
   private static final Logger logger = LoggerFactory.getLogger(SimpleOperationTracker.class);
 
@@ -120,6 +123,8 @@ class SimpleOperationTracker implements OperationTracker {
     boolean crossColoEnabled = false;
     boolean includeNonOriginatingDcReplicas = true;
     int numOfReplicasRequired = Integer.MAX_VALUE;
+    this.routerConfig = routerConfig;
+    this.routerOperation = routerOperation;
     datacenterName = routerConfig.routerDatacenterName;
     List<ReplicaId> eligibleReplicas;
     switch (routerOperation) {
@@ -240,7 +245,14 @@ class SimpleOperationTracker implements OperationTracker {
 
   @Override
   public boolean hasSucceeded() {
-    return succeededCount >= successTarget;
+    boolean hasSucceeded;
+    if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
+      hasSucceeded =
+          succeededCount >= Math.max(totalReplicaCount - disabledCount - 1, routerConfig.routerPutSuccessTarget);
+    } else {
+      hasSucceeded = succeededCount >= successTarget;
+    }
+    return hasSucceeded;
   }
 
   @Override
@@ -257,17 +269,22 @@ class SimpleOperationTracker implements OperationTracker {
   @Override
   public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
     inflightCount--;
-    if (trackedRequestFinalState == TrackedRequestFinalState.SUCCESS) {
-      succeededCount++;
-    } else {
-      failedCount++;
-      // NOT_FOUND is a special error. When tracker sees >= numReplicasInOriginatingDc - 1 "NOT_FOUND" from the
-      // originating DC, we can be sure the operation will end up with a NOT_FOUND error.
-      if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND && replicaId.getDataNodeId()
-          .getDatacenterName()
-          .equals(originatingDcName)) {
-        originatingDcNotFoundCount++;
-      }
+    switch (trackedRequestFinalState) {
+      case SUCCESS:
+        succeededCount++;
+        break;
+      case REQUEST_DISABLED:
+        disabledCount++;
+        break;
+      default:
+        failedCount++;
+        // NOT_FOUND is a special error. When tracker sees >= numReplicasInOriginatingDc - 1 "NOT_FOUND" from the
+        // originating DC, we can be sure the operation will end up with a NOT_FOUND error.
+        if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND && replicaId.getDataNodeId()
+            .getDatacenterName()
+            .equals(originatingDcName)) {
+          originatingDcNotFoundCount++;
+        }
     }
   }
 
@@ -313,7 +330,14 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   private boolean hasFailed() {
-    return (totalReplicaCount - failedCount) < successTarget || hasFailedOnNotFound();
+    boolean hasFailed;
+    if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
+      hasFailed = totalReplicaCount - disabledCount - failedCount < Math.max(totalReplicaCount - disabledCount - 1,
+          routerConfig.routerPutSuccessTarget);
+    } else {
+      hasFailed = (totalReplicaCount - failedCount) < successTarget || hasFailedOnNotFound();
+    }
+    return hasFailed;
   }
 
   /**
