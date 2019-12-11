@@ -390,9 +390,15 @@ public class IndexTest {
   @Test
   public void undeleteBasicTest() throws StoreException {
     //Get deleted key that hasn't been TTLUpdated
-    StoreKey targetKey = state.deletedKeys.iterator().next();
-    while(state.index.findKey(targetKey).isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
-      targetKey = state.deletedKeys.iterator().next();
+    StoreKey targetKey = null;
+    for (StoreKey key : state.deletedKeys) {
+      if (!state.index.findKey(key).isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        targetKey = key;
+        break;
+      }
+    }
+    if (targetKey == null) {
+      throw new IllegalStateException("Could not find deleted key without TTL Update");
     }
     //Undelete deleted key
     short expectedLifeVersion = 1;
