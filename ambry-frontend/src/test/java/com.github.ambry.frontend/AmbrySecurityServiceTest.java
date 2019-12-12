@@ -902,7 +902,6 @@ public class AmbrySecurityServiceTest {
 
     @Override
     public void setHeader(String headerName, Object headerValue) {
-      throw new UnsupportedOperationException();
     }
 
     @Override
