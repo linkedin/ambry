@@ -580,14 +580,14 @@ public class HelixClusterManagerTest {
         .get();
     // ensure previous latch has counted down to zero, otherwise the delayed routing table change may falsely count down
     // new latch and verification is performed based on old view. (if condition is not met, skip rest test)
-    if (routingTableChangeLatch.get().await(1, TimeUnit.SECONDS)) {
-      routingTableChangeLatch.set(new CountDownLatch(1));
-      mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
-      mockHelixAdmin.triggerRoutingTableNotification();
-      assertTrue("Routing table change didn't come within 1 second",
-          routingTableChangeLatch.get().await(1, TimeUnit.SECONDS));
-      verifyLeaderReplicasInDc(helixClusterManager, localDc);
-    }
+    assertTrue("Routing table change didn't come within 10 seconds",
+        routingTableChangeLatch.get().await(10, TimeUnit.SECONDS));
+    routingTableChangeLatch.set(new CountDownLatch(1));
+    mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
+    mockHelixAdmin.triggerRoutingTableNotification();
+    assertTrue("Routing table change didn't come within 1 second",
+        routingTableChangeLatch.get().await(1, TimeUnit.SECONDS));
+    verifyLeaderReplicasInDc(helixClusterManager, localDc);
 
     helixClusterManager.close();
   }
