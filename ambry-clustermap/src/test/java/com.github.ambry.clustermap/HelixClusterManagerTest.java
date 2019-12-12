@@ -532,8 +532,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void routingTableProviderChangeTest() throws Exception {
-    assumeTrue(!useComposite && !overrideEnabled && listenCrossColo);
-    clusterManager.close();
+    assumeTrue(!useComposite && !overrideEnabled && !listenCrossColo);
     // Change zk connect strings to ensure HelixClusterManager sees local DC only
     JSONObject zkJson = constructZkLayoutJSON(Collections.singletonList(dcsToZkInfo.get(localDc)));
     Properties props = new Properties();
@@ -578,10 +577,12 @@ public class HelixClusterManagerTest {
         .filter(k -> !k.equals(currentLeaderInstance))
         .findFirst()
         .get();
-    // ensure previous latch has counted down to zero, otherwise the delayed routing table change may falsely count down
-    // new latch and verification is performed based on old view. (if condition is not met, skip rest test)
-    assertTrue("Routing table change didn't come within 30 seconds",
-        routingTableChangeLatch.get().await(30, TimeUnit.SECONDS));
+    // Best effort to ensure previous latch has counted down to zero, otherwise the delayed routing table change may
+    // falsely count down new latch and verification is performed based on old view.
+    // Keep in mind that initial value of CountDownLatch is not always reasonable because the routing table change may
+    // occur before we add RoutingTableChange listener. So, right here we wait for 3 secs and then proceed with following
+    // leadership change tests.
+    routingTableChangeLatch.get().await(3, TimeUnit.SECONDS);
     routingTableChangeLatch.set(new CountDownLatch(1));
     mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
     mockHelixAdmin.triggerRoutingTableNotification();
