@@ -59,7 +59,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
    */
   @Override
   public void closeConnection(NetworkRequest originalRequest) throws InterruptedException {
-    throw new NotImplementedException();
+    throw new UnsupportedOperationException();
   }
 
   /** Get the next request or block until there is one */

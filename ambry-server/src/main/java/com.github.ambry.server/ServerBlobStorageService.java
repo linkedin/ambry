@@ -56,6 +56,7 @@ public class ServerBlobStorageService implements BlobStorageService {
         requestResponseChannel.sendRequest(
             new NettyServerRequest(restRequest, restResponseChannel, asyncWritableChannel.getContentAsInputStream()));
       } catch (InterruptedException e) {
+        //TODO  close requestResponseChannel.closeConnection() on error
         logger.error("Failed to SendRequest to requestResponseChannel.", e);
       }
     });
