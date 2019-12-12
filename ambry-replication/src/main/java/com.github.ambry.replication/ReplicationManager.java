@@ -251,11 +251,11 @@ public class ReplicationManager extends ReplicationEngine {
         throw new StateTransitionException("Store " + partitionName + " is not started",
             StateTransitionException.TransitionErrorCode.StoreNotStarted);
       }
-      store.setCurrentState(ReplicaState.BOOTSTRAP);
       // 2. check if store is new added and needs to catch up with peer replicas.
       if (store.isBootstrapInProgress()) {
+        store.setCurrentState(ReplicaState.BOOTSTRAP);
         // store state will updated to STANDBY in ReplicaThread when bootstrap is complete
-        replicaSyncUpService.initiateBootstrap(localReplica);
+        _replicaSyncUpManager.initiateBootstrap(localReplica);
       } else {
         // if this is existing replica, then directly set state to STANDBY
         store.setCurrentState(ReplicaState.STANDBY);

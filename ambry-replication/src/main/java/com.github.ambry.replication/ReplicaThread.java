@@ -21,7 +21,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
-import com.github.ambry.clustermap.ReplicaSyncUpService;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
@@ -112,7 +112,7 @@ public class ReplicaThread implements Runnable {
   private final Counter idleCount;
   private final ReentrantLock lock = new ReentrantLock();
   private final Condition pauseCondition = lock.newCondition();
-  private final ReplicaSyncUpService replicaSyncUpService;
+  private final ReplicaSyncUpManager replicaSyncUpManager;
 
   private volatile boolean allDisabled = false;
 
@@ -121,7 +121,7 @@ public class ReplicaThread implements Runnable {
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpService replicaSyncUpService) {
+      ReplicaSyncUpManager replicaSyncUpManager) {
     this.threadName = threadName;
     this.running = true;
     this.findTokenHelper = findTokenHelper;
@@ -140,7 +140,7 @@ public class ReplicaThread implements Runnable {
     this.replicatingOverSsl = replicatingOverSsl;
     this.datacenterName = datacenterName;
     this.time = time;
-    this.replicaSyncUpService = replicaSyncUpService;
+    this.replicaSyncUpManager = replicaSyncUpManager;
     if (replicatingFromRemoteColo) {
       threadThrottleDurationMs = replicationConfig.replicationInterReplicaThreadThrottleSleepDurationMs;
       syncedBackOffCount = replicationMetrics.interColoReplicaSyncedBackoffCount;
@@ -442,16 +442,17 @@ public class ReplicaThread implements Runnable {
                   new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken(),
                       replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
-              // update replication lag in ReplicaSyncUpService
-              if (replicaSyncUpService != null) {
+              // update replication lag in ReplicaSyncUpManager
+              if (replicaSyncUpManager != null) {
                 ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
                 ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
-                boolean updated = replicaSyncUpService.updateLagBetweenReplicas(localReplica, remoteReplica,
+                boolean updated = replicaSyncUpManager.updateLagBetweenReplicas(localReplica, remoteReplica,
                     exchangeMetadataResponse.localLagFromRemoteInBytes);
-                if (updated && replicaSyncUpService.isSyncUpComplete(localReplica)) {
+                // if updated is false, it means local replica is not found in replicaSyncUpManager
+                if (updated && replicaSyncUpManager.isSyncUpComplete(localReplica)) {
                   // complete BOOTSTRAP -> STANDBY transition
                   remoteReplicaInfo.getLocalStore().setCurrentState(ReplicaState.STANDBY);
-                  replicaSyncUpService.onBootstrapComplete(localReplica.getPartitionId().toPathString());
+                  replicaSyncUpManager.onBootstrapComplete(localReplica.getPartitionId().toPathString());
                 }
               }
               replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,

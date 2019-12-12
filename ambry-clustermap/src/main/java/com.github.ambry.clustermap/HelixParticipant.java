@@ -51,7 +51,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
-  private ReplicaSyncUpService replicaSyncUpService;
+  private ReplicaSyncUpManager _replicaSyncUpManager;
   final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
 
   private static final Logger logger = LoggerFactory.getLogger(HelixParticipant.class);
@@ -81,7 +81,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
     }
     manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
-    replicaSyncUpService = new AmbryReplicaSyncUpService(clusterMapConfig);
+    _replicaSyncUpManager = new AmbryReplicaSyncUpManager(clusterMapConfig);
     partitionStateChangeListeners = new HashMap<>();
   }
 
@@ -97,7 +97,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig, this, replicaSyncUpService));
+        new AmbryStateModelFactory(clusterMapConfig, this, _replicaSyncUpManager));
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
       synchronized (helixAdministrationLock) {
@@ -215,8 +215,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   @Override
-  public ReplicaSyncUpService getReplicaSyncUpService() {
-    return replicaSyncUpService;
+  public ReplicaSyncUpManager getReplicaSyncUpManager() {
+    return _replicaSyncUpManager;
   }
 
   /**

@@ -70,7 +70,7 @@ public class AmbryStateModelFactoryTest {
       public void onPartitionBecomeStandbyFromLeader(String partitionName) {
         //no op
       }
-    }, new AmbryReplicaSyncUpService(config));
+    }, new AmbryReplicaSyncUpManager(config));
     StateModel stateModel;
     switch (config.clustermapStateModelDefinition) {
       case ClusterMapConfig.OLD_STATE_MODEL_DEF:

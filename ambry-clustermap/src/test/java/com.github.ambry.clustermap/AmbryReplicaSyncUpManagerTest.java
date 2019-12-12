@@ -33,10 +33,10 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
-public class AmbryReplicaSyncUpServiceTest {
+public class AmbryReplicaSyncUpManagerTest {
   private static final String RESOURCE_NAME = "0";
   private AmbryPartitionStateModel stateModel;
-  private AmbryReplicaSyncUpService replicaSyncUpService;
+  private AmbryReplicaSyncUpManager replicaSyncUpService;
   private ReplicaId currentReplica;
   private MockPartitionStateChangeListener mockStateChangeListener;
   private Message mockMessage;
@@ -46,7 +46,7 @@ public class AmbryReplicaSyncUpServiceTest {
   private CountDownLatch listenerLatch;
   private ReplicaState replicaState = ReplicaState.OFFLINE;
 
-  public AmbryReplicaSyncUpServiceTest() throws IOException {
+  public AmbryReplicaSyncUpManagerTest() throws IOException {
     clusterMap = new MockClusterMap();
     // clustermap setup: 3 data centers(DC1/DC2/DC3), each data center has 3 replicas
     PartitionId partition = clusterMap.getAllPartitionIds(null).get(0);
@@ -67,7 +67,7 @@ public class AmbryReplicaSyncUpServiceTest {
     properties.setProperty("clustermap.replica.catchup.acceptable.lag.bytes", Long.toString(100L));
     properties.setProperty("clustermap.enable.state.model.listener", Boolean.toString(true));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
-    replicaSyncUpService = new AmbryReplicaSyncUpService(clusterMapConfig);
+    replicaSyncUpService = new AmbryReplicaSyncUpManager(clusterMapConfig);
     mockStateChangeListener = new MockPartitionStateChangeListener();
     stateModel =
         new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockStateChangeListener, clusterMapConfig,
@@ -124,23 +124,23 @@ public class AmbryReplicaSyncUpServiceTest {
     replicaSyncUpService.onBootstrapComplete(currentReplica.getPartitionId().toPathString());
     assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec.",
         stateModelLatch.await(1, TimeUnit.SECONDS));
-    // reset ReplicaSyncUpService
+    // reset ReplicaSyncUpManager
     replicaSyncUpService.reset();
   }
 
   /**
-   * Test several failure cases where replica is not present in ReplicaSyncUpService.
+   * Test several failure cases where replica is not present in ReplicaSyncUpManager.
    * @throws Exception
    */
   @Test
   public void replicaNotFoundFailureTest() throws Exception {
-    // get another partition that is not present in ReplicaSyncUpService
+    // get another partition that is not present in ReplicaSyncUpManager
     PartitionId partition = clusterMap.getAllPartitionIds(null).get(1);
     ReplicaId replicaToTest = partition.getReplicaIds().get(0);
     ReplicaId peerReplica = replicaToTest.getPeerReplicaIds().get(0);
     try {
       replicaSyncUpService.isSyncUpComplete(replicaToTest);
-      fail("should fail because replica is not present in ReplicaSyncUpService");
+      fail("should fail because replica is not present in ReplicaSyncUpManager");
     } catch (IllegalStateException e) {
       // expected
     }
@@ -181,7 +181,7 @@ public class AmbryReplicaSyncUpServiceTest {
   }
 
   /**
-   * Implementation of {@link PartitionStateChangeListener} to help {@link ReplicaSyncUpService} tests
+   * Implementation of {@link PartitionStateChangeListener} to help {@link ReplicaSyncUpManager} tests
    */
   private class MockPartitionStateChangeListener implements PartitionStateChangeListener {
     @Override

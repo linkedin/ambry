@@ -209,6 +209,13 @@ public class ClusterMapConfig {
   @Config("clustermap.replica.catchup.acceptable.lag.bytes")
   public final long clustermapReplicaCatchupAcceptableLagBytes;
 
+  /**
+   * The minimum number of peers that a bootstrap replica is required to catch up with. If target is set to 0, then
+   * {@link com.github.ambry.clustermap.ReplicaSyncUpManager} will use number of replicas in local dc as catchup target.
+   */
+  @Config("clustermap.replica.catchup.target")
+  public final int clustermapReplicaCatchupTarget;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -252,5 +259,7 @@ public class ClusterMapConfig {
         verifiableProperties.getBoolean("clustermap.enable.state.model.listener", false);
     clustermapReplicaCatchupAcceptableLagBytes =
         verifiableProperties.getLongInRange("clustermap.replica.catchup.acceptable.lag.bytes", 0L, 0L, Long.MAX_VALUE);
+    clustermapReplicaCatchupTarget =
+        verifiableProperties.getIntInRange("clustermap.replica.catchup.target", 0, 0, Integer.MAX_VALUE);
   }
 }

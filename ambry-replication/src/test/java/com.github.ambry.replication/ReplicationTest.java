@@ -14,7 +14,7 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.AmbryReplicaSyncUpService;
+import com.github.ambry.clustermap.AmbryReplicaSyncUpManager;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
@@ -24,7 +24,7 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
-import com.github.ambry.clustermap.ReplicaSyncUpService;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.commons.BlobId;
@@ -1463,7 +1463,7 @@ public class ReplicationTest {
   public void replicationLagMetricAndSyncUpTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-    AmbryReplicaSyncUpService replicaSyncUpService = new AmbryReplicaSyncUpService(clusterMapConfig);
+    AmbryReplicaSyncUpManager replicaSyncUpService = new AmbryReplicaSyncUpManager(clusterMapConfig);
     Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
     MockHost localHost = localAndRemoteHosts.getFirst();
     MockHost remoteHost1 = localAndRemoteHosts.getSecond();
@@ -1643,12 +1643,12 @@ public class ReplicationTest {
    * @param storeKeyConverter the {@link StoreKeyConverter} to be used in {@link ReplicaThread}
    * @param transformer the {@link Transformer} to be used in {@link ReplicaThread}
    * @param listener the {@link StoreEventListener} to use.
-   * @param replicaSyncUpService the {@link ReplicaSyncUpService} to help create replica thread
+   * @param replicaSyncUpManager the {@link ReplicaSyncUpManager} to help create replica thread
    * @return a pair whose first element is the set of remote replicas and the second element is the {@link ReplicaThread}
    */
   private Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> getRemoteReplicasAndReplicaThread(int batchSize,
       ClusterMap clusterMap, MockHost localHost, MockHost remoteHost, StoreKeyConverter storeKeyConverter,
-      Transformer transformer, StoreEventListener listener, ReplicaSyncUpService replicaSyncUpService)
+      Transformer transformer, StoreEventListener listener, ReplicaSyncUpManager replicaSyncUpManager)
       throws ReflectiveOperationException {
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
@@ -1664,7 +1664,7 @@ public class ReplicationTest {
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, replicaSyncUpService);
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, replicaSyncUpManager);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }

@@ -68,10 +68,11 @@ public interface ClusterParticipant extends AutoCloseable {
       PartitionStateChangeListener partitionStateChangeListener);
 
   /**
-   * @return {@link ReplicaSyncUpService} that is used to determine new replica has caught up with peers or peer replicas
+   * Gets the {@link ReplicaSyncUpManager} object.
+   * @return {@link ReplicaSyncUpManager} that is used to determine new replica has caught up with peers or peer replicas
    * have caught up with old replica that is being decommissioned.
    */
-  ReplicaSyncUpService getReplicaSyncUpService();
+  ReplicaSyncUpManager getReplicaSyncUpManager();
 
   /**
    * Terminate the participant.

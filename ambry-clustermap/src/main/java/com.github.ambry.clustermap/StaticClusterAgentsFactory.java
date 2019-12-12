@@ -119,7 +119,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public ReplicaSyncUpService getReplicaSyncUpService() {
+        public ReplicaSyncUpManager getReplicaSyncUpManager() {
           return null;
         }
       };

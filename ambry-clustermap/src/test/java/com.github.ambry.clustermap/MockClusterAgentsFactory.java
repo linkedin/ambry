@@ -125,7 +125,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public ReplicaSyncUpService getReplicaSyncUpService() {
+        public ReplicaSyncUpManager getReplicaSyncUpManager() {
           return null;
         }
       };

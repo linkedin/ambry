@@ -468,7 +468,7 @@ class CloudBlobStore implements Store {
 
   @Override
   public boolean isBootstrapInProgress() {
-    throw new UnsupportedOperationException("Method not supported");
+    return false;
   }
 
   @Override

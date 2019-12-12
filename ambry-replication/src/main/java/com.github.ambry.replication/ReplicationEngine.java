@@ -20,7 +20,7 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.ReplicaSyncUpService;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -76,7 +76,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
   protected final Map<String, Set<PartitionInfo>> mountPathToPartitionInfos;
-  protected final ReplicaSyncUpService replicaSyncUpService;
+  protected final ReplicaSyncUpManager _replicaSyncUpManager;
   protected ReplicaTokenPersistor persistor = null;
 
   protected static final short Replication_Delay_Multiplier = 5;
@@ -111,7 +111,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.storeKeyConverterFactory = storeKeyConverterFactory;
     this.transformerClassName = transformerClassName;
-    replicaSyncUpService = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpService();
+    _replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
   }
 
   /**
@@ -295,7 +295,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
             new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
                 connectionPool, replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
                 threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter, responseHandler,
-                SystemTime.getInstance(), replicaSyncUpService);
+                SystemTime.getInstance(), _replicaSyncUpManager);
         replicaThreads.add(replicaThread);
         if (startThread) {
           Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);
