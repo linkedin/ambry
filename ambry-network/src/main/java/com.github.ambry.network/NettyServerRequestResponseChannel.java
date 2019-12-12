@@ -17,7 +17,6 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 
 /**
