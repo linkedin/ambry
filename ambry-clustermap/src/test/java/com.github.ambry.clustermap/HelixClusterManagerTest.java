@@ -532,13 +532,23 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void routingTableProviderChangeTest() throws Exception {
-    assumeTrue(!useComposite && !overrideEnabled);
-    metricRegistry = new MetricRegistry();
+    assumeTrue(!useComposite && !overrideEnabled && !listenCrossColo);
+    // Change zk connect strings to ensure HelixClusterManager sees local DC only
+    JSONObject zkJson = constructZkLayoutJSON(Collections.singletonList(dcsToZkInfo.get(localDc)));
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", hostname);
+    props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
+    props.setProperty("clustermap.datacenter.name", localDc);
+    props.setProperty("clustermap.port", Integer.toString(portNum));
+    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     // Mock metricRegistry here to introduce a latch based counter for testing purpose
+    metricRegistry = new MetricRegistry();
     MetricRegistry mockMetricRegistry = Mockito.spy(metricRegistry);
     Counter mockCounter = Mockito.mock(Counter.class);
     AtomicReference<CountDownLatch> routingTableChangeLatch = new AtomicReference<>();
-    routingTableChangeLatch.set(new CountDownLatch(4));
+    routingTableChangeLatch.set(new CountDownLatch(2));
     doAnswer(invocation -> {
       routingTableChangeLatch.get().countDown();
       return null;
@@ -567,6 +577,12 @@ public class HelixClusterManagerTest {
         .filter(k -> !k.equals(currentLeaderInstance))
         .findFirst()
         .get();
+    // Best effort to ensure previous latch has counted down to zero, otherwise the delayed routing table change may
+    // falsely count down new latch and verification is performed based on old view.
+    // Keep in mind that initial value of CountDownLatch is not always reasonable because the routing table change may
+    // occur before we add RoutingTableChange listener. So, right here we wait for 3 secs and then proceed with following
+    // leadership change tests.
+    routingTableChangeLatch.get().await(3, TimeUnit.SECONDS);
     routingTableChangeLatch.set(new CountDownLatch(1));
     mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
     mockHelixAdmin.triggerRoutingTableNotification();
@@ -1154,13 +1170,11 @@ public class HelixClusterManagerTest {
     Map<String, String> leaderReplicasInCluster = helixCluster.getPartitionToLeaderReplica(dcName);
     for (PartitionId partitionId : helixClusterManager.getAllPartitionIds(null)) {
       List<? extends ReplicaId> leadReplicas = partitionId.getReplicaIdsByState(ReplicaState.LEADER, dcName);
-      assertTrue("There should not be more than one lead replica", leadReplicas.size() <= 1);
-      // some special partition class has replicas in one dc only
-      if (leadReplicas.size() == 1) {
-        DataNodeId dataNodeId = leadReplicas.get(0).getDataNodeId();
-        leaderReplicasInSnapshot.put(partitionId.toPathString(),
-            getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort()));
-      }
+      assertEquals("There should be exactly one lead replica for partition: " + partitionId.toPathString(), 1,
+          leadReplicas.size());
+      DataNodeId dataNodeId = leadReplicas.get(0).getDataNodeId();
+      leaderReplicasInSnapshot.put(partitionId.toPathString(),
+          getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort()));
     }
     assertEquals("Mismatch in leader replicas", leaderReplicasInCluster, leaderReplicasInSnapshot);
   }
