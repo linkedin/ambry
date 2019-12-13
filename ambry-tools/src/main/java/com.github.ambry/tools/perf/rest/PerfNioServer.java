@@ -415,7 +415,7 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
-    public void setHeader(String headerName, Object headerValue) throws RestServiceException {
+    public void setHeader(String headerName, Object headerValue) {
       headers.put(headerName, headerValue);
     }
 

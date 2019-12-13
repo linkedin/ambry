@@ -55,7 +55,6 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 /**
  * This is an Ambry frontend specific implementation of {@link BlobStorageService}.
- * <p/>
  * All the operations that need to be performed by the Ambry frontend are supported here.
  */
 class AmbryBlobStorageService implements BlobStorageService {
@@ -238,11 +237,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         ttlUpdateHandler.handle(restRequest, restResponseChannel, (r, e) -> {
           if (e instanceof RouterException
               && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobUpdateNotAllowed) {
-            try {
-              restResponseChannel.setHeader(Headers.ALLOW, TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE);
-            } catch (RestServiceException exc) {
-              logger.error("Exception while setting {}", Headers.ALLOW, exc);
-            }
+            restResponseChannel.setHeader(Headers.ALLOW, TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE);
           }
           submitResponse(restRequest, restResponseChannel, null, e);
         });

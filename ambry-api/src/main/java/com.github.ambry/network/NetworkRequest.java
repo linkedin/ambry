@@ -19,7 +19,7 @@ import java.io.InputStream;
 /**
  * Simple request
  */
-public interface Request {
+public interface NetworkRequest {
   /**
    * The request as an input stream is returned to the caller
    * @return The inputstream that represents the request

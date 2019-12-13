@@ -28,7 +28,7 @@ public interface RequestResponseChannel {
    * @param metrics The set of metrics tracked at the network layer
    * @throws InterruptedException
    */
-  void sendResponse(Send payloadToSend, Request originalRequest, ServerNetworkResponseMetrics metrics)
+  void sendResponse(Send payloadToSend, NetworkRequest originalRequest, ServerNetworkResponseMetrics metrics)
       throws InterruptedException;
 
   /**
@@ -36,21 +36,21 @@ public interface RequestResponseChannel {
    * @return The request that was queued by the network layer into the channel
    * @throws InterruptedException
    */
-  Request receiveRequest() throws InterruptedException;
+  NetworkRequest receiveRequest() throws InterruptedException;
 
   /**
    * Sends a request over the network. The request gets queued by the channel.
    * @param request The request to be queued by the channel
    * @throws InterruptedException
    */
-  void sendRequest(Request request) throws InterruptedException;
+  void sendRequest(NetworkRequest request) throws InterruptedException;
 
   /**
    * Closes the connection on which the original request came
    * @param request The request whose connection needs to be closed
    * @throws InterruptedException
    */
-  void closeConnection(Request request) throws InterruptedException;
+  void closeConnection(NetworkRequest request) throws InterruptedException;
 
   /**
    * Shuts down the request response channel

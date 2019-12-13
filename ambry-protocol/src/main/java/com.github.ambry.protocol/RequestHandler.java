@@ -13,7 +13,7 @@
  */
 package com.github.ambry.protocol;
 
-import com.github.ambry.network.Request;
+import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.server.EmptyRequest;
 import org.slf4j.Logger;
@@ -36,7 +36,7 @@ public class RequestHandler implements Runnable {
   }
 
   public void run() {
-    Request req = null;
+    NetworkRequest req = null;
     while (true) {
       try {
         req = requestChannel.receiveRequest();

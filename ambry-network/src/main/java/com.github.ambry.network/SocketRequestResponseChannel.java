@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
 
 
 // The request at the network layer
-class SocketServerRequest implements Request {
+class SocketServerRequest implements NetworkRequest {
   private final int processor;
   private final String connectionId;
   private final InputStream input;
@@ -71,15 +71,15 @@ class SocketServerRequest implements Request {
 }
 
 // The response at the network layer
-class SocketServerResponse implements Response {
+class SocketServerResponse implements NetworkResponse {
 
   private final int processor;
-  private final Request request;
+  private final NetworkRequest request;
   private final Send output;
   private final ServerNetworkResponseMetrics metrics;
   private long startQueueTimeInMs;
 
-  public SocketServerResponse(Request request, Send output, ServerNetworkResponseMetrics metrics) {
+  public SocketServerResponse(NetworkRequest request, Send output, ServerNetworkResponseMetrics metrics) {
     this.request = request;
     this.output = output;
     this.processor = ((SocketServerRequest) request).getProcessor();
@@ -90,7 +90,7 @@ class SocketServerResponse implements Response {
     return output;
   }
 
-  public Request getRequest() {
+  public NetworkRequest getRequest() {
     return request;
   }
 
@@ -123,31 +123,31 @@ interface ResponseListener {
 public class SocketRequestResponseChannel implements RequestResponseChannel {
   private final int numProcessors;
   private final int queueSize;
-  private final ArrayBlockingQueue<Request> requestQueue;
-  private final ArrayList<BlockingQueue<Response>> responseQueues;
+  private final ArrayBlockingQueue<NetworkRequest> requestQueue;
+  private final ArrayList<BlockingQueue<NetworkResponse>> responseQueues;
   private final ArrayList<ResponseListener> responseListeners;
 
   public SocketRequestResponseChannel(int numProcessors, int queueSize) {
     this.numProcessors = numProcessors;
     this.queueSize = queueSize;
-    this.requestQueue = new ArrayBlockingQueue<Request>(this.queueSize);
-    responseQueues = new ArrayList<BlockingQueue<Response>>(this.numProcessors);
+    this.requestQueue = new ArrayBlockingQueue<>(this.queueSize);
+    responseQueues = new ArrayList<>(this.numProcessors);
     responseListeners = new ArrayList<ResponseListener>();
 
     for (int i = 0; i < this.numProcessors; i++) {
-      responseQueues.add(i, new LinkedBlockingQueue<Response>());
+      responseQueues.add(i, new LinkedBlockingQueue<>());
     }
   }
 
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
-  public void sendRequest(Request request) throws InterruptedException {
+  public void sendRequest(NetworkRequest request) throws InterruptedException {
     requestQueue.put(request);
   }
 
   /** Send a response back to the socket server to be sent over the network */
   @Override
-  public void sendResponse(Send payloadToSend, Request originalRequest, ServerNetworkResponseMetrics metrics)
+  public void sendResponse(Send payloadToSend, NetworkRequest originalRequest, ServerNetworkResponseMetrics metrics)
       throws InterruptedException {
     SocketServerResponse response = new SocketServerResponse(originalRequest, payloadToSend, metrics);
     response.onEnqueueIntoResponseQueue();
@@ -161,7 +161,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
    * Closes the connection and does not send any response
    */
   @Override
-  public void closeConnection(Request originalRequest) throws InterruptedException {
+  public void closeConnection(NetworkRequest originalRequest) throws InterruptedException {
     SocketServerResponse response = new SocketServerResponse(originalRequest, null, null);
     responseQueues.get(response.getProcessor()).put(response);
     for (ResponseListener listener : responseListeners) {
@@ -171,12 +171,12 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
 
   /** Get the next request or block until there is one */
   @Override
-  public Request receiveRequest() throws InterruptedException {
+  public NetworkRequest receiveRequest() throws InterruptedException {
     return requestQueue.take();
   }
 
   /** Get a response for the given processor if there is one */
-  public Response receiveResponse(int processor) throws InterruptedException {
+  public NetworkResponse receiveResponse(int processor) throws InterruptedException {
     return responseQueues.get(processor).poll();
   }
 
@@ -197,7 +197,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   }
 
   public void shutdown() {
-    requestQueue.forEach(Request::release);
+    requestQueue.forEach(NetworkRequest::release);
     requestQueue.clear();
   }
 }

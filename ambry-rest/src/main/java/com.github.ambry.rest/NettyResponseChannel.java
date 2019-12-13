@@ -250,7 +250,7 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public void setHeader(String headerName, Object headerValue) throws RestServiceException {
+  public void setHeader(String headerName, Object headerValue) {
     if (headerName != null && headerValue != null) {
       long startTime = System.currentTimeMillis();
       responseMetadata.headers().set(headerName, headerValue);

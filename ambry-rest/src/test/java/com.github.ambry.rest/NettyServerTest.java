@@ -105,10 +105,10 @@ public class NettyServerTest {
 
     Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = new HashMap<>();
     channelInitializers.put(nettyConfig.nettyServerPort,
-        new NettyServerChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
+        new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
             REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, null));
     channelInitializers.put(nettyConfig.nettyServerSSLPort,
-        new NettyServerChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
+        new FrontendNettyChannelInitializer(nettyConfig, performanceConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER,
             REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, SSL_FACTORY));
     return new NettyServer(nettyConfig, NETTY_METRICS, channelInitializers);
   }
