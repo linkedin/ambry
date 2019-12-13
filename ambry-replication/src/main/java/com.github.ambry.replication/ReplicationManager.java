@@ -255,7 +255,7 @@ public class ReplicationManager extends ReplicationEngine {
       if (store.isBootstrapInProgress()) {
         store.setCurrentState(ReplicaState.BOOTSTRAP);
         // store state will updated to STANDBY in ReplicaThread when bootstrap is complete
-        _replicaSyncUpManager.initiateBootstrap(localReplica);
+        replicaSyncUpManager.initiateBootstrap(localReplica);
       } else {
         // if this is existing replica, then directly set state to STANDBY
         store.setCurrentState(ReplicaState.STANDBY);
