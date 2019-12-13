@@ -32,7 +32,7 @@ public class AmbryPartitionStateModel extends StateModel {
   private final String partitionName;
   private final PartitionStateChangeListener partitionStateChangeListener;
   private final ClusterMapConfig clusterMapConfig;
-  private final ReplicaSyncUpManager _replicaSyncUpManager;
+  private final ReplicaSyncUpManager replicaSyncUpManager;
 
   AmbryPartitionStateModel(String resourceName, String partitionName,
       PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig,
@@ -41,7 +41,7 @@ public class AmbryPartitionStateModel extends StateModel {
     this.partitionName = partitionName;
     this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
     this.clusterMapConfig = Objects.requireNonNull(clusterMapConfig);
-    this._replicaSyncUpManager = Objects.requireNonNull(replicaSyncUpManager);
+    this.replicaSyncUpManager = Objects.requireNonNull(replicaSyncUpManager);
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
   }
@@ -64,7 +64,7 @@ public class AmbryPartitionStateModel extends StateModel {
       partitionStateChangeListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
     }
     try {
-      _replicaSyncUpManager.waitBootstrapCompleted(partitionName);
+      replicaSyncUpManager.waitBootstrapCompleted(partitionName);
     } catch (InterruptedException | IllegalStateException e) {
       logger.info("Bootstrap failed or was interrupted on partition {}", partitionName);
       throw new StateTransitionException("Bootstrap failed or was interrupted",

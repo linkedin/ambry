@@ -76,7 +76,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
   protected final Map<String, Set<PartitionInfo>> mountPathToPartitionInfos;
-  protected final ReplicaSyncUpManager _replicaSyncUpManager;
+  protected final ReplicaSyncUpManager replicaSyncUpManager;
   protected ReplicaTokenPersistor persistor = null;
 
   protected static final short Replication_Delay_Multiplier = 5;
@@ -111,7 +111,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.storeKeyConverterFactory = storeKeyConverterFactory;
     this.transformerClassName = transformerClassName;
-    _replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
+    replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
   }
 
   /**
@@ -295,7 +295,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
             new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
                 connectionPool, replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
                 threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter, responseHandler,
-                SystemTime.getInstance(), _replicaSyncUpManager);
+                SystemTime.getInstance(), replicaSyncUpManager);
         replicaThreads.add(replicaThread);
         if (startThread) {
           Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);
