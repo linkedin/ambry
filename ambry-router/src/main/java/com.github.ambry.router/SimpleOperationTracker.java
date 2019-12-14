@@ -361,6 +361,20 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   /**
+   * @return the number of requests that are temporarily disabled on certain replicas.
+   */
+  int getDisabledCount() {
+    return disabledCount;
+  }
+
+  /**
+   * @return current failed count in this tracker
+   */
+  int getFailedCount() {
+    return failedCount;
+  }
+
+  /**
    * Helper function to catch a potential race condition in {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, RouterOperation, PartitionId, String, boolean)}.
    *
    * @param partitionId The partition on which the operation is performed.

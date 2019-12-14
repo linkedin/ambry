@@ -585,6 +585,13 @@ class PutOperation {
   }
 
   /**
+   * @return a snapshot of current put chunks
+   */
+  List<PutChunk> getPutChunks() {
+    return new ArrayList<>(putChunks);
+  }
+
+  /**
    * Called whenever the channel has data but no free or building chunk is available to be filled.
    */
   private void maybeStartTrackingWaitForChunkTime() {
@@ -1062,6 +1069,13 @@ class PutOperation {
      */
     boolean isComplete() {
       return state == ChunkState.Complete;
+    }
+
+    /**
+     * @return operation tracker used by current put chunk
+     */
+    OperationTracker getOperationTrackerInUse() {
+      return operationTracker;
     }
 
     /**
