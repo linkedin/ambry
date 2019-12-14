@@ -455,6 +455,9 @@ public class RouterConfig {
   @Default("false")
   public final boolean routerGetEligibleReplicasByStateEnabled;
 
+  /**
+   * Whether to use dynamic success target for put operation in router.
+   */
   @Config(ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET)
   @Default("false")
   public final boolean routerPutUseDynamicSuccessTarget;

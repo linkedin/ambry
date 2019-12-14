@@ -243,6 +243,19 @@ class SimpleOperationTracker implements OperationTracker {
         routerOperation, successTarget, parallelism, originatingDcNotFoundFailureThreshold);
   }
 
+  /**
+   * The dynamic success target is introduced mainly for following use case:
+   * In the intermediate state of "move replica", when decommission of old replicas is initiated(but hasn't transited to
+   * INACTIVE yet), the PUT requests should be rejected on old replicas. For frontends, they are seeing both old and new
+   * replicas(lets say 3 old and 3 new) and the success target should be 6 - 1 = 5. In the aforementioned scenario, PUT
+   * request failed on 3 old replicas. It seems we should fail whole PUT operation because number of remaining requests
+   * is already less than success target.
+   * From another point of view, however, PUT request is highly likely to succeed on 3 new replicas and we actually
+   * could consider it success without generating "slip put" (which makes PUT latency worse). The reason is, if new PUTs
+   * already succeeded on at least 2 new replicas,  read-after-write should always succeed because frontends are always
+   * able to see new replicas and subsequent READ/DELETE/TtlUpdate request should succeed on at least 2 aforementioned
+   * new replicas.
+   */
   @Override
   public boolean hasSucceeded() {
     boolean hasSucceeded;
@@ -332,8 +345,8 @@ class SimpleOperationTracker implements OperationTracker {
   private boolean hasFailed() {
     boolean hasFailed;
     if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
-      hasFailed = totalReplicaCount - disabledCount - failedCount < Math.max(totalReplicaCount - disabledCount - 1,
-          routerConfig.routerPutSuccessTarget);
+      hasFailed = totalReplicaCount - failedCount < Math.max(totalReplicaCount - 1,
+          routerConfig.routerPutSuccessTarget + disabledCount);
     } else {
       hasFailed = (totalReplicaCount - failedCount) < successTarget || hasFailedOnNotFound();
     }

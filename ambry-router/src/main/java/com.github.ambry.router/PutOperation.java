@@ -1446,7 +1446,7 @@ class PutOperation {
     /**
      * Perform the necessary actions when a request to a replica fails.
      * @param replicaId the {@link ReplicaId} associated with the failed response.
-     * @param routerErrorCode
+     * @param routerErrorCode the {@link RouterErrorCode} associated with failed response.
      */
     private void onErrorResponse(ReplicaId replicaId, RouterErrorCode routerErrorCode) {
       // For Put, final state could be TIMED_OUT, REQUEST_DISABLED and FAILURE

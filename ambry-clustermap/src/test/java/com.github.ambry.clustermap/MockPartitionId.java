@@ -171,6 +171,8 @@ public class MockPartitionId implements PartitionId {
     for (ReplicaId replicaId : replicaIds) {
       ((MockReplicaId) replicaId).cleanup();
     }
+    replicaIds.clear();
+    replicaAndState.clear();
   }
 
   public void onPartitionReadOnly() {
