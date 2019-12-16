@@ -116,7 +116,8 @@ public class BlobStoreRecoveryTest {
 
       // 5th message
       DeleteMessageFormatInputStream msg5 =
-          new DeleteMessageFormatInputStream(keys[1], keys[1].getAccountId(), keys[1].getContainerId(), updateTimeInMs);
+          new DeleteMessageFormatInputStream(keys[1], keys[1].getAccountId(), keys[1].getContainerId(), updateTimeInMs,
+              (short) 0);
       sizes.add(msg5.getSize());
 
       // 6th message

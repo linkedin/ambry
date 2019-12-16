@@ -362,6 +362,11 @@ class CloudBlobStore implements Store {
     }
   }
 
+  @Override
+  public void undelete(MessageWriteSet messageSetToUndelete) throws StoreException {
+    throw new UnsupportedOperationException("Undelete is unsupported in CloudBlobStore");
+  }
+
   /**
    * Add a blob state mapping to the recent blob cache.
    * @param blobKey the blob key to cache.

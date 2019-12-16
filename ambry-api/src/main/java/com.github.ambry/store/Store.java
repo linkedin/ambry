@@ -61,6 +61,13 @@ public interface Store {
   void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException;
 
   /**
+   * Undeletes all the messages that are part of the message set
+   * @param messageSetToUndelete The list of messages that need to be deleted
+   * @throws StoreException
+   */
+  void undelete(MessageWriteSet messageSetToUndelete) throws StoreException;
+
+  /**
    * Finds all the entries from the store given a find token
    * @param token The token that acts as a bookmark to make subsequent searches
    * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned. The api will try to

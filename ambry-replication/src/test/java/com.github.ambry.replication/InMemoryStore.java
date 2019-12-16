@@ -244,6 +244,11 @@ class InMemoryStore implements Store {
   }
 
   @Override
+  public void undelete(MessageWriteSet messageSetToUndelete) throws StoreException {
+    throw new UnsupportedOperationException("Undelete is unsupported in InMemoryStore");
+  }
+
+  @Override
   public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries) throws StoreException {
     // unused function
     MockFindToken mockToken = (MockFindToken) token;

@@ -271,7 +271,7 @@ public class MessageFormatInputStreamTest {
         deleteRecordSize = MessageFormatRecord.Update_Format_V2.getRecordSize();
         useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
       } else {
-        messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
+        messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs, (short) 0);
         deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.DELETE);
         useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
       }

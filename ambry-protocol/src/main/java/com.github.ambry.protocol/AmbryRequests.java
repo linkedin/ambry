@@ -395,7 +395,7 @@ public class AmbryRequests implements RequestAPI {
         BlobId convertedBlobId = (BlobId) convertedStoreKey;
         MessageFormatInputStream stream =
             new DeleteMessageFormatInputStream(convertedStoreKey, convertedBlobId.getAccountId(),
-                convertedBlobId.getContainerId(), deleteRequest.getDeletionTimeInMs());
+                convertedBlobId.getContainerId(), deleteRequest.getDeletionTimeInMs(), (short) 0);
         MessageInfo info = new MessageInfo(convertedStoreKey, stream.getSize(), convertedBlobId.getAccountId(),
             convertedBlobId.getContainerId(), deleteRequest.getDeletionTimeInMs());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
