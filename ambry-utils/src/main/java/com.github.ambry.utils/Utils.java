@@ -861,7 +861,7 @@ public class Utils {
    * @param data the string to split.
    * @param delimiter the delimiter for splitting.
    * @param collectionFactory functional interface to get the required collection.
-   * @return a mutable list of items.
+   * @return a mutable collection of items.
    */
   public static <C extends Collection<String>> C splitString(String data, String delimiter,
       Supplier<C> collectionFactory) {

@@ -73,7 +73,6 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private AtomicReference<ConcurrentSkipListSet<CloudDataNode>> vcrNodes;
   private final ConcurrentHashMap<String, PartitionId> localPartitionNameToPartition;
   private final Object notificationLock = new Object();
-  private final Set<String> partitionsToReplicate;
 
   /**
    * Constructor for {@link CloudToStoreReplicationManager}
@@ -114,8 +113,6 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, storeManager);
     this.localPartitionNameToPartition = mapPartitionNameToPartition(clusterMap, currentNode);
-    this.partitionsToReplicate = replicationConfig.replicationVcrRecoveryPartitions.isEmpty() ? new HashSet<>()
-        : Utils.splitString(replicationConfig.replicationVcrRecoveryPartitions, ",", HashSet::new);
   }
 
   /**
@@ -386,7 +383,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
      *         replicated. false otherwise.
      */
     private boolean shouldReplicatePartition(String partitionName) {
-      if (!partitionsToReplicate.isEmpty() && !partitionsToReplicate.contains(partitionName)) {
+      if (!replicationConfig.replicationVcrRecoveryPartitions.isEmpty()
+          && !replicationConfig.replicationVcrRecoveryPartitions.contains(partitionName)) {
         logger.info("Ignoring state change of partition {} as it is not in recovery partition config", partitionName);
         return false;
       }
