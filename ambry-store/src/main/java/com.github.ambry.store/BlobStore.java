@@ -576,7 +576,7 @@ public class BlobStore implements Store {
                 EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
             short lifeVersion = info.getLifeVersion();
             boolean hasLifeVersion = lifeVersion > -1;
-            
+
             if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
               throw new StoreException(
                   "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
