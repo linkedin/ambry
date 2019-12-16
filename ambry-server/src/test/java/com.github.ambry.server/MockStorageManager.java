@@ -162,6 +162,11 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
+    public void undelete(MessageWriteSet messageSetToUndelete) throws StoreException {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
       operationReceived = RequestOrResponseType.ReplicaMetadataRequest;
       tokenReceived = token;

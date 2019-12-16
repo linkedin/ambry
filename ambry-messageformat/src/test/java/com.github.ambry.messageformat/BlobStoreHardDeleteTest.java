@@ -114,7 +114,7 @@ public class BlobStoreHardDeleteTest {
       }
 
       DeleteMessageFormatInputStream msg4d =
-          new DeleteMessageFormatInputStream(keys[1], accountId, containerId, updateTimeMs);
+          new DeleteMessageFormatInputStream(keys[1], accountId, containerId, updateTimeMs, (short) 0);
 
       MessageFormatInputStream msg5 =
           getPutMessage(keys[3], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,

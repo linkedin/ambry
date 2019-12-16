@@ -514,6 +514,106 @@ public class BlobStore implements Store {
     }
   }
 
+  @Override
+  public void undelete(MessageWriteSet messageSetToUndelete) throws StoreException {
+    checkStarted();
+    checkDuplicates(messageSetToUndelete);
+    //TODO Add timing measurements
+//    final Timer.Context context = metrics.deleteResponse.time();
+    try {
+      List<IndexValue> indexValuesToUndelete = new ArrayList<>();
+      List<MessageInfo> infoList = messageSetToUndelete.getMessageSetInfo();
+      Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      for (MessageInfo info : infoList) {
+        //Due to compaction there may be DELETE tombstones without PUTs.  These cannot be undeleted
+        if (index.findKey(info.getStoreKey(), null, EnumSet.of(PersistentIndex.IndexEntryType.PUT))==null) {
+          throw new StoreException("Cannot undelete id " + info.getStoreKey() + " since a PUT is not present in the index.", StoreErrorCodes.ID_Not_Found);
+        }
+        IndexValue value = index.findKey(info.getStoreKey());
+        short lifeVersion = info.getLifeVersion();
+        boolean hasLifeVersion = lifeVersion > -1;
+
+        if (value == null) {
+          throw new StoreException("Cannot undelete id " + info.getStoreKey() + " since it is not present in the index.",
+              StoreErrorCodes.ID_Not_Found);
+        } else if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
+          if (config.storeValidateAuthorization) {
+            throw new StoreException("UNDELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: "
+                + value.getAccountId() + "Actually containerId: " + value.getContainerId(),
+                StoreErrorCodes.Authorization_Failure);
+          } else {
+            logger.warn("UNDELETE authorization failure. Key: {} Actually accountId: {} Actually containerId: {}",
+                info.getStoreKey(), value.getAccountId(), value.getContainerId());
+            //TODO Add Metrics
+//            metrics.deleteAuthorizationFailureCount.inc();
+          }
+        } else {
+          if (hasLifeVersion) {
+            if (value.getLifeVersion() >= lifeVersion) {
+              throw new StoreException("LifeVersion conflict in index. Id " + info.getStoreKey() + " LifeVersion: " + value.getLifeVersion()
+                  + " Undelete LifeVersion: " + lifeVersion, StoreErrorCodes.Life_Version_Conflict);
+            }
+          } else {
+//            lifeVersion = (short) (value.getLifeVersion() + 1);
+            if (!value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              throw new StoreException("Id " + info.getStoreKey() + " not deleted in index " + dataDir, StoreErrorCodes.ID_Not_Deleted);
+            }
+          }
+        }
+        indexValuesToUndelete.add(value);
+      }
+      synchronized (storeWriteLock) {
+        Offset currentIndexEndOffset = index.getCurrentEndOffset();
+        Map<MessageInfo, Short> infoToLifeVersion = new HashMap<>();
+        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
+          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+          for (MessageInfo info : infoList) {
+            //TODO IndexValue can be Undelete
+            //Not sure what the point of this section is since
+            //we already checked the indexes in the previous for loop
+            //is it because it could have changed before grabbing the lock?
+            IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
+                EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
+            short lifeVersion = info.getLifeVersion();
+            boolean hasLifeVersion = lifeVersion > -1;
+            
+            if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              throw new StoreException(
+                  "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
+                  StoreErrorCodes.ID_Deleted);
+            }
+          }
+        }
+        Offset endOffsetOfLastMessage = log.getEndOffset();
+        messageSetToUndelete.writeTo(log);
+        logger.trace("Store : {} undelete mark written to log", dataDir);
+//        int correspondingPutIndex = 0;
+        for (MessageInfo info : infoList) {
+          FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
+          IndexValue undeleteIndexValue = index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
+          endOffsetOfLastMessage = fileSpan.getEndOffset();
+          //TODO Add stats
+//          blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToUndelete.get(correspondingPutIndex++));
+        }
+        logger.trace("Store : {} undelete has been marked in the index ", dataDir);
+      }
+      onSuccess();
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
+      throw e;
+    } catch (Exception e) {
+      throw new StoreException("Unknown error while trying to delete blobs from store " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
+    } finally {
+//      context.stop();
+    }
+  }
+
+
+
+
   /**
    * {@inheritDoc}
    * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)

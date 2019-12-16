@@ -643,7 +643,7 @@ public class ReplicaThread implements Runnable {
         if (messageInfo.isDeleted() && !deletedLocally) {
           MessageFormatInputStream deleteStream =
               new DeleteMessageFormatInputStream(localKey, localKey.getAccountId(), localKey.getContainerId(),
-                  messageInfo.getOperationTimeMs());
+                  messageInfo.getOperationTimeMs(), (short) 0);
           MessageInfo info = new MessageInfo(localKey, deleteStream.getSize(), true, messageInfo.isTtlUpdated(),
               localKey.getAccountId(), localKey.getContainerId(), messageInfo.getOperationTimeMs());
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();

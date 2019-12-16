@@ -535,7 +535,7 @@ public class BlobIdTransformerTest {
                   blobStreamSize, blobType);
         } else if (clazz == DeleteMessageFormatInputStream.class) {
           messageFormatInputStream =
-              new DeleteMessageFormatInputStream(blobId, blobId.getAccountId(), blobId.getContainerId(), 0);
+              new DeleteMessageFormatInputStream(blobId, blobId.getAccountId(), blobId.getContainerId(), 0, (short) 0);
         } else {//if (clazz == PutMessageFormatBlobV1InputStream.class) {
           messageFormatInputStream =
               new PutMessageFormatBlobV1InputStream(blobId, blobProperties, userMetaData, blobStream, blobStreamSize,

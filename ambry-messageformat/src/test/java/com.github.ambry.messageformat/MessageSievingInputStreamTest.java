@@ -681,7 +681,7 @@ public class MessageSievingInputStreamTest {
         containerId = Utils.getRandomShort(RANDOM);
         long deletionTimeMs = SystemTime.getInstance().milliseconds() + RANDOM.nextInt();
         MessageFormatInputStream messageFormatStream2 =
-            new DeleteMessageFormatInputStream(key2, accountId, containerId, deletionTimeMs);
+            new DeleteMessageFormatInputStream(key2, accountId, containerId, deletionTimeMs, (short) 0);
 
         MessageInfo msgInfo2 =
             new MessageInfo(key2, messageFormatStream2.getSize(), accountId, containerId, deletionTimeMs);

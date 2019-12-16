@@ -559,6 +559,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public void undelete(MessageWriteSet messageSetToUndelete) throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }

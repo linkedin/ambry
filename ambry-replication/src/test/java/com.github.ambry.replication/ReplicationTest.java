@@ -1816,7 +1816,8 @@ public class ReplicationTest {
    */
   private ByteBuffer getDeleteMessage(StoreKey id, short accountId, short containerId, long deletionTimeMs)
       throws MessageFormatException, IOException {
-    MessageFormatInputStream stream = new DeleteMessageFormatInputStream(id, accountId, containerId, deletionTimeMs);
+    MessageFormatInputStream stream = new DeleteMessageFormatInputStream(id, accountId, containerId, deletionTimeMs,
+        (short) 0);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
     return ByteBuffer.wrap(message);
   }
