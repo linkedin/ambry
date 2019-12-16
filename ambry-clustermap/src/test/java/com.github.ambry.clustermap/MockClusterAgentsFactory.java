@@ -73,7 +73,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         private final List<PartitionStateChangeListener> registeredPartitionStateChangeListeners = new ArrayList<>();
 
         @Override
-        public void participate(List<AmbryHealthReport> ambryHealthReports, DataNodeId currentNode) {
+        public void participate(List<AmbryHealthReport> ambryHealthReports) {
           for (String partitionName : partitionLeadershipList) {
             for (PartitionStateChangeListener partitionStateChangeListener : registeredPartitionStateChangeListeners) {
               partitionStateChangeListener.onPartitionBecomeLeaderFromStandby(partitionName);

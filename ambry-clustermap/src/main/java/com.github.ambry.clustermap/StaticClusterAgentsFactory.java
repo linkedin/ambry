@@ -81,7 +81,9 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         private final List<PartitionStateChangeListener> listeners = new LinkedList<>();
 
         @Override
-        public void participate(List<AmbryHealthReport> ambryHealthReports, DataNodeId currentNode) {
+        public void participate(List<AmbryHealthReport> ambryHealthReports) {
+          DataNodeId currentNode =
+              getClusterMap().getDataNodeId(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
           Set<String> partitionsOnNode = getClusterMap().getReplicaIds(currentNode)
               .stream()
               .map(r -> r.getPartitionId().toPathString())

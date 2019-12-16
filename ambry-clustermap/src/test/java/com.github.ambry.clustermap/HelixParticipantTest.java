@@ -84,7 +84,7 @@ public class HelixParticipantTest {
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
     HelixParticipant helixParticipant =
         new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory);
-    helixParticipant.participate(Collections.emptyList(), null);
+    helixParticipant.participate(Collections.emptyList());
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     InstanceConfig instanceConfig = new InstanceConfig("someInstanceId");
@@ -176,9 +176,9 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipantDummy =
         new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(propsDummy)), helixManagerFactory);
     HelixParticipant helixParticipantSpy = Mockito.spy(helixParticipant);
-    helixParticipant.participate(Collections.emptyList(), null);
-    helixParticipantDummy.participate(Collections.emptyList(), null);
-    helixParticipantSpy.participate(Collections.emptyList(), null);
+    helixParticipant.participate(Collections.emptyList());
+    helixParticipantDummy.participate(Collections.emptyList());
+    helixParticipantSpy.participate(Collections.emptyList());
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     InstanceConfig instanceConfig = new InstanceConfig("testInstanceId");
@@ -268,7 +268,7 @@ public class HelixParticipantTest {
     helixManagerFactory.getHelixManager().beBad = true;
     HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
     try {
-      helixParticipant.participate(Collections.emptyList(), null);
+      helixParticipant.participate(Collections.emptyList());
       fail("Participation should have failed");
     } catch (IOException e) {
       // OK
@@ -303,7 +303,7 @@ public class HelixParticipantTest {
   public void testHelixParticipant() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
-    participant.participate(Collections.emptyList(), null);
+    participant.participate(Collections.emptyList());
     MockHelixManagerFactory.MockHelixManager helixManager = helixManagerFactory.getHelixManager();
     assertTrue(helixManager.isConnected());
     assertEquals(stateModelDef, helixManager.getStateModelDef());

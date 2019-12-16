@@ -984,7 +984,7 @@ public class StorageManagerTest {
     }
 
     @Override
-    public void participate(List<AmbryHealthReport> ambryHealthReports, DataNodeId currentNode) throws IOException {
+    public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
       // no op
     }
 

@@ -37,7 +37,6 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -115,8 +114,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, storeManager);
     this.localPartitionNameToPartition = mapPartitionNameToPartition(clusterMap, currentNode);
-    this.partitionsToReplicate = replicationConfig.vcrRecoveryPartitions.isEmpty() ? new HashSet<>()
-        : Arrays.stream(replicationConfig.vcrRecoveryPartitions.split(",")).collect(Collectors.toSet());
+    this.partitionsToReplicate = replicationConfig.replicationVcrRecoveryPartitions.isEmpty() ? new HashSet<>()
+        : Utils.splitString(replicationConfig.replicationVcrRecoveryPartitions, ",", HashSet::new);
   }
 
   /**
@@ -219,40 +218,22 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     }
   }
 
+  /**
+   * Check if a token is for the given {@link RemoteReplicaInfo} based on partition id.
+   * @param remoteReplicaInfo The remoteReplicaInfo to check.
+   * @param tokenInfo The tokenInfo to check.
+   * @return true if partition id matches. false otherwise.
+   */
   @Override
-  protected int reloadReplicationTokenIfExists(ReplicaId localReplicaId, List<RemoteReplicaInfo> remoteReplicaInfos)
-      throws ReplicationException {
-    int tokenReloadFailureCount = 0;
-    List<RemoteReplicaInfo.ReplicaTokenInfo> tokenInfos = persistor.retrieve(localReplicaId.getMountPath());
-    if (tokenInfos.size() != 0) {
-      for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
-        boolean tokenReloaded = false;
-        for (RemoteReplicaInfo.ReplicaTokenInfo tokenInfo : tokenInfos) {
-          // Note that in case of cloudReplicaTokens, the actual remote data node might not match as the node is chosen at
-          // random during initialization. So its enough to just match the partitionId in the token so that replication
-          // can start from cloud from where it left off.
-          if (tokenInfo.getReplicaInfo()
-              .getReplicaId()
-              .getPartitionId()
-              .equals(remoteReplicaInfo.getReplicaId().getPartitionId())) {
-            logger.info("Read token for partition {} remote host {} port {} token {}", localReplicaId.getPartitionId(),
-                tokenInfo.getHostname(), tokenInfo.getPort(), tokenInfo.getReplicaToken());
-            tokenReloaded = true;
-            remoteReplicaInfo.initializeTokens(tokenInfo.getReplicaToken());
-            remoteReplicaInfo.setTotalBytesReadFromLocalStore(tokenInfo.getTotalBytesReadFromLocalStore());
-            break;
-          }
-        }
-        if (!tokenReloaded) {
-          // This may happen on clusterMap update: replica removed or added.
-          // Or error on token persist/retrieve.
-          logger.warn("Token not found or reload failed. remoteReplicaInfo: {} tokenInfos: {}", remoteReplicaInfo,
-              tokenInfos);
-          tokenReloadFailureCount++;
-        }
-      }
-    }
-    return tokenReloadFailureCount;
+  protected boolean isTokenForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo,
+      RemoteReplicaInfo.ReplicaTokenInfo tokenInfo) {
+    // Note that in case of cloudReplicaTokens, the actual remote vcr node might not match as the vcr node is chosen at
+    // random during initialization. So its enough to just match the partitionId in the token so that replication
+    // can start from cloud from where it left off.
+    return tokenInfo.getReplicaInfo()
+        .getReplicaId()
+        .getPartitionId()
+        .equals(remoteReplicaInfo.getReplicaId().getPartitionId());
   }
 
   /**
@@ -374,16 +355,14 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeLeaderFromStandby(String partitionName) {
       logger.info("Partition state change notification from Standby to Leader received for partition {}",
           partitionName);
-      if (!partitionsToReplicate.isEmpty() && !partitionsToReplicate.contains(partitionName)) {
-        logger.info("Ignoring state change of partition {} as it is not in recovery partition config", partitionName);
-        return;
-      }
-      synchronized (notificationLock) {
-        try {
-          addCloudReplica(partitionName);
-        } catch (ReplicationException rex) {
-          logger.error("Exception {} while adding replication for partition {}", rex, partitionName);
-          replicationMetrics.addCloudPartitionErrorCount.inc();
+      if (shouldReplicatePartition(partitionName)) {
+        synchronized (notificationLock) {
+          try {
+            addCloudReplica(partitionName);
+          } catch (ReplicationException rex) {
+            logger.error("Exception {} while adding replication for partition {}", rex, partitionName);
+            replicationMetrics.addCloudPartitionErrorCount.inc();
+          }
         }
       }
     }
@@ -392,13 +371,26 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
+      if (shouldReplicatePartition(partitionName)) {
+        synchronized (notificationLock) {
+          removeCloudReplica(partitionName);
+        }
+      }
+    }
+
+    /**
+     * If only config specified list of partitions are being replicated from cloud, then check that the partition
+     * belongs to the specified list.
+     * @param partitionName Name of the partition to be checked.
+     * @return true if all the partitions are being replicated or if the partition in the list of partitions to be
+     *         replicated. false otherwise.
+     */
+    private boolean shouldReplicatePartition(String partitionName) {
       if (!partitionsToReplicate.isEmpty() && !partitionsToReplicate.contains(partitionName)) {
         logger.info("Ignoring state change of partition {} as it is not in recovery partition config", partitionName);
-        return;
+        return false;
       }
-      synchronized (notificationLock) {
-        removeCloudReplica(partitionName);
-      }
+      return true;
     }
   }
 }
