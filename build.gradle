@@ -110,13 +110,18 @@ subprojects {
     allTest.dependsOn test
     allTest.dependsOn intTest
 
-    task testJar(type: Jar) {
+    task testJar(type: Jar, dependsOn: testClasses) {
         from sourceSets.test.output
         classifier = 'test'
     }
 
     artifacts {
         archives testJar
+    }
+
+    if (!project.hasProperty('disableShipkit')) {
+        // add test jars to maven publication if using shipkit
+        publishing.publications.javaLibrary.artifact testJar
     }
 
     javadoc {
