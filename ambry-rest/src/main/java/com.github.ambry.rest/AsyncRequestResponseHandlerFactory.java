@@ -60,19 +60,19 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
    * Constructor for {@link RestRequestHandlerFactory}.
    * @param handlerCount the number of request scaling units required.
    * @param metricRegistry the {@link MetricRegistry} instance that should be used for metrics.
-   * @param blobStorageService the {@link BlobStorageService} to use for handling requests.
+   * @param restRequestService the {@link RestRequestService} to use for handling requests.
    * @throws IllegalArgumentException if {@code handlerCount} <= 0 or if {@code metricRegistry} or
-   * {@code blobStorageService} is null.
+   * {@code restRequestService} is null.
    */
   public AsyncRequestResponseHandlerFactory(Integer handlerCount, MetricRegistry metricRegistry,
-      BlobStorageService blobStorageService) {
-    if (metricRegistry == null || blobStorageService == null) {
+      RestRequestService restRequestService) {
+    if (metricRegistry == null || restRequestService == null) {
       throw new IllegalArgumentException("One or more arguments received is null");
     } else if (handlerCount <= 0) {
       throw new IllegalArgumentException("Request handler scaling unit count has to be > 0. Is " + handlerCount);
     } else {
       buildInstance(metricRegistry);
-      instance.setupRequestHandling(handlerCount, blobStorageService);
+      instance.setupRequestHandling(handlerCount, restRequestService);
     }
     logger.trace("Instantiated AsyncRequestResponseHandlerFactory as RestRequestHandler");
   }

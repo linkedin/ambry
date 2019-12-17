@@ -16,7 +16,7 @@ package com.github.ambry.rest;
 /**
  * Meant to be the component that handles and routes all incoming requests.
  * <p/>
- * The requests are usually submitted by a {@link NioServer} and handled by a {@link BlobStorageService} with the
+ * The requests are usually submitted by a {@link NioServer} and handled by a {@link RestRequestService} with the
  * RestRequestHandler forming a bridge between them to provide scaling capabilities and non-blocking behaviour.
  * <p/>
  * Implementations are expected to be thread-safe.

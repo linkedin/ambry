@@ -20,17 +20,17 @@ import com.github.ambry.router.Router;
 
 
 /**
- * Implementation of {@link BlobStorageServiceFactory} that can be used in tests.
+ * Implementation of {@link RestRequestServiceFactory} that can be used in tests.
  * <p/>
- * Sets up all the supporting cast required for the operation of {@link MockBlobStorageService} and returns a new
- * instance on {@link #getBlobStorageService()}.
+ * Sets up all the supporting cast required for the operation of {@link MockRestRequestService} and returns a new
+ * instance on {@link #getRestRequestService()}.
  */
-public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory {
+public class MockRestRequestServiceFactory implements RestRequestServiceFactory {
   private final VerifiableProperties verifiableProperties;
   private final RestResponseHandler restResponseHandler;
   private final Router router;
 
-  public MockBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+  public MockRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       RestResponseHandler restResponseHandler, Router router, AccountService accountService) {
     this.verifiableProperties = verifiableProperties;
     this.restResponseHandler = restResponseHandler;
@@ -39,11 +39,11 @@ public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory 
 
   /**
    *
-   * Returns a new instance of {@link MockBlobStorageService}.
-   * @return a new instance of {@link MockBlobStorageService}.
+   * Returns a new instance of {@link MockRestRequestService}.
+   * @return a new instance of {@link MockRestRequestService}.
    */
   @Override
-  public BlobStorageService getBlobStorageService() {
-    return new MockBlobStorageService(verifiableProperties, restResponseHandler, router);
+  public RestRequestService getRestRequestService() {
+    return new MockRestRequestService(verifiableProperties, restResponseHandler, router);
   }
 }

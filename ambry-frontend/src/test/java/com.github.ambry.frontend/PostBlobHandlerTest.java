@@ -72,9 +72,9 @@ import static org.junit.Assert.*;
 
 /**
  * Tests for {@link PostBlobHandler}. PostBlob functionality was recently extracted into this handler class from
- * {@link AmbryBlobStorageService}, so the test cases are still in {@link AmbryBlobStorageServiceTest}.
+ * {@link FrontendRestRequestService}, so the test cases are still in {@link FrontendRestRequestServiceTest}.
  *
- * @todo extract post related test cases from AmbryBlobStorageServiceTest
+ * @todo extract post related test cases from FrontendRestRequestServiceTest
  */
 public class PostBlobHandlerTest {
   private static final InMemAccountService ACCOUNT_SERVICE = new InMemAccountService(false, true);
@@ -288,7 +288,7 @@ public class PostBlobHandlerTest {
    */
   private void doTtlRequiredEnforcementTest(Container container, long blobTtlSecs) throws Exception {
     JSONObject headers = new JSONObject();
-    AmbryBlobStorageServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !container.isCacheable(), SERVICE_ID,
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !container.isCacheable(), SERVICE_ID,
         CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), container.getName());
     byte[] content = TestUtils.getRandomBytes(1024);
     RestRequest request = getRestRequest(headers, "/", content);
@@ -358,7 +358,7 @@ public class PostBlobHandlerTest {
   private void doChunkUploadTest(int contentLength, boolean chunkUpload, String uploadSession, Integer maxUploadSize,
       long blobTtlSecs, ThrowingConsumer<ExecutionException> errorChecker) throws Exception {
     JSONObject headers = new JSONObject();
-    AmbryBlobStorageServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !REF_CONTAINER.isCacheable(), SERVICE_ID,
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !REF_CONTAINER.isCacheable(), SERVICE_ID,
         CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), REF_CONTAINER.getName());
     if (chunkUpload) {
       headers.put(RestUtils.Headers.CHUNK_UPLOAD, true);
@@ -500,7 +500,7 @@ public class PostBlobHandlerTest {
   private void stitchBlobAndVerify(byte[] requestBody, List<ChunkInfo> expectedStitchedChunks,
       ThrowingConsumer<ExecutionException> errorChecker) throws Exception {
     JSONObject headers = new JSONObject();
-    AmbryBlobStorageServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(),
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(),
         SERVICE_ID, CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), REF_CONTAINER.getName());
     RestRequest request = getRestRequest(headers, "/" + Operations.STITCH, requestBody);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -536,7 +536,7 @@ public class PostBlobHandlerTest {
    */
   private RestRequest getRestRequest(JSONObject headers, String path, byte[] requestBody)
       throws UnsupportedEncodingException, URISyntaxException, RestServiceException {
-    RestRequest request = AmbryBlobStorageServiceTest.createRestRequest(RestMethod.POST, path, headers,
+    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, path, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(requestBody), null)));
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));

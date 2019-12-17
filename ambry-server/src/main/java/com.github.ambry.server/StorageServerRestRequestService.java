@@ -16,21 +16,22 @@ package com.github.ambry.server;
 import com.github.ambry.commons.CopyingAsyncWritableChannel;
 import com.github.ambry.network.NettyServerRequest;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
-import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestResponseChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 /**
- * This is an Ambry storage server specific implementation of {@link BlobStorageService}.
+ * This is an Ambry storage server specific implementation of {@link RestRequestService}.
  * All the operations that need to be performed by the Ambry storage server are supported here.
  */
-public class ServerBlobStorageService implements BlobStorageService {
-  private static final Logger logger = LoggerFactory.getLogger(ServerBlobStorageService.class);
+public class StorageServerRestRequestService implements RestRequestService {
+  private static final Logger logger = LoggerFactory.getLogger(StorageServerRestRequestService.class);
   NettyServerRequestResponseChannel requestResponseChannel;
 
-  public ServerBlobStorageService(NettyServerRequestResponseChannel requestResponseChannel) {
+  public StorageServerRestRequestService(NettyServerRequestResponseChannel requestResponseChannel) {
     this.requestResponseChannel = requestResponseChannel;
   }
 

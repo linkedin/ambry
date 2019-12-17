@@ -18,11 +18,11 @@ package com.github.ambry.config;
  */
 public class RestServerConfig {
   /**
-   * The BlobStorageServiceFactory that needs to be used by the RestServer
-   * for bootstrapping the BlobStorageService.
+   * The RestRequestServiceFactory that needs to be used by the RestServer
+   * for bootstrapping the RestRequestService.
    */
-  @Config("rest.server.blob.storage.service.factory")
-  public final String restServerBlobStorageServiceFactory;
+  @Config("rest.server.rest.request.service.factory")
+  public final String restServerRestRequestServiceFactory;
 
   /**
    * The NioServerFactory that needs to be used by the RestServer or AmbryServer for
@@ -63,7 +63,7 @@ public class RestServerConfig {
   public final String restServerResponseHandlerFactory;
 
   /**
-   * The AccountServiceFactory that needs to be used by AmbryBlobStorageService to get account-related information.
+   * The AccountServiceFactory that needs to be used by FrontendRestRequestService to get account-related information.
    */
   @Config("rest.server.account.service.factory")
   @Default("com.github.ambry.account.InMemoryUnknownAccountServiceFactory")
@@ -99,7 +99,7 @@ public class RestServerConfig {
   public final String restServerHealthCheckUri;
 
   public RestServerConfig(VerifiableProperties verifiableProperties) {
-    restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
+    restServerRestRequestServiceFactory = verifiableProperties.getString("rest.server.rest.request.service.factory");
     restServerNioServerFactory = verifiableProperties.getString("rest.server.nio.server.factory",
         "com.github.ambry.rest.FrontendNettyFactory");
     restServerRequestHandlerScalingUnitCount =

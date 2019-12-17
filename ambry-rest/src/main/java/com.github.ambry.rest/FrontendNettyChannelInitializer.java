@@ -95,7 +95,7 @@ public class FrontendNettyChannelInitializer extends ChannelInitializer<SocketCh
         .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
         // for safe writing of chunks for responses
         .addLast("chunker", new ChunkedWriteHandler())
-        // custom processing class that interfaces with a BlobStorageService.
+        // custom processing class that interfaces with a RestRequestService.
         .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, performanceConfig, requestHandler));
   }
 }

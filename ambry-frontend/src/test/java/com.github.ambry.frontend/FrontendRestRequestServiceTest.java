@@ -109,9 +109,9 @@ import static org.junit.Assert.*;
 
 
 /**
- * Unit tests for {@link AmbryBlobStorageService}. Also tests {@link AccountAndContainerInjector}.
+ * Unit tests for {@link FrontendRestRequestService}. Also tests {@link AccountAndContainerInjector}.
  */
-public class AmbryBlobStorageServiceTest {
+public class FrontendRestRequestServiceTest {
   private final Account refAccount;
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -132,7 +132,7 @@ public class AmbryBlobStorageServiceTest {
   private FrontendConfig frontendConfig;
   private VerifiableProperties verifiableProperties;
   private boolean shouldAllowServiceIdBasedPut = true;
-  private AmbryBlobStorageService ambryBlobStorageService;
+  private FrontendRestRequestService frontendRestRequestService;
   private Container refContainer;
   private Container refDefaultPublicContainer;
   private Container refDefaultPrivateContainer;
@@ -142,11 +142,11 @@ public class AmbryBlobStorageServiceTest {
   private final int CONTENT_LENGTH = 1024;
 
   /**
-   * Sets up the {@link AmbryBlobStorageService} instance before a test.
+   * Sets up the {@link FrontendRestRequestService} instance before a test.
    * @throws InstantiationException
    * @throws IOException
    */
-  public AmbryBlobStorageServiceTest() throws Exception {
+  public FrontendRestRequestServiceTest() throws Exception {
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     configProps.setProperty("frontend.allow.service.id.based.post.request",
         String.valueOf(shouldAllowServiceIdBasedPut));
@@ -186,17 +186,17 @@ public class AmbryBlobStorageServiceTest {
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
     referenceBlobIdStr = referenceBlobId.getID();
-    ambryBlobStorageService = getAmbryBlobStorageService();
+    frontendRestRequestService = getFrontendRestRequestService();
     responseHandler.start();
-    ambryBlobStorageService.start();
+    frontendRestRequestService.start();
   }
 
   /**
-   * Shuts down the {@link AmbryBlobStorageService} instance after all tests.
+   * Shuts down the {@link FrontendRestRequestService} instance after all tests.
    */
   @After
-  public void shutdownAmbryBlobStorageService() {
-    ambryBlobStorageService.shutdown();
+  public void shutdownFrontendRestRequestService() {
+    frontendRestRequestService.shutdown();
     responseHandler.shutdown();
     router.close();
   }
@@ -207,31 +207,31 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void startShutDownTest() throws InstantiationException {
-    ambryBlobStorageService.start();
-    ambryBlobStorageService.shutdown();
+    frontendRestRequestService.start();
+    frontendRestRequestService.shutdown();
   }
 
   /**
-   * Tests for {@link AmbryBlobStorageService#shutdown()} when {@link AmbryBlobStorageService#start()} has not been
+   * Tests for {@link FrontendRestRequestService#shutdown()} when {@link FrontendRestRequestService#start()} has not been
    * called previously.
    * <p/>
-   * This test is for  cases where {@link AmbryBlobStorageService#start()} has failed and
-   * {@link AmbryBlobStorageService#shutdown()} needs to be run.
+   * This test is for  cases where {@link FrontendRestRequestService#start()} has failed and
+   * {@link FrontendRestRequestService#shutdown()} needs to be run.
    */
   @Test
   public void shutdownWithoutStartTest() {
-    AmbryBlobStorageService ambryBlobStorageService = getAmbryBlobStorageService();
-    ambryBlobStorageService.shutdown();
+    FrontendRestRequestService frontendRestRequestService = getFrontendRestRequestService();
+    frontendRestRequestService.shutdown();
   }
 
   /**
-   * This tests for exceptions thrown when an {@link AmbryBlobStorageService} instance is used without calling
-   * {@link AmbryBlobStorageService#start()} first.
+   * This tests for exceptions thrown when an {@link FrontendRestRequestService} instance is used without calling
+   * {@link FrontendRestRequestService#start()} first.
    * @throws Exception
    */
   @Test
   public void useServiceWithoutStartTest() throws Exception {
-    ambryBlobStorageService = getAmbryBlobStorageService();
+    frontendRestRequestService = getFrontendRestRequestService();
     // not fine to use without start.
     for (RestMethod method : RestMethod.values()) {
       if (method.equals(RestMethod.UNKNOWN)) {
@@ -242,7 +242,7 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Checks for reactions of all methods in {@link AmbryBlobStorageService} to null arguments.
+   * Checks for reactions of all methods in {@link FrontendRestRequestService} to null arguments.
    * @throws Exception
    */
   @Test
@@ -256,7 +256,7 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Checks reactions of all methods in {@link AmbryBlobStorageService} to a {@link Router} that throws
+   * Checks reactions of all methods in {@link FrontendRestRequestService} to a {@link Router} that throws
    * {@link RuntimeException}.
    * @throws Exception
    */
@@ -275,7 +275,7 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Checks reactions of PUT methods in {@link AmbryBlobStorageService} when there are bad request parameters
+   * Checks reactions of PUT methods in {@link FrontendRestRequestService} when there are bad request parameters
    * @throws Exception
    */
   @Test
@@ -286,17 +286,17 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Checks reactions of all methods in {@link AmbryBlobStorageService} to bad {@link RestResponseHandler} and
+   * Checks reactions of all methods in {@link FrontendRestRequestService} to bad {@link RestResponseHandler} and
    * {@link RestRequest} implementations.
    * @throws Exception
    */
   @Test
   public void badResponseHandlerAndRestRequestTest() throws Exception {
-    // What happens inside AmbryBlobStorageService during this test?
-    // 1. Since the RestRequest throws errors, AmbryBlobStorageService will attempt to submit response with exception
+    // What happens inside FrontendRestRequestService during this test?
+    // 1. Since the RestRequest throws errors, FrontendRestRequestService will attempt to submit response with exception
     //      to FrontendTestResponseHandler.
     // 2. The submission will fail because FrontendTestResponseHandler has been shutdown.
-    // 3. AmbryBlobStorageService will directly complete the request over the RestResponseChannel with the *original*
+    // 3. FrontendRestRequestService will directly complete the request over the RestResponseChannel with the *original*
     //      exception.
     // 4. It will then try to release resources but closing the RestRequest will also throw an exception. This exception
     //      is swallowed.
@@ -306,11 +306,11 @@ public class AmbryBlobStorageServiceTest {
     for (String methodName : new String[]{"handleGet", "handlePost", "handleHead", "handleDelete", "handleOptions",
         "handlePut"}) {
       Method method =
-          AmbryBlobStorageService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
+          FrontendRestRequestService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
       responseHandler.reset();
       RestRequest restRequest = new BadRestRequest();
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-      method.invoke(ambryBlobStorageService, restRequest, restResponseChannel);
+      method.invoke(frontendRestRequestService, restRequest, restResponseChannel);
       Exception e = restResponseChannel.getException();
       assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
     }
@@ -318,7 +318,7 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Tests
-   * {@link AmbryBlobStorageService#submitResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, Exception)}.
+   * {@link FrontendRestRequestService#submitResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, Exception)}.
    * @throws JSONException
    * @throws UnsupportedEncodingException
    * @throws URISyntaxException
@@ -333,7 +333,7 @@ public class AmbryBlobStorageServiceTest {
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
       assertTrue("RestRequest channel is not open", restRequest.isOpen());
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-      ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null,
+      frontendRestRequestService.submitResponse(restRequest, restResponseChannel, null,
           new RuntimeException(exceptionMsg));
       assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
@@ -343,7 +343,7 @@ public class AmbryBlobStorageServiceTest {
       restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel response = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
       assertTrue("Response channel is not open", response.isOpen());
-      ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, response, null);
+      frontendRestRequestService.submitResponse(restRequest, restResponseChannel, response, null);
       assertNotNull("There is no cause of failure", restResponseChannel.getException());
       // resources should have been cleaned up.
       assertFalse("Response channel is not cleaned up", response.isOpen());
@@ -357,13 +357,13 @@ public class AmbryBlobStorageServiceTest {
     for (String header : RestUtils.TrackingHeaders.TRACKING_HEADERS) {
       restRequest = createRestRequest(RestMethod.GET, "/", null, null);
       restResponseChannel = new MockRestResponseChannel();
-      ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null, null);
+      frontendRestRequestService.submitResponse(restRequest, restResponseChannel, null, null);
       assertTrue("Response header should not contain tracking info", restResponseChannel.getHeader(header) == null);
     }
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restRequest.setArg(RestUtils.InternalKeys.SEND_TRACKING_INFO, new Boolean(true));
     restResponseChannel = new MockRestResponseChannel();
-    ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null, null);
+    frontendRestRequestService.submitResponse(restRequest, restResponseChannel, null, null);
     assertEquals("Unexpected or missing tracking info", datacenterName,
         restResponseChannel.getHeader(RestUtils.TrackingHeaders.DATACENTER_NAME));
     assertEquals("Unexpected or missing tracking info", hostname,
@@ -386,26 +386,26 @@ public class AmbryBlobStorageServiceTest {
       ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
       assertTrue("RestRequest channel not open", restRequest.isOpen());
       assertTrue("ReadableStreamChannel not open", channel.isOpen());
-      ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, channel, null);
+      frontendRestRequestService.submitResponse(restRequest, restResponseChannel, channel, null);
       assertFalse("ReadableStreamChannel is still open", channel.isOpen());
 
       // null ReadableStreamChannel
       restRequest = createRestRequest(RestMethod.GET, "/", null, null);
       restResponseChannel = new MockRestResponseChannel();
       assertTrue("RestRequest channel not open", restRequest.isOpen());
-      ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null, null);
+      frontendRestRequestService.submitResponse(restRequest, restResponseChannel, null, null);
 
       // bad RestRequest (close() throws IOException)
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
       restResponseChannel = new MockRestResponseChannel();
       assertTrue("ReadableStreamChannel not open", channel.isOpen());
-      ambryBlobStorageService.submitResponse(new BadRestRequest(), restResponseChannel, channel, null);
+      frontendRestRequestService.submitResponse(new BadRestRequest(), restResponseChannel, channel, null);
 
       // bad ReadableStreamChannel (close() throws IOException)
       restRequest = createRestRequest(RestMethod.GET, "/", null, null);
       restResponseChannel = new MockRestResponseChannel();
       assertTrue("RestRequest channel not open", restRequest.isOpen());
-      ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, new BadRSC(), null);
+      frontendRestRequestService.submitResponse(restRequest, restResponseChannel, new BadRSC(), null);
     } finally {
       responseHandler.start();
     }
@@ -616,8 +616,8 @@ public class AmbryBlobStorageServiceTest {
   public void accountNameMismatchTest() throws Exception {
     accountService = new InMemAccountServiceFactory(true, false).getAccountService();
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
-    ambryBlobStorageService = getAmbryBlobStorageService();
-    ambryBlobStorageService.start();
+    frontendRestRequestService = getFrontendRestRequestService();
+    frontendRestRequestService.start();
     postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId",
         !refContainer.isCacheable(), null, null, RestServiceErrorCode.InternalServerError);
   }
@@ -756,11 +756,11 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void deleteServiceIdTest() throws Exception {
     FrontendTestRouter testRouter = new FrontendTestRouter();
-    ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
+    frontendRestRequestService =
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
             accountAndContainerInjector, datacenterName, hostname, clusterName);
-    ambryBlobStorageService.start();
+    frontendRestRequestService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
     headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
@@ -776,13 +776,13 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void getPeersTest() throws Exception {
-    ambryBlobStorageService.shutdown();
+    frontendRestRequestService.shutdown();
     TailoredPeersClusterMap clusterMap = new TailoredPeersClusterMap();
-    ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
+    frontendRestRequestService =
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
             accountAndContainerInjector, datacenterName, hostname, clusterName);
-    ambryBlobStorageService.start();
+    frontendRestRequestService.start();
     // test good requests
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
       String[] parts = datanode.split(":");
@@ -1041,11 +1041,11 @@ public class AmbryBlobStorageServiceTest {
     String exceptionMsg = UtilsTest.getRandomString(10);
     testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.BlobUpdateNotAllowed);
     testRouter.exceptionOpType = FrontendTestRouter.OpType.UpdateBlobTtl;
-    ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
+    frontendRestRequestService =
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
             accountAndContainerInjector, datacenterName, hostname, clusterName);
-    ambryBlobStorageService.start();
+    frontendRestRequestService.start();
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getAllPartitionIds(null).get(0), false,
         BlobId.BlobDataType.DATACHUNK).getID();
@@ -1055,7 +1055,7 @@ public class AmbryBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = verifyOperationFailure(restRequest, RestServiceErrorCode.NotAllowed);
     assertEquals("Unexpected response status", ResponseStatus.MethodNotAllowed, restResponseChannel.getStatus());
     assertEquals("Unexpected value for the 'allow' header",
-        AmbryBlobStorageService.TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE,
+        FrontendRestRequestService.TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE,
         restResponseChannel.getHeader(RestUtils.Headers.ALLOW));
   }
 
@@ -1071,12 +1071,12 @@ public class AmbryBlobStorageServiceTest {
             refAccount, refContainer, null);
     // this also verifies that the blob is inaccessible
     deleteBlobAndVerify(postResults.blobId, postResults.headers, postResults.content, refAccount, refContainer, false);
-    // now reload AmbryBlobStorageService with a new default get option (Include_Deleted and Include_All) and the blob
+    // now reload FrontendRestRequestService with a new default get option (Include_Deleted and Include_All) and the blob
     // can be retrieved
     verifyGetWithDefaultOptions(postResults.blobId, postResults.headers, postResults.content,
         EnumSet.of(GetOption.Include_Deleted_Blobs, GetOption.Include_All));
     // won't work with default GetOption.None
-    restartAmbryBlobStorageServiceWithDefaultGetOption(GetOption.None);
+    restartFrontendRestRequestServiceWithDefaultGetOption(GetOption.None);
     verifyOperationsAfterDelete(postResults.blobId, postResults.headers, postResults.content, refAccount, refContainer);
   }
 
@@ -1093,12 +1093,12 @@ public class AmbryBlobStorageServiceTest {
     Thread.sleep(5);
     RestRequest restRequest = createRestRequest(RestMethod.GET, postResults.blobId, null, null);
     verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
-    // now reload AmbryBlobStorageService with a new default get option (Include_Expired and Include_All) and the blob
+    // now reload FrontendRestRequestService with a new default get option (Include_Expired and Include_All) and the blob
     // can be retrieved
     verifyGetWithDefaultOptions(postResults.blobId, postResults.headers, postResults.content,
         EnumSet.of(GetOption.Include_Expired_Blobs, GetOption.Include_All));
     // won't work with default GetOption.None
-    restartAmbryBlobStorageServiceWithDefaultGetOption(GetOption.None);
+    restartFrontendRestRequestServiceWithDefaultGetOption(GetOption.None);
     restRequest = createRestRequest(RestMethod.GET, postResults.blobId, null, null);
     verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
   }
@@ -1264,9 +1264,9 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Does an operation in {@link AmbryBlobStorageService} as dictated by the {@link RestMethod} in {@code restRequest}
+   * Does an operation in {@link FrontendRestRequestService} as dictated by the {@link RestMethod} in {@code restRequest}
    * and returns the result, if any. If an exception occurs during the operation, throws the exception.
-   * @param restRequest the {@link RestRequest} that needs to be submitted to the {@link AmbryBlobStorageService}.
+   * @param restRequest the {@link RestRequest} that needs to be submitted to the {@link FrontendRestRequestService}.
    * @param restResponseChannel the {@link RestResponseChannel} to use to return the response.
    * @throws Exception
    */
@@ -1274,22 +1274,22 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     switch (restRequest.getRestMethod()) {
       case POST:
-        ambryBlobStorageService.handlePost(restRequest, restResponseChannel);
+        frontendRestRequestService.handlePost(restRequest, restResponseChannel);
         break;
       case PUT:
-        ambryBlobStorageService.handlePut(restRequest, restResponseChannel);
+        frontendRestRequestService.handlePut(restRequest, restResponseChannel);
         break;
       case GET:
-        ambryBlobStorageService.handleGet(restRequest, restResponseChannel);
+        frontendRestRequestService.handleGet(restRequest, restResponseChannel);
         break;
       case DELETE:
-        ambryBlobStorageService.handleDelete(restRequest, restResponseChannel);
+        frontendRestRequestService.handleDelete(restRequest, restResponseChannel);
         break;
       case HEAD:
-        ambryBlobStorageService.handleHead(restRequest, restResponseChannel);
+        frontendRestRequestService.handleHead(restRequest, restResponseChannel);
         break;
       case OPTIONS:
-        ambryBlobStorageService.handleOptions(restRequest, restResponseChannel);
+        frontendRestRequestService.handleOptions(restRequest, restResponseChannel);
         break;
       default:
         fail("RestMethod not supported: " + restRequest.getRestMethod());
@@ -1350,11 +1350,11 @@ public class AmbryBlobStorageServiceTest {
   // Constructor helpers
 
   /**
-   * Sets up and gets an instance of {@link AmbryBlobStorageService}.
-   * @return an instance of {@link AmbryBlobStorageService}.
+   * Sets up and gets an instance of {@link FrontendRestRequestService}.
+   * @return an instance of {@link FrontendRestRequestService}.
    */
-  private AmbryBlobStorageService getAmbryBlobStorageService() {
-    return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
+  private FrontendRestRequestService getFrontendRestRequestService() {
+    return new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
         idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
         accountAndContainerInjector, datacenterName, hostname, clusterName);
   }
@@ -1362,19 +1362,19 @@ public class AmbryBlobStorageServiceTest {
   // nullInputsForFunctionsTest() helpers
 
   /**
-   * Checks for reaction to null input in {@code methodName} in {@link AmbryBlobStorageService}.
+   * Checks for reaction to null input in {@code methodName} in {@link FrontendRestRequestService}.
    * @param methodName the name of the method to invoke.
    * @throws Exception
    */
   private void doNullInputsForFunctionsTest(String methodName) throws Exception {
     Method method =
-        AmbryBlobStorageService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
+        FrontendRestRequestService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
 
     responseHandler.reset();
     try {
-      method.invoke(ambryBlobStorageService, null, restResponseChannel);
+      method.invoke(frontendRestRequestService, null, restResponseChannel);
       fail("Method [" + methodName + "] should have failed because RestRequest is null");
     } catch (InvocationTargetException e) {
       assertEquals("Unexpected exception class", IllegalArgumentException.class, e.getTargetException().getClass());
@@ -1382,7 +1382,7 @@ public class AmbryBlobStorageServiceTest {
 
     responseHandler.reset();
     try {
-      method.invoke(ambryBlobStorageService, restRequest, null);
+      method.invoke(frontendRestRequestService, restRequest, null);
       fail("Method [" + methodName + "] should have failed because RestResponseChannel is null");
     } catch (InvocationTargetException e) {
       assertEquals("Unexpected exception class", IllegalArgumentException.class, e.getTargetException().getClass());
@@ -1392,9 +1392,9 @@ public class AmbryBlobStorageServiceTest {
   // runtimeExceptionRouterTest() helpers
 
   /**
-   * Tests reactions of various methods of {@link AmbryBlobStorageService} to a {@link Router} that throws
+   * Tests reactions of various methods of {@link FrontendRestRequestService} to a {@link Router} that throws
    * {@link RuntimeException}.
-   * @param restMethod used to determine the method to invoke in {@link AmbryBlobStorageService}.
+   * @param restMethod used to determine the method to invoke in {@link FrontendRestRequestService}.
    * @throws Exception
    */
   private void doRuntimeExceptionRouterTest(RestMethod restMethod) throws Exception {
@@ -1874,7 +1874,7 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Verifies that a request returns the right response code once the blob's TTL has been updated.
-   * @param restRequest the {@link RestRequest} to send to {@link AmbryBlobStorageService}.
+   * @param restRequest the {@link RestRequest} to send to {@link FrontendRestRequestService}.
    * @throws Exception
    */
   private void verifyUpdateBlobTtlResponse(RestRequest restRequest) throws Exception {
@@ -1948,7 +1948,7 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Verifies that a request returns the right response code  once the blob has been deleted.
-   * @param restRequest the {@link RestRequest} to send to {@link AmbryBlobStorageService}.
+   * @param restRequest the {@link RestRequest} to send to {@link FrontendRestRequestService}.
    * @throws Exception
    */
   private void verifyDeleteAccepted(RestRequest restRequest) throws Exception {
@@ -1972,25 +1972,25 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Does the exception pipelining test for {@link IdConverter}.
-   * @param converterFactory the {@link IdConverterFactory} to use to while creating {@link AmbryBlobStorageService}.
+   * @param converterFactory the {@link IdConverterFactory} to use to while creating {@link FrontendRestRequestService}.
    * @param expectedExceptionMsg the expected exception message.
    * @throws InstantiationException
    * @throws JSONException
    */
   private void doIdConverterExceptionTest(FrontendTestIdConverterFactory converterFactory, String expectedExceptionMsg)
       throws InstantiationException, JSONException {
-    ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
+    frontendRestRequestService =
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
             converterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
             accountAndContainerInjector, datacenterName, hostname, clusterName);
-    ambryBlobStorageService.start();
+    frontendRestRequestService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     doExternalServicesBadInputTest(restMethods, expectedExceptionMsg, false);
   }
 
   /**
    * Does the exception pipelining test for {@link SecurityService}.
-   * @param securityFactory the {@link SecurityServiceFactory} to use to while creating {@link AmbryBlobStorageService}.
+   * @param securityFactory the {@link SecurityServiceFactory} to use to while creating {@link FrontendRestRequestService}.
    * @param exceptionMsg the expected exception message.
    * @throws InstantiationException
    * @throws JSONException
@@ -2010,11 +2010,11 @@ public class AmbryBlobStorageServiceTest {
       } else {
         restMethods = RestMethod.values();
       }
-      ambryBlobStorageService =
-          new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
+      frontendRestRequestService =
+          new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
               clusterMap, idConverterFactory, securityFactory, urlSigningService, idSigningService, accountService,
               accountAndContainerInjector, datacenterName, hostname, clusterName);
-      ambryBlobStorageService.start();
+      frontendRestRequestService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg,
           mode == FrontendTestSecurityServiceFactory.Mode.ProcessResponse);
     }
@@ -2062,16 +2062,16 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Does the exception pipelining test for {@link Router}.
-   * @param testRouter the {@link Router} to use to while creating {@link AmbryBlobStorageService}.
+   * @param testRouter the {@link Router} to use to while creating {@link FrontendRestRequestService}.
    * @param exceptionMsg the expected exception message.
    * @throws Exception
    */
   private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
-    ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
+    frontendRestRequestService =
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
             idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
             accountAndContainerInjector, datacenterName, hostname, clusterName);
-    ambryBlobStorageService.start();
+    frontendRestRequestService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {
         case HEAD:
@@ -2100,10 +2100,10 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Checks that the exception received by submitting {@code restRequest} to {@link AmbryBlobStorageService} matches
+   * Checks that the exception received by submitting {@code restRequest} to {@link FrontendRestRequestService} matches
    * what was expected.
    * @param expectedExceptionMsg the expected exception message.
-   * @param restRequest the {@link RestRequest} to submit to {@link AmbryBlobStorageService}.
+   * @param restRequest the {@link RestRequest} to submit to {@link FrontendRestRequestService}.
    * @throws Exception
    */
   private void checkRouterExceptionPipeline(String expectedExceptionMsg, RestRequest restRequest) throws Exception {
@@ -2275,8 +2275,8 @@ public class AmbryBlobStorageServiceTest {
     verifiableProperties = new VerifiableProperties(configProps);
     frontendConfig = new FrontendConfig(verifiableProperties);
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
-    ambryBlobStorageService = getAmbryBlobStorageService();
-    ambryBlobStorageService.start();
+    frontendRestRequestService = getFrontendRestRequestService();
+    frontendRestRequestService.start();
     populateAccountService();
 
     // should succeed when serviceId-based PUT requests are allowed.
@@ -2425,17 +2425,17 @@ public class AmbryBlobStorageServiceTest {
   // defaultGetDeletedTest() and defaultGetExpiredTest() helpers
 
   /**
-   * Restarts {@link #ambryBlobStorageService} with the default {@link GetOption} set to {@code option}
+   * Restarts {@link #frontendRestRequestService} with the default {@link GetOption} set to {@code option}
    * @param option the value to set for "frontend.default.router.get.option"
    * @throws InstantiationException
    */
-  private void restartAmbryBlobStorageServiceWithDefaultGetOption(GetOption option) throws InstantiationException {
-    ambryBlobStorageService.shutdown();
+  private void restartFrontendRestRequestServiceWithDefaultGetOption(GetOption option) throws InstantiationException {
+    frontendRestRequestService.shutdown();
     configProps.setProperty("frontend.default.router.get.option", option.name());
     verifiableProperties = new VerifiableProperties(configProps);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    ambryBlobStorageService = getAmbryBlobStorageService();
-    ambryBlobStorageService.start();
+    frontendRestRequestService = getFrontendRestRequestService();
+    frontendRestRequestService.start();
   }
 
   /**
@@ -2450,7 +2450,7 @@ public class AmbryBlobStorageServiceTest {
   private void verifyGetWithDefaultOptions(String blobId, JSONObject expectedHeaders, ByteBuffer expectedContent,
       EnumSet<GetOption> defaultOptionsToTest) throws Exception {
     for (GetOption option : defaultOptionsToTest) {
-      restartAmbryBlobStorageServiceWithDefaultGetOption(option);
+      restartFrontendRestRequestServiceWithDefaultGetOption(option);
       getBlobInfoAndVerify(blobId, null, expectedHeaders, refAccount, refContainer);
       getHeadAndVerify(blobId, null, null, expectedHeaders, refAccount, refContainer);
       getBlobAndVerify(blobId, null, null, expectedHeaders, expectedContent, refAccount, refContainer);
@@ -2458,7 +2458,7 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Results from a POST performed against {@link AmbryBlobStorageService}
+   * Results from a POST performed against {@link FrontendRestRequestService}
    */
   private class PostResults {
     final String blobId;

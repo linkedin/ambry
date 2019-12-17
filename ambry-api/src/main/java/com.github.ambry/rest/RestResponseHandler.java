@@ -19,7 +19,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 /**
  * Meant to be the component that handles and routes all outgoing responses.
  * <p/>
- * The responses are usually submitted by the {@link BlobStorageService} and sent out via the
+ * The responses are usually submitted by the {@link RestRequestService} and sent out via the
  * {@link RestResponseChannel} with the RestResponseHandler forming a bridge between them to provide scaling
  * capabilities and non-blocking behaviour.
  * <p/>

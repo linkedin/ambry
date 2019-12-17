@@ -31,9 +31,9 @@ public class MockRestRequestResponseHandlerFactory implements RestRequestHandler
   }
 
   public MockRestRequestResponseHandlerFactory(Object handlerCount, Object metricRegistry,
-      BlobStorageService blobStorageService) {
+      RestRequestService restRequestService) {
     MockRestRequestResponseHandler requestHandler = getInstance();
-    requestHandler.setBlobStorageService(blobStorageService);
+    requestHandler.setRestRequestService(restRequestService);
   }
 
   /**

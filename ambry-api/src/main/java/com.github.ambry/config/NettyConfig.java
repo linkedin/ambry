@@ -13,6 +13,7 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.rest.RestRequestService;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -121,7 +122,7 @@ public class NettyConfig {
 
   /**
    * A comma separated list of query parameters that should not be honored when forwarded to the
-   * {@link com.github.ambry.rest.BlobStorageService} layer.
+   * {@link RestRequestService} layer.
    */
   @Config(NETTY_SERVER_BLACKLISTED_QUERY_PARAMS)
   @Default("")

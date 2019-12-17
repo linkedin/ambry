@@ -69,28 +69,28 @@ public class FrontendConfig {
   public final String optionsAllowMethods;
 
   /**
-   * The IdConverterFactory that needs to be used by AmbryBlobStorageService to convert IDs.
+   * The IdConverterFactory that needs to be used by FrontendRestRequestService to convert IDs.
    */
   @Config("frontend.id.converter.factory")
   @Default("com.github.ambry.frontend.AmbryIdConverterFactory")
   public final String idConverterFactory;
 
   /**
-   * The SecurityServiceFactory that needs to be used by AmbryBlobStorageService to validate requests.
+   * The SecurityServiceFactory that needs to be used by FrontendRestRequestService to validate requests.
    */
   @Config("frontend.security.service.factory")
   @Default("com.github.ambry.frontend.AmbrySecurityServiceFactory")
   public final String securityServiceFactory;
 
   /**
-   * The UrlSigningServiceFactory that needs to be used by AmbryBlobStorageService to sign and verify URLs.
+   * The UrlSigningServiceFactory that needs to be used by FrontendRestRequestService to sign and verify URLs.
    */
   @Config("frontend.url.signing.service.factory")
   @Default("com.github.ambry.frontend.AmbryUrlSigningServiceFactory")
   public final String urlSigningServiceFactory;
 
   /**
-   * The IdSigningService that needs to be used by AmbryBlobStorageService to sign and verify IDs.
+   * The IdSigningService that needs to be used by FrontendRestRequestService to sign and verify IDs.
    */
   private static final String ID_SIGNING_SERVICE_FACTORY_KEY = PREFIX + "id.signing.service.factory";
   @Config(ID_SIGNING_SERVICE_FACTORY_KEY)
