@@ -117,6 +117,9 @@ public class GCMCryptoServiceTest {
       Assert.assertTrue(encryptedBytesByteBufDirect.hasArray());
       Assert.assertEquals(encryptedBytes.remaining(), encryptedBytesByteBufHeap.readableBytes());
       Assert.assertEquals(encryptedBytes.remaining(), encryptedBytesByteBufDirect.readableBytes());
+      Assert.assertEquals(toEncrypt.remaining(), 0);
+      Assert.assertEquals(toEncryptByteBufDirect.readableBytes(), 0);
+      Assert.assertEquals(toEncryptByteBufHeap.readableBytes(), 0);
 
       byte[] arrayFromByteBuf = new byte[encryptedBytesByteBufHeap.readableBytes()];
       encryptedBytesByteBufHeap.getBytes(encryptedBytesByteBufHeap.readerIndex(), arrayFromByteBuf);
@@ -136,6 +139,9 @@ public class GCMCryptoServiceTest {
       Assert.assertTrue(decryptedBytesByteBufDirect.hasArray());
       Assert.assertEquals(decryptedBytes.remaining(), decryptedBytesByteBufHeap.readableBytes());
       Assert.assertEquals(decryptedBytes.remaining(), decryptedBytesByteBufDirect.readableBytes());
+      Assert.assertEquals(encryptedBytes.remaining(), 0);
+      Assert.assertEquals(toDecryptByteBufDirect.readableBytes(), 0);
+      Assert.assertEquals(toDecryptByteBufHeap.readableBytes(), 0);
 
       arrayFromByteBuf = new byte[decryptedBytesByteBufHeap.readableBytes()];
       decryptedBytesByteBufHeap.getBytes(decryptedBytesByteBufHeap.readerIndex(), arrayFromByteBuf);
@@ -188,6 +194,8 @@ public class GCMCryptoServiceTest {
       ByteBuf encryptedBytes = cryptoService.encrypt(toEncrypt, secretKeySpec, fixedIv);
       ByteBuf encryptedBytesComposite = cryptoService.encrypt(toEncryptComposite, secretKeySpec, fixedIv);
       Assert.assertEquals(encryptedBytes.readableBytes(), encryptedBytesComposite.readableBytes());
+      Assert.assertEquals(toEncrypt.readableBytes(), 0);
+      Assert.assertEquals(toEncryptComposite.readableBytes(), 0);
 
       byte[] array = new byte[encryptedBytes.readableBytes()];
       encryptedBytes.getBytes(encryptedBytes.readerIndex(), array);
@@ -215,6 +223,8 @@ public class GCMCryptoServiceTest {
       ByteBuf decryptedBytesComposite = cryptoService.decrypt(toDecryptComposite, secretKeySpec);
 
       Assert.assertEquals(decryptedBytes.readableBytes(), decryptedBytesComposite.readableBytes());
+      Assert.assertEquals(toDecrypt.readableBytes(), 0);
+      Assert.assertEquals(toDecryptComposite.readableBytes(), 0);
 
       array = new byte[decryptedBytes.readableBytes()];
       arrayComposite = new byte[decryptedBytesComposite.readableBytes()];

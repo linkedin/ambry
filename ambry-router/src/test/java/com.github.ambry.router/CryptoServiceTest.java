@@ -153,22 +153,26 @@ public class CryptoServiceTest {
     for (int i = 0; i < 5; i++) {
       ByteBuf toEncryptByteBuf = createByteBuf();
       ByteBuffer toEncrypt = fromByteBufToByteBuffer(toEncryptByteBuf);
-      ByteBuffer encryptedBytes = cryptoService.encrypt(toEncrypt, secretKeySpec);
       ByteBuf encryptedBytesByteBuf = cryptoService.encrypt(toEncryptByteBuf, secretKeySpec);
+      ByteBuffer encryptedBytes = cryptoService.encrypt(toEncrypt, secretKeySpec);
 
       Assert.assertTrue(encryptedBytesByteBuf.hasArray());
       Assert.assertEquals(encryptedBytes.remaining(), encryptedBytesByteBuf.readableBytes());
+      Assert.assertEquals(toEncryptByteBuf.readableBytes(), 0);
+      Assert.assertEquals(toEncrypt.remaining(), 0);
       byte[] arrayFromByteBuf = new byte[encryptedBytesByteBuf.readableBytes()];
       encryptedBytesByteBuf.getBytes(encryptedBytesByteBuf.readerIndex(), arrayFromByteBuf);
       Assert.assertArrayEquals(encryptedBytes.array(), arrayFromByteBuf);
 
       ByteBuf toDecryptByteBuf = maybeConvertToComposite(encryptedBytesByteBuf);
       ByteBuffer toDecrypt = encryptedBytes;
-      ByteBuffer decryptedBytes = cryptoService.decrypt(encryptedBytes, secretKeySpec);
       ByteBuf decryptedBytesByteBuf = cryptoService.decrypt(toDecryptByteBuf, secretKeySpec);
+      ByteBuffer decryptedBytes = cryptoService.decrypt(encryptedBytes, secretKeySpec);
 
       Assert.assertTrue(decryptedBytesByteBuf.hasArray());
       Assert.assertEquals(decryptedBytes.remaining(), decryptedBytesByteBuf.readableBytes());
+      Assert.assertEquals(toDecryptByteBuf.readableBytes(), 0);
+      Assert.assertEquals(toDecrypt.remaining(), 0);
       arrayFromByteBuf = new byte[decryptedBytesByteBuf.readableBytes()];
       decryptedBytesByteBuf.getBytes(decryptedBytesByteBuf.readerIndex(), arrayFromByteBuf);
       Assert.assertArrayEquals(decryptedBytes.array(), arrayFromByteBuf);

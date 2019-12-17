@@ -145,7 +145,7 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
         if (toRelease) {
           toEncrypt.release();
         } else {
-          toEncrypt.readerIndex(toEncrypt.readerIndex() + toEncrypt.readableBytes());
+          toEncrypt.skipBytes(toEncrypt.readableBytes());
         }
       }
     } catch (Exception e) {
@@ -195,7 +195,7 @@ public class GCMCryptoService implements CryptoService<SecretKeySpec> {
         if (toRelease) {
           toDecrypt.release();
         } else {
-          toDecrypt.readerIndex(toDecrypt.readerIndex() + toDecrypt.readableBytes());
+          toDecrypt.skipBytes(toDecrypt.readableBytes());
         }
       }
     } catch (Exception e) {

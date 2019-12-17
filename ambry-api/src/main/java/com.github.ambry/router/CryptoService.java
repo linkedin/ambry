@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
@@ -48,17 +49,9 @@ public interface CryptoService<T> {
    * @throws {@link GeneralSecurityException} on any exception with encryption
    */
   default ByteBuf encrypt(ByteBuf toEncrypt, T key) throws GeneralSecurityException {
-    if (toEncrypt.nioBufferCount() == 1) {
-      return Unpooled.wrappedBuffer(encrypt(toEncrypt.nioBuffer(), key));
-    } else {
-      ByteBuf temp = ByteBufAllocator.DEFAULT.heapBuffer(toEncrypt.readableBytes());
-      try {
-        temp.writeBytes(toEncrypt);
-        return Unpooled.wrappedBuffer(encrypt(temp.nioBuffer(), key));
-      } finally {
-        temp.release();
-      }
-    }
+    return Utils.applyByteBufferFunctionToByteBuf(toEncrypt, (buffer) -> {
+      return encrypt(buffer, key);
+    });
   }
 
   /**
@@ -79,17 +72,9 @@ public interface CryptoService<T> {
    * @throws {@link GeneralSecurityException} on any exception with decryption
    */
   default ByteBuf decrypt(ByteBuf toDecrypt, T key) throws GeneralSecurityException {
-    if (toDecrypt.nioBufferCount() == 1) {
-      return Unpooled.wrappedBuffer(decrypt(toDecrypt.nioBuffer(), key));
-    } else {
-      ByteBuf temp = ByteBufAllocator.DEFAULT.heapBuffer(toDecrypt.readableBytes());
-      try {
-        temp.writeBytes(toDecrypt);
-        return Unpooled.wrappedBuffer(decrypt(temp.nioBuffer(), key));
-      } finally {
-        temp.release();
-      }
-    }
+    return Utils.applyByteBufferFunctionToByteBuf(toDecrypt, (buffer) -> {
+      return decrypt(buffer, key);
+    });
   }
 
   /**
