@@ -65,10 +65,13 @@ public class AmbryPartitionStateModel extends StateModel {
     }
     try {
       replicaSyncUpManager.waitBootstrapCompleted(partitionName);
-    } catch (InterruptedException | IllegalStateException e) {
-      logger.error("Bootstrap failed or was interrupted on partition {}", partitionName);
+    } catch (InterruptedException e) {
+      logger.error("Bootstrap was interrupted on partition {}", partitionName);
       throw new StateTransitionException("Bootstrap failed or was interrupted",
           StateTransitionException.TransitionErrorCode.BootstrapFailure);
+    } catch (StateTransitionException e) {
+      logger.error("Bootstrap didn't complete.", e);
+      throw e;
     }
   }
 

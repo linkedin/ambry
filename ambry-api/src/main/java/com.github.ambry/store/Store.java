@@ -116,6 +116,11 @@ public interface Store {
   boolean isBootstrapInProgress();
 
   /**
+   * Take actions (if any) to complete the bootstrap (i.e, delete bootstrap file in store directory)
+   */
+  void completeBootstrap();
+
+  /**
    * Set current state of the store.
    * @param state {@link ReplicaState} associated with local store
    */

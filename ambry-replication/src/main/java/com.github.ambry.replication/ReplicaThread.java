@@ -454,6 +454,7 @@ public class ReplicaThread implements Runnable {
                   // complete BOOTSTRAP -> STANDBY transition
                   remoteReplicaInfo.getLocalStore().setCurrentState(ReplicaState.STANDBY);
                   replicaSyncUpManager.onBootstrapComplete(localReplica.getPartitionId().toPathString());
+                  remoteReplicaInfo.getLocalStore().completeBootstrap();
                 }
               }
               replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,

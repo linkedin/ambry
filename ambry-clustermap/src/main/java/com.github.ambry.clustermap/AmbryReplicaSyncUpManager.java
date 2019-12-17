@@ -58,7 +58,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
       partitionToBootstrapLatch.remove(partitionName);
       if (!partitionToBootstrapSuccess.remove(partitionName)) {
         throw new StateTransitionException("Partition " + partitionName + " failed on bootstrap.",
-            StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+            StateTransitionException.TransitionErrorCode.BootstrapFailure);
       }
       logger.info("Bootstrap is complete on partition {}", partitionName);
     }
