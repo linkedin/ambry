@@ -172,8 +172,6 @@ public class GCMCryptoServiceTest {
 
       ByteBuf toEncrypt = Unpooled.wrappedBuffer(randomData);
       CompositeByteBuf toEncryptComposite = new CompositeByteBuf(toEncrypt.alloc(), toEncrypt.isDirect(), size);
-      // break this array to three parts
-      // First component
       int start = 0;
       int end = 0;
       for (int j = 0; j < 3; j++) {
