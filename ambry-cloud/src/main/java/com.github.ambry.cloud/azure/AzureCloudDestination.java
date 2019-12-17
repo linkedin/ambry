@@ -30,6 +30,7 @@ import com.microsoft.azure.cosmosdb.ConnectionPolicy;
 import com.microsoft.azure.cosmosdb.ConsistencyLevel;
 import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
+import com.microsoft.azure.cosmosdb.PartitionKey;
 import com.microsoft.azure.cosmosdb.ResourceResponse;
 import com.microsoft.azure.cosmosdb.RetryOptions;
 import com.microsoft.azure.cosmosdb.SqlParameter;
@@ -255,6 +256,17 @@ class AzureCloudDestination implements CloudDestination {
   @Override
   public List<CloudBlobMetadata> findEntriesSince(String partitionPath, CloudFindToken findToken,
       long maxTotalSizeOfEntries) throws CloudStorageException {
+    ChangeFeedOptions changeFeedOptions = new ChangeFeedOptions();
+    changeFeedOptions.setPartitionKey(new PartitionKey(partitionPath));
+    if(findToken.getCloudDestinationToken() != null) {
+      AzureCloudDestinationToken azureCloudDestinationToken = (AzureCloudDestinationToken) findToken.getCloudDestinationToken();
+      changeFeedOptions.setRequestContinuation(azureCloudDestinationToken.getCosmosRequestContinuationToken());
+    } else {
+      changeFeedOptions.setStartFromBeginning(true);
+    }
+    changeFeedOptions.setMaxItemCount(100);
+
+
     SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
         new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, findSinceQueryLimit),
             new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime())));

@@ -19,7 +19,6 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -33,64 +32,44 @@ public class CloudFindToken implements FindToken {
   static final short CURRENT_VERSION = VERSION_0;
   private final short version;
   private final FindTokenType type;
-  private final long lastUpdateTime;
-  private final Set<String> lastUpdateTimeReadBlobIds;
+  private final CloudDestinationToken cloudDestinationToken;
   private final long bytesRead;
 
   /** Constructor for start token */
-  public CloudFindToken() {
-    this((short) 0, 0, new HashSet<>());
+  public CloudFindToken(CloudDestinationTokenFactory cloudDestinationTokenFactory) {
+    this(VERSION_0, 0, cloudDestinationTokenFactory.getNewCloudDestinationToken());
   }
 
   /** Constructor for in-progress token */
-  public CloudFindToken(long lastUpdateTime, long bytesRead, Set<String> lastUpdateTimeReadBlobIds) {
+  public CloudFindToken(long bytesRead, CloudDestinationToken cloudDestinationToken) {
     this.version = CURRENT_VERSION;
     this.type = FindTokenType.CloudBased;
-    this.lastUpdateTime = lastUpdateTime;
     this.bytesRead = bytesRead;
-    this.lastUpdateTimeReadBlobIds = new HashSet<>(lastUpdateTimeReadBlobIds);
+    this.cloudDestinationToken = cloudDestinationToken;
   }
 
   /** Constructor for reading token that can have older version*/
-  public CloudFindToken(short version, long lastUpdateTime, long bytesRead, Set<String> lastUpdateTimeReadBlobIds) {
+  public CloudFindToken(short version, long bytesRead, CloudDestinationToken cloudDestinationToken) {
     this.version = version;
     this.type = FindTokenType.CloudBased;
-    this.lastUpdateTime = lastUpdateTime;
     this.bytesRead = bytesRead;
-    this.lastUpdateTimeReadBlobIds = new HashSet<>(lastUpdateTimeReadBlobIds);
+    this.cloudDestinationToken = cloudDestinationToken;
   }
 
   /**
-   * Utility to construct a new CloudFindToken from a previous instance and the results of a findEntriesSince query.
+   * Utility to construct a new CloudFindToken from a previous instance and new token returned from findEntriesSince query.
    * @param prevToken previous {@link CloudFindToken}.
-   * @param queryResults List of {@link CloudBlobMetadata} objects.
+   * @param cloudDestinationToken new {@link CloudDestinationToken}
+   * @param newBytesRead bytes read in the findEntriesSince query.
    * @return the updated token.
    */
-  public static CloudFindToken getUpdatedToken(CloudFindToken prevToken, List<CloudBlobMetadata> queryResults) {
-    if (queryResults.isEmpty()) {
+  public static CloudFindToken getUpdatedToken(CloudFindToken prevToken, CloudDestinationToken cloudDestinationToken,
+      long newBytesRead) {
+    if (cloudDestinationToken.equals(prevToken.cloudDestinationToken)) {
       return prevToken;
     }
 
-    Set<String> lastUpdateTimeReadBlobIds;
-    long lastUpdateTime = queryResults.get(queryResults.size() - 1).getLastUpdateTime();
-    if (lastUpdateTime == prevToken.getLastUpdateTime()) {
-      // If last update time doesn't progress with the new token, then new token should include all the previous blobIds
-      // with the same last update time.
-      lastUpdateTimeReadBlobIds = new HashSet<>(prevToken.getLastUpdateTimeReadBlobIds());
-    } else {
-      lastUpdateTimeReadBlobIds = new HashSet<>();
-    }
-
-    for (int i = queryResults.size() - 1; i >= 0; i--) {
-      if (queryResults.get(i).getLastUpdateTime() == lastUpdateTime) {
-        lastUpdateTimeReadBlobIds.add(queryResults.get(i).getId());
-      } else {
-        break;
-      }
-    }
-
-    long bytesReadThisQuery = queryResults.stream().mapToLong(CloudBlobMetadata::getSize).sum();
-    return new CloudFindToken(lastUpdateTime, prevToken.getBytesRead() + bytesReadThisQuery, lastUpdateTimeReadBlobIds);
+    return new CloudFindToken(prevToken.getBytesRead() + newBytesRead, cloudDestinationToken);
   }
 
   @Override
@@ -98,27 +77,17 @@ public class CloudFindToken implements FindToken {
     byte[] buf = null;
     switch (version) {
       case VERSION_0:
-        int size = 2 * Short.BYTES + 2 * Long.BYTES + Short.BYTES;
-        for (String blobId : lastUpdateTimeReadBlobIds) {
-          size += Short.BYTES; //for size of string
-          size += blobId.length(); //for the string itself
-        }
+        int size = 2 * Short.BYTES + Long.BYTES + cloudDestinationToken.size();
         buf = new byte[size];
         ByteBuffer bufWrap = ByteBuffer.wrap(buf);
         // add version
         bufWrap.putShort(version);
         // add type
         bufWrap.putShort((short) type.ordinal());
-        // add latestUploadTime
-        bufWrap.putLong(lastUpdateTime);
         // add bytesRead
         bufWrap.putLong(bytesRead);
         // add lastUpdateTimeReadBlobIds
-        bufWrap.putShort((short) lastUpdateTimeReadBlobIds.size());
-        for (String blobId : lastUpdateTimeReadBlobIds) {
-          bufWrap.putShort((short) blobId.length());
-          bufWrap.put(blobId.getBytes());
-        }
+        bufWrap.put(cloudDestinationToken.toBytes());
         break;
       default:
         throw new IllegalStateException("Unknown version: " + version);
@@ -132,25 +101,16 @@ public class CloudFindToken implements FindToken {
    * @return deserialized {@code CloudFindToken} object.
    * @throws IOException
    */
-  static CloudFindToken fromBytes(DataInputStream inputStream) throws IOException {
+  static CloudFindToken fromBytes(DataInputStream inputStream, CloudDestinationTokenFactory cloudDestinationTokenFactory) throws IOException {
     CloudFindToken cloudFindToken = null;
     DataInputStream stream = new DataInputStream(inputStream);
     short version = stream.readShort();
     switch (version) {
       case VERSION_0:
         FindTokenType type = FindTokenType.values()[stream.readShort()];
-        long lastUpdateTime = stream.readLong();
         long bytesRead = stream.readLong();
-        int numBlobs = stream.readShort();
-        Set<String> blobIds = new HashSet<>();
-        while (numBlobs > 0) {
-          int blobIdLength = stream.readShort();
-          byte[] blobIdBytes = new byte[blobIdLength];
-          stream.read(blobIdBytes, 0, blobIdLength);
-          blobIds.add(new String(blobIdBytes));
-          numBlobs--;
-        }
-        cloudFindToken = new CloudFindToken(version, lastUpdateTime, bytesRead, blobIds);
+        CloudDestinationToken cloudDestinationToken = cloudDestinationTokenFactory.getCloudDestinationToken(stream);
+        cloudFindToken = new CloudFindToken(version, bytesRead, cloudDestinationToken);
         break;
       default:
         throw new IllegalStateException("Unknown version: " + version);
@@ -163,12 +123,8 @@ public class CloudFindToken implements FindToken {
     return bytesRead;
   }
 
-  public long getLastUpdateTime() {
-    return lastUpdateTime;
-  }
-
-  public Set<String> getLastUpdateTimeReadBlobIds() {
-    return lastUpdateTimeReadBlobIds;
+  public CloudDestinationToken getCloudDestinationToken() {
+    return cloudDestinationToken;
   }
 
   @Override
@@ -180,22 +136,21 @@ public class CloudFindToken implements FindToken {
       return false;
     }
     CloudFindToken that = (CloudFindToken) o;
-    return version == that.version && lastUpdateTime == that.lastUpdateTime && bytesRead == that.bytesRead
-        && lastUpdateTimeReadBlobIds.equals(that.lastUpdateTimeReadBlobIds);
+    return version == that.version && bytesRead == that.bytesRead && cloudDestinationToken.equals(
+        ((CloudFindToken) o).getCloudDestinationToken());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(version, lastUpdateTime, bytesRead, lastUpdateTimeReadBlobIds);
+    return Objects.hash(version, cloudDestinationToken, bytesRead);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("version: ").append(version);
-    sb.append(" lastUpdateTime: ").append(lastUpdateTime);
     sb.append(" bytesRead: ").append(bytesRead);
-    sb.append(" lastUpdateTimeReadBlobIds: ").append(lastUpdateTimeReadBlobIds);
+    sb.append(" cloudDestinationToken: ").append(cloudDestinationToken.toString());
     return sb.toString();
   }
 

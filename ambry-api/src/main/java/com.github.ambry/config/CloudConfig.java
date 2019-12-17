@@ -20,6 +20,7 @@ public class CloudConfig {
 
   public static final String CLOUD_IS_VCR = "cloud.is.vcr";
   public static final String VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS = "virtual.replicator.cluster.factory.class";
+  public static final String CLOUD_DESTINATION_TOKEN_FACTORY_CLASS = "cloud.destination.token.factory";
   public static final String CLOUD_DESTINATION_FACTORY_CLASS = "cloud.destination.factory.class";
   public static final String VCR_CLUSTER_ZK_CONNECT_STRING = "vcr.cluster.zk.connect.string";
   public static final String VCR_CLUSTER_NAME = "vcr.cluster.name";
@@ -45,6 +46,8 @@ public class CloudConfig {
       "com.github.ambry.cloud.StaticVcrClusterFactory";
   public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
       "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
+  public static final String DEFAULT_CLOUD_DESTINATION_TOKEN_FACTORY_CLASS =
+      "com.github.cloud.azure.AzureCloudDestinationTokenFactory";
   public static final String KMS_SERVICE_KEY_CONTEXT = "kms.service.key.context";
   public static final String DEFAULT_KMS_SERVICE_KEY_CONTEXT = "default-backup";
   public static final String CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS = "cloud.blob.crypto.agent.factory.class";
@@ -75,6 +78,13 @@ public class CloudConfig {
   @Config(VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS)
   @Default(DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS)
   public final String virtualReplicatorClusterFactoryClass;
+
+  /**
+   * The cloud replication continuation token factory class name.
+   */
+  @Config(CLOUD_DESTINATION_TOKEN_FACTORY_CLASS)
+  @Default(DEFAULT_CLOUD_DESTINATION_TOKEN_FACTORY_CLASS)
+  public final String cloudDestinationTokenFactoryClass;
 
   /**
    * The cloud destination factory class name.
@@ -227,6 +237,8 @@ public class CloudConfig {
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
     virtualReplicatorClusterFactoryClass = verifiableProperties.getString(VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS,
         DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS);
+    cloudDestinationTokenFactoryClass =
+        verifiableProperties.getString(CLOUD_DESTINATION_TOKEN_FACTORY_CLASS, DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS);
     cloudDestinationFactoryClass =
         verifiableProperties.getString(CLOUD_DESTINATION_FACTORY_CLASS, DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS);
     vcrAssignedPartitions = verifiableProperties.getString(VCR_ASSIGNED_PARTITIONS, null);
