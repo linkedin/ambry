@@ -173,7 +173,8 @@ public class HelixClusterManager implements ClusterMap {
               // Periodic refresh in routing table provider is enabled by default. In worst case, routerUpdater should
               // trigger routing table change within 5 minutes
               if (!routingTableInitLatch.await(5, TimeUnit.MINUTES)) {
-                throw new IllegalStateException("Initial routing table change didn't come within 5 mins");
+                throw new IllegalStateException(
+                    "Initial routing table change from " + dcName + " didn't come within 5 mins");
               }
             }
             logger.info("Registered routing table change listeners in {}", dcName);

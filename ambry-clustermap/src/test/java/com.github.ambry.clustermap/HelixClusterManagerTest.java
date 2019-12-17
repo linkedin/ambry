@@ -568,9 +568,9 @@ public class HelixClusterManagerTest {
     int sleepCnt = 0;
     while (helixClusterManager.getRoutingTableSnapshots().get(localDc).get().getLiveInstances().size()
         != initialLiveCnt - 1) {
+      assertTrue("Routing table change (triggered by bringing down node) didn't come within 1 sec", sleepCnt < 5);
       Thread.sleep(200);
       sleepCnt++;
-      assertTrue("Routing table change (triggered by bringing down node) didn't come within 1 sec", sleepCnt < 5);
     }
     // then bring up the same instance, the number of live instances should equal to initial count
     mockHelixAdmin.bringInstanceUp(instance);
@@ -578,9 +578,9 @@ public class HelixClusterManagerTest {
     sleepCnt = 0;
     while (helixClusterManager.getRoutingTableSnapshots().get(localDc).get().getLiveInstances().size()
         != initialLiveCnt) {
+      assertTrue("Routing table change (triggered by bringing up node) didn't come within 1 sec", sleepCnt < 5);
       Thread.sleep(200);
       sleepCnt++;
-      assertTrue("Routing table change (triggered by bringing up node) didn't come within 1 sec", sleepCnt < 5);
     }
 
     // randomly choose a partition and change the leader replica of it in cluster
@@ -598,9 +598,9 @@ public class HelixClusterManagerTest {
     sleepCnt = 0;
     while (partitionToChange.getReplicaIdsByState(ReplicaState.LEADER, localDc).get(0).getDataNodeId().getPort()
         == currentLeaderPort) {
+      assertTrue("Routing table change (triggered by leadership change) didn't come within 1 sec", sleepCnt < 5);
       Thread.sleep(200);
       sleepCnt++;
-      assertTrue("Routing table change (triggered by leadership change) didn't come within 1 sec", sleepCnt < 5);
     }
     verifyLeaderReplicasInDc(helixClusterManager, localDc);
 
