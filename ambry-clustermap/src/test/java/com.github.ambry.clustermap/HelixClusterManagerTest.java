@@ -40,8 +40,6 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixManager;
@@ -63,7 +61,6 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
-import static org.mockito.Mockito.*;
 
 
 /**
@@ -545,18 +542,8 @@ public class HelixClusterManagerTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     // Mock metricRegistry here to introduce a latch based counter for testing purpose
     metricRegistry = new MetricRegistry();
-    MetricRegistry mockMetricRegistry = Mockito.spy(metricRegistry);
-    Counter mockCounter = Mockito.mock(Counter.class);
-    AtomicReference<CountDownLatch> routingTableChangeLatch = new AtomicReference<>();
-    routingTableChangeLatch.set(new CountDownLatch(2));
-    doAnswer(invocation -> {
-      routingTableChangeLatch.get().countDown();
-      return null;
-    }).when(mockCounter).inc();
-    doReturn(mockCounter).when(mockMetricRegistry)
-        .counter(MetricRegistry.name(HelixClusterManager.class, "routingTableChangeTriggerCount"));
     HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
-        new MockHelixManagerFactory(helixCluster, null, null), mockMetricRegistry);
+        new MockHelixManagerFactory(helixCluster, null, null), metricRegistry);
     Map<String, AtomicReference<RoutingTableSnapshot>> snapshotsByDc = helixClusterManager.getRoutingTableSnapshots();
     RoutingTableSnapshot localDcSnapshot = snapshotsByDc.get(localDc).get();
 
@@ -567,27 +554,54 @@ public class HelixClusterManagerTest {
     // verify leader replica of each partition is correct
     verifyLeaderReplicasInDc(helixClusterManager, localDc);
 
+    // test live instance triggered routing table change
+    // we purposely bring down one instance and wait for expected number of live instance unless times out.
+    int initialLiveCnt = localDcSnapshot.getLiveInstances().size();
+    MockHelixAdmin mockHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
+    String instance = instanceConfigsInCluster.stream()
+        .filter(insConfig -> !insConfig.getInstanceName().equals(selfInstanceName))
+        .findFirst()
+        .get()
+        .getInstanceName();
+    mockHelixAdmin.bringInstanceDown(instance);
+    mockHelixAdmin.triggerRoutingTableNotification();
+    int sleepCnt = 0;
+    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).get().getLiveInstances().size()
+        != initialLiveCnt - 1) {
+      Thread.sleep(200);
+      sleepCnt++;
+      assertTrue("Routing table change (triggered by bringing down node) didn't come within 1 sec", sleepCnt < 5);
+    }
+    // then bring up the same instance, the number of live instances should equal to initial count
+    mockHelixAdmin.bringInstanceUp(instance);
+    mockHelixAdmin.triggerRoutingTableNotification();
+    sleepCnt = 0;
+    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).get().getLiveInstances().size()
+        != initialLiveCnt) {
+      Thread.sleep(200);
+      sleepCnt++;
+      assertTrue("Routing table change (triggered by bringing up node) didn't come within 1 sec", sleepCnt < 5);
+    }
+
     // randomly choose a partition and change the leader replica of it in cluster
     List<? extends PartitionId> defaultPartitionIds = helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS);
     PartitionId partitionToChange = defaultPartitionIds.get((new Random()).nextInt(defaultPartitionIds.size()));
-    MockHelixAdmin mockHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
     String currentLeaderInstance = mockHelixAdmin.getPartitionToLeaderReplica().get(partitionToChange.toPathString());
+    int currentLeaderPort = Integer.valueOf(currentLeaderInstance.split("_")[1]);
     String newLeaderInstance = mockHelixAdmin.getInstancesForPartition(partitionToChange.toPathString())
         .stream()
         .filter(k -> !k.equals(currentLeaderInstance))
         .findFirst()
         .get();
-    // Best effort to ensure previous latch has counted down to zero, otherwise the delayed routing table change may
-    // falsely count down new latch and verification is performed based on old view.
-    // Keep in mind that initial value of CountDownLatch is not always reasonable because the routing table change may
-    // occur before we add RoutingTableChange listener. So, right here we wait for 3 secs and then proceed with following
-    // leadership change tests.
-    routingTableChangeLatch.get().await(3, TimeUnit.SECONDS);
-    routingTableChangeLatch.set(new CountDownLatch(1));
     mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
     mockHelixAdmin.triggerRoutingTableNotification();
-    assertTrue("Routing table change didn't come within 1 second",
-        routingTableChangeLatch.get().await(1, TimeUnit.SECONDS));
+    sleepCnt = 0;
+    while (partitionToChange.getReplicaIdsByState(ReplicaState.LEADER, localDc).get(0).getDataNodeId().getPort()
+        == currentLeaderPort) {
+      Thread.sleep(200);
+      sleepCnt++;
+      assertTrue("Routing table change (triggered by leadership change) didn't come within 1 sec", sleepCnt < 5);
+    }
     verifyLeaderReplicasInDc(helixClusterManager, localDc);
 
     helixClusterManager.close();

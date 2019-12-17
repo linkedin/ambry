@@ -32,6 +32,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -139,7 +140,6 @@ public class HelixClusterManager implements ClusterMap {
       for (Map.Entry<String, DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
         String dcName = entry.getKey();
         String zkConnectStr = entry.getValue().getZkConnectStr();
-        ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName);
         // Initialize from every remote datacenter in a separate thread to speed things up.
         Utils.newThread(() -> {
           try {
@@ -153,6 +153,9 @@ public class HelixClusterManager implements ClusterMap {
               manager.connect();
               logger.info("Established connection to Helix manager at {}", zkConnectStr);
             }
+
+            CountDownLatch routingTableInitLatch = new CountDownLatch(1);
+            ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName, routingTableInitLatch);
             // Create RoutingTableProvider of each DC to keep track of partition(replicas) state. Here, we use current
             // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
             logger.info("Creating routing table provider associated with Helix manager at {}", zkConnectStr);
@@ -161,9 +164,18 @@ public class HelixClusterManager implements ClusterMap {
             DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler);
             dcToDcZkInfo.put(dcName, dcInfo);
             dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcName);
-            dcToRoutingTableSnapshotRef.put(dcName,
-                new AtomicReference<>(routingTableProvider.getRoutingTableSnapshot()));
             routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
+            dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>())
+                .getAndSet(routingTableProvider.getRoutingTableSnapshot());
+            // the initial routing table change should populate the instanceConfigs, so if it's empty that means initial
+            // change didn't come and thread should wait on the init latch to ensure routing table snapshot is non-empty
+            if (dcToRoutingTableSnapshotRef.get(dcName).get().getInstanceConfigs().size() == 0) {
+              // Periodic refresh in routing table provider is enabled by default. In worst case, routerUpdater should
+              // trigger routing table change within 5 minutes
+              if (!routingTableInitLatch.await(5, TimeUnit.MINUTES)) {
+                throw new IllegalStateException("Initial routing table change didn't come within 5 mins");
+              }
+            }
             logger.info("Registered routing table change listeners in {}", dcName);
 
             // The initial instance config change notification is required to populate the static cluster
@@ -546,13 +558,17 @@ public class HelixClusterManager implements ClusterMap {
     private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
     private final AtomicBoolean liveStateInitialized = new AtomicBoolean(false);
     private final AtomicBoolean idealStateInitialized = new AtomicBoolean(false);
+    private final AtomicBoolean routingTableInitialized = new AtomicBoolean(false);
+    private final CountDownLatch routingTableInitLatch;
 
     /**
      * Initialize a ClusterChangeHandler in the given datacenter.
      * @param dcName the datacenter associated with this ClusterChangeHandler.
+     * @param routingTableInitLatch the {@link CountDownLatch} that helps to track initial notification from {@link RoutingTableProvider}.
      */
-    ClusterChangeHandler(String dcName) {
+    ClusterChangeHandler(String dcName, CountDownLatch routingTableInitLatch) {
       this.dcName = dcName;
+      this.routingTableInitLatch = routingTableInitLatch;
     }
 
     @Override
@@ -638,8 +654,16 @@ public class HelixClusterManager implements ClusterMap {
      */
     @Override
     public void onRoutingTableChange(RoutingTableSnapshot routingTableSnapshot, Object context) {
-      logger.info("Routing table change triggered from {}", dcName);
-      dcToRoutingTableSnapshotRef.get(dcName).getAndSet(routingTableSnapshot);
+      if (!routingTableInitialized.get()) {
+        logger.info("Received initial notification for routing table change from {}", dcName);
+        dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>())
+            .getAndSet(routingTableSnapshot);
+        routingTableInitLatch.countDown();
+        routingTableInitialized.set(true);
+      } else {
+        logger.info("Routing table change triggered from {}", dcName);
+        dcToRoutingTableSnapshotRef.get(dcName).getAndSet(routingTableSnapshot);
+      }
       helixClusterManagerMetrics.routingTableChangeTriggerCount.inc();
     }
 
