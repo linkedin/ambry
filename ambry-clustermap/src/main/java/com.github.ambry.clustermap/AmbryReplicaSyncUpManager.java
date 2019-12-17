@@ -57,7 +57,8 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
       latch.await();
       partitionToBootstrapLatch.remove(partitionName);
       if (!partitionToBootstrapSuccess.remove(partitionName)) {
-        throw new IllegalStateException("Partition " + partitionName + " failed on bootstrap.");
+        throw new StateTransitionException("Partition " + partitionName + " failed on bootstrap.",
+            StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
       }
       logger.info("Bootstrap is complete on partition {}", partitionName);
     }
@@ -68,7 +69,9 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     boolean updated = false;
     if (replicaToLagInfos.containsKey(source)) {
       replicaToLagInfos.get(source).updateLagInfo(target, lagInBytes);
-      logger.debug(replicaToLagInfos.get(source).toString());
+      if (logger.isDebugEnabled()) {
+        logger.debug(replicaToLagInfos.get(source).toString());
+      }
       updated = true;
     }
     return updated;

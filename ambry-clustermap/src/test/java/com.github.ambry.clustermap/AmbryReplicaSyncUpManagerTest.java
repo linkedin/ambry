@@ -33,6 +33,9 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
+/**
+ * Tests for {@link AmbryReplicaSyncUpManager}.
+ */
 public class AmbryReplicaSyncUpManagerTest {
   private static final String RESOURCE_NAME = "0";
   private AmbryPartitionStateModel stateModel;
@@ -186,7 +189,6 @@ public class AmbryReplicaSyncUpManagerTest {
   private class MockPartitionStateChangeListener implements PartitionStateChangeListener {
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-
     }
 
     @Override
@@ -198,12 +200,10 @@ public class AmbryReplicaSyncUpManagerTest {
 
     @Override
     public void onPartitionBecomeLeaderFromStandby(String partitionName) {
-
     }
 
     @Override
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
-
     }
   }
 }
