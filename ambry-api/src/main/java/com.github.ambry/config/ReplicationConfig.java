@@ -195,7 +195,6 @@ public class ReplicationConfig {
         verifiableProperties.getShortInRange("replication.metadata.request.version", (short) 1, (short) 1, (short) 2);
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
     String vcrRecoveryPartitions = verifiableProperties.getString("replication.vcr.recovery.partitions", "");
-    replicationVcrRecoveryPartitions =
-        vcrRecoveryPartitions.isEmpty() ? new HashSet<>() : Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
+    replicationVcrRecoveryPartitions = Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
   }
 }

@@ -225,7 +225,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   protected boolean isTokenForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo,
       RemoteReplicaInfo.ReplicaTokenInfo tokenInfo) {
     // Note that in case of cloudReplicaTokens, the actual remote vcr node might not match as the vcr node is chosen at
-    // random during initialization. So its enough to just match the partitionId in the token so that replication
+    // random during initialization. So it's enough to just match the partitionId in the token so that replication
     // can start from cloud from where it left off.
     return tokenInfo.getReplicaInfo()
         .getReplicaId()
