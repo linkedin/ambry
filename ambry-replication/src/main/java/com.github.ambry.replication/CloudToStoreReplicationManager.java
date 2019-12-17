@@ -216,6 +216,24 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   }
 
   /**
+   * Check if a token is for the given {@link RemoteReplicaInfo} based on partition id.
+   * @param remoteReplicaInfo The remoteReplicaInfo to check.
+   * @param tokenInfo The tokenInfo to check.
+   * @return true if partition id matches. false otherwise.
+   */
+  @Override
+  protected boolean isTokenForRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo,
+      RemoteReplicaInfo.ReplicaTokenInfo tokenInfo) {
+    // Note that in case of cloudReplicaTokens, the actual remote vcr node might not match as the vcr node is chosen at
+    // random during initialization. So it's enough to just match the partitionId in the token so that replication
+    // can start from cloud from where it left off.
+    return tokenInfo.getReplicaInfo()
+        .getReplicaId()
+        .getPartitionId()
+        .equals(remoteReplicaInfo.getReplicaId().getPartitionId());
+  }
+
+  /**
    * Remove a replica of given partition and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionName the partition of the replica to removed.
    */
@@ -334,12 +352,14 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeLeaderFromStandby(String partitionName) {
       logger.info("Partition state change notification from Standby to Leader received for partition {}",
           partitionName);
-      synchronized (notificationLock) {
-        try {
-          addCloudReplica(partitionName);
-        } catch (ReplicationException rex) {
-          logger.error("Exception {} while adding replication for partition {}", rex, partitionName);
-          replicationMetrics.addCloudPartitionErrorCount.inc();
+      if (shouldReplicatePartition(partitionName)) {
+        synchronized (notificationLock) {
+          try {
+            addCloudReplica(partitionName);
+          } catch (ReplicationException rex) {
+            logger.error("Exception {} while adding replication for partition {}", rex, partitionName);
+            replicationMetrics.addCloudPartitionErrorCount.inc();
+          }
         }
       }
     }
@@ -348,9 +368,27 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
-      synchronized (notificationLock) {
-        removeCloudReplica(partitionName);
+      if (shouldReplicatePartition(partitionName)) {
+        synchronized (notificationLock) {
+          removeCloudReplica(partitionName);
+        }
       }
+    }
+
+    /**
+     * If only config specified list of partitions are being replicated from cloud, then check that the partition
+     * belongs to the specified list.
+     * @param partitionName Name of the partition to be checked.
+     * @return true if all the partitions are being replicated or if the partition in the list of partitions to be
+     *         replicated. false otherwise.
+     */
+    private boolean shouldReplicatePartition(String partitionName) {
+      if (!replicationConfig.replicationVcrRecoveryPartitions.isEmpty()
+          && !replicationConfig.replicationVcrRecoveryPartitions.contains(partitionName)) {
+        logger.info("Ignoring state change of partition {} as it is not in recovery partition config", partitionName);
+        return false;
+      }
+      return true;
     }
   }
 }

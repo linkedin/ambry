@@ -13,6 +13,11 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.utils.Utils;
+import java.util.HashSet;
+import java.util.Set;
+
+
 /**
  * The configs for the replication layer
  */
@@ -145,6 +150,14 @@ public class ReplicationConfig {
   @Default("false")
   public final boolean replicationEnabledWithVcrCluster;
 
+  /**
+   * Comma separated list of partitions to recover.
+   * This config will ignore the partition leadership information for recovering partitions.
+   */
+  @Config("replication.vcr.recovery.partitions")
+  @Default("")
+  public final Set<String> replicationVcrRecoveryPartitions;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationStoreTokenFactory =
@@ -181,5 +194,7 @@ public class ReplicationConfig {
     replicaMetadataRequestVersion =
         verifiableProperties.getShortInRange("replication.metadata.request.version", (short) 1, (short) 1, (short) 2);
     replicationEnabledWithVcrCluster = verifiableProperties.getBoolean("replication.enabled.with.vcr.cluster", false);
+    String vcrRecoveryPartitions = verifiableProperties.getString("replication.vcr.recovery.partitions", "");
+    replicationVcrRecoveryPartitions = Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
   }
 }

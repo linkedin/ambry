@@ -623,7 +623,7 @@ public class StorageManagerTest {
         assertFalse("Compaction should not be scheduled", storageManager.scheduleNextForCompaction(id));
       } else {
         Store store = storageManager.getStore(id, false);
-        assertTrue("Store should be started", ((BlobStore) store).isStarted());
+        assertTrue("Store should be started", store.isStarted());
         assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
       }
     }
@@ -757,8 +757,8 @@ public class StorageManagerTest {
         getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
-    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS,
-        Collections.<MockDataNodeId>emptyList(), 0);
+    MockPartitionId invalidPartition =
+        new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, Collections.emptyList(), 0);
     assertNull("Should not have found a store for an invalid partition.",
         storageManager.getStore(invalidPartition, false));
     assertEquals("Compaction thread count is incorrect", dataNode.getMountPaths().size(),
@@ -789,7 +789,7 @@ public class StorageManagerTest {
         assertFalse("Compaction should not be scheduled", storageManager.scheduleNextForCompaction(id));
       } else {
         Store store = storageManager.getStore(id, false);
-        assertTrue("Store should be started", ((BlobStore) store).isStarted());
+        assertTrue("Store should be started", store.isStarted());
         assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
       }
     }
@@ -908,7 +908,7 @@ public class StorageManagerTest {
         assertFalse("Compaction should not be scheduled", storageManager.scheduleNextForCompaction(id));
       } else {
         Store store = storageManager.getStore(id, false);
-        assertTrue("Store should be started", ((BlobStore) store).isStarted());
+        assertTrue("Store should be started", store.isStarted());
         assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
       }
     }

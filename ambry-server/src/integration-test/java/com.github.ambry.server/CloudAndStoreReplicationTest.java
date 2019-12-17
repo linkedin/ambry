@@ -46,6 +46,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -59,6 +60,8 @@ import java.util.stream.Stream;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -66,6 +69,7 @@ import static org.junit.Assert.*;
 /**
  * Test for replication from cloud to store and store to store.
  */
+@RunWith(Parameterized.class)
 public class CloudAndStoreReplicationTest {
   private Properties recoveryProperties;
   private MockCluster recoveryCluster;
@@ -81,6 +85,25 @@ public class CloudAndStoreReplicationTest {
   private final short accountId = Utils.getRandomShort(TestUtils.RANDOM);
   private final short containerId = Utils.getRandomShort(TestUtils.RANDOM);
   private final static int FOUR_MB_SZ = 4194304;
+  private final String vcrRecoveryPartitionConfig;
+
+  /**
+   * Parameterized constructor.
+   * @param vcrRecoveryPartitionConfig vcrRecoveryPartitionConfig value.
+   */
+  public CloudAndStoreReplicationTest(String vcrRecoveryPartitionConfig) {
+    super();
+    this.vcrRecoveryPartitionConfig = vcrRecoveryPartitionConfig;
+  }
+
+  /**
+   * static method to generate parameters.
+   * @return {@link Collection} of parameters.
+   */
+  @Parameterized.Parameters
+  public static Collection input() {
+    return Arrays.asList("0", "");
+  }
 
   /**
    * Create a cluster with one vcr node and two ambry server data nodes.
@@ -94,6 +117,9 @@ public class CloudAndStoreReplicationTest {
     recoveryProperties.setProperty("replication.metadata.request.version", "2");
     recoveryProperties.setProperty("replication.enabled.with.vcr.cluster", "true");
     recoveryProperties.setProperty("clustermap.vcr.datacenter.name", cloudDc);
+    if (!vcrRecoveryPartitionConfig.isEmpty()) {
+      recoveryProperties.setProperty("vcr.recovery.partitions", vcrRecoveryPartitionConfig);
+    }
 
     // create vcr node
     List<Port> vcrPortList = Arrays.asList(new Port(12310, PortType.PLAINTEXT), new Port(12410, PortType.SSL));

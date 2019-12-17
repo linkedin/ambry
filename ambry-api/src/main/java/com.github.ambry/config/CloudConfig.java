@@ -184,8 +184,7 @@ public class CloudConfig {
   public final int vcrProxyPort;
 
   /**
-   *
-   * @param verifiableProperties
+   * The class used to instantiate {@link com.github.ambry.clustermap.ClusterSpectatorFactory}
    */
   @Config(VCR_CLUSTER_SPECTATOR_FACTORY_CLASS)
   @Default(DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS)

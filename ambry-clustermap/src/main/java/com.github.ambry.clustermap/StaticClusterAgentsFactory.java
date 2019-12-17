@@ -21,6 +21,8 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -80,8 +82,14 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
 
         @Override
         public void participate(List<AmbryHealthReport> ambryHealthReports) {
+          DataNodeId currentNode =
+              getClusterMap().getDataNodeId(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
+          Set<String> partitionsOnNode = getClusterMap().getReplicaIds(currentNode)
+              .stream()
+              .map(r -> r.getPartitionId().toPathString())
+              .collect(Collectors.toSet());
           for (PartitionStateChangeListener listener : listeners) {
-            for (String partitionName : partitionLayout.getAllPartitionNames()) {
+            for (String partitionName : partitionsOnNode) {
               listener.onPartitionBecomeLeaderFromStandby(partitionName);
             }
           }

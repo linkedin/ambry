@@ -17,7 +17,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
-import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -42,6 +41,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
@@ -52,6 +52,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.json.JSONArray;
@@ -114,7 +115,7 @@ public class Utils {
     if (read != size) {
       throw new IllegalArgumentException("readShortString : the size of the input does not match the actual data size");
     }
-    return new String(bytes, "UTF-8");
+    return new String(bytes, StandardCharsets.UTF_8);
   }
 
   /**
@@ -263,8 +264,7 @@ public class Utils {
     ByteBuffer output;
     InputStream inputStream = crcStream.getUnderlyingInputStream();
     if (inputStream instanceof ByteBufferDataInputStream) {
-      output =
-          getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
+      output = getByteBufferFromByteBufferDataInputStream((ByteBufferDataInputStream) inputStream, dataSize);
       crcStream.updateCrc(output.duplicate());
     } else if (inputStream instanceof NettyByteBufDataInputStream) {
       // getBuffer() doesn't increase the reference count on this ByteBuf.
@@ -596,7 +596,7 @@ public class Utils {
    *
    * @param filename The path of the file to read
    */
-  public static Properties loadProps(String filename) throws FileNotFoundException, IOException {
+  public static Properties loadProps(String filename) throws IOException {
     InputStream propStream = new FileInputStream(filename);
     Properties props = new Properties();
     props.load(propStream);
@@ -851,12 +851,26 @@ public class Utils {
    * @return a mutable list of items.
    */
   public static ArrayList<String> splitString(String data, String delimiter) {
+    return splitString(data, delimiter, ArrayList::new);
+  }
+
+  /**
+   * Split the input string "data" using the delimiter and return as collection of strings for the slices obtained.
+   * This method will ignore empty segments. That is, a call like {@code splitString(",a1,,b2,c3,", ","}} will return
+   * {@code ["a1","b2","c3]}. Since this is used for reading list-style configs, this is usually the desired behavior.
+   * @param data the string to split.
+   * @param delimiter the delimiter for splitting.
+   * @param collectionFactory functional interface to get the required collection.
+   * @return a mutable collection of items.
+   */
+  public static <C extends Collection<String>> C splitString(String data, String delimiter,
+      Supplier<C> collectionFactory) {
     if (data == null) {
       throw new IllegalArgumentException("Passed in string is null ");
     }
     return Arrays.stream(data.split(delimiter))
         .filter(s -> !s.isEmpty())
-        .collect(Collectors.toCollection(ArrayList::new));
+        .collect(Collectors.toCollection(collectionFactory));
   }
 
   /**
