@@ -74,6 +74,30 @@ public class CryptoServiceTest {
   }
 
   /**
+   * Create a {@link CompositeByteBuf} from the given byte array.
+   * @param data the byte array.
+   * @return A {@link CompositeByteBuf}.
+   */
+  private CompositeByteBuf fromByteArrayToCompositeByteBuf(byte[] data) {
+    int size = data.length;
+    ByteBuf toEncrypt = Unpooled.wrappedBuffer(data);
+    CompositeByteBuf composite = new CompositeByteBuf(toEncrypt.alloc(), toEncrypt.isDirect(), size);
+    int start = 0;
+    int end = 0;
+    for (int j = 0; j < 3; j++) {
+      start = end;
+      end = TestUtils.RANDOM.nextInt(size / 2 - 1) + end;
+      if (j == 2) {
+        end = size;
+      }
+      ByteBuf c = Unpooled.buffer(end - start);
+      c.writeBytes(data, start, end - start);
+      composite.addComponent(true, c);
+    }
+    return composite;
+  }
+
+  /**
    * Create a {@link ByteBuf} based on whether it should be a composite ByteBuf or not. If it should, then
    * create a {@link CompositeByteBuf} with three components.
    * @return A {@link ByteBuf}.
@@ -83,23 +107,24 @@ public class CryptoServiceTest {
     byte[] randomData = new byte[size];
     TestUtils.RANDOM.nextBytes(randomData);
     if (isCompositeByteBuf) {
-      ByteBuf toEncrypt = Unpooled.wrappedBuffer(randomData);
-      CompositeByteBuf composite = new CompositeByteBuf(toEncrypt.alloc(), toEncrypt.isDirect(), size);
-      int start = 0;
-      int end = 0;
-      for (int j = 0; j < 3; j++) {
-        start = end;
-        end = TestUtils.RANDOM.nextInt(size / 2 - 1) + end;
-        if (j == 2) {
-          end = size;
-        }
-        ByteBuf c = Unpooled.buffer(end - start);
-        c.writeBytes(randomData, start, end - start);
-        composite.addComponent(true, c);
-      }
-      return composite;
+      return fromByteArrayToCompositeByteBuf(randomData);
     } else {
       return ByteBufAllocator.DEFAULT.heapBuffer(size);
+    }
+  }
+
+  /**
+   * Convert the given {@link ByteBuf} to a {@link CompositeByteBuf} if the {@code isCompositeByteBuf} is true.
+   * @param buf The given {@link ByteBuf}.
+   * @return The result {@link ByteBuf}.
+   */
+  private ByteBuf maybeConvertToComposite(ByteBuf buf) {
+    if (!isCompositeByteBuf) {
+      return buf.retainedDuplicate();
+    } else {
+      byte[] data = new byte[buf.readableBytes()];
+      buf.getBytes(buf.readerIndex(), data);
+      return fromByteArrayToCompositeByteBuf(data);
     }
   }
 
@@ -137,7 +162,7 @@ public class CryptoServiceTest {
       encryptedBytesByteBuf.getBytes(encryptedBytesByteBuf.readerIndex(), arrayFromByteBuf);
       Assert.assertArrayEquals(encryptedBytes.array(), arrayFromByteBuf);
 
-      ByteBuf toDecryptByteBuf = encryptedBytesByteBuf;
+      ByteBuf toDecryptByteBuf = maybeConvertToComposite(encryptedBytesByteBuf);
       ByteBuffer toDecrypt = encryptedBytes;
       ByteBuffer decryptedBytes = cryptoService.decrypt(encryptedBytes, secretKeySpec);
       ByteBuf decryptedBytesByteBuf = cryptoService.decrypt(toDecryptByteBuf, secretKeySpec);
@@ -150,6 +175,7 @@ public class CryptoServiceTest {
 
       toEncryptByteBuf.release();
       encryptedBytesByteBuf.release();
+      toDecryptByteBuf.release();
       decryptedBytesByteBuf.release();
     }
   }
