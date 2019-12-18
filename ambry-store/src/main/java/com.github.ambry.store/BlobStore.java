@@ -686,7 +686,6 @@ public class BlobStore implements Store {
   @Override
   public void completeBootstrap() {
     File bootstrapFile = new File(dataDir, BOOTSTRAP_FILE_NAME);
-    System.out.println(bootstrapFile.getAbsolutePath());
     try {
       // the method will check if file exists or not
       Utils.deleteFileOrDirectory(bootstrapFile);
