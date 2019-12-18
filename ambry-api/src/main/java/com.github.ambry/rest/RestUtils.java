@@ -164,7 +164,7 @@ public class RestUtils {
     public final static String ENCRYPTED_IN_STORAGE = "x-ambry-encrypted-in-storage";
     /**
      * optional in request; defines an option while getting the blob and is optional support in a
-     * {@link BlobStorageService}. Valid values are available in {@link GetOption}. Defaults to {@link GetOption#None}
+     * {@link RestRequestService}. Valid values are available in {@link GetOption}. Defaults to {@link GetOption#None}
      */
     public final static String GET_OPTION = "x-ambry-get-option";
     /**

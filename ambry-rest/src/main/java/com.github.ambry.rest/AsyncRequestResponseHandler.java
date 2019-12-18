@@ -35,13 +35,13 @@ import org.slf4j.LoggerFactory;
 /**
  * Asynchronously handles requests and responses that are submitted.
  * <p/>
- * Requests are submitted by a {@link NioServer} and asynchronously routed to a {@link BlobStorageService}. Responses
- * are usually submitted from beyond the {@link BlobStorageService} layer and asynchronously sent to the client. In both
+ * Requests are submitted by a {@link NioServer} and asynchronously routed to a {@link RestRequestService}. Responses
+ * are usually submitted from beyond the {@link RestRequestService} layer and asynchronously sent to the client. In both
  * pathways, this class enables a non-blocking paradigm.
  * <p/>
  * Maintains multiple "workers" internally that run continuously to handle submitted requests.
  * <p/>
- * Requests are queued on submission and handed off to the {@link BlobStorageService} when they are dequeued. Responses
+ * Requests are queued on submission and handed off to the {@link RestRequestService} when they are dequeued. Responses
  * are sent to the client via the appropriate {@link RestResponseChannel} and callbacks/errors are handled.
  * <p/>
  * These are the scaling units of the server and can be scaled up and down independently of any other component.
@@ -54,7 +54,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private AsyncResponseHandler asyncResponseHandler = null;
-  private BlobStorageService blobStorageService = null;
+  private RestRequestService restRequestService = null;
   private int requestWorkersCount = 0;
   private volatile boolean isRunning = false;
 
@@ -79,7 +79,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
         logger.info("Starting AsyncRequestResponseHandler with {} request workers", requestWorkersCount);
         for (int i = 0; i < requestWorkersCount; i++) {
           long workerStartupBeginTime = System.currentTimeMillis();
-          AsyncRequestWorker asyncRequestWorker = new AsyncRequestWorker(metrics, blobStorageService);
+          AsyncRequestWorker asyncRequestWorker = new AsyncRequestWorker(metrics, restRequestService);
           asyncRequestWorkers.add(asyncRequestWorker);
           Utils.newThread("RequestWorker-" + i, asyncRequestWorker, false).start();
           long workerStartupTime = System.currentTimeMillis() - workerStartupBeginTime;
@@ -185,24 +185,24 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   }
 
   /**
-   * Sets the number of request handling units and the {@link BlobStorageService} that will be used in
+   * Sets the number of request handling units and the {@link RestRequestService} that will be used in
    * {@link AsyncRequestWorker} instances..
    * @param workerCount the required number of request handling units.
-   * @param blobStorageService the {@link BlobStorageService} instance to be used to process requests.
+   * @param restRequestService the {@link RestRequestService} instance to be used to process requests.
    * @throws IllegalArgumentException if {@code workerCount} < 0 or if {@code workerCount} > 0 but
-   *                                  {@code blobStorageService} is null.
+   *                                  {@code restRequestService} is null.
    * @throws IllegalStateException if {@link #start()} has already been called before a call to this function.
    */
-  protected void setupRequestHandling(int workerCount, BlobStorageService blobStorageService) {
+  protected void setupRequestHandling(int workerCount, RestRequestService restRequestService) {
     if (isRunning()) {
       throw new IllegalStateException("Cannot modify scaling unit count after the service has started");
     } else if (workerCount < 0) {
       throw new IllegalArgumentException("Request worker workerCount has to be >= 0");
-    } else if (workerCount > 0 && blobStorageService == null) {
-      throw new IllegalArgumentException("BlobStorageService cannot be null");
+    } else if (workerCount > 0 && restRequestService == null) {
+      throw new IllegalArgumentException("RestRequestService cannot be null");
     }
     requestWorkersCount = workerCount;
-    this.blobStorageService = blobStorageService;
+    this.restRequestService = restRequestService;
     logger.trace("Request handling units count set to {}", requestWorkersCount);
   }
 
@@ -273,7 +273,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
  */
 class AsyncRequestWorker implements Runnable {
   private final RequestResponseHandlerMetrics metrics;
-  private final BlobStorageService blobStorageService;
+  private final RestRequestService _restRequestService;
   private final LinkedBlockingQueue<AsyncRequestInfo> requests = new LinkedBlockingQueue<AsyncRequestInfo>();
   private final AtomicInteger queuedRequestCount = new AtomicInteger(0);
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
@@ -284,9 +284,9 @@ class AsyncRequestWorker implements Runnable {
    * Creates a worker that can process requests.
    * @param metrics the {@link RequestResponseHandlerMetrics} instance to use to track metrics.
    */
-  protected AsyncRequestWorker(RequestResponseHandlerMetrics metrics, BlobStorageService blobStorageService) {
+  protected AsyncRequestWorker(RequestResponseHandlerMetrics metrics, RestRequestService restRequestService) {
     this.metrics = metrics;
-    this.blobStorageService = blobStorageService;
+    this._restRequestService = restRequestService;
     metrics.registerRequestWorker(this);
     logger.trace("Instantiated AsyncRequestWorker");
   }
@@ -405,14 +405,14 @@ class AsyncRequestWorker implements Runnable {
 
   /**
    * Processes the {@code asyncRequestInfo}. Discerns the type of {@link RestMethod} in the request and calls the right
-   * function of the {@link BlobStorageService}.
+   * function of the {@link RestRequestService}.
    * @param asyncRequestInfo the currently dequeued {@link AsyncRequestInfo}.
-   * @throws RestServiceException if the request cannot be prepared for hand-off to the {@link BlobStorageService}.
+   * @throws RestServiceException if the request cannot be prepared for hand-off to the {@link RestRequestService}.
    */
   private void processRequest(AsyncRequestInfo asyncRequestInfo) throws RestServiceException {
     long processingStartTime = System.currentTimeMillis();
     // needed to avoid double counting.
-    long blobStorageProcessingTime = 0;
+    long restRequestProcessingTime = 0;
     RestRequest restRequest = asyncRequestInfo.restRequest;
     try {
       onRequestDequeue(asyncRequestInfo);
@@ -420,25 +420,25 @@ class AsyncRequestWorker implements Runnable {
       RestMethod restMethod = restRequest.getRestMethod();
       restRequest.prepare();
       logger.trace("Processing request {} with RestMethod {}", restRequest.getUri(), restMethod);
-      long blobStorageProcessingStartTime = System.currentTimeMillis();
+      long restRequestProcessingStartTime = System.currentTimeMillis();
       switch (restMethod) {
         case GET:
-          blobStorageService.handleGet(restRequest, restResponseChannel);
+          _restRequestService.handleGet(restRequest, restResponseChannel);
           break;
         case POST:
-          blobStorageService.handlePost(restRequest, restResponseChannel);
+          _restRequestService.handlePost(restRequest, restResponseChannel);
           break;
         case PUT:
-          blobStorageService.handlePut(restRequest, restResponseChannel);
+          _restRequestService.handlePut(restRequest, restResponseChannel);
           break;
         case DELETE:
-          blobStorageService.handleDelete(restRequest, restResponseChannel);
+          _restRequestService.handleDelete(restRequest, restResponseChannel);
           break;
         case HEAD:
-          blobStorageService.handleHead(restRequest, restResponseChannel);
+          _restRequestService.handleHead(restRequest, restResponseChannel);
           break;
         case OPTIONS:
-          blobStorageService.handleOptions(restRequest, restResponseChannel);
+          _restRequestService.handleOptions(restRequest, restResponseChannel);
           break;
         default:
           metrics.unknownRestMethodError.inc();
@@ -446,10 +446,10 @@ class AsyncRequestWorker implements Runnable {
               RestServiceErrorCode.UnsupportedRestMethod);
           onProcessingFailure(restRequest, restResponseChannel, e);
       }
-      blobStorageProcessingTime = System.currentTimeMillis() - blobStorageProcessingStartTime;
+      restRequestProcessingTime = System.currentTimeMillis() - restRequestProcessingStartTime;
     } finally {
       restRequest.getMetricsTracker().scalingMetricsTracker.addToRequestProcessingTime(
-          System.currentTimeMillis() - processingStartTime - blobStorageProcessingTime);
+          System.currentTimeMillis() - processingStartTime - restRequestProcessingTime);
     }
   }
 

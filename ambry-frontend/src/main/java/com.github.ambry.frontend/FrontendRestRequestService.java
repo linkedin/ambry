@@ -21,7 +21,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.rest.BlobStorageService;
+import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -54,10 +54,10 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
- * This is an Ambry frontend specific implementation of {@link BlobStorageService}.
+ * This is an Ambry frontend specific implementation of {@link RestRequestService}.
  * All the operations that need to be performed by the Ambry frontend are supported here.
  */
-class AmbryBlobStorageService implements BlobStorageService {
+class FrontendRestRequestService implements RestRequestService {
   static final String TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE = "GET,HEAD,DELETE";
 
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
@@ -80,7 +80,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final IdSigningService idSigningService;
   private final AccountService accountService;
   private final AccountAndContainerInjector accountAndContainerInjector;
-  private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
+  private final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
   private final String datacenterName;
   private final String hostname;
   private final String clusterName;
@@ -96,7 +96,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private boolean isUp = false;
 
   /**
-   * Create a new instance of AmbryBlobStorageService by supplying it with config, metrics, cluster map, a
+   * Create a new instance of FrontendRestRequestService by supplying it with config, metrics, cluster map, a
    * response handler controller and a router.
    * @param frontendConfig the {@link FrontendConfig} with configuration parameters.
    * @param frontendMetrics the metrics instance to use in the form of {@link FrontendMetrics}.
@@ -113,7 +113,7 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param hostname the hostname for this frontend.
    * @param clusterName the name of the storage cluster that the router communicates with.
    */
-  AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
+  FrontendRestRequestService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
       SecurityServiceFactory securityServiceFactory, UrlSigningService urlSigningService,
       IdSigningService idSigningService, AccountService accountService,
@@ -134,7 +134,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.hostname = hostname;
     this.clusterName = clusterName.toLowerCase();
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
-    logger.trace("Instantiated AmbryBlobStorageService");
+    logger.trace("Instantiated FrontendRestRequestService");
   }
 
   @Override
@@ -156,8 +156,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     isUp = true;
-    logger.info("AmbryBlobStorageService has started");
-    frontendMetrics.blobStorageServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
+    logger.info("FrontendRestRequestService has started");
+    frontendMetrics.restRequestServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
   }
 
   @Override
@@ -173,11 +173,11 @@ class AmbryBlobStorageService implements BlobStorageService {
         idConverter.close();
         idConverter = null;
       }
-      logger.info("AmbryBlobStorageService shutdown complete");
+      logger.info("FrontendRestRequestService shutdown complete");
     } catch (IOException e) {
       logger.error("Downstream service close failed", e);
     } finally {
-      frontendMetrics.blobStorageServiceShutdownTimeInMs.update(System.currentTimeMillis() - shutdownBeginTime);
+      frontendMetrics.restRequestServiceShutdownTimeInMs.update(System.currentTimeMillis() - shutdownBeginTime);
     }
   }
 
@@ -432,12 +432,12 @@ class AmbryBlobStorageService implements BlobStorageService {
   }
 
   /**
-   * Checks if {@link AmbryBlobStorageService} is available to serve requests.
-   * @throws RestServiceException if {@link AmbryBlobStorageService} is not available to serve requests.
+   * Checks if {@link FrontendRestRequestService} is available to serve requests.
+   * @throws RestServiceException if {@link FrontendRestRequestService} is not available to serve requests.
    */
   private void checkAvailable() throws RestServiceException {
     if (!isUp) {
-      throw new RestServiceException("AmbryBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
+      throw new RestServiceException("FrontendRestRequestService unavailable", RestServiceErrorCode.ServiceUnavailable);
     }
   }
 
@@ -854,7 +854,7 @@ class AmbryBlobStorageService implements BlobStorageService {
                         response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
                       } else {
                         restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
-                        response = new ByteBufferReadableStreamChannel(AmbryBlobStorageService.EMPTY_BUFFER);
+                        response = new ByteBufferReadableStreamChannel(EMPTY_BUFFER);
                       }
                     } else if (restResponseChannel.getStatus() == ResponseStatus.NotModified) {
                       response = null;

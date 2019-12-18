@@ -23,9 +23,9 @@ import java.util.concurrent.Future;
 /**
  * The RestResponseChannel is meant to provide a {@link NioServer} implementation independent way to return responses
  * to the client. It deals with data in terms of bytes only and is not concerned with different types of data that might
- * need to be returned from the {@link BlobStorageService}.
+ * need to be returned from the {@link RestRequestService}.
  * <p/>
- * This functionality is mostly required by implementations of {@link BlobStorageService} since they are agnostic to
+ * This functionality is mostly required by implementations of {@link RestRequestService} since they are agnostic to
  * both the REST protocol being used and the framework used for the implementation of {@link NioServer}.
  * <p/>
  * Typically, the RestResponseChannel wraps the underlying network channel and the APIs of the NIO framework to return

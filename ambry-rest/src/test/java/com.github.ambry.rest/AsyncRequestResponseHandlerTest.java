@@ -57,7 +57,7 @@ import static org.junit.Assert.*;
 public class AsyncRequestResponseHandlerTest {
   private static VerifiableProperties verifiableProperties;
   private static Router router;
-  private static MockBlobStorageService blobStorageService;
+  private static MockRestRequestService restRequestService;
   private static AsyncRequestResponseHandler asyncRequestResponseHandler;
 
   /**
@@ -70,7 +70,7 @@ public class AsyncRequestResponseHandlerTest {
     verifiableProperties = new VerifiableProperties(new Properties());
     router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
     asyncRequestResponseHandler = getAsyncRequestResponseHandler(5);
-    blobStorageService.start();
+    restRequestService.start();
     asyncRequestResponseHandler.start();
   }
 
@@ -81,7 +81,7 @@ public class AsyncRequestResponseHandlerTest {
   @AfterClass
   public static void shutdownRequestResponseHandler() throws IOException {
     asyncRequestResponseHandler.shutdown();
-    blobStorageService.shutdown();
+    restRequestService.shutdown();
     router.close();
   }
 
@@ -169,30 +169,30 @@ public class AsyncRequestResponseHandlerTest {
 
     // set request workers < 0
     try {
-      requestResponseHandler.setupRequestHandling(-1, blobStorageService);
+      requestResponseHandler.setupRequestHandling(-1, restRequestService);
       fail("Setting request workers < 0 should have thrown exception");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
 
-    // set null BlobStorageService
+    // set null RestRequestService
     try {
       requestResponseHandler.setupRequestHandling(1, null);
-      fail("Setting BlobStorageService to null should have thrown exception");
+      fail("Setting RestRequestService to null should have thrown exception");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
     }
   }
 
   /**
-   * Tests behavior of {@link AsyncRequestResponseHandler#setupRequestHandling(int, BlobStorageService)} after the
+   * Tests behavior of {@link AsyncRequestResponseHandler#setupRequestHandling(int, RestRequestService)} after the
    * {@link AsyncRequestResponseHandler} has been started.
    */
   @Test
   public void setupRequestHandlingStartTest() {
     // set request workers.
     try {
-      asyncRequestResponseHandler.setupRequestHandling(5, blobStorageService);
+      asyncRequestResponseHandler.setupRequestHandling(5, restRequestService);
       fail("Setting request workers after start should have thrown exception");
     } catch (IllegalStateException e) {
       // expected. nothing to do.
@@ -200,7 +200,7 @@ public class AsyncRequestResponseHandlerTest {
   }
 
   /**
-   * Tests handling of all {@link RestMethod}s. The {@link MockBlobStorageService} instance being used is
+   * Tests handling of all {@link RestMethod}s. The {@link MockRestRequestService} instance being used is
    * asked to only echo the method.
    * @throws Exception
    */
@@ -423,7 +423,7 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void multipleRequestsInQueueTest() throws Exception {
     final int EXPECTED_MIN_QUEUE_SIZE = 5;
-    blobStorageService.blockAllOperations();
+    restRequestService.blockAllOperations();
     try {
       // the first request that each worker processes will block.
       for (int i = 0; i < EXPECTED_MIN_QUEUE_SIZE + asyncRequestResponseHandler.getWorkersAlive(); i++) {
@@ -436,7 +436,7 @@ public class AsyncRequestResponseHandlerTest {
               + asyncRequestResponseHandler.getRequestQueueSize(),
           asyncRequestResponseHandler.getRequestQueueSize() >= EXPECTED_MIN_QUEUE_SIZE);
     } finally {
-      blobStorageService.releaseAllOperations();
+      restRequestService.releaseAllOperations();
     }
   }
 
@@ -517,7 +517,7 @@ public class AsyncRequestResponseHandlerTest {
    */
   private void doHandleRequestSuccessTest(RestMethod restMethod, AsyncRequestResponseHandler requestHandler)
       throws Exception {
-    RestRequest restRequest = createRestRequest(restMethod, MockBlobStorageService.ECHO_REST_METHOD, null, null);
+    RestRequest restRequest = createRestRequest(restMethod, MockRestRequestService.ECHO_REST_METHOD, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     sendRequestAwaitResponse(requestHandler, restRequest, restResponseChannel);
     if (restResponseChannel.getException() == null) {
@@ -596,10 +596,10 @@ public class AsyncRequestResponseHandlerTest {
     RequestResponseHandlerMetrics metrics = new RequestResponseHandlerMetrics(new MetricRegistry());
     AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(metrics);
     if (requestWorkers > 0) {
-      if (blobStorageService == null) {
-        blobStorageService = new MockBlobStorageService(verifiableProperties, handler, router);
+      if (restRequestService == null) {
+        restRequestService = new MockRestRequestService(verifiableProperties, handler, router);
       }
-      handler.setupRequestHandling(requestWorkers, blobStorageService);
+      handler.setupRequestHandling(requestWorkers, restRequestService);
     }
     return handler;
   }
@@ -629,7 +629,7 @@ public class AsyncRequestResponseHandlerTest {
       // using for request is not OK.
       try {
         doHandleRequestSuccessTest(RestMethod.GET, requestResponseHandler);
-        fail("Handling request should have failed because no BlobStorageService was set.");
+        fail("Handling request should have failed because no RestRequestService was set.");
       } catch (RestServiceException e) {
         assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.ServiceUnavailable, e.getErrorCode());
       }
@@ -691,7 +691,7 @@ public class AsyncRequestResponseHandlerTest {
   private void delayedHandleRequestThatThrowsRestException(AsyncRequestResponseHandler requestResponseHandler)
       throws Exception {
     RestRequest restRequest =
-        createRestRequest(RestMethod.GET, MockBlobStorageService.SEND_RESPONSE_REST_SERVICE_EXCEPTION, null, null);
+        createRestRequest(RestMethod.GET, MockRestRequestService.SEND_RESPONSE_REST_SERVICE_EXCEPTION, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     sendRequestAwaitResponse(requestResponseHandler, restRequest, restResponseChannel);
     if (restResponseChannel.getException() == null) {
@@ -714,7 +714,7 @@ public class AsyncRequestResponseHandlerTest {
   private void delayedHandleRequestThatThrowsRuntimeException(AsyncRequestResponseHandler requestResponseHandler)
       throws Exception {
     RestRequest restRequest =
-        createRestRequest(RestMethod.GET, MockBlobStorageService.THROW_RUNTIME_EXCEPTION, null, null);
+        createRestRequest(RestMethod.GET, MockRestRequestService.THROW_RUNTIME_EXCEPTION, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     sendRequestAwaitResponse(requestResponseHandler, restRequest, restResponseChannel);
     if (restResponseChannel.getException() == null) {
@@ -722,7 +722,7 @@ public class AsyncRequestResponseHandlerTest {
     } else {
       // it's ok if this conversion fails - the test should fail anyway.
       RuntimeException e = (RuntimeException) restResponseChannel.getException();
-      assertEquals("Failure message does not match expectation", MockBlobStorageService.THROW_RUNTIME_EXCEPTION,
+      assertEquals("Failure message does not match expectation", MockRestRequestService.THROW_RUNTIME_EXCEPTION,
           e.getMessage());
       assertTrue("AsyncRequestResponseHandler is dead", requestResponseHandler.isRunning());
     }

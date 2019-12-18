@@ -28,7 +28,7 @@ import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static com.github.ambry.frontend.AmbryBlobStorageServiceTest.*;
+import static com.github.ambry.frontend.FrontendRestRequestServiceTest.*;
 
 
 /**
