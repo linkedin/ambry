@@ -72,7 +72,7 @@ public class RestServer {
   private final JmxReporter reporter;
   private final AccountService accountService;
   private final Router router;
-  private final RestRequestService _restRequestService;
+  private final RestRequestService restRequestService;
   private final RestRequestHandler restRequestHandler;
   private final RestResponseHandler restResponseHandler;
   private final NioServer nioServer;
@@ -189,10 +189,10 @@ public class RestServer {
     RestRequestServiceFactory restRequestServiceFactory =
         Utils.getObj(restServerConfig.restServerRestRequestServiceFactory, verifiableProperties, clusterMap,
             restResponseHandler, router, accountService);
-    _restRequestService = restRequestServiceFactory.getRestRequestService();
+    restRequestService = restRequestServiceFactory.getRestRequestService();
 
     RestRequestHandlerFactory restRequestHandlerFactory = Utils.getObj(restServerConfig.restServerRequestHandlerFactory,
-        restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, _restRequestService);
+        restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, restRequestService);
     restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
     publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
         restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
@@ -202,7 +202,7 @@ public class RestServer {
             restRequestHandler, publicAccessLogger, restServerState, sslFactory);
     nioServer = nioServerFactory.getNioServer();
 
-    if (accountService == null || router == null || restResponseHandler == null || _restRequestService == null
+    if (accountService == null || router == null || restResponseHandler == null || restRequestService == null
         || restRequestHandler == null || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
     }
@@ -236,7 +236,7 @@ public class RestServer {
       logger.info("Response handler start took {} ms", elapsedTime);
       restServerMetrics.restResponseHandlerStartTimeInMs.update(elapsedTime);
 
-      _restRequestService.start();
+      restRequestService.start();
       long restRequestServiceStartTime = System.currentTimeMillis();
       elapsedTime = restRequestServiceStartTime - restResponseHandlerStartTime;
       logger.info("Rest request service start took {} ms", elapsedTime);
@@ -297,7 +297,7 @@ public class RestServer {
       logger.info("Request handler shutdown took {} ms", elapsedTime);
       restServerMetrics.restRequestHandlerShutdownTimeInMs.update(elapsedTime);
 
-      _restRequestService.shutdown();
+      restRequestService.shutdown();
       long restRequestServiceShutdownTime = System.currentTimeMillis();
       elapsedTime = restRequestServiceShutdownTime - requestHandlerShutdownTime;
       logger.info("Rest request service shutdown took {} ms", elapsedTime);

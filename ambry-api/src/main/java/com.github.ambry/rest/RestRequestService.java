@@ -14,7 +14,7 @@
 package com.github.ambry.rest;
 
 /**
- * RestRequestService defines a service that handles {@RestRequest}.
+ * RestRequestService defines a service that handles {@link RestRequest}.
  * Typically, a RestRequestService is expected to receive requests and handle them as required and either send a
  * response (if immediately available) or pass control to another component that does further handling and generates a
  * response.

@@ -73,7 +73,7 @@ import static org.junit.Assert.*;
  */
 public class NettyMessageProcessorTest {
   private final InMemoryRouter router;
-  private final RestRequestService _restRequestService;
+  private final RestRequestService restRequestService;
   private final MockRestRequestResponseHandler requestHandler;
   private final HelperNotificationSystem notificationSystem = new HelperNotificationSystem();
 
@@ -93,9 +93,9 @@ public class NettyMessageProcessorTest {
     RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(verifiableProperties, notificationSystem, new MockClusterMap());
     requestHandler = new MockRestRequestResponseHandler();
-    _restRequestService = new MockRestRequestService(verifiableProperties, requestHandler, router);
-    requestHandler.setRestRequestService(_restRequestService);
-    _restRequestService.start();
+    restRequestService = new MockRestRequestService(verifiableProperties, requestHandler, router);
+    requestHandler.setRestRequestService(restRequestService);
+    restRequestService.start();
     requestHandler.start();
   }
 
@@ -104,7 +104,7 @@ public class NettyMessageProcessorTest {
    */
   @After
   public void cleanUp() throws IOException {
-    _restRequestService.shutdown();
+    restRequestService.shutdown();
     router.close();
     notificationSystem.close();
   }

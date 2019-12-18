@@ -54,7 +54,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private AsyncResponseHandler asyncResponseHandler = null;
-  private RestRequestService _restRequestService = null;
+  private RestRequestService restRequestService = null;
   private int requestWorkersCount = 0;
   private volatile boolean isRunning = false;
 
@@ -79,7 +79,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
         logger.info("Starting AsyncRequestResponseHandler with {} request workers", requestWorkersCount);
         for (int i = 0; i < requestWorkersCount; i++) {
           long workerStartupBeginTime = System.currentTimeMillis();
-          AsyncRequestWorker asyncRequestWorker = new AsyncRequestWorker(metrics, _restRequestService);
+          AsyncRequestWorker asyncRequestWorker = new AsyncRequestWorker(metrics, restRequestService);
           asyncRequestWorkers.add(asyncRequestWorker);
           Utils.newThread("RequestWorker-" + i, asyncRequestWorker, false).start();
           long workerStartupTime = System.currentTimeMillis() - workerStartupBeginTime;
@@ -190,7 +190,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
    * @param workerCount the required number of request handling units.
    * @param restRequestService the {@link RestRequestService} instance to be used to process requests.
    * @throws IllegalArgumentException if {@code workerCount} < 0 or if {@code workerCount} > 0 but
-   *                                  {@code _restRequestService} is null.
+   *                                  {@code restRequestService} is null.
    * @throws IllegalStateException if {@link #start()} has already been called before a call to this function.
    */
   protected void setupRequestHandling(int workerCount, RestRequestService restRequestService) {
@@ -202,7 +202,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
       throw new IllegalArgumentException("RestRequestService cannot be null");
     }
     requestWorkersCount = workerCount;
-    this._restRequestService = restRequestService;
+    this.restRequestService = restRequestService;
     logger.trace("Request handling units count set to {}", requestWorkersCount);
   }
 

@@ -40,11 +40,11 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
   private boolean isRunning = false;
   private VerifiableProperties failureProperties = null;
 
-  private RestRequestService _restRequestService = null;
+  private RestRequestService restRequestService = null;
 
   @Override
   public void start() throws InstantiationException {
-    if (_restRequestService == null) {
+    if (restRequestService == null) {
       throw new InstantiationException("RestRequestService not set");
     }
     isRunning = true;
@@ -71,19 +71,19 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
       restRequest.prepare();
       switch (restMethod) {
         case GET:
-          _restRequestService.handleGet(restRequest, restResponseChannel);
+          restRequestService.handleGet(restRequest, restResponseChannel);
           break;
         case POST:
-          _restRequestService.handlePost(restRequest, restResponseChannel);
+          restRequestService.handlePost(restRequest, restResponseChannel);
           break;
         case PUT:
-          _restRequestService.handlePut(restRequest, restResponseChannel);
+          restRequestService.handlePut(restRequest, restResponseChannel);
           break;
         case DELETE:
-          _restRequestService.handleDelete(restRequest, restResponseChannel);
+          restRequestService.handleDelete(restRequest, restResponseChannel);
           break;
         case HEAD:
-          _restRequestService.handleHead(restRequest, restResponseChannel);
+          restRequestService.handleHead(restRequest, restResponseChannel);
           break;
         default:
           throw new RestServiceException("Unknown rest method - " + restMethod,
@@ -147,7 +147,7 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
    * @param restRequestService the {@link RestRequestService} instance to be used to process requests.
    */
   protected void setRestRequestService(RestRequestService restRequestService) {
-    this._restRequestService = restRequestService;
+    this.restRequestService = restRequestService;
   }
 
   /**

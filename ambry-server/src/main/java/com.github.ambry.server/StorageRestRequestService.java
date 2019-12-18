@@ -27,11 +27,11 @@ import org.slf4j.LoggerFactory;
  * This is an Ambry storage server specific implementation of {@link RestRequestService}.
  * All the operations that need to be performed by the Ambry storage server are supported here.
  */
-public class StorageServerRestRequestService implements RestRequestService {
-  private static final Logger logger = LoggerFactory.getLogger(StorageServerRestRequestService.class);
+public class StorageRestRequestService implements RestRequestService {
+  private static final Logger logger = LoggerFactory.getLogger(StorageRestRequestService.class);
   NettyServerRequestResponseChannel requestResponseChannel;
 
-  public StorageServerRestRequestService(NettyServerRequestResponseChannel requestResponseChannel) {
+  public StorageRestRequestService(NettyServerRequestResponseChannel requestResponseChannel) {
     this.requestResponseChannel = requestResponseChannel;
   }
 

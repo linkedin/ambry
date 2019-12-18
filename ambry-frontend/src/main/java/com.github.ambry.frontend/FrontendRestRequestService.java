@@ -854,7 +854,7 @@ class FrontendRestRequestService implements RestRequestService {
                         response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
                       } else {
                         restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
-                        response = new ByteBufferReadableStreamChannel(FrontendRestRequestService.EMPTY_BUFFER);
+                        response = new ByteBufferReadableStreamChannel(EMPTY_BUFFER);
                       }
                     } else if (restResponseChannel.getStatus() == ResponseStatus.NotModified) {
                       response = null;
