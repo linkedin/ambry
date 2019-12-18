@@ -14,7 +14,9 @@
 package com.github.ambry.utils;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.Unpooled;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
@@ -288,6 +290,43 @@ public class Utils {
       output.flip();
     }
     return output;
+  }
+
+  /**
+   * Represent an operation that accepts a {@link ByteBuffer} and returns another {@link ByteBuffer}. Side effect should
+   * be expected to the input {@link ByteBuffer} and the returned {@link ByteBuffer} should be ready for read.
+   * @param <T> The exception to throw in this operation.
+   */
+  @FunctionalInterface
+  public static interface ByteBufferFunction<T extends Throwable> {
+    ByteBuffer apply(ByteBuffer buffer) throws T;
+  }
+
+  /**
+   * Apply a {@link ByteBufferFunction} to a {@link ByteBuf} and return a {@link ByteBuf}. All the bytes in the input
+   * {@link ByteBuf} will be consumed.
+   * @param buf The input {@link ByteBuf}.
+   * @param fn The {@link ByteBufferFunction}.
+   * @param <T> The exception to throw in the {@code fn}.
+   * @return A {@link ByteBuf}.
+   * @throws T Exception thrown from {@code fn}.
+   */
+  public static <T extends Throwable> ByteBuf applyByteBufferFunctionToByteBuf(ByteBuf buf, ByteBufferFunction<T> fn)
+      throws T {
+    if (buf.nioBufferCount() == 1) {
+      ByteBuffer buffer = buf.nioBuffer();
+      buf.skipBytes(buffer.remaining());
+      return Unpooled.wrappedBuffer(fn.apply(buffer));
+    } else {
+      ByteBuf temp = ByteBufAllocator.DEFAULT.heapBuffer(buf.readableBytes());
+      try {
+        temp.writeBytes(buf);
+        ByteBuffer buffer = temp.nioBuffer();
+        return Unpooled.wrappedBuffer(fn.apply(buffer));
+      } finally {
+        temp.release();
+      }
+    }
   }
 
   /**
