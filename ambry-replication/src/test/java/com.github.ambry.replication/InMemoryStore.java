@@ -318,7 +318,7 @@ class InMemoryStore implements Store {
 
   @Override
   public void completeBootstrap() {
-    throw new UnsupportedOperationException("Method not supported");
+    // no-op
   }
 
   @Override

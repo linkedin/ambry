@@ -332,6 +332,11 @@ public class ReplicationTest {
     storageManager.shutdown();
   }
 
+  /**
+   * Test BOOTSTRAP -> STANDBY transition on both existing and new replicas. For new replica, we test both failure and
+   * success cases.
+   * @throws Exception
+   */
   @Test
   public void replicaFromBootstrapToStandbyTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
@@ -1467,7 +1472,7 @@ public class ReplicationTest {
     Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
     MockHost localHost = localAndRemoteHosts.getFirst();
     MockHost remoteHost1 = localAndRemoteHosts.getSecond();
-    // create another remote host that shares spacial partition with localHost and remoteHost
+    // create another remoteHost2 that shares spacial partition with localHost and remoteHost1
     PartitionId specialPartitionId = clusterMap.getWritablePartitionIds(MockClusterMap.SPECIAL_PARTITION_CLASS).get(0);
     MockHost remoteHost2 = new MockHost(specialPartitionId.getReplicaIds().get(2).getDataNodeId(), clusterMap);
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
@@ -1483,7 +1488,7 @@ public class ReplicationTest {
       // add batchSize + 1 messages to the remoteHost1 so that two round of replication is needed.
       addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost1), batchSize + 1);
     }
-    // add batchSize - 1 messages to the remoteHost2 with which localHost can catch up during one cycle of replication
+    // add batchSize - 1 messages to the remoteHost2 so that localHost can catch up during one cycle of replication
     for (ReplicaId replicaId : clusterMap.getReplicaIds(remoteHost2.dataNodeId)) {
       addPutMessagesToReplicasOfPartition(replicaId.getPartitionId(), Collections.singletonList(remoteHost2),
           batchSize - 1);
