@@ -286,6 +286,12 @@ class SimpleOperationTracker implements OperationTracker {
       case SUCCESS:
         succeededCount++;
         break;
+      // Request disabled may happen when PUT/DELETE/TTLUpdate requests attempt to perform on replicas that are being
+      // decommissioned (i.e STANDBY -> INACTIVE). This is because decommission may take some time and frontends still
+      // hold old view. Aforementioned requests are rejected by server with Temporarily_Disabled error. For DELETE/TTLUpdate,
+      // even though we may receive such errors, the success target is still same(=2). For PUT, we have to adjust the
+      // success target (quorum) to let some PUT operations (with at least 2 requests succeeded on new replicas) succeed.
+      // Currently, disabledCount only applies to PUT operation.
       case REQUEST_DISABLED:
         disabledCount++;
         break;
