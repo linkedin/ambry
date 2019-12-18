@@ -679,8 +679,8 @@ class PersistentIndex {
    * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
-   IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long deletionTimeMs,
-      short lifeVersion) throws StoreException {
+  IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long deletionTimeMs, short lifeVersion)
+      throws StoreException {
     boolean hasLifeVersion = lifeVersion > (short) -1;
     validateFileSpan(fileSpan, true);
     //TODO IndexValue findLatest, can be either PUT, DELETE, or UNDELETE
@@ -1032,8 +1032,10 @@ class PersistentIndex {
                     EnumSet.allOf(IndexEntryType.class), indexSegments);
             messageEntries.add(
                 new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                    value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
-                    value.getContainerId(), value.getOperationTimeInMs()));
+                    value.isFlagSet(IndexValue.Flags.Ttl_Update_Index),
+                    value.isFlagSet(IndexValue.Flags.Undelete_Index), value.getExpiresAtMs(), null,
+                    value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs(),
+                    value.getLifeVersion()));
             currentTotalSizeOfEntries += value.getSize();
             offsetEnd = entry.getOffset();
             if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
@@ -1334,8 +1336,9 @@ class PersistentIndex {
               EnumSet.allOf(IndexEntryType.class), indexSegments);
           messageEntries.add(
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                  value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
-                  value.getContainerId(), value.getOperationTimeInMs()));
+                  value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.isFlagSet(IndexValue.Flags.Undelete_Index),
+                  value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(),
+                  value.getOperationTimeInMs(), value.getLifeVersion()));
           currentTotalSizeOfEntries.addAndGet(value.getSize());
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
               currentSegment.getLastModifiedTimeSecs())) {
