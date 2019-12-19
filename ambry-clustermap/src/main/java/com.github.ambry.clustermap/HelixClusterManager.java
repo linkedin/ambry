@@ -35,21 +35,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
-import org.apache.helix.NotificationContext;
 import org.apache.helix.PropertyType;
 import org.apache.helix.ZNRecord;
-import org.apache.helix.api.listeners.IdealStateChangeListener;
-import org.apache.helix.api.listeners.InstanceConfigChangeListener;
-import org.apache.helix.api.listeners.LiveInstanceChangeListener;
-import org.apache.helix.api.listeners.RoutingTableChangeListener;
-import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
-import org.apache.helix.model.LiveInstance;
 import org.apache.helix.spectator.RoutingTableProvider;
 import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
@@ -74,20 +66,11 @@ public class HelixClusterManager implements ClusterMap {
   private final MetricRegistry metricRegistry;
   private final ClusterMapConfig clusterMapConfig;
   private final ConcurrentHashMap<String, DcInfo> dcToDcZkInfo = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, Set<AmbryDataNode>> dcToNodes = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<Byte, String> dcIdToDcName = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas =
       new ConcurrentHashMap<>();
-  // A map whose key is ambry datanode and value is a map of partitionId to corresponding replica associated with this datanode
-  private final ConcurrentHashMap<AmbryDataNode, ConcurrentHashMap<String, AmbryReplica>> ambryDataNodeToAmbryReplicas =
-      new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<AmbryDataNode, Set<AmbryDisk>> ambryDataNodeToAmbryDisks = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, ConcurrentHashMap<String, String>> partitionToResourceNameByDc =
-      new ConcurrentHashMap<>();
-  private final Map<String, AtomicReference<RoutingTableSnapshot>> dcToRoutingTableSnapshotRef = new HashMap<>();
   private long clusterWideRawCapacityBytes;
   private long clusterWideAllocatedRawCapacityBytes;
   private long clusterWideAllocatedUsableCapacityBytes;
@@ -102,7 +85,6 @@ public class HelixClusterManager implements ClusterMap {
   // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
   // reflects the current value.
   private final AtomicLong currentXid;
-  private final AtomicLong errorCount = new AtomicLong(0);
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
 
   /**
@@ -153,8 +135,12 @@ public class HelixClusterManager implements ClusterMap {
               manager.connect();
               logger.info("Established connection to Helix manager at {}", zkConnectStr);
             }
-
-            ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName);
+            CountDownLatch routingTableInitLatch = new CountDownLatch(1);
+            ClusterChangeHandler clusterChangeHandler =
+                new SimpleClusterChangeHandler(clusterMapConfig, dcName, selfInstanceName, partitionOverrideInfoMap,
+                    partitionMap, partitionNameToAmbryPartition, ambryPartitionToAmbryReplicas,
+                    helixClusterManagerCallback, helixClusterManagerMetrics, initializationFailureMap,
+                    routingTableInitLatch, sealedStateChangeCounter);
             // Create RoutingTableProvider of each DC to keep track of partition(replicas) state. Here, we use current
             // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
             logger.info("Creating routing table provider associated with Helix manager at {}", zkConnectStr);
@@ -180,16 +166,23 @@ public class HelixClusterManager implements ClusterMap {
             manager.addLiveInstanceChangeListener(clusterChangeHandler);
             logger.info("Registered live instance change listeners for Helix manager at {}", zkConnectStr);
 
-            dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>())
-                .getAndSet(routingTableProvider.getRoutingTableSnapshot());
-            // the initial routing table change should populate the instanceConfigs, If it's empty that means initial
+
+            // in case initial event occurs before adding routing table listener, here we explicitly set snapshot in
+            // ClusterChangeHandler. The reason is, if listener missed initial event, snapshot inside routing table
+            // provider should be already populated.
+            clusterChangeHandler.setRoutingTableSnapshot(routingTableProvider.getRoutingTableSnapshot());
+            // the initial routing table change should populate the instanceConfigs. If it's empty that means initial
             // change didn't come and thread should wait on the init latch to ensure routing table snapshot is non-empty
-            if (dcToRoutingTableSnapshotRef.get(dcName).get().getInstanceConfigs().size() == 0) {
+            if (dcToDcZkInfo.get(dcName).clusterChangeHandler.getRoutingTableSnapshot().getInstanceConfigs().size()
+                == 0) {
               // Periodic refresh in routing table provider is enabled by default. In worst case, routerUpdater should
-              // refresh snapshot and trigger routing table change within 5 minutes. So we make clusterChangeHandler wait
-              // here for initial notification until times out.
-              clusterChangeHandler.waitForInitNotification();
+              // trigger routing table change within 5 minutes
+              if (!routingTableInitLatch.await(5, TimeUnit.MINUTES)) {
+                throw new IllegalStateException(
+                    "Initial routing table change from " + dcName + " didn't come within 5 mins");
+              }
             }
+
             if (!clusterMapConfig.clustermapListenCrossColo && manager != localManager) {
               manager.disconnect();
               logger.info("Stopped listening to cross colo ZK server {}", zkConnectStr);
@@ -286,9 +279,12 @@ public class HelixClusterManager implements ClusterMap {
    * Initialize capacity statistics.
    */
   private void initializeCapacityStats() {
-    for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
-      for (AmbryDisk disk : disks) {
-        clusterWideRawCapacityBytes += disk.getRawCapacityInBytes();
+    for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+      Map<AmbryDataNode, Set<AmbryDisk>> dataNodeToDisks = dcInfo.clusterChangeHandler.getDataNodeToDisksMap();
+      for (Set<AmbryDisk> disks : dataNodeToDisks.values()) {
+        for (AmbryDisk disk : disks) {
+          clusterWideRawCapacityBytes += disk.getRawCapacityInBytes();
+        }
       }
     }
     for (Set<AmbryReplica> partitionReplicas : ambryPartitionToAmbryReplicas.values()) {
@@ -315,7 +311,15 @@ public class HelixClusterManager implements ClusterMap {
 
   @Override
   public AmbryDataNode getDataNodeId(String hostname, int port) {
-    return instanceNameToAmbryDataNode.get(getInstanceName(hostname, port));
+    String instanceName = getInstanceName(hostname, port);
+    AmbryDataNode dataNode = null;
+    for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+      dataNode = dcInfo.clusterChangeHandler.getDataNode(instanceName);
+      if (dataNode != null) {
+        break;
+      }
+    }
+    return dataNode;
   }
 
   @Override
@@ -323,13 +327,17 @@ public class HelixClusterManager implements ClusterMap {
     if (!(dataNodeId instanceof AmbryDataNode)) {
       throw new IllegalArgumentException("Incompatible type passed in");
     }
-    AmbryDataNode datanode = (AmbryDataNode) dataNodeId;
-    return new ArrayList<>(ambryDataNodeToAmbryReplicas.get(datanode).values());
+    AmbryDataNode dataNode = (AmbryDataNode) dataNodeId;
+    return dcToDcZkInfo.get(dataNode.getDatacenterName()).clusterChangeHandler.getReplicaIds(dataNode);
   }
 
   @Override
   public List<AmbryDataNode> getDataNodeIds() {
-    return new ArrayList<>(instanceNameToAmbryDataNode.values());
+    List<AmbryDataNode> dataNodeList = new ArrayList<>();
+    for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+      dataNodeList.addAll(dcInfo.clusterChangeHandler.getAllDataNodes());
+    }
+    return dataNodeList;
   }
 
   @Override
@@ -377,7 +385,8 @@ public class HelixClusterManager implements ClusterMap {
       data.put(DATACENTER_NAME, dcName);
       data.put(DATACENTER_ID, dcId);
       JSONArray datanodesInDc = new JSONArray();
-      dcToNodes.get(dcName).forEach(node -> datanodesInDc.put(node.getSnapshot()));
+      dcToDcZkInfo.get(dcName).clusterChangeHandler.getAllDataNodes()
+          .forEach(node -> datanodesInDc.put(node.getSnapshot()));
       data.put(DATACENTER_NODES, datanodesInDc);
       datacentersJsonArray.put(data);
     });
@@ -462,9 +471,11 @@ public class HelixClusterManager implements ClusterMap {
       mappedPartition = new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass, helixClusterManagerCallback);
     }
     // Check if data node or disk is in current cluster map, if not, set bootstrapReplica to null.
-    AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
+    ClusterChangeHandler localClusterChangeHandler =
+        dcToDcZkInfo.get(clusterMapConfig.clusterMapDatacenterName).clusterChangeHandler;
+    AmbryDataNode dataNode = localClusterChangeHandler.getDataNode(instanceName);
     String mountPathFromHelix = replicaInfos.get(instanceName);
-    Set<AmbryDisk> disks = dataNode != null ? ambryDataNodeToAmbryDisks.get(dataNode) : null;
+    Set<AmbryDisk> disks = dataNode != null ? localClusterChangeHandler.getDisks(dataNode) : null;
     Optional<AmbryDisk> potentialDisk =
         disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPathFromHelix)).findAny()
             : Optional.empty();
@@ -499,21 +510,26 @@ public class HelixClusterManager implements ClusterMap {
 
   /**
    * Return the unique {@link AmbryReplica} for a {@link AmbryPartition} on a {@link AmbryDataNode}.
-   * @param hostname the hostname associated with the {@link AmbryDataNode}.
-   * @param port the port associated with the {@link AmbryDataNode}.
+   * @param dataNodeId the {@link DataNodeId} on which the ambry replica resides.
    * @param partitionString the partition id string associated with the {@link AmbryPartition}.
    * @return the {@link AmbryReplica} associated with the given parameters.
    */
-  AmbryReplica getReplicaForPartitionOnNode(String hostname, int port, String partitionString) {
+  AmbryReplica getReplicaForPartitionOnNode(DataNodeId dataNodeId, String partitionString) {
     // Note: partitionString here comes from partitionId.toString() not partitionId.toPathString()
-    return ambryDataNodeToAmbryReplicas.get(getDataNodeId(hostname, port)).get(partitionString);
+    AmbryDataNode ambryDataNode = getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
+    return dcToDcZkInfo.get(dataNodeId.getDatacenterName()).clusterChangeHandler.getReplicaId(ambryDataNode,
+        partitionString);
   }
 
   /**
    * @return the count of errors encountered by the Cluster Manager.
    */
   long getErrorCount() {
-    return errorCount.get();
+    long totalErrorCnt = 0;
+    for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+      totalErrorCnt += dcInfo.clusterChangeHandler.getErrorCount();
+    }
+    return totalErrorCnt;
   }
 
   /**
@@ -526,353 +542,34 @@ public class HelixClusterManager implements ClusterMap {
   /**
    * @return a map of partition to its corresponding resource grouped by data center
    */
-  Map<String, ConcurrentHashMap<String, String>> getPartitionToResourceMap() {
-    return Collections.unmodifiableMap(partitionToResourceNameByDc);
+  Map<String, Map<String, String>> getPartitionToResourceMap() {
+    Map<String, Map<String, String>> partitionToResourceNameByDc = new HashMap<>();
+    for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+      partitionToResourceNameByDc.put(dcInfo.dcName, dcInfo.clusterChangeHandler.getPartitionToResourceMap());
+    }
+    return partitionToResourceNameByDc;
   }
 
   /**
    * @return a map of data center to its data nodes
    */
   Map<String, Set<AmbryDataNode>> getDcToDataNodesMap() {
+    Map<String, Set<AmbryDataNode>> dcToNodes = new HashMap<>();
+    for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+      dcToNodes.put(dcInfo.dcName, new HashSet<>(dcInfo.clusterChangeHandler.getAllDataNodes()));
+    }
     return Collections.unmodifiableMap(dcToNodes);
   }
 
   /**
    * @return a map of data center to its {@link RoutingTableSnapshot}
    */
-  Map<String, AtomicReference<RoutingTableSnapshot>> getRoutingTableSnapshots() {
-    return Collections.unmodifiableMap(dcToRoutingTableSnapshotRef);
-  }
-
-  /**
-   * An instance of this object is used to register as listener for Helix related changes in each datacenter. This
-   * class is also responsible for handling events received.
-   */
-  private class ClusterChangeHandler
-      implements InstanceConfigChangeListener, LiveInstanceChangeListener, IdealStateChangeListener,
-                 RoutingTableChangeListener {
-    private final String dcName;
-    final Set<String> allInstances = new HashSet<>();
-    private final Object notificationLock = new Object();
-    private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
-    private final AtomicBoolean liveStateInitialized = new AtomicBoolean(false);
-    private final AtomicBoolean idealStateInitialized = new AtomicBoolean(false);
-    private final CountDownLatch routingTableInitLatch = new CountDownLatch(1);
-
-    /**
-     * Initialize a ClusterChangeHandler in the given datacenter.
-     * @param dcName the datacenter associated with this ClusterChangeHandler.
-     */
-    ClusterChangeHandler(String dcName) {
-      this.dcName = dcName;
+  Map<String, RoutingTableSnapshot> getRoutingTableSnapshots() {
+    Map<String, RoutingTableSnapshot> dcToRoutingTableSnapshot = new HashMap<>();
+    for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+      dcToRoutingTableSnapshot.put(dcInfo.dcName, dcInfo.clusterChangeHandler.getRoutingTableSnapshot());
     }
-
-    @Override
-    public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
-      try {
-        logger.debug("InstanceConfig change triggered in {} with: {}", dcName, configs);
-        synchronized (notificationLock) {
-          if (!instanceConfigInitialized.get()) {
-            logger.info("Received initial notification for instance config change from {}", dcName);
-            try {
-              initializeInstances(configs);
-            } catch (Exception e) {
-              logger.error("Exception occurred when initializing instances in {}: ", dcName, e);
-              initializationFailureMap.putIfAbsent(dcName, e);
-            }
-            instanceConfigInitialized.set(true);
-          } else {
-            updateStateOfReplicas(configs);
-          }
-          sealedStateChangeCounter.incrementAndGet();
-          helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
-        }
-      } catch (Throwable t) {
-        errorCount.incrementAndGet();
-        throw t;
-      }
-    }
-
-    /**
-     * Triggered whenever the IdealState in current data center has changed (for now, it is usually updated by Helix
-     * Bootstrap tool).
-     * @param idealState a list of {@link IdealState} that specifies ideal location of replicas.
-     * @param changeContext the {@link NotificationContext} associated.
-     * @throws InterruptedException
-     */
-    @Override
-    public void onIdealStateChange(List<IdealState> idealState, NotificationContext changeContext)
-        throws InterruptedException {
-      if (!idealStateInitialized.get()) {
-        logger.info("Received initial notification for IdealState change from {}", dcName);
-        idealStateInitialized.set(true);
-      } else {
-        logger.info("IdealState change triggered from {}", dcName);
-      }
-      // rebuild the entire partition-to-resource map in current dc
-      ConcurrentHashMap<String, String> newPartitionToResourceMap = new ConcurrentHashMap<>();
-      for (IdealState state : idealState) {
-        String resourceName = state.getResourceName();
-        for (String partitionStr : state.getPartitionSet()) {
-          newPartitionToResourceMap.put(partitionStr, resourceName);
-        }
-      }
-      partitionToResourceNameByDc.put(dcName, newPartitionToResourceMap);
-      helixClusterManagerMetrics.idealStateChangeTriggerCount.inc();
-    }
-
-    /**
-     * Triggered whenever there is a change in the list of live instances.
-     * @param liveInstances the list of all live instances (not a change set) at the time of this call.
-     * @param changeContext the {@link NotificationContext} associated.
-     */
-    @Override
-    public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
-      try {
-        logger.debug("Live instance change triggered from {} with: {}", dcName, liveInstances);
-        updateInstanceLiveness(liveInstances);
-        if (!liveStateInitialized.get()) {
-          logger.info("Received initial notification for live instance change from {}", dcName);
-          liveStateInitialized.set(true);
-        }
-        helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
-      } catch (Throwable t) {
-        errorCount.incrementAndGet();
-        throw t;
-      }
-    }
-
-    /**
-     * Triggered whenever the state of replica in cluster has changed. The snapshot contains up-to-date state of all
-     * resources(replicas) in this data center.
-     * @param routingTableSnapshot a snapshot of routing table for this data center.
-     * @param context additional context associated with this change.
-     */
-    @Override
-    public void onRoutingTableChange(RoutingTableSnapshot routingTableSnapshot, Object context) {
-      if (routingTableInitLatch.getCount() == 1) {
-        logger.info("Received initial notification for routing table change from {}", dcName);
-        dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>())
-            .getAndSet(routingTableSnapshot);
-        routingTableInitLatch.countDown();
-      } else {
-        logger.info("Routing table change triggered from {}", dcName);
-        dcToRoutingTableSnapshotRef.get(dcName).getAndSet(routingTableSnapshot);
-      }
-      helixClusterManagerMetrics.routingTableChangeTriggerCount.inc();
-    }
-
-    /**
-     * Wait for initial notification from routing table provider
-     */
-    void waitForInitNotification() throws InterruptedException {
-      // wait slightly more than 5 mins to ensure routerUpdater refreshes the snapshot.
-      if (!routingTableInitLatch.await(320, TimeUnit.SECONDS)) {
-        throw new IllegalStateException("Initial routing table change from " + dcName + " didn't come within 5 mins");
-      }
-    }
-
-    /**
-     * Populate the initial data from the admin connection. Create nodes, disks, partitions and replicas for the entire
-     * cluster. An {@link InstanceConfig} will only be looked at if the xid in it is <= currentXid.
-     * @param instanceConfigs the list of {@link InstanceConfig}s containing the information about the sealed states of replicas.
-     * @throws Exception if creation of {@link AmbryDataNode}s or {@link AmbryDisk}s throw an Exception.
-     */
-    private void initializeInstances(List<InstanceConfig> instanceConfigs) throws Exception {
-      logger.info("Initializing cluster information from {}", dcName);
-      for (InstanceConfig instanceConfig : instanceConfigs) {
-        int schemaVersion = getSchemaVersion(instanceConfig);
-        switch (schemaVersion) {
-          case 0:
-            String instanceName = instanceConfig.getInstanceName();
-            long instanceXid = getXid(instanceConfig);
-            if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
-              logger.info("Adding node {} and its disks and replicas", instanceName);
-              AmbryDataNode datanode =
-                  new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
-                      Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig),
-                      getSslPortStr(instanceConfig), instanceXid, helixClusterManagerCallback);
-              initializeDisksAndReplicasOnNode(datanode, instanceConfig);
-              instanceNameToAmbryDataNode.put(instanceName, datanode);
-              dcToNodes.computeIfAbsent(datanode.getDatacenterName(), s -> new HashSet<>()).add(datanode);
-              allInstances.add(instanceName);
-            } else {
-              logger.info(
-                  "Ignoring instanceConfig for {} because the xid associated with it ({}) is later than current xid ({})",
-                  instanceName, instanceXid, currentXid.get());
-              helixClusterManagerMetrics.ignoredUpdatesCount.inc();
-            }
-            break;
-          default:
-            logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
-            break;
-        }
-      }
-      logger.info("Initialized cluster information from {}", dcName);
-    }
-
-    /**
-     * Go over the given list of {@link InstanceConfig}s and update the both sealed and stopped states of replicas.
-     * An {@link InstanceConfig} will only be looked at if the xid in it is <= currentXid.
-     * @param instanceConfigs the list of {@link InstanceConfig}s containing the up-to-date information about the
-     *                        sealed states of replicas.
-     */
-    private void updateStateOfReplicas(List<InstanceConfig> instanceConfigs) {
-      for (InstanceConfig instanceConfig : instanceConfigs) {
-        int schemaVersion = getSchemaVersion(instanceConfig);
-        switch (schemaVersion) {
-          case 0:
-            String instanceName = instanceConfig.getInstanceName();
-            long instanceXid = getXid(instanceConfig);
-            AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceName);
-            if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
-              if (node == null) {
-                logger.trace("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
-                    instanceConfig);
-              } else {
-                Set<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
-                Set<String> stoppedReplicas = new HashSet<>(getStoppedReplicas(instanceConfig));
-                for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node).values()) {
-                  String partitionId = replica.getPartitionId().toPathString();
-                  if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(
-                      partitionId)) {
-                    logger.trace(
-                        "Ignoring instanceConfig change for partition {} on instance {} because partition override is enabled",
-                        partitionId, instanceName);
-                    helixClusterManagerMetrics.ignoredUpdatesCount.inc();
-                  } else {
-                    replica.setSealedState(sealedReplicas.contains(partitionId));
-                    replica.setStoppedState(stoppedReplicas.contains(partitionId));
-                  }
-                }
-              }
-            } else {
-              logger.trace(
-                  "Ignoring instanceConfig change for {} because the xid associated with it ({}) is later than current xid ({})",
-                  instanceName, instanceXid, currentXid.get());
-              helixClusterManagerMetrics.ignoredUpdatesCount.inc();
-            }
-            break;
-          default:
-            logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
-        }
-      }
-    }
-
-    /**
-     * Update the liveness states of existing instances based on the input.
-     * @param liveInstances the list of instances that are up.
-     */
-    private void updateInstanceLiveness(List<LiveInstance> liveInstances) {
-      synchronized (notificationLock) {
-        Set<String> liveInstancesSet = new HashSet<>();
-        for (LiveInstance liveInstance : liveInstances) {
-          liveInstancesSet.add(liveInstance.getInstanceName());
-        }
-        for (String instanceName : allInstances) {
-          // Here we ignore live instance change it's about self instance. The reason is, during server's startup, current
-          // node should be AVAILABLE but the list of live instances doesn't include current node since it hasn't joined yet.
-          if (liveInstancesSet.contains(instanceName) || instanceName.equals(selfInstanceName)) {
-            instanceNameToAmbryDataNode.get(instanceName).setState(HardwareState.AVAILABLE);
-          } else {
-            instanceNameToAmbryDataNode.get(instanceName).setState(HardwareState.UNAVAILABLE);
-          }
-        }
-      }
-    }
-
-    /**
-     * Initialize the disks and replicas on the given node. Create partitions if this is the first time a replica of
-     * that partition is being constructed. If partition override is enabled, the seal state of replica is determined by
-     * partition info in HelixPropertyStore, if disabled, the seal state is determined by instanceConfig.
-     * @param datanode the {@link AmbryDataNode} that is being initialized.
-     * @param instanceConfig the {@link InstanceConfig} associated with this datanode.
-     * @throws Exception if creation of {@link AmbryDisk} throws an Exception.
-     */
-    private void initializeDisksAndReplicasOnNode(AmbryDataNode datanode, InstanceConfig instanceConfig)
-        throws Exception {
-      ambryDataNodeToAmbryReplicas.put(datanode, new ConcurrentHashMap<>());
-      ambryDataNodeToAmbryDisks.put(datanode, new HashSet<AmbryDisk>());
-      List<String> sealedReplicas = getSealedReplicas(instanceConfig);
-      List<String> stoppedReplicas = getStoppedReplicas(instanceConfig);
-      Map<String, Map<String, String>> diskInfos = instanceConfig.getRecord().getMapFields();
-      for (Map.Entry<String, Map<String, String>> entry : diskInfos.entrySet()) {
-        String mountPath = entry.getKey();
-        Map<String, String> diskInfo = entry.getValue();
-        long capacityBytes = Long.valueOf(diskInfo.get(DISK_CAPACITY_STR));
-        HardwareState diskState =
-            diskInfo.get(DISK_STATE).equals(AVAILABLE_STR) ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
-        String replicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
-
-        // Create disk
-        AmbryDisk disk = new AmbryDisk(clusterMapConfig, datanode, mountPath, diskState, capacityBytes);
-        ambryDataNodeToAmbryDisks.get(datanode).add(disk);
-
-        if (!replicasStr.isEmpty()) {
-          String[] replicaInfoList = replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR);
-          for (String replicaInfo : replicaInfoList) {
-            String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
-            // partition name and replica name are the same.
-            String partitionName = info[0];
-            long replicaCapacity = Long.valueOf(info[1]);
-            String partitionClass = clusterMapConfig.clusterMapDefaultPartitionClass;
-            if (info.length > 2) {
-              partitionClass = info[2];
-            }
-            AmbryPartition mappedPartition =
-                new AmbryPartition(Long.valueOf(partitionName), partitionClass, helixClusterManagerCallback);
-            // Ensure only one AmbryPartition entry goes in to the mapping based on the name.
-            AmbryPartition existing = partitionNameToAmbryPartition.putIfAbsent(partitionName, mappedPartition);
-            if (existing != null) {
-              mappedPartition = existing;
-            }
-            // mappedPartition is now the final mapped AmbryPartition object for this partition.
-            synchronized (mappedPartition) {
-              if (!ambryPartitionToAmbryReplicas.containsKey(mappedPartition)) {
-                ambryPartitionToAmbryReplicas.put(mappedPartition,
-                    Collections.newSetFromMap(new ConcurrentHashMap<>()));
-                partitionMap.put(ByteBuffer.wrap(mappedPartition.getBytes()), mappedPartition);
-              }
-            }
-            ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
-            // Create replica associated with this node.
-            boolean isSealed;
-            if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(
-                partitionName)) {
-              isSealed = partitionOverrideInfoMap.get(partitionName)
-                  .get(ClusterMapUtils.PARTITION_STATE)
-                  .equals(ClusterMapUtils.READ_ONLY_STR);
-            } else {
-              isSealed = sealedReplicas.contains(partitionName);
-            }
-            AmbryReplica replica =
-                new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                    replicaCapacity, isSealed);
-            ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
-            ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toString(), replica);
-          }
-        }
-      }
-    }
-
-    /**
-     * Ensure that the given partition is absent on the given datanode. This is called as part of an inline validation
-     * done to ensure that two replicas of the same partition do not exist on the same datanode.
-     * @param partition the {@link AmbryPartition} to check.
-     * @param datanode the {@link AmbryDataNode} on which to check.
-     * @param expectedReplicaCapacity the capacity expected for the replicas of the partition.
-     */
-    private void ensurePartitionAbsenceOnNodeAndValidateCapacity(AmbryPartition partition, AmbryDataNode datanode,
-        long expectedReplicaCapacity) {
-      for (AmbryReplica replica : ambryPartitionToAmbryReplicas.get(partition)) {
-        if (replica.getDataNodeId().equals(datanode)) {
-          throw new IllegalStateException("Replica already exists on " + datanode + " for " + partition);
-        } else if (replica.getCapacityInBytes() != expectedReplicaCapacity) {
-          throw new IllegalStateException("Expected replica capacity " + expectedReplicaCapacity + " is different from "
-              + "the capacity of an existing replica " + replica.getCapacityInBytes());
-        }
-      }
-    }
+    return Collections.unmodifiableMap(dcToRoutingTableSnapshot);
   }
 
   /**
@@ -921,18 +618,16 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName) {
       List<AmbryReplica> replicas = new ArrayList<>();
-      for (Map.Entry<String, AtomicReference<RoutingTableSnapshot>> entry : dcToRoutingTableSnapshotRef.entrySet()) {
-        String dc = entry.getKey();
+      for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+        String dc = dcInfo.dcName;
         if (dcName == null || dcName.equals(dc)) {
-          AtomicReference<RoutingTableSnapshot> reference = entry.getValue();
-          String resourceName =
-              partitionToResourceNameByDc.getOrDefault(dc, new ConcurrentHashMap<>()).get(partition.toPathString());
-          List<InstanceConfig> instanceConfigs =
-              reference.get().getInstancesForResource(resourceName, partition.toPathString(), state.name());
+          ClusterChangeHandler clusterChangeHandler = dcInfo.clusterChangeHandler;
+          String resourceName = clusterChangeHandler.getPartitionToResourceMap().get(partition.toPathString());
+          List<InstanceConfig> instanceConfigs = clusterChangeHandler.getRoutingTableSnapshot()
+              .getInstancesForResource(resourceName, partition.toPathString(), state.name());
           instanceConfigs.forEach((e) -> {
-            AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(e.getInstanceName());
-            replicas.add(ambryDataNodeToAmbryReplicas.getOrDefault(dataNode, new ConcurrentHashMap<>())
-                .get(partition.toString()));
+            AmbryDataNode dataNode = clusterChangeHandler.getDataNode(e.getInstanceName());
+            replicas.add(clusterChangeHandler.getReplicaId(dataNode, partition.toString()));
           });
         }
       }
@@ -959,14 +654,14 @@ public class HelixClusterManager implements ClusterMap {
      * @return a collection of datanodes in this cluster.
      */
     Collection<AmbryDataNode> getDatanodes() {
-      return new ArrayList<>(instanceNameToAmbryDataNode.values());
+      return getDataNodeIds();
     }
 
     /**
      * @return the count of the datanodes in this cluster.
      */
     long getDatanodeCount() {
-      return instanceNameToAmbryDataNode.values().size();
+      return getDatanodes().size();
     }
 
     /**
@@ -974,7 +669,7 @@ public class HelixClusterManager implements ClusterMap {
      */
     long getDownDatanodesCount() {
       long count = 0;
-      for (AmbryDataNode datanode : instanceNameToAmbryDataNode.values()) {
+      for (AmbryDataNode datanode : getDatanodes()) {
         if (datanode.getState() == HardwareState.UNAVAILABLE) {
           count++;
         }
@@ -985,11 +680,13 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public Collection<AmbryDisk> getDisks(AmbryDataNode dataNode) {
       if (dataNode != null) {
-        return ambryDataNodeToAmbryDisks.get(dataNode);
+        return dcToDcZkInfo.get(dataNode.getDatacenterName()).clusterChangeHandler.getDisks(dataNode);
       }
       List<AmbryDisk> disksToReturn = new ArrayList<>();
-      for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
-        disksToReturn.addAll(disks);
+      for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+        for (Set<AmbryDisk> disks : dcInfo.clusterChangeHandler.getDataNodeToDisksMap().values()) {
+          disksToReturn.addAll(disks);
+        }
       }
       return disksToReturn;
     }
@@ -999,8 +696,10 @@ public class HelixClusterManager implements ClusterMap {
      */
     long getDiskCount() {
       long count = 0;
-      for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
-        count += disks.size();
+      for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+        for (Set<AmbryDisk> disks : dcInfo.clusterChangeHandler.getDataNodeToDisksMap().values()) {
+          count += disks.size();
+        }
       }
       return count;
     }
@@ -1010,11 +709,9 @@ public class HelixClusterManager implements ClusterMap {
      */
     long getDownDisksCount() {
       long count = 0;
-      for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
-        for (AmbryDisk disk : disks) {
-          if (disk.getState() == HardwareState.UNAVAILABLE) {
-            count++;
-          }
+      for (AmbryDisk disk : getDisks(null)) {
+        if (disk.getState() == HardwareState.UNAVAILABLE) {
+          count++;
         }
       }
       return count;

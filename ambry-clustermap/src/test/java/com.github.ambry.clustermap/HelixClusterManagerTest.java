@@ -39,8 +39,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
@@ -515,8 +513,7 @@ public class HelixClusterManagerTest {
     helixCluster.addNewResource(resourceName, idealState, localDc);
     verifyInitialClusterChanges(helixClusterManager, helixCluster, new String[]{localDc});
     // localDc should have one more partition compared with remoteDc
-    Map<String, ConcurrentHashMap<String, String>> partitionToResource =
-        (helixClusterManager).getPartitionToResourceMap();
+    Map<String, Map<String, String>> partitionToResource = (helixClusterManager).getPartitionToResourceMap();
     assertEquals("localDc should have one more partition", partitionToResource.get(localDc).size(),
         partitionToResource.get(remoteDc).size() + 1);
     assertTrue(partitionToResource.get(localDc).containsKey(partitionName) && !partitionToResource.get(remoteDc)
@@ -544,8 +541,8 @@ public class HelixClusterManagerTest {
     metricRegistry = new MetricRegistry();
     HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
         new MockHelixManagerFactory(helixCluster, null, null), metricRegistry);
-    Map<String, AtomicReference<RoutingTableSnapshot>> snapshotsByDc = helixClusterManager.getRoutingTableSnapshots();
-    RoutingTableSnapshot localDcSnapshot = snapshotsByDc.get(localDc).get();
+    Map<String, RoutingTableSnapshot> snapshotsByDc = helixClusterManager.getRoutingTableSnapshots();
+    RoutingTableSnapshot localDcSnapshot = snapshotsByDc.get(localDc);
 
     Set<InstanceConfig> instanceConfigsInSnapshot = new HashSet<>(localDcSnapshot.getInstanceConfigs());
     Set<InstanceConfig> instanceConfigsInCluster =
@@ -566,7 +563,7 @@ public class HelixClusterManagerTest {
     mockHelixAdmin.bringInstanceDown(instance);
     mockHelixAdmin.triggerRoutingTableNotification();
     int sleepCnt = 0;
-    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).get().getLiveInstances().size()
+    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).getLiveInstances().size()
         != initialLiveCnt - 1) {
       assertTrue("Routing table change (triggered by bringing down node) didn't come within 1 sec", sleepCnt < 5);
       Thread.sleep(200);
@@ -576,8 +573,7 @@ public class HelixClusterManagerTest {
     mockHelixAdmin.bringInstanceUp(instance);
     mockHelixAdmin.triggerRoutingTableNotification();
     sleepCnt = 0;
-    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).get().getLiveInstances().size()
-        != initialLiveCnt) {
+    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).getLiveInstances().size() != initialLiveCnt) {
       assertTrue("Routing table change (triggered by bringing up node) didn't come within 1 sec", sleepCnt < 5);
       Thread.sleep(200);
       sleepCnt++;
@@ -1146,7 +1142,7 @@ public class HelixClusterManagerTest {
   private void verifyInitialClusterChanges(HelixClusterManager clusterManager, MockHelixCluster helixCluster,
       String[] dcs) {
     // get in-mem data structures populated based on initial notification
-    Map<String, ConcurrentHashMap<String, String>> partitionToResouceByDc = clusterManager.getPartitionToResourceMap();
+    Map<String, Map<String, String>> partitionToResouceByDc = clusterManager.getPartitionToResourceMap();
     Map<String, Set<AmbryDataNode>> dataNodesByDc = clusterManager.getDcToDataNodesMap();
 
     for (String dc : dcs) {
