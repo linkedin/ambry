@@ -26,6 +26,14 @@ import org.slf4j.LoggerFactory;
 
 /**
  * An implementation of {@link ReplicaSyncUpManager} that helps track replica catchup state.
+ *
+ * To track state of replica that is catching up or being commissioned, this class leverages a {@link java.util.concurrent.CountDownLatch}.
+ * Every time {@link ReplicaSyncUpManager#initiateBootstrap(ReplicaId)} is called, a new latch (with initial value = 1)
+ * is created associated with given replica. Any caller that invokes {@link ReplicaSyncUpManager#waitBootstrapCompleted(String)}
+ * is blocked and wait until corresponding latch counts to zero. External component (i.e. replication manager) is able to
+ * call {@link ReplicaSyncUpManager#onBootstrapComplete(String)} or {@link ReplicaSyncUpManager#onBootstrapError(String)}
+ * to mark sync-up success or failure by counting down the latch. This will unblock caller waiting fot this latch and
+ * proceed with subsequent actions.
  */
 public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   private final ConcurrentHashMap<String, CountDownLatch> partitionToBootstrapLatch = new ConcurrentHashMap<>();
@@ -47,6 +55,10 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
         new LocalReplicaLagInfos(replicaId, clusterMapConfig.clustermapReplicaCatchupAcceptableLagBytes));
   }
 
+  /**
+   * {@inheritDoc}
+   * The method is blocked on a {@link java.util.concurrent.CountDownLatch} until the bootstrap is complete
+   */
   @Override
   public void waitBootstrapCompleted(String partitionName) throws InterruptedException {
     CountDownLatch latch = partitionToBootstrapLatch.get(partitionName);
@@ -87,12 +99,21 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     return lagInfos.hasSyncedUpWithEnoughPeers();
   }
 
+  /**
+   * {@inheritDoc}
+   * This method will count down the latch associated with given replica and
+   * unblock external service waiting on this latch.
+   */
   @Override
   public void onBootstrapComplete(String partitionName) {
     partitionToBootstrapSuccess.put(partitionName, true);
     countDownLatch(partitionName);
   }
 
+  /**
+   * {@inheritDoc}
+   * This method will count down latch and terminates bootstrap.
+   */
   @Override
   public void onBootstrapError(String partitionName) {
     countDownLatch(partitionName);
