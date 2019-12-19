@@ -165,18 +165,6 @@ public class HelixClusterManager implements ClusterMap {
             dcToDcZkInfo.put(dcName, dcInfo);
             dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcName);
             routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
-            dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>())
-                .getAndSet(routingTableProvider.getRoutingTableSnapshot());
-            // the initial routing table change should populate the instanceConfigs, so if it's empty that means initial
-            // change didn't come and thread should wait on the init latch to ensure routing table snapshot is non-empty
-            if (dcToRoutingTableSnapshotRef.get(dcName).get().getInstanceConfigs().size() == 0) {
-              // Periodic refresh in routing table provider is enabled by default. In worst case, routerUpdater should
-              // trigger routing table change within 5 minutes
-              if (!routingTableInitLatch.await(5, TimeUnit.MINUTES)) {
-                throw new IllegalStateException(
-                    "Initial routing table change from " + dcName + " didn't come within 5 mins");
-              }
-            }
             logger.info("Registered routing table change listeners in {}", dcName);
 
             // The initial instance config change notification is required to populate the static cluster
@@ -192,6 +180,19 @@ public class HelixClusterManager implements ClusterMap {
             // Now register listeners to get notified on live instance change in every datacenter.
             manager.addLiveInstanceChangeListener(clusterChangeHandler);
             logger.info("Registered live instance change listeners for Helix manager at {}", zkConnectStr);
+
+            dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>())
+                .getAndSet(routingTableProvider.getRoutingTableSnapshot());
+            // the initial routing table change should populate the instanceConfigs, If it's empty that means initial
+            // change didn't come and thread should wait on the init latch to ensure routing table snapshot is non-empty
+            if (dcToRoutingTableSnapshotRef.get(dcName).get().getInstanceConfigs().size() == 0) {
+              // Periodic refresh in routing table provider is enabled by default. In worst case, routerUpdater should
+              // trigger routing table change within 5 minutes
+              if (!routingTableInitLatch.await(5, TimeUnit.MINUTES)) {
+                throw new IllegalStateException(
+                    "Initial routing table change from " + dcName + " didn't come within 5 mins");
+              }
+            }
             if (!clusterMapConfig.clustermapListenCrossColo && manager != localManager) {
               manager.disconnect();
               logger.info("Stopped listening to cross colo ZK server {}", zkConnectStr);
