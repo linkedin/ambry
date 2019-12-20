@@ -123,6 +123,11 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
             PartitionStateChangeListener partitionStateChangeListener) {
           registeredPartitionStateChangeListeners.add(partitionStateChangeListener);
         }
+
+        @Override
+        public ReplicaSyncUpManager getReplicaSyncUpManager() {
+          return null;
+        }
       };
     }
     return clusterParticipant;

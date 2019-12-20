@@ -671,6 +671,16 @@ public class StatsManagerTest {
     }
 
     @Override
+    public boolean isBootstrapInProgress() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void completeBootstrap() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void setCurrentState(ReplicaState state) {
       throw new IllegalStateException("Not implemented");
     }

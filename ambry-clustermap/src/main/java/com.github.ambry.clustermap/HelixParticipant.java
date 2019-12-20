@@ -51,6 +51,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
+  private ReplicaSyncUpManager replicaSyncUpManager;
   final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
 
   private static final Logger logger = LoggerFactory.getLogger(HelixParticipant.class);
@@ -80,6 +81,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
     }
     manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
+    replicaSyncUpManager = new AmbryReplicaSyncUpManager(clusterMapConfig);
     partitionStateChangeListeners = new HashMap<>();
   }
 
@@ -95,7 +97,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig, this));
+        new AmbryStateModelFactory(clusterMapConfig, this, replicaSyncUpManager));
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
       synchronized (helixAdministrationLock) {
@@ -212,6 +214,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return ClusterMapUtils.getStoppedReplicas(instanceConfig);
   }
 
+  @Override
+  public ReplicaSyncUpManager getReplicaSyncUpManager() {
+    return replicaSyncUpManager;
+  }
+
   /**
    * @return a snapshot of registered state change listeners.
    */
@@ -305,10 +312,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-    PartitionStateChangeListener storageManagerListener =
-        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
-    if (storageManagerListener != null) {
-      storageManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
+    PartitionStateChangeListener replicationManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+    if (replicationManagerListener != null) {
+      replicationManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
     }
   }
 

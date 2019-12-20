@@ -679,6 +679,24 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public boolean isBootstrapInProgress() {
+    return (new File(dataDir, BOOTSTRAP_FILE_NAME)).exists();
+  }
+
+  @Override
+  public void completeBootstrap() {
+    File bootstrapFile = new File(dataDir, BOOTSTRAP_FILE_NAME);
+    try {
+      // the method will check if file exists or not
+      Utils.deleteFileOrDirectory(bootstrapFile);
+    } catch (IOException e) {
+      // if deletion fails, we log here without throwing exception. Next time when server restarts, the store should
+      // complete BOOTSTRAP -> STANDBY quickly and attempt to delete this again.
+      logger.error("Failed to delete " + bootstrapFile.getName(), e);
+    }
+  }
+
+  @Override
   public void setCurrentState(ReplicaState state) {
     currentState = state;
   }
@@ -741,13 +759,6 @@ public class BlobStore implements Store {
    */
   public long getEndPositionOfLastPut() throws StoreException {
     return index.getAbsoluteEndPositionOfLastPut();
-  }
-
-  /**
-   * @return {@code true} if new added store has initiated bootstrap process and bootstrap is still in progress.
-   */
-  boolean isBootstrapInProgress() {
-    return (new File(dataDir, BOOTSTRAP_FILE_NAME)).exists();
   }
 
   /**

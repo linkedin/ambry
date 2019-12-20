@@ -111,6 +111,16 @@ public interface Store {
   boolean isStarted();
 
   /**
+   * @return {@code true} if store has initiated bootstrap process and bootstrap is still in progress.
+   */
+  boolean isBootstrapInProgress();
+
+  /**
+   * Take actions (if any) to complete the bootstrap (i.e, delete bootstrap file in store directory)
+   */
+  void completeBootstrap();
+
+  /**
    * Set current state of the store.
    * @param state {@link ReplicaState} associated with local store
    */

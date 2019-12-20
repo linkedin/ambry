@@ -467,6 +467,16 @@ class CloudBlobStore implements Store {
   }
 
   @Override
+  public boolean isBootstrapInProgress() {
+    return false;
+  }
+
+  @Override
+  public void completeBootstrap() {
+    // no op
+  }
+
+  @Override
   public void setCurrentState(ReplicaState state) {
     throw new UnsupportedOperationException("Method not supported");
   }

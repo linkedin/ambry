@@ -32,13 +32,16 @@ public class AmbryPartitionStateModel extends StateModel {
   private final String partitionName;
   private final PartitionStateChangeListener partitionStateChangeListener;
   private final ClusterMapConfig clusterMapConfig;
+  private final ReplicaSyncUpManager replicaSyncUpManager;
 
   AmbryPartitionStateModel(String resourceName, String partitionName,
-      PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig) {
+      PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig,
+      ReplicaSyncUpManager replicaSyncUpManager) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
     this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
     this.clusterMapConfig = Objects.requireNonNull(clusterMapConfig);
+    this.replicaSyncUpManager = Objects.requireNonNull(replicaSyncUpManager);
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
   }
@@ -54,10 +57,21 @@ public class AmbryPartitionStateModel extends StateModel {
 
   @Transition(to = "STANDBY", from = "BOOTSTRAP")
   public void onBecomeStandbyFromBootstrap(Message message, NotificationContext context) {
-    logger.info("Partition {} in resource {} is becoming STANDBY from BOOTSTRAP", message.getPartitionName(),
+    String partitionName = message.getPartitionName();
+    logger.info("Partition {} in resource {} is becoming STANDBY from BOOTSTRAP", partitionName,
         message.getResourceName());
     if (clusterMapConfig.clustermapEnableStateModelListener) {
-      partitionStateChangeListener.onPartitionBecomeStandbyFromBootstrap(message.getPartitionName());
+      partitionStateChangeListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
+    }
+    try {
+      replicaSyncUpManager.waitBootstrapCompleted(partitionName);
+    } catch (InterruptedException e) {
+      logger.error("Bootstrap was interrupted on partition {}", partitionName);
+      throw new StateTransitionException("Bootstrap failed or was interrupted",
+          StateTransitionException.TransitionErrorCode.BootstrapFailure);
+    } catch (StateTransitionException e) {
+      logger.error("Bootstrap didn't complete.", e);
+      throw e;
     }
   }
 

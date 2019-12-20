@@ -1250,6 +1250,25 @@ public class BlobStoreTest {
     reloadStore();
   }
 
+  /**
+   * test store in bootstrap and store completes bootstrap behaviors.
+   * @throws Exception
+   */
+  @Test
+  public void inBootstrapAndCompleteBootstrapTest() throws Exception {
+    store.shutdown();
+    File testDir = StoreTestUtils.createTempDirectory("testStoreDir-" + storeId);
+    StoreTestUtils.MockReplicaId testReplica = getMockReplicaId(testDir.getAbsolutePath());
+    BlobStore blobStore = createBlobStore(testReplica);
+    blobStore.start();
+    // create a bootstrap file
+    File bootstrapFile = new File(testReplica.getReplicaPath(), BlobStore.BOOTSTRAP_FILE_NAME);
+    assertTrue("Couldn't create a bootstrap file", bootstrapFile.createNewFile());
+    assertTrue("Store should be in bootstrap state", blobStore.isBootstrapInProgress());
+    blobStore.completeBootstrap();
+    assertFalse("Bootstrap file should be deleted", bootstrapFile.exists());
+  }
+
   // helpers
   // general
 

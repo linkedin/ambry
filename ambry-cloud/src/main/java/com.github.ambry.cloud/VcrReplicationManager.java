@@ -71,7 +71,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       String transformerClassName) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
         virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool,
-        vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName);
+        vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null);
     this.properties = properties;
     this.cloudConfig = cloudConfig;
     this.storeConfig = storeConfig;
