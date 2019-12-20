@@ -33,6 +33,7 @@ import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
+import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
@@ -127,6 +128,9 @@ public class AmbryRequests implements RequestAPI {
           break;
         case TtlUpdateRequest:
           handleTtlUpdateRequest(request);
+          break;
+        case UndeleteRequest:
+          handleUndeleteRequest(request);
           break;
         case ReplicaMetadataRequest:
           handleReplicaMetadataRequest(request);
@@ -450,6 +454,78 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
+  public void handleUndeleteRequest(Request request) throws IOException, InterruptedException {
+    UndeleteRequest undeleteRequest =
+        UndeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    long startTime = SystemTime.getInstance().milliseconds();
+    UndeleteResponse response = null;
+    try {
+      StoreKey convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(undeleteRequest.getBlobId())).get(0);
+      ServerErrorCode error =
+          validateRequest(undeleteRequest.getBlobId().getPartition(), RequestOrResponseType.UndeleteRequest, false);
+      if (error != ServerErrorCode.No_Error) {
+        logger.error("Validating delete request failed with error {} for request {}", error, undeleteRequest);
+        response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(), error);
+      } else {
+        BlobId convertedBlobId = (BlobId) convertedStoreKey;
+        MessageFormatInputStream stream =
+            new UndeleteMessageFormatInputStream(convertedStoreKey, convertedBlobId.getAccountId(),
+                convertedBlobId.getContainerId(), undeleteRequest.getUndeletionTimeInMs(),
+                undeleteRequest.getLifeVersion());
+        MessageInfo info = new MessageInfo(convertedStoreKey, stream.getSize(), convertedBlobId.getAccountId(),
+            convertedBlobId.getContainerId(), undeleteRequest.getUndeletionTimeInMs());
+        ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
+        infoList.add(info);
+        MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
+        Store storeToUndelete = storeManager.getStore(undeleteRequest.getBlobId().getPartition());
+        storeToUndelete.undelete(writeSet);
+        response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+            ServerErrorCode.No_Error);
+//        if (notification != null) {
+//          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(), convertedStoreKey.getID(),
+//              BlobReplicaSourceType.PRIMARY);
+//        }
+      }
+    } catch (StoreException e) {
+      boolean logInErrorLevel = false;
+//      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+//        metrics.idNotFoundError.inc();
+//      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+//        metrics.ttlExpiredError.inc();
+//      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+//        metrics.idDeletedError.inc();
+//      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+//        metrics.deleteAuthorizationFailure.inc();
+//      } else {
+//        logInErrorLevel = true;
+//        metrics.unExpectedStoreDeleteError.inc();
+//      }
+      if (logInErrorLevel) {
+        logger.error("Store exception on an undelete with error code {} for request {}", e.getErrorCode(),
+            undeleteRequest, e);
+      } else {
+        logger.trace("Store exception on an undelete with error code {} for request {}", e.getErrorCode(),
+            undeleteRequest, e);
+      }
+      response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+    } catch (Exception e) {
+      logger.error("Unknown exception for undelete request " + undeleteRequest, e);
+      response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+          ServerErrorCode.Unknown_Error);
+//      metrics.unExpectedStoreDeleteError.inc();
+    } finally {
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", undeleteRequest, response, processingTime);
+//      metrics.deleteBlobProcessingTimeInMs.update(processingTime);
+    }
+    requestResponseChannel.sendResponse(response, request, null);
+  }
+
+  @Override
   public void handleTtlUpdateRequest(Request request) throws IOException, InterruptedException {
     TtlUpdateRequest updateRequest =
         TtlUpdateRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
@@ -471,7 +547,7 @@ public class AmbryRequests implements RequestAPI {
         MessageFormatInputStream stream =
             new TtlUpdateMessageFormatInputStream(convertedStoreKey, convertedStoreKey.getAccountId(),
                 convertedStoreKey.getContainerId(), updateRequest.getExpiresAtMs(),
-                updateRequest.getOperationTimeInMs());
+                updateRequest.getOperationTimeInMs(), (short) 0);
         MessageInfo info =
             new MessageInfo(convertedStoreKey, stream.getSize(), false, true, updateRequest.getExpiresAtMs(),
                 convertedStoreKey.getAccountId(), convertedStoreKey.getContainerId(),

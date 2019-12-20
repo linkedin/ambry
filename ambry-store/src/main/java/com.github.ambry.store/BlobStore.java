@@ -480,7 +480,7 @@ public class BlobStore implements Store {
             //we already checked the indexes in the previous for loop
             //is it because it could have changed before grabbing the lock?
             IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
-                EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
+                EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
             if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
               throw new StoreException(
                   "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
@@ -576,7 +576,8 @@ public class BlobStore implements Store {
                 EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE, PersistentIndex.IndexEntryType.UNDELETE));
             short lifeVersion = info.getLifeVersion();
             boolean hasLifeVersion = lifeVersion > -1;
-
+            lifeVersion = hasLifeVersion ? lifeVersion : (short)(value.getLifeVersion()+1);
+            infoToLifeVersion.put(info, lifeVersion);
             if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
               throw new StoreException(
                   "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
@@ -590,7 +591,7 @@ public class BlobStore implements Store {
 //        int correspondingPutIndex = 0;
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-          IndexValue undeleteIndexValue = index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
+          IndexValue undeleteIndexValue = index.markAsUndeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs(), infoToLifeVersion.get(info));
           endOffsetOfLastMessage = fileSpan.getEndOffset();
           //TODO Add stats
 //          blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToUndelete.get(correspondingPutIndex++));

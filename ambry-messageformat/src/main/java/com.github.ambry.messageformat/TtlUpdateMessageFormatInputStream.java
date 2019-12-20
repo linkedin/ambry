@@ -31,15 +31,29 @@ import java.nio.ByteBuffer;
  */
 public class TtlUpdateMessageFormatInputStream extends MessageFormatInputStream {
   public TtlUpdateMessageFormatInputStream(StoreKey key, short accountId, short containerId, long expiresAtMs,
-      long updateTimeInMs) throws MessageFormatException {
+      long updateTimeInMs, short lifeVersion) throws MessageFormatException {
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     int recordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.TTL_UPDATE);
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + recordSize);
-    MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(buffer, recordSize,
-        MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-        MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
-        MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-        MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
+    switch (MessageFormatRecord.headerVersionToUse) {
+      case MessageFormatRecord.Message_Header_Version_V2:
+        MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(buffer, recordSize,
+            MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+            MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
+            MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+            MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
+        break;
+      case MessageFormatRecord.Message_Header_Version_V3:
+        MessageFormatRecord.MessageHeader_Format_V3.serializeHeader(buffer, lifeVersion, recordSize,
+            MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+            MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
+            MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+            MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
+        break;
+      default:
+        throw new IllegalStateException("Unexpected Message Header: " + MessageFormatRecord.headerVersionToUse);
+    }
+
     buffer.put(key.toBytes());
     MessageFormatRecord.Update_Format_V3.serialize(buffer,
         new UpdateRecord(accountId, containerId, updateTimeInMs, new TtlUpdateSubRecord(expiresAtMs)));

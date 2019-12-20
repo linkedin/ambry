@@ -248,7 +248,8 @@ public class StoreCopier implements Closeable {
             if (tgtMsgInfo.isTtlUpdated()) {
               TtlUpdateMessageFormatInputStream stream =
                   new TtlUpdateMessageFormatInputStream(tgtMsgInfo.getStoreKey(), tgtMsgInfo.getAccountId(),
-                      tgtMsgInfo.getContainerId(), tgtMsgInfo.getExpirationTimeInMs(), tgtMsgInfo.getOperationTimeMs());
+                      tgtMsgInfo.getContainerId(), tgtMsgInfo.getExpirationTimeInMs(), tgtMsgInfo.getOperationTimeMs(),
+                      (short) 0);
               MessageInfo updateMsgInfo = new MessageInfo(tgtMsgInfo.getStoreKey(), stream.getSize(), false, true,
                   tgtMsgInfo.getExpirationTimeInMs(), tgtMsgInfo.getAccountId(), tgtMsgInfo.getContainerId(),
                   tgtMsgInfo.getOperationTimeMs());

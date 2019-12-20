@@ -1556,7 +1556,7 @@ public class BlobStoreTest {
         idToDelete = getIdToDelete(idsByLogSegment.get(0), true);
         delete(idToDelete);
         deletes++;
-        // 1 DELETE for a key that's already ttl updated in the first second segment
+        // 1 DELETE for a key that's already ttl updated in the second log segment
         idToDelete = getIdToDelete(idsByLogSegment.get(1), true);
         delete(idToDelete);
         deletes++;

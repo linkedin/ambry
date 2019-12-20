@@ -930,7 +930,8 @@ public class ReplicaThread implements Runnable {
       throws IOException, MessageFormatException, StoreException {
     MessageFormatInputStream ttlUpdateStream =
         new TtlUpdateMessageFormatInputStream(messageInfo.getStoreKey(), messageInfo.getAccountId(),
-            messageInfo.getContainerId(), messageInfo.getExpirationTimeInMs(), messageInfo.getOperationTimeMs());
+            messageInfo.getContainerId(), messageInfo.getExpirationTimeInMs(), messageInfo.getOperationTimeMs(),
+            (short) 0);
     MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), ttlUpdateStream.getSize(), false, true,
         messageInfo.getExpirationTimeInMs(), messageInfo.getAccountId(), messageInfo.getContainerId(),
         messageInfo.getOperationTimeMs());

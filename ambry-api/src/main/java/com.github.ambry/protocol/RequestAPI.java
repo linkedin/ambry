@@ -56,6 +56,14 @@ public interface RequestAPI {
   void handleDeleteRequest(Request request) throws IOException, InterruptedException;
 
   /**
+   * Undeletes the blob from the store.
+   * @param request The request that contains the partition and id of the blob that needs to be undeleted.
+   * @throws IOException if there are I/O errors carrying our the required operation.
+   * @throws InterruptedException if request processing is interrupted.
+   */
+  void handleUndeleteRequest(Request request) throws IOException, InterruptedException;
+
+  /**
    * Updates the TTL of a blob as required in {@code request}.
    * @param request The request that contains the partition and id of the blob that needs to be updated.
    * @throws IOException if there are I/O errors carrying our the required operation.
