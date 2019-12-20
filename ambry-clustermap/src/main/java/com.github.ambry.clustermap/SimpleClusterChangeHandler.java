@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -42,13 +43,11 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * This class is also responsible for handling events received.
  */
 public class SimpleClusterChangeHandler implements ClusterChangeHandler {
-  private final Set<String> allInstances = new HashSet<>();
   private final String dcName;
   private final Object notificationLock = new Object();
   private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
   private final AtomicBoolean liveStateInitialized = new AtomicBoolean(false);
   private final AtomicBoolean idealStateInitialized = new AtomicBoolean(false);
-  private final AtomicBoolean routingTableInitialized = new AtomicBoolean(false);
   private final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final AtomicLong sealedStateChangeCounter;
   private final ConcurrentHashMap<String, Exception> initializationFailureMap;
@@ -60,7 +59,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
   private final ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition;
   private final ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas;
   private final HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback;
-  private final CountDownLatch routingTableInitLatch;
+  private final CountDownLatch routingTableInitLatch = new CountDownLatch(1);
 
   private ConcurrentHashMap<String, String> partitionNameToResource = new ConcurrentHashMap<>();
   private AtomicReference<RoutingTableSnapshot> routingTableSnapshotRef = new AtomicReference<>();
@@ -76,10 +75,17 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
 
   /**
    * Initialize a ClusterChangeHandler in the given datacenter.
-   * @param dcName the datacenter associated with this ClusterChangeHandler.
-   * @param selfInstanceName
-   * @param routingTableInitLatch
-   * @param sealedStateChangeCounter
+   * @param clusterMapConfig {@link ClusterMapConfig} to help some admin operations
+   * @param dcName the name of dc this {@link ClusterChangeHandler} associates with
+   * @param selfInstanceName the name of instance on which {@link HelixClusterManager} resides.
+   * @param partitionOverrideInfoMap a map specifying partitions whose state should be overridden.
+   * @param partitionMap a map from serialized bytes to corresponding partition.
+   * @param partitionNameToAmbryPartition a map from partition name to {@link AmbryPartition} object.
+   * @param ambryPartitionToAmbryReplicas a map from {@link AmbryPartition} to its replicas.
+   * @param helixClusterManagerCallback a help class to get cluster state from all DCs.
+   * @param helixClusterManagerMetrics metrics that help track of cluster changes and infos.
+   * @param initializationFailureMap a map that records failure in each DC during initialization.
+   * @param sealedStateChangeCounter a counter that records event when replica is sealed or unsealed
    */
   SimpleClusterChangeHandler(ClusterMapConfig clusterMapConfig, String dcName, String selfInstanceName,
       Map<String, Map<String, String>> partitionOverrideInfoMap,
@@ -88,8 +94,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
       ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas,
       HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback,
       HelixClusterManagerMetrics helixClusterManagerMetrics,
-      ConcurrentHashMap<String, Exception> initializationFailureMap, CountDownLatch routingTableInitLatch,
-      AtomicLong sealedStateChangeCounter) {
+      ConcurrentHashMap<String, Exception> initializationFailureMap, AtomicLong sealedStateChangeCounter) {
     this.clusterMapConfig = clusterMapConfig;
     this.dcName = dcName;
     this.selfInstanceName = selfInstanceName;
@@ -100,7 +105,6 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
     this.helixClusterManagerCallback = helixClusterManagerCallback;
     this.helixClusterManagerMetrics = helixClusterManagerMetrics;
     this.initializationFailureMap = initializationFailureMap;
-    this.routingTableInitLatch = routingTableInitLatch;
     this.sealedStateChangeCounter = sealedStateChangeCounter;
     currentXid = new AtomicLong(clusterMapConfig.clustermapCurrentXid);
   }
@@ -188,11 +192,10 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
    */
   @Override
   public void onRoutingTableChange(RoutingTableSnapshot routingTableSnapshot, Object context) {
-    if (!routingTableInitialized.get()) {
+    if (routingTableInitLatch.getCount() == 1) {
       logger.info("Received initial notification for routing table change from {}", dcName);
       routingTableSnapshotRef.getAndSet(routingTableSnapshot);
       routingTableInitLatch.countDown();
-      routingTableInitialized.set(true);
     } else {
       logger.info("Routing table change triggered from {}", dcName);
       routingTableSnapshotRef.getAndSet(routingTableSnapshot);
@@ -250,6 +253,14 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
     return errorCount.get();
   }
 
+  @Override
+  public void waitForInitNotification() throws InterruptedException {
+    // wait slightly more than 5 mins to ensure routerUpdater refreshes the snapshot.
+    if (!routingTableInitLatch.await(320, TimeUnit.SECONDS)) {
+      throw new IllegalStateException("Initial routing table change from " + dcName + " didn't come within 5 mins");
+    }
+  }
+
   /**
    * Populate the initial data from the admin connection. Create nodes, disks, partitions and replicas for the entire
    * cluster. An {@link InstanceConfig} will only be looked at if the xid in it is <= currentXid.
@@ -272,7 +283,6 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
                     instanceXid, helixClusterManagerCallback);
             initializeDisksAndReplicasOnNode(datanode, instanceConfig);
             instanceNameToAmbryDataNode.put(instanceName, datanode);
-            allInstances.add(instanceName);
           } else {
             logger.info(
                 "Ignoring instanceConfig for {} because the xid associated with it ({}) is later than current xid ({})",
@@ -346,7 +356,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
       for (LiveInstance liveInstance : liveInstances) {
         liveInstancesSet.add(liveInstance.getInstanceName());
       }
-      for (String instanceName : allInstances) {
+      for (String instanceName : instanceNameToAmbryDataNode.keySet()) {
         // Here we ignore live instance change it's about self instance. The reason is, during server's startup, current
         // node should be AVAILABLE but the list of live instances doesn't include current node since it hasn't joined yet.
         if (liveInstancesSet.contains(instanceName) || instanceName.equals(selfInstanceName)) {

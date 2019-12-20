@@ -32,8 +32,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.helix.AccessOption;
@@ -135,12 +133,11 @@ public class HelixClusterManager implements ClusterMap {
               manager.connect();
               logger.info("Established connection to Helix manager at {}", zkConnectStr);
             }
-            CountDownLatch routingTableInitLatch = new CountDownLatch(1);
             ClusterChangeHandler clusterChangeHandler =
                 new SimpleClusterChangeHandler(clusterMapConfig, dcName, selfInstanceName, partitionOverrideInfoMap,
                     partitionMap, partitionNameToAmbryPartition, ambryPartitionToAmbryReplicas,
                     helixClusterManagerCallback, helixClusterManagerMetrics, initializationFailureMap,
-                    routingTableInitLatch, sealedStateChangeCounter);
+                    sealedStateChangeCounter);
             // Create RoutingTableProvider of each DC to keep track of partition(replicas) state. Here, we use current
             // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
             logger.info("Creating routing table provider associated with Helix manager at {}", zkConnectStr);
@@ -177,10 +174,7 @@ public class HelixClusterManager implements ClusterMap {
                 == 0) {
               // Periodic refresh in routing table provider is enabled by default. In worst case, routerUpdater should
               // trigger routing table change within 5 minutes
-              if (!routingTableInitLatch.await(5, TimeUnit.MINUTES)) {
-                throw new IllegalStateException(
-                    "Initial routing table change from " + dcName + " didn't come within 5 mins");
-              }
+              dcToDcZkInfo.get(dcName).clusterChangeHandler.waitForInitNotification();
             }
 
             if (!clusterMapConfig.clustermapListenCrossColo && manager != localManager) {

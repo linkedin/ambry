@@ -90,4 +90,10 @@ interface ClusterChangeHandler
    * @return number of errors occurred during handling cluster changes.
    */
   long getErrorCount();
+
+  /**
+   * Wait for initial notification during startup.
+   * @throws InterruptedException
+   */
+  void waitForInitNotification() throws InterruptedException;
 }
