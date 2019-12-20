@@ -38,11 +38,11 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
- * An instance of this object is used to register as listener for Helix related changes in each datacenter. This
- * class is also responsible for handling events received.
+ * An implementation of {@link ClusterChangeHandler} to register as listener for Helix related changes in each datacenter.
+ * This class is also responsible for handling events received.
  */
 public class SimpleClusterChangeHandler implements ClusterChangeHandler {
-  final Set<String> allInstances = new HashSet<>();
+  private final Set<String> allInstances = new HashSet<>();
   private final String dcName;
   private final Object notificationLock = new Object();
   private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
