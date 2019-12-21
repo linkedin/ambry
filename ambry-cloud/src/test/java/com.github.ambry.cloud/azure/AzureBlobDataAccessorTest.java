@@ -13,9 +13,14 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.core.http.HttpHeaders;
+import com.azure.core.http.HttpRequest;
+import com.azure.core.http.rest.Response;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.batch.BlobBatch;
+import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobStorageException;
@@ -34,7 +39,9 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.commons.codec.binary.Base64;
@@ -60,6 +67,7 @@ public class AzureBlobDataAccessorTest {
   private Properties configProps = new Properties();
   private AzureBlobDataAccessor dataAccessor;
   private BlockBlobClient mockBlockBlobClient;
+  private BlobBatchClient mockBatchClient;
   private AzureMetrics azureMetrics;
   private int blobSize = 1024;
   byte dataCenterId = 66;
@@ -76,6 +84,7 @@ public class AzureBlobDataAccessorTest {
 
     BlobServiceClient mockServiceClient = mock(BlobServiceClient.class);
     mockBlockBlobClient = setupMockBlobClient(mockServiceClient);
+    mockBatchClient = mock(BlobBatchClient.class);
 
     mockBlobExistence(false);
 
@@ -92,7 +101,7 @@ public class AzureBlobDataAccessorTest {
     configProps.setProperty("clustermap.datacenter.name", "uswest");
     configProps.setProperty("clustermap.host.name", "localhost");
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    dataAccessor = new AzureBlobDataAccessor(mockServiceClient, clusterName, azureMetrics);
+    dataAccessor = new AzureBlobDataAccessor(mockServiceClient, mockBatchClient, clusterName, azureMetrics);
   }
 
   static BlockBlobClient setupMockBlobClient(BlobServiceClient mockServiceClient) {
@@ -149,6 +158,38 @@ public class AzureBlobDataAccessorTest {
   public void testExpire() throws Exception {
     mockBlobExistence(true);
     assertTrue("Expected success", dataAccessor.updateBlobMetadata(blobId, "expirationTime", expirationTime));
+  }
+
+  /** Test purge */
+  @Test
+  public void testPurge() throws Exception {
+    // purge 3 blobs, response status (202, 404, 503)
+    String blobNameOkStatus = "andromeda";
+    String blobNameNotFoundStatus = "sirius";
+    String blobNameErrorStatus = "mutant";
+    BlobBatch mockBatch = mock(BlobBatch.class);
+    when (mockBatchClient.getBlobBatch()).thenReturn(mockBatch);
+    Response<Void> okResponse = mock(Response.class);
+    when (okResponse.getStatusCode()).thenReturn(202);
+    when (mockBatch.deleteBlob(anyString(), eq(blobNameOkStatus))).thenReturn(okResponse);
+    BlobStorageException notFoundException = mock(BlobStorageException.class);
+    when (notFoundException.getStatusCode()).thenReturn(404);
+    Response<Void> notFoundResponse = mock(Response.class);
+    when (notFoundResponse.getStatusCode()).thenThrow(notFoundException);
+    when (mockBatch.deleteBlob(anyString(), eq(blobNameNotFoundStatus))).thenReturn(notFoundResponse);
+    BlobStorageException badException = mock(BlobStorageException.class);
+    when (badException.getStatusCode()).thenReturn(503);
+    Response<Void> badResponse = mock(Response.class);
+    when (badResponse.getStatusCode()).thenThrow(badException);
+    when (mockBatch.deleteBlob(anyString(), eq(blobNameErrorStatus))).thenReturn(badResponse);
+    List<CloudBlobMetadata> purgeList = new ArrayList<>();
+    purgeList.add(new CloudBlobMetadata().setCloudBlobName(blobNameOkStatus));
+    purgeList.add(new CloudBlobMetadata().setCloudBlobName(blobNameNotFoundStatus));
+    purgeList.add(new CloudBlobMetadata().setCloudBlobName(blobNameErrorStatus));
+    List<CloudBlobMetadata> purgeResponseList = dataAccessor.purgeBlobs(purgeList);
+    assertEquals("Wrong response size", 2, purgeResponseList.size());
+    assertEquals("Wrong blob name", blobNameOkStatus, purgeResponseList.get(0).getCloudBlobName());
+    assertEquals("Wrong blob name", blobNameNotFoundStatus, purgeResponseList.get(1).getCloudBlobName());
   }
 
   /** Test initializing with a proxy */

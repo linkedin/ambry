@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
@@ -131,9 +132,10 @@ class AzureCloudDestination implements CloudDestination {
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    */
-  AzureCloudDestination(BlobServiceClient storageClient, AsyncDocumentClient asyncDocumentClient,
-      String cosmosCollectionLink, String clusterName, AzureMetrics azureMetrics) {
-    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, clusterName, azureMetrics);
+  AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
+      AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String clusterName,
+      AzureMetrics azureMetrics) {
+    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
     this.asyncDocumentClient = asyncDocumentClient;
     this.azureMetrics = azureMetrics;
     this.clusterName = clusterName;
@@ -202,6 +204,14 @@ class AzureCloudDestination implements CloudDestination {
     if (blobIds.isEmpty()) {
       return Collections.emptyMap();
     }
+
+    // For single blob GET request), get metadata from ABS
+    /*
+    if (blobIds.size() == 1) {
+      CloudBlobMetadata metadata = azureBlobDataAccessor.getBlobMetadata(blobIds.get(0));
+      return Collections.singletonMap(metadata.getId(), metadata);
+    }
+    */
 
     // CosmosDB has query size limit of 256k chars.
     // Break list into chunks if necessary to avoid overflow.
@@ -348,51 +358,49 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean purgeBlob(CloudBlobMetadata blobMetadata) throws CloudStorageException {
-    String blobId = blobMetadata.getId();
-    String blobFileName = blobMetadata.getCloudBlobName();
-    String partitionPath = blobMetadata.getPartitionId();
-    String containerName = getAzureContainerName(partitionPath);
-    azureMetrics.blobDeleteRequestCount.inc();
+  public int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws CloudStorageException {
+    if (blobMetadataList.isEmpty()) {
+      return 0;
+    }
+    azureMetrics.blobDeleteRequestCount.inc(blobMetadataList.size());
     Timer.Context deleteTimer = azureMetrics.blobDeletionTime.time();
     try {
-      // delete blob from storage
-      boolean deletionDone = azureBlobDataAccessor.deleteFile(containerName, blobFileName);
+      List<CloudBlobMetadata> deletedBlobs = azureBlobDataAccessor.purgeBlobs(blobMetadataList);
+      azureMetrics.blobDeletedCount.inc(deletedBlobs.size());
+      azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size() - deletedBlobs.size());
 
-      // Delete the document too
-      try {
-        cosmosDataAccessor.deleteMetadata(blobMetadata);
-        deletionDone = true;
-        logger.debug("Purged blob {} from partition {}.", blobId, partitionPath);
-      } catch (DocumentClientException dex) {
-        if (dex.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
-          logger.warn("Could not find metadata for blob {} to delete", blobId);
-        } else {
-          throw dex;
-        }
+      // Remove them from Cosmos too
+      for (CloudBlobMetadata blobMetadata : deletedBlobs) {
+        deleteFromCosmos(blobMetadata);
       }
-      azureMetrics.blobDeletedCount.inc(deletionDone ? 1 : 0);
-      return deletionDone;
-    } catch (Exception e) {
-      azureMetrics.blobDeleteErrorCount.inc();
-      String error = (e instanceof DocumentClientException) ? "Failed to delete metadata document for blob " + blobId
-          : "Failed to delete blob " + blobId + ", storage path: " + containerName + "/" + blobFileName;
-      throw new CloudStorageException(error, e);
+      return deletedBlobs.size();
+    } catch (Exception ex) {
+      logger.error("Failed to purge all blobs", ex);
+      azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size());
+      throw new CloudStorageException(ex);
     } finally {
       deleteTimer.stop();
     }
   }
 
-  @Override
-  public int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws CloudStorageException {
-    int numPurged = 0;
-    for (CloudBlobMetadata blobMetadata : blobMetadataList) {
-      if (purgeBlob(blobMetadata)) {
-        numPurged++;
+  /**
+   * Delete a blob metadata record from Cosmos.
+   * @param blobMetadata the record to delete.
+   * @return {@code true} if the record was deleted, {@code false} if it was not found.
+   * @throws DocumentClientException
+   */
+  private boolean deleteFromCosmos(CloudBlobMetadata blobMetadata) throws DocumentClientException {
+    try {
+      cosmosDataAccessor.deleteMetadata(blobMetadata);
+      return true;
+    } catch (DocumentClientException dex) {
+      if (dex.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
+        logger.warn("Could not find metadata for blob {} to delete", blobMetadata.getId());
+        return false;
+      } else {
+        throw dex;
       }
     }
-    logger.info("Purged {} blobs", numPurged);
-    return numPurged;
   }
 
   @Override

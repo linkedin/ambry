@@ -56,7 +56,7 @@ import static org.junit.Assert.*;
  * Must supply file azure-test.properties in classpath with valid config property values.
  */
 @RunWith(MockitoJUnitRunner.class)
-@Ignore
+//@Ignore
 public class AzureIntegrationTest {
 
   private static final Logger logger = LoggerFactory.getLogger(AzureIntegrationTest.class);
@@ -127,7 +127,7 @@ public class AzureIntegrationTest {
     assertEquals(deletionTime, metadata.getDeletionTime());
     assertEquals(azureDest.getAzureBlobName(blobId), metadata.getCloudBlobName());
 
-    azureDest.purgeBlob(metadata);
+    azureDest.purgeBlobs(Collections.singletonList(metadata));
     assertTrue("Expected empty set after purge",
         azureDest.getBlobMetadata(Collections.singletonList(blobId)).isEmpty());
 
@@ -204,6 +204,8 @@ public class AzureIntegrationTest {
     long creationTime = now - TimeUnit.DAYS.toMillis(7);
     int expectedDeadBlobs = 0;
     for (int j = 0; j < bucketCount; j++) {
+      Thread.sleep(100);
+      logger.info("Uploading bucket {}", j);
       // Active blob
       BlobId blobId =
           new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
@@ -261,9 +263,12 @@ public class AzureIntegrationTest {
 
     // run getDeadBlobs query, should return 20
     String partitionPath = String.valueOf(testPartition);
+    logger.info("Running query");
+
     List<CloudBlobMetadata> deadBlobs = azureDest.getDeadBlobs(partitionPath);
     assertEquals("Unexpected number of dead blobs", expectedDeadBlobs, deadBlobs.size());
 
+    logger.info("Running purge");
     int numPurged = azureDest.purgeBlobs(deadBlobs);
     assertEquals("Not all blobs were purged", expectedDeadBlobs, numPurged);
     cleanup();

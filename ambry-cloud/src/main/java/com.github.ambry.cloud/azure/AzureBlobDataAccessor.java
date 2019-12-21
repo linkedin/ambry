@@ -16,11 +16,15 @@ package com.github.ambry.cloud.azure;
 import com.azure.core.http.HttpClient;
 import com.azure.core.http.ProxyOptions;
 import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
+import com.azure.core.http.rest.Response;
 import com.azure.core.util.Configuration;
 import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
+import com.azure.storage.blob.batch.BlobBatch;
+import com.azure.storage.blob.batch.BlobBatchClient;
+import com.azure.storage.blob.batch.BlobBatchClientBuilder;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRequestConditions;
@@ -31,12 +35,15 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,12 +62,15 @@ public class AzureBlobDataAccessor {
   private static final Logger logger = LoggerFactory.getLogger(AzureBlobDataAccessor.class);
   private static final String SEPARATOR = "-";
   private final BlobServiceClient storageClient;
+  private final BlobBatchClient blobBatchClient;
   private final Configuration storageConfiguration;
   private final AzureMetrics azureMetrics;
   private final String clusterName;
   // Containers known to exist in the storage account
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
   private ProxyOptions proxyOptions;
+  // TODO: add to AzureCloudConfig
+  private int purgeBatchSize = 100;
 
   /**
    * Production constructor
@@ -89,19 +99,23 @@ public class AzureBlobDataAccessor {
         .retryOptions(requestRetryOptions)
         .configuration(storageConfiguration)
         .buildClient();
+    blobBatchClient = new BlobBatchClientBuilder(storageClient).buildClient();
   }
 
   /**
    * Test constructor
    * @param storageClient the {@link BlobServiceClient} to use.
+   * @param blobBatchClient the {@link BlobBatchClient} to use.
    * @param clusterName the cluster name to use.
    * @param azureMetrics the {@link AzureMetrics} to use.
    */
-  AzureBlobDataAccessor(BlobServiceClient storageClient, String clusterName, AzureMetrics azureMetrics) {
+  AzureBlobDataAccessor(BlobServiceClient storageClient, BlobBatchClient blobBatchClient, String clusterName,
+      AzureMetrics azureMetrics) {
     this.storageClient = storageClient;
     this.storageConfiguration = new Configuration();
     this.clusterName = clusterName;
     this.azureMetrics = azureMetrics;
+    this.blobBatchClient = blobBatchClient;
   }
 
   /**
@@ -254,6 +268,12 @@ public class AzureBlobDataAccessor {
     }
   }
 
+  public CloudBlobMetadata getBlobMetadata(BlobId blobId) throws BlobStorageException {
+    BlockBlobClient blobClient = getBlockBlobClient(blobId, false);
+    BlobProperties blobProperties = blobClient.getProperties();
+    return (blobProperties == null) ? null : new CloudBlobMetadata(blobProperties.getMetadata());
+  }
+
   /**
    * Update the metadata for the specified blob.
    * @param blobId The {@link BlobId} to update.
@@ -303,13 +323,47 @@ public class AzureBlobDataAccessor {
   /**
    * Permanently delete the specified blobs in Azure storage.
    * @param blobMetadataList the list of {@link CloudBlobMetadata} referencing the blobs to purge.
-   * @return the number of blobs successfully purged.
+   * @return list of {@link CloudBlobMetadata} referencing the blobs successfully purged.
    * @throws BlobStorageException if the purge operation fails.
    */
-  public int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws BlobStorageException {
-    // TODO: use batch api to delete all
-    // https://github.com/Azure/azure-sdk-for-java/tree/master/sdk/storage/azure-storage-blob-batch
-    throw new UnsupportedOperationException("Not yet implemented");
+  public List<CloudBlobMetadata> purgeBlobs(List<CloudBlobMetadata> blobMetadataList) throws BlobStorageException {
+
+    // Per docs.microsoft.com/en-us/rest/api/storageservices/blob-batch, must use batch size <= 256
+    List<CloudBlobMetadata> deletedBlobs = new ArrayList<>();
+    List<List<CloudBlobMetadata>> partitionedLists = Lists.partition(blobMetadataList, purgeBatchSize);
+    for (List<CloudBlobMetadata> someBlobs : partitionedLists) {
+      BlobBatch blobBatch = blobBatchClient.getBlobBatch();
+      List<Response<Void>> responseList = new ArrayList<>();
+      for (CloudBlobMetadata blobMetadata : someBlobs) {
+        String containerName = getAzureContainerName(blobMetadata.getPartitionId());
+        String blobName = blobMetadata.getCloudBlobName();
+        responseList.add(blobBatch.deleteBlob(containerName, blobName));
+      }
+      blobBatchClient.submitBatchWithResponse(blobBatch, false, Duration.ofHours(1), Context.NONE);
+      for (int j = 0; j < responseList.size(); j++) {
+        Response<Void> response = responseList.get(j);
+        CloudBlobMetadata blobMetadata = someBlobs.get(j);
+        // Note: Response.getStatusCode() throws exception on any error.
+        int statusCode;
+        try {
+          statusCode = response.getStatusCode();
+        } catch (BlobStorageException bex) {
+          statusCode = bex.getStatusCode();
+        }
+        switch (statusCode) {
+          case HttpURLConnection.HTTP_OK:
+          case HttpURLConnection.HTTP_ACCEPTED:
+          case HttpURLConnection.HTTP_NOT_FOUND:
+          case HttpURLConnection.HTTP_GONE:
+            // blob was deleted or already gone
+            deletedBlobs.add(blobMetadata);
+            break;
+          default:
+            logger.error("Deleting blob {} got status {}", blobMetadata.getId(), statusCode);
+        }
+      }
+    }
+    return deletedBlobs;
   }
 
   /**

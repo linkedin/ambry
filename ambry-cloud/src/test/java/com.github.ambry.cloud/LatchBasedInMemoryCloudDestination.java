@@ -160,11 +160,6 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean purgeBlob(CloudBlobMetadata blobMetadata) {
-    return true;
-  }
-
-  @Override
   public int purgeBlobs(List<CloudBlobMetadata> blobMetadataList) {
     return 0;
   }
