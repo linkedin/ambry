@@ -163,7 +163,6 @@ public class HelixClusterManager implements ClusterMap {
             manager.addLiveInstanceChangeListener(clusterChangeHandler);
             logger.info("Registered live instance change listeners for Helix manager at {}", zkConnectStr);
 
-
             // in case initial event occurs before adding routing table listener, here we explicitly set snapshot in
             // ClusterChangeHandler. The reason is, if listener missed initial event, snapshot inside routing table
             // provider should be already populated.
