@@ -124,7 +124,7 @@ public class AmbryReplicaSyncUpManagerTest {
     replicaSyncUpService.updateLagBetweenReplicas(currentReplica, remotePeer1, 10L);
     assertTrue("Catch up should be complete on current replica because it has caught up at least 3 peer replicas",
         replicaSyncUpService.isSyncUpComplete(currentReplica));
-    replicaSyncUpService.onBootstrapComplete(currentReplica.getPartitionId().toPathString());
+    replicaSyncUpService.onBootstrapComplete(currentReplica);
     assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec.",
         stateModelLatch.await(1, TimeUnit.SECONDS));
     // reset ReplicaSyncUpManager
@@ -150,7 +150,7 @@ public class AmbryReplicaSyncUpManagerTest {
     assertFalse("Updating lag should return false because replica is not present",
         replicaSyncUpService.updateLagBetweenReplicas(replicaToTest, peerReplica, 100L));
     try {
-      replicaSyncUpService.onBootstrapError(partition.toPathString());
+      replicaSyncUpService.onBootstrapError(replicaToTest);
       fail("should fail because replica is not present");
     } catch (IllegalStateException e) {
       // expected
@@ -178,7 +178,7 @@ public class AmbryReplicaSyncUpManagerTest {
       }
     }, false).start();
     assertTrue("State change listener didn't get invoked within 1 sec.", listenerLatch.await(1, TimeUnit.SECONDS));
-    replicaSyncUpService.onBootstrapError(currentReplica.getPartitionId().toPathString());
+    replicaSyncUpService.onBootstrapError(currentReplica);
     assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec.",
         stateModelLatch.await(1, TimeUnit.SECONDS));
   }
@@ -204,6 +204,10 @@ public class AmbryReplicaSyncUpManagerTest {
 
     @Override
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
+    }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
     }
   }
 }

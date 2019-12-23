@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
@@ -427,6 +428,33 @@ public class StorageManager implements StoreManager {
     @Override
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       // no op
+    }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      // check if partition exists on current node
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+      // if replica is null that means partition is not on current node (this shouldn't happen unless we use server admin
+      // tool to remove the store before initiating decommission on this partition). We don't throw exception in this case.
+      if (replica != null) {
+        Store localStore = getStore(replica.getPartitionId());
+        if (localStore != null) {
+          // 1. set state to INACTIVE
+          localStore.setCurrentState(ReplicaState.INACTIVE);
+          logger.info("Store {} is set to INACTIVE", partitionName);
+          // 2. disable compaction on this store
+          if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
+            logger.error("Failed to disable compaction on store {}", partitionName);
+            throw new StateTransitionException("Couldn't disable compaction on replica " + replica.getReplicaPath(),
+                StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+          }
+          logger.info("Compaction is successfully disabled on store {}", partitionName);
+        } else {
+          // this may happen when the disk holding this store crashes (or store is stopped by server admin tool)
+          throw new StateTransitionException("Store " + partitionName + " is not started",
+              StateTransitionException.TransitionErrorCode.StoreNotStarted);
+        }
+      }
     }
   }
 }

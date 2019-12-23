@@ -29,7 +29,7 @@ public interface ReplicaSyncUpManager {
   void initiateBootstrap(ReplicaId replicaId);
 
   /**
-   * Wait until bootstrap for given replica is complete.
+   * Wait until bootstrap on given replica is complete.
    * until given replica has caught up with enough peer replicas either in local DC or remote DCs
    * @param partitionName partition name of replica that in bootstrap state
    * @throws InterruptedException
@@ -56,15 +56,30 @@ public interface ReplicaSyncUpManager {
 
   /**
    * Bootstrap on given replica is complete.
-   * @param partitionName partition name of replica on which bootstrap completes.
+   * @param replicaId the replica which completes bootstrap.
    */
-  void onBootstrapComplete(String partitionName);
+  void onBootstrapComplete(ReplicaId replicaId);
+
+  void onDeactivationComplete(ReplicaId replicaId);
 
   /**
    * When exception/error occurs during bootstrap.
-   * @param partitionName partition name of replica which encounters error.
+   * @param replicaId the replica which encounters error.
    */
-  void onBootstrapError(String partitionName);
+  void onBootstrapError(ReplicaId replicaId);
 
-  // TODO introduce decommission logic in sync-up service. For example, initiateDecommission(String partitionName)
+  void onDeactivationError(ReplicaId replicaId);
+
+  /**
+   * Initiate deactivation process if the replica should become INACTIVE from STANDBY on current node.
+   * @param replicaId the replica to deactivate
+   */
+  void initiateDeactivation(ReplicaId replicaId);
+
+  /**
+   * Wait until deactivation on given replica is complete.
+   * @param partitionName the name of replica that is within Standby-To-Inactive transition.
+   * @throws InterruptedException
+   */
+  void waitDeactivationCompleted(String partitionName) throws InterruptedException;
 }

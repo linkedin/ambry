@@ -691,6 +691,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public long getEndPositionOfLastPut() throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void shutdown() throws StoreException {
       throw new IllegalStateException("Not implemented");
     }

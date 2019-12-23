@@ -336,4 +336,20 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       cloudToStoreReplicationListener.onPartitionBecomeStandbyFromLeader(partitionName);
     }
   }
+
+  @Override
+  public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+    // 1. storage manager marks store local state as INACTIVE and disables compaction on this partition
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+    }
+    // 2. replication manager initiates deactivation
+    PartitionStateChangeListener replicationManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+    if (replicationManagerListener != null) {
+      replicationManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+    }
+  }
 }

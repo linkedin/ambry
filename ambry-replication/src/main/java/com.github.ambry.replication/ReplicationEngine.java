@@ -20,12 +20,16 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -77,6 +81,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final Map<PartitionId, PartitionInfo> partitionToPartitionInfo;
   protected final Map<String, Set<PartitionInfo>> mountPathToPartitionInfos;
   protected final ReplicaSyncUpManager replicaSyncUpManager;
+  protected final StoreManager storeManager;
   protected ReplicaTokenPersistor persistor = null;
 
   protected static final short Replication_Delay_Multiplier = 5;
@@ -86,7 +91,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, ScheduledExecutorService scheduler, DataNodeId dataNode,
       List<? extends ReplicaId> replicaIds, ConnectionPool connectionPool, MetricRegistry metricRegistry,
       NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
-      String transformerClassName, ClusterParticipant clusterParticipant) throws ReplicationException {
+      String transformerClassName, ClusterParticipant clusterParticipant, StoreManager storeManager)
+      throws ReplicationException {
     this.replicationConfig = replicationConfig;
     this.storeKeyFactory = storeKeyFactory;
     try {
@@ -111,6 +117,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.storeKeyConverterFactory = storeKeyConverterFactory;
     this.transformerClassName = transformerClassName;
+    this.storeManager = storeManager;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
   }
 
@@ -138,10 +145,24 @@ public abstract class ReplicationEngine implements ReplicationAPI {
 
   @Override
   public void updateTotalBytesReadByRemoteReplica(PartitionId partitionId, String hostName, String replicaPath,
-      long totalBytesRead) {
+      long totalBytesRead) throws StoreException {
     RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
     if (remoteReplicaInfo != null) {
+      ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
       remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesRead);
+      // update replication lag in ReplicaSyncUpManager
+      if (replicaSyncUpManager != null) {
+        Store localStore = storeManager.getStore(partitionId);
+        if (localStore.getCurrentState() == ReplicaState.INACTIVE) {
+          boolean updated =
+              replicaSyncUpManager.updateLagBetweenReplicas(remoteReplicaInfo.getReplicaId(), localReplica,
+                  localStore.getEndPositionOfLastPut() - totalBytesRead);
+          if (updated && replicaSyncUpManager.isSyncUpComplete(localReplica)) {
+            replicaSyncUpManager.onDeactivationComplete(localReplica);
+          }
+        }
+        // todo local state = OFFLINE, update lag in replicaSyncUpManager
+      }
     }
   }
 

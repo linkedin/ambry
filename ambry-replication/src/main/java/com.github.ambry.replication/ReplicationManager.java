@@ -46,7 +46,6 @@ import java.util.concurrent.TimeUnit;
  * Set up replicas based on {@link ReplicationEngine} and do replication across all data centers.
  */
 public class ReplicationManager extends ReplicationEngine {
-  private final StoreManager storeManager;
   private final StoreConfig storeConfig;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
@@ -57,8 +56,7 @@ public class ReplicationManager extends ReplicationEngine {
       ClusterParticipant clusterParticipant) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
-        storeKeyConverterFactory, transformerClassName, clusterParticipant);
-    this.storeManager = storeManager;
+        storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager);
     this.storeConfig = storeConfig;
     List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNode);
     // initialize all partitions
@@ -248,7 +246,8 @@ public class ReplicationManager extends ReplicationEngine {
       Store store = storeManager.getStore(localReplica.getPartitionId());
       // 1. check if store is started
       if (store == null) {
-        throw new StateTransitionException("Store " + partitionName + " is not started",
+        throw new StateTransitionException(
+            "Store " + partitionName + " is not started during Bootstrap-To-Standby transition",
             StateTransitionException.TransitionErrorCode.StoreNotStarted);
       }
       // 2. check if store is new added and needs to catch up with peer replicas.
@@ -272,6 +271,19 @@ public class ReplicationManager extends ReplicationEngine {
     public void onPartitionBecomeStandbyFromLeader(String partitionName) {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
+    }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      ReplicaId localReplica = storeManager.getReplica(partitionName);
+      Store store = storeManager.getStore(localReplica.getPartitionId());
+      // 1. check if store is started
+      if (store == null) {
+        throw new StateTransitionException(
+            "Store " + partitionName + " is not started during Standby-To-Inactive transition",
+            StateTransitionException.TransitionErrorCode.StoreNotStarted);
+      }
+      replicaSyncUpManager.initiateDeactivation(localReplica);
     }
   }
 }

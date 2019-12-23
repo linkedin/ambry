@@ -410,5 +410,11 @@ class StatsManager {
       logger.info("Partition state change notification from Leader to Standby received for partition {}",
           partitionName);
     }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      logger.info("Partition state change notification from Standby to Inactive received for partition {}",
+          partitionName);
+    }
   }
 }

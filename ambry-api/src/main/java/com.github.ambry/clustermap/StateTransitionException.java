@@ -42,6 +42,10 @@ public class StateTransitionException extends RuntimeException {
     /**
      * If bootstrap process fails at some point for specific replica.
      */
-    BootstrapFailure
+    BootstrapFailure,
+    /**
+     * If failure occurs during Standby-To-Inactive transition.
+     */
+    DeactivationFailure
   }
 }

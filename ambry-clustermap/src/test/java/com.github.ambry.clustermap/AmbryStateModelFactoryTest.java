@@ -70,6 +70,11 @@ public class AmbryStateModelFactoryTest {
       public void onPartitionBecomeStandbyFromLeader(String partitionName) {
         //no op
       }
+
+      @Override
+      public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+        // no op
+      }
     }, new AmbryReplicaSyncUpManager(config));
     StateModel stateModel;
     switch (config.clustermapStateModelDefinition) {
