@@ -89,7 +89,7 @@ public class AmbryReplicaSyncUpManagerTest {
    * @throws Exception
    */
   @Test
-  public void basicTest() throws Exception {
+  public void bootstrapBasicTest() throws Exception {
     CountDownLatch stateModelLatch = new CountDownLatch(1);
     listenerLatch = new CountDownLatch(1);
     // create a new thread and trigger BOOTSTRAP -> STANDBY transition
@@ -117,12 +117,8 @@ public class AmbryReplicaSyncUpManagerTest {
     replicaSyncUpService.updateLagBetweenReplicas(currentReplica, remotePeer2, 10L);
     // make current replica fall behind first peer replica in local DC again (update lag to 150 > 100)
     replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer1, 150L);
-    // at this time, current replica has caught up with two replicas only, so SyncUp is not complete
-    assertFalse("Catchup shouldn't complete on current replica because only one peer replica is caught up",
-        replicaSyncUpService.isSyncUpComplete(currentReplica));
-    // make current replica catch up with first peer remote dc replica
-    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, remotePeer1, 10L);
-    assertTrue("Catch up should be complete on current replica because it has caught up at least 3 peer replicas",
+    // at this time, current replica has caught up with two replicas in local DC, so SyncUp is complete
+    assertTrue("Catch up should be complete on current replica because it has caught up at least 2 peer replicas",
         replicaSyncUpService.isSyncUpComplete(currentReplica));
     replicaSyncUpService.onBootstrapComplete(currentReplica);
     assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec.",
