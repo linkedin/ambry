@@ -50,8 +50,11 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MockId;
+import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
@@ -64,6 +67,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -298,7 +302,7 @@ public class ReplicationTest {
             .containsKey(StateModelListenerType.ReplicationManagerListener));
     // 1. test partition not found case (should throw exception)
     try {
-      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline("invalidPartition");
+      mockHelixParticipant.onPartitionBecomeBootstrapFromOffline("-1");
       fail("should fail because replica is not found");
     } catch (StateTransitionException e) {
       assertEquals("Transition error doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
@@ -355,6 +359,7 @@ public class ReplicationTest {
     storageManager.shutdownBlobStore(existingPartition);
     try {
       mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(existingPartition.toPathString());
+      fail("should fail because store is not started");
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
           e.getErrorCode());
@@ -367,6 +372,71 @@ public class ReplicationTest {
     assertEquals("Replica should be in BOOTSTRAP state before catchup is complete", ReplicaState.BOOTSTRAP,
         storageManager.getStore(newReplicaToAdd.getPartitionId()).getCurrentState());
 
+    storageManager.shutdown();
+  }
+
+  /**
+   * Test STANDBY -> INACTIVE transition on existing replica (both success and failure cases)
+   */
+  @Test
+  public void replicaFromStandbyToInactiveTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    // get an existing partition to test both success and failure cases
+    PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    storageManager.shutdownBlobStore(existingPartition);
+    try {
+      mockHelixParticipant.onPartitionBecomeInactiveFromStandby(existingPartition.toPathString());
+      fail("should fail because store is not started");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
+          e.getErrorCode());
+    }
+    // restart the store and trigger Standby-To-Inactive transition again
+    storageManager.startBlobStore(existingPartition);
+    ReplicaId localReplica = storageManager.getReplica(existingPartition.toPathString());
+    List<RemoteReplicaInfo> remoteReplicaInfos =
+        replicationManager.partitionToPartitionInfo.get(existingPartition).getRemoteReplicaInfos();
+    ReplicaId peerReplica1 = remoteReplicaInfos.get(0).getReplicaId();
+    mockHelixParticipant.onPartitionBecomeInactiveFromStandby(existingPartition.toPathString());
+    assertEquals("Local store state should be INACTIVE", ReplicaState.INACTIVE,
+        storageManager.getStore(existingPartition).getCurrentState());
+    // we purposely update lag between local and peer replicas to verify that local replica is present in ReplicaSyncUpManager.
+    assertTrue("Updating lag between local replica and peer replica should succeed",
+        mockHelixParticipant.getReplicaSyncUpManager().updateLagBetweenReplicas(localReplica, peerReplica1, 10L));
+    // pick another remote replica to update the replication lag
+    Store localStore = storageManager.getStore(existingPartition);
+    // write a blob with size = 100 into local store (end offset of last PUT = 100 + 18 = 118)
+    MockId id = new MockId(UtilsTest.getRandomString(10), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM));
+    long crc = (new Random()).nextLong();
+    long blobSize = 100;
+    MessageInfo info =
+        new MessageInfo(id, blobSize, false, false, Utils.Infinite_Time, crc, id.getAccountId(), id.getContainerId(),
+            Utils.Infinite_Time);
+    List<MessageInfo> infos = new ArrayList<>();
+    List<ByteBuffer> buffers = new ArrayList<>();
+    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) blobSize));
+    infos.add(info);
+    buffers.add(buffer);
+    localStore.put(new MockMessageWriteSet(infos, buffers));
+    ReplicaId peerReplica2 = remoteReplicaInfos.get(1).getReplicaId();
+    replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
+        peerReplica1.getDataNodeId().getHostname(), peerReplica1.getReplicaPath(), 118);
+    assertFalse("Sync up shouldn't complete because only one replica has caught up with local replica",
+        mockHelixParticipant.getReplicaSyncUpManager().isSyncUpComplete(localReplica));
+    // make second peer replica catch up with last PUT in local store
+    replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
+        peerReplica2.getDataNodeId().getHostname(), peerReplica2.getReplicaPath(), 118);
+    // we purposely update lag against local replica to verify local replica is no longer in ReplicaSyncUpManager because
+    // deactivation has completed and local replica has been removed from "replicaToLagInfos" map.
+    assertFalse("Sync up should complete (2 replicas have caught up), hence updated should be false",
+        mockHelixParticipant.getReplicaSyncUpManager().updateLagBetweenReplicas(localReplica, peerReplica2, 0L));
     storageManager.shutdown();
   }
 
@@ -1630,7 +1700,7 @@ public class ReplicationTest {
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null);
+            new MetricRegistry(), null, clusterMap, dataNodeId, null, clusterParticipant, new MockTime(), null);
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
