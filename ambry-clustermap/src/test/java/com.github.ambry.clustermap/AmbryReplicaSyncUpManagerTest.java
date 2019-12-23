@@ -127,6 +127,36 @@ public class AmbryReplicaSyncUpManagerTest {
     replicaSyncUpService.reset();
   }
 
+  @Test
+  public void deactivationBasicTest() throws Exception {
+    CountDownLatch stateModelLatch = new CountDownLatch(1);
+    listenerLatch = new CountDownLatch(1);
+    // create a new thread and trigger STANDBY -> INACTIVE transition
+    Utils.newThread(() -> {
+      stateModel.onBecomeInactiveFromStandby(mockMessage, null);
+      stateModelLatch.countDown();
+    }, false).start();
+    assertTrue("State change listener didn't get invoked within 1 sec.", listenerLatch.await(1, TimeUnit.SECONDS));
+    assertEquals("current replica should be in INACTIVE state", ReplicaState.INACTIVE, replicaState);
+    assertFalse("Catchup shouldn't complete on current replica", replicaSyncUpService.isSyncUpComplete(currentReplica));
+    ReplicaId localPeer1 = localDcPeerReplicas.get(0);
+    ReplicaId localPeer2 = localDcPeerReplicas.get(1);
+    // make localPeer1 catch up with current replica but localPeer2 still falls behind.
+    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer1, 0L);
+    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer2, 5L);
+    assertFalse("Catchup shouldn't complete on current replica because only one peer replica has caught up",
+        replicaSyncUpService.isSyncUpComplete(currentReplica));
+    // make localPeer2 catch up with current replica.
+    replicaSyncUpService.updateLagBetweenReplicas(currentReplica, localPeer2, 0L);
+    assertTrue("Sync up should be complete on current replica because 2 peer replicas have caught up with it",
+        replicaSyncUpService.isSyncUpComplete(currentReplica));
+    replicaSyncUpService.onDeactivationComplete(currentReplica);
+    assertTrue("Standby-To-Inactive transition didn't complete within 1 sec.",
+        stateModelLatch.await(1, TimeUnit.SECONDS));
+    // reset ReplicaSyncUpManager
+    replicaSyncUpService.reset();
+  }
+
   /**
    * Test several failure cases where replica is not present in ReplicaSyncUpManager.
    * @throws Exception
@@ -157,6 +187,40 @@ public class AmbryReplicaSyncUpManagerTest {
   }
 
   /**
+   * Test failure cases during STANDBY -> INACTIVE transition
+   */
+  @Test
+  public void deactivationFailureTest() throws Exception {
+    // test replica not found exception (get another partition that is not present in ReplicaSyncUpManager)
+    PartitionId partition = clusterMap.getAllPartitionIds(null).get(1);
+    try {
+      replicaSyncUpService.waitDeactivationCompleted(partition.toPathString());
+      fail("should fail because replica is not found");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code is not expected", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
+    }
+    // test deactivation failure for some reason (triggered by calling onDeactivationError)
+    CountDownLatch stateModelLatch = new CountDownLatch(1);
+    listenerLatch = new CountDownLatch(1);
+    // create a new thread and trigger STANDBY -> INACTIVE transition
+    Utils.newThread(() -> {
+      try {
+        stateModel.onBecomeInactiveFromStandby(mockMessage, null);
+      } catch (StateTransitionException e) {
+        assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.DeactivationFailure,
+            e.getErrorCode());
+        stateModelLatch.countDown();
+      }
+    }, false).start();
+    assertTrue("State change listener didn't get invoked within 1 sec.", listenerLatch.await(1, TimeUnit.SECONDS));
+    replicaSyncUpService.onDeactivationError(currentReplica);
+    assertTrue("Standby-To-Inactive transition didn't complete within 1 sec.",
+        stateModelLatch.await(1, TimeUnit.SECONDS));
+    replicaSyncUpService.reset();
+  }
+
+  /**
    * Test BOOTSTRAP -> STANDBY transition failure
    */
   @Test
@@ -177,6 +241,7 @@ public class AmbryReplicaSyncUpManagerTest {
     replicaSyncUpService.onBootstrapError(currentReplica);
     assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec.",
         stateModelLatch.await(1, TimeUnit.SECONDS));
+    replicaSyncUpService.reset();
   }
 
   /**
@@ -204,6 +269,9 @@ public class AmbryReplicaSyncUpManagerTest {
 
     @Override
     public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      replicaState = ReplicaState.INACTIVE;
+      replicaSyncUpService.initiateDeactivation(currentReplica);
+      listenerLatch.countDown();
     }
   }
 }

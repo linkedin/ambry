@@ -154,9 +154,15 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       if (replicaSyncUpManager != null) {
         Store localStore = storeManager.getStore(partitionId);
         if (localStore.getCurrentState() == ReplicaState.INACTIVE) {
+          // if local store is in INACTIVE state, that means deactivation process is initiated and in progress on this
+          // replica. We update SyncUpManager by peer's lag from last PUT offset in local store.
           boolean updated =
-              replicaSyncUpManager.updateLagBetweenReplicas(remoteReplicaInfo.getReplicaId(), localReplica,
+              replicaSyncUpManager.updateLagBetweenReplicas(localReplica, remoteReplicaInfo.getReplicaId(),
                   localStore.getEndPositionOfLastPut() - totalBytesRead);
+          // if updated = false, it means the replica is not present in SyncUpManager and therefore doesn't need to
+          // complete transition. We don't throw exception here because Standby-To-Inactive transition may already be
+          // complete but local store's state is still INACTIVE since it will be updated at the beginning of
+          // Inactive-To-Offline transition.
           if (updated && replicaSyncUpManager.isSyncUpComplete(localReplica)) {
             replicaSyncUpManager.onDeactivationComplete(localReplica);
           }
