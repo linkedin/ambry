@@ -72,9 +72,8 @@ public class AmbryReplicaSyncUpManagerTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     replicaSyncUpService = new AmbryReplicaSyncUpManager(clusterMapConfig);
     mockStateChangeListener = new MockPartitionStateChangeListener();
-    stateModel =
-        new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockStateChangeListener, clusterMapConfig,
-            replicaSyncUpService);
+    stateModel = new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockStateChangeListener,
+        clusterMapConfig);
     mockMessage = Mockito.mock(Message.class);
     when(mockMessage.getPartitionName()).thenReturn(partition.toPathString());
     when(mockMessage.getResourceName()).thenReturn(RESOURCE_NAME);
@@ -257,6 +256,12 @@ public class AmbryReplicaSyncUpManagerTest {
       replicaState = ReplicaState.BOOTSTRAP;
       replicaSyncUpService.initiateBootstrap(currentReplica);
       listenerLatch.countDown();
+      try {
+        replicaSyncUpService.waitBootstrapCompleted(partitionName);
+      } catch (InterruptedException e) {
+        throw new StateTransitionException("Was interrupted during Bootstrap-To-Standby",
+            StateTransitionException.TransitionErrorCode.BootstrapFailure);
+      }
     }
 
     @Override
@@ -272,6 +277,12 @@ public class AmbryReplicaSyncUpManagerTest {
       replicaState = ReplicaState.INACTIVE;
       replicaSyncUpService.initiateDeactivation(currentReplica);
       listenerLatch.countDown();
+      try {
+        replicaSyncUpService.waitDeactivationCompleted(partitionName);
+      } catch (InterruptedException e) {
+        throw new StateTransitionException("Deactivation failed or was interrupted",
+            StateTransitionException.TransitionErrorCode.DeactivationFailure);
+      }
     }
   }
 }

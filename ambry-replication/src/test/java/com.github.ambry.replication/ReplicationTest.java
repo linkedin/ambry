@@ -368,10 +368,24 @@ public class ReplicationTest {
     // 3. create new replica and add it into storage manager, test replica that needs to initiate bootstrap
     ReplicaId newReplicaToAdd = getNewReplicaToAdd(clusterMap);
     assertTrue("Adding new replica to Storage Manager should succeed", storageManager.addBlobStore(newReplicaToAdd));
-    mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(newReplicaToAdd.getPartitionId().toPathString());
-    assertEquals("Replica should be in BOOTSTRAP state before catchup is complete", ReplicaState.BOOTSTRAP,
+    // override partition state change listener in ReplicationManager to help thread manipulation
+    mockHelixParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
+        replicationManager.replicationListener);
+    CountDownLatch participantLatch = new CountDownLatch(1);
+    replicationManager.listenerExcuctionLatch = new CountDownLatch(1);
+    // create a new thread and trigger BOOTSTRAP -> STANDBY transition
+    Utils.newThread(() -> {
+      mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(newReplicaToAdd.getPartitionId().toPathString());
+      participantLatch.countDown();
+    }, false).start();
+    assertTrue("Partition state change listener in ReplicationManager didn't get called within 1 sec",
+        replicationManager.listenerExcuctionLatch.await(1, TimeUnit.SECONDS));
+    assertEquals("Replica should be in BOOTSTRAP state before bootstrap is complete", ReplicaState.BOOTSTRAP,
         storageManager.getStore(newReplicaToAdd.getPartitionId()).getCurrentState());
-
+    // make bootstrap succeed
+    mockHelixParticipant.getReplicaSyncUpManager().onBootstrapComplete(newReplicaToAdd);
+    assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec",
+        participantLatch.await(1, TimeUnit.SECONDS));
     storageManager.shutdown();
   }
 
@@ -399,19 +413,9 @@ public class ReplicationTest {
     }
     // restart the store and trigger Standby-To-Inactive transition again
     storageManager.startBlobStore(existingPartition);
-    ReplicaId localReplica = storageManager.getReplica(existingPartition.toPathString());
-    List<RemoteReplicaInfo> remoteReplicaInfos =
-        replicationManager.partitionToPartitionInfo.get(existingPartition).getRemoteReplicaInfos();
-    ReplicaId peerReplica1 = remoteReplicaInfos.get(0).getReplicaId();
-    mockHelixParticipant.onPartitionBecomeInactiveFromStandby(existingPartition.toPathString());
-    assertEquals("Local store state should be INACTIVE", ReplicaState.INACTIVE,
-        storageManager.getStore(existingPartition).getCurrentState());
-    // we purposely update lag between local and peer replicas to verify that local replica is present in ReplicaSyncUpManager.
-    assertTrue("Updating lag between local replica and peer replica should succeed",
-        mockHelixParticipant.getReplicaSyncUpManager().updateLagBetweenReplicas(localReplica, peerReplica1, 10L));
-    // pick another remote replica to update the replication lag
-    Store localStore = storageManager.getStore(existingPartition);
+
     // write a blob with size = 100 into local store (end offset of last PUT = 100 + 18 = 118)
+    Store localStore = storageManager.getStore(existingPartition);
     MockId id = new MockId(UtilsTest.getRandomString(10), Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM));
     long crc = (new Random()).nextLong();
@@ -425,6 +429,30 @@ public class ReplicationTest {
     infos.add(info);
     buffers.add(buffer);
     localStore.put(new MockMessageWriteSet(infos, buffers));
+    ReplicaId localReplica = storageManager.getReplica(existingPartition.toPathString());
+
+    // override partition state change listener in ReplicationManager to help thread manipulation
+    mockHelixParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
+        replicationManager.replicationListener);
+    CountDownLatch participantLatch = new CountDownLatch(1);
+    replicationManager.listenerExcuctionLatch = new CountDownLatch(1);
+    // create a new thread and trigger STANDBY -> INACTIVE transition
+    Utils.newThread(() -> {
+      mockHelixParticipant.onPartitionBecomeInactiveFromStandby(existingPartition.toPathString());
+      participantLatch.countDown();
+    }, false).start();
+    assertTrue("Partition state change listener didn't get called within 1 sec",
+        replicationManager.listenerExcuctionLatch.await(1, TimeUnit.SECONDS));
+    assertEquals("Local store state should be INACTIVE", ReplicaState.INACTIVE,
+        storageManager.getStore(existingPartition).getCurrentState());
+
+    List<RemoteReplicaInfo> remoteReplicaInfos =
+        replicationManager.partitionToPartitionInfo.get(existingPartition).getRemoteReplicaInfos();
+    ReplicaId peerReplica1 = remoteReplicaInfos.get(0).getReplicaId();
+    // we purposely update lag to verify that local replica is present in ReplicaSyncUpManager.
+    assertTrue("Updating lag between local replica and peer replica should succeed",
+        mockHelixParticipant.getReplicaSyncUpManager().updateLagBetweenReplicas(localReplica, peerReplica1, 10L));
+    // pick another remote replica to update the replication lag
     ReplicaId peerReplica2 = remoteReplicaInfos.get(1).getReplicaId();
     replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
         peerReplica1.getDataNodeId().getHostname(), peerReplica1.getReplicaPath(), 118);
@@ -433,8 +461,12 @@ public class ReplicationTest {
     // make second peer replica catch up with last PUT in local store
     replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
         peerReplica2.getDataNodeId().getHostname(), peerReplica2.getReplicaPath(), 118);
+
+    assertTrue("Standby-To-Inactive transition didn't complete within 1 sec",
+        participantLatch.await(1, TimeUnit.SECONDS));
+
     // we purposely update lag against local replica to verify local replica is no longer in ReplicaSyncUpManager because
-    // deactivation has completed and local replica has been removed from "replicaToLagInfos" map.
+    // deactivation is complete and local replica should be removed from "replicaToLagInfos" map.
     assertFalse("Sync up should complete (2 replicas have caught up), hence updated should be false",
         mockHelixParticipant.getReplicaSyncUpManager().updateLagBetweenReplicas(localReplica, peerReplica2, 0L));
     storageManager.shutdown();

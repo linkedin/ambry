@@ -214,7 +214,7 @@ public class ReplicationManager extends ReplicationEngine {
   /**
    * {@link PartitionStateChangeListener} to capture changes in partition state.
    */
-  private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+  class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {

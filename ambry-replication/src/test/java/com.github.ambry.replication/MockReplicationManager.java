@@ -31,6 +31,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 
 
 /**
@@ -48,6 +49,8 @@ public class MockReplicationManager extends ReplicationManager {
   // Variables for controlling getRemoteReplicaLagFromLocalInBytes()
   // the key is partitionId:hostname:replicaPath
   public Map<String, Long> lagOverrides = null;
+  CountDownLatch listenerExcuctionLatch = null;
+  MockReplicationListener replicationListener = new MockReplicationListener();
 
   /**
    * Static construction helper
@@ -161,6 +164,28 @@ public class MockReplicationManager extends ReplicationManager {
   private void failIfRequired() {
     if (exceptionToThrow != null) {
       throw exceptionToThrow;
+    }
+  }
+
+  /**
+   * A class extends implementation of {@link ReplicationManager.PartitionStateChangeListenerImpl} to help manipulate
+   * ordering of threads' execution.
+   */
+  private class MockReplicationListener extends ReplicationManager.PartitionStateChangeListenerImpl {
+    @Override
+    public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+      super.onPartitionBecomeStandbyFromBootstrap(partitionName);
+      if (listenerExcuctionLatch != null) {
+        listenerExcuctionLatch.countDown();
+      }
+    }
+
+    @Override
+    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
+      super.onPartitionBecomeInactiveFromStandby(partitionName);
+      if (listenerExcuctionLatch != null) {
+        listenerExcuctionLatch.countDown();
+      }
     }
   }
 }
