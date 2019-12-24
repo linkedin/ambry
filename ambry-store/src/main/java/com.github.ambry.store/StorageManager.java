@@ -435,7 +435,7 @@ public class StorageManager implements StoreManager {
       // check if partition exists on current node
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
       // if replica is null that means partition is not on current node (this shouldn't happen unless we use server admin
-      // tool to remove the store before initiating decommission on this partition). We don't throw exception in this case.
+      // tool to remove the store before initiating decommission on this partition). We throw exception in this case.
       if (replica != null) {
         Store localStore = getStore(replica.getPartitionId());
         if (localStore != null) {
@@ -454,6 +454,9 @@ public class StorageManager implements StoreManager {
           throw new StateTransitionException("Store " + partitionName + " is not started",
               StateTransitionException.TransitionErrorCode.StoreNotStarted);
         }
+      } else {
+        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
+            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
       }
     }
   }

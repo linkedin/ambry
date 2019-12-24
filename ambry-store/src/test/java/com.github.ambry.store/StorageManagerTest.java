@@ -28,6 +28,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
@@ -298,6 +299,60 @@ public class StorageManagerTest {
     // 6. test that existing replica state transition should succeed
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
+   * test both success and failure cases during STANDBY -> INACTIVE transition
+   */
+  @Test
+  public void replicaFromStandbyToInactiveTest() throws Exception {
+    generateConfigs(true);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    storageManager.start();
+    // 1. get listeners from Helix participant and verify there is a storageManager listener.
+    Map<StateModelListenerType, PartitionStateChangeListener> listeners =
+        mockHelixParticipant.getPartitionStateChangeListeners();
+    assertTrue("Should contain storage manager listener",
+        listeners.containsKey(StateModelListenerType.StorageManagerListener));
+    // 2. not found replica should encounter exception
+    try {
+      mockHelixParticipant.onPartitionBecomeInactiveFromStandby("-1");
+      fail("should fail because replica is not found");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
+    }
+    // 3. store not started exception
+    ReplicaId localReplica = localReplicas.get(0);
+    storageManager.shutdownBlobStore(localReplica.getPartitionId());
+    try {
+      mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
+      fail("should fail because store is not started");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
+          e.getErrorCode());
+    }
+    storageManager.startBlobStore(localReplica.getPartitionId());
+    // 4. success case
+    mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
+    assertEquals("local store state should be set to INACTIVE", ReplicaState.INACTIVE,
+        storageManager.getStore(localReplica.getPartitionId()).getCurrentState());
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+
+    // 5. mock disable compaction failure
+    MockStorageManager mockStorageManager = new MockStorageManager(localNode, mockHelixParticipant);
+    mockStorageManager.start();
+    try {
+      mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaOperationFailure,
+          e.getErrorCode());
+    } finally {
+      shutdownAndAssertStoresInaccessible(mockStorageManager, localReplicas);
+    }
   }
 
   /**
@@ -828,7 +883,7 @@ public class StorageManagerTest {
    * Construct a {@link StorageManager} for the passed in set of replicas.
    * @param currentNode the list of replicas for the {@link StorageManager} to use.
    * @param metricRegistry the {@link MetricRegistry} instance to use to instantiate {@link StorageManager}
-   * @param clusterParticipant
+   * @param clusterParticipant the {@link ClusterParticipant} to use in storage manager
    * @return a started {@link StorageManager}
    * @throws StoreException
    */
@@ -1021,6 +1076,24 @@ public class StorageManagerTest {
     @Override
     public void close() {
       // no op
+    }
+  }
+
+  /**
+   * An extension of {@link StorageManager} to help mock failure case
+   */
+  private class MockStorageManager extends StorageManager {
+    boolean controlCompactionReturnVal = false;
+
+    MockStorageManager(DataNodeId currentNode, ClusterParticipant clusterParticipant) throws Exception {
+      super(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, new MockIdFactory(),
+          clusterMap, currentNode, new DummyMessageStoreHardDelete(), clusterParticipant, SystemTime.getInstance(),
+          new DummyMessageStoreRecovery());
+    }
+
+    @Override
+    public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
+      return controlCompactionReturnVal;
     }
   }
 }
