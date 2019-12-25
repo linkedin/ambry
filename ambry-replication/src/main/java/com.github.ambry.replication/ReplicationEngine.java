@@ -167,7 +167,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
             replicaSyncUpManager.onDeactivationComplete(localReplica);
           }
         }
-        // todo local state = OFFLINE, update lag in replicaSyncUpManager
+        // TODO, if local state == OFFLINE, it means replica might be in Inactive-To-Offline transition.
+        //  We need to update lag in replicaSyncUpManager accordingly as well.
       }
     }
   }

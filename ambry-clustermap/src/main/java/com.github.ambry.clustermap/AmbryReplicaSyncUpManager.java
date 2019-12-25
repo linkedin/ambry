@@ -63,7 +63,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     partitionToDeactivationLatch.put(replicaId.getPartitionId().toPathString(), new CountDownLatch(1));
     partitionToDeactivationSuccess.put(replicaId.getPartitionId().toPathString(), false);
     // once deactivation is initiated, local replica won't receive new PUTs. All remote replicas should be able to
-    // catch with last PUT in local store. Hence, we set acceptable lag threshold to 0.
+    // eventually catch with last PUT in local store. Hence, we set acceptable lag threshold to 0.
     replicaToLagInfos.put(replicaId, new LocalReplicaLagInfos(replicaId, 0, ReplicaState.INACTIVE));
   }
 

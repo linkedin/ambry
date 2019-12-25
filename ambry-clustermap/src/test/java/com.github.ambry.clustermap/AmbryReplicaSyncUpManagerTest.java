@@ -26,9 +26,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.apache.helix.model.Message;
+import org.json.JSONObject;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -41,13 +43,11 @@ public class AmbryReplicaSyncUpManagerTest {
   private AmbryPartitionStateModel stateModel;
   private AmbryReplicaSyncUpManager replicaSyncUpService;
   private ReplicaId currentReplica;
-  private MockPartitionStateChangeListener mockStateChangeListener;
+  private MockHelixParticipant mockHelixParticipant;
   private Message mockMessage;
   private final List<ReplicaId> localDcPeerReplicas;
   private final List<ReplicaId> remoteDcPeerReplicas;
   private final MockClusterMap clusterMap;
-  private CountDownLatch listenerLatch;
-  private ReplicaState replicaState = ReplicaState.OFFLINE;
 
   public AmbryReplicaSyncUpManagerTest() throws IOException {
     clusterMap = new MockClusterMap();
@@ -63,17 +63,23 @@ public class AmbryReplicaSyncUpManagerTest {
     replicas.removeAll(localDcPeers);
     localDcPeerReplicas = new ArrayList<>(localDcPeers);
     remoteDcPeerReplicas = new ArrayList<>(replicas);
+    List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
+    zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
+    JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     Properties properties = new Properties();
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("clustermap.replica.catchup.acceptable.lag.bytes", Long.toString(100L));
     properties.setProperty("clustermap.enable.state.model.listener", Boolean.toString(true));
+    properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
-    replicaSyncUpService = new AmbryReplicaSyncUpManager(clusterMapConfig);
-    mockStateChangeListener = new MockPartitionStateChangeListener();
-    stateModel = new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockStateChangeListener,
-        clusterMapConfig);
+    mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    replicaSyncUpService = (AmbryReplicaSyncUpManager) mockHelixParticipant.getReplicaSyncUpManager();
+    mockHelixParticipant.currentReplica = currentReplica;
+    mockHelixParticipant.replicaSyncUpService = replicaSyncUpService;
+    stateModel =
+        new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockHelixParticipant, clusterMapConfig);
     mockMessage = Mockito.mock(Message.class);
     when(mockMessage.getPartitionName()).thenReturn(partition.toPathString());
     when(mockMessage.getResourceName()).thenReturn(RESOURCE_NAME);
@@ -90,14 +96,19 @@ public class AmbryReplicaSyncUpManagerTest {
   @Test
   public void bootstrapBasicTest() throws Exception {
     CountDownLatch stateModelLatch = new CountDownLatch(1);
-    listenerLatch = new CountDownLatch(1);
+    // the listener latch is to ensure state change listener in ReplicationManager or StorageManager is invoked before
+    // moving forward to rest tests.
+    mockHelixParticipant.listenerLatch = new CountDownLatch(1);
+    mockHelixParticipant.registerMockStateChangeListeners();
     // create a new thread and trigger BOOTSTRAP -> STANDBY transition
     Utils.newThread(() -> {
       stateModel.onBecomeStandbyFromBootstrap(mockMessage, null);
       stateModelLatch.countDown();
     }, false).start();
-    assertTrue("State change listener didn't get invoked within 1 sec.", listenerLatch.await(1, TimeUnit.SECONDS));
-    assertEquals("current replica should be in BOOTSTRAP state", ReplicaState.BOOTSTRAP, replicaState);
+    assertTrue("State change listener didn't get invoked within 1 sec.",
+        mockHelixParticipant.listenerLatch.await(1, TimeUnit.SECONDS));
+    assertEquals("current replica should be in BOOTSTRAP state", ReplicaState.BOOTSTRAP,
+        mockHelixParticipant.replicaState);
     assertFalse("Catchup shouldn't complete on current replica", replicaSyncUpService.isSyncUpComplete(currentReplica));
     ReplicaId localPeer1 = localDcPeerReplicas.get(0);
     ReplicaId localPeer2 = localDcPeerReplicas.get(1);
@@ -126,17 +137,26 @@ public class AmbryReplicaSyncUpManagerTest {
     replicaSyncUpService.reset();
   }
 
+  /**
+   * Basic tests for deactivation process (STANDBY -> INACTIVE transition)
+   * @throws Exception
+   */
   @Test
   public void deactivationBasicTest() throws Exception {
     CountDownLatch stateModelLatch = new CountDownLatch(1);
-    listenerLatch = new CountDownLatch(1);
+    // the listener latch is to ensure state change listener in ReplicationManager or StorageManager is invoked before
+    // moving forward to rest tests.
+    mockHelixParticipant.listenerLatch = new CountDownLatch(1);
+    mockHelixParticipant.registerMockStateChangeListeners();
     // create a new thread and trigger STANDBY -> INACTIVE transition
     Utils.newThread(() -> {
       stateModel.onBecomeInactiveFromStandby(mockMessage, null);
       stateModelLatch.countDown();
     }, false).start();
-    assertTrue("State change listener didn't get invoked within 1 sec.", listenerLatch.await(1, TimeUnit.SECONDS));
-    assertEquals("current replica should be in INACTIVE state", ReplicaState.INACTIVE, replicaState);
+    assertTrue("State change listener didn't get invoked within 1 sec.",
+        mockHelixParticipant.listenerLatch.await(1, TimeUnit.SECONDS));
+    assertEquals("current replica should be in INACTIVE state", ReplicaState.INACTIVE,
+        mockHelixParticipant.replicaState);
     assertFalse("Catchup shouldn't complete on current replica", replicaSyncUpService.isSyncUpComplete(currentReplica));
     ReplicaId localPeer1 = localDcPeerReplicas.get(0);
     ReplicaId localPeer2 = localDcPeerReplicas.get(1);
@@ -201,7 +221,8 @@ public class AmbryReplicaSyncUpManagerTest {
     }
     // test deactivation failure for some reason (triggered by calling onDeactivationError)
     CountDownLatch stateModelLatch = new CountDownLatch(1);
-    listenerLatch = new CountDownLatch(1);
+    mockHelixParticipant.listenerLatch = new CountDownLatch(1);
+    mockHelixParticipant.registerMockStateChangeListeners();
     // create a new thread and trigger STANDBY -> INACTIVE transition
     Utils.newThread(() -> {
       try {
@@ -212,7 +233,8 @@ public class AmbryReplicaSyncUpManagerTest {
         stateModelLatch.countDown();
       }
     }, false).start();
-    assertTrue("State change listener didn't get invoked within 1 sec.", listenerLatch.await(1, TimeUnit.SECONDS));
+    assertTrue("State change listener didn't get invoked within 1 sec.",
+        mockHelixParticipant.listenerLatch.await(1, TimeUnit.SECONDS));
     replicaSyncUpService.onDeactivationError(currentReplica);
     assertTrue("Standby-To-Inactive transition didn't complete within 1 sec.",
         stateModelLatch.await(1, TimeUnit.SECONDS));
@@ -225,7 +247,8 @@ public class AmbryReplicaSyncUpManagerTest {
   @Test
   public void bootstrapFailureTest() throws Exception {
     CountDownLatch stateModelLatch = new CountDownLatch(1);
-    listenerLatch = new CountDownLatch(1);
+    mockHelixParticipant.listenerLatch = new CountDownLatch(1);
+    mockHelixParticipant.registerMockStateChangeListeners();
     // create a new thread and trigger BOOTSTRAP -> STANDBY transition
     Utils.newThread(() -> {
       try {
@@ -236,53 +259,11 @@ public class AmbryReplicaSyncUpManagerTest {
         stateModelLatch.countDown();
       }
     }, false).start();
-    assertTrue("State change listener didn't get invoked within 1 sec.", listenerLatch.await(1, TimeUnit.SECONDS));
+    assertTrue("State change listener didn't get invoked within 1 sec.",
+        mockHelixParticipant.listenerLatch.await(1, TimeUnit.SECONDS));
     replicaSyncUpService.onBootstrapError(currentReplica);
     assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec.",
         stateModelLatch.await(1, TimeUnit.SECONDS));
     replicaSyncUpService.reset();
-  }
-
-  /**
-   * Implementation of {@link PartitionStateChangeListener} to help {@link ReplicaSyncUpManager} tests
-   */
-  private class MockPartitionStateChangeListener implements PartitionStateChangeListener {
-    @Override
-    public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
-    }
-
-    @Override
-    public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
-      replicaState = ReplicaState.BOOTSTRAP;
-      replicaSyncUpService.initiateBootstrap(currentReplica);
-      listenerLatch.countDown();
-      try {
-        replicaSyncUpService.waitBootstrapCompleted(partitionName);
-      } catch (InterruptedException e) {
-        throw new StateTransitionException("Was interrupted during Bootstrap-To-Standby",
-            StateTransitionException.TransitionErrorCode.BootstrapFailure);
-      }
-    }
-
-    @Override
-    public void onPartitionBecomeLeaderFromStandby(String partitionName) {
-    }
-
-    @Override
-    public void onPartitionBecomeStandbyFromLeader(String partitionName) {
-    }
-
-    @Override
-    public void onPartitionBecomeInactiveFromStandby(String partitionName) {
-      replicaState = ReplicaState.INACTIVE;
-      replicaSyncUpService.initiateDeactivation(currentReplica);
-      listenerLatch.countDown();
-      try {
-        replicaSyncUpService.waitDeactivationCompleted(partitionName);
-      } catch (InterruptedException e) {
-        throw new StateTransitionException("Deactivation failed or was interrupted",
-            StateTransitionException.TransitionErrorCode.DeactivationFailure);
-      }
-    }
   }
 }

@@ -21,15 +21,49 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
+import org.mockito.Mockito;
+import org.mockito.stubbing.Answer;
+
+import static org.mockito.Mockito.*;
 
 
 public class MockHelixParticipant extends HelixParticipant {
-  Set<ReplicaId> sealedReplicas = new HashSet<>();
-  Set<ReplicaId> stoppedReplicas = new HashSet<>();
+  CountDownLatch listenerLatch = null;
+  ReplicaState replicaState = ReplicaState.OFFLINE;
+  ReplicaId currentReplica = null;
+  ReplicaSyncUpManager replicaSyncUpService = null;
+  private Set<ReplicaId> sealedReplicas = new HashSet<>();
+  private Set<ReplicaId> stoppedReplicas = new HashSet<>();
+  private PartitionStateChangeListener mockReplicationManagerListener;
 
   public MockHelixParticipant(ClusterMapConfig clusterMapConfig) throws IOException {
     super(clusterMapConfig, new MockHelixManagerFactory());
+    // create mock state change listener for ReplicationManager
+    mockReplicationManagerListener = Mockito.mock(PartitionStateChangeListener.class);
+    // mock Bootstrap-To-Standby change
+    doAnswer((Answer) invocation -> {
+      replicaState = ReplicaState.BOOTSTRAP;
+      if (replicaSyncUpService != null && currentReplica != null) {
+        replicaSyncUpService.initiateBootstrap(currentReplica);
+      }
+      if (listenerLatch != null) {
+        listenerLatch.countDown();
+      }
+      return null;
+    }).when(mockReplicationManagerListener).onPartitionBecomeStandbyFromBootstrap(any(String.class));
+    // mock Standby-To-Inactive change
+    doAnswer((Answer) invocation -> {
+      replicaState = ReplicaState.INACTIVE;
+      if (replicaSyncUpService != null && currentReplica != null) {
+        replicaSyncUpService.initiateDeactivation(currentReplica);
+      }
+      if (listenerLatch != null) {
+        listenerLatch.countDown();
+      }
+      return null;
+    }).when(mockReplicationManagerListener).onPartitionBecomeInactiveFromStandby(any(String.class));
   }
 
   @Override
@@ -77,5 +111,14 @@ public class MockHelixParticipant extends HelixParticipant {
    */
   public Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners() {
     return Collections.unmodifiableMap(partitionStateChangeListeners);
+  }
+
+  /**
+   * Re-register state change listeners in {@link HelixParticipant} to replace original one with mock state change
+   * listener. This is to help with special test cases.
+   */
+  void registerMockStateChangeListeners() {
+    registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
+        mockReplicationManagerListener);
   }
 }

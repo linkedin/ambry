@@ -60,6 +60,10 @@ public interface ReplicaSyncUpManager {
    */
   void onBootstrapComplete(ReplicaId replicaId);
 
+  /**
+   * Deactivation on given replica is complete.
+   * @param replicaId the replica which completes deactivation.
+   */
   void onDeactivationComplete(ReplicaId replicaId);
 
   /**
@@ -68,6 +72,10 @@ public interface ReplicaSyncUpManager {
    */
   void onBootstrapError(ReplicaId replicaId);
 
+  /**
+   * When exception/error occurs during deactivation.
+   * @param replicaId the replica which encounters error.
+   */
   void onDeactivationError(ReplicaId replicaId);
 
   /**

@@ -316,6 +316,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
     if (replicationManagerListener != null) {
       replicationManagerListener.onPartitionBecomeStandbyFromBootstrap(partitionName);
+      // after bootstrap is initiated in ReplicationManager, transition is blocked here and wait until local replica has
+      // caught up with enough peer replicas.
       try {
         replicaSyncUpManager.waitBootstrapCompleted(partitionName);
       } catch (InterruptedException e) {
@@ -360,6 +362,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
     if (replicationManagerListener != null) {
       replicationManagerListener.onPartitionBecomeInactiveFromStandby(partitionName);
+      // after deactivation is initiated in ReplicationManager, transition is blocked here and wait until enough peer
+      // replicas have caught up with last PUT in local store.
       try {
         replicaSyncUpManager.waitDeactivationCompleted(partitionName);
       } catch (InterruptedException e) {
