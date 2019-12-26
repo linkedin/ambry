@@ -54,6 +54,10 @@ public class StateTransitionException extends RuntimeException {
     /**
      * If failure occurs during Standby-To-Inactive transition.
      */
-    DeactivationFailure
+    DeactivationFailure,
+    /**
+     * If disconnection process fails on specific replica.
+     */
+    DisconnectionFailure
   }
 }

@@ -460,5 +460,17 @@ public class StorageManager implements StoreManager {
             ReplicaNotFound);
       }
     }
+
+    @Override
+    public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+      // if code arrives here, which means replica exists on current node. This is guaranteed by replication manager,
+      // which checks existence of local replica (see onPartitionBecomeOfflineFromInactive method in ReplicationManager)
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+      if (!shutdownBlobStore(replica.getPartitionId())) {
+        throw new StateTransitionException("Failed to shutdown store " + partitionName,
+            StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+      }
+      logger.info("Store {} is successfully shut down during Inactive-To-Offline transition", partitionName);
+    }
   }
 }

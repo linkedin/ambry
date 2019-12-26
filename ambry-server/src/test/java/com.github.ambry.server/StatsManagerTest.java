@@ -676,6 +676,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public boolean isDecommissionInProgress() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void completeBootstrap() {
       throw new IllegalStateException("Not implemented");
     }
