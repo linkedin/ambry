@@ -576,13 +576,13 @@ public class ReplicationTest {
     mockHelixParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
         replicationManager.replicationListener);
     CountDownLatch participantLatch = new CountDownLatch(1);
-    replicationManager.listenerExcuctionLatch = new CountDownLatch(1);
+    replicationManager.listenerExecutionLatch = new CountDownLatch(1);
     Utils.newThread(() -> {
       mockHelixParticipant.onPartitionBecomeOfflineFromInactive(existingPartition.toPathString());
       participantLatch.countDown();
     }, false).start();
     assertTrue("Partition state change listener in ReplicationManager didn't get called within 1 sec",
-        replicationManager.listenerExcuctionLatch.await(1, TimeUnit.SECONDS));
+        replicationManager.listenerExecutionLatch.await(1, TimeUnit.SECONDS));
     // the state of local store should be updated to OFFLINE
     assertEquals("Local store state is not expected", ReplicaState.OFFLINE, localStore.getCurrentState());
     // update replication lag between local and peer replicas
