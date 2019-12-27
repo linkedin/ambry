@@ -68,6 +68,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
+import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -507,6 +508,102 @@ public class ReplicationTest {
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
     PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
     mockHelixParticipant.onPartitionBecomeStandbyFromLeader(existingPartition.toPathString());
+    storageManager.shutdown();
+  }
+
+  /**
+   * Test INACTIVE -> OFFLINE transition on existing replica (both success and failure cases)
+   */
+  @Test
+  public void replicaFromInactiveToOfflineTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    // 1. test replica not found case
+    try {
+      mockHelixParticipant.onPartitionBecomeOfflineFromInactive("-1");
+      fail("should fail because of invalid partition");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
+    }
+    // 2. test store not started case
+    PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    storageManager.shutdownBlobStore(existingPartition);
+    try {
+      mockHelixParticipant.onPartitionBecomeOfflineFromInactive(existingPartition.toPathString());
+      fail("should fail because store is not started");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
+          e.getErrorCode());
+    }
+    storageManager.startBlobStore(existingPartition);
+    // before testing success case, let's write a blob (size = 100) into local store and add a delete record for new blob
+    Store localStore = storageManager.getStore(existingPartition);
+    MockId id = new MockId(UtilsTest.getRandomString(10), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM));
+    long crc = (new Random()).nextLong();
+    long blobSize = 100;
+    MessageInfo info =
+        new MessageInfo(id, blobSize, false, false, Utils.Infinite_Time, crc, id.getAccountId(), id.getContainerId(),
+            Utils.Infinite_Time);
+    List<MessageInfo> infos = new ArrayList<>();
+    List<ByteBuffer> buffers = new ArrayList<>();
+    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) blobSize));
+    infos.add(info);
+    buffers.add(buffer);
+    localStore.put(new MockMessageWriteSet(infos, buffers));
+    // delete the blob
+    int deleteRecordSize = 29;
+    MessageInfo deleteInfo =
+        new MessageInfo(id, deleteRecordSize, id.getAccountId(), id.getContainerId(), time.milliseconds());
+    ByteBuffer deleteBuffer = ByteBuffer.wrap(TestUtils.getRandomBytes(deleteRecordSize));
+    localStore.delete(
+        new MockMessageWriteSet(Collections.singletonList(deleteInfo), Collections.singletonList(deleteBuffer)));
+    // note that end offset of last PUT = 100 + 18 = 118, end offset of the store is 147 (118 + 29)
+    // 3. test success case (create a new thread and trigger INACTIVE -> OFFLINE transition)
+    ReplicaId localReplica = storageManager.getReplica(existingPartition.toPathString());
+    // put a decommission-in-progress file into local store dir
+    File decommissionFile = new File(localReplica.getReplicaPath(), "decommission_in_progress");
+    assertTrue("Couldn't create decommission file in local store", decommissionFile.createNewFile());
+    decommissionFile.deleteOnExit();
+    assertNotSame("Before disconnection, the local store state shouldn't be OFFLINE", ReplicaState.OFFLINE,
+        localStore.getCurrentState());
+    mockHelixParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
+        replicationManager.replicationListener);
+    CountDownLatch participantLatch = new CountDownLatch(1);
+    replicationManager.listenerExcuctionLatch = new CountDownLatch(1);
+    Utils.newThread(() -> {
+      mockHelixParticipant.onPartitionBecomeOfflineFromInactive(existingPartition.toPathString());
+      participantLatch.countDown();
+    }, false).start();
+    assertTrue("Partition state change listener in ReplicationManager didn't get called within 1 sec",
+        replicationManager.listenerExcuctionLatch.await(1, TimeUnit.SECONDS));
+    // the state of local store should be updated to OFFLINE
+    assertEquals("Local store state is not expected", ReplicaState.OFFLINE, localStore.getCurrentState());
+    // update replication lag between local and peer replicas
+    List<RemoteReplicaInfo> remoteReplicaInfos =
+        replicationManager.partitionToPartitionInfo.get(existingPartition).getRemoteReplicaInfos();
+    ReplicaId peerReplica1 = remoteReplicaInfos.get(0).getReplicaId();
+    ReplicaId peerReplica2 = remoteReplicaInfos.get(1).getReplicaId();
+    // peer1 catches up with last PUT, peer2 catches up with end offset of local store. In this case, SyncUp is not complete
+    replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
+        peerReplica1.getDataNodeId().getHostname(), peerReplica1.getReplicaPath(), 118);
+    replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
+        peerReplica2.getDataNodeId().getHostname(), peerReplica2.getReplicaPath(), 147);
+    assertFalse("Only one peer replica has fully caught up with end offset so sync-up should not complete",
+        mockHelixParticipant.getReplicaSyncUpManager().isSyncUpComplete(localReplica));
+    // make peer1 catch up with end offset
+    replicationManager.updateTotalBytesReadByRemoteReplica(existingPartition,
+        peerReplica1.getDataNodeId().getHostname(), peerReplica1.getReplicaPath(), 147);
+    // Now, sync-up should complete and transition should be able to proceed.
+    assertTrue("Inactive-To-Offline transition didn't complete within 1 sec",
+        participantLatch.await(1, TimeUnit.SECONDS));
+    assertFalse("Local store should be stopped after transition", localStore.isStarted());
     storageManager.shutdown();
   }
 

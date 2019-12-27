@@ -187,5 +187,13 @@ public class MockReplicationManager extends ReplicationManager {
         listenerExecutionLatch.countDown();
       }
     }
+
+    @Override
+    public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+      super.onPartitionBecomeOfflineFromInactive(partitionName);
+      if (listenerExecutionLatch != null) {
+        listenerExecutionLatch.countDown();
+      }
+    }
   }
 }
