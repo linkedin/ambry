@@ -267,4 +267,41 @@ public class AmbryReplicaSyncUpManagerTest {
         stateModelLatch.await(1, TimeUnit.SECONDS));
     replicaSyncUpService.reset();
   }
+
+  /**
+   * Test INACTIVE -> OFFLINE transition failure.
+   * @throws Exception
+   */
+  @Test
+  public void disconnectionFailureTest() throws Exception {
+    // test replica-not-found case (pass in another partition that is not present in ReplicaSyncUpManager)
+    PartitionId secondPartition = clusterMap.getAllPartitionIds(null).get(1);
+    try {
+      replicaSyncUpService.waitDisconnectionCompleted(secondPartition.toPathString());
+      fail("should fail because replica is not tracked by ReplicaSyncUpManager");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
+    }
+    // test disconnection failure (this is induced by call onDisconnectionError)
+    CountDownLatch stateModelLatch = new CountDownLatch(1);
+    mockHelixParticipant.listenerLatch = new CountDownLatch(1);
+    mockHelixParticipant.registerMockStateChangeListeners();
+    // create a new thread and trigger STANDBY -> INACTIVE transition
+    Utils.newThread(() -> {
+      try {
+        stateModel.onBecomeOfflineFromInactive(mockMessage, null);
+      } catch (StateTransitionException e) {
+        assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.DisconnectionFailure,
+            e.getErrorCode());
+        stateModelLatch.countDown();
+      }
+    }, false).start();
+    assertTrue("State change listener didn't get invoked within 1 sec.",
+        mockHelixParticipant.listenerLatch.await(1, TimeUnit.SECONDS));
+    replicaSyncUpService.onDisconnectionError(currentReplica);
+    assertTrue("Inactive-To-Offline transition didn't complete within 1 sec.",
+        stateModelLatch.await(1, TimeUnit.SECONDS));
+    replicaSyncUpService.reset();
+  }
 }

@@ -52,6 +52,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.junit.After;
@@ -353,6 +355,40 @@ public class StorageManagerTest {
     } finally {
       shutdownAndAssertStoresInaccessible(mockStorageManager, localReplicas);
     }
+  }
+
+  /**
+   * Test shutting down blob store failure during Inactive-To-Offline transition.
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromInactiveToOfflineTest() throws Exception {
+    generateConfigs(true);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    ReplicaId testReplica = localReplicas.get(0);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager = createStorageManager(localNode, metricRegistry, mockHelixParticipant);
+    storageManager.start();
+    // test shutdown store failure (this is induced by shutting down disk manager)
+    storageManager.getDiskManager(testReplica.getPartitionId()).shutdown();
+    mockHelixParticipant.getReplicaSyncUpManager().initiateDisconnection(testReplica);
+    CountDownLatch participantLatch = new CountDownLatch(1);
+    Utils.newThread(() -> {
+      try {
+        mockHelixParticipant.onPartitionBecomeOfflineFromInactive(testReplica.getPartitionId().toPathString());
+        fail("should fail because of shutting down store failure");
+      } catch (StateTransitionException e) {
+        assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaOperationFailure,
+            e.getErrorCode());
+        participantLatch.countDown();
+      }
+    }, false).start();
+    // make sync-up complete to let code proceed and encounter exception in storage manager.
+    mockHelixParticipant.getReplicaSyncUpManager().onDisconnectionComplete(testReplica);
+    assertTrue("Helix participant transition didn't get invoked within 1 sec",
+        participantLatch.await(1, TimeUnit.SECONDS));
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
   /**

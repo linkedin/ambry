@@ -64,6 +64,17 @@ public class MockHelixParticipant extends HelixParticipant {
       }
       return null;
     }).when(mockReplicationManagerListener).onPartitionBecomeInactiveFromStandby(any(String.class));
+    // mock Inactive-To-Offline change
+    doAnswer((Answer) invocation -> {
+      replicaState = ReplicaState.OFFLINE;
+      if (replicaSyncUpService != null && currentReplica != null) {
+        replicaSyncUpService.initiateDisconnection(currentReplica);
+      }
+      if (listenerLatch != null) {
+        listenerLatch.countDown();
+      }
+      return null;
+    }).when(mockReplicationManagerListener).onPartitionBecomeOfflineFromInactive(any(String.class));
   }
 
   @Override
