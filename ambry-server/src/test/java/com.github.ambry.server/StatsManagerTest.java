@@ -595,6 +595,12 @@ public class StatsManagerTest {
     ReplicaId replica = localReplicas.get(1);
     storageManager.shutdownBlobStore(replica.getPartitionId());
     clusterParticipant.onPartitionBecomeDroppedFromOffline(replica.getPartitionId().toPathString());
+    // verify that the replica is no longer present in StorageManager
+    assertNull("Store of removed replica should not exist", storageManager.getStore(replica.getPartitionId(), true));
+    // purposely remove the same replica in ReplicationManager again to verify it no longer exists
+    assertFalse("Should return false because replica no longer exists", mockReplicationManager.removeReplica(replica));
+    // purposely remove the same replica in StatsManager again to verify it no longer exists
+    assertFalse("Should return false because replica no longer exists", mockStatsManager.removeReplica(replica));
     storageManager.shutdown();
     mockStatsManager.shutdown();
   }

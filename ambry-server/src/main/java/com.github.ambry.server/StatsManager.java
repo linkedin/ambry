@@ -195,9 +195,9 @@ class StatsManager {
   boolean addReplica(ReplicaId id) {
     boolean success = partitionToReplicaMap.putIfAbsent(id.getPartitionId(), id) == null;
     if (success) {
-      logger.info(id.getPartitionId() + " is added into StatsManager");
+      logger.info("Partition " + id.getPartitionId() + " is added into StatsManager");
     } else {
-      logger.error("Failed to add " + id.getPartitionId() + " because it is already in StatsManager");
+      logger.error("Failed to add partition " + id.getPartitionId() + " because it is already in StatsManager");
     }
     return success;
   }
@@ -210,9 +210,9 @@ class StatsManager {
   boolean removeReplica(ReplicaId id) {
     boolean success = partitionToReplicaMap.remove(id.getPartitionId()) != null;
     if (success) {
-      logger.info(id.getPartitionId() + " is removed from StatsManager");
+      logger.info("Partition " + id.getPartitionId() + " is removed from StatsManager");
     } else {
-      logger.error("Failed to remove " + id.getPartitionId() + " because it doesn't exist in StatsManager");
+      logger.error("Failed to remove partition " + id.getPartitionId() + " because it doesn't exist in StatsManager");
     }
     return success;
   }
