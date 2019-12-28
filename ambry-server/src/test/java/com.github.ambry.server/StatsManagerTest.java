@@ -26,13 +26,18 @@ import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StatsManagerConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.MockReplicationManager;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageWriteSet;
+import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
@@ -90,6 +95,7 @@ public class StatsManagerTest {
   private final Random random = new Random();
   private final ObjectMapper mapper = new ObjectMapper();
   private final StatsManagerConfig statsManagerConfig;
+  private VerifiableProperties verifiableProperties;
   private DataNodeId dataNodeId;
 
   /**
@@ -120,6 +126,7 @@ public class StatsManagerTest {
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    verifiableProperties = new VerifiableProperties(properties);
     statsManagerConfig = new StatsManagerConfig(new VerifiableProperties(properties));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     storeMap = new HashMap<>();
@@ -525,6 +532,71 @@ public class StatsManagerTest {
   @Test
   public void testShutdownBeforeStart() {
     statsManager.shutdown();
+  }
+
+  /**
+   * Test Offline-To-Dropped transition (both failure and success cases)
+   * @throws Exception
+   */
+  @Test
+  public void testReplicaFromOfflineToDropped() throws Exception {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
+    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
+    MockClusterMap clusterMap = new MockClusterMap();
+    DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(currentNode);
+    StorageManager storageManager =
+        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
+            new MetricRegistry(), null, clusterMap, currentNode, null, clusterParticipant, new MockTime(), null);
+    storageManager.start();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    MockReplicationManager mockReplicationManager =
+        new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
+            currentNode, storeKeyConverterFactory, clusterParticipant);
+    MockStatsManager mockStatsManager =
+        new MockStatsManager(storageManager, localReplicas, new MetricRegistry(), statsManagerConfig,
+            clusterParticipant);
+    // 1. test replica not found error
+    try {
+      clusterParticipant.onPartitionBecomeDroppedFromOffline("-1");
+      fail("should fail because replica is not found");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
+          e.getErrorCode());
+    }
+    // 2. attempt to remove replica while store is still running (remove store failure case)
+    ReplicaId replicaToDrop = localReplicas.get(0);
+    try {
+      clusterParticipant.onPartitionBecomeDroppedFromOffline(replicaToDrop.getPartitionId().toPathString());
+      fail("should fail because store is still running");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaOperationFailure,
+          e.getErrorCode());
+    }
+    // 4. shutdown the store but introduce file deletion failure (put a invalid dir in store dir)
+    storageManager.shutdownBlobStore(replicaToDrop.getPartitionId());
+    File invalidDir = new File(replicaToDrop.getReplicaPath(), "invalidDir");
+    invalidDir.deleteOnExit();
+    assertTrue("Couldn't create dir within store dir", invalidDir.mkdir());
+    assertTrue("Could not make unreadable", invalidDir.setReadable(false));
+    try {
+      clusterParticipant.onPartitionBecomeDroppedFromOffline(replicaToDrop.getPartitionId().toPathString());
+      fail("should fail because store deletion fails");
+    } catch (StateTransitionException e) {
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaOperationFailure,
+          e.getErrorCode());
+    }
+    // reset permission to allow deletion to succeed.
+    assertTrue("Could not make readable", invalidDir.setReadable(true));
+    assertTrue("Could not delete invalid dir", invalidDir.delete());
+    // 5. success case (remove another replica because previous replica has been removed from in-mem data structures)
+    ReplicaId replica = localReplicas.get(1);
+    storageManager.shutdownBlobStore(replica.getPartitionId());
+    clusterParticipant.onPartitionBecomeDroppedFromOffline(replica.getPartitionId().toPathString());
+    storageManager.shutdown();
+    mockStatsManager.shutdown();
   }
 
   /**
