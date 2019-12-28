@@ -422,5 +422,17 @@ class StatsManager {
       logger.info("Partition state change notification from Inactive to Offline received for partition {}",
           partitionName);
     }
+
+    @Override
+    public void onPartitionBecomeDroppedFromOffline(String partitionName) {
+      // check if partition exists
+      ReplicaId replica = storageManager.getReplica(partitionName);
+      if (replica == null) {
+        throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
+            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+      }
+      // remove replica from in-mem data structure. If replica doesn't exist, log info but don't fail the transition
+      removeReplica(replica);
+    }
   }
 }

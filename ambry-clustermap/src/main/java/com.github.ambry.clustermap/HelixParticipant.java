@@ -489,6 +489,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   @Override
+<<<<<<< HEAD
   public void onPartitionBecomeInactiveFromStandby(String partitionName) {
     // 1. storage manager marks store local state as INACTIVE and disables compaction on this partition
     PartitionStateChangeListener storageManagerListener =
@@ -542,5 +543,26 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       storageManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
     }
     // 4. todo update instanceConfig in helix
+=======
+  public void onPartitionBecomeDroppedFromOffline(String partitionName) {
+    // 1. remove old replica from StatsManager
+    PartitionStateChangeListener statsManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
+    if (statsManagerListener != null) {
+      statsManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+    }
+    // 2. remove old replica from ReplicationManager
+    PartitionStateChangeListener replicationManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+    if (replicationManagerListener != null) {
+      replicationManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+    }
+    // 3. remove old replica from StorageManager and delete store directory
+    PartitionStateChangeListener storageManagerListener =
+        partitionStateChangeListeners.get(StateModelListenerType.StorageManagerListener);
+    if (storageManagerListener != null) {
+      storageManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
+    }
+>>>>>>> WIP: Implement replica Offline-To-Dropped transition on server side
   }
 }

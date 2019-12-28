@@ -76,7 +76,13 @@ public class AmbryStateModelFactoryTest {
         // no op
       }
 
+      @Override
       public void onPartitionBecomeOfflineFromInactive(String partitionName) {
+        // no op
+      }
+
+      @Override
+      public void onPartitionBecomeDroppedFromOffline(String partitionName) {
         // no op
       }
     });

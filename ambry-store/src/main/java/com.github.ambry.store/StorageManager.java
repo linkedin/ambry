@@ -499,5 +499,29 @@ public class StorageManager implements StoreManager {
       }
       logger.info("Store {} is successfully shut down during Inactive-To-Offline transition", partitionName);
     }
+
+    @Override
+    public void onPartitionBecomeDroppedFromOffline(String partitionName) {
+      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
+      // get the store (skip the state check here, because the store should be stopped in previous transition)
+      BlobStore store = (BlobStore) getStore(replica.getPartitionId(), true);
+      if (removeBlobStore(replica.getPartitionId())) {
+        try {
+          store.deleteStoreFiles();
+        } catch (Exception e) {
+          throw new StateTransitionException("Failed to delete directory for store " + partitionName,
+              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+        }
+        // Remove store from sealed and stopped list (if present)
+        logger.info("Removing store from sealed and stopped list(if present)");
+        replicaStatusDelegate.unseal(replica);
+        replicaStatusDelegate.unmarkStopped(Collections.singletonList(replica));
+      } else {
+        throw new StateTransitionException("Failed to remove store " + partitionName + " from storage manager",
+            StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+      }
+      partitionNameToReplicaId.remove(partitionName);
+      logger.info("Partition {} is successfully dropped on current node", partitionName);
+    }
   }
 }

@@ -387,6 +387,12 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
           partitionName);
     }
 
+    @Override
+    public void onPartitionBecomeDroppedFromOffline(String partitionName) {
+      logger.info("Partition state change notification from Offline to Dropped received for partition {}",
+          partitionName);
+    }
+
     /**
      * If only config specified list of partitions are being replicated from cloud, then check that the partition
      * belongs to the specified list.

@@ -53,4 +53,10 @@ public interface PartitionStateChangeListener {
    * @param partitionName of the partition
    */
   void onPartitionBecomeOfflineFromInactive(String partitionName);
+
+  /**
+   * Action to take when partition becomes dropped from offline.
+   * @param partitionName of the partition.
+   */
+  void onPartitionBecomeDroppedFromOffline(String partitionName);
 }

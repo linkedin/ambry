@@ -304,5 +304,14 @@ public class ReplicationManager extends ReplicationEngine {
       store.setCurrentState(ReplicaState.OFFLINE);
       replicaSyncUpManager.initiateDisconnection(localReplica);
     }
+
+    @Override
+    public void onPartitionBecomeDroppedFromOffline(String partitionName) {
+      ReplicaId replica = storeManager.getReplica(partitionName);
+      // if code arrives here, we don't need to check if replica exists, it has been checked in StatsManager
+      // here we attempt to remove replica from replication manager. If replica doesn't exist, log info but don't fail
+      // the transition
+      removeReplica(replica);
+    }
   }
 }
