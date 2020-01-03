@@ -13,9 +13,9 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -46,8 +46,17 @@ import static org.junit.Assert.*;
  * Tests {@link StaticClusterManager} class.
  */
 public class StaticClusterManagerTest {
+  private final ClusterMapConfig clusterMapConfig;
   @Rule
   public org.junit.rules.TemporaryFolder folder = new TemporaryFolder();
+
+  public StaticClusterManagerTest() {
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.cluster.name", "cluster");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+  }
 
   // Useful for understanding partition layout affect on free capacity across all hardware.
   public String freeCapacityDump(StaticClusterManager clusterMapManager, HardwareLayout hardwareLayout) {
@@ -159,7 +168,7 @@ public class StaticClusterManagerTest {
   @Test
   public void addNewPartition() {
     TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha");
-    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), null);
+    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), clusterMapConfig);
 
     StaticClusterManager clusterMapManager =
         (new StaticClusterAgentsFactory(getDummyConfig(), partitionLayout)).getClusterMap();
@@ -181,7 +190,7 @@ public class StaticClusterManagerTest {
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
     TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha");
-    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), null);
+    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), clusterMapConfig);
 
     StaticClusterManager clusterMapManager =
         (new StaticClusterAgentsFactory(getDummyConfig(), partitionLayout)).getClusterMap();
@@ -223,7 +232,7 @@ public class StaticClusterManagerTest {
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
     TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha", true);
-    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), null);
+    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), clusterMapConfig);
 
     StaticClusterManager clusterMapManager =
         (new StaticClusterAgentsFactory(getDummyConfig(), partitionLayout)).getClusterMap();
@@ -259,7 +268,7 @@ public class StaticClusterManagerTest {
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
     TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha", true);
-    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), null);
+    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), clusterMapConfig);
 
     StaticClusterManager clusterMapManager =
         (new StaticClusterAgentsFactory(getDummyConfig(), partitionLayout)).getClusterMap();
@@ -284,7 +293,7 @@ public class StaticClusterManagerTest {
   @Test
   public void capacities() {
     TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha");
-    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), null);
+    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), clusterMapConfig);
 
     StaticClusterManager clusterMapManager =
         (new StaticClusterAgentsFactory(getDummyConfig(), partitionLayout)).getClusterMap();
@@ -347,10 +356,9 @@ public class StaticClusterManagerTest {
     String hardwareLayoutDe = tmpDir + "/hardwareLayoutDe.json";
     String partitionLayoutDe = tmpDir + "/partitionLayoutDe.json";
 
-    StaticClusterManager clusterMapManagerSer = getTestClusterMap();
-    clusterMapManagerSer.persist(hardwareLayoutSer, partitionLayoutSer);
-
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    StaticClusterManager clusterMapManagerSer = getTestClusterMap(clusterMapConfig);
+    clusterMapManagerSer.persist(hardwareLayoutSer, partitionLayoutSer);
 
     StaticClusterManager clusterMapManagerDe =
         (new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutSer, partitionLayoutSer)).getClusterMap();
@@ -481,11 +489,6 @@ public class StaticClusterManagerTest {
    */
   @Test
   public void onReplicaEventTest() {
-    Properties props = new Properties();
-    props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.cluster.name", "cluster");
-    props.setProperty("clustermap.datacenter.name", "dc1");
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha");
     TestPartitionLayout testPartitionLayout = new TestPartitionLayout(testHardwareLayout, null);
     ClusterMap clusterMapManager =

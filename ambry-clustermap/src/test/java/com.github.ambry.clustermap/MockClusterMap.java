@@ -49,6 +49,7 @@ public class MockClusterMap implements ClusterMap {
   protected final Map<Long, PartitionId> partitions;
   protected final List<MockDataNodeId> dataNodes;
   protected final int numMountPointsPerNode;
+  private static final int MIN_LOCAL_REPLICA_COUNT_FOR_WRITE = 3;
   private final List<String> dataCentersInClusterMap = new ArrayList<>();
   private final Map<String, List<MockDataNodeId>> dcToDataNodes = new HashMap<>();
   private final ClusterMapUtils.PartitionSelectionHelper partitionSelectionHelper;
@@ -156,7 +157,8 @@ public class MockClusterMap implements ClusterMap {
     } else {
       specialPartition = null;
     }
-    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName);
+    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName,
+        MIN_LOCAL_REPLICA_COUNT_FOR_WRITE);
   }
 
   /**
@@ -175,7 +177,8 @@ public class MockClusterMap implements ClusterMap {
     partitions = new HashMap<>();
     partitionIdList.forEach(p -> partitions.put(Long.valueOf(p.toPathString()), p));
     this.localDatacenterName = localDatacenterName;
-    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName);
+    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName,
+        MIN_LOCAL_REPLICA_COUNT_FOR_WRITE);
     Set<String> dcNames = new HashSet<>();
     datanodes.forEach(node -> dcNames.add(node.getDatacenterName()));
     dataCentersInClusterMap.addAll(dcNames);
@@ -217,7 +220,8 @@ public class MockClusterMap implements ClusterMap {
     recoveryReplica.setPeerReplicas(Collections.singletonList(vcrReplica));
     partitions.put(mockPartitionId.partition, mockPartitionId);
 
-    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName);
+    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName,
+        MIN_LOCAL_REPLICA_COUNT_FOR_WRITE);
     specialPartition = null;
   }
 

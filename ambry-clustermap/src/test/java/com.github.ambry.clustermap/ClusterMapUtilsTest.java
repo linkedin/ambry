@@ -60,10 +60,12 @@ public class ClusterMapUtilsTest {
     // 2 partitions with 3 replicas in two datacenters "DC1" and "DC2" (class "max-replicas-all-sites")
     // 2 partitions with 3 replicas in "DC1" and 1 replica in "DC2" (class "max-local-one-remote")
     // 2 partitions with 3 replicas in "DC2" and 1 replica in "DC1" (class "max-local-one-remote")
+    // minimum number of replicas required for choosing writable partition is 3.
     final String dc1 = "DC1";
     final String dc2 = "DC2";
     final String maxReplicasAllSites = "max-replicas-all-sites";
     final String maxLocalOneRemote = "max-local-one-remote";
+    final int minimumLocalReplicaCount = 3;
 
     MockDataNodeId dc1Dn1 = getDataNodeId("dc1dn1", dc1);
     MockDataNodeId dc1Dn2 = getDataNodeId("dc1dn2", dc1);
@@ -86,7 +88,7 @@ public class ClusterMapUtilsTest {
     Collection<MockPartitionId> allPartitionIdsMain = Collections.unmodifiableSet(
         new HashSet<>(Arrays.asList(everywhere1, everywhere2, majorDc11, majorDc12, majorDc21, majorDc22)));
     ClusterMapUtils.PartitionSelectionHelper psh =
-        new ClusterMapUtils.PartitionSelectionHelper(allPartitionIdsMain, null);
+        new ClusterMapUtils.PartitionSelectionHelper(allPartitionIdsMain, null, minimumLocalReplicaCount);
 
     String[] dcsToTry = {null, "", dc1, dc2};
     for (String dc : dcsToTry) {
@@ -143,10 +145,10 @@ public class ClusterMapUtilsTest {
         // expected. Nothing to do.
       }
       verifyWritablePartitionsReturned(psh, allPartitionIds, maxReplicasAllSites, everywhere1, everywhere2,
-          maxLocalOneRemote, expectedWritableForMaxLocalOneRemote);
+          maxLocalOneRemote, expectedWritableForMaxLocalOneRemote, dc);
       if (candidate1 != null && candidate2 != null) {
         verifyWritablePartitionsReturned(psh, allPartitionIds, maxLocalOneRemote, candidate1, candidate2,
-            maxReplicasAllSites, new HashSet<>(Arrays.asList(everywhere1, everywhere2)));
+            maxReplicasAllSites, new HashSet<>(Arrays.asList(everywhere1, everywhere2)), dc);
       }
     }
   }
@@ -230,13 +232,19 @@ public class ClusterMapUtilsTest {
    * @param classBeingTested the partition class being tested
    * @param expectedReturnForClassBeingTested the list of partitions that can expected to be returned for
    *                                             {@code classBeingTested}.
+   * @param localDc the local dc name.
    */
   private void verifyGetWritablePartition(ClusterMapUtils.PartitionSelectionHelper psh,
       Set<MockPartitionId> allPartitionIds, String classBeingTested,
-      Set<MockPartitionId> expectedReturnForClassBeingTested) {
+      Set<MockPartitionId> expectedReturnForClassBeingTested, String localDc) {
     assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getWritablePartitions(null));
-    assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassBeingTested,
-        psh.getWritablePartitions(classBeingTested));
+    if (localDc == null || localDc.isEmpty()) {
+      assertCollectionEquals("Partitions returned not as expected", Collections.emptyList(),
+          psh.getWritablePartitions(classBeingTested));
+    } else {
+      assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassBeingTested,
+          psh.getWritablePartitions(classBeingTested));
+    }
   }
 
   /**
@@ -247,14 +255,19 @@ public class ClusterMapUtilsTest {
    * @param classBeingTested the partition class being tested
    * @param expectedReturnForClassBeingTested the list of partitions that can expected to be returned for
    *                                             {@code classBeingTested}.
+   * @param localDc the local dc name.
    */
   private void verifyGetRandomWritablePartition(ClusterMapUtils.PartitionSelectionHelper psh,
       Set<MockPartitionId> allPartitionIds, String classBeingTested,
-      Set<MockPartitionId> expectedReturnForClassBeingTested) {
+      Set<MockPartitionId> expectedReturnForClassBeingTested, String localDc) {
     assertInCollection("Random partition returned not as expected", allPartitionIds,
         psh.getRandomWritablePartition(null, null));
-    assertInCollection("Random partition returned not as expected", expectedReturnForClassBeingTested,
-        psh.getRandomWritablePartition(classBeingTested, null));
+    if (localDc == null || localDc.isEmpty()) {
+      assertNull("Partitions returned not as expected", psh.getRandomWritablePartition(classBeingTested, null));
+    } else {
+      assertInCollection("Random partition returned not as expected", expectedReturnForClassBeingTested,
+          psh.getRandomWritablePartition(classBeingTested, null));
+    }
   }
 
   /**
@@ -269,37 +282,44 @@ public class ClusterMapUtilsTest {
    * {@code classBeingTested} aren't affected).
    * @param expectedReturnForClassNotBeingTested the list of partitions that can expected to be returned for
    *                                             {@code classsNotBeingTested}.
+   * @param localDc the local dc name.
    */
   private void verifyWritablePartitionsReturned(ClusterMapUtils.PartitionSelectionHelper psh,
       Set<MockPartitionId> allPartitionIds, String classBeingTested, MockPartitionId testedPart1,
       MockPartitionId testedPart2, String classsNotBeingTested,
-      Set<MockPartitionId> expectedReturnForClassNotBeingTested) {
+      Set<MockPartitionId> expectedReturnForClassNotBeingTested, String localDc) {
     Set<MockPartitionId> expectedReturnForClassBeingTested = new HashSet<>(Arrays.asList(testedPart1, testedPart2));
     // no problematic scenarios
-    verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested);
-    verifyGetRandomWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested);
+    verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested, localDc);
+    verifyGetRandomWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested,
+        localDc);
 
     //verify excluded partitions behavior in getRandomPartition
     assertNull(psh.getRandomWritablePartition(null, new ArrayList<>(allPartitionIds)));
 
-    checkCaseInsensitivityForPartitionSelectionHelper(psh, false, classBeingTested, expectedReturnForClassBeingTested);
+    if (localDc != null && !localDc.isEmpty()) {
+      checkCaseInsensitivityForPartitionSelectionHelper(psh, false, classBeingTested,
+          expectedReturnForClassBeingTested);
+    }
 
     // one replica of one partition of "classBeingTested" down
     ((MockReplicaId) testedPart1.getReplicaIds().get(0)).markReplicaDownStatus(true);
     allPartitionIds.remove(testedPart1);
     expectedReturnForClassBeingTested.remove(testedPart1);
-    verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested);
+    verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested, localDc);
     //for getRandomWritablePartition one replica being down doesnt change anything unless its a local replica
     expectedReturnForClassBeingTested.add(testedPart1);
-    verifyGetRandomWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested);
+    verifyGetRandomWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested,
+        localDc);
 
     // one replica of other partition of "classBeingTested" down too
     ((MockReplicaId) testedPart2.getReplicaIds().get(0)).markReplicaDownStatus(true);
     allPartitionIds.remove(testedPart2);
     // if both have a replica down, then even though both are unhealthy, they are both returned.
     expectedReturnForClassBeingTested.add(testedPart1);
-    verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested);
-    verifyGetRandomWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested);
+    verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested, localDc);
+    verifyGetRandomWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested,
+        localDc);
 
     if (expectedReturnForClassNotBeingTested != null) {
       assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassNotBeingTested,
@@ -315,15 +335,16 @@ public class ClusterMapUtilsTest {
     ((MockReplicaId) testedPart1.getReplicaIds().get(0)).setSealedState(true);
     allPartitionIds.remove(testedPart1);
     expectedReturnForClassBeingTested.remove(testedPart1);
-    verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested);
-    verifyGetRandomWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested);
+    verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested, localDc);
+    verifyGetRandomWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested,
+        localDc);
 
     // all READ_ONLY
     ((MockReplicaId) testedPart2.getReplicaIds().get(0)).setSealedState(true);
     allPartitionIds.remove(testedPart2);
     expectedReturnForClassBeingTested.remove(testedPart2);
-    verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested);
-    verifyGetRandomWritablePartition(psh, allPartitionIds, classBeingTested, null);
+    verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested, localDc);
+    verifyGetRandomWritablePartition(psh, allPartitionIds, classBeingTested, null, localDc);
 
     if (expectedReturnForClassNotBeingTested != null) {
       assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassNotBeingTested,

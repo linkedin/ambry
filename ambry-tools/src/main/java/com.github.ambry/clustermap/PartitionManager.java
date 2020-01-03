@@ -127,7 +127,7 @@ public class PartitionManager {
       if (fileString == null) {
         manager = (new StaticClusterAgentsFactory(clusterMapConfig, new PartitionLayout(
             new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)), clusterMapConfig),
-            null))).getClusterMap();
+            clusterMapConfig))).getClusterMap();
       } else {
         manager =
             (new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath)).getClusterMap();

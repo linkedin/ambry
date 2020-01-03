@@ -341,6 +341,7 @@ public class ClusterMapUtils {
    * Not thread safe.
    */
   static class PartitionSelectionHelper {
+    private final int minimumLocalReplicaCount;
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
     private Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas;
@@ -349,10 +350,13 @@ public class ClusterMapUtils {
     /**
      * @param allPartitions the list of all {@link PartitionId}s
      * @param localDatacenterName the name of the local datacenter. Can be null if datacenter specific replica counts
-     *                            are not required.
+     * @param minimumLocalReplicaCount the minimum number of replicas in local datacenter. This is used when selecting
+     *                                 writable partitions.
      */
-    PartitionSelectionHelper(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
+    PartitionSelectionHelper(Collection<? extends PartitionId> allPartitions, String localDatacenterName,
+        int minimumLocalReplicaCount) {
       this.localDatacenterName = localDatacenterName;
+      this.minimumLocalReplicaCount = minimumLocalReplicaCount;
       updatePartitions(allPartitions, localDatacenterName);
     }
 
@@ -487,20 +491,23 @@ public class ClusterMapUtils {
      * Returns the partitions belonging to the {@code partitionClass}. Returns all partitions if {@code partitionClass}
      * is {@code null}.
      * @param partitionClass the class of the partitions desired.
-     * @param highestReplicaCountOnly if {@code true}, returns only the partitions with the highest number of replicas
-     *                                in the local datacenter.
+     * @param minimumReplicaCountRequired if {@code true}, returns only the partitions with the number of replicas in
+     *                                    local datacenter that is larger than or equal to minimum required count.
      * @return the partitions belonging to the {@code partitionClass}. Returns all partitions if {@code partitionClass}
      * is {@code null}.
      */
-    private List<PartitionId> getPartitionsInClass(String partitionClass, boolean highestReplicaCountOnly) {
+    private List<PartitionId> getPartitionsInClass(String partitionClass, boolean minimumReplicaCountRequired) {
       List<PartitionId> toReturn = new ArrayList<>();
       if (partitionClass == null) {
         toReturn.addAll(allPartitions);
       } else if (partitionIdsByClassAndLocalReplicaCount.containsKey(partitionClass)) {
         SortedMap<Integer, List<PartitionId>> partitionsByReplicaCount =
             partitionIdsByClassAndLocalReplicaCount.get(partitionClass);
-        if (highestReplicaCountOnly) {
-          toReturn.addAll(partitionsByReplicaCount.get(partitionsByReplicaCount.lastKey()));
+        if (minimumReplicaCountRequired) {
+          // get partitions with replica count >= min replica count specified in ClusterMapConfig
+          for (List<PartitionId> partitionIds : partitionsByReplicaCount.tailMap(minimumLocalReplicaCount).values()) {
+            toReturn.addAll(partitionIds);
+          }
         } else {
           for (List<PartitionId> partitionIds : partitionIdsByClassAndLocalReplicaCount.get(partitionClass).values()) {
             toReturn.addAll(partitionIds);

@@ -216,6 +216,14 @@ public class ClusterMapConfig {
   @Config("clustermap.replica.catchup.target")
   public final int clustermapReplicaCatchupTarget;
 
+  /**
+   * The minimum number of replicas in local datacenter required for a partition to serve PUT request. This is used to
+   * get writable partitions for PUT operation. Any partition with replica count larger than or equal to this number is
+   * acceptable to be considered as a candidate.
+   */
+  @Config("clustermap.writable.partition.min.replica.count")
+  public final int clustermapWritablePartitionMinReplicaCount;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -261,5 +269,6 @@ public class ClusterMapConfig {
         verifiableProperties.getLongInRange("clustermap.replica.catchup.acceptable.lag.bytes", 0L, 0L, Long.MAX_VALUE);
     clustermapReplicaCatchupTarget =
         verifiableProperties.getIntInRange("clustermap.replica.catchup.target", 0, 0, Integer.MAX_VALUE);
+    clustermapWritablePartitionMinReplicaCount = verifiableProperties.getIntInRange("clustermap.writable.partition.min.replica.count", 3, 0, Integer.MAX_VALUE);
   }
 }
