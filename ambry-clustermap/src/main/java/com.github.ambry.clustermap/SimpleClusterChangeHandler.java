@@ -61,7 +61,7 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
   private final HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback;
   private final CountDownLatch routingTableInitLatch = new CountDownLatch(1);
 
-  private ConcurrentHashMap<String, String> partitionNameToResource = new ConcurrentHashMap<>();
+  private volatile ConcurrentHashMap<String, String> partitionNameToResource = new ConcurrentHashMap<>();
   private AtomicReference<RoutingTableSnapshot> routingTableSnapshotRef = new AtomicReference<>();
   private ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
   // A map whose key is ambry datanode and value is a map of partitionId to corresponding replica associated with this datanode

@@ -267,7 +267,6 @@ public class HelixClusterManagerTest {
     Utils.writeJsonObjectToFile(testHardwareLayout1.getHardwareLayout().toJSONObject(), testHardwareLayoutPath);
     DataNode newAddedNode =
         testHardwareLayout1.getAllExistingDataNodes().stream().filter(n -> !initialNodes.contains(n)).findAny().get();
-    System.out.println("new Added Node instance :" + newAddedNode.getHostname() + "_" + newAddedNode.getPort());
     // add a new replica on new node for partitionToTest
     Disk diskOnNewNode = newAddedNode.getDisks().get(0);
     // deliberately change capacity of partition to ensure new replica picks new capacity

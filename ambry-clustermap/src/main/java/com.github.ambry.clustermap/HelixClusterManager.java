@@ -169,11 +169,11 @@ public class HelixClusterManager implements ClusterMap {
             clusterChangeHandler.setRoutingTableSnapshot(routingTableProvider.getRoutingTableSnapshot());
             // the initial routing table change should populate the instanceConfigs. If it's empty that means initial
             // change didn't come and thread should wait on the init latch to ensure routing table snapshot is non-empty
-            if (dcToDcZkInfo.get(dcName).clusterChangeHandler.getRoutingTableSnapshot().getInstanceConfigs().size()
-                == 0) {
+            if (clusterChangeHandler.getRoutingTableSnapshot().getInstanceConfigs().isEmpty()) {
               // Periodic refresh in routing table provider is enabled by default. In worst case, routerUpdater should
               // trigger routing table change within 5 minutes
-              dcToDcZkInfo.get(dcName).clusterChangeHandler.waitForInitNotification();
+              logger.info("Routing table snapshot in {} is currently empty. Waiting for initial notification.", dcName);
+              clusterChangeHandler.waitForInitNotification();
             }
 
             if (!clusterMapConfig.clustermapListenCrossColo && manager != localManager) {

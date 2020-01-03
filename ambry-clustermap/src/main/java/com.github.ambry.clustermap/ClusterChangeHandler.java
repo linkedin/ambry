@@ -25,7 +25,7 @@ import org.apache.helix.spectator.RoutingTableSnapshot;
 
 /**
  * General handler that handles any resource or state changes in cluster. It exposes API(s) for cluster manager to
- * access up-to-date cluster infos. Each data center has its own {@link ClusterChangeHandler}.
+ * access up-to-date cluster info. Each data center has its own {@link ClusterChangeHandler}.
  */
 interface ClusterChangeHandler
     extends InstanceConfigChangeListener, LiveInstanceChangeListener, IdealStateChangeListener,
