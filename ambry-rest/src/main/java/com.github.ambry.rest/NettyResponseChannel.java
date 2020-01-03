@@ -86,7 +86,7 @@ class NettyResponseChannel implements RestResponseChannel {
   private final ChunkedWriteHandler chunkedWriteHandler;
   private final PerformanceConfig perfConfig;
 
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final static Logger logger = LoggerFactory.getLogger(NettyResponseChannel.class);
   private final HttpResponse responseMetadata = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
   // tracks whether onResponseComplete() has been called. Helps make it idempotent and also treats response channel as
   // closed if this is true.
@@ -443,7 +443,7 @@ class NettyResponseChannel implements RestResponseChannel {
 
   /**
    * Builds and sends an error response to the client based on {@code cause}.
-   * @param exception the cause of the request handling failure.
+   *j@param exception the cause of the request handling failure.
    * @return {@code true} if error response was scheduled to be sent. {@code false} otherwise.
    */
   private boolean maybeSendErrorResponse(Exception exception) {
