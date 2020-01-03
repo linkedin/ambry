@@ -23,7 +23,6 @@ import com.github.ambry.commons.BlobId.BlobDataType;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
@@ -35,6 +34,7 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
@@ -108,7 +108,9 @@ public class PutManagerTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
-  private static final String LOCAL_DC = "DC1";
+  // here we set local dc to "DC3" because MockClusterMap uses DC3 as default local dc (where special class partition
+  // has 3 replicas)
+  private static final String LOCAL_DC = "DC3";
   private static final String EXTERNAL_ASSET_TAG = "ExternalAssetTag";
 
   /**

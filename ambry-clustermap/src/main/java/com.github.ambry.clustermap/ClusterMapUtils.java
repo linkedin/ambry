@@ -436,7 +436,6 @@ public class ClusterMapUtils {
     PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
       PartitionId anyWritablePartition = null;
       List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, true);
-
       int workingSize = partitionsInClass.size();
       while (workingSize > 0) {
         int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
