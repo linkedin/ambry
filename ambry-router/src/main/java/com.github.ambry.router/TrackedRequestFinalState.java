@@ -32,8 +32,6 @@ public enum TrackedRequestFinalState {
         return TIMED_OUT;
       case BlobDoesNotExist:
         return NOT_FOUND;
-      case OperationDisabled:
-        return REQUEST_DISABLED;
       default:
         return FAILURE;
     }

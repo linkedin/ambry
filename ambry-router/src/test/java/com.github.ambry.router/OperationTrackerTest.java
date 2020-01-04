@@ -173,6 +173,7 @@ public class OperationTrackerTest {
    *         (1) 3 REQUEST_DISABLED, 2 success and 1 failure (operation should succeed)
    *         (2) 2 REQUEST_DISABLED, 2 failure (operation should fail no matter what results are from remaining replicas)
    *         (3) 1 REQUEST_DISABLED, 1 failure, 4 success (operation should succeed)
+   *         (4) 0 REQUEST_DISABLED, 2 failure, 4 success (operation should fail)
    * Case 4: 1 LEADER, 4 STANDBY, 1 INACTIVE  (this is to mock one replica has completed STANDBY -> INACTIVE)
    *         (1) 2 REQUEST_DISABLED, 1 failure and 2 success (operation should succeed)
    *         (2) 3 REQUEST_DISABLED, 1 failure (operation should fail no matter what result is from remaining replica)
@@ -251,6 +252,18 @@ public class OperationTrackerTest {
       ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
     }
     assertTrue("Operation should succeed", ot.hasSucceeded());
+    // Case 3.4
+    repetitionTracker.clear();
+    ot = getOperationTracker(true, 1, 2, true, Integer.MAX_VALUE, RouterOperation.PutOperation, true);
+    sendRequests(ot, 6, false);
+    for (int i = 0; i < 6; ++i) {
+      if (i < 2) {
+        ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+      } else {
+        ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+      }
+    }
+    assertFalse("Operation should fail", ot.hasSucceeded());
     // Case 4
     // re-populate replica list
     mockPartition.cleanUp();
