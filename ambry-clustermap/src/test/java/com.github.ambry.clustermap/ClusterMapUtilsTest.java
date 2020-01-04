@@ -154,6 +154,43 @@ public class ClusterMapUtilsTest {
   }
 
   /**
+   * Test partition with different number of replicas in local datacenter.
+   */
+  @Test
+  public void partitionWithDifferentReplicaCntTest() {
+    // set up partitions in local dc:
+    // partition1 has 2 replicas; partition2 has 3 replicas; partition3 has 4 replicas
+    final String dc1 = "DC1";
+    final String partitionClass = "default-partition-class";
+    List<MockDataNodeId> dataNodeIdList = new ArrayList<>();
+    for (int i = 1; i <= 4; ++i) {
+      dataNodeIdList.add(getDataNodeId("node" + i, dc1));
+    }
+    MockPartitionId partition1 = new MockPartitionId(1, partitionClass, dataNodeIdList.subList(0, 2), 0);
+    MockPartitionId partition2 = new MockPartitionId(2, partitionClass, dataNodeIdList.subList(0, 3), 0);
+    MockPartitionId partition3 = new MockPartitionId(3, partitionClass, dataNodeIdList.subList(0, 4), 0);
+    List<MockPartitionId> allPartitions = Arrays.asList(partition1, partition2, partition3);
+    int minimumLocalReplicaCount = 3;
+    ClusterMapUtils.PartitionSelectionHelper psh =
+        new ClusterMapUtils.PartitionSelectionHelper(allPartitions, dc1, minimumLocalReplicaCount);
+    // verify get all partitions return correct result
+    assertEquals("Returned partitions are not expected", allPartitions, psh.getPartitions(null));
+    // verify get writable partitions return partition2 and partition3 only
+    assertEquals("Returned writable partitions are not expected", Arrays.asList(partition2, partition3),
+        psh.getWritablePartitions(partitionClass));
+    assertNotSame("Get random writable partition shouldn't return partition1", partition1,
+        psh.getRandomWritablePartition(partitionClass, null));
+
+    // create another partition selection helper with minimumLocalReplicaCount = 4
+    minimumLocalReplicaCount = 4;
+    psh = new ClusterMapUtils.PartitionSelectionHelper(allPartitions, dc1, minimumLocalReplicaCount);
+    assertEquals("Returned writable partitions are not expected", Arrays.asList(partition3),
+        psh.getWritablePartitions(partitionClass));
+    assertEquals("Get random writable partition should return partition3 only", partition3,
+        psh.getRandomWritablePartition(partitionClass, null));
+  }
+
+  /**
    * @param hostname the host name of the {@link MockDataNodeId}.
    * @param dc the name of the dc of the {@link MockDataNodeId}.
    * @return a {@link MockDataNodeId} based on {@code hostname} and {@code dc}.

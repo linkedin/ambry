@@ -368,6 +368,7 @@ public class ClusterMapUtils {
      */
     void updatePartitions(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
       this.allPartitions = allPartitions;
+      // todo when new partitions added into clustermap, dynamically update these two maps.
       partitionIdsByClassAndLocalReplicaCount = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       partitionIdToLocalReplicas = new HashMap<>();
       for (PartitionId partition : allPartitions) {
