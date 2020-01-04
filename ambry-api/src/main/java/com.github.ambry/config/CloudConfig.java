@@ -18,6 +18,7 @@ package com.github.ambry.config;
  */
 public class CloudConfig {
 
+  public static final String CLOUD_IS_VCR = "cloud.is.vcr";
   public static final String VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS = "virtual.replicator.cluster.factory.class";
   public static final String CLOUD_DESTINATION_FACTORY_CLASS = "cloud.destination.factory.class";
   public static final String VCR_CLUSTER_ZK_CONNECT_STRING = "vcr.cluster.zk.connect.string";
@@ -55,6 +56,13 @@ public class CloudConfig {
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
   public static final String DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS =
       "com.github.ambry.clustermap.HelixClusterSpectatorFactory";
+
+  /**
+   * True for VCR node, false for live serving node.
+   */
+  @Config(CLOUD_IS_VCR)
+  @Default("false")
+  public final boolean cloudIsVcr;
 
   /**
    * The virtual replicator cluster factory class name.
@@ -183,6 +191,8 @@ public class CloudConfig {
   @Default("3128")
   public final int vcrProxyPort;
 
+  // TODO: int maxAttempts, long defaultRetryDelay
+
   /**
    * The class used to instantiate {@link com.github.ambry.clustermap.ClusterSpectatorFactory}
    */
@@ -192,6 +202,7 @@ public class CloudConfig {
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
+    cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
     virtualReplicatorClusterFactoryClass = verifiableProperties.getString(VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS,
         DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS);
     cloudDestinationFactoryClass =

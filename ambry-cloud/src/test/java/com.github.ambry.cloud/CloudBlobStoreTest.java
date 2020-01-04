@@ -59,11 +59,13 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -74,12 +76,15 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static com.github.ambry.commons.BlobId.*;
 import static com.github.ambry.replication.ReplicationTest.*;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.eq;
@@ -89,8 +94,10 @@ import static org.mockito.Mockito.*;
 /**
  * Test class testing behavior of CloudBlobStore class.
  */
+@RunWith(Parameterized.class)
 public class CloudBlobStoreTest {
 
+  private final boolean isVcr;
   private CloudBlobStore store;
   private CloudDestination dest;
   private PartitionId partitionId;
@@ -102,8 +109,17 @@ public class CloudBlobStoreTest {
   private long operationTime = System.currentTimeMillis();
   private final int defaultCacheLimit = 1000;
 
-  @Before
-  public void setup() throws Exception {
+  /**
+   * Run in both VCR and live serving mode.
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  public CloudBlobStoreTest(boolean isVcr) throws Exception {
+    this.isVcr = isVcr;
     partitionId = new MockPartitionId();
     clusterMap = new MockClusterMap();
   }
@@ -145,6 +161,7 @@ public class CloudBlobStoreTest {
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("clustermap.resolve.hostnames", "false");
     properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(64));
+    properties.setProperty(CloudConfig.CLOUD_IS_VCR, String.valueOf(isVcr));
   }
 
   /** Test the CloudBlobStore put method. */
@@ -182,12 +199,18 @@ public class CloudBlobStoreTest {
     assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
     assertEquals("Unexpected encryption count", expectedEncryptions, vcrMetrics.blobEncryptionCount.getCount());
 
-    // Try to put the same blobs again (e.g. from another replica), should already be cached.
+    // Try to put the same blobs again (e.g. from another replica).
+    // If isVcr is true, they should already be cached.
     messageWriteSet.resetBuffers();
     store.put(messageWriteSet);
+    if (!isVcr) {
+      expectedUploads *= 2;
+      expectedBytesUploaded *= 2;
+    }
+    int expectedSkips = isVcr ? expectedUploads : 0;
     assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
     assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
-    assertEquals("Unexpected skipped count", expectedUploads, vcrMetrics.blobUploadSkippedCount.getCount());
+    assertEquals("Unexpected skipped count", expectedSkips, vcrMetrics.blobUploadSkippedCount.getCount());
   }
 
   /** Test the CloudBlobStore delete method. */
@@ -203,9 +226,10 @@ public class CloudBlobStoreTest {
     store.delete(messageWriteSet);
     verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime));
 
-    // Call second time, should all be cached causing deletions to be skipped.
+    // Call second time.  If isVcr, should be cached causing deletions to be skipped.
     store.delete(messageWriteSet);
-    verify(dest, times(count)).deleteBlob(any(BlobId.class), eq(operationTime));
+    int expectedCount = isVcr ? count : count * 2;
+    verify(dest, times(expectedCount)).deleteBlob(any(BlobId.class), eq(operationTime));
   }
 
   /** Test the CloudBlobStore updateTtl method. */
@@ -222,9 +246,10 @@ public class CloudBlobStoreTest {
     store.updateTtl(messageWriteSet);
     verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong());
 
-    // Call second time, should all be cached causing updates to be skipped.
+    // Call second time, If isVcr, should be cached causing updates to be skipped.
     store.updateTtl(messageWriteSet);
-    verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong());
+    int expectedCount = isVcr ? count : count * 2;
+    verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong());
   }
 
   /** Test the CloudBlobStore findMissingKeys method. */
@@ -302,6 +327,8 @@ public class CloudBlobStoreTest {
   /** Test CloudBlobStore cache eviction. */
   @Test
   public void testCacheEvictionOrder() throws Exception {
+    assumeTrue(isVcr);
+
     // setup store with small cache size
     int cacheSize = 10;
     long blobSize = 10;
@@ -402,6 +429,41 @@ public class CloudBlobStoreTest {
     } catch (StoreException e) {
       assertEquals(StoreErrorCodes.IOError, e.getErrorCode());
     }
+  }
+
+  /* Test retry behavior */
+  @Test
+  public void testExceptionRetry() throws Exception {
+    assumeTrue(!isVcr);
+    CloudDestination exDest = mock(CloudDestination.class);
+    long retryDelay = 5;
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+    BlobId blobId = addBlobToSet(messageWriteSet, 10, Utils.Infinite_Time, refAccountId, refContainerId, true);
+    List<StoreKey> keys = Collections.singletonList(blobId);
+    CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, operationTime, Utils.Infinite_Time, 1024, null);
+    CloudStorageException retryableException = new CloudStorageException("Server unavailable", null, true, retryDelay);
+    when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(retryableException)
+        .thenReturn(true);
+    when(exDest.deleteBlob(any(BlobId.class), anyLong())).thenThrow(retryableException).thenReturn(true);
+    when(exDest.getBlobMetadata(anyList())).thenThrow(retryableException).thenReturn(Collections.singletonMap(metadata.getId(), metadata));
+    doThrow(retryableException).doNothing().when(exDest).downloadBlob(any(BlobId.class), any());
+    Properties props = new Properties();
+    setBasicProperties(props);
+    props.setProperty(CloudConfig.VCR_REQUIRE_ENCRYPTION, "false");
+    props.setProperty(CloudConfig.CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
+        TestCloudBlobCryptoAgentFactory.class.getName());
+    vcrMetrics = new VcrMetrics(new MetricRegistry());
+    CloudBlobStore exStore =
+        new CloudBlobStore(new VerifiableProperties(props), partitionId, exDest, clusterMap, vcrMetrics);
+    exStore.start();
+
+    // Run all three operations, they should be retried and succeed second time.
+    exStore.put(messageWriteSet);
+    exStore.delete(messageWriteSet);
+    exStore.get(keys, EnumSet.noneOf(StoreGetOptions.class));
+    exStore.downloadBlob(metadata, blobId, new ByteArrayOutputStream());
+    assertEquals("Wrong retry count", 4, vcrMetrics.retryCount.getCount());
+    assertEquals("Wrong wait count", 4, vcrMetrics.retryWaitTime.getCount());
   }
 
   /**
