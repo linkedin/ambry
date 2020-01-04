@@ -39,8 +39,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
@@ -231,6 +229,81 @@ public class HelixClusterManagerTest {
     }
     for (com.github.ambry.utils.TestUtils.ZkInfo zkInfo : dcsToZkInfo.values()) {
       zkInfo.shutdown();
+    }
+  }
+
+  /**
+   * Test the case where replicas from same partition have different capacities (which should block the startup)
+   * @throws Exception
+   */
+  @Test
+  public void inconsistentReplicaCapacityTest() throws Exception {
+    assumeTrue(listenCrossColo);
+    clusterManager.close();
+    metricRegistry = new MetricRegistry();
+    String staticClusterName = "TestOnly";
+    File tempDir = Files.createTempDirectory("helixClusterManagerTest").toFile();
+    tempDir.deleteOnExit();
+    String tempDirPath = tempDir.getAbsolutePath();
+    String testHardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
+    String testPartitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
+    String testZkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
+
+    // initialize test hardware layout and partition layout, create mock helix cluster for testing.
+    TestHardwareLayout testHardwareLayout1 = constructInitialHardwareLayoutJSON(staticClusterName);
+    TestPartitionLayout testPartitionLayout1 = constructInitialPartitionLayoutJSON(testHardwareLayout1, 3, localDc);
+    JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
+    Utils.writeJsonObjectToFile(zkJson, testZkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout1.getHardwareLayout().toJSONObject(), testHardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
+    MockHelixCluster testCluster =
+        new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath);
+
+    List<DataNode> initialNodes = testHardwareLayout1.getAllExistingDataNodes();
+    Partition partitionToTest = (Partition) testPartitionLayout1.getPartitionLayout().getPartitions(null).get(0);
+
+    // add a new node into cluster
+    testHardwareLayout1.addNewDataNodes(1);
+    Utils.writeJsonObjectToFile(testHardwareLayout1.getHardwareLayout().toJSONObject(), testHardwareLayoutPath);
+    DataNode newAddedNode =
+        testHardwareLayout1.getAllExistingDataNodes().stream().filter(n -> !initialNodes.contains(n)).findAny().get();
+    // add a new replica on new node for partitionToTest
+    Disk diskOnNewNode = newAddedNode.getDisks().get(0);
+    // deliberately change capacity of partition to ensure new replica picks new capacity
+    partitionToTest.replicaCapacityInBytes += 1;
+    partitionToTest.addReplica(new Replica(partitionToTest, diskOnNewNode, testHardwareLayout1.clusterMapConfig));
+    Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
+    testCluster.upgradeWithNewHardwareLayout(testHardwareLayoutPath);
+    testCluster.upgradeWithNewPartitionLayout(testPartitionLayoutPath);
+
+    // reset hardware/partition layout, this also resets replica capacity of partitionToTest. However, it won't touch
+    // instanceConfig of new added node because it is not in hardware layout. So, replica on new added node still has
+    // larger capacity. We use this particular replica to mock inconsistent replica capacity case.
+    // Note that instanceConfig of new node is still kept in cluster because upgrading cluster didn't force remove
+    // instanceConfig that not present in static clustermap.
+    testHardwareLayout1 = constructInitialHardwareLayoutJSON(staticClusterName);
+    testPartitionLayout1 = constructInitialPartitionLayoutJSON(testHardwareLayout1, 3, localDc);
+    Utils.writeJsonObjectToFile(testHardwareLayout1.getHardwareLayout().toJSONObject(), testHardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
+    testCluster.upgradeWithNewHardwareLayout(testHardwareLayoutPath);
+    testCluster.upgradeWithNewPartitionLayout(testPartitionLayoutPath);
+
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", hostname);
+    props.setProperty("clustermap.cluster.name", "AmbryTest-" + staticClusterName);
+    props.setProperty("clustermap.datacenter.name", localDc);
+    props.setProperty("clustermap.port", Integer.toString(portNum));
+    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    // instantiate HelixClusterManager and its initialization should fail because validation on replica capacity cannot
+    // succeed (The aforementioned replica has larger capacity than its peers)
+    try {
+      new HelixClusterManager(clusterMapConfig, selfInstanceName, new MockHelixManagerFactory(testCluster, null, null),
+          metricRegistry);
+      fail("Initialization should fail due to inconsistent replica capacity");
+    } catch (IOException e) {
+      // expected
     }
   }
 
@@ -515,8 +588,7 @@ public class HelixClusterManagerTest {
     helixCluster.addNewResource(resourceName, idealState, localDc);
     verifyInitialClusterChanges(helixClusterManager, helixCluster, new String[]{localDc});
     // localDc should have one more partition compared with remoteDc
-    Map<String, ConcurrentHashMap<String, String>> partitionToResource =
-        (helixClusterManager).getPartitionToResourceMap();
+    Map<String, Map<String, String>> partitionToResource = (helixClusterManager).getPartitionToResourceMap();
     assertEquals("localDc should have one more partition", partitionToResource.get(localDc).size(),
         partitionToResource.get(remoteDc).size() + 1);
     assertTrue(partitionToResource.get(localDc).containsKey(partitionName) && !partitionToResource.get(remoteDc)
@@ -544,8 +616,8 @@ public class HelixClusterManagerTest {
     metricRegistry = new MetricRegistry();
     HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
         new MockHelixManagerFactory(helixCluster, null, null), metricRegistry);
-    Map<String, AtomicReference<RoutingTableSnapshot>> snapshotsByDc = helixClusterManager.getRoutingTableSnapshots();
-    RoutingTableSnapshot localDcSnapshot = snapshotsByDc.get(localDc).get();
+    Map<String, RoutingTableSnapshot> snapshotsByDc = helixClusterManager.getRoutingTableSnapshots();
+    RoutingTableSnapshot localDcSnapshot = snapshotsByDc.get(localDc);
 
     Set<InstanceConfig> instanceConfigsInSnapshot = new HashSet<>(localDcSnapshot.getInstanceConfigs());
     Set<InstanceConfig> instanceConfigsInCluster =
@@ -566,7 +638,7 @@ public class HelixClusterManagerTest {
     mockHelixAdmin.bringInstanceDown(instance);
     mockHelixAdmin.triggerRoutingTableNotification();
     int sleepCnt = 0;
-    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).get().getLiveInstances().size()
+    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).getLiveInstances().size()
         != initialLiveCnt - 1) {
       assertTrue("Routing table change (triggered by bringing down node) didn't come within 1 sec", sleepCnt < 5);
       Thread.sleep(200);
@@ -576,8 +648,7 @@ public class HelixClusterManagerTest {
     mockHelixAdmin.bringInstanceUp(instance);
     mockHelixAdmin.triggerRoutingTableNotification();
     sleepCnt = 0;
-    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).get().getLiveInstances().size()
-        != initialLiveCnt) {
+    while (helixClusterManager.getRoutingTableSnapshots().get(localDc).getLiveInstances().size() != initialLiveCnt) {
       assertTrue("Routing table change (triggered by bringing up node) didn't come within 1 sec", sleepCnt < 5);
       Thread.sleep(200);
       sleepCnt++;
@@ -1146,7 +1217,7 @@ public class HelixClusterManagerTest {
   private void verifyInitialClusterChanges(HelixClusterManager clusterManager, MockHelixCluster helixCluster,
       String[] dcs) {
     // get in-mem data structures populated based on initial notification
-    Map<String, ConcurrentHashMap<String, String>> partitionToResouceByDc = clusterManager.getPartitionToResourceMap();
+    Map<String, Map<String, String>> partitionToResouceByDc = clusterManager.getPartitionToResourceMap();
     Map<String, Set<AmbryDataNode>> dataNodesByDc = clusterManager.getDcToDataNodesMap();
 
     for (String dc : dcs) {
