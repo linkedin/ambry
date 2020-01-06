@@ -248,6 +248,7 @@ public class RestRequestMetricsTracker {
     if (metrics != null) {
       if (metricsRecorded.compareAndSet(false, true)) {
         metrics.operationRate.mark();
+        metrics.operationCount.inc();
         metrics.nioRequestProcessingTimeInMs.update(nioMetricsTracker.requestProcessingTimeInMs.get());
         metrics.nioResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
         metrics.nioRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);

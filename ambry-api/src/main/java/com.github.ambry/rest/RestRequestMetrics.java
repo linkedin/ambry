@@ -39,6 +39,7 @@ public class RestRequestMetrics {
 
   static final String OPERATION_RATE_SUFFIX = "Rate";
   static final String OPERATION_ERROR_SUFFIX = "Error";
+  static final String OPERATION_COUNT_SUFFIX = "Count";
 
   static final String UNSATISFIED_REQUEST_COUNT_SUFFIX = "UnsatisfiedRequestCount";
   static final String SATISFIED_REQUEST_COUNT_SUFFIX = "SatisfiedRequestCount";
@@ -56,6 +57,7 @@ public class RestRequestMetrics {
 
   final Meter operationRate;
   final Counter operationError;
+  final Counter operationCount;
   final Counter unsatisfiedRequestCount;
   final Counter satisfiedRequestCount;
 
@@ -95,6 +97,7 @@ public class RestRequestMetrics {
 
     operationRate = metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + OPERATION_RATE_SUFFIX));
     operationError = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + OPERATION_ERROR_SUFFIX));
+    operationCount = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + OPERATION_COUNT_SUFFIX));
 
     unsatisfiedRequestCount =
         metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + UNSATISFIED_REQUEST_COUNT_SUFFIX));
