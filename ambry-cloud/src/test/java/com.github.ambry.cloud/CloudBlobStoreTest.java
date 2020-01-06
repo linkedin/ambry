@@ -275,14 +275,16 @@ public class CloudBlobStoreTest {
     verify(dest).getBlobMetadata(anyList());
     assertEquals("Wrong number of missing keys", count, missingKeys.size());
 
-    // Add keys to cache and rerun (should be cached)
-    for (StoreKey storeKey : keys) {
-      store.addToCache(storeKey.getID(), CloudBlobStore.BlobState.CREATED);
+    if (isVcr) {
+      // Add keys to cache and rerun (should be cached)
+      for (StoreKey storeKey : keys) {
+        store.addToCache(storeKey.getID(), CloudBlobStore.BlobState.CREATED);
+      }
+      missingKeys = store.findMissingKeys(keys);
+      assertTrue("Expected no missing keys", missingKeys.isEmpty());
+      // getBlobMetadata should not have been called a second time.
+      verify(dest).getBlobMetadata(anyList());
     }
-    missingKeys = store.findMissingKeys(keys);
-    assertTrue("Expected no missing keys", missingKeys.isEmpty());
-    // getBlobMetadata should not have been called a second time.
-    verify(dest).getBlobMetadata(anyList());
   }
 
   /** Test the CloudBlobStore findEntriesSince method. */
