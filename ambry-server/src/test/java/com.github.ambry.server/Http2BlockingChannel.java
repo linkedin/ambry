@@ -44,12 +44,15 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * A HTTP2 implementation of {@link ConnectedChannel}
  */
 public class Http2BlockingChannel implements ConnectedChannel {
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
   private Channel channel;
   private Http2ResponseHandler http2ResponseHandler;
   private String hostName;
@@ -78,7 +81,7 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
     // Start the client.
     channel = b.connect().syncUninterruptibly().channel();
-    System.out.println("Connected to remote host");
+    logger.info("Connected to remote host");
   }
 
   @Override

@@ -23,6 +23,8 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http2.HttpConversionUtil;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -31,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 @ChannelHandler.Sharable
 public class Http2ResponseHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
 
+  protected final Logger logger = LoggerFactory.getLogger(getClass());
   private StreamResult streamResult;
 
   public Http2ResponseHandler() {
@@ -46,7 +49,7 @@ public class Http2ResponseHandler extends SimpleChannelInboundHandler<FullHttpRe
    * @see Http2ResponseHandler#awaitResponses(long, TimeUnit)
    */
   public void put(ChannelFuture writeFuture, ChannelPromise promise) {
-    streamResult  = new StreamResult(writeFuture, promise);
+    streamResult = new StreamResult(writeFuture, promise);
   }
 
   /**
@@ -78,15 +81,11 @@ public class Http2ResponseHandler extends SimpleChannelInboundHandler<FullHttpRe
   protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
     Integer streamId = msg.headers().getInt(HttpConversionUtil.ExtensionHeaderNames.STREAM_ID.text());
     if (streamId == null) {
-      System.err.println("Http2ResponseHandler unexpected message received: " + msg);
+      logger.error("Http2ResponseHandler unexpected message received: " + msg);
       return;
     }
-    System.out.println("received response");
-    if (streamResult == null) {
-      System.err.println("Message received for unknown stream id " + streamId);
-    } else {
-      streamResult.setByteBuf(msg.content().retainedDuplicate());
-    }
+    logger.trace("Stream response received.");
+    streamResult.setByteBuf(msg.content().retainedDuplicate());
     streamResult.getChannelPromise().setSuccess();
   }
 
