@@ -585,6 +585,13 @@ class PutOperation {
   }
 
   /**
+   * @return a snapshot of current put chunks
+   */
+  List<PutChunk> getPutChunks() {
+    return new ArrayList<>(putChunks);
+  }
+
+  /**
    * Called whenever the channel has data but no free or building chunk is available to be filled.
    */
   private void maybeStartTrackingWaitForChunkTime() {
@@ -1065,6 +1072,13 @@ class PutOperation {
     }
 
     /**
+     * @return operation tracker used by current put chunk
+     */
+    OperationTracker getOperationTrackerInUse() {
+      return operationTracker;
+    }
+
+    /**
      * Prepare this chunk for building, that is, for being filled with data from the channel.
      * @param chunkIndex the position in the overall blob that this chunk is going to  be in.
      * @param size size to allocate memory for the buffer that will hold the data for this chunk.
@@ -1279,7 +1293,7 @@ class PutOperation {
         int correlationId = entry.getKey();
         ChunkPutRequestInfo info = entry.getValue();
         if (time.milliseconds() - info.startTimeMs > routerConfig.routerRequestTimeoutMs) {
-          onErrorResponse(info.replicaId);
+          onErrorResponse(info.replicaId, TrackedRequestFinalState.FAILURE);
           logger.debug("PutRequest with correlationId {} in flight has expired for replica {} ", correlationId,
               info.replicaId.getDataNodeId());
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
@@ -1383,11 +1397,13 @@ class PutOperation {
       routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId()).putRequestLatencyMs.update(
           requestLatencyMs);
       boolean isSuccessful;
+      TrackedRequestFinalState putRequestFinalState = null;
       if (responseInfo.getError() != null) {
         logger.debug("PutRequest with response correlationId {} timed out for replica {} ", correlationId,
             chunkPutRequestInfo.replicaId.getDataNodeId());
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
         isSuccessful = false;
+        putRequestFinalState = TrackedRequestFinalState.FAILURE;
       } else {
         if (putResponse == null) {
           logger.debug(
@@ -1396,6 +1412,7 @@ class PutOperation {
           setChunkException(new RouterException("Response deserialization received an unexpected error",
               RouterErrorCode.UnexpectedInternalError));
           isSuccessful = false;
+          putRequestFinalState = TrackedRequestFinalState.FAILURE;
         } else {
           if (putResponse.getCorrelationId() != correlationId) {
             // The NetworkClient associates a response with a request based on the fact that only one request is sent
@@ -1408,6 +1425,7 @@ class PutOperation {
             setChunkException(
                 new RouterException("Unexpected internal error", RouterErrorCode.UnexpectedInternalError));
             isSuccessful = false;
+            putRequestFinalState = TrackedRequestFinalState.FAILURE;
             // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
             ServerErrorCode putError = putResponse.getError();
@@ -1421,6 +1439,9 @@ class PutOperation {
                   chunkPutRequestInfo.replicaId, putResponse.getError(), putResponse.getCorrelationId(), blobId);
               processServerError(putResponse.getError());
               isSuccessful = false;
+              putRequestFinalState =
+                  putError == ServerErrorCode.Temporarily_Disabled ? TrackedRequestFinalState.REQUEST_DISABLED
+                      : TrackedRequestFinalState.FAILURE;
             }
           }
         }
@@ -1433,7 +1454,7 @@ class PutOperation {
           routerMetrics.crossColoSuccessCount.inc();
         }
       } else {
-        onErrorResponse(chunkPutRequestInfo.replicaId);
+        onErrorResponse(chunkPutRequestInfo.replicaId, putRequestFinalState);
       }
       checkAndMaybeComplete();
     }
@@ -1441,9 +1462,11 @@ class PutOperation {
     /**
      * Perform the necessary actions when a request to a replica fails.
      * @param replicaId the {@link ReplicaId} associated with the failed response.
+     * @param putRequestFinalState the {@link RouterErrorCode} associated with failed response.
      */
-    private void onErrorResponse(ReplicaId replicaId) {
-      operationTracker.onResponse(replicaId, TrackedRequestFinalState.FAILURE);
+    private void onErrorResponse(ReplicaId replicaId, TrackedRequestFinalState putRequestFinalState) {
+      // For Put, final state could be TIMED_OUT, REQUEST_DISABLED and FAILURE
+      operationTracker.onResponse(replicaId, putRequestFinalState);
       routerMetrics.routerRequestErrorCount.inc();
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestErrorCount.inc();
     }

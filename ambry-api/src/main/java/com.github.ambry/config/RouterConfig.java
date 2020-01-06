@@ -97,6 +97,8 @@ public class RouterConfig {
   public static final String ROUTER_GET_BLOB_OPERATION_SHARE_MEMORY = "router.get.blob.operation.share.memory";
   public static final String ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED =
       "router.get.eligible.replicas.by.state.enabled";
+  public static final String ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET = "router.put.use.dynamic.success.target";
+
   /**
    * Number of independent scaling units for the router.
    */
@@ -454,6 +456,13 @@ public class RouterConfig {
   public final boolean routerGetEligibleReplicasByStateEnabled;
 
   /**
+   * Whether to use dynamic success target for put operation in router.
+   */
+  @Config(ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET)
+  @Default("false")
+  public final boolean routerPutUseDynamicSuccessTarget;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -552,5 +561,6 @@ public class RouterConfig {
     routerGetBlobOperationShareMemory = verifiableProperties.getBoolean(ROUTER_GET_BLOB_OPERATION_SHARE_MEMORY, false);
     routerGetEligibleReplicasByStateEnabled =
         verifiableProperties.getBoolean(ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED, false);
+    routerPutUseDynamicSuccessTarget = verifiableProperties.getBoolean(ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET, false);
   }
 }

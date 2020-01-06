@@ -26,9 +26,9 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -180,6 +180,54 @@ public class PutOperationTest {
     op.handleResponse(responseInfo, putResponse);
     responseInfo.release();
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+  }
+
+  /**
+   * Test PUT operation that handles ServerErrorCode = Temporarily_Disabled and Replica_Unavailable
+   * @throws Exception
+   */
+  @Test
+  public void testHandleResponseWithServerErrors() throws Exception {
+    int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize * numChunks];
+    random.nextBytes(content);
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, new FutureResult<>(),
+            null, new RouterCallback(new MockNetworkClient(), new ArrayList<>()), null, null, null, null, time,
+            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    // fill chunks would end up filling the maximum number of PutChunks.
+    op.fillChunks();
+    // poll to populate request
+    op.poll(requestRegistrationCallback);
+    // make 1st request of first chunk encounter Temporarily_Disabled
+    mockServer.setServerErrorForAllRequests(ServerErrorCode.Temporarily_Disabled);
+    ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0));
+    PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+        Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
+    op.handleResponse(responseInfo, putResponse);
+    PutOperation.PutChunk putChunk = op.getPutChunks().get(0);
+    SimpleOperationTracker operationTracker = (SimpleOperationTracker) putChunk.getOperationTrackerInUse();
+    Assert.assertEquals("Disabled count should be 1", 1, operationTracker.getDisabledCount());
+    Assert.assertEquals("Disabled count should be 0", 0, operationTracker.getFailedCount());
+    // make 2nd request of first chunk encounter Replica_Unavailable
+    mockServer.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+    responseInfo = getResponseInfo(requestInfos.get(1));
+    putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+        Utils.createDataInputStreamFromBuffer(responseInfo.getResponse())) : null;
+    op.handleResponse(responseInfo, putResponse);
+    putChunk = op.getPutChunks().get(0);
+    Assert.assertEquals("Failure count should be 1", 1,
+        ((SimpleOperationTracker) putChunk.getOperationTrackerInUse()).getFailedCount());
+    mockServer.resetServerErrors();
   }
 
   /**
