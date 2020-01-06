@@ -23,7 +23,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.HelixControllerManager;
@@ -408,7 +408,7 @@ public class VcrBackupTest {
     TestUtils.RANDOM.nextBytes(data);
 
     Port port = new Port(dataNode.getPort(), PortType.PLAINTEXT);
-    BlockingChannel channel = ServerTestUtil.getBlockingChannelBasedOnPortType(port, "localhost", null, null);
+    ConnectedChannel channel = ServerTestUtil.getBlockingChannelBasedOnPortType(port, "localhost", null, null);
     channel.connect();
     CountDownLatch latch = new CountDownLatch(1);
     DirectSender runnable =

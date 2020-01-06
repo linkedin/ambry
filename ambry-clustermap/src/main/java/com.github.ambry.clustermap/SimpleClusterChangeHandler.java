@@ -277,10 +277,11 @@ public class SimpleClusterChangeHandler implements ClusterChangeHandler {
           long instanceXid = getXid(instanceConfig);
           if (instanceName.equals(selfInstanceName) || instanceXid <= currentXid.get()) {
             logger.info("Adding node {} and its disks and replicas", instanceName);
+            // HTTP2 port null for now, until it's populated to Helix
             AmbryDataNode datanode =
                 new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
                     Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig),
-                    instanceXid, helixClusterManagerCallback);
+                    null, instanceXid, helixClusterManagerCallback);
             initializeDisksAndReplicasOnNode(datanode, instanceConfig);
             instanceNameToAmbryDataNode.put(instanceName, datanode);
           } else {

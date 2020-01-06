@@ -20,6 +20,7 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import java.io.DataInputStream;
@@ -37,7 +38,7 @@ import org.junit.Assert;
  */
 class DirectSender implements Runnable {
 
-  BlockingChannel channel;
+  ConnectedChannel channel;
   List<BlobId> blobIds;
   byte[] data;
   byte[] usermetadata;
@@ -56,7 +57,7 @@ class DirectSender implements Runnable {
    * @param encryptionKey encryption key to encrypt blobs.
    * @param endLatch {@link CountDownLatch} object to signal all blobs have been uploaded.
    */
-  public DirectSender(MockCluster cluster, BlockingChannel channel, int totalBlobsToPut, byte[] data,
+  public DirectSender(MockCluster cluster, ConnectedChannel channel, int totalBlobsToPut, byte[] data,
       byte[] usermetadata, BlobProperties blobProperties, byte[] encryptionKey, CountDownLatch endLatch) {
     MockClusterMap clusterMap = cluster.getClusterMap();
     this.channel = channel;
@@ -86,7 +87,7 @@ class DirectSender implements Runnable {
    * @param encryptionKey encryption key to encrypt blobs.
    * @param endLatch {@link CountDownLatch} object to signal all blobs have been uploaded.
    */
-  public DirectSender(BlockingChannel channel, List<BlobId> blobIds, byte[] data, byte[] usermetadata,
+  public DirectSender(ConnectedChannel channel, List<BlobId> blobIds, byte[] data, byte[] usermetadata,
       BlobProperties blobProperties, byte[] encryptionKey, CountDownLatch endLatch) {
     this.channel = channel;
     this.data = data;

@@ -153,6 +153,16 @@ public class MockConnectionPool implements ConnectionPool {
     }
 
     @Override
+    public void connect() throws IOException {
+
+    }
+
+    @Override
+    public void disconnect() throws IOException {
+
+    }
+
+    @Override
     public void send(Send request) {
       if (request instanceof ReplicaMetadataRequest) {
         metadataRequest = (ReplicaMetadataRequest) request;

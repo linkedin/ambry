@@ -70,6 +70,7 @@ public class BlockingChannel implements ConnectedChannel {
    *
    * @throws IOException
    */
+  @Override
   public void connect() throws IOException {
     synchronized (this) {
       if (!connected) {
@@ -116,6 +117,7 @@ public class BlockingChannel implements ConnectedChannel {
     /**
      * Disconnect readChannel, writeChannel and close underlying Socket
      */
+    @Override
     public void disconnect() {
     synchronized (this) {
       try {

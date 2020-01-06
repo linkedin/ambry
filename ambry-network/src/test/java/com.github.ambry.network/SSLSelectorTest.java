@@ -22,7 +22,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
-import io.netty.buffer.ByteBuf;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;

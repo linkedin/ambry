@@ -220,6 +220,7 @@ project(':ambry-server') {
                 project(':ambry-commons'),
                 project(':ambry-store'),
                 project(':ambry-utils'),
+                project(':ambry-rest'),
                 project(':ambry-replication')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"

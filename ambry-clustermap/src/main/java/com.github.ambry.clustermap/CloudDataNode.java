@@ -95,6 +95,16 @@ public class CloudDataNode implements DataNodeId {
   }
 
   @Override
+  public int getHttp2Port() {
+    return -1;
+  }
+
+  @Override
+  public boolean hasHttp2Port() {
+    return false;
+  }
+
+  @Override
   public Port getPortToConnectTo() {
     return isSslEnabled ? sslPort : plainTextPort;
   }

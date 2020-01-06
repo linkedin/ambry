@@ -111,6 +111,16 @@ class DataNode implements DataNodeId {
     return ports.containsKey(PortType.SSL);
   }
 
+  @Override
+  public int getHttp2Port() {
+    return -1;
+  }
+
+  @Override
+  public boolean hasHttp2Port() {
+    return false;
+  }
+
   /**
    * Gets the DataNode's SSL port number.
    *

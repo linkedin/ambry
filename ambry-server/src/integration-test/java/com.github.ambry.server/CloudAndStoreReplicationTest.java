@@ -30,7 +30,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
-import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.GetOption;
@@ -271,7 +271,7 @@ public class CloudAndStoreReplicationTest {
    * @throws IOException on {@link IOException}
    */
   private void testGetOnServerNode(Map<BlobId, Integer> blobIdToSizeMap, DataNodeId node) throws IOException {
-    BlockingChannel channel =
+    ConnectedChannel channel =
         ServerTestUtil.getBlockingChannelBasedOnPortType(node.getPortToConnectTo(), node.getHostname(), null, null);
     channel.connect();
 
@@ -327,7 +327,7 @@ public class CloudAndStoreReplicationTest {
     TestUtils.RANDOM.nextBytes(data);
 
     Port port = new Port(dataNode.getPort(), PortType.PLAINTEXT);
-    BlockingChannel channel =
+    ConnectedChannel channel =
         ServerTestUtil.getBlockingChannelBasedOnPortType(port, dataNode.getHostname(), null, null);
     channel.connect();
     CountDownLatch latch = new CountDownLatch(1);
