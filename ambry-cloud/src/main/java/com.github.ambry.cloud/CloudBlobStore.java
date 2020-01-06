@@ -82,6 +82,7 @@ class CloudBlobStore implements Store {
   private final boolean requireEncryption;
   // For live serving mode, implement retries and disable caching
   private final boolean isVcr;
+  private final long defaultRetryDelay;
   private final int maxAttempts;
   private boolean started;
 
@@ -109,9 +110,10 @@ class CloudBlobStore implements Store {
       maxAttempts = 1;
       recentBlobCache = Collections.synchronizedMap(new RecentBlobCache(cloudConfig.recentBlobCacheLimit));
     } else {
-      maxAttempts = 3; //cloudConfig.maxAttempts;
+      maxAttempts = cloudConfig.cloudMaxAttempts;
       recentBlobCache = Collections.emptyMap();
     }
+    defaultRetryDelay = cloudConfig.cloudDefaultRetryDelay;
 
     String cryptoAgentFactoryClass = cloudConfig.cloudBlobCryptoAgentFactoryClass;
     try {
@@ -571,9 +573,8 @@ class CloudBlobStore implements Store {
   private void throwOrDelay(Throwable e, String actionName, int attempts) throws CloudStorageException {
     if (e instanceof CloudStorageException) {
       CloudStorageException cse = (CloudStorageException) e;
-      long defaultDelay = 50;
       if (cse.isRetryable() && attempts < maxAttempts) {
-        long delay = (cse.getRetryDelayMs() > 0) ? cse.getRetryDelayMs() : defaultDelay;
+        long delay = (cse.getRetryDelayMs() > 0) ? cse.getRetryDelayMs() : defaultRetryDelay;
         logger.error(String.format("%s failed attempt %d, retrying after %d ms.", actionName, attempts, delay));
         try {
           Thread.sleep(delay);

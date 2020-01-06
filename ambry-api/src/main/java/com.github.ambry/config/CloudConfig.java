@@ -33,6 +33,8 @@ public class CloudConfig {
   public static final String CLOUD_BLOB_COMPACTION_INTERVAL_HOURS = "cloud.blob.compaction.interval.hours";
   public static final String CLOUD_BLOB_COMPACTION_QUERY_LIMIT = "cloud.blob.compaction.query.limit";
   public static final String CLOUD_RECENT_BLOB_CACHE_LIMIT = "cloud.recent.blob.cache.limit";
+  public static final String CLOUD_MAX_ATTEMPTS = "cloud.max.attempts";
+  public static final String CLOUD_DEFAULT_RETRY_DELAY = "cloud.default.retry.delay";
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
   public static final String VCR_PROXY_HOST = "vcr.proxy.host";
   public static final String VCR_PROXY_PORT = "vcr.proxy.port";
@@ -53,6 +55,8 @@ public class CloudConfig {
   public static final int DEFAULT_RETENTION_DAYS = 7;
   public static final int DEFAULT_COMPACTION_QUERY_LIMIT = 100000;
   public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 10000;
+  public static final int DEFAULT_MAX_ATTEMPTS = 3;
+  public static final long DEFAULT_RETRY_DELAY_VALUE = 50;
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
   public static final String DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS =
       "com.github.ambry.clustermap.HelixClusterSpectatorFactory";
@@ -191,7 +195,17 @@ public class CloudConfig {
   @Default("3128")
   public final int vcrProxyPort;
 
-  // TODO: int maxAttempts, long defaultRetryDelay
+  /**
+   * The maximum number of attempts for each cloud operation in live serving mode;
+   */
+  @Config(CLOUD_MAX_ATTEMPTS)
+  public final int cloudMaxAttempts;
+
+  /**
+   * The default delay in ms between retries of cloud operations.
+   */
+  @Config(CLOUD_DEFAULT_RETRY_DELAY)
+  public final long cloudDefaultRetryDelay;
 
   /**
    * The class used to instantiate {@link com.github.ambry.clustermap.ClusterSpectatorFactory}
@@ -226,7 +240,8 @@ public class CloudConfig {
     cloudBlobCompactionQueryLimit =
         verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_QUERY_LIMIT, DEFAULT_COMPACTION_QUERY_LIMIT);
     recentBlobCacheLimit = verifiableProperties.getInt(CLOUD_RECENT_BLOB_CACHE_LIMIT, DEFAULT_RECENT_BLOB_CACHE_LIMIT);
-
+    cloudMaxAttempts = verifiableProperties.getInt(CLOUD_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS);
+    cloudDefaultRetryDelay = verifiableProperties.getLong(CLOUD_DEFAULT_RETRY_DELAY, DEFAULT_RETRY_DELAY_VALUE);
     // Proxy settings
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);
     vcrProxyPort = verifiableProperties.getInt(VCR_PROXY_PORT, DEFAULT_VCR_PROXY_PORT);
