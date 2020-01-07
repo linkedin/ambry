@@ -69,10 +69,11 @@ public class HelixClusterManager implements ClusterMap {
   private final ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas =
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap = new ConcurrentHashMap<>();
-  private long clusterWideRawCapacityBytes;
-  private long clusterWideAllocatedRawCapacityBytes;
-  private long clusterWideAllocatedUsableCapacityBytes;
+  private final AtomicLong clusterWideRawCapacityBytes = new AtomicLong(0);
+  private final AtomicLong clusterWideAllocatedRawCapacityBytes = new AtomicLong(0);
+  private final AtomicLong clusterWideAllocatedUsableCapacityBytes = new AtomicLong(0);
   private final HelixClusterManagerCallback helixClusterManagerCallback;
+  private final ClusterChangeHandlerCallback clusterChangeHandlerCallback;
   private final byte localDatacenterId;
   private final ConcurrentHashMap<String, Exception> initializationFailureMap = new ConcurrentHashMap<>();
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
@@ -103,6 +104,7 @@ public class HelixClusterManager implements ClusterMap {
     clusterName = clusterMapConfig.clusterMapClusterName;
     selfInstanceName = instanceName;
     helixClusterManagerCallback = new HelixClusterManagerCallback();
+    clusterChangeHandlerCallback = new ClusterChangeHandlerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
     Map<String, DcZkInfo> dataCenterToZkAddress = null;
     HelixManager localManager_ = null;
@@ -134,11 +136,23 @@ public class HelixClusterManager implements ClusterMap {
               manager.connect();
               logger.info("Established connection to Helix manager at {}", zkConnectStr);
             }
-            ClusterChangeHandler clusterChangeHandler =
-                new SimpleClusterChangeHandler(clusterMapConfig, dcName, selfInstanceName, partitionOverrideInfoMap,
-                    partitionMap, partitionNameToAmbryPartition, ambryPartitionToAmbryReplicas,
-                    helixClusterManagerCallback, helixClusterManagerMetrics, initializationFailureMap,
-                    sealedStateChangeCounter);
+            ClusterChangeHandler clusterChangeHandler;
+            String clusterChangeHandlerType = clusterMapConfig.clusterMapClusterChangeHandlerType;
+            if (clusterChangeHandlerType.equals(SimpleClusterChangeHandler.class.getSimpleName())) {
+              clusterChangeHandler =
+                  new SimpleClusterChangeHandler(clusterMapConfig, dcName, selfInstanceName, partitionOverrideInfoMap,
+                      partitionMap, partitionNameToAmbryPartition, ambryPartitionToAmbryReplicas,
+                      helixClusterManagerCallback, helixClusterManagerMetrics, initializationFailureMap,
+                      sealedStateChangeCounter);
+            } else if (clusterChangeHandlerType.equals(DynamicClusterChangeHandler.class.getSimpleName())) {
+              clusterChangeHandler =
+                  new DynamicClusterChangeHandler(clusterMapConfig, dcName, selfInstanceName, partitionOverrideInfoMap,
+                      helixClusterManagerCallback, clusterChangeHandlerCallback, helixClusterManagerMetrics,
+                      initializationFailureMap, sealedStateChangeCounter);
+            } else {
+              throw new IllegalArgumentException(
+                  "Unsupported cluster change handler type: " + clusterChangeHandlerType);
+            }
             // Create RoutingTableProvider of each DC to keep track of partition(replicas) state. Here, we use current
             // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
             logger.info("Creating routing table provider associated with Helix manager at {}", zkConnectStr);
@@ -207,7 +221,11 @@ public class HelixClusterManager implements ClusterMap {
       for (AmbryPartition partition : partitionMap.values()) {
         partition.resolvePartitionState();
       }
-      initializeCapacityStats();
+      if (clusterMapConfig.clusterMapClusterChangeHandlerType.equals(
+          SimpleClusterChangeHandler.class.getSimpleName())) {
+        // capacity stats needs to be initialized only when SimpleClusterChangeHandler is adopted.
+        initializeCapacityStats();
+      }
       helixClusterManagerMetrics.initializeInstantiationMetric(true,
           initializationFailureMap.values().stream().filter(Objects::nonNull).count());
       helixClusterManagerMetrics.initializeXidMetric(currentXid);
@@ -278,14 +296,14 @@ public class HelixClusterManager implements ClusterMap {
       Map<AmbryDataNode, Set<AmbryDisk>> dataNodeToDisks = dcInfo.clusterChangeHandler.getDataNodeToDisksMap();
       for (Set<AmbryDisk> disks : dataNodeToDisks.values()) {
         for (AmbryDisk disk : disks) {
-          clusterWideRawCapacityBytes += disk.getRawCapacityInBytes();
+          clusterWideRawCapacityBytes.getAndAdd(disk.getRawCapacityInBytes());
         }
       }
     }
     for (Set<AmbryReplica> partitionReplicas : ambryPartitionToAmbryReplicas.values()) {
       long replicaCapacity = partitionReplicas.iterator().next().getCapacityInBytes();
-      clusterWideAllocatedRawCapacityBytes += replicaCapacity * partitionReplicas.size();
-      clusterWideAllocatedUsableCapacityBytes += replicaCapacity;
+      clusterWideAllocatedRawCapacityBytes.getAndAdd(replicaCapacity * partitionReplicas.size());
+      clusterWideAllocatedUsableCapacityBytes.getAndAdd(replicaCapacity);
     }
   }
 
@@ -515,7 +533,7 @@ public class HelixClusterManager implements ClusterMap {
    * @return the {@link AmbryReplica} associated with the given parameters.
    */
   AmbryReplica getReplicaForPartitionOnNode(DataNodeId dataNodeId, String partitionString) {
-    // Note: partitionString here comes from partitionId.toString() not partitionId.toPathString()
+    // Note: partitionString here is now from partitionId.toPathString()
     AmbryDataNode ambryDataNode = getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
     return dcToDcZkInfo.get(dataNodeId.getDatacenterName()).clusterChangeHandler.getReplicaId(ambryDataNode,
         partitionString);
@@ -573,6 +591,13 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
+   * @return {@link HelixClusterManagerCallback} associated with this cluster manager.
+   */
+  HelixClusterManagerCallback getManagerCallback() {
+    return helixClusterManagerCallback;
+  }
+
+  /**
    * Class that stores all the information associated with a datacenter.
    */
   static class DcInfo {
@@ -593,6 +618,52 @@ public class HelixClusterManager implements ClusterMap {
       this.dcZkInfo = dcZkInfo;
       this.helixManager = helixManager;
       this.clusterChangeHandler = clusterChangeHandler;
+    }
+  }
+
+  /**
+   * A callback class for {@link ClusterChangeHandler} in each dc to update cluster-wide info (i.e partition-to-replica
+   * mapping, cluster-wide capacity)
+   */
+  class ClusterChangeHandlerCallback {
+    /**
+     *
+     * @param partition
+     * @param capacityBytes
+     * @return
+     */
+    AmbryPartition addPartitionIfAbsent(AmbryPartition partition, long capacityBytes) {
+      AmbryPartition currentPartition = partitionNameToAmbryPartition.putIfAbsent(partition.toPathString(), partition);
+      if (currentPartition == null) {
+        // this means the map previously didn't contain this partition and passed-in partition is successfully added
+        // into the map
+        currentPartition = partition;
+        // it doesn't really need to synchronize this method. "partitionNameToAmbryPartition" guarantees each thread
+        // will get same instance of ambry partition. The first one that succeeds adding partition into
+        // "partitionNameToAmbryPartition" will update "partitionMap".
+        partitionMap.put(ByteBuffer.wrap(currentPartition.getBytes()), currentPartition);
+        // update cluster-wide capacity
+        clusterWideAllocatedUsableCapacityBytes.getAndAdd(capacityBytes);
+      }
+      ambryPartitionToAmbryReplicas.putIfAbsent(currentPartition, ConcurrentHashMap.newKeySet());
+      return currentPartition;
+    }
+
+    void addReplicasToPartition(AmbryPartition partition, List<AmbryReplica> replicas) {
+      ambryPartitionToAmbryReplicas.computeIfAbsent(partition, k -> ConcurrentHashMap.newKeySet()).addAll(replicas);
+      clusterWideAllocatedRawCapacityBytes.getAndAdd(replicas.get(0).getCapacityInBytes() * replicas.size());
+    }
+
+    void removeReplicasFromPartition(AmbryPartition partition, List<AmbryReplica> replicas) {
+      ambryPartitionToAmbryReplicas.computeIfPresent(partition, (k, v) -> {
+        v.removeAll(replicas);
+        clusterWideAllocatedRawCapacityBytes.getAndAdd(-1 * replicas.get(0).getCapacityInBytes() * replicas.size());
+        return v;
+      });
+    }
+
+    void addClusterWideRawCapacity(long diskRawCapacityBytes) {
+      clusterWideRawCapacityBytes.getAndAdd(diskRawCapacityBytes);
     }
   }
 
@@ -627,7 +698,7 @@ public class HelixClusterManager implements ClusterMap {
               .getInstancesForResource(resourceName, partition.toPathString(), state.name());
           instanceConfigs.forEach((e) -> {
             AmbryDataNode dataNode = clusterChangeHandler.getDataNode(e.getInstanceName());
-            replicas.add(clusterChangeHandler.getReplicaId(dataNode, partition.toString()));
+            replicas.add(clusterChangeHandler.getReplicaId(dataNode, partition.toPathString()));
           });
         }
       }
@@ -761,21 +832,21 @@ public class HelixClusterManager implements ClusterMap {
      * @return the cluster wide raw capacity in bytes.
      */
     long getRawCapacity() {
-      return clusterWideRawCapacityBytes;
+      return clusterWideRawCapacityBytes.get();
     }
 
     /**
      * @return the cluster wide allocated raw capacity in bytes.
      */
     long getAllocatedRawCapacity() {
-      return clusterWideAllocatedRawCapacityBytes;
+      return clusterWideAllocatedRawCapacityBytes.get();
     }
 
     /**
      * @return the cluster wide allocated usable capacity in bytes.
      */
     long getAllocatedUsableCapacity() {
-      return clusterWideAllocatedUsableCapacityBytes;
+      return clusterWideAllocatedUsableCapacityBytes.get();
     }
   }
 }

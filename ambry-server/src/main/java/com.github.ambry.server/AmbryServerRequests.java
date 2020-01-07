@@ -98,6 +98,7 @@ public class AmbryServerRequests extends AmbryRequests {
       requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     }
     localPartitionToReplicaMap = createLocalPartitionToReplicaMap();
+    // TODO add callback from clustermap in this class once instanceInfo related to current node has changed
   }
 
   /**

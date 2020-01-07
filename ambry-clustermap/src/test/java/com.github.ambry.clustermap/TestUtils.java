@@ -865,6 +865,27 @@ public class TestUtils {
           updateJsonPartitionLayout(partitionClass, partitionState), clusterMapConfig);
     }
 
+    void addNewPartition(TestHardwareLayout testHardwareLayout, List<DataNode> dataNodes, String partitionClass,
+        String localDc) {
+      this.partitionCount += 1;
+      this.partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(),
+          addPartitionAndUpdateJsonPartitionLayout(partitionClass, dataNodes), localDc);
+    }
+
+    private JSONObject addPartitionAndUpdateJsonPartitionLayout(String partitionClass, List<DataNode> dataNodes) {
+      version += 1;
+      int nextPartitionIndex = jsonPartitions.length();
+      List<Disk> disksToPlaceNewPartition = new ArrayList<>();
+      Random random = new Random();
+      dataNodes.forEach(
+          node -> disksToPlaceNewPartition.add(node.getDisks().get(random.nextInt(node.getDisks().size()))));
+      JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(disksToPlaceNewPartition);
+      jsonPartitions.put(
+          getJsonPartition(nextPartitionIndex, partitionClass, partitionState, replicaCapacityInBytes, jsonReplicas));
+      return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), version, partitionCount,
+          jsonPartitions);
+    }
+
     public PartitionLayout getPartitionLayout() {
       return partitionLayout;
     }
