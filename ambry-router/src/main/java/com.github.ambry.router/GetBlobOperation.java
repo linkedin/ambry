@@ -241,6 +241,7 @@ class GetBlobOperation extends GetOperation {
    */
   @Override
   void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
+    responseInfo.touch(blobId);
     GetChunk getChunk = correlationIdToGetChunk.remove(
         ((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
     getChunk.handleResponse(responseInfo, getResponse);
