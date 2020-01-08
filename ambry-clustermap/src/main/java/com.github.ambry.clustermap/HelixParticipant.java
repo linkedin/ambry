@@ -379,24 +379,24 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeOfflineFromInactive(String partitionName) {
-    // 1. take actions in replication manager
-    //    (1) set local store state to OFFLINE
-    //    (2) initiate decommission in ReplicaSyncUpManager
     PartitionStateChangeListener replicationManagerListener =
         partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
     if (replicationManagerListener != null) {
+      // 1. take actions in replication manager
+      //    (1) set local store state to OFFLINE
+      //    (2) initiate decommission in ReplicaSyncUpManager
       replicationManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
-    }
-    // 2. wait until peer replicas have caught up with local replica
-    try {
-      replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
-    } catch (InterruptedException e) {
-      logger.error("Disconnection was interrupted on partition {}", partitionName);
-      throw new StateTransitionException("Disconnection failed or was interrupted",
-          StateTransitionException.TransitionErrorCode.DisconnectionFailure);
-    } catch (StateTransitionException e) {
-      logger.error("Disconnection didn't complete ", e);
-      throw e;
+      // 2. wait until peer replicas have caught up with local replica
+      try {
+        replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
+      } catch (InterruptedException e) {
+        logger.error("Disconnection was interrupted on partition {}", partitionName);
+        throw new StateTransitionException("Disconnection failed or was interrupted",
+            StateTransitionException.TransitionErrorCode.DisconnectionFailure);
+      } catch (StateTransitionException e) {
+        logger.error("Disconnection didn't complete ", e);
+        throw e;
+      }
     }
     // 3. take actions in storage manager (stop the store)
     PartitionStateChangeListener storageManagerListener =
