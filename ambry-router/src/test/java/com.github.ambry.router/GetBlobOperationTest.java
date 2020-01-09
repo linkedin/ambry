@@ -364,6 +364,19 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test gets of simple blob with getChunkIdsOnly being true.
+   */
+  @Test
+  public void testSimpleBlobGetChunkIdsOnly() throws Exception {
+    blobSize = maxChunkSize;
+    doPut();
+    options =
+        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
+            true, routerMetrics.ageAtGet);
+    getAndAssertSuccess();
+  }
+
+  /**
    * Test gets of composite blob in raw mode.
    */
   @Test
@@ -391,6 +404,22 @@ public class GetBlobOperationTest {
       } else {
         // Only supported for encrypted blobs now
       }
+    }
+  }
+
+  /**
+   * Test gets of composite blob with getChunkIdsOnly being true.
+   */
+  @Test
+  public void testCompositeBlobGetChunkIdsOnly() throws Exception {
+    options =
+        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
+            true, routerMetrics.ageAtGet);
+
+    for (int numChunks = 2; numChunks < 10; numChunks++) {
+      blobSize = numChunks * maxChunkSize;
+      doPut();
+      getAndAssertSuccess();
     }
   }
 
@@ -1286,6 +1315,21 @@ public class GetBlobOperationTest {
         readCompleteLatch.countDown();
       } else {
         try {
+          if (options.getChunkIdsOnly) {
+            Assert.assertNull("Unexpected blob result when getChunkIdsOnly", result.getBlobResult);
+            if (blobSize > maxChunkSize) {
+              // CompositeBlob
+              Assert.assertNotNull("CompositeBlob should return a list of blob ids when getting chunk ids",
+                  result.storeKeys);
+              Assert.assertEquals(result.storeKeys.size(), (blobSize + maxChunkSize - 1) / maxChunkSize);
+            } else {
+              // SimpleBlob
+              Assert.assertNull("Unexpected list of blob id when getChunkIdsOnly is true on a simple blob",
+                  result.storeKeys);
+            }
+            readCompleteLatch.countDown();
+            return;
+          }
           BlobInfo blobInfo;
           switch (options.getBlobOptions.getOperationType()) {
             case All:
@@ -1351,7 +1395,7 @@ public class GetBlobOperationTest {
     // Ensure that a ChannelClosed exception is not set when the ReadableStreamChannel is closed correctly.
     Assert.assertNull("Callback operation exception should be null", op.getOperationException());
     if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo
-        && !options.getBlobOptions.isRawMode()) {
+        && !options.getBlobOptions.isRawMode() && !options.getChunkIdsOnly) {
       int sizeWritten = blobSize;
       if (options.getBlobOptions.getRange() != null) {
         ByteRange range = options.getBlobOptions.getRange().toResolvedByteRange(blobSize);
