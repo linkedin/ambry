@@ -1365,16 +1365,19 @@ class GetBlobOperation extends GetOperation {
       }
       if (!rangeResolutionFailure) {
         chunkIdIterator = null;
+        numChunksTotal = 0;
         dataChunks = null;
-        chunkIndex = 0;
-        numChunksTotal = 1;
-        ByteBuffer dataBuffer = blobData.getStream().getByteBuffer();
-        responseInfo.retain();
-        chunkIndexToResponseInfo.put(0, responseInfo);
-        boolean launchedJob = maybeLaunchCryptoJob(dataBuffer, userMetadata, encryptionKey, blobId);
-        if (!launchedJob) {
-          chunkIndexToBuffer.put(0, filterChunkToRange(dataBuffer));
-          numChunksRetrieved = 1;
+        if (!options.getChunkIdsOnly) {
+          chunkIndex = 0;
+          numChunksTotal = 1;
+          ByteBuffer dataBuffer = blobData.getStream().getByteBuffer();
+          responseInfo.retain();
+          chunkIndexToResponseInfo.put(0, responseInfo);
+          boolean launchedJob = maybeLaunchCryptoJob(dataBuffer, userMetadata, encryptionKey, blobId);
+          if (!launchedJob) {
+            chunkIndexToBuffer.put(0, filterChunkToRange(dataBuffer));
+            numChunksRetrieved = 1;
+          }
         }
       }
     }
