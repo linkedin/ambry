@@ -296,10 +296,72 @@ public class ClusterChangeHandlerTest {
     // verify after InstanceConfig change, HelixClusterManager contains the one more node per dc.
     assertEquals("Number of data nodes after instance addition is not correct",
         testHardwareLayout.getAllExistingDataNodes().size(), helixClusterManager.getDataNodeIds().size());
-    System.out.println("Current partition count = " + testPartitionLayout.getPartitionCount());
     // verify number of partitions in cluster manager has increased by 1
     assertEquals("Number of partitions after partition addition is not correct",
         testPartitionLayout.getPartitionCount(), helixClusterManager.getAllPartitionIds(null).size());
+    // todo verify capacity stats are updated
+    // todo for override enabled case, change number of writable partition
+    helixClusterManager.close();
+  }
+
+  /**
+   * Test the case where a current replica is moved between existing nodes.
+   */
+  @Test
+  public void moveReplicaTest() throws Exception {
+    // create a HelixClusterManager with DynamicClusterChangeHandler
+    Properties properties = new Properties();
+    properties.putAll(props);
+    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
+    // pick a partition and move one of its replicas
+    Partition testPartition =
+        (Partition) testPartitionLayout.getPartitionLayout().getRandomWritablePartition(null, null);
+    int previousReplicaCnt = testPartition.getReplicaIds().size();
+    // 1. find out nodes in local dc that host this partition
+    Set<DataNode> localDcNodes = new HashSet<>();
+    testPartition.getReplicaIds().forEach(r -> {
+      if (r.getDataNodeId().getDatacenterName().equals(localDc)) {
+        localDcNodes.add((DataNode) r.getDataNodeId());
+      }
+    });
+    // 2. then find a node in local dc that doesn't host this partition (this is the node we will add replica to)
+    Datacenter localDatacenter = testHardwareLayout.getHardwareLayout()
+        .getDatacenters()
+        .stream()
+        .filter(dc -> dc.getName().equals(localDc))
+        .findFirst()
+        .get();
+    DataNode nodeToAddReplica =
+        localDatacenter.getDataNodes().stream().filter(node -> !localDcNodes.contains(node)).findFirst().get();
+    testPartitionLayout.addReplicaToPartition(nodeToAddReplica, testPartition, localDc);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    // 3. We upgrade helix by adding new replica to the chosen node in local dc. This is to mock "replica addition" on
+    //    chosen node and chosen node updates its instanceConfig in Helix. There should be 7 (= 6+1) replicas in the
+    //    intermediate state.
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+    PartitionId partitionInManager = helixClusterManager.getAllPartitionIds(null)
+        .stream()
+        .filter(p -> p.toPathString().equals(testPartition.toPathString()))
+        .findFirst()
+        .get();
+    assertEquals("Replica count of testing partition is not correct", previousReplicaCnt + 1,
+        partitionInManager.getReplicaIds().size());
+    // 4. find a replica (from same partition) in local dc that is not just added one
+    Replica oldReplica = (Replica) testPartition.getReplicaIds()
+        .stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(localDc) && r.getDataNodeId() != nodeToAddReplica)
+        .findFirst()
+        .get();
+    testPartitionLayout.removeReplicaFromPartition(oldReplica, localDc);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    // 5. upgrade Helix again to mock one of the old replicas is removed and the node (where replica previously resides)
+    //    updates the InstanceConfig in Helix. The number of replicas should become 6 again.
+    helixCluster.upgradeWithNewPartitionLayout(partitionLayoutPath);
+    assertEquals("Replica count of testing partition is not correct", previousReplicaCnt,
+        partitionInManager.getReplicaIds().size());
 
     helixClusterManager.close();
   }

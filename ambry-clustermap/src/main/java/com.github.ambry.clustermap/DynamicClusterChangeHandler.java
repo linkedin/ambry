@@ -98,9 +98,8 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
           logger.info("Received initial notification for instance config change from {}", dcName);
         } else {
           logger.info("Instance config change triggered from {}", dcName);
-          logger.info("Detailed instance configs in {} are: {}", dcName, configs);
         }
-//        logger.debug("Detailed instance configs in {} are: {}", dcName, configs);
+        logger.debug("Detailed instance configs in {} are: {}", dcName, configs);
         try {
           addOrUpdateInstanceInfos(configs);
           instanceConfigInitialized.set(true);
