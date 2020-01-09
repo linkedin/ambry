@@ -125,9 +125,6 @@ public class ClusterChangeHandlerTest {
    */
   @After
   public void after() {
-//    if (clusterManager != null) {
-//      clusterManager.close();
-//    }
     for (com.github.ambry.utils.TestUtils.ZkInfo zkInfo : dcsToZkInfo.values()) {
       zkInfo.shutdown();
     }
@@ -238,9 +235,28 @@ public class ClusterChangeHandlerTest {
   }
 
   /**
+   * Test that invalid cluster change handler type will cause instantiation failure.
+   */
+  @Test
+  public void invalidClusterChangeHandlerTest() {
+    Properties properties = new Properties();
+    properties.putAll(props);
+    properties.setProperty("clustermap.cluster.change.handler.type", "InvalidClusterChangeHandler");
+    ClusterMapConfig invalidConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    try {
+      new HelixClusterManager(invalidConfig, selfInstanceName, helixManagerFactory, metricRegistry);
+      fail("Should fail because the cluster change handler type is invalid.");
+    } catch (IOException e) {
+      assertEquals(1L,
+          metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
+    }
+  }
+
+  /**
    * Test new instances/partitions are added to cluster dynamically. {@link HelixClusterManager} with
    * {@link DynamicClusterChangeHandler} should absorb the change and update in-mem cluster map.
-   * 1. add new instances
+   * 1. add new instance
    * 2. add new partition onto new instance
    * 3. add new partition onto existing instance
    */
@@ -272,8 +288,6 @@ public class ClusterChangeHandlerTest {
       remoteDcNode2 = testHardwareLayout.getRandomDataNodeFromDc(remoteDc);
     } while (remoteDcNode1 == remoteDcNode2);
 
-    System.out.println("Initial partition count = " + testPartitionLayout.getPartitionCount());
-
     // add a new node into static layout
     testHardwareLayout.addNewDataNodes(1);
     // add a new partition to static layout and put its replicas to both existing nodes and new node
@@ -299,8 +313,30 @@ public class ClusterChangeHandlerTest {
     // verify number of partitions in cluster manager has increased by 1
     assertEquals("Number of partitions after partition addition is not correct",
         testPartitionLayout.getPartitionCount(), helixClusterManager.getAllPartitionIds(null).size());
-    // todo verify capacity stats are updated
-    // todo for override enabled case, change number of writable partition
+    // verify writable partitions in HelixClusterManager with partition override enabled/disabled (to call getWritablePartitionIds,
+    // we need to bring new added instances up because that method checks if all local replicas are up)
+    for (DataNode newNode : newAddedNodes) {
+      helixCluster.bringInstanceUp(getInstanceName(newNode.getHostname(), newNode.getPort()));
+    }
+    assertEquals("Number of writable partitions after partition addition is not correct",
+        overrideEnabled ? testPartitionLayout.getPartitionCount() - 1 : testPartitionLayout.getPartitionCount(),
+        helixClusterManager.getWritablePartitionIds(null).size());
+
+    // verify capacity stats are updated
+    HelixClusterManager.HelixClusterManagerCallback clusterManagerCallback = helixClusterManager.getManagerCallback();
+    // note that we add one node to each dc, so the raw capacity = (# of nodes) * (# of disks) * (disk capacity)
+    long rawCapacityInStaticLayout =
+        testHardwareLayout.getAllExistingDataNodes().size() * testHardwareLayout.getDiskCount()
+            * testHardwareLayout.getDiskCapacityInBytes();
+    assertEquals("Raw capacity of entire cluster is not expected", rawCapacityInStaticLayout,
+        clusterManagerCallback.getRawCapacity());
+    // we have added one more partition, so now the allocated raw capacity in cluster is 4 (partition count) * 6 * ReplicaCapacity
+    assertEquals("Allocated raw capacity of entire cluster is not correct",
+        testPartitionLayout.getAllocatedRawCapacityInBytes(), clusterManagerCallback.getAllocatedRawCapacity());
+    // verify usable capacity
+    assertEquals("Allocated usable capacity of entire cluster is not correct",
+        testPartitionLayout.getAllocatedUsableCapacityInBytes(), clusterManagerCallback.getAllocatedUsableCapacity());
+
     helixClusterManager.close();
   }
 
