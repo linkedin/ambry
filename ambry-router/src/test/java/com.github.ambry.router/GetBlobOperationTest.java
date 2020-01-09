@@ -408,6 +408,22 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test gets of composite blob with getChunkIdsOnly being true.
+   */
+  @Test
+  public void testCompositeBlobGetChunkIdsOnly() throws Exception {
+    options =
+        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
+            true, routerMetrics.ageAtGet);
+
+    for (int numChunks = 2; numChunks < 10; numChunks++) {
+      blobSize = numChunks * maxChunkSize;
+      doPut();
+      getAndAssertSuccess();
+    }
+  }
+
+  /**
    * Put a blob with no data, perform get and ensure success.
    */
   @Test
