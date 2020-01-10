@@ -37,6 +37,10 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
+/**
+ * A more dynamic implementation of {@link ClusterChangeHandler} which supports adding new nodes/partitions at runtime.
+ * It is also able to absorb replica location changes in cluster.
+ */
 public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   private final String dcName;
   private final Object notificationLock = new Object();
@@ -250,8 +254,8 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   }
 
   /**
-   *
-   * @param instanceConfigs
+   * Add new instance or update existing instance based on {@link InstanceConfig}(s).
+   * @param instanceConfigs the {@link InstanceConfig}(s) used to update in-mem cluster map.
    * @throws Exception
    */
   private void addOrUpdateInstanceInfos(List<InstanceConfig> instanceConfigs) throws Exception {
@@ -343,10 +347,11 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   }
 
   /**
-   *
-   * @param replica
-   * @param sealedReplicas
-   * @param stoppedReplicas
+   * If partition override is enabled, we override replica SEAL/UNSEAL state based on partitionOverrideMap. If disabled,
+   * update replica state according to the info from {@link InstanceConfig}.
+   * @param replica the {@link ReplicaId} whose states (seal,stop) should be updated.
+   * @param sealedReplicas a list of {@link ReplicaId}(s) that are in SEALED state.
+   * @param stoppedReplicas a list of {@link ReplicaId}(s) that are in STOPPED state.
    */
   private void updateReplicaStateAndOverrideIfNeeded(AmbryReplica replica, List<String> sealedReplicas,
       List<String> stoppedReplicas) {
@@ -364,8 +369,8 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   }
 
   /**
-   *
-   * @param instanceConfig
+   * Create a new instance(node) and initialize disks/replicas on it.
+   * @param instanceConfig the {@link InstanceConfig} to create new instance
    * @throws Exception
    */
   private void createNewInstance(InstanceConfig instanceConfig) throws Exception {
@@ -384,10 +389,12 @@ public class DynamicClusterChangeHandler implements ClusterChangeHandler {
   }
 
   /**
-   *
-   * @param datanode
-   * @param instanceConfig
-   * @throws Exception
+   * Initialize the disks and replicas on the given node. Create partitions if this is the first time a replica of
+   * that partition is being constructed. If partition override is enabled, the seal state of replica is determined by
+   * partition info in HelixPropertyStore, if disabled, the seal state is determined by instanceConfig.
+   * @param datanode the {@link AmbryDataNode} that is being initialized.
+   * @param instanceConfig the {@link InstanceConfig} associated with this datanode.
+   * @throws Exception if creation of {@link AmbryDisk} throws an Exception.
    */
   private void initializeDisksAndReplicasOnNode(AmbryDataNode datanode, InstanceConfig instanceConfig)
       throws Exception {

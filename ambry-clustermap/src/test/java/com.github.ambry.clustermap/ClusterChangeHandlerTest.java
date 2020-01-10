@@ -167,7 +167,7 @@ public class ClusterChangeHandlerTest {
         partitionsInDynamicHandler);
     assertEquals("Partitions from two HelixClusterManagers don't match", partitionsInSimpleHandler,
         partitionsInDynamicHandler);
-    // verify metrics in manager with simple handler and manager with dynamic handler are same
+    // verify metrics in managers with simple/dynamic handler are same
     HelixClusterManager.HelixClusterManagerCallback dynamicHandlerCallback =
         managerWithDynamicHandler.getManagerCallback();
     HelixClusterManager.HelixClusterManagerCallback simpleHandlerCallback =
@@ -337,6 +337,26 @@ public class ClusterChangeHandlerTest {
     assertEquals("Allocated usable capacity of entire cluster is not correct",
         testPartitionLayout.getAllocatedUsableCapacityInBytes(), clusterManagerCallback.getAllocatedUsableCapacity());
 
+    // additional tests to verify getting replicas, disks and resources etc returns correct results.
+    for (DataNode newNode : newAddedNodes) {
+      AmbryDataNode ambryNode = helixClusterManager.getDataNodeId(newNode.getHostname(), newNode.getPort());
+      assertNotNull("New added node should exist in HelixClusterManager", ambryNode);
+      List<AmbryReplica> ambryReplicas = helixClusterManager.getReplicaIds(ambryNode);
+      assertEquals("There should be one replica on the new node", 1, ambryReplicas.size());
+      Set<AmbryDisk> ambryDisks = new HashSet<>(clusterManagerCallback.getDisks(ambryNode));
+      assertEquals("Disk count on the new node is not correct", localDcNode1.getDisks().size(), ambryDisks.size());
+      // verify that get a non-existent partition on new node should return null
+      assertNull("Should return null when getting a non-existent replica on new node",
+          helixClusterManager.getReplicaForPartitionOnNode(ambryNode, "0"));
+    }
+    // trigger IdealState change and refresh partition-to-resource mapping (bring in the new partition in resource map)
+    helixCluster.refreshIdealState();
+    Map<String, String> partitionNameToResource = helixClusterManager.getPartitionToResourceMap().get(localDc);
+    List<PartitionId> partitionIds = testPartitionLayout.getPartitionLayout().getPartitions(null);
+    // verify all partitions (including the new added one) are present in partition-to-resource map
+    Set<String> partitionNames = partitionIds.stream().map(PartitionId::toPathString).collect(Collectors.toSet());
+    assertEquals("Some partitions are not present in partition-to-resource map", partitionNames,
+        partitionNameToResource.keySet());
     helixClusterManager.close();
   }
 

@@ -627,10 +627,11 @@ public class HelixClusterManager implements ClusterMap {
    */
   class ClusterChangeHandlerCallback {
     /**
-     *
-     * @param partition
-     * @param capacityBytes
-     * @return
+     * Add partition if it's not present in cluster-wide partition map and also update cluster-wide allocated usable
+     * capacity. If the partition already exists, skip addition and return current partition.
+     * @param partition the {@link AmbryPartition} to add (if not present)
+     * @param capacityBytes the capacity of partition in bytes
+     * @return the current {@link AmbryPartition} present in the map.
      */
     AmbryPartition addPartitionIfAbsent(AmbryPartition partition, long capacityBytes) {
       AmbryPartition currentPartition = partitionNameToAmbryPartition.putIfAbsent(partition.toPathString(), partition);
@@ -649,11 +650,21 @@ public class HelixClusterManager implements ClusterMap {
       return currentPartition;
     }
 
+    /**
+     * Add a list of {@link AmbryReplica} to given {@link AmbryPartition} and update cluster-wide capacity stats
+     * @param partition the {@link AmbryPartition} which replicas should be added to.
+     * @param replicas list of {@link AmbryReplica} to be added.
+     */
     void addReplicasToPartition(AmbryPartition partition, List<AmbryReplica> replicas) {
       ambryPartitionToAmbryReplicas.computeIfAbsent(partition, k -> ConcurrentHashMap.newKeySet()).addAll(replicas);
       clusterWideAllocatedRawCapacityBytes.getAndAdd(replicas.get(0).getCapacityInBytes() * replicas.size());
     }
 
+    /**
+     * Remove {@link AmbryReplica}(s) from given {@link AmbryPartition} and update cluster-wide capacity stats
+     * @param partition the {@link AmbryPartition} which replicas should be removed from.
+     * @param replicas list of {@link AmbryReplica} to be removed.
+     */
     void removeReplicasFromPartition(AmbryPartition partition, List<AmbryReplica> replicas) {
       ambryPartitionToAmbryReplicas.computeIfPresent(partition, (k, v) -> {
         v.removeAll(replicas);
@@ -662,6 +673,11 @@ public class HelixClusterManager implements ClusterMap {
       });
     }
 
+    /**
+     * Add cluster-wide raw capacity. This is called when new disk is created and added to cluster. We update cluster-wide
+     * raw capacity by adding the disk capacity.
+     * @param diskRawCapacityBytes raw disk capacity to be added.
+     */
     void addClusterWideRawCapacity(long diskRawCapacityBytes) {
       clusterWideRawCapacityBytes.getAndAdd(diskRawCapacityBytes);
     }
