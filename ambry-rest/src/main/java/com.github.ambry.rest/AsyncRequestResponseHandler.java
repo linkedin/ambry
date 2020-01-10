@@ -61,10 +61,25 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   /**
    * Builds a AsyncRequestResponseHandler.
    * @param metrics the {@link RequestResponseHandlerMetrics} instance to use to track metrics.
+   * @param workerCount the required number of request handling units.
+   * @param restRequestService the {@link RestRequestService} instance to be used to process requests.
+   * @throws IllegalArgumentException if {@code workerCount} < 0 or if {@code workerCount} > 0 but
+   * {@code restRequestService} is null.
    */
-  protected AsyncRequestResponseHandler(RequestResponseHandlerMetrics metrics) {
+  protected AsyncRequestResponseHandler(RequestResponseHandlerMetrics metrics, int workerCount,
+      RestRequestService restRequestService) {
     this.metrics = metrics;
     metrics.trackAsyncRequestResponseHandler(this);
+    if (isRunning()) {
+      throw new IllegalStateException("Cannot modify scaling unit count after the service has started");
+    } else if (workerCount < 0) {
+      throw new IllegalArgumentException("Request worker workerCount has to be >= 0");
+    } else if (workerCount > 0 && restRequestService == null) {
+      throw new IllegalArgumentException("RestRequestService cannot be null");
+    }
+    requestWorkersCount = workerCount;
+    this.restRequestService = restRequestService;
+    this.restRequestService.setupResponseHandler(this);
     logger.trace("Instantiated AsyncRequestResponseHandler");
   }
 
@@ -179,31 +194,9 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
     } else {
       metrics.requestResponseHandlerUnavailableError.inc();
       throw new RestServiceException(
-          "Requests cannot be handled because the AsyncRequestResponseHandler is not available",
+          "Requests cannot be handled because the AsyncRequestResponseHandler is not running",
           RestServiceErrorCode.ServiceUnavailable);
     }
-  }
-
-  /**
-   * Sets the number of request handling units and the {@link RestRequestService} that will be used in
-   * {@link AsyncRequestWorker} instances..
-   * @param workerCount the required number of request handling units.
-   * @param restRequestService the {@link RestRequestService} instance to be used to process requests.
-   * @throws IllegalArgumentException if {@code workerCount} < 0 or if {@code workerCount} > 0 but
-   *                                  {@code restRequestService} is null.
-   * @throws IllegalStateException if {@link #start()} has already been called before a call to this function.
-   */
-  protected void setupRequestHandling(int workerCount, RestRequestService restRequestService) {
-    if (isRunning()) {
-      throw new IllegalStateException("Cannot modify scaling unit count after the service has started");
-    } else if (workerCount < 0) {
-      throw new IllegalArgumentException("Request worker workerCount has to be >= 0");
-    } else if (workerCount > 0 && restRequestService == null) {
-      throw new IllegalArgumentException("RestRequestService cannot be null");
-    }
-    requestWorkersCount = workerCount;
-    this.restRequestService = restRequestService;
-    logger.trace("Request handling units count set to {}", requestWorkersCount);
   }
 
   /**
@@ -320,7 +313,7 @@ class AsyncRequestWorker implements Runnable {
     } finally {
       running.set(false);
       discardRequests();
-      logger.trace("AsyncRequestWorker stopped");
+      logger.info("AsyncRequestWorker stopped");
       shutdownLatch.countDown();
     }
   }

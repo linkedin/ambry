@@ -21,8 +21,6 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestRequestService;
-import com.github.ambry.rest.MockRestRequestResponseHandler;
-import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.Router;
 import java.util.Properties;
@@ -57,8 +55,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     FrontendRestRequestServiceFactory frontendRestRequestServiceFactory =
         new FrontendRestRequestServiceFactory(verifiableProperties, new MockClusterMap(),
-            new MockRestRequestResponseHandler(), new InMemoryRouter(verifiableProperties, new MockClusterMap()),
-            new InMemAccountService(false, true));
+            new InMemoryRouter(verifiableProperties, new MockClusterMap()), new InMemAccountService(false, true));
     RestRequestService ambryRestRequestService = frontendRestRequestServiceFactory.getRestRequestService();
     assertNotNull("No RestRequestService returned", ambryRestRequestService);
     assertEquals("Did not receive an FrontendRestRequestService instance",
@@ -75,13 +72,12 @@ public class FrontendRestRequestServiceFactoryTest {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     ClusterMap clusterMap = new MockClusterMap();
-    RestResponseHandler restResponseHandler = new MockRestRequestResponseHandler();
     Router router = new InMemoryRouter(verifiableProperties, clusterMap);
     AccountService accountService = new InMemAccountService(false, true);
 
     // VerifiableProperties null.
     try {
-      new FrontendRestRequestServiceFactory(null, clusterMap, restResponseHandler, router, accountService);
+      new FrontendRestRequestServiceFactory(null, clusterMap, router, accountService);
       fail("Instantiation should have failed because VerifiableProperties was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
@@ -89,23 +85,15 @@ public class FrontendRestRequestServiceFactoryTest {
 
     // ClusterMap null.
     try {
-      new FrontendRestRequestServiceFactory(verifiableProperties, null, restResponseHandler, router, accountService);
+      new FrontendRestRequestServiceFactory(verifiableProperties, null, router, accountService);
       fail("Instantiation should have failed because ClusterMap was null");
-    } catch (NullPointerException e) {
-      // expected. Nothing to do.
-    }
-
-    // RestResponseHandler null.
-    try {
-      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, null, router, accountService);
-      fail("Instantiation should have failed because RestResponseHandler was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
     }
 
     // Router null.
     try {
-      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, restResponseHandler, null, accountService);
+      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, null, accountService);
       fail("Instantiation should have failed because Router was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
@@ -113,7 +101,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     // AccountService null.
     try {
-      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, restResponseHandler, router, null);
+      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, router, null);
       fail("Instantiation should have failed because AccountService was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.

@@ -29,8 +29,6 @@ import static org.junit.Assert.*;
  * Tests functionality of {@link AsyncRequestResponseHandlerFactory}.
  */
 public class AsyncRequestResponseHandlerFactoryTest {
-  private static final MetricRegistry METRIC_REGISTRY = new MetricRegistry();
-
   /**
    * Tests the instantiation of an {@link AsyncRequestResponseHandler} instance through the
    * {@link AsyncRequestResponseHandlerFactory}.
@@ -42,20 +40,17 @@ public class AsyncRequestResponseHandlerFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     Router router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
 
+    RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
+    AsyncRequestResponseHandlerFactory handlerFactory =
+        new AsyncRequestResponseHandlerFactory(1, new MetricRegistry(), restRequestService);
     // Get response handler.
-    AsyncRequestResponseHandlerFactory responseHandlerFactory =
-        new AsyncRequestResponseHandlerFactory(1, METRIC_REGISTRY);
-    RestResponseHandler restResponseHandler = responseHandlerFactory.getRestResponseHandler();
+    RestResponseHandler restResponseHandler = handlerFactory.getRestResponseHandler();
     assertNotNull("No RestResponseHandler returned", restResponseHandler);
     assertEquals("Did not receive an AsyncRequestResponseHandler instance",
         AsyncRequestResponseHandler.class.getCanonicalName(), restResponseHandler.getClass().getCanonicalName());
 
-    RestRequestService restRequestService =
-        new MockRestRequestService(verifiableProperties, restResponseHandler, router);
     // Get request handler.
-    AsyncRequestResponseHandlerFactory requestHandlerFactory =
-        new AsyncRequestResponseHandlerFactory(1, METRIC_REGISTRY, restRequestService);
-    RestRequestHandler restRequestHandler = requestHandlerFactory.getRestRequestHandler();
+    RestRequestHandler restRequestHandler = handlerFactory.getRestRequestHandler();
     assertNotNull("No RestRequestHandler returned", restRequestHandler);
     assertEquals("Did not receive an AsyncRequestResponseHandler instance",
         AsyncRequestResponseHandler.class.getCanonicalName(), restRequestHandler.getClass().getCanonicalName());
@@ -75,21 +70,19 @@ public class AsyncRequestResponseHandlerFactoryTest {
   public void getFactoryTestWithBadInputTest() throws IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     Router router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
-    MockRestRequestResponseHandler restRequestResponseHandler = new MockRestRequestResponseHandler();
-    RestRequestService restRequestService =
-        new MockRestRequestService(verifiableProperties, restRequestResponseHandler, router);
+    RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
 
     // RestResponseHandlerFactory constructor.
     // handlerCount = 0
     try {
-      new AsyncRequestResponseHandlerFactory(0, METRIC_REGISTRY);
+      new AsyncRequestResponseHandlerFactory(0, new MetricRegistry(), restRequestService);
       fail("Instantiation should have failed because response handler count is 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
     // handlerCount < 0
     try {
-      new AsyncRequestResponseHandlerFactory(-1, METRIC_REGISTRY);
+      new AsyncRequestResponseHandlerFactory(-1, new MetricRegistry(), restRequestService);
       fail("Instantiation should have failed because response handler count is less than 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -97,7 +90,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // MetricRegistry null.
     try {
-      new AsyncRequestResponseHandlerFactory(1, null);
+      new AsyncRequestResponseHandlerFactory(1, null, restRequestService);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -106,7 +99,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
     // RestRequestHandlerFactory constructor.
     // handlerCount = 0
     try {
-      new AsyncRequestResponseHandlerFactory(0, METRIC_REGISTRY, restRequestService);
+      new AsyncRequestResponseHandlerFactory(0, new MetricRegistry(), restRequestService);
       fail("Instantiation should have failed because request handler count is 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -114,7 +107,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // handlerCount < 0
     try {
-      new AsyncRequestResponseHandlerFactory(-1, METRIC_REGISTRY, restRequestService);
+      new AsyncRequestResponseHandlerFactory(-1, new MetricRegistry(), restRequestService);
       fail("Instantiation should have failed because request handler count is less than 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -130,19 +123,10 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // RestRequestService null.
     try {
-      new AsyncRequestResponseHandlerFactory(1, METRIC_REGISTRY, null);
+      new AsyncRequestResponseHandlerFactory(1, new MetricRegistry(), null);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
-    }
-
-    // Different instances of MetricRegistry during construction of different instances of the factory.
-    new AsyncRequestResponseHandlerFactory(1, METRIC_REGISTRY);
-    try {
-      new AsyncRequestResponseHandlerFactory(1, new MetricRegistry(), restRequestService);
-      fail("Instantiation should have failed because different instances of MetricRegistry was provided");
-    } catch (IllegalStateException e) {
-      // expected. nothing to do.
     }
   }
 }

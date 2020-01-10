@@ -20,7 +20,6 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestRequestServiceFactory;
-import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
 import java.util.Objects;
@@ -40,7 +39,6 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
   private final VerifiableProperties verifiableProperties;
   private final ClusterMap clusterMap;
   private final ClusterMapConfig clusterMapConfig;
-  private final RestResponseHandler responseHandler;
   private final Router router;
   private final AccountService accountService;
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -49,17 +47,14 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
    * Creates a new instance of FrontendRestRequestServiceFactory.
    * @param verifiableProperties the properties to use to create configs.
    * @param clusterMap the {@link ClusterMap} to use.
-   * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent
-   *                        out.
    * @param router the {@link Router} to use.
    * @param accountService the {@link AccountService} to use.
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public FrontendRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RestResponseHandler responseHandler, Router router, AccountService accountService) {
+      Router router, AccountService accountService) {
     this.verifiableProperties = Objects.requireNonNull(verifiableProperties, "Provided VerifiableProperties is null");
     this.clusterMap = Objects.requireNonNull(clusterMap, "Provided ClusterMap is null");
-    this.responseHandler = Objects.requireNonNull(responseHandler, "Provided RestResponseHandler is null");
     this.router = Objects.requireNonNull(router, "Provided Router is null");
     this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
     clusterMapConfig = new ClusterMapConfig(verifiableProperties);
@@ -89,9 +84,9 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, idSigningService, accountAndContainerInjector);
-      return new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-          idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-          accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
+      return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
+          securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
+          clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
           clusterMapConfig.clusterMapClusterName);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate FrontendRestRequestService", e);

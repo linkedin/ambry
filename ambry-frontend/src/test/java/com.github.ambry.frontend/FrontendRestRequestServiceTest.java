@@ -181,12 +181,12 @@ public class FrontendRestRequestServiceTest {
     blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     router = new InMemoryRouter(verifiableProperties, clusterMap);
     responseHandler = new FrontendTestResponseHandler();
+    frontendRestRequestService = getFrontendRestRequestService();
     referenceBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
         Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
     referenceBlobIdStr = referenceBlobId.getID();
-    frontendRestRequestService = getFrontendRestRequestService();
     responseHandler.start();
     frontendRestRequestService.start();
   }
@@ -212,6 +212,26 @@ public class FrontendRestRequestServiceTest {
   }
 
   /**
+   * Start {@link FrontendRestRequestService} without {@link RestResponseHandler} should fail.
+   * @throws InstantiationException
+   */
+  @Test
+  public void startWithoutResponseHandler() throws InstantiationException {
+    FrontendRestRequestService frontendRestRequestService =
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
+            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
+            datacenterName, hostname, clusterName);
+    try {
+      frontendRestRequestService.start();
+      fail("Test should fail if ResponseHandler is not setup");
+    } catch (InstantiationException e) {
+    }
+    frontendRestRequestService.setupResponseHandler(responseHandler);
+    frontendRestRequestService.start();
+    frontendRestRequestService.shutdown();
+  }
+
+  /**
    * Tests for {@link FrontendRestRequestService#shutdown()} when {@link FrontendRestRequestService#start()} has not been
    * called previously.
    * <p/>
@@ -232,6 +252,7 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void useServiceWithoutStartTest() throws Exception {
     frontendRestRequestService = getFrontendRestRequestService();
+    frontendRestRequestService.setupResponseHandler(responseHandler);
     // not fine to use without start.
     for (RestMethod method : RestMethod.values()) {
       if (method.equals(RestMethod.UNKNOWN)) {
@@ -348,6 +369,7 @@ public class FrontendRestRequestServiceTest {
       // resources should have been cleaned up.
       assertFalse("Response channel is not cleaned up", response.isOpen());
     } finally {
+      frontendRestRequestService.setupResponseHandler(responseHandler);
       responseHandler.start();
     }
 
@@ -407,6 +429,7 @@ public class FrontendRestRequestServiceTest {
       assertTrue("RestRequest channel not open", restRequest.isOpen());
       frontendRestRequestService.submitResponse(restRequest, restResponseChannel, new BadRSC(), null);
     } finally {
+      frontendRestRequestService.setupResponseHandler(responseHandler);
       responseHandler.start();
     }
   }
@@ -617,6 +640,7 @@ public class FrontendRestRequestServiceTest {
     accountService = new InMemAccountServiceFactory(true, false).getAccountService();
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     frontendRestRequestService = getFrontendRestRequestService();
+    frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId",
         !refContainer.isCacheable(), null, null, RestServiceErrorCode.InternalServerError);
@@ -757,9 +781,10 @@ public class FrontendRestRequestServiceTest {
   public void deleteServiceIdTest() throws Exception {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     frontendRestRequestService =
-        new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName);
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
+            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
+            datacenterName, hostname, clusterName);
+    frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
@@ -779,9 +804,10 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService.shutdown();
     TailoredPeersClusterMap clusterMap = new TailoredPeersClusterMap();
     frontendRestRequestService =
-        new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName);
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
+            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
+            datacenterName, hostname, clusterName);
+    frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     // test good requests
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
@@ -1042,9 +1068,10 @@ public class FrontendRestRequestServiceTest {
     testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.BlobUpdateNotAllowed);
     testRouter.exceptionOpType = FrontendTestRouter.OpType.UpdateBlobTtl;
     frontendRestRequestService =
-        new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName);
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
+            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
+            datacenterName, hostname, clusterName);
+    frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getAllPartitionIds(null).get(0), false,
@@ -1354,9 +1381,12 @@ public class FrontendRestRequestServiceTest {
    * @return an instance of {@link FrontendRestRequestService}.
    */
   private FrontendRestRequestService getFrontendRestRequestService() {
-    return new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-        idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-        accountAndContainerInjector, datacenterName, hostname, clusterName);
+    FrontendRestRequestService frontendRestRequestService =
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
+            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
+            datacenterName, hostname, clusterName);
+    frontendRestRequestService.setupResponseHandler(responseHandler);
+    return frontendRestRequestService;
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -1980,9 +2010,10 @@ public class FrontendRestRequestServiceTest {
   private void doIdConverterExceptionTest(FrontendTestIdConverterFactory converterFactory, String expectedExceptionMsg)
       throws InstantiationException, JSONException {
     frontendRestRequestService =
-        new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            converterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName);
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, converterFactory,
+            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
+            datacenterName, hostname, clusterName);
+    frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     doExternalServicesBadInputTest(restMethods, expectedExceptionMsg, false);
@@ -2011,9 +2042,10 @@ public class FrontendRestRequestServiceTest {
         restMethods = RestMethod.values();
       }
       frontendRestRequestService =
-          new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
-              clusterMap, idConverterFactory, securityFactory, urlSigningService, idSigningService, accountService,
+          new FrontendRestRequestService(frontendConfig, frontendMetrics, new FrontendTestRouter(), clusterMap,
+              idConverterFactory, securityFactory, urlSigningService, idSigningService, accountService,
               accountAndContainerInjector, datacenterName, hostname, clusterName);
+      frontendRestRequestService.setupResponseHandler(responseHandler);
       frontendRestRequestService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg,
           mode == FrontendTestSecurityServiceFactory.Mode.ProcessResponse);
@@ -2068,9 +2100,10 @@ public class FrontendRestRequestServiceTest {
    */
   private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
     frontendRestRequestService =
-        new FrontendRestRequestService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, urlSigningService, idSigningService, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName);
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
+            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
+            datacenterName, hostname, clusterName);
+    frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {
@@ -2806,11 +2839,7 @@ class FrontendTestRouter implements Router {
    * Enumerates the different operation types in the router.
    */
   enum OpType {
-    DeleteBlob,
-    GetBlob,
-    PutBlob,
-    StitchBlob,
-    UpdateBlobTtl
+    DeleteBlob, GetBlob, PutBlob, StitchBlob, UpdateBlobTtl
   }
 
   OpType exceptionOpType = null;

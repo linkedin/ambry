@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.MockRouter;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.NettyConfig;
@@ -33,7 +34,9 @@ import static org.junit.Assert.*;
  */
 public class FrontendNettyFactoryTest {
   // dud properties. server should pick up defaults
-  private static final RestRequestHandler REST_REQUEST_HANDLER = new MockRestRequestResponseHandler();
+  private static final RestRequestHandler REST_REQUEST_HANDLER =
+      new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 1,
+          new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter()));
   private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();

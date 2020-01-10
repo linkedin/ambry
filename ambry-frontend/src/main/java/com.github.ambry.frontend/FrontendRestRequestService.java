@@ -68,7 +68,6 @@ class FrontendRestRequestService implements RestRequestService {
   private static final String OPERATION_TYPE_GET = "GET";
   private static final String OPERATION_TYPE_HEAD = "HEAD";
   private static final String OPERATION_TYPE_DELETE = "DELETE";
-  private final RestResponseHandler responseHandler;
   private final Router router;
   private final IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
@@ -84,6 +83,7 @@ class FrontendRestRequestService implements RestRequestService {
   private final String datacenterName;
   private final String hostname;
   private final String clusterName;
+  private RestResponseHandler responseHandler;
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
   private GetPeersHandler getPeersHandler;
@@ -100,7 +100,6 @@ class FrontendRestRequestService implements RestRequestService {
    * response handler controller and a router.
    * @param frontendConfig the {@link FrontendConfig} with configuration parameters.
    * @param frontendMetrics the metrics instance to use in the form of {@link FrontendMetrics}.
-   * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent out.
    * @param router the {@link Router} instance to use to perform blob operations.
    * @param clusterMap the {@link ClusterMap} in use.
    * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter} instance.
@@ -114,14 +113,13 @@ class FrontendRestRequestService implements RestRequestService {
    * @param clusterName the name of the storage cluster that the router communicates with.
    */
   FrontendRestRequestService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
+      Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
       SecurityServiceFactory securityServiceFactory, UrlSigningService urlSigningService,
       IdSigningService idSigningService, AccountService accountService,
       AccountAndContainerInjector accountAndContainerInjector, String datacenterName, String hostname,
       String clusterName) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
-    this.responseHandler = responseHandler;
     this.router = router;
     this.clusterMap = clusterMap;
     this.idConverterFactory = idConverterFactory;
@@ -137,8 +135,19 @@ class FrontendRestRequestService implements RestRequestService {
     logger.trace("Instantiated FrontendRestRequestService");
   }
 
+  /**
+   * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent out.
+   */
+  @Override
+  public void setupResponseHandler(RestResponseHandler responseHandler) {
+    this.responseHandler = responseHandler;
+  }
+
   @Override
   public void start() throws InstantiationException {
+    if (responseHandler == null) {
+      throw new InstantiationException("ResponseHandler is not set.");
+    }
     long startupBeginTime = System.currentTimeMillis();
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();

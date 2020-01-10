@@ -46,7 +46,7 @@ public class MockRestRequestService implements RestRequestService {
   public final static String SEND_RESPONSE_REST_SERVICE_EXCEPTION = "mbssRestServiceException";
   public final static String REST_ERROR_CODE = "mock.rest.request.service.rest.error.code";
 
-  private final RestResponseHandler responseHandler;
+  private RestResponseHandler responseHandler;
   private final Router router;
 
   private VerifiableProperties verifiableProperties;
@@ -67,18 +67,23 @@ public class MockRestRequestService implements RestRequestService {
    * Creates an instance of {@link MockRestRequestService} with {@code router} as the backing {@link Router} and
    * {@code verifiableProperties} defining the behavior of this instance.
    * @param verifiableProperties the {@link VerifiableProperties} that defines the behavior of this instance.
-   * @param responseHandler the {@link RestResponseHandler} instance to use.
    * @param router the {@link Router} that will back this instance.
    */
-  public MockRestRequestService(VerifiableProperties verifiableProperties, RestResponseHandler responseHandler,
-      Router router) {
+  public MockRestRequestService(VerifiableProperties verifiableProperties, Router router) {
     setVerifiableProperties(verifiableProperties);
-    this.responseHandler = responseHandler;
     this.router = router;
   }
 
   @Override
+  public void setupResponseHandler(RestResponseHandler responseHandler) {
+    this.responseHandler = responseHandler;
+  }
+
+  @Override
   public void start() throws InstantiationException {
+    if (responseHandler == null) {
+      throw new InstantiationException("ResponseHandler is not set.");
+    }
     serviceRunning = true;
   }
 

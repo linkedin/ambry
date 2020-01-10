@@ -25,6 +25,11 @@ package com.github.ambry.rest;
 public interface RestRequestService {
 
   /**
+   * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses.
+   */
+  public void setupResponseHandler(RestResponseHandler responseHandler);
+
+  /**
    * Does startup tasks for the RestRequestService. When the function returns, startup is FULLY complete.
    * @throws InstantiationException if RestRequestService is unable to start.
    */

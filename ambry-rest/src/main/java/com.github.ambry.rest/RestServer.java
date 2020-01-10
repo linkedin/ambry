@@ -181,19 +181,21 @@ public class RestServer {
       ((HelixAccountService) accountService).setupRouter(router);
     }
 
-    RestResponseHandlerFactory restResponseHandlerFactory =
-        Utils.getObj(restServerConfig.restServerResponseHandlerFactory,
-            restServerConfig.restServerResponseHandlerScalingUnitCount, metricRegistry);
-    restResponseHandler = restResponseHandlerFactory.getRestResponseHandler();
-
+    // setup restRequestService
     RestRequestServiceFactory restRequestServiceFactory =
-        Utils.getObj(restServerConfig.restServerRestRequestServiceFactory, verifiableProperties, clusterMap,
-            restResponseHandler, router, accountService);
+        Utils.getObj(restServerConfig.restServerRestRequestServiceFactory, verifiableProperties, clusterMap, router,
+            accountService);
     restRequestService = restRequestServiceFactory.getRestRequestService();
+    if (restRequestService == null) {
+      throw new InstantiationException("RestRequestService is null");
+    }
 
-    RestRequestHandlerFactory restRequestHandlerFactory = Utils.getObj(restServerConfig.restServerRequestHandlerFactory,
-        restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, restRequestService);
-    restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
+    RestRequestResponseHandlerFactory restHandlerFactory =
+        Utils.getObj(restServerConfig.restServerRequestHandlerFactory,
+            restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, restRequestService);
+    restRequestHandler = restHandlerFactory.getRestRequestHandler();
+    restResponseHandler = restHandlerFactory.getRestResponseHandler();
+
     publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
         restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
 
@@ -202,8 +204,8 @@ public class RestServer {
             restRequestHandler, publicAccessLogger, restServerState, sslFactory);
     nioServer = nioServerFactory.getNioServer();
 
-    if (accountService == null || router == null || restResponseHandler == null || restRequestService == null
-        || restRequestHandler == null || nioServer == null) {
+    if (accountService == null || router == null || restResponseHandler == null || restRequestHandler == null
+        || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
     }
     NetworkConfig networkConfig = new NetworkConfig(verifiableProperties);

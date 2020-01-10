@@ -24,7 +24,9 @@ import com.github.ambry.router.RouterFactory;
  * <p/>
  * Public because factories are usually constructed via {@link com.github.ambry.utils.Utils#getObj(String, Object...)}
  */
-public class FaultyFactory implements AccountServiceFactory, RestRequestServiceFactory, NioServerFactory, RestRequestHandlerFactory, RestResponseHandlerFactory, RouterFactory {
+public class FaultyFactory
+    implements AccountServiceFactory, RestRequestServiceFactory, NioServerFactory, RestRequestResponseHandlerFactory,
+               RouterFactory {
 
   // for RestResponseHandlerFactory
   public FaultyFactory(Object obj1, Object obj2) {
@@ -36,7 +38,12 @@ public class FaultyFactory implements AccountServiceFactory, RestRequestServiceF
     // don't care.
   }
 
-  // for RestRequestServiceFactory and RouterFactory
+  // for RestRequestServiceFactory
+  public FaultyFactory(Object obj1, Object obj2, Object obj3, Object obj4) {
+    // don't care.
+  }
+
+  // for RouterFactory
   public FaultyFactory(Object obj1, Object obj2, Object obj3, Object obj4, Object obj5) {
     // don't care.
   }

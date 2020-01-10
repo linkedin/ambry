@@ -19,47 +19,25 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- * {@link AsyncRequestResponseHandler} specific implementation of {@link RestRequestHandlerFactory} and
- * {@link RestResponseHandlerFactory}.
+ * {@link AsyncRequestResponseHandler} specific implementation of {@link RestRequestResponseHandlerFactory}.
  * <p/>
- * Sets up all the supporting cast required for {@link AsyncRequestResponseHandler}. Maintains a single instance of
- * {@link AsyncRequestResponseHandler} and returns the same instance on any call to {@link #getRestRequestHandler()} or
+ * Sets up all the supporting cast required for {@link AsyncRequestResponseHandler}. Maintains a single handler of
+ * {@link AsyncRequestResponseHandler} and returns the same handler on any call to {@link #getRestRequestHandler()} or
  * {@link #getRestResponseHandler()}.
  */
-public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFactory, RestResponseHandlerFactory {
+public class AsyncRequestResponseHandlerFactory implements RestRequestResponseHandlerFactory {
 
-  private static final ReentrantLock lock = new ReentrantLock();
-  private static AsyncRequestResponseHandler instance;
-  private static RequestResponseHandlerMetrics requestResponseHandlerMetrics;
-
+  private AsyncRequestResponseHandler handler;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
-   * Constructor for {@link RestResponseHandlerFactory}.
-   * @param handlerCount the number of response scaling units required.
-   * @param metricRegistry the {@link MetricRegistry} instance that should be used for metrics.
-   * @throws IllegalArgumentException if {@code handlerCount} <= 0 or if {@code metricRegistry} is null.
-   */
-  public AsyncRequestResponseHandlerFactory(Integer handlerCount, MetricRegistry metricRegistry) {
-    if (metricRegistry == null) {
-      throw new IllegalArgumentException("MetricRegistry instance provided is null");
-    } else if (handlerCount <= 0) {
-      throw new IllegalArgumentException("Response handler scaling unit count has to be > 0. Is " + handlerCount);
-    }
-    buildInstance(metricRegistry);
-    logger.trace("Instantiated AsyncRequestResponseHandlerFactory as RestResponseHandler");
-  }
-
-  /**
-   * Constructor for {@link RestRequestHandlerFactory}.
    * @param handlerCount the number of request scaling units required.
-   * @param metricRegistry the {@link MetricRegistry} instance that should be used for metrics.
+   * @param metricRegistry the {@link MetricRegistry} handler that should be used for metrics.
    * @param restRequestService the {@link RestRequestService} to use for handling requests.
    * @throws IllegalArgumentException if {@code handlerCount} <= 0 or if {@code metricRegistry} or
    * {@code restRequestService} is null.
@@ -71,51 +49,26 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
     } else if (handlerCount <= 0) {
       throw new IllegalArgumentException("Request handler scaling unit count has to be > 0. Is " + handlerCount);
     } else {
-      buildInstance(metricRegistry);
-      instance.setupRequestHandling(handlerCount, restRequestService);
+      handler = new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(metricRegistry), handlerCount,
+          restRequestService);
     }
     logger.trace("Instantiated AsyncRequestResponseHandlerFactory as RestRequestHandler");
   }
 
   /**
-   * Returns an instance of {@link AsyncRequestResponseHandler}.
-   * @return an instance of {@link AsyncRequestResponseHandler}.
+   * @return an handler of {@link AsyncRequestResponseHandler}.
    */
   @Override
   public RestRequestHandler getRestRequestHandler() {
-    return instance;
+    return handler;
   }
 
   /**
-   * Returns an instance of {@link AsyncRequestResponseHandler}.
-   * @return an instance of {@link AsyncRequestResponseHandler}.
+   * @return an handler of {@link AsyncRequestResponseHandler}.
    */
   @Override
   public RestResponseHandler getRestResponseHandler() {
-    return instance;
-  }
-
-  /**
-   * Returns the singleton {@link AsyncRequestResponseHandler} instance being maintained. Creates it if it hasn't been
-   * created already.
-   * @param metricRegistry the {@link MetricRegistry} instance that should be used for metrics.
-   */
-  private static void buildInstance(MetricRegistry metricRegistry) {
-    lock.lock();
-    try {
-      if (instance == null) {
-        AsyncRequestResponseHandlerFactory.requestResponseHandlerMetrics =
-            new RequestResponseHandlerMetrics(metricRegistry);
-        instance = new AsyncRequestResponseHandler(requestResponseHandlerMetrics);
-      }
-      // check if same instance of MetricRegistry - otherwise it is a problem.
-      if (AsyncRequestResponseHandlerFactory.requestResponseHandlerMetrics.metricRegistry != metricRegistry) {
-        throw new IllegalStateException("MetricRegistry instance provided during construction of "
-            + "AsyncRequestResponseHandler differs from the one currently received");
-      }
-    } finally {
-      lock.unlock();
-    }
+    return handler;
   }
 }
 
@@ -171,7 +124,7 @@ class RequestResponseHandlerMetrics {
   public final Counter residualResponseSetSize;
 
   /**
-   * Creates an instance of RequestResponseHandlerMetrics using the given {@code metricRegistry}.
+   * Creates an handler of RequestResponseHandlerMetrics using the given {@code metricRegistry}.
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
    */
   public RequestResponseHandlerMetrics(MetricRegistry metricRegistry) {

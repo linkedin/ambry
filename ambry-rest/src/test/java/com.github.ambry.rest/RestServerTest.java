@@ -131,7 +131,7 @@ public class RestServerTest {
         MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.rest.request.service.factory",
         MockRestRequestServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.request.handler.factory",
+    properties.setProperty("rest.server.request.response.handler.factory",
         MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
   }
@@ -183,8 +183,7 @@ public class RestServerTest {
     doBadFactoryClassTest("rest.server.nio.server.factory");
     doBadFactoryClassTest("rest.server.rest.request.service.factory");
     doBadFactoryClassTest("rest.server.router.factory");
-    doBadFactoryClassTest("rest.server.response.handler.factory");
-    doBadFactoryClassTest("rest.server.request.handler.factory");
+    doBadFactoryClassTest("rest.server.request.response.handler.factory");
     doBadFactoryClassTest("rest.server.account.service.factory");
   }
 
