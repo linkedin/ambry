@@ -23,6 +23,8 @@ import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+
 
 /**
  * An implementation of {@link ReplicaSyncUpManager} that helps track replica catchup state.
@@ -81,8 +83,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
       latch.await();
       partitionToBootstrapLatch.remove(partitionName);
       if (!partitionToBootstrapSuccess.remove(partitionName)) {
-        throw new StateTransitionException("Partition " + partitionName + " failed to bootstrap.",
-            StateTransitionException.TransitionErrorCode.BootstrapFailure);
+        throw new StateTransitionException("Partition " + partitionName + " failed to bootstrap.", BootstrapFailure);
       }
       logger.info("Bootstrap is complete on partition {}", partitionName);
     }
@@ -94,15 +95,14 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     if (latch == null) {
       logger.error("Partition {} is not found for deactivation", partitionName);
       throw new StateTransitionException("No deactivation latch is found for partition " + partitionName,
-          StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+          ReplicaNotFound);
     } else {
       logger.info("Waiting for partition {} to be deactivated", partitionName);
       latch.await();
       partitionToDeactivationLatch.remove(partitionName);
       // throw exception to put replica into ERROR state， this happens when disk crashes during deactivation
       if (!partitionToDeactivationSuccess.remove(partitionName)) {
-        throw new StateTransitionException("Deactivation failed on partition " + partitionName,
-            StateTransitionException.TransitionErrorCode.DeactivationFailure);
+        throw new StateTransitionException("Deactivation failed on partition " + partitionName, DeactivationFailure);
       }
       logger.info("Deactivation is complete on partition {}", partitionName);
     }

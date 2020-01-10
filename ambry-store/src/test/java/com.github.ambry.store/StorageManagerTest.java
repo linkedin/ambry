@@ -348,7 +348,7 @@ public class StorageManagerTest {
     try {
       mockHelixParticipant.onPartitionBecomeInactiveFromStandby(localReplica.getPartitionId().toPathString());
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaOperationFailure,
+      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
           e.getErrorCode());
     } finally {
       shutdownAndAssertStoresInaccessible(mockStorageManager, localReplicas);

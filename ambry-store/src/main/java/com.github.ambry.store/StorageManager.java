@@ -43,6 +43,8 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+
 
 /**
  * The storage manager that handles all the stores on this node. The stores on each disk are handled by a
@@ -388,14 +390,13 @@ public class StorageManager implements StoreManager {
         if (replicaToAdd == null) {
           logger.error("No new replica found for partition {} in cluster map", partitionName);
           throw new StateTransitionException(
-              "New replica " + partitionName + " is not found in clustermap for " + currentNode,
-              StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+              "New replica " + partitionName + " is not found in clustermap for " + currentNode, ReplicaNotFound);
         }
         // Attempt to add store into storage manager. If store already exists, fail adding store request.
         if (!addBlobStore(replicaToAdd)) {
           logger.error("Failed to add store {} into storage manager", partitionName);
           throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
-              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+              ReplicaOperationFailure);
         }
         // TODO, update InstanceConfig in Helix
         // note that partitionNameToReplicaId should be updated if addBlobStore succeeds, so replicationManager should be
@@ -410,7 +411,7 @@ public class StorageManager implements StoreManager {
         if (getStore(replica.getPartitionId(), false) == null) {
           throw new StateTransitionException(
               "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
-              StateTransitionException.TransitionErrorCode.StoreNotStarted);
+              StoreNotStarted);
         }
       }
     }
@@ -445,18 +446,18 @@ public class StorageManager implements StoreManager {
           // 2. disable compaction on this store
           if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
             logger.error("Failed to disable compaction on store {}", partitionName);
+            // we set error code to ReplicaNotFound because that is the only reason why compaction may fail.
             throw new StateTransitionException("Couldn't disable compaction on replica " + replica.getReplicaPath(),
-                StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+                ReplicaNotFound);
           }
           logger.info("Compaction is successfully disabled on store {}", partitionName);
         } else {
           // this may happen when the disk holding this store crashes (or store is stopped by server admin tool)
-          throw new StateTransitionException("Store " + partitionName + " is not started",
-              StateTransitionException.TransitionErrorCode.StoreNotStarted);
+          throw new StateTransitionException("Store " + partitionName + " is not started", StoreNotStarted);
         }
       } else {
         throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
-            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+            ReplicaNotFound);
       }
     }
   }

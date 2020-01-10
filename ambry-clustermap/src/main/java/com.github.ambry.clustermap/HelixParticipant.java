@@ -39,6 +39,8 @@ import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+
 
 /**
  * An implementation of {@link ClusterParticipant} that registers as a participant to a Helix cluster.
@@ -322,8 +324,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         replicaSyncUpManager.waitBootstrapCompleted(partitionName);
       } catch (InterruptedException e) {
         logger.error("Bootstrap was interrupted on partition {}", partitionName);
-        throw new StateTransitionException("Bootstrap failed or was interrupted",
-            StateTransitionException.TransitionErrorCode.BootstrapFailure);
+        throw new StateTransitionException("Bootstrap failed or was interrupted", BootstrapFailure);
       } catch (StateTransitionException e) {
         logger.error("Bootstrap didn't complete on partition {}", partitionName, e);
         throw e;
@@ -368,8 +369,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         replicaSyncUpManager.waitDeactivationCompleted(partitionName);
       } catch (InterruptedException e) {
         logger.error("Deactivation was interrupted on partition {}", partitionName);
-        throw new StateTransitionException("Deactivation failed or was interrupted",
-            StateTransitionException.TransitionErrorCode.DeactivationFailure);
+        throw new StateTransitionException("Deactivation failed or was interrupted", DeactivationFailure);
       } catch (StateTransitionException e) {
         logger.error("Deactivation didn't complete on partition {}", partitionName, e);
         throw e;

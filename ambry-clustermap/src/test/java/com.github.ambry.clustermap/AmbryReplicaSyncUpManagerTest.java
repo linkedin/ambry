@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -63,8 +64,8 @@ public class AmbryReplicaSyncUpManagerTest {
     replicas.removeAll(localDcPeers);
     localDcPeerReplicas = new ArrayList<>(localDcPeers);
     remoteDcPeerReplicas = new ArrayList<>(replicas);
-    List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
-    zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
+    List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
+    zkInfoList.add(new TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     Properties properties = new Properties();
     properties.setProperty("clustermap.cluster.name", "test");

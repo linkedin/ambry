@@ -49,7 +49,7 @@ public class MockReplicationManager extends ReplicationManager {
   // Variables for controlling getRemoteReplicaLagFromLocalInBytes()
   // the key is partitionId:hostname:replicaPath
   public Map<String, Long> lagOverrides = null;
-  CountDownLatch listenerExcuctionLatch = null;
+  CountDownLatch listenerExecutionLatch = null;
   MockReplicationListener replicationListener = new MockReplicationListener();
 
   /**
@@ -175,16 +175,16 @@ public class MockReplicationManager extends ReplicationManager {
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
       super.onPartitionBecomeStandbyFromBootstrap(partitionName);
-      if (listenerExcuctionLatch != null) {
-        listenerExcuctionLatch.countDown();
+      if (listenerExecutionLatch != null) {
+        listenerExecutionLatch.countDown();
       }
     }
 
     @Override
     public void onPartitionBecomeInactiveFromStandby(String partitionName) {
       super.onPartitionBecomeInactiveFromStandby(partitionName);
-      if (listenerExcuctionLatch != null) {
-        listenerExcuctionLatch.countDown();
+      if (listenerExecutionLatch != null) {
+        listenerExecutionLatch.countDown();
       }
     }
   }

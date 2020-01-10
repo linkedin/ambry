@@ -41,6 +41,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+
 
 /**
  * Set up replicas based on {@link ReplicationEngine} and do replication across all data centers.
@@ -224,7 +226,7 @@ public class ReplicationManager extends ReplicationEngine {
         // no matter this is an existing replica or new added one, it should be present in storage manager because new
         // replica is added into storage manager first.
         throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
-            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+            ReplicaNotFound);
       }
 
       if (!partitionToPartitionInfo.containsKey(replica.getPartitionId())) {
@@ -233,7 +235,7 @@ public class ReplicationManager extends ReplicationEngine {
         logger.info("Didn't find replica {} in replication manager, starting to add it.", partitionName);
         if (!addReplica(replica)) {
           throw new StateTransitionException("Failed to add new replica " + partitionName + " into replication manager",
-              StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+              ReplicaOperationFailure);
         }
       }
     }
@@ -247,8 +249,7 @@ public class ReplicationManager extends ReplicationEngine {
       // 1. check if store is started
       if (store == null) {
         throw new StateTransitionException(
-            "Store " + partitionName + " is not started during Bootstrap-To-Standby transition",
-            StateTransitionException.TransitionErrorCode.StoreNotStarted);
+            "Store " + partitionName + " is not started during Bootstrap-To-Standby transition", StoreNotStarted);
       }
       // 2. check if store is new added and needs to catch up with peer replicas.
       if (store.isBootstrapInProgress()) {
@@ -280,8 +281,7 @@ public class ReplicationManager extends ReplicationEngine {
       // 1. check if store is started
       if (store == null) {
         throw new StateTransitionException(
-            "Store " + partitionName + " is not started during Standby-To-Inactive transition",
-            StateTransitionException.TransitionErrorCode.StoreNotStarted);
+            "Store " + partitionName + " is not started during Standby-To-Inactive transition", StoreNotStarted);
       }
       replicaSyncUpManager.initiateDeactivation(localReplica);
     }

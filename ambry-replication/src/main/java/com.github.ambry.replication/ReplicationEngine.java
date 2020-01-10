@@ -156,6 +156,10 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         if (localStore.getCurrentState() == ReplicaState.INACTIVE) {
           // if local store is in INACTIVE state, that means deactivation process is initiated and in progress on this
           // replica. We update SyncUpManager by peer's lag from last PUT offset in local store.
+          // it's ok if deactivation has completed and subsequent metadata request attempts to update lag of same replica
+          // again. The reason is, in previous request, onDeactivationComplete method should have removed local replica
+          // from SyncUpManager and it should be no-op and "updated" should be false when calling updateLagBetweenReplicas()
+          // for subsequent request. Hence, it won't call onDeactivationComplete() twice.
           boolean updated =
               replicaSyncUpManager.updateLagBetweenReplicas(localReplica, remoteReplicaInfo.getReplicaId(),
                   localStore.getEndPositionOfLastPut() - totalBytesRead);
