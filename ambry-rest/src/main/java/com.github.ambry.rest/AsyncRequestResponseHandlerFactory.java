@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AsyncRequestResponseHandlerFactory implements RestRequestResponseHandlerFactory {
 
-  private AsyncRequestResponseHandler handler;
+  private final AsyncRequestResponseHandler handler;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   /**

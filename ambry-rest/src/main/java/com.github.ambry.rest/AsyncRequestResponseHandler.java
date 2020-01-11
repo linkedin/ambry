@@ -70,9 +70,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
       RestRequestService restRequestService) {
     this.metrics = metrics;
     metrics.trackAsyncRequestResponseHandler(this);
-    if (isRunning()) {
-      throw new IllegalStateException("Cannot modify scaling unit count after the service has started");
-    } else if (workerCount < 0) {
+    if (workerCount < 0) {
       throw new IllegalArgumentException("Request worker workerCount has to be >= 0");
     } else if (workerCount > 0 && restRequestService == null) {
       throw new IllegalArgumentException("RestRequestService cannot be null");
@@ -89,21 +87,22 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   @Override
   public void start() {
     long startupBeginTime = System.currentTimeMillis();
+    if (isRunning()) {
+      throw new IllegalStateException("AsyncRequestResponseHandler is running.");
+    }
     try {
-      if (!isRunning()) {
-        logger.info("Starting AsyncRequestResponseHandler with {} request workers", requestWorkersCount);
-        for (int i = 0; i < requestWorkersCount; i++) {
-          long workerStartupBeginTime = System.currentTimeMillis();
-          AsyncRequestWorker asyncRequestWorker = new AsyncRequestWorker(metrics, restRequestService);
-          asyncRequestWorkers.add(asyncRequestWorker);
-          Utils.newThread("RequestWorker-" + i, asyncRequestWorker, false).start();
-          long workerStartupTime = System.currentTimeMillis() - workerStartupBeginTime;
-          metrics.requestWorkerStartTimeInMs.update(workerStartupTime);
-          logger.info("AsyncRequestWorker startup took {} ms", workerStartupTime);
-        }
-        asyncResponseHandler = new AsyncResponseHandler(metrics);
-        isRunning = true;
+      logger.info("Starting AsyncRequestResponseHandler with {} request workers", requestWorkersCount);
+      for (int i = 0; i < requestWorkersCount; i++) {
+        long workerStartupBeginTime = System.currentTimeMillis();
+        AsyncRequestWorker asyncRequestWorker = new AsyncRequestWorker(metrics, restRequestService);
+        asyncRequestWorkers.add(asyncRequestWorker);
+        Utils.newThread("RequestWorker-" + i, asyncRequestWorker, false).start();
+        long workerStartupTime = System.currentTimeMillis() - workerStartupBeginTime;
+        metrics.requestWorkerStartTimeInMs.update(workerStartupTime);
+        logger.info("AsyncRequestWorker startup took {} ms", workerStartupTime);
       }
+      asyncResponseHandler = new AsyncResponseHandler(metrics);
+      isRunning = true;
     } finally {
       long startupTime = System.currentTimeMillis() - startupBeginTime;
       metrics.requestResponseHandlerStartTimeInMs.update(startupTime);

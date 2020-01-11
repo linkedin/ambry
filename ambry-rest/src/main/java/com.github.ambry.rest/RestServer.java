@@ -191,7 +191,7 @@ public class RestServer {
     }
 
     RestRequestResponseHandlerFactory restHandlerFactory =
-        Utils.getObj(restServerConfig.restServerRequestHandlerFactory,
+        Utils.getObj(restServerConfig.restServerRequestResponseHandlerFactory,
             restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, restRequestService);
     restRequestHandler = restHandlerFactory.getRestRequestHandler();
     restResponseHandler = restHandlerFactory.getRestResponseHandler();

@@ -45,7 +45,7 @@ public class RestServerConfig {
    */
   @Config("rest.server.request.response.handler.factory")
   @Default("com.github.ambry.rest.AsyncRequestResponseHandlerFactory")
-  public final String restServerRequestHandlerFactory;
+  public final String restServerRequestResponseHandlerFactory;
 
   /**
    * The number of scaling units in RestResponseHandler handle responses.
@@ -96,7 +96,7 @@ public class RestServerConfig {
         verifiableProperties.getString("rest.server.nio.server.factory", "com.github.ambry.rest.FrontendNettyFactory");
     restServerRequestHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.request.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
-    restServerRequestHandlerFactory = verifiableProperties.getString("rest.server.request.response.handler.factory",
+    restServerRequestResponseHandlerFactory = verifiableProperties.getString("rest.server.request.response.handler.factory",
         "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerResponseHandlerScalingUnitCount =
         verifiableProperties.getIntInRange("rest.server.response.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
