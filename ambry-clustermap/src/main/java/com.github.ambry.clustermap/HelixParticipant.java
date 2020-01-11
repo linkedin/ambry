@@ -384,7 +384,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     if (replicationManagerListener != null) {
       // 1. take actions in replication manager
       //    (1) set local store state to OFFLINE
-      //    (2) initiate decommission in ReplicaSyncUpManager
+      //    (2) initiate disconnection in ReplicaSyncUpManager
       replicationManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
       // 2. wait until peer replicas have caught up with local replica
       try {
