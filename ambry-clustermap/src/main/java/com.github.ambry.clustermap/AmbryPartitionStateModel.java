@@ -79,8 +79,8 @@ public class AmbryPartitionStateModel extends StateModel {
   @Transition(to = "INACTIVE", from = "STANDBY")
   public void onBecomeInactiveFromStandby(Message message, NotificationContext context) {
     String partitionName = message.getPartitionName();
-    logger.info("Partition {} in resource {} is becoming INACTIVE from STANDBY", message.getPartitionName(),
-        partitionName);
+    logger.info("Partition {} in resource {} is becoming INACTIVE from STANDBY", partitionName,
+        message.getResourceName());
     if (clusterMapConfig.clustermapEnableStateModelListener) {
       partitionStateChangeListener.onPartitionBecomeInactiveFromStandby(partitionName);
     }
