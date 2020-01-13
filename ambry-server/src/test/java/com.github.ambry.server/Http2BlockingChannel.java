@@ -29,6 +29,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.HttpMethod;
@@ -49,14 +50,16 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * A HTTP2 implementation of {@link ConnectedChannel}
+ * A HTTP2 implementation of {@link ConnectedChannel}. This implementation is for test now. It will be imporved to
+ * to support replication in the future.
  */
 public class Http2BlockingChannel implements ConnectedChannel {
-  protected final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannel.class);
+  private final Http2ResponseHandler http2ResponseHandler;
+  private final String hostName;
+  private final int port;
+  private EventLoopGroup workerGroup;
   private Channel channel;
-  private Http2ResponseHandler http2ResponseHandler;
-  private String hostName;
-  private int port;
 
   public Http2BlockingChannel(String hostName, int port) {
     http2ResponseHandler = new Http2ResponseHandler();
@@ -66,8 +69,9 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
   @Override
   public void connect() throws IOException {
+    workerGroup = new NioEventLoopGroup();
     Bootstrap b = new Bootstrap();
-    b.group(new NioEventLoopGroup());
+    b.group(workerGroup);
     b.channel(NioSocketChannel.class);
     b.option(ChannelOption.SO_KEEPALIVE, true);
     b.remoteAddress(hostName, port);
@@ -86,7 +90,8 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
   @Override
   public void disconnect() throws IOException {
-
+    channel.disconnect().syncUninterruptibly();
+    workerGroup.shutdownGracefully();
   }
 
   @Override
@@ -121,11 +126,11 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
   @Override
   public String getRemoteHost() {
-    return null;
+    return hostName;
   }
 
   @Override
   public int getRemotePort() {
-    return 0;
+    return port;
   }
 }

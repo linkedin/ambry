@@ -29,10 +29,10 @@ import io.netty.handler.ssl.SslHandler;
  * A {@link ChannelInitializer} to be used with {@link Http2BlockingChannel}. Calling {@link #initChannel(SocketChannel)}
  * adds the necessary handlers to a channel's pipeline so that it may handle requests.
  */
-public class Http2ClientChannelInitializer extends ChannelInitializer<SocketChannel> {
+class Http2ClientChannelInitializer extends ChannelInitializer<SocketChannel> {
   private final SSLFactory sslFactory;
-  String host;
-  int port;
+  private final String host;
+  private final int port;
 
   /**
    * Construct a {@link Http2ClientChannelInitializer}.
@@ -57,7 +57,7 @@ public class Http2ClientChannelInitializer extends ChannelInitializer<SocketChan
     pipeline.addLast(new Http2MultiplexHandler(new DummyChildHandler()));
   }
 
-  public class DummyChildHandler extends ChannelInboundHandlerAdapter {
+  private class DummyChildHandler extends ChannelInboundHandlerAdapter {
 
     public DummyChildHandler() {
     }

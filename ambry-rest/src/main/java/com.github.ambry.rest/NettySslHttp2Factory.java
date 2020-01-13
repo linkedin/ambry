@@ -39,14 +39,14 @@ import static com.github.ambry.rest.NettySslFactory.*;
 
 /**
  * An HTTP/2 specific implementation of {@link SSLFactory} that uses Netty's SSL libraries for HTTP2.
- * This has the benefit of using OpenSSL instead of JDK's SSL implementation when the netty-tcnative library is loaded.
- * OpenSSL shows significant performance enhancements over the JDK implementation.
+ * The main differences between this factory and {@link NettySslFactory} are getServerSslContext and getServerClientContext.
+ * This factory provides HTTP2 specific sslContext: HTTP2 Ciphers and ALPN.
+ *
  */
 public class NettySslHttp2Factory implements SSLFactory {
   private static final Logger logger = LoggerFactory.getLogger(NettySslFactory.class);
   private final SslContext nettyServerSslContext;
   private final SslContext nettyClientSslContext;
-  private final SSLContext jdkSslContext;
   private final String endpointIdentification;
 
   /**
@@ -60,8 +60,6 @@ public class NettySslHttp2Factory implements SSLFactory {
     nettyClientSslContext = getClientSslContext(sslConfig);
     // Netty's OpenSsl based implementation does not use the JDK SSLContext so we have to fall back to the JDK based
     // factory to support this method.
-
-    jdkSslContext = sslConfig.sslHttp2SelfSign ? null : new JdkSslFactory(sslConfig).getSSLContext();
 
     this.endpointIdentification =
         sslConfig.sslEndpointIdentificationAlgorithm.isEmpty() ? null : sslConfig.sslEndpointIdentificationAlgorithm;
@@ -82,7 +80,7 @@ public class NettySslHttp2Factory implements SSLFactory {
 
   @Override
   public SSLContext getSSLContext() {
-    return jdkSslContext;
+    throw new UnsupportedOperationException();
   }
 
   /**

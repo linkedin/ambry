@@ -153,7 +153,8 @@ public class SSLConfig {
   public final String sslHttp2Factory;
 
   /**
-   * Use self signed HTTP2 SSL certification if true.
+   * Use self signed HTTP2 SSL certification if set to true.
+   * Note: Production systems should set this to false as it is relatively insecure.
    */
   @Config("ssl.http2.self.sign")
   @Default("true")

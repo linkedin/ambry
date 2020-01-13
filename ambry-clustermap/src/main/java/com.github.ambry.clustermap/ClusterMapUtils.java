@@ -254,7 +254,7 @@ public class ClusterMapUtils {
   }
 
   /**
-   * Validate plainTextPort and sslPort.
+   * Validate plainTextPort, sslPort and http2Port.
    * @param plainTextPort PlainText {@link Port}.
    * @param sslPort SSL {@link Port}.
    * @throws IllegalArgumentException if ports are not valid.
