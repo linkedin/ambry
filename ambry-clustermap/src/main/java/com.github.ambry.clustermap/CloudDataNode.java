@@ -58,7 +58,7 @@ public class CloudDataNode implements DataNodeId {
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
-    validatePorts(plainTextPort, sslPort, isSslEnabled);
+    validatePorts(plainTextPort, sslPort, http2Port, isSslEnabled);
   }
 
   /**
@@ -74,7 +74,7 @@ public class CloudDataNode implements DataNodeId {
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
-    validatePorts(plainTextPort, sslPort, isSslEnabled);
+    validatePorts(plainTextPort, sslPort, http2Port, isSslEnabled);
   }
 
   @Override

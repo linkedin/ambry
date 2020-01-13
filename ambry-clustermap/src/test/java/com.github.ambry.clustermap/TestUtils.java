@@ -98,12 +98,13 @@ public class TestUtils {
     return jsonObject;
   }
 
-  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, HardwareState hardwareState,
-      JSONArray disks) throws JSONException {
+  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, int http2Port,
+      HardwareState hardwareState, JSONArray disks) throws JSONException {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
     jsonObject.put("sslport", sslPort);
+    jsonObject.put("http2port", http2Port);
     jsonObject.put("xid", DEFAULT_XID);
     jsonObject.put("hardwareState", hardwareState.name());
     jsonObject.put("disks", disks);
@@ -152,7 +153,7 @@ public class TestUtils {
       HardwareState hardwareState, JSONArray disks) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, 8666, hardwareState, disks));
     }
     return jsonArray;
   }
@@ -172,7 +173,7 @@ public class TestUtils {
   private static void updateJsonArrayDataNodes(JSONArray dataNodeJsonArray, int dataNodeCount, String hostname,
       int basePort, int sslPort, HardwareState hardwareState, JSONArray disks) throws JSONException {
     for (int i = dataNodeJsonArray.length(); i < dataNodeCount; ++i) {
-      dataNodeJsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks));
+      dataNodeJsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, 8666, hardwareState, disks));
     }
   }
 
@@ -241,7 +242,7 @@ public class TestUtils {
     for (int i = 0; i < dataNodeCount; ++i) {
       JSONObject jsonDataNode =
           (i % 2 == 0) ? getJsonDataNode(hostname, basePort + i, sslPort + i, i, DEFAULT_XID, hardwareState, disks)
-              : getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks);
+              : getJsonDataNode(hostname, basePort + i, sslPort + i, 8666, hardwareState, disks);
       jsonArray.put(jsonDataNode);
     }
     return jsonArray;
@@ -262,7 +263,7 @@ public class TestUtils {
       HardwareState hardwareState, JSONArray disks) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort, sslPort, hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname, basePort, sslPort, 8666, hardwareState, disks));
     }
     return jsonArray;
   }
