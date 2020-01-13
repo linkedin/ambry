@@ -235,7 +235,7 @@ public class RestServer {
       restResponseHandler.start();
       long restResponseHandlerStartTime = System.currentTimeMillis();
       elapsedTime = restResponseHandlerStartTime - reporterStartTime;
-      logger.info("Response handler start took {} ms", elapsedTime);
+      logger.info("Response handler and Request Handler start took {} ms", elapsedTime);
       restServerMetrics.restResponseHandlerStartTimeInMs.update(elapsedTime);
 
       restRequestService.start();
@@ -244,14 +244,8 @@ public class RestServer {
       logger.info("Rest request service start took {} ms", elapsedTime);
       restServerMetrics.restRequestServiceStartTimeInMs.update(elapsedTime);
 
-      restRequestHandler.start();
-      long restRequestHandlerStartTime = System.currentTimeMillis();
-      elapsedTime = restRequestHandlerStartTime - restRequestServiceStartTime;
-      logger.info("Request handler start took {} ms", elapsedTime);
-      restServerMetrics.restRequestHandlerStartTimeInMs.update(elapsedTime);
-
       nioServer.start();
-      elapsedTime = System.currentTimeMillis() - restRequestHandlerStartTime;
+      elapsedTime = System.currentTimeMillis() - restRequestServiceStartTime;
       logger.info("NIO server start took {} ms", elapsedTime);
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
 
