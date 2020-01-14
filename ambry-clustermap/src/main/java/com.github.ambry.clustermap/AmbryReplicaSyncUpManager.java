@@ -40,9 +40,9 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
 public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   private final ConcurrentHashMap<String, CountDownLatch> partitionToBootstrapLatch = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, CountDownLatch> partitionToDeactivationLatch = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, CountDownLatch> partitionToDisconnectionLatch = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Boolean> partitionToBootstrapSuccess = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Boolean> partitionToDeactivationSuccess = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, CountDownLatch> partitionToDisconnectionLatch = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Boolean> partitionToDisconnectionSuccess = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<ReplicaId, LocalReplicaLagInfos> replicaToLagInfos = new ConcurrentHashMap<>();
   private final ClusterMapConfig clusterMapConfig;
@@ -183,15 +183,14 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     if (latch == null) {
       logger.error("Partition {} is not found for disconnection", partitionName);
       throw new StateTransitionException("No disconnection latch is found for partition " + partitionName,
-          StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+          ReplicaNotFound);
     } else {
       logger.info("Waiting for partition {} to be disconnected", partitionName);
       latch.await();
       partitionToDisconnectionLatch.remove(partitionName);
       // throw exception to put replica into ERROR state， this happens when disk crashes during disconnection
       if (!partitionToDisconnectionSuccess.remove(partitionName)) {
-        throw new StateTransitionException("Disconnection failed on partition " + partitionName,
-            StateTransitionException.TransitionErrorCode.DisconnectionFailure);
+        throw new StateTransitionException("Disconnection failed on partition " + partitionName, DisconnectionFailure);
       }
       logger.info("Disconnection is complete on partition {}", partitionName);
     }
@@ -218,9 +217,9 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
     partitionToBootstrapSuccess.clear();
     partitionToDeactivationLatch.clear();
     partitionToDeactivationSuccess.clear();
-    replicaToLagInfos.clear();
     partitionToDisconnectionLatch.clear();
     partitionToDisconnectionSuccess.clear();
+    replicaToLagInfos.clear();
   }
 
   /**

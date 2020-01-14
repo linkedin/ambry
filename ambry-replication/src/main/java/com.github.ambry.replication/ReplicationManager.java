@@ -292,14 +292,13 @@ public class ReplicationManager extends ReplicationEngine {
       // check if local replica exists
       if (localReplica == null) {
         throw new StateTransitionException("Replica " + partitionName + " is not found on current node",
-            StateTransitionException.TransitionErrorCode.ReplicaNotFound);
+            ReplicaNotFound);
       }
       // check if store is started
       Store store = storeManager.getStore(localReplica.getPartitionId());
       if (store == null) {
         throw new StateTransitionException(
-            "Store " + partitionName + " is not started during Inactive-To-Offline transition",
-            StateTransitionException.TransitionErrorCode.StoreNotStarted);
+            "Store " + partitionName + " is not started during Inactive-To-Offline transition", StoreNotStarted);
       }
       // set local store state to OFFLINE and initiate disconnection
       store.setCurrentState(ReplicaState.OFFLINE);

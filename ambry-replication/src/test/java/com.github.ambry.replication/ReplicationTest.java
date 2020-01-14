@@ -97,6 +97,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -306,8 +307,7 @@ public class ReplicationTest {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline("-1");
       fail("should fail because replica is not found");
     } catch (StateTransitionException e) {
-      assertEquals("Transition error doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
-          e.getErrorCode());
+      assertEquals("Transition error doesn't match", ReplicaNotFound, e.getErrorCode());
     }
     // 2. create a new partition and test replica addition success case
     ReplicaId newReplicaToAdd = getNewReplicaToAdd(clusterMap);
@@ -325,8 +325,7 @@ public class ReplicationTest {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
       fail("should fail due to replica addition failure");
     } catch (StateTransitionException e) {
-      assertEquals("Transition error doesn't match",
-          StateTransitionException.TransitionErrorCode.ReplicaOperationFailure, e.getErrorCode());
+      assertEquals("Transition error doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
     replicationManager.addReplicaReturnVal = null;
     // 4. test OFFLINE -> BOOTSTRAP on existing replica (should be no-op)
@@ -362,8 +361,7 @@ public class ReplicationTest {
       mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(existingPartition.toPathString());
       fail("should fail because store is not started");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", StoreNotStarted, e.getErrorCode());
     }
 
     // 3. create new replica and add it into storage manager, test replica that needs to initiate bootstrap
@@ -409,8 +407,7 @@ public class ReplicationTest {
       mockHelixParticipant.onPartitionBecomeInactiveFromStandby(existingPartition.toPathString());
       fail("should fail because store is not started");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", StoreNotStarted, e.getErrorCode());
     }
     // restart the store and trigger Standby-To-Inactive transition again
     storageManager.startBlobStore(existingPartition);
@@ -528,8 +525,7 @@ public class ReplicationTest {
       mockHelixParticipant.onPartitionBecomeOfflineFromInactive("-1");
       fail("should fail because of invalid partition");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
     }
     // 2. test store not started case
     PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
@@ -538,8 +534,7 @@ public class ReplicationTest {
       mockHelixParticipant.onPartitionBecomeOfflineFromInactive(existingPartition.toPathString());
       fail("should fail because store is not started");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.StoreNotStarted,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", StoreNotStarted, e.getErrorCode());
     }
     storageManager.startBlobStore(existingPartition);
     // before testing success case, let's write a blob (size = 100) into local store and add a delete record for new blob

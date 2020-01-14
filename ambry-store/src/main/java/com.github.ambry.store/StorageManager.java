@@ -32,6 +32,8 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -438,6 +440,19 @@ public class StorageManager implements StoreManager {
       // if replica is null that means partition is not on current node (this shouldn't happen unless we use server admin
       // tool to remove the store before initiating decommission on this partition). We throw exception in this case.
       if (replica != null) {
+        // 0. as long as local replica exists, we create a decommission file in its dir
+        File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
+        try {
+          if (!decommissionFile.exists()) {
+            // if not present, create one.
+            decommissionFile.createNewFile();
+            logger.info("Decommission file is created for replica {}", replica.getReplicaPath());
+          }
+        } catch (IOException e) {
+          logger.error("IOException occurs when creating decommission file for replica " + partitionName, e);
+          throw new StateTransitionException(
+              "Couldn't create decommission file for replica " + replica.getReplicaPath(), ReplicaOperationFailure);
+        }
         Store localStore = getStore(replica.getPartitionId());
         if (localStore != null) {
           // 1. set state to INACTIVE
@@ -467,8 +482,7 @@ public class StorageManager implements StoreManager {
       // which checks existence of local replica (see onPartitionBecomeOfflineFromInactive method in ReplicationManager)
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
       if (!shutdownBlobStore(replica.getPartitionId())) {
-        throw new StateTransitionException("Failed to shutdown store " + partitionName,
-            StateTransitionException.TransitionErrorCode.ReplicaOperationFailure);
+        throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
       }
       logger.info("Store {} is successfully shut down during Inactive-To-Offline transition", partitionName);
     }

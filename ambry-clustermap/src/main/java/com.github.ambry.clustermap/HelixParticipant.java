@@ -391,8 +391,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
       } catch (InterruptedException e) {
         logger.error("Disconnection was interrupted on partition {}", partitionName);
-        throw new StateTransitionException("Disconnection failed or was interrupted",
-            StateTransitionException.TransitionErrorCode.DisconnectionFailure);
+        throw new StateTransitionException("Disconnection failed or was interrupted", DisconnectionFailure);
       } catch (StateTransitionException e) {
         logger.error("Disconnection didn't complete ", e);
         throw e;

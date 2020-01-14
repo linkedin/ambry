@@ -31,6 +31,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -217,8 +218,7 @@ public class AmbryReplicaSyncUpManagerTest {
       replicaSyncUpService.waitDeactivationCompleted(partition.toPathString());
       fail("should fail because replica is not found");
     } catch (StateTransitionException e) {
-      assertEquals("Error code is not expected", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
-          e.getErrorCode());
+      assertEquals("Error code is not expected", ReplicaNotFound, e.getErrorCode());
     }
     // test deactivation failure for some reason (triggered by calling onDeactivationError)
     CountDownLatch stateModelLatch = new CountDownLatch(1);
@@ -229,8 +229,7 @@ public class AmbryReplicaSyncUpManagerTest {
       try {
         stateModel.onBecomeInactiveFromStandby(mockMessage, null);
       } catch (StateTransitionException e) {
-        assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.DeactivationFailure,
-            e.getErrorCode());
+        assertEquals("Error code doesn't match", DeactivationFailure, e.getErrorCode());
         stateModelLatch.countDown();
       }
     }, false).start();
@@ -255,8 +254,7 @@ public class AmbryReplicaSyncUpManagerTest {
       try {
         stateModel.onBecomeStandbyFromBootstrap(mockMessage, null);
       } catch (StateTransitionException e) {
-        assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.BootstrapFailure,
-            e.getErrorCode());
+        assertEquals("Error code doesn't match", BootstrapFailure, e.getErrorCode());
         stateModelLatch.countDown();
       }
     }, false).start();
@@ -280,8 +278,7 @@ public class AmbryReplicaSyncUpManagerTest {
       replicaSyncUpService.waitDisconnectionCompleted(secondPartition.toPathString());
       fail("should fail because replica is not tracked by ReplicaSyncUpManager");
     } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.ReplicaNotFound,
-          e.getErrorCode());
+      assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
     }
     // test disconnection failure (this is induced by call onDisconnectionError)
     CountDownLatch stateModelLatch = new CountDownLatch(1);
@@ -292,8 +289,7 @@ public class AmbryReplicaSyncUpManagerTest {
       try {
         stateModel.onBecomeOfflineFromInactive(mockMessage, null);
       } catch (StateTransitionException e) {
-        assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.DisconnectionFailure,
-            e.getErrorCode());
+        assertEquals("Error code doesn't match", DisconnectionFailure, e.getErrorCode());
         stateModelLatch.countDown();
       }
     }, false).start();
