@@ -56,7 +56,7 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestResponseHa
   }
 
   /**
-   * @return an handler of {@link AsyncRequestResponseHandler}.
+   * @return {@link AsyncRequestResponseHandler}.
    */
   @Override
   public RestRequestHandler getRestRequestHandler() {
@@ -64,7 +64,7 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestResponseHa
   }
 
   /**
-   * @return an handler of {@link AsyncRequestResponseHandler}.
+   * @return {@link AsyncRequestResponseHandler}.
    */
   @Override
   public RestResponseHandler getRestResponseHandler() {
@@ -124,7 +124,7 @@ class RequestResponseHandlerMetrics {
   public final Counter residualResponseSetSize;
 
   /**
-   * Creates an handler of RequestResponseHandlerMetrics using the given {@code metricRegistry}.
+   * Creates an instance of RequestResponseHandlerMetrics using the given {@code metricRegistry}.
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
    */
   public RequestResponseHandlerMetrics(MetricRegistry metricRegistry) {

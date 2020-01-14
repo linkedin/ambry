@@ -265,7 +265,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
  */
 class AsyncRequestWorker implements Runnable {
   private final RequestResponseHandlerMetrics metrics;
-  private final RestRequestService _restRequestService;
+  private final RestRequestService restRequestService;
   private final LinkedBlockingQueue<AsyncRequestInfo> requests = new LinkedBlockingQueue<AsyncRequestInfo>();
   private final AtomicInteger queuedRequestCount = new AtomicInteger(0);
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
@@ -278,7 +278,7 @@ class AsyncRequestWorker implements Runnable {
    */
   protected AsyncRequestWorker(RequestResponseHandlerMetrics metrics, RestRequestService restRequestService) {
     this.metrics = metrics;
-    this._restRequestService = restRequestService;
+    this.restRequestService = restRequestService;
     metrics.registerRequestWorker(this);
     logger.trace("Instantiated AsyncRequestWorker");
   }
@@ -415,22 +415,22 @@ class AsyncRequestWorker implements Runnable {
       long restRequestProcessingStartTime = System.currentTimeMillis();
       switch (restMethod) {
         case GET:
-          _restRequestService.handleGet(restRequest, restResponseChannel);
+          restRequestService.handleGet(restRequest, restResponseChannel);
           break;
         case POST:
-          _restRequestService.handlePost(restRequest, restResponseChannel);
+          restRequestService.handlePost(restRequest, restResponseChannel);
           break;
         case PUT:
-          _restRequestService.handlePut(restRequest, restResponseChannel);
+          restRequestService.handlePut(restRequest, restResponseChannel);
           break;
         case DELETE:
-          _restRequestService.handleDelete(restRequest, restResponseChannel);
+          restRequestService.handleDelete(restRequest, restResponseChannel);
           break;
         case HEAD:
-          _restRequestService.handleHead(restRequest, restResponseChannel);
+          restRequestService.handleHead(restRequest, restResponseChannel);
           break;
         case OPTIONS:
-          _restRequestService.handleOptions(restRequest, restResponseChannel);
+          restRequestService.handleOptions(restRequest, restResponseChannel);
           break;
         default:
           metrics.unknownRestMethodError.inc();

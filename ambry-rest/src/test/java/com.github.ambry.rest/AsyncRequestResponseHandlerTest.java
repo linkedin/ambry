@@ -168,14 +168,6 @@ public class AsyncRequestResponseHandlerTest {
       // expected. nothing to do.
     }
 
-    // set request workers < 0
-    try {
-      requestResponseHandler = getAsyncRequestResponseHandler(-1);
-      fail("Setting request workers < 0 should have thrown exception");
-    } catch (IllegalArgumentException e) {
-      // expected. nothing to do.
-    }
-
     // set null RestRequestService
     try {
       RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
