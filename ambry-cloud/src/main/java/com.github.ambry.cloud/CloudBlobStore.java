@@ -528,7 +528,8 @@ class CloudBlobStore implements Store {
 
   /**
    * Execute an action up to the configured number of attempts.
-   * @param action the action to execute.
+   * @param action the {@link ThrowingRunnable} to run.
+   * @param actionName the name of the action.
    * @throws CloudStorageException
    */
   private void doWithRetries(ThrowingRunnable action, String actionName) throws CloudStorageException {
@@ -547,7 +548,9 @@ class CloudBlobStore implements Store {
 
   /**
    * Execute an action up to the configured number of attempts.
-   * @param action the action to execute.
+   * @param action the {@link Callable} to call.
+   * @param actionName the name of the action.
+   * @return the return value of the action.
    * @throws CloudStorageException
    */
   private Map<String, CloudBlobMetadata> doWithRetries(Callable<Map<String, CloudBlobMetadata>> action,
@@ -567,6 +570,7 @@ class CloudBlobStore implements Store {
   /**
    * Utility to either throw the input exception or sleep for a specified retry delay.
    * @param e the input exception to check.
+   * @param actionName the name of the action that threw the exception.
    * @param attempts the number of attempts made so far.
    * @throws CloudStorageException
    */
