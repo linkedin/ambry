@@ -45,10 +45,10 @@ public class CloudBlobMetadata {
   private int containerId;
   private long expirationTime;
   private long deletionTime;
-  private String cloudBlobName;
   private EncryptionOrigin encryptionOrigin;
   private String vcrKmsContext;
   private String cryptoAgentFactory;
+  private String cloudBlobName;
   private long encryptedSize;
   // this field is derived from the system generated last Update Time in the cloud db
   // and hence shouldn't be serializable.
@@ -66,7 +66,8 @@ public class CloudBlobMetadata {
     /** Encrypted by Router */
     ROUTER,
     /** Encrypted by VCR */
-    VCR}
+    VCR
+  }
 
   /**
    * Default constructor (for JSONSerializer).
