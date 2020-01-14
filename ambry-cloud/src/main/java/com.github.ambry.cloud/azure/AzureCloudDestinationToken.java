@@ -13,20 +13,21 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.github.ambry.cloud.CloudDestinationToken;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 
 
 /**
  * Class representing the replication token to track replication progress in azure.
  */
-public class AzureCloudDestinationToken implements CloudDestinationToken {
-  private final String cosmosRequestContinuationToken;
+public class AzureCloudDestinationToken {
+  private final String startContinuationToken;
+  private final String endContinuationToken;
+  private final int index;
+  private final int totalItems;
+  private final String azureTokenRequestId;
   private final short version;
 
   public static short VERSION_0 = 0;
@@ -36,26 +37,48 @@ public class AzureCloudDestinationToken implements CloudDestinationToken {
    * Default constructor to create a {@link AzureCloudDestinationToken} with uninitialized continuation token.
    */
   public AzureCloudDestinationToken() {
-    cosmosRequestContinuationToken = null;
-    version = VERSION_0;
+    startContinuationToken = null;
+    index = -1;
+    endContinuationToken = null;
+    totalItems = -1;
+    azureTokenRequestId = null;
+    version = DEFAULT_VERSION;
   }
 
   /**
-   * Constructor to create a {@link AzureCloudDestinationToken} with specified continuation token.
-   * @param cosmosRequestContinuationToken continuation token.
+   * Create {@link AzureCloudDestinationToken} from provided values.
+   * @param startContinuationToken
+   * @param endContinuationToken
+   * @param index
+   * @param totalItems
+   * @param azureTokenRequestId
    */
-  public AzureCloudDestinationToken(String cosmosRequestContinuationToken) {
-    this.cosmosRequestContinuationToken = cosmosRequestContinuationToken;
+  public AzureCloudDestinationToken(String startContinuationToken, String endContinuationToken, int index,
+      int totalItems, String azureTokenRequestId) {
+    this.startContinuationToken = startContinuationToken;
+    this.endContinuationToken = endContinuationToken;
+    this.index = index;
+    this.totalItems = totalItems;
+    this.azureTokenRequestId = azureTokenRequestId;
     this.version = DEFAULT_VERSION;
   }
 
   /**
-   * Constructor to create a {@link AzureCloudDestinationToken} with specified continuation token and specified version.
-   * @param cosmosRequestContinuationToken continuation token.
-   * @param version token version.
+   * Constructor to create a {@link AzureCloudDestinationToken} with specified token values and specified version.
+   * @param startContinuationToken
+   * @param endContinuationToken
+   * @param index
+   * @param totalItems
+   * @param azureTokenRequestId
+   * @param version
    */
-  public AzureCloudDestinationToken(String cosmosRequestContinuationToken, short version) {
-    this.cosmosRequestContinuationToken = cosmosRequestContinuationToken;
+  public AzureCloudDestinationToken(String startContinuationToken, String endContinuationToken, int index,
+      int totalItems, String azureTokenRequestId, short version) {
+    this.startContinuationToken = startContinuationToken;
+    this.endContinuationToken = endContinuationToken;
+    this.index = index;
+    this.totalItems = totalItems;
+    this.azureTokenRequestId = azureTokenRequestId;
     this.version = version;
   }
 
@@ -65,50 +88,99 @@ public class AzureCloudDestinationToken implements CloudDestinationToken {
    * @return {@link AzureCloudDestinationToken} object.
    * @throws IOException
    */
-  static AzureCloudDestinationToken fromBytes(DataInputStream inputStream) throws IOException {
+  public static AzureCloudDestinationToken fromBytes(DataInputStream inputStream) throws IOException {
     short version = inputStream.readShort();
+    String startContinuationToken = extractStringFromStream(inputStream);
+    String endContinuationToken = extractStringFromStream(inputStream);
+    int index = inputStream.readInt();
+    int totalItems = inputStream.readInt();
+    String azureTokenRequestId = extractStringFromStream(inputStream);
+    return new AzureCloudDestinationToken(startContinuationToken, endContinuationToken, index, totalItems,
+        azureTokenRequestId, version);
+  }
+
+  /**
+   * Extract string from the {@link DataInputStream}.
+   * @param inputStream {@link DataInputStream} to extract String from.
+   * @return extracted String from {@code inputStream}.
+   * @throws IOException
+   */
+  private static String extractStringFromStream(DataInputStream inputStream) throws IOException {
     int size = inputStream.readInt();
     byte[] bytes = new byte[size];
     inputStream.read(bytes);
-    String cosmosRequestContinuationToken = Arrays.toString(bytes);
-    return new AzureCloudDestinationToken(cosmosRequestContinuationToken, version);
+    return new String(bytes);
   }
 
-  @Override
   public byte[] toBytes() {
     byte[] buf = new byte[size()];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     bufWrap.putShort(version);
-    bufWrap.putInt(cosmosRequestContinuationToken.length());
-    bufWrap.put(cosmosRequestContinuationToken.getBytes());
+    bufWrap.putInt(startContinuationToken.length());
+    bufWrap.put(startContinuationToken.getBytes());
+    bufWrap.putInt(endContinuationToken.length());
+    bufWrap.put(endContinuationToken.getBytes());
+    bufWrap.putInt(index);
+    bufWrap.putInt(totalItems);
+    bufWrap.putInt(azureTokenRequestId.length());
+    bufWrap.put(azureTokenRequestId.getBytes());
     return buf;
   }
 
-  @Override
   public short getVersion() {
     return version;
   }
 
-  @Override
   public int size() {
-    return Short.BYTES + Integer.BYTES + cosmosRequestContinuationToken.length();
+    return Short.BYTES + 5 * Integer.BYTES + startContinuationToken.length() + endContinuationToken.length()
+        + azureTokenRequestId.length();
   }
 
-  @Override
-  public boolean equals(CloudDestinationToken otherCloudDestinationToken) {
-    if(!(otherCloudDestinationToken instanceof AzureCloudDestinationToken)) {
-      throw new IllegalArgumentException("cannot compare if argument is not AzureCloudDestinationToken");
-    }
-    AzureCloudDestinationToken azureCloudDestinationToken = (AzureCloudDestinationToken) otherCloudDestinationToken;
-    return azureCloudDestinationToken.getVersion() == version
-        && azureCloudDestinationToken.getCosmosRequestContinuationToken().equals(cosmosRequestContinuationToken);
+  public boolean equals(AzureCloudDestinationToken azureCloudDestinationToken) {
+    return azureCloudDestinationToken.getVersion() == version && azureCloudDestinationToken.getStartContinuationToken()
+        .equals(startContinuationToken) && azureCloudDestinationToken.getEndContinuationToken()
+        .equals(endContinuationToken) && azureCloudDestinationToken.getTotalItems() == totalItems
+        && azureCloudDestinationToken.getIndex() == index && azureCloudDestinationToken.getAzureTokenRequestId()
+        .equals(azureTokenRequestId);
   }
 
   /**
-   * Return request continuation token.
-   * @return request continuation token.
+   * Return startContinuationToken of the current token.
+   * @return startContinuationToken.
    */
-  public String getCosmosRequestContinuationToken() {
-    return cosmosRequestContinuationToken;
+  public String getStartContinuationToken() {
+    return startContinuationToken;
+  }
+
+  /**
+   * Return endContinuationToken of the current token.
+   * @return endContinuationToken.
+   */
+  public String getEndContinuationToken() {
+    return endContinuationToken;
+  }
+
+  /**
+   * Return index of the current token.
+   * @return index.
+   */
+  public int getIndex() {
+    return index;
+  }
+
+  /**
+   * Return totalitems in the current token.
+   * @return totalitems.
+   */
+  public int getTotalItems() {
+    return totalItems;
+  }
+
+  /**
+   * Return azureTokenRequestId of the current token.
+   * @return azureTokenRequestId.
+   */
+  public String getAzureTokenRequestId() {
+    return azureTokenRequestId;
   }
 }

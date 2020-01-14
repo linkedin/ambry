@@ -23,7 +23,6 @@ import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.CloudFindToken;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.clustermap.MockClusterMap;

@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageCompactor;
 import com.github.ambry.cloud.VcrMetrics;
-import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
 import java.util.Collections;

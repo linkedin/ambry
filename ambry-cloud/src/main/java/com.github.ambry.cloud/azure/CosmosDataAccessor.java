@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
+import com.microsoft.azure.cosmosdb.ChangeFeedOptions;
 import com.microsoft.azure.cosmosdb.Document;
 import com.microsoft.azure.cosmosdb.DocumentClientException;
 import com.microsoft.azure.cosmosdb.DocumentCollection;
@@ -30,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -153,6 +155,28 @@ public class CosmosDataAccessor {
       }
       throw rex;
     }
+  }
+
+  String queryChangeFeed(String requestContinationToken, int feedSize, List<CloudBlobMetadata> changeFeed,
+      String partitionPath) {
+    ChangeFeedOptions changeFeedOptions = new ChangeFeedOptions();
+    changeFeedOptions.setPartitionKey(new PartitionKey(partitionPath));
+    changeFeedOptions.setMaxItemCount(feedSize);
+    if (requestContinationToken == null) {
+      changeFeedOptions.setStartFromBeginning(true);
+    } else {
+      changeFeedOptions.setRequestContinuation(requestContinationToken);
+    }
+    FeedResponse<Document> feedResponse =
+        asyncDocumentClient.queryDocumentChangeFeed(cosmosCollectionLink, changeFeedOptions)
+            .limit(1)
+            .toBlocking().single();
+    changeFeed.addAll(feedResponse
+        .getResults()
+        .stream()
+        .map(doc -> createMetadataFromDocument(doc))
+        .collect(Collectors.toList()));
+    return feedResponse.getResponseContinuation();
   }
 
   /**

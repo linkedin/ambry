@@ -258,9 +258,8 @@ class AzureCloudDestination implements CloudDestination {
       long maxTotalSizeOfEntries) throws CloudStorageException {
     ChangeFeedOptions changeFeedOptions = new ChangeFeedOptions();
     changeFeedOptions.setPartitionKey(new PartitionKey(partitionPath));
-    if(findToken.getCloudDestinationToken() != null) {
-      AzureCloudDestinationToken azureCloudDestinationToken = (AzureCloudDestinationToken) findToken.getCloudDestinationToken();
-      changeFeedOptions.setRequestContinuation(azureCloudDestinationToken.getCosmosRequestContinuationToken());
+    if(findToken.getAzureCloudDestinationToken() != null) {
+      AzureCloudDestinationToken azureCloudDestinationToken = findToken.getAzureCloudDestinationToken()      changeFeedOptions.setRequestContinuation(azureCloudDestinationToken.getCosmosRequestContinuationToken());
     } else {
       changeFeedOptions.setStartFromBeginning(true);
     }

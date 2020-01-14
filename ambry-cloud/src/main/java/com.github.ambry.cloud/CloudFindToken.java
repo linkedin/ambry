@@ -13,14 +13,13 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.cloud.azure.AzureCloudDestinationToken;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.HashSet;
 import java.util.Objects;
-import java.util.Set;
 
 
 /**
@@ -32,44 +31,44 @@ public class CloudFindToken implements FindToken {
   static final short CURRENT_VERSION = VERSION_0;
   private final short version;
   private final FindTokenType type;
-  private final CloudDestinationToken cloudDestinationToken;
+  private final AzureCloudDestinationToken azureCloudDestinationToken;
   private final long bytesRead;
 
   /** Constructor for start token */
-  public CloudFindToken(CloudDestinationTokenFactory cloudDestinationTokenFactory) {
-    this(VERSION_0, 0, cloudDestinationTokenFactory.getNewCloudDestinationToken());
+  public CloudFindToken() {
+    this(VERSION_0, 0, new AzureCloudDestinationToken());
   }
 
   /** Constructor for in-progress token */
-  public CloudFindToken(long bytesRead, CloudDestinationToken cloudDestinationToken) {
+  public CloudFindToken(long bytesRead, AzureCloudDestinationToken azureCloudDestinationToken) {
     this.version = CURRENT_VERSION;
     this.type = FindTokenType.CloudBased;
     this.bytesRead = bytesRead;
-    this.cloudDestinationToken = cloudDestinationToken;
+    this.azureCloudDestinationToken = azureCloudDestinationToken;
   }
 
   /** Constructor for reading token that can have older version*/
-  public CloudFindToken(short version, long bytesRead, CloudDestinationToken cloudDestinationToken) {
+  public CloudFindToken(short version, long bytesRead, AzureCloudDestinationToken azureCloudDestinationToken) {
     this.version = version;
     this.type = FindTokenType.CloudBased;
     this.bytesRead = bytesRead;
-    this.cloudDestinationToken = cloudDestinationToken;
+    this.azureCloudDestinationToken = azureCloudDestinationToken;
   }
 
   /**
    * Utility to construct a new CloudFindToken from a previous instance and new token returned from findEntriesSince query.
    * @param prevToken previous {@link CloudFindToken}.
-   * @param cloudDestinationToken new {@link CloudDestinationToken}
+   * @param azureCloudDestinationToken new {@link AzureCloudDestinationToken}
    * @param newBytesRead bytes read in the findEntriesSince query.
    * @return the updated token.
    */
-  public static CloudFindToken getUpdatedToken(CloudFindToken prevToken, CloudDestinationToken cloudDestinationToken,
+  public static CloudFindToken getUpdatedToken(CloudFindToken prevToken, AzureCloudDestinationToken azureCloudDestinationToken,
       long newBytesRead) {
-    if (cloudDestinationToken.equals(prevToken.cloudDestinationToken)) {
+    if (azureCloudDestinationToken.equals(prevToken.azureCloudDestinationToken)) {
       return prevToken;
     }
 
-    return new CloudFindToken(prevToken.getBytesRead() + newBytesRead, cloudDestinationToken);
+    return new CloudFindToken(prevToken.getBytesRead() + newBytesRead, azureCloudDestinationToken);
   }
 
   @Override
@@ -77,7 +76,7 @@ public class CloudFindToken implements FindToken {
     byte[] buf = null;
     switch (version) {
       case VERSION_0:
-        int size = 2 * Short.BYTES + Long.BYTES + cloudDestinationToken.size();
+        int size = 2 * Short.BYTES + Long.BYTES + azureCloudDestinationToken.size();
         buf = new byte[size];
         ByteBuffer bufWrap = ByteBuffer.wrap(buf);
         // add version
@@ -87,7 +86,7 @@ public class CloudFindToken implements FindToken {
         // add bytesRead
         bufWrap.putLong(bytesRead);
         // add lastUpdateTimeReadBlobIds
-        bufWrap.put(cloudDestinationToken.toBytes());
+        bufWrap.put(azureCloudDestinationToken.toBytes());
         break;
       default:
         throw new IllegalStateException("Unknown version: " + version);
@@ -101,7 +100,7 @@ public class CloudFindToken implements FindToken {
    * @return deserialized {@code CloudFindToken} object.
    * @throws IOException
    */
-  static CloudFindToken fromBytes(DataInputStream inputStream, CloudDestinationTokenFactory cloudDestinationTokenFactory) throws IOException {
+  static CloudFindToken fromBytes(DataInputStream inputStream) throws IOException {
     CloudFindToken cloudFindToken = null;
     DataInputStream stream = new DataInputStream(inputStream);
     short version = stream.readShort();
@@ -109,8 +108,8 @@ public class CloudFindToken implements FindToken {
       case VERSION_0:
         FindTokenType type = FindTokenType.values()[stream.readShort()];
         long bytesRead = stream.readLong();
-        CloudDestinationToken cloudDestinationToken = cloudDestinationTokenFactory.getCloudDestinationToken(stream);
-        cloudFindToken = new CloudFindToken(version, bytesRead, cloudDestinationToken);
+        AzureCloudDestinationToken azureCloudDestinationToken = AzureCloudDestinationToken.fromBytes(stream);
+        cloudFindToken = new CloudFindToken(version, bytesRead, azureCloudDestinationToken);
         break;
       default:
         throw new IllegalStateException("Unknown version: " + version);
@@ -123,8 +122,8 @@ public class CloudFindToken implements FindToken {
     return bytesRead;
   }
 
-  public CloudDestinationToken getCloudDestinationToken() {
-    return cloudDestinationToken;
+  public AzureCloudDestinationToken getAzureCloudDestinationToken() {
+    return azureCloudDestinationToken;
   }
 
   @Override
@@ -136,13 +135,13 @@ public class CloudFindToken implements FindToken {
       return false;
     }
     CloudFindToken that = (CloudFindToken) o;
-    return version == that.version && bytesRead == that.bytesRead && cloudDestinationToken.equals(
-        ((CloudFindToken) o).getCloudDestinationToken());
+    return version == that.version && bytesRead == that.bytesRead && azureCloudDestinationToken.equals(
+        ((CloudFindToken) o).getAzureCloudDestinationToken());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(version, cloudDestinationToken, bytesRead);
+    return Objects.hash(version, azureCloudDestinationToken, bytesRead);
   }
 
   @Override
@@ -150,7 +149,7 @@ public class CloudFindToken implements FindToken {
     StringBuilder sb = new StringBuilder();
     sb.append("version: ").append(version);
     sb.append(" bytesRead: ").append(bytesRead);
-    sb.append(" cloudDestinationToken: ").append(cloudDestinationToken.toString());
+    sb.append(" azureCloudDestinationToken: ").append(azureCloudDestinationToken.toString());
     return sb.toString();
   }
 
